@@ -18,11 +18,11 @@ They run with no backend. Replies stream from a local fake responder
 
 | Directory | Framework | Kit API used |
 |---|---|---|
-| `react/` | React 19 | Generated React wrappers from `@kitn.ai/ui/react` (`<Conversations>`, `<Message>`, `<PromptInput>`) |
-| `vue/` | Vue 3 | Raw `kai-*` web components via `:prop.prop` bindings + `@kai-*` handlers |
-| `svelte/` | Svelte 5 (runes) | Raw `kai-*` web components via `bind:this` + `$effect` + `onkai-*` handlers |
-| `vanilla/` | Plain TypeScript (Vite) | Raw `kai-*` web components, composed imperatively; no framework |
-| `angular/` | Angular 18 (standalone) | Raw `kai-*` web components via `[prop]` / `(kai-*)` + `CUSTOM_ELEMENTS_SCHEMA` |
+| `starters/react/` | React 19 | Generated React wrappers from `@kitn.ai/ui/react` (`<Conversations>`, `<Message>`, `<PromptInput>`) |
+| `starters/vue/` | Vue 3 | Raw `kai-*` web components via `:prop.prop` bindings + `@kai-*` handlers |
+| `starters/svelte/` | Svelte 5 (runes) | Raw `kai-*` web components via `bind:this` + `$effect` + `onkai-*` handlers |
+| `starters/vanilla/` | Plain TypeScript (Vite) | Raw `kai-*` web components, composed imperatively; no framework |
+| `starters/angular/` | Angular 18 (standalone) | Raw `kai-*` web components via `[prop]` / `(kai-*)` + `CUSTOM_ELEMENTS_SCHEMA` |
 
 All five are pnpm-workspace members that depend on the kit with
 `"@kitn.ai/ui": "workspace:*"`, so they build against the local source through
@@ -54,12 +54,12 @@ Each example has a shortcut script and a fixed dev port:
 | `pnpm example:angular` | <http://localhost:4200> |
 
 Longhand still works: `pnpm --filter @kitn.ai/ui-example-<dir> dev`, or run it in
-place with `cd examples/<dir> && pnpm dev`.
+place with `cd examples/starters/<dir> && pnpm dev`.
 
 Each example's own `README.md` documents the per-framework web-component rules
 (registering `kai-*` before mount, setting array/object data as DOM properties,
 listening for non-bubbling `kai-*` events, keeping the composer uncontrolled).
-`react/` is the reference the others mirror.
+`starters/react/` is the reference the others mirror.
 
 ## Other examples
 
@@ -67,9 +67,9 @@ These predate the starter-set refresh and consume the kit their own way.
 
 ### Static ES-module demos
 
-- **`composable/`**: the full roster of individual elements plus the
+- **`demos/composable/`**: the full roster of individual elements plus the
   batteries-included `<kai-chat>`, as a plain HTML page.
-- **`widget/`**: a floating chat widget.
+- **`demos/widget/`**: a floating chat widget.
 
 Both are ES-module web-component pages: they must be **served over HTTP** (opening
 them as a `file://` page fails, because browsers block ES-module loading from a
@@ -80,8 +80,8 @@ root** with any static server:
 npx serve .        # serve the repo root over HTTP (or: python3 -m http.server 8000)
 ```
 
-Then open `http://localhost:3000/examples/composable/index.html` or
-`.../examples/widget/index.html` (adjust the port to whatever your server prints).
+Then open `http://localhost:3000/examples/demos/composable/index.html` or
+`.../examples/demos/widget/index.html` (adjust the port to whatever your server prints).
 
 Caveat: these older demos load a repo-root `dist/kai.es.js` bundle. The current
 kit build writes to `packages/ui/dist/`, not the repo root, so you may need to
@@ -89,20 +89,21 @@ produce that repo-root bundle manually before they render.
 
 ### Framework and meta-framework apps
 
-- **`solid/`**: SolidJS Vite app that uses the raw SolidJS component API (the
-  `.` entry). Not a workspace member: `cd examples/solid && npm install && npm run dev`.
-- **`nextjs/`**: Next.js 15 App Router, SSR + RSC `'use client'`, on the
+- **`starters/solid/`**: SolidJS Vite app that uses the raw SolidJS component API
+  (the `.` entry). A pnpm-workspace member on `"@kitn.ai/ui": "workspace:*"`, like
+  the other SPA starters.
+- **`starters/nextjs/`**: Next.js 15 App Router, SSR + RSC `'use client'`, on the
   generated React wrappers (`@kitn.ai/ui/react`).
-- **`tanstack-start/`**: TanStack Start, SSR + hydration, also on the generated
-  React wrappers.
+- **`starters/tanstack-start/`**: TanStack Start, SSR + hydration, also on the
+  generated React wrappers.
 
-`nextjs/` and `tanstack-start/` install the kit from the local repo via
-`file:../..` (not aliased), the way a real consumer would. Build the kit at the
-repo root first, then `cd` in, `npm install`, and `npm run build`.
+`starters/nextjs/` and `starters/tanstack-start/` install the kit from the local
+repo via `file:../../..` (not aliased), the way a real consumer would. Build the
+kit at the repo root first, then `cd` in, `npm install`, and `npm run build`.
 
 ### Support fixtures
 
-`remote-host/`, `remote-provider/`, `shared/`, and `artifact-fixtures/` are not
-standalone demos. They hold shared sample data and assets, the remote
-generative-UI host/provider harness, and artifact render fixtures used by the
-other examples.
+`internal/remote-host/`, `internal/remote-provider/`, `internal/shared/`, and
+`internal/artifact-fixtures/` are not standalone demos. They hold shared sample
+data and assets, the remote generative-UI host/provider harness, and artifact
+render fixtures used by the other examples.

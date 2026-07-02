@@ -21,8 +21,8 @@
  *                times out → inline fallback + Retry (failure-mode test)
  *   ?max=NNN     maxHeight cap (px)
  */
-import { mountRemoteCard, type RemoteCardHandle } from '../../packages/ui/src/remote/host-embed';
-import type { CardEnvelope, CardContext, CardEvent } from '../../packages/ui/src/primitives/card-contract';
+import { mountRemoteCard, type RemoteCardHandle } from '../../../packages/ui/src/remote/host-embed';
+import type { CardEnvelope, CardContext, CardEvent } from '../../../packages/ui/src/primitives/card-contract';
 
 const PROVIDER_ORIGIN = 'http://localhost:6007';
 

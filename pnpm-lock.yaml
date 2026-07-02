@@ -75,7 +75,7 @@ importers:
         specifier: ^23.0.1
         version: 23.0.1(@vue/compiler-sfc@3.5.39)(svelte@5.56.4)
 
-  examples/angular:
+  examples/starters/angular:
     dependencies:
       '@angular/common':
         specifier: ^22.0.0
@@ -91,7 +91,7 @@ importers:
         version: 22.0.5(@angular/common@22.0.5(@angular/core@22.0.5(@angular/compiler@22.0.5)(rxjs@7.8.2))(rxjs@7.8.2))(@angular/core@22.0.5(@angular/compiler@22.0.5)(rxjs@7.8.2))
       '@kitn.ai/ui':
         specifier: workspace:*
-        version: link:../../packages/ui
+        version: link:../../../packages/ui
       rxjs:
         specifier: ~7.8.0
         version: 7.8.2
@@ -112,11 +112,11 @@ importers:
         specifier: ~6.0.0
         version: 6.0.3
 
-  examples/react:
+  examples/starters/react:
     dependencies:
       '@kitn.ai/ui':
         specifier: workspace:*
-        version: link:../../packages/ui
+        version: link:../../../packages/ui
       react:
         specifier: ^19.0.0
         version: 19.2.7
@@ -143,11 +143,39 @@ importers:
         specifier: ^6.0.0
         version: 6.4.3(@types/node@22.20.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.32.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0)
 
-  examples/svelte:
+  examples/starters/solid:
     dependencies:
       '@kitn.ai/ui':
         specifier: workspace:*
-        version: link:../../packages/ui
+        version: link:../../../packages/ui
+      lucide-solid:
+        specifier: ^0.400.0
+        version: 0.400.0(solid-js@1.9.13)
+      solid-js:
+        specifier: ^1.9.0
+        version: 1.9.13
+    devDependencies:
+      '@tailwindcss/vite':
+        specifier: ^4.2.2
+        version: 4.3.2(vite@6.4.3(@types/node@26.0.1)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.32.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))
+      tailwindcss:
+        specifier: ^4.2.2
+        version: 4.3.2
+      typescript:
+        specifier: ^5.5.0
+        version: 5.7.3
+      vite:
+        specifier: ^6.0.0
+        version: 6.4.3(@types/node@26.0.1)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.32.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0)
+      vite-plugin-solid:
+        specifier: ^2.11.0
+        version: 2.11.12(@testing-library/jest-dom@6.9.1)(solid-js@1.9.13)(vite@6.4.3(@types/node@26.0.1)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.32.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))
+
+  examples/starters/svelte:
+    dependencies:
+      '@kitn.ai/ui':
+        specifier: workspace:*
+        version: link:../../../packages/ui
       svelte:
         specifier: ^5.0.0
         version: 5.56.4
@@ -168,11 +196,11 @@ importers:
         specifier: ^6.0.0
         version: 6.4.3(@types/node@22.20.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.32.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0)
 
-  examples/vanilla:
+  examples/starters/vanilla:
     dependencies:
       '@kitn.ai/ui':
         specifier: workspace:*
-        version: link:../../packages/ui
+        version: link:../../../packages/ui
     devDependencies:
       typescript:
         specifier: ~5.7.2
@@ -181,11 +209,11 @@ importers:
         specifier: ^6.0.0
         version: 6.4.3(@types/node@26.0.1)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.32.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0)
 
-  examples/vue:
+  examples/starters/vue:
     dependencies:
       '@kitn.ai/ui':
         specifier: workspace:*
-        version: link:../../packages/ui
+        version: link:../../../packages/ui
       vue:
         specifier: ^3.5.13
         version: 3.5.39(typescript@5.7.3)
@@ -6705,10 +6733,6 @@ packages:
     resolution: {integrity: sha512-o8qghlI8NZHU1lLPrpi2+Uq7abh4GGPpYANlalzWxyWteJOCsr/P+oPBA49TOLu5FTZO4d3F9MnWJfiMo4BkmA==}
     engines: {node: '>=18'}
 
-  watchpack@2.4.1:
-    resolution: {integrity: sha512-8wrBCMtVhqcXP2Sup1ctSkga6uc2Bx0IIvKyT7yTFier5AXHooSI+QyQQAtTb7+E0IUCCKyTFmXqdqgum2XWGg==}
-    engines: {node: '>=10.13.0'}
-
   watchpack@2.5.1:
     resolution: {integrity: sha512-Zn5uXdcFNIA1+1Ei5McRd+iRzfhENPCe7LeABkJtNulSxjma+l7ltNx55BWZkRlwRnpOgHqxnjyaDgJnNXnqzg==}
     engines: {node: '>=10.13.0'}
@@ -9160,6 +9184,13 @@ snapshots:
     dependencies:
       postcss-selector-parser: 6.0.10
       tailwindcss: 4.3.2
+
+  '@tailwindcss/vite@4.3.2(vite@6.4.3(@types/node@26.0.1)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.32.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))':
+    dependencies:
+      '@tailwindcss/node': 4.3.2
+      '@tailwindcss/oxide': 4.3.2
+      tailwindcss: 4.3.2
+      vite: 6.4.3(@types/node@26.0.1)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.32.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0)
 
   '@tailwindcss/vite@4.3.2(vite@7.3.6(@types/node@26.0.1)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.32.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0))':
     dependencies:
@@ -14122,12 +14153,6 @@ snapshots:
     dependencies:
       xml-name-validator: 5.0.0
 
-  watchpack@2.4.1:
-    dependencies:
-      glob-to-regexp: 0.4.1
-      graceful-fs: 4.2.11
-    optional: true
-
   watchpack@2.5.1:
     dependencies:
       glob-to-regexp: 0.4.1
@@ -14172,7 +14197,7 @@ snapshots:
       schema-utils: 3.3.0
       tapable: 2.3.3
       terser-webpack-plugin: 5.6.1(esbuild@0.28.1)(lightningcss@1.32.0)(webpack@5.94.0(esbuild@0.28.1)(lightningcss@1.32.0))
-      watchpack: 2.4.1
+      watchpack: 2.5.1
       webpack-sources: 3.5.0
     transitivePeerDependencies:
       - '@minify-html/node'

@@ -1,5 +1,5 @@
 {
-  "name": "@kitnai/example-solid",
+  "name": "@kitn.ai/ui-example-solid",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@kitn.ai/ui": "^0.2.0",
+    "@kitn.ai/ui": "workspace:*",
     "lucide-solid": "^0.400.0",
     "solid-js": "^1.9.0"
   },

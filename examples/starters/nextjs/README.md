@@ -93,7 +93,7 @@ wrapper registers its own element on mount (browser-only) — no separate
 
 ## Consuming the local kit
 
-This example consumes the local `@kitn.ai/ui` via `file:../..`. Build the kit
+This example consumes the local `@kitn.ai/ui` via `file:../../..`. Build the kit
 first from the repo root (`npm run build`), then `npm install` here.
 (Post-monorepo this becomes `workspace:*`; once the register-all fix is
 published you can pin the npm semver instead.)

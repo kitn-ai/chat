@@ -1,11 +1,11 @@
 // Composable web-components showcase — wiring for the demo page.
-// (The kit itself is registered by ../../dist/kai.es.js, imported in the HTML.)
+// (The kit itself is registered by ../../../dist/kai.es.js, imported in the HTML.)
 
 // ── boot guard: if the bundle didn't register the elements, show how to run it ──
 setTimeout(() => {
   if (!customElements.get('kai-chat')) {
     const link = document.getElementById('boot-link');
-    if (location.protocol.startsWith('http')) link.href = location.origin + '/examples/composable/index.html';
+    if (location.protocol.startsWith('http')) link.href = location.origin + '/examples/demos/composable/index.html';
     document.getElementById('boot-error').style.display = 'block';
   }
 }, 1200);

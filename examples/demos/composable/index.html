@@ -6,7 +6,7 @@
   <title>kitn · composable web components</title>
 
   <!-- One import of the local build registers every kai-* element. -->
-  <script type="module" src="../../dist/kai.es.js"></script>
+  <script type="module" src="../../../dist/kai.es.js"></script>
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -254,7 +254,7 @@
   <div id="boot-error" style="display:none;position:fixed;inset:0;z-index:100;background:var(--bg);color:var(--ink);padding:3rem;font-family:var(--font-display)">
     <div style="max-width:640px;margin:0 auto">
       <h2 style="margin:0 0 1rem">The component bundle didn't load</h2>
-      <p style="color:var(--ink-2);line-height:1.6">These are ES-module web components, so this page must be <strong>served over HTTP</strong> (not opened as a <code>file://</code> page) from the <strong>repo root</strong> (it loads the local build at <code>../../dist/</code>).</p>
+      <p style="color:var(--ink-2);line-height:1.6">These are ES-module web components, so this page must be <strong>served over HTTP</strong> (not opened as a <code>file://</code> page) from the <strong>repo root</strong> (it loads the local build at <code>../../../dist/</code>).</p>
       <pre style="background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:1rem;overflow:auto;font-family:var(--font-mono)">npm run build        <span style="opacity:.6"># once, to produce dist/</span>
 npm run examples     <span style="opacity:.6"># serves the repo root on :8000</span></pre>
       <p>then open <a id="boot-link" href="#">http://localhost:8000/examples/composable/index.html</a></p>

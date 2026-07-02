@@ -18,10 +18,10 @@
  *              back to the host — proves the zero-round-trip pattern.
  */
 
-import type { RemoteCardRenderer } from '../../packages/ui/src/remote/provider';
+import type { RemoteCardRenderer } from '../../../packages/ui/src/remote/provider';
 
 // Register the <kai-form> custom element (side-effect import).
-import '../../packages/ui/src/elements/form';
+import '../../../packages/ui/src/elements/form';
 
 // ── Renderer 1: form — interactive, data-collecting ───────────────────────────
 //

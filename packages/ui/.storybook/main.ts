@@ -8,7 +8,7 @@ import type { Plugin } from 'vite';
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 /**
- * Serve the reference provider example (examples/remote-provider/) under
+ * Serve the reference provider example (examples/internal/remote-provider/) under
  * /remote-provider/ THROUGH Storybook's own Vite pipeline, so its `.ts` entry is
  * transformed and runnable in the browser (a raw staticDir can't transform TS).
  *
@@ -20,7 +20,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
  * interaction demos (H-L).
  */
 function serveRemoteProvider(): Plugin {
-  const dir = resolve(HERE, '../../../examples/remote-provider');
+  const dir = resolve(HERE, '../../../examples/internal/remote-provider');
   return {
     name: 'kai-serve-remote-provider',
     configureServer(server) {
@@ -59,7 +59,7 @@ const config: StorybookConfig = {
     { from: '../llms-full.txt', to: '/llms-full.txt' },
     // Sample artifact (cross-linked HTML pages + image + PDF) framed by
     // <kai-artifact> stories at a stable URL — no backend needed.
-    { from: '../../../examples/artifact-fixtures', to: '/artifact-fixtures' },
+    { from: '../../../examples/internal/artifact-fixtures', to: '/artifact-fixtures' },
   ],
   addons: [
     'storybook-dark-mode',

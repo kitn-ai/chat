@@ -1,7 +1,7 @@
 import { chromium } from 'playwright';
 import { readFileSync } from 'node:fs';
 
-const URL = 'http://localhost:8000/examples/composable/index.html';
+const URL = 'http://localhost:8000/examples/demos/composable/index.html';
 const AXE = readFileSync('./node_modules/axe-core/axe.min.js', 'utf-8');
 
 const browser = await chromium.launch();

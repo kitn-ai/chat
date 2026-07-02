@@ -39,7 +39,7 @@ npm start          # serve the production build (node serve.mjs) on :3000
 npm run typecheck
 ```
 
-This example consumes the local `@kitn.ai/ui` via `file:../..`. Build the kit
+This example consumes the local `@kitn.ai/ui` via `file:../../..`. Build the kit
 first from the repo root (`npm run build`), then `npm install` here.
 (Post-monorepo this becomes `workspace:*`; once the register-all fix is
 published you can pin the npm semver instead.)

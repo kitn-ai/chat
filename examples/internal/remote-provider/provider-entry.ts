@@ -24,7 +24,7 @@
  */
 
 // ── Kit imports (source paths for dev — no build required) ────────────────────
-import { createCardBridge } from '../../packages/ui/src/remote/provider';
+import { createCardBridge } from '../../../packages/ui/src/remote/provider';
 import { formRenderer, infoRenderer } from './renderers';
 
 // ── Bridge setup ───────────────────────────────────────────────────────────────
