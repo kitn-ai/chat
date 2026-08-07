@@ -153,6 +153,17 @@ The components are deliberately **transport-agnostic**: `<kai-chat>` just render
     const assistantId = crypto.randomUUID();
     chat.messages = [...history, { id: assistantId, role: 'assistant', parts: [] }];
 
+    // Fold each delta onto the message's TRAILING text part, opening a new one
+    // when the last part is not text. Do NOT replace `parts` wholesale: that
+    // drops any reasoning/tool/card parts already on the message.
+    // `@kitn.ai/ui/state` exports this same function as `appendTextPart`.
+    const appendText = (parts, delta) => {
+      const last = parts[parts.length - 1];
+      return last?.type === 'text'
+        ? [...parts.slice(0, -1), { ...last, text: last.text + delta }]
+        : [...parts, { type: 'text', text: delta }];
+    };
+
     try {
       // In production, replace this URL with your own proxy endpoint.
       const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -175,17 +186,6 @@ The components are deliberately **transport-agnostic**: `<kai-chat>` just render
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
-
-      // Fold each delta onto the message's TRAILING text part, opening a new one
-      // when the last part is not text. Do NOT replace `parts` wholesale: that
-      // drops any reasoning/tool/card parts already on the message.
-      // `@kitn.ai/ui/state` exports this same function as `appendTextPart`.
-      const appendText = (parts, delta) => {
-        const last = parts[parts.length - 1];
-        return last?.type === 'text'
-          ? [...parts.slice(0, -1), { ...last, text: last.text + delta }]
-          : [...parts, { type: 'text', text: delta }];
-      };
 
       while (true) {
         const { value, done } = await reader.read();
