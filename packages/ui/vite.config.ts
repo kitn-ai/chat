@@ -26,7 +26,10 @@ function libMinifyPlugin(): Plugin {
             minify: true,
             legalComments: 'none',
           });
-          (chunk as OutputChunk).code = result.code;
+          // esbuild drops /* @vite-ignore */ (not a "legal" comment). Our only template-literal
+          // dynamic imports are intentional runtime-only loads (pdf.js CDN, the autoloader) that
+          // must stay un-analyzed; re-annotate them so downstream bundlers don't warn.
+          (chunk as OutputChunk).code = result.code.replace(/import\(`/g, 'import(/*@vite-ignore*/`');
         }
       }
     },
