@@ -4110,6 +4110,80 @@ git commit -m "feat(components): add BYO-shader audio visualizer variant"
 
 ---
 
+## Task 13.5: Capture the aura reference
+
+**Files:**
+- Create: `.superpowers/sdd/2026-08-07-audio-visualizers/reference/aura-<state>.png` (five frames per state, ten states-worth of frames total is fine)
+- Create: `.superpowers/sdd/2026-08-07-audio-visualizers/reference/metrics.json`
+- Create: `.superpowers/sdd/2026-08-07-audio-visualizers/reference/README.md`
+
+**Interfaces:**
+- Consumes: nothing in this repo.
+- Produces: the reference frames and measurements Task 14 tunes against.
+
+**Why this exists.** The goal for the aura is to match LiveKit's, not merely to
+evoke it. A prose description cannot express "matches," so this task turns their
+render into something Task 14 can measure itself against. Do this early: it is
+cheap, it is independent of everything else, and without it Task 14 has no exit
+condition except opinion.
+
+Nothing here goes into the shipped package. These are scratch artifacts under
+the SDD workspace, which is gitignored.
+
+- [ ] **Step 1: Record their aura**
+
+Their live previews are at
+<https://docs.livekit.io/frontends/agents-ui/audio-visualizer/prebuilt/>. Drive
+it with Playwright, set the largest size available, and capture the aura in each
+state the page exposes. Take a burst of consecutive frames per state (at least
+30 at ~60fps), not a single screenshot: the silhouette motion is half of what we
+are matching and one frame cannot show it.
+
+If the page does not let you pin the state directly, capture a continuous run
+and segment it, noting which frames belong to which state.
+
+- [ ] **Step 2: Extract the measurements**
+
+Write `metrics.json` with, per state:
+
+- **falloff**: luminance sampled along a horizontal line from the center to the
+  right edge, normalized to peak, as an array of 64 values. This is the single
+  most important curve: it encodes core size, shoulder steepness, and where the
+  image reaches zero.
+- **bloomRadius**: the radius, as a fraction of half-width, where luminance
+  first drops below 10 percent of peak.
+- **coreHue** and **edgeHue**: hue in degrees at the center and at 60 percent of
+  `bloomRadius`. The difference is the hue drift.
+- **coreSaturation**: saturation at the center. The aura reads near-white in the
+  middle, so this should be low.
+- **alphaProfile**: alpha along the same center-out line, 64 values. Confirms
+  the premultiplied edge behavior.
+- **deformHz**: dominant frequency of silhouette change. Threshold alpha at 0.5
+  to get a contour per frame, measure its area frame to frame, and take the
+  dominant frequency of that signal.
+- **deformAmplitude**: standard deviation of that contour area, as a fraction of
+  its mean.
+
+Also record `capturedAt`, the page URL, and the viewport and device pixel ratio
+used, so a later re-capture is comparable.
+
+- [ ] **Step 3: Write the README**
+
+One page describing what was captured, how, and what each metric means. Include
+the tolerance table from Task 14 so the two documents agree.
+
+- [ ] **Step 4: Report**
+
+No commit (these are gitignored scratch artifacts). Report the file paths and a
+short summary of the numbers.
+
+**Do NOT** open, download, or read
+`agent-audio-visualizer-aura.tsx` or `use-agent-audio-visualizer-aura.ts` from
+`livekit/components-js` at any point in this task. Capturing rendered output is
+the point; reading the source is what we are avoiding. See spec section 1.
+
+---
+
 ## Task 14: Aura shader
 
 **Files:**
@@ -4123,7 +4197,43 @@ git commit -m "feat(components): add BYO-shader audio visualizer variant"
 
 **You must not open** `agent-audio-visualizer-aura.tsx` or `use-agent-audio-visualizer-aura.ts` from `livekit/components-js`. Upstream's aura shader is under a restrictive UNCRN license that is incompatible with publishing `@kitn.ai/ui` to npm, and a framework port would leave that GLSL byte-identical. The visual effect is not protectable; that specific source is. Build from the brief below, which is spec section 8.
 
-**Visual target.** A soft luminous elliptical mass, centered in a square frame, reading as one organic light source rather than a shape with an edge. Bright and near-white at the core, falling through the accent hue to full transparency by roughly 45% of the frame radius, with no hard boundary anywhere. The silhouette is continuously deformed by low-frequency domain-warped noise so the outline breathes and wanders, never a clean circle and never holding a recognizable shape for more than about a second. Values above 1.0 spill into a wide soft halo, tonemapped so highlights saturate toward white rather than clipping. Hue drifts slightly toward the outer edges so the mass does not read flat. Sub-1/255 dither prevents banding across the falloff. Alpha is premultiplied so it composites over any background.
+**Visual target.** A luminous **ring**, not a filled shape. A reference still is at
+`.superpowers/sdd/2026-08-07-audio-visualizers/reference/`; look at it before writing anything.
+
+An earlier version of this brief described a filled glowing blob. That was wrong,
+and a shader built from it would have been confidently, structurally incorrect.
+The correct subject:
+
+- **An annulus with a clean hollow centre.** The inner hole is empty (fully
+  transparent), large, roughly half the outer radius. The band occupies the outer
+  portion of the frame.
+- **Distance to a circle, not to a point.** The band is driven by `abs(r - ringRadius)`,
+  where `r` is the (noise-displaced) distance from centre. This is the single most
+  important structural fact in this brief. `1.0 - smoothstep(core, outer, r)`
+  produces a disc and is the wrong construction.
+- **Thickness varies continuously around the circumference**, driven by low
+  frequency noise sampled by angle. In the reference the lower-left arc is
+  markedly heavier than the upper-right.
+- **Brightness tracks thickness.** Thick arcs read near-white and nearly opaque;
+  thin arcs are pale, translucent accent colour. Intensity is a function of local
+  band thickness, not of radius alone.
+- **Both edges are soft.** Inner and outer boundaries each fall off smoothly with
+  a glow; there is no hard edge anywhere, inside or out.
+- **The outline wanders.** Both the ring's radius and its thickness are displaced
+  by slow noise so the shape breathes and never settles into a clean circle or a
+  repeating figure.
+- **Bloom** spills outward from the brightest arcs, tonemapped so highlights
+  saturate toward white rather than clipping.
+- **Hue** comes from `uColor` (cyan by default in the reference), drifting slightly
+  across the band so it does not read flat.
+- **Dither** below one 8-bit step prevents banding across the soft falloffs.
+- **Alpha is premultiplied** so it composites over any background. The hollow
+  centre must be genuinely transparent, not white: the reference sits on a white
+  page, which makes an opaque white centre look identical until it is placed on a
+  dark background.
+
+**The goal is to match the reference, not to evoke it.** Task 13.5 captures frames
+and measurements; Step 3 below tunes against them with numeric tolerances.
 
 **Performance rules** (upstream's published guidance): prefer `mix()` / `step()` / `smoothstep()` over branching, keep `sin`/`cos`/`sqrt` out of loops where you can, and cap the fbm at 4 octaves.
 
@@ -4220,28 +4330,43 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
   float wobble = 0.10 + 0.18 * uComplexity;
   float r = length(p + warp * wobble);
 
-  // Squash toward an ellipse: slightly wider than tall.
-  float axis = abs(p.x) / max(0.001, length(p));
-  r *= mix(1.0, 0.85, axis);
+  // Angle around the ring, used to vary thickness along the circumference.
+  float ang = atan(p.y, p.x);
 
-  // The core grows with intensity, which is what makes the mass breathe.
-  float core = 0.10 + 0.20 * uIntensity;
+  // Thickness is NOT constant. Low-frequency noise sampled by angle makes some
+  // arcs heavy and others thin, which is the reference's most obvious feature
+  // after the hollow centre. Sampled on a circle so it wraps seamlessly at PI.
+  vec2 angPos = vec2(cos(ang), sin(ang)) * 1.7;
+  float thickNoise = fbm(angPos + vec2(t * 0.6, 0.0));
+  float thickness = (0.045 + 0.075 * thickNoise) * (0.6 + 0.8 * uIntensity);
 
-  // Long smooth falloff to nothing. The pow steepens the shoulder so the
-  // centre reads solid while the edge stays feathered.
-  float mass = 1.0 - smoothstep(core, 0.45, r);
-  mass = pow(mass, 1.6);
+  // Ring radius, also wandering slowly so the shape never settles.
+  float ringRadius = 0.30 + 0.03 * (fbm(angPos * 0.7 + vec2(0.0, t * 0.4)) - 0.5);
 
-  // A second, much wider falloff added on top is the halo.
-  float bloom = (1.0 - smoothstep(core, 0.9, r)) * 0.35;
+  // DISTANCE TO A CIRCLE, not to a point. This is the structural difference
+  // between a ring and a disc: `1.0 - smoothstep(core, outer, r)` would fill
+  // the centre. `abs(r - ringRadius)` leaves it hollow.
+  float d = abs(r - ringRadius);
 
-  float energy = (mass + bloom) * (0.4 + 1.6 * uIntensity);
+  // Soft on both edges, inner and outer alike. No hard boundary anywhere.
+  float band = 1.0 - smoothstep(0.0, thickness, d);
+  band = pow(band, 1.4);
 
-  // Hue drifts outward so the mass is not a flat wash of one colour, and
-  // value lifts at the core so it reads near-white in the middle.
+  // Brightness tracks LOCAL THICKNESS, so heavy arcs read near-white and thin
+  // arcs stay pale and translucent. Radius alone would light the ring evenly.
+  float weight = smoothstep(0.045, 0.115, thickness);
+
+  // Bloom spills outward from the band, widest where the band is heaviest.
+  float bloom = (1.0 - smoothstep(0.0, thickness * 3.5, d)) * 0.30 * weight;
+
+  float energy = (band + bloom) * (0.35 + 1.5 * uIntensity);
+
+  // Hue drifts across the band so it is not a flat wash, and value lifts where
+  // the band is thick so those arcs read close to white.
   vec3 hsv = rgb2hsv(uColor);
-  hsv.x = fract(hsv.x + smoothstep(core, 0.45, r) * 0.08);
-  hsv.z = min(1.0, hsv.z + mass * 0.6);
+  hsv.x = fract(hsv.x + (d / max(0.001, thickness)) * 0.05);
+  hsv.z = min(1.0, hsv.z + band * weight * 0.7);
+  hsv.y *= mix(1.0, 0.45, band * weight);
   vec3 col = hsv2rgb(hsv) * energy;
 
   col = tonemap(col);
@@ -4256,14 +4381,62 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
 `;
 ```
 
-- [ ] **Step 2: Commit the shader before wiring it up**
+- [ ] **Step 2: Commit the first draft**
 
 ```bash
 git add packages/ui/src/components/audio-visualizer/aura.glsl.ts
 git commit -m "feat(components): add original aura fragment shader"
 ```
 
-- [ ] **Step 3: HUMAN REVIEW GATE**
+- [ ] **Step 3: Measure against the reference, then tune. Repeat.**
+
+The shader above is a starting point, not the deliverable. **The deliverable is
+a shader whose render matches the Task 13.5 reference within tolerance.** This is
+a loop, and it is the only task in the plan with a numeric exit condition rather
+than a review verdict.
+
+Each round: wire the shader through Task 15, render ours at the same size, state,
+and device pixel ratio as the reference capture, extract the same metrics with
+the same code Task 13.5 used, and compare.
+
+**Tolerances (all must hold, per state):**
+
+| Metric | Tolerance |
+| --- | --- |
+| `falloff` (radial luminance curve) | RMS error under 0.05 on the normalized 0..1 curve |
+| `innerRadius` (where the hollow ends) | within 10 percent |
+| `outerRadius` | within 10 percent |
+| `thicknessVariation` (max arc thickness over min) | within 20 percent |
+| `coreHue` | within 5 degrees, after setting `uColor` to the reference's hue |
+| `peakSaturation` and `minSaturation` across the band | each within 0.10 |
+| `alphaProfile` | RMS error under 0.05, and the centre must read alpha 0 |
+| `deformHz` | within 20 percent |
+| `deformAmplitude` | within 25 percent |
+
+**Performance parity is required, not optional:** p95 frame time at `size="xl"`
+in the `speaking` state, over 300 frames on the same machine, no worse than the
+reference's. Record both numbers. A shader that matches visually while halving
+the frame rate has not matched.
+
+**The knobs**, so tuning is directed rather than random: `ringRadius`'s `0.30`
+sets ring size; `thickness`'s `0.045` and `0.075` set the thin and thick
+extremes; `angPos`'s `1.7` sets how many heavy arcs appear around the
+circumference; `pow(band, 1.4)` sets edge softness; `weight`'s `smoothstep`
+bounds set how strongly brightness tracks thickness; `bloom`'s `3.5` and `0.30`
+set halo reach and strength; `t * 0.6` and `t * 0.4` set how fast thickness and
+radius wander; `wobble` and `scale` set the domain warp.
+
+Change ONE knob per round where you can, and record what you changed and which
+metrics moved. The tuning log is worth more than the final numbers: the next
+person to touch this shader needs to know which knobs are sensitive.
+
+**Stop and escalate** rather than grinding if five rounds pass without every
+metric improving, if a metric moves the wrong way when its own knob is adjusted
+(the model is wrong, not the value), or if matching one metric reliably breaks
+another. Those mean the structure needs changing, which is a different
+conversation than tuning.
+
+- [ ] **Step 4: HUMAN REVIEW GATE**
 
 Do not proceed past this point without a look from Rob. Wire it up (Task 15), run `pnpm dev`, and capture the aura at `size="lg"` in all five states, in both light and dark. Present the renders and ask whether the look is right before doing any polish.
 
