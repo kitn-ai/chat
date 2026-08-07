@@ -75,13 +75,23 @@ export function barInterval(state: VisualizerState, barCount: number): number {
 
 // ---------------------------------------------------------------- grid
 
-/** Walk the perimeter of a ring `spread` cells out from center, clockwise. */
+/**
+ * Walk the perimeter of a ring `spread` cells out from center, clockwise.
+ *
+ * NOTE: This diverges from upstream use-agent-audio-visualizer-grid.ts in two ways:
+ * (1) We use separate centerX and centerY (upstream uses row-center for both axes).
+ *     Upstream never ships non-square grids, so the bug never manifested. We expose
+ *     row-count and column-count independently, so we need to handle arbitrary shapes.
+ * (2) We distinguish spread === 0 from spread === undefined (upstream treats 0 as falsy).
+ *     Again, upstream never ships spread=0 explicitly; we do for API completeness.
+ */
 function gridRing(rows: number, columns: number, spread: number): Coordinate[] {
   const seq: Coordinate[] = [];
+  const centerX = Math.floor(columns / 2);
   const centerY = Math.floor(rows / 2);
-  const topLeft = { x: Math.max(0, centerY - spread), y: Math.max(0, centerY - spread) };
+  const topLeft = { x: Math.max(0, centerX - spread), y: Math.max(0, centerY - spread) };
   const bottomRight = {
-    x: columns - 1 - topLeft.x,
+    x: Math.min(columns - 1, centerX + spread),
     y: Math.min(rows - 1, centerY + spread),
   };
 
@@ -104,7 +114,7 @@ export function gridSequence(
   switch (state) {
     case 'connecting': {
       const maxSpread = Math.floor(Math.max(rows, columns) / 2);
-      const clamped = spread ? Math.min(spread, maxSpread) : maxSpread;
+      const clamped = spread !== undefined ? Math.min(spread, maxSpread) : maxSpread;
       const ring = gridRing(rows, columns, clamped);
       return ring.length ? ring : [center];
     }

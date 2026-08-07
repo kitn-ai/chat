@@ -101,6 +101,24 @@ describe('gridSequence', () => {
     expect(gridSequence('idle', 5, 5)).toEqual([{ x: 2, y: 2 }]);
     expect(gridSequence('speaking', 5, 5)).toEqual([{ x: 2, y: 2 }]);
   });
+  it('regression: non-square grids emit only valid coordinates', () => {
+    // Bug fix: gridRing was using row-center for both axes, producing
+    // out-of-range x coordinates on non-square grids.
+    const seq = gridSequence('connecting', 20, 3, 1);
+    for (const coord of seq) {
+      expect(coord.x).toBeGreaterThanOrEqual(0);
+      expect(coord.x).toBeLessThan(3);
+      expect(coord.y).toBeGreaterThanOrEqual(0);
+      expect(coord.y).toBeLessThan(20);
+    }
+  });
+  it('regression: explicit spread=0 is not treated as undefined', () => {
+    // Bug fix: spread ? ... treated 0 as falsy. Explicit 0 should request
+    // the tightest possible ring, which is strictly smaller than the default.
+    const withSpreadZero = gridSequence('connecting', 5, 5, 0);
+    const withoutSpread = gridSequence('connecting', 5, 5);
+    expect(withSpreadZero.length).toBeLessThan(withoutSpread.length);
+  });
   it('never returns an empty sequence', () => {
     const states = ['idle', 'connecting', 'listening', 'thinking', 'speaking'] as const;
     for (const s of states) {
