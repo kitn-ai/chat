@@ -29,8 +29,8 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
 
 describe('Thread message rendering', () => {
   const convo: ChatMessage[] = [
-    { id: 'u1', role: 'user', content: 'Hello there' },
-    { id: 'a1', role: 'assistant', content: 'General Kenobi' },
+    { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'Hello there' }] },
+    { id: 'a1', role: 'assistant', parts: [{ type: 'text', text: 'General Kenobi' }] },
   ];
 
   it('renders one row per message with its content', () => {
@@ -41,10 +41,25 @@ describe('Thread message rendering', () => {
 
   it('renders an avatar rail for messages that carry an avatar', () => {
     const withAvatar: ChatMessage[] = [
-      { id: 'a1', role: 'assistant', content: 'hi', avatar: { fallback: 'AI' } },
+      { id: 'a1', role: 'assistant', parts: [{ type: 'text', text: 'hi' }], avatar: { fallback: 'AI' } },
     ];
     const { getByText } = render(() => <Thread messages={withAvatar} />);
     expect(getByText('AI')).toBeInTheDocument();
+  });
+
+  it('renders parts in order, not grouped by type', () => {
+    const message: ChatMessage = {
+      id: 'm1', role: 'assistant',
+      parts: [
+        { type: 'text', text: 'Checking.' },
+        { type: 'tool', tool: { type: 'get_weather', kind: 'generic', state: 'output-available' } },
+        { type: 'text', text: 'Done.' },
+      ],
+    };
+    const { container } = render(() => <Thread messages={[message]} />);
+    const text = container.textContent ?? '';
+    expect(text.indexOf('Checking.')).toBeLessThan(text.indexOf('Done.'));
+    expect(text).toContain('get_weather');
   });
 });
 
@@ -64,7 +79,7 @@ describe('Thread empty state', () => {
 
   it('hides the empty state once the thread has messages', () => {
     const { queryByText } = render(() => (
-      <Thread messages={[{ id: 'u1', role: 'user', content: 'hi' }]} />
+      <Thread messages={[{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }]} />
     ));
     expect(queryByText('No messages yet')).toBeNull();
   });
@@ -81,8 +96,8 @@ describe('Thread message actions', () => {
     writeText.mockClear();
   });
 
-  const assistant = (content: string): ChatMessage => ({
-    id: 'a1', role: 'assistant', content, actions: ['copy', 'like', 'dislike'],
+  const assistant = (text: string): ChatMessage => ({
+    id: 'a1', role: 'assistant', parts: [{ type: 'text', text }], actions: ['copy', 'like', 'dislike'],
   });
 
   it('fires onMessageAction with { messageId, action:"copy" } and copies content', () => {
@@ -114,7 +129,7 @@ describe('Thread stick-to-bottom', () => {
     (Element.prototype as unknown as { scrollTo: typeof scrollTo }).scrollTo = scrollTo;
     let controller: ThreadController | undefined;
     const { container } = render(() => (
-      <Thread messages={[{ id: 'u1', role: 'user', content: 'hi' }]} controllerRef={(c) => (controller = c)} />
+      <Thread messages={[{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }]} controllerRef={(c) => (controller = c)} />
     ));
     const viewport = container.querySelector('.overflow-y-auto') as HTMLElement;
     // Give the viewport a scrollHeight the jsdom layout won't.
@@ -131,13 +146,13 @@ describe('Thread stick-to-bottom', () => {
     const scrollTo = vi.fn();
     (Element.prototype as unknown as { scrollTo: typeof scrollTo }).scrollTo = scrollTo;
 
-    const base: ChatMessage[] = [{ id: 'u1', role: 'user', content: 'Stream please' }];
+    const base: ChatMessage[] = [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'Stream please' }] }];
     const [messages, setMessages] = createSignal<ChatMessage[]>(base);
     render(() => <Thread messages={messages()} />);
 
     scrollTo.mockClear();
     // A NEW array reference with an appended assistant turn — as a stream chunk.
-    setMessages([...base, { id: 'a1', role: 'assistant', content: 'streaming...' }]);
+    setMessages([...base, { id: 'a1', role: 'assistant', parts: [{ type: 'text', text: 'streaming...' }] }]);
     await tick();
 
     expect(scrollTo).toHaveBeenCalled();

@@ -1,15 +1,17 @@
-import { type JSX, For, createSignal, splitProps, Show } from "solid-js";
+import { type JSX, For, Switch, Match, createSignal, splitProps, Show } from "solid-js";
 import { Tooltip } from "../ui/tooltip";
 import { Copy, Check } from "lucide-solid";
 import { cn } from "../utils/cn";
 import { Markdown } from "./markdown";
 import { Button } from "../ui/button";
 import { actionIcon, BUILTIN_ACTION_LABEL } from "../ui/action-icons";
-import type { ChatMessageAction, CustomAction, FeedbackVote } from "../elements/chat-types";
+import type { ChatMessageAction, CustomAction, FeedbackVote, MessagePart } from "../elements/chat-types";
 import { useChatConfig, textClass } from "../primitives/chat-config";
 import { Reasoning, ReasoningTrigger, ReasoningContent } from "./reasoning";
-import { Tool, type ToolPart } from "./tool";
-import { Attachments, Attachment, AttachmentPreview, AttachmentInfo, type AttachmentData } from "./attachments";
+import { Tool } from "./tool";
+import { Attachments, Attachment, AttachmentPreview, AttachmentInfo } from "./attachments";
+import { CardRenderer } from "./card-renderer";
+import type { CardComponentMap } from "../primitives/card-registry";
 
 // --- Message ---
 
@@ -253,18 +255,19 @@ function MessageActionBar(props: MessageActionBarProps) {
 // --- MessageBody ---
 
 export interface MessageBodyProps {
-  /** The message text/markdown. */
-  content: string;
-  /** Optional collapsible reasoning block, rendered above the content. */
-  reasoning?: { text: string; label?: string };
-  /** Tool-call parts, rendered above the content. */
-  tools?: ToolPart[];
-  /** Inline attachment previews, rendered above the content. */
-  attachments?: AttachmentData[];
+  /** The message's ordered parts (text, reasoning, tool, card, source, file),
+   *  rendered in a single pass in the order they appear. `source` parts carry
+   *  citation data but render no UI yet — the citation row is a later
+   *  sub-project — so they are matched nowhere below and fall through to no
+   *  output, on purpose, not by omission. */
+  parts: MessagePart[];
+  /** Add/override card type -> component entries, forwarded to `CardRenderer`
+   *  for `card` parts. */
+  cardTypes?: CardComponentMap;
   /** Whether this is a user message (right-aligned bubble) vs an assistant
    *  message (full-width transparent). */
   isUser: boolean;
-  /** Whether the content renders as markdown. */
+  /** Whether text parts render as markdown. */
   markdown: boolean;
   /** Action-bar entries — built-in names and/or custom descriptors. When empty
    *  the bar is not rendered. */
@@ -290,9 +293,10 @@ export interface MessageBodyProps {
 }
 
 /**
- * The shared message body: an optional reasoning block, tool calls, inline
- * attachments, the content bubble, and the action bar — in that order. This is
- * the single source of truth for how a message renders, consumed by `ChatThread`
+ * The shared message body: the message's `parts` rendered in a single ordered
+ * pass — text, reasoning, tool calls, generative-UI cards, and file attachments
+ * interleaved exactly as they appear — followed by the action bar. This is the
+ * single source of truth for how a message renders, consumed by `ChatThread`
  * (the `<For>` over `messages`), the standalone `<kai-message>` facade, and (in
  * future) `kai-compare` for each candidate. Pure/prop-driven: all interaction
  * state (copied, feedback vote) is owned above and passed in.
@@ -302,31 +306,51 @@ function MessageBody(props: MessageBodyProps) {
     <>
       {/* before-body (inject): a per-message header above everything else. */}
       <Show when={props.beforeBody}>{props.beforeBody}</Show>
-      <Show when={props.reasoning}>
-        {(r) => (
-          <Reasoning class="mb-2 w-full">
-            <ReasoningTrigger>{r().label ?? 'Reasoning'}</ReasoningTrigger>
-            <ReasoningContent markdown>{r().text}</ReasoningContent>
-          </Reasoning>
+      <For each={props.parts}>
+        {(part) => (
+          <Switch fallback={null}>
+            <Match when={part.type === 'text' && part}>
+              {(p) => (
+                <MessageContent
+                  part="bubble content"
+                  markdown={props.markdown}
+                  class={props.isUser
+                    ? 'bg-muted text-primary max-w-[85%] rounded-2xl px-4 py-2'
+                    : 'bg-transparent p-0'}
+                >
+                  {p().text}
+                </MessageContent>
+              )}
+            </Match>
+            <Match when={part.type === 'reasoning' && part}>
+              {(p) => (
+                <Reasoning class="mb-2 w-full">
+                  <ReasoningTrigger>{p().label ?? 'Reasoning'}</ReasoningTrigger>
+                  <ReasoningContent markdown>{p().text}</ReasoningContent>
+                </Reasoning>
+              )}
+            </Match>
+            <Match when={part.type === 'tool' && part}>
+              {(p) => <Tool toolPart={p().tool} class="mb-2 w-full" />}
+            </Match>
+            <Match when={part.type === 'card' && part}>
+              {(p) => <CardRenderer envelope={p().envelope} types={props.cardTypes} />}
+            </Match>
+            <Match when={part.type === 'file' && part}>
+              {(p) => (
+                <Attachments variant="inline" class={props.isUser ? 'mb-2 justify-end' : 'mb-2'}>
+                  <Attachment data={p().attachment}><AttachmentPreview /><AttachmentInfo /></Attachment>
+                </Attachments>
+              )}
+            </Match>
+            {/* `source` parts intentionally have no `<Match>` here — the citation
+                row is a later sub-project. They still flow through this `<For>`
+                (nothing filters them out of `parts`), they just render nothing
+                via `fallback`. When the citation UI ships, add its `<Match>`
+                right here rather than reaching for a placeholder now. */}
+          </Switch>
         )}
-      </Show>
-      <For each={props.tools ?? []}>{(tp) => <Tool toolPart={tp} class="mb-2 w-full" />}</For>
-      <Show when={props.attachments?.length}>
-        <Attachments variant="inline" class={props.isUser ? 'mb-2 justify-end' : 'mb-2'}>
-          <For each={props.attachments!}>
-            {(att) => (<Attachment data={att}><AttachmentPreview /><AttachmentInfo /></Attachment>)}
-          </For>
-        </Attachments>
-      </Show>
-      <MessageContent
-        part="bubble content"
-        markdown={props.markdown}
-        class={props.isUser
-          ? 'bg-muted text-primary max-w-[85%] rounded-2xl px-4 py-2'
-          : 'bg-transparent p-0'}
-      >
-        {props.content}
-      </MessageContent>
+      </For>
       <Show when={(props.actions?.length ?? 0) > 0}>
         <MessageActionBar
           actions={props.actions!}
