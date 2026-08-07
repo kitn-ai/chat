@@ -4232,6 +4232,30 @@ The correct subject:
   page, which makes an opaque white centre look identical until it is placed on a
   dark background.
 
+**In motion** (from Rob's reference capture, on a black background):
+
+- **Overlapping translucent ribbons, not a single band.** Two or three separate
+  loop strokes cross each other, and the brightest near-white points are exactly
+  at the crossings. This reads as additive accumulation of strokes rather than one
+  annulus whose thickness varies. Upstream's function inventory has `sdLine`
+  beside `sdCircle`, which is consistent with drawing segments and not just a ring.
+- **The silhouette is a rounded polygon**, roughly six or seven sided, not a
+  wobbly circle. That points at low-frequency angular variation or a small number
+  of control points, not the broad fbm domain warp described above. Prefer the
+  simpler construction that reproduces it.
+- **There is an apparent 3D twist.** The loop reads as a ribbon seen slightly off
+  axis, folding over itself, rather than a flat washer.
+- **Scale tracks audio.** The whole form grows when the speaker is talking, so
+  `uIntensity` should drive ring radius and not only brightness.
+- **The centre is genuinely transparent.** The reference reads correctly on both
+  white and black. An opaque white centre would be indistinguishable on white and
+  obviously wrong on black, so test against a dark background.
+
+**Reference-quality warning.** If you are working from a GIF, the speckle across
+the background is palette dithering, a GIF artifact, NOT the shader's own dither.
+Do not tune toward it. Measure from video frames or PNGs; 256-colour quantization
+destroys exactly the gradient precision the metrics below depend on.
+
 **The goal is to match the reference, not to evoke it.** Task 13.5 captures frames
 and measurements; Step 3 below tunes against them with numeric tolerances.
 
