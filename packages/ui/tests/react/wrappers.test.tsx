@@ -112,8 +112,8 @@ test('updating a prop re-assigns the element property and re-renders', async () 
 
 test('object prop (messages) on Chat reaches the element unstringified', async () => {
   const messages = [
-    { id: 'm1', role: 'user' as const, content: 'Hi there' },
-    { id: 'm2', role: 'assistant' as const, content: 'Hello!' },
+    { id: 'm1', role: 'user' as const, parts: [{ type: 'text' as const, text: 'Hi there' }] },
+    { id: 'm2', role: 'assistant' as const, parts: [{ type: 'text' as const, text: 'Hello!' }] },
   ];
   const { container } = render(<Chat messages={messages} theme="light" />);
   const el = container.querySelector('kai-chat') as unknown as AnyEl;
