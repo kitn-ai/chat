@@ -184,8 +184,8 @@ export {
   ChatContainer, ChatContainerRoot, ChatContainerContent, ChatContainerScrollAnchor,
   useChatContainer,
 } from './components/chat-container';
-export { Message, MessageAvatar, MessageContent, MessageActions, MessageAction, MessageCopyButton } from './components/message';
-export type { MessageCopyButtonProps } from './components/message';
+export { Message, MessageAvatar, MessageContent, MessageActions, MessageAction, MessageCopyButton, MessageBody } from './components/message';
+export type { MessageCopyButtonProps, MessageBodyProps } from './components/message';
 export { ResponseCompare, useResolved } from './components/response-compare';
 export type { ResponseCompareProps, CompareLayout, ResolvedController } from './components/response-compare';
 export {
@@ -285,7 +285,7 @@ export type {
 // Chat message types — public API for consumers who need to type their own message arrays.
 // NOTE: chat-types.ts also exports an unrelated `Source` interface (a citation), but
 // `Source` is already a public component export (./components/source, a citation
-// chip/trigger) — re-exporting both under the same name is a duplicate-identifier
+// chip/trigger), so re-exporting both under the same name is a duplicate-identifier
 // error, so the message-part `Source` interface stays reachable only via
 // `Extract<MessagePart, { type: 'source' }>['source']` rather than a direct import.
 export type {
