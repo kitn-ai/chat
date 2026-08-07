@@ -1,4 +1,4 @@
-import { createSignal, createComputed, onCleanup, type Accessor } from 'solid-js';
+import { createSignal, createEffect, onCleanup, type Accessor } from 'solid-js';
 import { reduceToBands, reduceToVolume } from './audio-bands';
 
 export interface AudioAnalysisOptions {
@@ -85,11 +85,7 @@ export function useAudioAnalysis(
   const [bands, setBands] = createSignal<number[]>(new Array(opts.bands).fill(0));
   const [volume, setVolume] = createSignal(0);
 
-  // createComputed (not createEffect) so the wiring is synchronous, both on
-  // mount and on every source change: createEffect defers its runs to a
-  // queued flush, which would leave a freshly-mounted or freshly-swapped
-  // consumer's analyser unconnected until the next tick.
-  createComputed(() => {
+  createEffect(() => {
     const src = source();
 
     // Reset to a correctly-sized zero array whenever the source goes away, so a
@@ -132,7 +128,6 @@ export function useAudioAnalysis(
 
     let raf = 0;
     let last = 0;
-    let stopped = false;
     const step = (now: number) => {
       if (now - last >= opts.updateInterval) {
         analyser.getFloatFrequencyData(freq);
@@ -141,20 +136,11 @@ export function useAudioAnalysis(
         setVolume(reduceToVolume(bytes));
         last = now;
       }
-      // Reschedule via a microtask rather than calling requestAnimationFrame
-      // straight from inside its own callback. A real browser always defers
-      // rAF to the next frame, so this changes nothing observable there, but
-      // a synchronous rAF (a test double, or a non-browser environment) would
-      // otherwise recurse this call stack forever.
-      queueMicrotask(() => {
-        if (stopped) return;
-        raf = requestAnimationFrame(step);
-      });
+      raf = requestAnimationFrame(step);
     };
     raf = requestAnimationFrame(step);
 
     onCleanup(() => {
-      stopped = true;
       cancelAnimationFrame(raf);
       stopResume();
       analyser.disconnect();

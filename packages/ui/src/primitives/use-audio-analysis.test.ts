@@ -42,18 +42,35 @@ class FakeAudioContext {
   resume() { this.state = 'running'; return Promise.resolve(); }
 }
 
+/**
+ * No real browser ever invokes a requestAnimationFrame callback synchronously,
+ * from inside the call that scheduled it. Modeling rAF as a queue with an
+ * explicit flush (instead of calling back immediately) keeps the production
+ * `step` loop honest: it can recurse via a plain `requestAnimationFrame(step)`
+ * exactly as it would in a browser, and only advances a frame when a test
+ * asks for one.
+ */
+let rafQueue: FrameRequestCallback[] = [];
+function flushFrame(t = 1000) {
+  const queue = rafQueue;
+  rafQueue = [];
+  queue.forEach((cb) => cb(t));
+}
+
 beforeEach(() => {
   created.elementSources = [];
   created.streamSources = [];
   created.connections = [];
   created.disconnects = 0;
+  rafQueue = [];
   vi.stubGlobal('AudioContext', FakeAudioContext);
   vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
-    // Run exactly one frame synchronously so an update happens without a loop.
-    cb(performance.now() + 1000);
-    return 1;
+    rafQueue.push(cb);
+    return rafQueue.length;
   });
-  vi.stubGlobal('cancelAnimationFrame', () => {});
+  vi.stubGlobal('cancelAnimationFrame', () => {
+    rafQueue = [];
+  });
 });
 
 afterEach(() => {
@@ -82,9 +99,13 @@ describe('useAudioAnalysis', () => {
     });
   });
 
-  it('wires a MediaStream to the analyser but NOT to destination (no mic echo)', () => {
-    createRoot((dispose) => {
+  // The hook wires up in a createEffect, and createEffect's first run does not
+  // happen synchronously: it flushes once this callback yields. `await
+  // Promise.resolve()` gives it that chance before asserting on the wiring.
+  it('wires a MediaStream to the analyser but NOT to destination (no mic echo)', async () => {
+    await createRoot(async (dispose) => {
       useAudioAnalysis(() => fakeStream(), { bands: 3 });
+      await Promise.resolve();
       expect(created.streamSources).toHaveLength(1);
       expect(created.connections).toContain('stream->analyser');
       expect(created.connections).not.toContain('analyser->destination');
@@ -92,9 +113,10 @@ describe('useAudioAnalysis', () => {
     });
   });
 
-  it('wires an HTMLMediaElement all the way through to destination', () => {
-    createRoot((dispose) => {
+  it('wires an HTMLMediaElement all the way through to destination', async () => {
+    await createRoot(async (dispose) => {
       useAudioAnalysis(() => fakeElement(), { bands: 3 });
+      await Promise.resolve();
       expect(created.elementSources).toHaveLength(1);
       expect(created.connections).toContain('element->analyser');
       // Without this the consumer's audio goes silent with no error.
@@ -103,37 +125,68 @@ describe('useAudioAnalysis', () => {
     });
   });
 
-  it('reuses the cached source node when the same element mounts twice', () => {
+  it('reuses the cached source node when the same element mounts twice', async () => {
     const el = fakeElement();
-    createRoot((dispose) => {
+    // Each mount must let its effect actually flush before disposing, or the
+    // wiring never runs and the cache is never really exercised.
+    await createRoot(async (dispose) => {
       useAudioAnalysis(() => el, { bands: 3 });
+      await Promise.resolve();
       dispose();
     });
+
     // A second consumer of the same element must not throw.
-    expect(() => {
-      createRoot((dispose) => {
+    let threw = false;
+    try {
+      await createRoot(async (dispose) => {
         useAudioAnalysis(() => el, { bands: 3 });
+        await Promise.resolve();
         dispose();
       });
-    }).not.toThrow();
+    } catch {
+      threw = true;
+    }
+    expect(threw).toBe(false);
     expect(created.elementSources).toHaveLength(1);
   });
 
-  it('disconnects the analyser on cleanup', () => {
-    createRoot((dispose) => {
+  it('disconnects the analyser on cleanup', async () => {
+    await createRoot(async (dispose) => {
       useAudioAnalysis(() => fakeStream(), { bands: 3 });
+      // Let the effect wire the analyser up before tearing down. Disposing
+      // before the effect has ever run cleans up a computation that never
+      // executed, and nothing disconnects.
+      await Promise.resolve();
       dispose();
     });
     expect(created.disconnects).toBeGreaterThan(0);
   });
 
-  it('rebuilds when the source changes', () => {
-    createRoot((dispose) => {
+  it('rebuilds when the source changes', async () => {
+    await createRoot(async (dispose) => {
       const [src, setSrc] = createSignal<MediaStream | undefined>(undefined);
       useAudioAnalysis(src, { bands: 3 });
+      await Promise.resolve();
       expect(created.streamSources).toHaveLength(0);
       setSrc(fakeStream());
+      await Promise.resolve();
       expect(created.streamSources).toHaveLength(1);
+      dispose();
+    });
+  });
+
+  it('produces non-zero bands once a frame actually runs', async () => {
+    await createRoot(async (dispose) => {
+      const { bands } = useAudioAnalysis(() => fakeStream(), { bands: 3 });
+      await Promise.resolve();
+      // Wired up, but no frame has read the analyser yet: still the initial
+      // zero-fill.
+      expect(bands()).toEqual([0, 0, 0]);
+      flushFrame();
+      // FakeAnalyser reports -50dB across the board, which normalizes to a
+      // positive value. This is the hook's entire purpose, so it gets its own
+      // assertion instead of relying on another test to exercise it by accident.
+      expect(bands().every((b) => b > 0)).toBe(true);
       dispose();
     });
   });
