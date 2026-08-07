@@ -743,6 +743,8 @@ export interface KaiMessageElement extends HTMLElement {
   avatarFallback?: string;
   /** Avatar rail mode. `'none'` omits the avatar rail entirely so the body spans the full row (predictable layout when you never show avatars). Any other value keeps the default behaviour: the built-in avatar when one resolves, or your `slot="avatar"` content when projected (which REPLACES the built-in). */
   avatar?: string;
+  /** Optional card type -> custom-element tag overrides/additions for `card` parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type. */
+  cardTypes?: Record<string, string>;
 }
 
 export interface KaiModelSwitcherElement extends HTMLElement {
@@ -1234,6 +1236,8 @@ export interface KaiThreadElement extends HTMLElement {
   scrollButton?: boolean;
   /** Extra classes applied to the thread's inner root. */
   class?: string;
+  /** Optional card type -> custom-element tag overrides/additions for `card` parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type. */
+  cardTypes?: Record<string, string>;
 }
 
 export interface KaiToastRegionElement extends HTMLElement {
@@ -1359,6 +1363,8 @@ export interface KaiWorkspaceElement extends HTMLElement {
   compact?: boolean;
   /** Suppress the built-in ConversationList so the `sidebar-header` slot owns the whole rail flex region (for apps that supply their own rail nav). Default false. Attribute: `no-conversations`. */
   noConversations?: boolean;
+  /** Optional card type -> custom-element tag overrides/additions for `card` parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type. */
+  cardTypes?: Record<string, string>;
 }
 
 declare global {

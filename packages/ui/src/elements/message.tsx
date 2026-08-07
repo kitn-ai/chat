@@ -1,10 +1,55 @@
-import { Show, createSignal, onMount, onCleanup } from 'solid-js';
+import { Show, createSignal, createEffect, onMount, onCleanup, type JSX } from 'solid-js';
+import { Dynamic } from 'solid-js/web';
 import { defineWebComponent } from './define';
 import { readSlots, MESSAGE_SLOTS } from './slots';
 import { ChatConfig, useChatConfig, type ProseSize } from '../primitives/chat-config';
 import { Message, MessageAvatar, MessageBody } from '../components/message';
 import { createMessageFeedback } from '../primitives/message-feedback';
+import {
+  mergeCardTags,
+  BUILTIN_CARD_TAGS,
+  BUILTIN_CARD_COMPONENTS,
+  type CardTagMap,
+  type CardComponentMap,
+} from '../primitives/card-registry';
+import type { CardEnvelope } from '../primitives/card-contract';
 import type { ChatMessage } from './chat-types';
+
+/**
+ * Bridges the web-component-facing `cardTypes` (envelope type -> custom-element
+ * TAG name, e.g. `{ 'my-widget': 'my-widget-el' }`) into the `CardComponentMap`
+ * that `MessageBody`/`Thread` expect. A type the consumer did NOT override keeps
+ * rendering its built-in Solid component directly (no extra custom-element
+ * indirection); an overridden built-in or a brand-new consumer type renders as a
+ * dynamically-created custom element instead, mirroring `<kai-cards>`'s
+ * `CardSlot`. A type with no tag at all (unregistered) simply gets no entry, so
+ * `CardRenderer`'s own fallback (`CardFallback`) takes over.
+ */
+export function cardComponentsFromTags(types?: CardTagMap): CardComponentMap {
+  const tags = mergeCardTags(types);
+  const map: CardComponentMap = {};
+  for (const type of Object.keys(tags)) {
+    const tag = tags[type];
+    map[type] = tag === BUILTIN_CARD_TAGS[type] && BUILTIN_CARD_COMPONENTS[type]
+      ? BUILTIN_CARD_COMPONENTS[type]
+      : (p) => <CardTagSlot tag={tag} envelope={p.envelope} />;
+  }
+  return map;
+}
+
+/** Renders one envelope as a dynamically-created custom element, setting the
+ *  envelope's data/id/title/resolution as DOM properties (reactive). */
+function CardTagSlot(props: { tag: string; envelope: CardEnvelope }): JSX.Element {
+  let ref: HTMLElement | undefined;
+  createEffect(() => {
+    if (!ref) return;
+    (ref as unknown as { data: unknown }).data = props.envelope.data;
+    (ref as unknown as { cardId: string }).cardId = props.envelope.id;
+    if (props.envelope.title != null) (ref as unknown as { heading: string }).heading = props.envelope.title;
+    (ref as unknown as { resolution: unknown }).resolution = props.envelope.resolution;
+  });
+  return <Dynamic component={props.tag} ref={ref} />;
+}
 
 interface Props extends Record<string, unknown> {
   /** The full message object. Set as a JS property. */
@@ -33,6 +78,11 @@ interface Props extends Record<string, unknown> {
    *  value keeps the default behaviour: the built-in avatar when one resolves, or
    *  your `slot="avatar"` content when projected (which REPLACES the built-in). */
   avatar?: 'none' | string;
+  /** Optional card type -> custom-element tag overrides/additions for `card`
+   *  parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a
+   *  plain string map (not the `CardTagMap` alias) so the generated React
+   *  wrapper inlines it instead of emitting an unresolved named type. */
+  cardTypes?: Record<string, string>;
 }
 
 /** Events fired by `<kai-message>`. */
@@ -61,10 +111,15 @@ defineWebComponent<Props, Events>('kai-message', {
   avatarSrc: undefined,
   avatarFallback: undefined,
   avatar: undefined,
+  cardTypes: undefined,
 }, (props, { dispatch, flag, element, expose }) => {
   const outer = useChatConfig();
   const msg = (): ChatMessage =>
-    props.message ?? { id: 'message', role: props.role ?? 'assistant', content: props.content ?? '' };
+    props.message ?? {
+      id: 'message',
+      role: props.role ?? 'assistant',
+      parts: [{ type: 'text', text: props.content ?? '' }],
+    };
   // Copy + vote state lives here (above the rendered body) so it survives a
   // re-render when the host swaps in a fresh `message` object during streaming.
   const feedback = createMessageFeedback({
@@ -127,10 +182,8 @@ defineWebComponent<Props, Events>('kai-message', {
   const mergedActions = () => [...(msg().actions ?? []), ...slottedActions()];
   const body = () => (
     <MessageBody
-      content={msg().content}
-      reasoning={msg().reasoning}
-      tools={msg().tools}
-      attachments={msg().attachments}
+      parts={msg().parts}
+      cardTypes={cardComponentsFromTags(props.cardTypes)}
       isUser={isUser()}
       markdown={useMarkdown()}
       actions={mergedActions()}

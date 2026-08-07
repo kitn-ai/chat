@@ -2,6 +2,7 @@ import { createSignal, onMount, onCleanup } from 'solid-js';
 import { defineWebComponent } from './define';
 import { readSlots, THREAD_SLOTS } from './slots';
 import { Thread, type ThreadController } from '../components/thread';
+import { cardComponentsFromTags } from './message';
 import type { ChatMessage } from './chat-types';
 import type { ProseSize } from '../primitives/chat-config';
 
@@ -30,6 +31,11 @@ interface Props extends Record<string, unknown> {
   scrollButton?: boolean;
   /** Extra classes applied to the thread's inner root. */
   class?: string;
+  /** Optional card type -> custom-element tag overrides/additions for `card`
+   *  parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a
+   *  plain string map (not the `CardTagMap` alias) so the generated React
+   *  wrapper inlines it instead of emitting an unresolved named type. */
+  cardTypes?: Record<string, string>;
 }
 
 /** Events fired by `<kai-thread>`. */
@@ -61,6 +67,7 @@ defineWebComponent<Props, Events>('kai-thread', {
   actionsReveal: 'always',
   scrollButton: true,
   class: undefined,
+  cardTypes: undefined,
 }, (props, { element, dispatch, flag, expose }) => {
   let controller: ThreadController | undefined;
 
@@ -96,6 +103,7 @@ defineWebComponent<Props, Events>('kai-thread', {
         codeHighlight={flag('codeHighlight')}
         actionsReveal={props.actionsReveal as 'always' | 'hover'}
         scrollButton={props.scrollButton !== false}
+        cardTypes={cardComponentsFromTags(props.cardTypes as Record<string, string> | undefined)}
         empty={slots()['empty'] ? <slot name="empty" /> : undefined}
         onMessageAction={(detail) => dispatch('kai-message-action', detail)}
         controllerRef={(c) => (controller = c)}

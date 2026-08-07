@@ -5,6 +5,7 @@ import { readSlots, WORKSPACE_SLOTS } from './slots';
 import { ChatThread, type ChatThreadContextUsage, type ChatThreadController } from '../components/chat-thread';
 import { ConversationList, CollapsedRail } from '../components/conversation-list';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '../ui/resizable';
+import { cardComponentsFromTags } from './message';
 import type { AttachmentData } from '../components/attachments';
 import type { TriggerDef } from '../components/composer';
 import type { ChatMessage } from './chat-types';
@@ -63,6 +64,11 @@ interface Props extends Record<string, unknown> {
    *  whole rail flex region (for apps that supply their own rail nav). Default
    *  false. Attribute: `no-conversations`. */
   noConversations?: boolean;
+  /** Optional card type -> custom-element tag overrides/additions for `card`
+   *  parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a
+   *  plain string map (not the `CardTagMap` alias) so the generated React
+   *  wrapper inlines it instead of emitting an unresolved named type. */
+  cardTypes?: Record<string, string>;
 }
 
 interface Events {
@@ -99,7 +105,7 @@ defineWebComponent<Props, Events>('kai-workspace', {
   search: false, voice: false, triggers: undefined, kindIcons: undefined,
   sidebarWidth: 26, sidebarMinWidth: 240, sidebarMaxWidth: 420,
   sidebarCollapsed: undefined, defaultSidebarCollapsed: undefined, collapseBelow: undefined, compact: undefined,
-  noConversations: undefined,
+  noConversations: undefined, cardTypes: undefined,
 }, (props, { dispatch, flag, expose, element }) => {
   // Which injection slots the consumer has filled. A bare <slot> is always a
   // truthy JSX node, so we render each region wrapper ONLY when readSlots reports
@@ -189,6 +195,7 @@ defineWebComponent<Props, Events>('kai-workspace', {
       scrollButton={props.scrollButton !== false} search={flag('search')} voice={flag('voice')}
       triggers={props.triggers as TriggerDef[] | undefined}
       kindIcons={props.kindIcons as Record<string, string> | undefined}
+      cardTypes={cardComponentsFromTags(props.cardTypes as Record<string, string> | undefined)}
       onValueChange={(value) => dispatch('kai-value-change', { value })}
       onSubmit={(detail) => dispatch('kai-submit', detail)}
       onSuggestionClick={(value) => dispatch('kai-suggestion-click', { value })}
