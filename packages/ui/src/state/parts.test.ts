@@ -12,6 +12,18 @@ describe('fingerprint', () => {
   it('distinguishes different values', () => {
     expect(fingerprint({ a: 1 })).not.toBe(fingerprint({ a: 2 }));
   });
+
+  it('does NOT treat a repeated non-circular reference as circular', () => {
+    const shared = { x: 1 };
+    expect(fingerprint({ a: shared, b: shared })).toBe(fingerprint({ a: { x: 1 }, b: { x: 1 } }));
+  });
+
+  it('still guards a true cycle without throwing', () => {
+    const a: Record<string, unknown> = { x: 1 };
+    a.self = a;
+    expect(() => fingerprint(a)).not.toThrow();
+    expect(fingerprint(a)).toContain('[circular]');
+  });
 });
 
 describe('appendTextPart', () => {

@@ -10,9 +10,12 @@ export function fingerprint(value: unknown): string {
     if (v === null || typeof v !== 'object') return v;
     if (seen.has(v as object)) return '[circular]';
     seen.add(v as object);
-    if (Array.isArray(v)) return v.map(walk);
     const o = v as Record<string, unknown>;
-    return Object.fromEntries(Object.keys(o).sort().map((k) => [k, walk(o[k])]));
+    const out = Array.isArray(v)
+      ? v.map(walk)
+      : Object.fromEntries(Object.keys(o).sort().map((k) => [k, walk(o[k])]));
+    seen.delete(v as object);
+    return out;
   };
   return JSON.stringify(walk(value)) ?? '';
 }
