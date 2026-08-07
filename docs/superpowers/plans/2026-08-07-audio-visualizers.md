@@ -63,6 +63,27 @@ that `bands` set as a JS property moves the bars, and that `nx build ui` still
 passes with the element registered. Any failure here stops the shader work until
 it is resolved.
 
+**Also do the fidelity comparison here.** The whole point of carrying upstream's
+constants verbatim is that our output should be hard to tell from theirs, and so
+far that is a claim derived from reading code rather than from looking at
+pixels. Capture LiveKit's own previews at
+<https://docs.livekit.io/frontends/agents-ui/audio-visualizer/prebuilt/> beside
+ours, same variant, same state, same size, and compare.
+
+Expected, so a real divergence is distinguishable from a known one:
+
+| | Expectation |
+| --- | --- |
+| bar, grid, radial | Geometry and timing indistinguishable. Every constant was carried over. |
+| Color | Ours follows the kit theme via `currentColor`, theirs is their palette. Set `color` to match before comparing shape. |
+| grid on non-square counts | Deliberately different. Ours stays in range; upstream emits out-of-range columns. Compare on the default 5x5. |
+| wave | Identical at rest (same shader). Transitions should now also match, since Task 4 uses motion's real bezier curves. |
+| aura | Different by design. Not a fidelity target. |
+
+Anything outside that table is a finding. Report it with both screenshots rather
+than adjusting our code to match on the spot: a difference might mean we got a
+constant wrong, or it might mean upstream changed since the port.
+
 **Reviewer standing instruction.** Every task reviewer is told: the brief may be
 wrong, and anything that would fail at runtime in a real browser or build is a
 finding even when the brief mandates it. This is not optional politeness. Of the
@@ -1574,13 +1595,25 @@ Create `packages/ui/src/primitives/create-tween.ts`:
 import { createSignal, onCleanup, type Accessor } from 'solid-js';
 
 export type Transition =
-  | { duration: number; ease?: 'linear' | 'easeOut' | 'easeInOut' }
+  | { duration: number; ease?: 'linear' | 'easeIn' | 'easeOut' | 'easeInOut' }
   | { type: 'spring'; duration: number; bounce: number };
 
+/**
+ * Real cubic-bezier curves, matching the named easings `motion` uses. This
+ * tween replaces a `motion/react` dependency in components ported from LiveKit,
+ * so the transitions have to FEEL the same, not merely ease. Cubic
+ * approximations are noticeably snappier: `1 - (1-t)^3` reaches 0.875 at the
+ * midpoint where motion's easeOut reaches about 0.68.
+ *
+ * `cubicBezier` solves X(s) = t for the curve parameter by Newton-Raphson with
+ * a bisection fallback, then returns Y(s). Endpoints are pinned so a tween
+ * lands exactly on its target.
+ */
 const EASINGS = {
   linear: (t: number) => t,
-  easeOut: (t: number) => 1 - Math.pow(1 - t, 3),
-  easeInOut: (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2),
+  easeIn: cubicBezier(0.42, 0, 1, 1),
+  easeOut: cubicBezier(0, 0, 0.58, 1),
+  easeInOut: cubicBezier(0.42, 0, 0.58, 1),
 } as const;
 
 /**
