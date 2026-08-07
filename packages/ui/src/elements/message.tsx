@@ -25,21 +25,24 @@ import type { ChatMessage } from './chat-types';
  * `CardSlot`. A type with no tag at all (unregistered) simply gets no entry, so
  * `CardRenderer`'s own fallback (`CardFallback`) takes over.
  */
-export function cardComponentsFromTags(types?: CardTagMap): CardComponentMap {
+export function cardComponentsFromTags(types?: CardTagMap, theme = 'auto'): CardComponentMap {
   const tags = mergeCardTags(types);
   const map: CardComponentMap = {};
   for (const type of Object.keys(tags)) {
     const tag = tags[type];
     map[type] = tag === BUILTIN_CARD_TAGS[type] && BUILTIN_CARD_COMPONENTS[type]
       ? BUILTIN_CARD_COMPONENTS[type]
-      : (p) => <CardTagSlot tag={tag} envelope={p.envelope} />;
+      : (p) => <CardTagSlot tag={tag} envelope={p.envelope} theme={theme} />;
   }
   return map;
 }
 
 /** Renders one envelope as a dynamically-created custom element, setting the
- *  envelope's data/id/title/resolution as DOM properties (reactive). */
-function CardTagSlot(props: { tag: string; envelope: CardEnvelope }): JSX.Element {
+ *  envelope's data/id/title/resolution as DOM properties (reactive) plus the
+ *  `theme` + `data-card-id` chrome — mirrors `<kai-cards>`'s `CardSlot` so a
+ *  custom card behaves identically whether it arrives via `<kai-cards>` or a
+ *  `card` message part here. */
+function CardTagSlot(props: { tag: string; envelope: CardEnvelope; theme: string }): JSX.Element {
   let ref: HTMLElement | undefined;
   createEffect(() => {
     if (!ref) return;
@@ -47,6 +50,8 @@ function CardTagSlot(props: { tag: string; envelope: CardEnvelope }): JSX.Elemen
     (ref as unknown as { cardId: string }).cardId = props.envelope.id;
     if (props.envelope.title != null) (ref as unknown as { heading: string }).heading = props.envelope.title;
     (ref as unknown as { resolution: unknown }).resolution = props.envelope.resolution;
+    ref.setAttribute('theme', props.theme);
+    ref.setAttribute('data-card-id', props.envelope.id);
   });
   return <Dynamic component={props.tag} ref={ref} />;
 }
@@ -183,7 +188,7 @@ defineWebComponent<Props, Events>('kai-message', {
   const body = () => (
     <MessageBody
       parts={msg().parts}
-      cardTypes={cardComponentsFromTags(props.cardTypes)}
+      cardTypes={cardComponentsFromTags(props.cardTypes, (props as { theme?: string }).theme)}
       isUser={isUser()}
       markdown={useMarkdown()}
       actions={mergedActions()}

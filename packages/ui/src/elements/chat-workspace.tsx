@@ -195,7 +195,7 @@ defineWebComponent<Props, Events>('kai-workspace', {
       scrollButton={props.scrollButton !== false} search={flag('search')} voice={flag('voice')}
       triggers={props.triggers as TriggerDef[] | undefined}
       kindIcons={props.kindIcons as Record<string, string> | undefined}
-      cardTypes={cardComponentsFromTags(props.cardTypes as Record<string, string> | undefined)}
+      cardTypes={cardComponentsFromTags(props.cardTypes as Record<string, string> | undefined, (props as { theme?: string }).theme)}
       onValueChange={(value) => dispatch('kai-value-change', { value })}
       onSubmit={(detail) => dispatch('kai-submit', detail)}
       onSuggestionClick={(value) => dispatch('kai-suggestion-click', { value })}

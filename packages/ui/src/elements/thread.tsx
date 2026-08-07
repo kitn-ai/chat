@@ -103,7 +103,7 @@ defineWebComponent<Props, Events>('kai-thread', {
         codeHighlight={flag('codeHighlight')}
         actionsReveal={props.actionsReveal as 'always' | 'hover'}
         scrollButton={props.scrollButton !== false}
-        cardTypes={cardComponentsFromTags(props.cardTypes as Record<string, string> | undefined)}
+        cardTypes={cardComponentsFromTags(props.cardTypes as Record<string, string> | undefined, (props as { theme?: string }).theme)}
         empty={slots()['empty'] ? <slot name="empty" /> : undefined}
         onMessageAction={(detail) => dispatch('kai-message-action', detail)}
         controllerRef={(c) => (controller = c)}

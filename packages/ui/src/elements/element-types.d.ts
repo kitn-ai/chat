@@ -313,6 +313,8 @@ export interface KaiChatElement extends HTMLElement {
   kindIcons?: Record<string, string>;
   /** Whether each message's action bar is always visible (`'always'`, default) or only revealed on hover of that message row (`'hover'`). */
   actionsReveal?: "always" | "hover";
+  /** Optional card type -> custom-element tag overrides/additions for `card` parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type. */
+  cardTypes?: Record<string, string>;
 }
 
 export interface KaiCheckpointElement extends HTMLElement {
