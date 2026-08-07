@@ -24,6 +24,7 @@ import {
   type CompareSelection,
   type ResponseCompareData,
   buildSelection,
+  candidateToParts,
   isAnyStreaming,
   normalizeCandidates,
 } from './response-compare-types';
@@ -37,7 +38,7 @@ export type {
   ResponseCompareData,
   CompareSelection,
 } from './response-compare-types';
-export { normalizeCandidates, buildSelection, isAnyStreaming } from './response-compare-types';
+export { normalizeCandidates, buildSelection, isAnyStreaming, candidateToParts } from './response-compare-types';
 
 export type CompareLayout = 'auto' | 'columns' | 'tabs';
 
@@ -386,10 +387,7 @@ function CompareColumn(props: ColumnProps): JSX.Element {
           when={props.candidate.streaming}
           fallback={
             <MessageBody
-              content={props.candidate.content}
-              reasoning={props.candidate.reasoning}
-              tools={props.candidate.tools}
-              attachments={props.candidate.attachments}
+              parts={candidateToParts(props.candidate)}
               isUser={false}
               markdown={true}
             />
@@ -445,10 +443,7 @@ function CollapsedWinner(props: {
         {(c) => (
           <div class="min-w-0">
             <MessageBody
-              content={c().content}
-              reasoning={c().reasoning}
-              tools={c().tools}
-              attachments={c().attachments}
+              parts={candidateToParts(c())}
               isUser={false}
               markdown={true}
             />

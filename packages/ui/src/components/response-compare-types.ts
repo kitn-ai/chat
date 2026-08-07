@@ -6,6 +6,7 @@
 // isolation.
 import type { ToolPart } from './tool';
 import type { AttachmentData } from './attachments';
+import type { MessagePart } from '../elements/chat-types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -124,4 +125,28 @@ export function buildSelection(pair: ComparePair, chosenId: string): CompareSele
 export function isAnyStreaming(pair: ComparePair | null): boolean {
   if (!pair) return false;
   return pair.some((c) => c.streaming === true);
+}
+
+/** Map a `CompareCandidate`'s flat legacy fields (content/reasoning/tools/
+ *  attachments) into the ordered `MessagePart[]` `MessageBody` now renders.
+ *  `CompareCandidate` stays its own independent shape (it is `<kai-compare>`'s
+ *  public `data` JSON, not a `ChatMessage`) — this is purely a render-time
+ *  adapter, applied at each `MessageBody` call site. Order: reasoning (the
+ *  thinking trace) → tool calls (the actions taken) → attachments (anything
+ *  produced) → the final text answer, mirroring how an assistant turn reads. */
+export function candidateToParts(candidate: CompareCandidate): MessagePart[] {
+  const parts: MessagePart[] = [];
+  if (candidate.reasoning) {
+    parts.push({ type: 'reasoning', text: candidate.reasoning.text, label: candidate.reasoning.label });
+  }
+  for (const tool of candidate.tools ?? []) {
+    parts.push({ type: 'tool', tool });
+  }
+  for (const attachment of candidate.attachments ?? []) {
+    parts.push({ type: 'file', attachment });
+  }
+  if (candidate.content) {
+    parts.push({ type: 'text', text: candidate.content });
+  }
+  return parts;
 }

@@ -4,6 +4,7 @@ import './register'; // every kai-* element used below
 import type { KaiNavItem } from '../ui/nav';
 import type { KaiCommandItem } from './command';
 import type { ConversationSummary } from '../types';
+import { textMessage } from '../state';
 import type { ChatMessage } from './chat-types';
 
 // Labs/Apps: a fourth dogfood - "ChatGPT", a replica of chatgpt.com, the
@@ -131,8 +132,8 @@ export function debounce<T extends (...args: unknown[]) => void>(fn: T, ms = 200
 Create the wrapper once and reuse the returned function so the timer is shared.`;
 
 const MESSAGES: ChatMessage[] = [
-  { id: 'u1', role: 'user', content: 'What is the difference between debounce and throttle, and can you show a tiny debounce in TypeScript?' },
-  { id: 'a1', role: 'assistant', content: ANSWER_MD, actions: ['copy', 'like', 'dislike', 'regenerate'] },
+  textMessage('user', 'What is the difference between debounce and throttle, and can you show a tiny debounce in TypeScript?', { id: 'u1' }),
+  textMessage('assistant', ANSWER_MD, { id: 'a1', actions: ['copy', 'like', 'dislike', 'regenerate'] }),
 ];
 
 // The canvas document - kai-artifact's Code tab (real source + tree + copy). Set
@@ -442,8 +443,8 @@ export const ChatGPT: Story = {
     <kai-resizable orientation="horizontal">
       <kai-resizable-item min="420px">
         <!-- one <kai-message> per turn; assistant carries the built-in action row -->
-        <kai-message><!-- message = { role:'user', content } --></kai-message>
-        <kai-message><!-- message = { role:'assistant', content, actions:['copy','like','dislike','regenerate'] } --></kai-message>
+        <kai-message><!-- message = { role:'user', parts:[{ type:'text', text }] } --></kai-message>
+        <kai-message><!-- message = { role:'assistant', parts:[{ type:'text', text }], actions:['copy','like','dislike','regenerate'] } --></kai-message>
         <kai-prompt-input placeholder="Ask anything">
           <div slot="toolbar-start">
             <kai-menu trigger-icon="plus" label="Add"></kai-menu>            <!-- + attach/upload -->
@@ -478,7 +479,7 @@ export const ChatGPT: Story = {
   document.querySelector('kai-nav').items = [{ id: 'library', label: 'Library', icon: 'book-open' }, { id: 'gpts', label: 'GPTs', icon: 'box' }];
   // One message object per turn; the assistant turn carries the action row.
   thread.querySelectorAll('kai-message')[1].message = {
-    id: 'a1', role: 'assistant', content: '...markdown...', actions: ['copy', 'like', 'dislike', 'regenerate'],
+    id: 'a1', role: 'assistant', parts: [{ type: 'text', text: '...markdown...' }], actions: ['copy', 'like', 'dislike', 'regenerate'],
   };
   document.querySelector('kai-model-switcher').models = [{ id: 'auto', name: 'Auto' }, { id: 'instant', name: 'Instant' }, { id: 'thinking', name: 'Thinking' }];
   // The canvas (Code tab) source, set as a property.

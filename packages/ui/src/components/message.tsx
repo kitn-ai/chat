@@ -302,13 +302,9 @@ export type MessagePartGroup =
   | { kind: 'single'; part: Exclude<MessagePart, { type: 'file' }> }
   | { kind: 'files'; parts: Extract<MessagePart, { type: 'file' }>[] };
 
-export function groupMessageParts(parts: MessagePart[] | undefined | null): MessagePartGroup[] {
+export function groupMessageParts(parts: MessagePart[]): MessagePartGroup[] {
   const groups: MessagePartGroup[] = [];
-  // Tolerate a missing/nullish `parts` the same way <For>'s `each` already
-  // does (renders nothing) rather than throwing, so a caller still on the
-  // pre-parts MessageBody props degrades to an empty body instead of crashing
-  // the whole render tree.
-  for (const part of parts ?? []) {
+  for (const part of parts) {
     if (part.type === 'file') {
       const last = groups[groups.length - 1];
       if (last?.kind === 'files') {

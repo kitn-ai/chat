@@ -3,22 +3,31 @@ import { createSignal } from 'solid-js';
 import { Thread } from './thread';
 import { ChatConfig } from '../primitives/chat-config';
 import { componentDescription } from '../stories/docs/element-controls';
+import { textMessage } from '../state';
 import type { ChatMessage } from '../elements/chat-types';
 
 const conversation: ChatMessage[] = [
-  { id: 'u1', role: 'user', content: 'What is SolidJS in one line?' },
+  textMessage('user', 'What is SolidJS in one line?', { id: 'u1' }),
   {
     id: 'a1',
     role: 'assistant',
-    content:
-      '**SolidJS** is a reactive UI library that compiles your components away and updates the DOM with fine-grained signals — no virtual DOM.',
+    parts: [
+      {
+        type: 'text',
+        text: '**SolidJS** is a reactive UI library that compiles your components away and updates the DOM with fine-grained signals — no virtual DOM.',
+      },
+    ],
     actions: ['copy', 'like', 'dislike'],
   },
-  { id: 'u2', role: 'user', content: 'Show me a signal.' },
+  textMessage('user', 'Show me a signal.', { id: 'u2' }),
   {
     id: 'a2',
     role: 'assistant',
-    content: `Here's a counter:
+    parts: [
+      { type: 'reasoning', text: 'The user wants the smallest possible signal example, so keep it to a counter.' },
+      {
+        type: 'text',
+        text: `Here's a counter:
 
 \`\`\`tsx
 import { createSignal } from 'solid-js';
@@ -30,7 +39,8 @@ function Counter() {
 \`\`\`
 
 \`count\` is a getter — reading it inside JSX subscribes just that node.`,
-    reasoning: { text: 'The user wants the smallest possible signal example, so keep it to a counter.' },
+      },
+    ],
     actions: ['copy', 'like', 'dislike', 'regenerate'],
   },
 ];
@@ -110,18 +120,64 @@ export const EmptyCustom: Story = {
 export const WithAvatars: Story = {
   args: {
     messages: [
-      { id: 'u1', role: 'user', content: 'Morning — any blockers?', avatar: { fallback: 'RT' } },
-      { id: 'a1', role: 'assistant', content: 'None. The build is green and the release is queued.', avatar: { fallback: 'AI' }, actions: ['copy'] },
+      textMessage('user', 'Morning — any blockers?', { id: 'u1', avatar: { fallback: 'RT' } }),
+      textMessage('assistant', 'None. The build is green and the release is queued.', {
+        id: 'a1',
+        avatar: { fallback: 'AI' },
+        actions: ['copy'],
+      }),
     ],
   },
   ...src(`<Thread messages={messagesWithAvatars} />`),
+};
+
+/** Ordering: `parts` render in a single pass, in array order — reasoning, then
+ *  plain text, then a tool call, then more text. Every other fixture on this page
+ *  is single-type (all text, or all-with-avatar), so this is the one story that
+ *  would actually catch an ordering regression (e.g. a render path that groups by
+ *  part type instead of preserving array order). */
+export const Interleaved: Story = {
+  args: {
+    messages: [
+      textMessage('user', 'Weather in Paris?', { id: 'u1' }),
+      {
+        id: 'a1',
+        role: 'assistant',
+        parts: [
+          { type: 'reasoning', text: 'I should call the weather tool.', index: 0 },
+          { type: 'text', text: 'Checking that for you.' },
+          {
+            type: 'tool',
+            tool: {
+              type: 'get_weather',
+              kind: 'generic',
+              state: 'output-available',
+              input: { city: 'Paris' },
+              output: { c: 18 },
+              toolCallId: 'tc1',
+            },
+          },
+          { type: 'text', text: 'It is 18C and partly cloudy.' },
+        ],
+      },
+    ],
+  },
+  ...src(`<Thread messages={[
+  { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'Weather in Paris?' }] },
+  { id: 'a1', role: 'assistant', parts: [
+    { type: 'reasoning', text: 'I should call the weather tool.', index: 0 },
+    { type: 'text', text: 'Checking that for you.' },
+    { type: 'tool', tool: { type: 'get_weather', kind: 'generic', state: 'output-available', input: { city: 'Paris' }, output: { c: 18 }, toolCallId: 'tc1' } },
+    { type: 'text', text: 'It is 18C and partly cloudy.' },
+  ] },
+]} />`),
 };
 
 /** Streaming: hand the thread a NEW array reference per chunk and it sticks to the
  *  bottom. Click to simulate a token stream. */
 export const Streaming: Story = {
   render: () => {
-    const base: ChatMessage[] = [{ id: 'u1', role: 'user', content: 'Stream a reply.' }];
+    const base: ChatMessage[] = [textMessage('user', 'Stream a reply.', { id: 'u1' })];
     const full = 'Streaming works by handing the thread a brand-new messages array on every chunk. Mutating the same array in place would not re-render — a fresh reference does, and the list auto-scrolls to follow.';
     const [messages, setMessages] = createSignal<ChatMessage[]>(base);
     let timer: ReturnType<typeof setInterval> | undefined;
@@ -130,7 +186,7 @@ export const Streaming: Story = {
       let i = 0;
       timer = setInterval(() => {
         i += 4;
-        setMessages([...base, { id: 'a1', role: 'assistant', content: full.slice(0, i) }]);
+        setMessages([...base, textMessage('assistant', full.slice(0, i), { id: 'a1' })]);
         if (i >= full.length) { clearInterval(timer); timer = undefined; }
       }, 40);
     };
@@ -148,6 +204,6 @@ export const Streaming: Story = {
     );
   },
   ...src(`const [messages, setMessages] = createSignal(base);
-// per chunk: setMessages([...base, { id: 'a1', role: 'assistant', content: next }]);
+// per chunk: setMessages([...base, { id: 'a1', role: 'assistant', parts: [{ type: 'text', text: next }] }]);
 <Thread messages={messages()} />`),
 };
