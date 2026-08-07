@@ -114,7 +114,7 @@ function jsArray(items: string[]): string {
 
 /**
  * Reduce a ChatMessage's `parts` array to the plain `content` string an
- * OpenAI-format chat-completions POST body expects. Text-only extraction —
+ * OpenAI-format chat-completions POST body expects. Text-only extraction:
  * the scaffolder never emits tool/reasoning parsing (that's a later
  * sub-project), so any non-text part is simply skipped here.
  */
@@ -152,11 +152,15 @@ function mockStreamBody(opts: {
 }): string {
   const { pad, read, commitInitial, commitMap, setLoading, strictRoles = false } = opts;
   const asConst = strictRoles ? ' as const' : '';
+  // Under strict TS, an un-annotated array literal widens the part's `type` to
+  // `string`, so the later `setMessages([...history, …])` fails TS2322. Plain-JS
+  // contexts (html) have no type to annotate with.
+  const historyType = strictRoles ? ': ChatMessage[]' : '';
   const mapBody = `(m.id === assistantId ? { ...m, parts: [{ type: 'text', text: answer }] } : m)`;
   return [
     `${pad}const value = e.detail.value.trim();`,
     `${pad}if (!value) return;`,
-    `${pad}const history = [...${read}, { id: crypto.randomUUID(), role: 'user'${asConst}, parts: [{ type: 'text', text: value }] }];`,
+    `${pad}const history${historyType} = [...${read}, { id: crypto.randomUUID(), role: 'user'${asConst}, parts: [{ type: 'text', text: value }] }];`,
     `${pad}const assistantId = crypto.randomUUID();`,
     `${pad}${commitInitial(`[...history, { id: assistantId, role: 'assistant'${asConst}, parts: [] }]`)}`,
     `${pad}${setLoading('true')}`,
@@ -978,7 +982,7 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
   const companionLinesList: string[] = [];
   if (hasEmbedded) {
     companionLinesList.push(
-      `  <!-- kai-tool / kai-reasoning render INSIDE the thread — set tools/reasoning on each message object. -->`,
+      `  <!-- kai-tool / kai-reasoning render INSIDE the thread — set them as parts on each message object. -->`,
     );
   }
   for (const t of standaloneCompanionTags) {
@@ -1010,7 +1014,7 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
     : [
         `    const value = e.detail.value.trim();`,
         `    if (!value) return;`,
-        `    const history = [...messages, { id: crypto.randomUUID(), role: 'user' as const, parts: [{ type: 'text', text: value }] }];`,
+        `    const history: ChatMessage[] = [...messages, { id: crypto.randomUUID(), role: 'user' as const, parts: [{ type: 'text', text: value }] }];`,
         `    const assistantId = crypto.randomUUID();`,
         `    messages = [...history, { id: assistantId, role: 'assistant' as const, parts: [] }];`,
         `    loading = true;`,

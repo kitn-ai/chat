@@ -149,7 +149,7 @@ for await (const token of streamFromYourModel(prompt)) {
 chat.loading = false;
 ```
 
-The ergonomic path is `createAssistantStream` from `@kitn.ai/ui/state` — its `upsertTool(toolCallId, patch)` and `appendReasoning(delta)` handle the part-lookup and new-reference plumbing above for you.
+The ergonomic path is `createAssistantStream` from `@kitn.ai/ui/state`: its `upsertTool(toolCallId, patch)` and `appendReasoning(delta)` handle the part-lookup and new-reference plumbing above for you.
 
 **Tool lifecycle — four states:**
 

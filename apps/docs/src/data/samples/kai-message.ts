@@ -14,7 +14,7 @@ const AVATAR_SVG =
   );
 
 /** A rich assistant message: markdown, reasoning block, a tool call, an attachment, and actions.
- *  `message` is the same `{ id, role, parts }` shape `<kai-chat>` uses per message — `parts` is
+ *  `message` is the same `{ id, role, parts }` shape `<kai-chat>` uses per message; `parts` is
  *  ordered (reasoning -> tool -> file -> text, mirroring how an assistant turn reads). */
 const ASSISTANT_MESSAGE = {
   id: 'm-a',

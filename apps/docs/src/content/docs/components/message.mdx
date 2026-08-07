@@ -59,7 +59,7 @@ Set `message` in JavaScript (objects can't be HTML attributes) and listen for `k
 </script>
 ```
 
-- **`message`** takes the whole object — `id`, `role`, an ordered `parts` array, plus optional `actions`, `avatar`, and `feedback`. There's no scalar shortcut for the text; even a single line is a `{ type: 'text', text }` part.
+- **`message`** takes the whole object: `id`, `role`, an ordered `parts` array, plus optional `actions`, `avatar`, and `feedback`. There's no scalar shortcut for the text; even a single line is a `{ type: 'text', text }` part.
 - **Markdown** is on by default for `role="assistant"`, off for `role="user"`. Override with the `markdown` boolean.
 - **`actions`** accepts built-in names (`'copy'`, `'like'`, `'dislike'`, `'regenerate'`, `'edit'`) and/or `{ id, label, icon?, tooltip? }` descriptors. Alternatively, place `<kai-action>` children in the light DOM.
 - **`actionsReveal`** — `'always'` (default) keeps the action bar visible; `'hover'` hides it until the row is hovered.

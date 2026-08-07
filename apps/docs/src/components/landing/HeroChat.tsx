@@ -187,7 +187,7 @@ export default function HeroChat() {
     };
     host.messages = [user, { ...a }];
 
-    // Stream the answer — the text part is appended after reasoning + tool.
+    // Stream the answer: the text part is appended after reasoning + tool.
     await wait(560); if (!alive()) return stop();
     const words = ANSWER.split(/(\s+)/);
     for (let i = 2; i <= words.length; i += 2) {

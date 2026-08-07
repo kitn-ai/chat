@@ -15,13 +15,19 @@ import { Aside } from '@astrojs/starlight/components';
 type Message = {
   id: string;
   role: 'user' | 'assistant';
-  parts: MessagePart[];             // ordered — render in the order they appear
+  parts: MessagePart[];             // ordered, rendered in the order they appear
 };
 
+// The full union has six variants. Streaming from a model or agent only ever
+// produces the first three below; card / source / file are for generative-UI
+// cards, citations, and attachments, covered in their own guides.
 type MessagePart =
   | { type: 'text'; text: string }  // the text, streamed in token by token
   | { type: 'reasoning'; text: string; label?: string }
-  | { type: 'tool'; tool: ToolCall };
+  | { type: 'tool'; tool: ToolCall }
+  | { type: 'card'; envelope: CardEnvelope }
+  | { type: 'source'; source: Source }
+  | { type: 'file'; attachment: AttachmentData };
 
 type ToolCall = {
   type: string;                    // the tool name, e.g. 'web_search'

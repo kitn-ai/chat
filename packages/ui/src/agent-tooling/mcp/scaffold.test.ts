@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { scaffold } from './tools/scaffold';
+import { listIntegrations } from '../registry';
 
 /**
  * scaffold composes a working chat surface from four axes:
@@ -1262,7 +1263,7 @@ describe('scaffold', () => {
       });
       const emitted = JSON.stringify(out);
       // The INTERACTION PATTERNS reference block (appended to every scaffold)
-      // legitimately shows kai-compare's `CompareCandidate.content` — an
+      // legitimately shows kai-compare's `CompareCandidate.content`, an
       // independent type from `ChatMessage`, unaffected by the parts migration
       // (see response-compare-types.ts). Scope the content-string ban to the
       // scaffolder's OWN emitted code (blocks 1-4), not that reference snippet.
@@ -1270,5 +1271,87 @@ describe('scaffold', () => {
       expect(ownCode).not.toMatch(/content:\s*\\?'\\?'/);
       expect(emitted).toContain('parts:');
     }
+  });
+
+  // Round-1 fix review found a real bug (integrations/ollama.ts's `html` route
+  // template still built a `role, content` ChatMessage literal) that this suite
+  // never caught, because every test above only ever passes `integration: 'mock'`
+  // — the one integration with no route template to sweep. Every integration's
+  // templates are static strings baked into its catalog file, so a bad one is a
+  // silent, permanent bug: fix the systemic gap by exercising every registered
+  // integration here, not just the one the earlier tests happened to use.
+  it('every registered integration emits parts-shaped ChatMessage literals (no role+content, no stale stream API)', async () => {
+    for (const integration of listIntegrations()) {
+      // 'html' is the framework-agnostic front end every integration's route
+      // falls back to (per chooseRoute), so one call exercises both the
+      // client-side seed/submit code AND that integration's own backend
+      // route template (the exact class of bug ollama.ts had).
+      const out = await scaffold.handler({
+        framework: 'html', useCase: 'drop-in-chat', integration: integration.id, placement: 'full-page',
+      });
+      const emitted = JSON.stringify(out);
+      const label = integration.id;
+
+      // The old removed shape: a role literal directly followed by `content:`.
+      expect(emitted, `${label}: emits role:'user', content: (removed ChatMessage shape)`).not.toMatch(
+        /role:\s*'user'(?:\s+as\s+const)?,\s*content:/,
+      );
+      expect(emitted, `${label}: emits role:'assistant', content: (removed ChatMessage shape)`).not.toMatch(
+        /role:\s*'assistant'(?:\s+as\s+const)?,\s*content:/,
+      );
+      expect(emitted, `${label}: missing parts:`).toContain('parts:');
+
+      // Stale @kitn.ai/ui/state API removed earlier in this migration.
+      expect(emitted, `${label}: stale addTool`).not.toContain('addTool');
+      expect(emitted, `${label}: stale updateTool`).not.toContain('updateTool');
+      expect(emitted, `${label}: stale appendContent`).not.toContain('appendContent');
+    }
+  });
+
+  // Same integration sweep, on a strict-TS framework — catches a bad route
+  // template that only shows up once TypeScript output (not plain JS) is involved.
+  it('every registered integration emits parts-shaped ChatMessage literals on a TS framework (react)', async () => {
+    for (const integration of listIntegrations()) {
+      const out = await scaffold.handler({
+        framework: 'react', useCase: 'drop-in-chat', integration: integration.id, placement: 'full-page',
+      });
+      const emitted = JSON.stringify(out);
+      const label = integration.id;
+      expect(emitted, `${label}: emits role:'user', content:`).not.toMatch(
+        /role:\s*'user'(?:\s+as\s+const)?,\s*content:/,
+      );
+      expect(emitted, `${label}: emits role:'assistant', content:`).not.toMatch(
+        /role:\s*'assistant'(?:\s+as\s+const)?,\s*content:/,
+      );
+      expect(emitted, `${label}: missing parts:`).toContain('parts:');
+    }
+  });
+
+  // Regression test for the exact TS2322 defect the reviewer reproduced with
+  // `tsc --strict`: an un-annotated `const history = [...]` widens the part's
+  // `type` field to `string`, so `setMessages([...history, …])` no longer
+  // satisfies `ChatMessage[]`. This is a string-level proxy for "would compile
+  // under strict", not a real compiler run (a temp-file + tsc/ts-morph harness
+  // was judged too heavy for this suite — flagged to the coordinator as a
+  // possible follow-up) — but it pins the exact annotation every prior fix
+  // relied on, on every strict-TS framework this bug hit.
+  it('every strict-TS framework annotates the mock-path `history` const as ChatMessage[]', async () => {
+    for (const framework of ['react', 'next', 'vue', 'svelte', 'tanstack-start'] as const) {
+      const out = await scaffold.handler({
+        framework, useCase: 'drop-in-chat', integration: 'mock', placement: 'full-page',
+      });
+      const emitted = JSON.stringify(out);
+      expect(emitted, `${framework}: mock-path history is missing : ChatMessage[]`).toMatch(
+        /const history: ChatMessage\[\] = \[/,
+      );
+    }
+  });
+
+  it('svelte real-backend `history` const is annotated ChatMessage[] (matches its react/vue/tanstack siblings)', async () => {
+    const out = await scaffold.handler({
+      framework: 'svelte', useCase: 'drop-in-chat', integration: 'openrouter', placement: 'full-page',
+    });
+    const emitted = JSON.stringify(out);
+    expect(emitted).toMatch(/const history: ChatMessage\[\] = \[/);
   });
 });

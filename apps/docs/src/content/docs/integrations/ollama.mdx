@@ -55,7 +55,7 @@ The browser side is the same reader loop you use for any backend: append the use
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       // The route (and Ollama's OpenAI-compatible endpoint) speak flat
-      // { role, content } pairs — reduce each message's parts to text.
+      // { role, content } pairs, so reduce each message's parts to text.
       body: JSON.stringify({
         messages: history.map((m) => ({
           role: m.role,
