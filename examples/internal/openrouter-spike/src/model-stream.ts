@@ -71,6 +71,15 @@ export interface ModelStreamChunk {
    * string with no options channel, so a text part's `raw` is unreachable.
    */
   reasoningRaw?: RawOrigin;
+  /**
+   * The provider's BLOCK index for this reasoning delta.
+   *
+   * Providers emit reasoning in numbered blocks and can interleave them, so the
+   * index is what keeps parallel blocks distinct: the kit's `appendReasoning`
+   * keys its reasoning part by it. Omitted means "block 0", the single-block
+   * case every provider degrades to.
+   */
+  reasoningIndex?: number;
   toolCalls?: ModelToolCallDelta[];
   finishReason?: string | null;
   usage?: ModelUsage;
@@ -367,9 +376,13 @@ export async function consumeModelStream(
     if (chunk.reasoning) {
       reasoning += chunk.reasoning;
       reasoningChunks++;
+      // `index` keys the reasoning part. Without it every block folds into part
+      // 0, so parallel thinking blocks concatenate and the LAST block's `raw`
+      // silently wins, which breaks the verbatim round-trip that `raw` exists for.
       // `raw` only when the bridge actually had the provider's block; passing
       // `undefined` would blank a `raw` an earlier delta already established.
       out.appendReasoning(chunk.reasoning, {
+        index: chunk.reasoningIndex ?? 0,
         label,
         ...(chunk.reasoningRaw ? { raw: chunk.reasoningRaw } : {}),
       });

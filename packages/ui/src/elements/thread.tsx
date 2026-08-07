@@ -3,6 +3,7 @@ import { defineWebComponent } from './define';
 import { readSlots, THREAD_SLOTS } from './slots';
 import { Thread, type ThreadController } from '../components/thread';
 import { cardComponentsFromTags } from './message';
+import { createMessagesGuard } from './validate-messages';
 import type { ChatMessage } from './chat-types';
 import type { ProseSize } from '../primitives/chat-config';
 
@@ -71,6 +72,12 @@ defineWebComponent<Props, Events>('kai-thread', {
 }, (props, { element, dispatch, flag, expose }) => {
   let controller: ThreadController | undefined;
 
+  // `messages` is an untyped boundary: a consumer can hand it anything at
+  // runtime (a pre-0.20.0 `{ id, role, content }` array, in particular). Skip
+  // the invalid entries rather than let `groupMessageParts` throw deep inside a
+  // render pass, which would blank the whole element instead of one message.
+  const validMessages = createMessagesGuard('kai-thread');
+
   // Detect whether the consumer projected `slot="empty"` content, so the built-in
   // default only renders when they did NOT.
   const [slots, setSlots] = createSignal<Record<string, boolean>>({});
@@ -96,7 +103,7 @@ defineWebComponent<Props, Events>('kai-thread', {
       <style>{':host{display:block;height:100%}'}</style>
       <Thread
         class={props.class as string | undefined}
-        messages={(props.messages as ChatMessage[] | undefined) ?? []}
+        messages={validMessages(props.messages)}
         loading={flag('loading')}
         proseSize={props.proseSize as ProseSize}
         codeTheme={props.codeTheme as string}

@@ -6,7 +6,7 @@
 // Runs in node with no key and no network.
 import { describe, expect, it } from 'vitest';
 import type { ChatStreamChunk } from '@openrouter/sdk/models';
-import { reasoningTextOf, toModelChunk, toSdkMessages } from './sdk-bridge';
+import { reasoningIndexOf, reasoningTextOf, toModelChunk, toSdkMessages } from './sdk-bridge';
 import type { WireMessage } from '../src/model-stream';
 
 const base = {
@@ -40,6 +40,19 @@ describe('toModelChunk', () => {
         }),
       ),
     ).toEqual({ toolCalls: [{ index: 0, id: 'call_1', name: 'get_weather', arguments: '{"ci' }] });
+  });
+
+  it('carries the reasoning block index through with the raw block list', () => {
+    const details = [{ type: 'reasoning.text' as const, text: 'weighing', index: 1 }];
+    expect(toModelChunk(chunk({ reasoningDetails: details }))).toEqual({
+      reasoning: 'weighing',
+      reasoningIndex: 1,
+      reasoningRaw: { source: 'openrouter.reasoning_details', payload: details },
+    });
+  });
+
+  it('omits reasoningIndex when the provider sends a bare reasoning string', () => {
+    expect(toModelChunk(chunk({ reasoning: 'weighing' }))).toEqual({ reasoning: 'weighing' });
   });
 
   it('keeps an argument fragment that has no id or name', () => {
@@ -98,6 +111,27 @@ describe('reasoningTextOf', () => {
 
   it('returns empty when there is nothing readable', () => {
     expect(reasoningTextOf({ content: 'hi' })).toBe('');
+  });
+});
+
+describe('reasoningIndexOf', () => {
+  it('reads the provider block index off reasoningDetails', () => {
+    expect(reasoningIndexOf({ reasoningDetails: [{ type: 'reasoning.text', text: 'x', index: 2 }] })).toBe(2);
+  });
+
+  it('takes the first entry that declares one', () => {
+    expect(
+      reasoningIndexOf({
+        reasoningDetails: [
+          { type: 'reasoning.encrypted', data: 'BLOB' },
+          { type: 'reasoning.text', text: 'x', index: 1 },
+        ],
+      }),
+    ).toBe(1);
+  });
+
+  it('is undefined for a bare `reasoning` string (no block list to read)', () => {
+    expect(reasoningIndexOf({ reasoning: 'thinking' })).toBeUndefined();
   });
 });
 

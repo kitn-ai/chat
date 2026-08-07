@@ -121,6 +121,43 @@ function jsArray(items: string[]): string {
 const PARTS_TO_CONTENT = `m.parts.map((p) => (p.type === 'text' ? p.text : '')).join('')`;
 
 /**
+ * The streaming fold, emitted into every scaffold that streams text into a
+ * message.
+ *
+ * The naive `{ ...m, parts: [{ type: 'text', text: answer }] }` is the old
+ * flat-string fold wearing parts clothing. It is harmless while the target
+ * message starts at `parts: []`, but it DELETES every part already on the
+ * message, and the agentic archetype seeds exactly such a message
+ * (`SAMPLE_AGENTIC_MESSAGE` carries reasoning + a tool call), so the first
+ * consumer who streams into a seeded message loses them silently.
+ *
+ * `@kitn.ai/ui/state` exports this same function as `appendTextPart`. It is
+ * emitted inline rather than imported so a scaffold stays copy-paste readable
+ * and adds no import to wire up.
+ *
+ * `typed` annotates the signature for strict-TS frameworks, reusing the local
+ * `ChatMessage` type those scaffolds already declare (see `chatMessageType`);
+ * plain-JS contexts (html) take the bare form.
+ */
+function appendTextHelper(pad: string, typed: boolean): string[] {
+  const sig = typed
+    ? `(parts: ChatMessage['parts'], delta: string): ChatMessage['parts'] =>`
+    : `(parts, delta) =>`;
+  return [
+    `${pad}// Fold each delta onto the message's TRAILING text part, opening a new one`,
+    `${pad}// when the last part is not text. Do NOT replace parts wholesale: that drops`,
+    `${pad}// any reasoning/tool/card parts already on the message. This is exactly`,
+    `${pad}// appendTextPart from @kitn.ai/ui/state, inlined.`,
+    `${pad}const appendText = ${sig} {`,
+    `${pad}  const last = parts[parts.length - 1];`,
+    `${pad}  return last?.type === 'text'`,
+    `${pad}    ? [...parts.slice(0, -1), { ...last, text: last.text + delta }]`,
+    `${pad}    : [...parts, { type: 'text', text: delta }];`,
+    `${pad}};`,
+  ];
+}
+
+/**
  * The shared client-side mock stream body, parameterised by how each framework
  * commits a messages update. Two operations keep the contract correct:
  *   - `commitInitial(expr)` appends the user + empty-assistant pair.
@@ -156,7 +193,7 @@ function mockStreamBody(opts: {
   // `string`, so the later `setMessages([...history, …])` fails TS2322. Plain-JS
   // contexts (html) have no type to annotate with.
   const historyType = strictRoles ? ': ChatMessage[]' : '';
-  const mapBody = `(m.id === assistantId ? { ...m, parts: [{ type: 'text', text: answer }] } : m)`;
+  const mapBody = `(m.id === assistantId ? { ...m, parts: appendText(m.parts, tok) } : m)`;
   return [
     `${pad}const value = e.detail.value.trim();`,
     `${pad}if (!value) return;`,
@@ -167,10 +204,9 @@ function mockStreamBody(opts: {
     `${pad}// No backend: stream a canned reply client-side, one token at a time.`,
     `${pad}const reply = ${JSON.stringify(MOCK_REPLY)};`,
     `${pad}const tokens = reply.split(/(\\s+)/);`,
-    `${pad}let answer = '';`,
+    ...appendTextHelper(pad, strictRoles),
     `${pad}for (const tok of tokens) {`,
     `${pad}  await new Promise((r) => setTimeout(r, 24));`,
-    `${pad}  answer += tok;`,
     `${pad}  // new array + object reference per chunk so kai-chat re-renders`,
     `${pad}  ${commitMap(mapBody)}`,
     `${pad}}`,
@@ -432,9 +468,10 @@ function htmlWiring(ctx: RenderCtx, archetype: Archetype): string {
     ``,
     `        // Read the OpenAI-format SSE and stream it into the assistant message.`,
     `        // This loop is the Streaming recipe — copy its exact body if you need keep-alive handling.`,
+    ...appendTextHelper('        ', false),
     `        const reader = res.body.getReader();`,
     `        const decoder = new TextDecoder();`,
-    `        let buffer = '', answer = '';`,
+    `        let buffer = '';`,
     `        while (true) {`,
     `          const { value: chunk, done } = await reader.read();`,
     `          if (done) break;`,
@@ -449,8 +486,7 @@ function htmlWiring(ctx: RenderCtx, archetype: Archetype): string {
     `            try {`,
     `              const delta = JSON.parse(payload).choices?.[0]?.delta?.content;`,
     `              if (!delta) continue;`,
-    `              answer += delta;`,
-    `              chat.messages = chat.messages.map((m) => (m.id === assistantId ? { ...m, parts: [{ type: 'text', text: answer }] } : m));`,
+    `              chat.messages = chat.messages.map((m) => (m.id === assistantId ? { ...m, parts: appendText(m.parts, delta) } : m));`,
     `            } catch { /* skip keep-alive lines */ }`,
     `          }`,
     `        }`,
@@ -588,9 +624,10 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
         `      body: JSON.stringify(${bodyPayload}),`,
         `    });`,
         `    // Stream the OpenAI-format SSE into the assistant message — see the Streaming recipe.`,
+        ...appendTextHelper('    ', true),
         `    const reader = res.body!.getReader();`,
         `    const decoder = new TextDecoder();`,
-        `    let buffer = '', answer = '';`,
+        `    let buffer = '';`,
         `    while (true) {`,
         `      const { value: chunk, done } = await reader.read();`,
         `      if (done) break;`,
@@ -605,8 +642,7 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
         `        try {`,
         `          const delta = JSON.parse(payload).choices?.[0]?.delta?.content;`,
         `          if (!delta) continue;`,
-        `          answer += delta;`,
-        `          setMessages((ms) => ms.map((m) => (m.id === assistantId ? { ...m, parts: [{ type: 'text', text: answer }] } : m)));`,
+        `          setMessages((ms) => ms.map((m) => (m.id === assistantId ? { ...m, parts: appendText(m.parts, delta) } : m)));`,
         `        } catch { /* skip keep-alives */ }`,
         `      }`,
         `    }`,
@@ -833,9 +869,10 @@ function renderVue(archetype: Archetype, ctx: RenderCtx): string {
         `      body: JSON.stringify(${bodyPayload}),`,
         `    });`,
         `    // Stream the OpenAI-format SSE — see the Streaming recipe.`,
+        ...appendTextHelper('    ', true),
         `    const reader = res.body.getReader();`,
         `    const decoder = new TextDecoder();`,
-        `    let buffer = '', answer = '';`,
+        `    let buffer = '';`,
         `    while (true) {`,
         `      const { value: chunk, done } = await reader.read();`,
         `      if (done) break;`,
@@ -850,8 +887,7 @@ function renderVue(archetype: Archetype, ctx: RenderCtx): string {
         `        try {`,
         `          const delta = JSON.parse(payload).choices?.[0]?.delta?.content;`,
         `          if (!delta) continue;`,
-        `          answer += delta;`,
-        `          messages.value = messages.value.map((m) => (m.id === assistantId ? { ...m, parts: [{ type: 'text', text: answer }] } : m));`,
+        `          messages.value = messages.value.map((m) => (m.id === assistantId ? { ...m, parts: appendText(m.parts, delta) } : m));`,
         `        } catch { /* skip keep-alives */ }`,
         `      }`,
         `    }`,
@@ -1030,9 +1066,10 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
         `      body: JSON.stringify(${bodyPayload}),`,
         `    });`,
         `    // Stream the OpenAI-format SSE into the assistant message — see the Streaming recipe.`,
+        ...appendTextHelper('    ', true),
         `    const reader = res.body.getReader();`,
         `    const decoder = new TextDecoder();`,
-        `    let buffer = '', answer = '';`,
+        `    let buffer = '';`,
         `    while (true) {`,
         `      const { value: chunk, done } = await reader.read();`,
         `      if (done) break;`,
@@ -1047,8 +1084,7 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
         `        try {`,
         `          const delta = JSON.parse(payload).choices?.[0]?.delta?.content;`,
         `          if (!delta) continue;`,
-        `          answer += delta;`,
-        `          messages = messages.map((m) => (m.id === assistantId ? { ...m, parts: [{ type: 'text', text: answer }] } : m));`,
+        `          messages = messages.map((m) => (m.id === assistantId ? { ...m, parts: appendText(m.parts, delta) } : m));`,
         `        } catch { /* skip keep-alives */ }`,
         `      }`,
         `    }`,
@@ -1261,9 +1297,10 @@ function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
         `      body: JSON.stringify(${bodyPayload}),`,
         `    });`,
         `    // Stream the OpenAI-format SSE into the assistant message — see the Streaming recipe.`,
+        ...appendTextHelper('    ', true),
         `    const reader = res.body!.getReader();`,
         `    const decoder = new TextDecoder();`,
-        `    let buffer = '', answer = '';`,
+        `    let buffer = '';`,
         `    while (true) {`,
         `      const { value: chunk, done } = await reader.read();`,
         `      if (done) break;`,
@@ -1278,8 +1315,7 @@ function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
         `        try {`,
         `          const delta = JSON.parse(payload).choices?.[0]?.delta?.content;`,
         `          if (!delta) continue;`,
-        `          answer += delta;`,
-        `          setMessages((ms) => ms.map((m) => (m.id === assistantId ? { ...m, parts: [{ type: 'text', text: answer }] } : m)));`,
+        `          setMessages((ms) => ms.map((m) => (m.id === assistantId ? { ...m, parts: appendText(m.parts, delta) } : m)));`,
         `        } catch { /* skip keep-alives */ }`,
         `      }`,
         `    }`,

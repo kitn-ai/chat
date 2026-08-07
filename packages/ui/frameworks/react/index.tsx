@@ -10,7 +10,13 @@
 import { createWebComponent, registerAll, type WebComponentProps } from './runtime';
 export { registerAll };
 export { useKaiChat } from './use-kai-chat';
-export type { UseKaiChatOptions, KaiChatController, ChatMessage } from './use-kai-chat';
+export type { UseKaiChatOptions, KaiChatController } from './use-kai-chat';
+// The content-model types, re-exported so a consumer can annotate a `parts`
+// array or an `addSource` argument without reaching into the main entry.
+export type {
+  ChatMessage, ChatMessageAction, CustomAction, AvatarData, FeedbackVote, MessagePart,
+  MessageSource, RawOrigin, ToolPart, ToolKind, CardEnvelope, AttachmentData,
+} from './use-kai-chat';
 export { useVoiceInput } from './use-voice-input';
 
 

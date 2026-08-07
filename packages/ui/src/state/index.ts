@@ -6,3 +6,16 @@ export { createAssistantStream, onStreamSettled } from './stream';
 export type { SetMessages, AssistantStream } from './stream';
 export { appendTextPart, appendReasoningPart, upsertToolPart, fingerprint } from './parts';
 export type { ReasoningOpts } from './parts';
+
+// The content-model types every signature above mentions. Without these a
+// consumer importing only from '@kitn.ai/ui/state' cannot annotate the very
+// values these helpers take and return (the missing-annotation gap that made an
+// un-annotated `const history = [...]` widen to `string` and fail TS2322).
+export type {
+  ChatMessage, ChatMessageAction, CustomAction, AvatarData, FeedbackVote, MessagePart,
+  MessageSource, RawOrigin,
+} from '../elements/chat-types';
+export type { ToolPart } from '../components/tool-types';
+export type { ToolKind } from '../components/tool-classify';
+export type { CardEnvelope } from '../primitives/card-contract';
+export type { AttachmentData } from '../components/attachment-types';

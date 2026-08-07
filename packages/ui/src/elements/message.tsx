@@ -13,6 +13,7 @@ import {
   type CardComponentMap,
 } from '../primitives/card-registry';
 import type { CardEnvelope } from '../primitives/card-contract';
+import { hasParts } from './validate-messages';
 import type { ChatMessage } from './chat-types';
 
 /**
@@ -133,7 +134,7 @@ defineWebComponent<Props, Events>('kai-message', {
   let lastWarnedMessage: unknown;
   const hasValidParts = (): boolean => {
     const m = msg();
-    if (Array.isArray(m.parts)) return true;
+    if (hasParts(m)) return true;
     if (m !== lastWarnedMessage) {
       lastWarnedMessage = m;
       console.error(

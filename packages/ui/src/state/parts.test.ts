@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { appendReasoningPart, appendTextPart, fingerprint, upsertToolPart } from './parts';
 import type { MessagePart } from '../elements/chat-types';
+import type { ToolPart } from '../components/tool-types';
 
 describe('fingerprint', () => {
   it('is stable across key order', () => {
@@ -97,5 +98,47 @@ describe('upsertToolPart', () => {
     const parts = upsertToolPart([], 'tc1', { type: 'bash', state: 'input-streaming', input: { a: 1 } });
     const next = upsertToolPart(parts, 'tc1', { input: { a: 2 } });
     expect(next).not.toBe(parts);
+  });
+
+  // Regression: create honored `patch.kind` but update unconditionally re-derived
+  // it, so the first `{ state }` patch reverted a consumer classification to
+  // 'generic' and the panel changed treatment mid-stream.
+  it('preserves a consumer-set kind across later patches', () => {
+    let parts = upsertToolPart([], 'tc1', { type: 'my_widget_tool', kind: 'mcp', state: 'input-streaming' });
+    expect((parts[0] as { tool: ToolPart }).tool.kind).toBe('mcp');
+    parts = upsertToolPart(parts, 'tc1', { state: 'output-available', output: { ok: true } });
+    expect((parts[0] as { tool: ToolPart }).tool.kind).toBe('mcp');
+  });
+
+  it('an explicit patch.kind still wins over the preserved one', () => {
+    let parts = upsertToolPart([], 'tc1', { type: 'my_widget_tool', kind: 'mcp', state: 'input-streaming' });
+    parts = upsertToolPart(parts, 'tc1', { kind: 'image' });
+    expect((parts[0] as { tool: ToolPart }).tool.kind).toBe('image');
+  });
+
+  // The streaming path must still work: a fragment-created tool starts as
+  // 'unknown'/'generic' and re-derives once the real name arrives.
+  it('re-derives kind when the type changes and the old kind was auto-derived', () => {
+    let parts = upsertToolPart([], 'tc1', {});
+    expect((parts[0] as { tool: ToolPart }).tool.kind).toBe('generic');
+    parts = upsertToolPart(parts, 'tc1', { type: 'web_search' });
+    expect((parts[0] as { tool: ToolPart }).tool.kind).toBe('search');
+  });
+
+  // Regression: `{ ...cur, ...patch }` let an explicit `raw: undefined` blank an
+  // established round-trip payload (the spike defended against this by hand).
+  it('an explicit raw: undefined does not blank an established raw', () => {
+    const raw = { source: 'anthropic.content_block', payload: { id: 'tu_1' } };
+    let parts = upsertToolPart([], 'tc1', { type: 'bash', state: 'input-streaming', raw });
+    parts = upsertToolPart(parts, 'tc1', { state: 'output-available', raw: undefined });
+    expect((parts[0] as { tool: ToolPart }).tool.raw).toEqual(raw);
+  });
+
+  it('a defined raw still replaces the previous one', () => {
+    const first = { source: 'openai.delta', payload: { n: 1 } };
+    const second = { source: 'openai.delta', payload: { n: 2 } };
+    let parts = upsertToolPart([], 'tc1', { type: 'bash', state: 'input-streaming', raw: first });
+    parts = upsertToolPart(parts, 'tc1', { raw: second });
+    expect((parts[0] as { tool: ToolPart }).tool.raw).toEqual(second);
   });
 });

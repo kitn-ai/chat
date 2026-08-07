@@ -1327,6 +1327,40 @@ describe('scaffold', () => {
     }
   });
 
+  // The streamed fold must APPEND onto the trailing text part, not replace
+  // `parts` wholesale. The wholesale form is the old flat-string fold wearing
+  // parts clothing: harmless into a fresh `parts: []`, but it deletes the
+  // reasoning + tool parts SAMPLE_AGENTIC_MESSAGE seeds, so the first consumer
+  // to stream into a seeded message loses them silently.
+  it('every streaming path folds onto the trailing text part, never replacing parts wholesale', async () => {
+    for (const framework of ['react', 'vue', 'svelte', 'html', 'next', 'tanstack-start'] as const) {
+      for (const integration of ['mock', 'openrouter'] as const) {
+        const out = await scaffold.handler({
+          framework, useCase: 'drop-in-chat', integration, placement: 'full-page',
+        });
+        const ownCode = JSON.stringify(out).split('=== INTERACTION PATTERNS ===')[0];
+        const label = `${framework}/${integration}`;
+
+        // The wholesale replacement, in any of its per-framework spellings.
+        expect(ownCode, `${label}: streams by replacing parts wholesale`).not.toMatch(
+          /\.\.\.m, parts: \[\{ type: .text., text: (answer|accumulated)/,
+        );
+        // The fold itself, plus the helper it calls.
+        expect(ownCode, `${label}: missing the appendText fold`).toMatch(
+          /\.\.\.m, parts: appendText\(m\.parts, (tok|delta)\)/,
+        );
+        expect(ownCode, `${label}: missing the appendText helper definition`).toContain(
+          'const appendText =',
+        );
+        // The helper must open a NEW text part when the last part is not text,
+        // which is what keeps a post-tool answer out of the pre-tool text.
+        expect(ownCode, `${label}: fold does not open a new trailing text part`).toContain(
+          "[...parts, { type: 'text', text: delta }]",
+        );
+      }
+    }
+  });
+
   // Regression test for the exact TS2322 defect the reviewer reproduced with
   // `tsc --strict`: an un-annotated `const history = [...]` widens the part's
   // `type` field to `string`, so `setMessages([...history, …])` no longer

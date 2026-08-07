@@ -65,13 +65,19 @@ const RULES: Rule[] = [
       '  ...chat.messages,\n' +
       "  { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: userText }] },\n" +
       '];\n\n' +
-      '// ✅ During streaming — replace with a new array + new object on every chunk\n' +
+      '// ✅ During streaming: new array + new object per chunk, and FOLD the delta\n' +
+      "//    onto the trailing text part so reasoning/tool/card parts survive.\n" +
+      "import { appendTextPart } from '@kitn.ai/ui/state';\n" +
       'chat.messages = chat.messages.map((m) =>\n' +
-      "  m.id === assistantId ? { ...m, parts: [{ type: 'text', text: accumulated }] } : m\n" +
+      '  m.id === assistantId ? { ...m, parts: appendTextPart(m.parts, delta) } : m\n' +
       ');\n\n' +
       '// ❌ Does NOT trigger re-render\n' +
       'chat.messages.push(newMsg);\n' +
-      "chat.messages[i].parts = [{ type: 'text', text: accumulated }];\n" +
+      'chat.messages[i].parts = appendTextPart(chat.messages[i].parts, delta);\n\n' +
+      '// ❌ Re-renders, but DROPS the reasoning/tool/card parts already on the message\n' +
+      'chat.messages = chat.messages.map((m) =>\n' +
+      "  m.id === assistantId ? { ...m, parts: [{ type: 'text', text: accumulated }] } : m\n" +
+      ');\n' +
       '```\n\n' +
       'The ergonomic path: helpers in `@kitn.ai/ui/state` (`appendMessage`, `updateMessage`, `appendText`) ' +
       'and `createAssistantStream` handle the new-reference contract for you. ' +

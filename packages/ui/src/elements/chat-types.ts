@@ -47,6 +47,13 @@ export interface Source {
   index?: number;
 }
 
+/** The public name for the citation carried by a `source` part, and the argument
+ *  type of `AssistantStream.addSource`. The bare `Source` name is already taken
+ *  on the public entry by the citation-chip COMPONENT (`./components/source`),
+ *  so exporting this interface unaliased would be a duplicate identifier and the
+ *  type would be unnameable from `@kitn.ai/ui`. */
+export type MessageSource = Source;
+
 /** One ordered piece of message content. Closed union: extension happens at the CARD
  *  layer via the card registry, not by adding variants here. */
 export type MessagePart =
@@ -75,6 +82,8 @@ export interface ChatMessage {
   actions?: (ChatMessageAction | CustomAction)[];
   /** Optional speaker avatar shown to the left of the message column. */
   avatar?: AvatarData;
-  /** Controlled feedback vote. */
+  /** Controlled feedback vote. When set, it wins over the facade's internal
+   *  optimistic state (`m.feedback ?? feedbackMap[m.id]`), so a host that
+   *  persists votes can re-hydrate them. */
   feedback?: FeedbackVote;
 }

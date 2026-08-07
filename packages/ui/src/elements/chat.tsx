@@ -3,6 +3,7 @@ import { defineWebComponent } from './define';
 import { CHAT_SLOTS, readSlots } from './slots';
 import { ChatThread, type ChatThreadProps, type ChatThreadContextUsage, type ChatThreadController } from '../components/chat-thread';
 import { cardComponentsFromTags } from './message';
+import { createMessagesGuard } from './validate-messages';
 import type { AttachmentData } from '../components/attachments';
 import type { TriggerDef } from '../components/composer';
 import type { ComposerDoc } from '../primitives/composer-model';
@@ -49,6 +50,12 @@ defineWebComponent<Props, Events>('kai-chat', {
   search: false, voice: false, triggers: undefined, kindIcons: undefined,
   actionsReveal: 'always', cardTypes: undefined,
 }, (props, { dispatch, flag, element, expose }) => {
+  // `messages` is an untyped boundary: a consumer can hand it anything at
+  // runtime (a pre-0.20.0 `{ id, role, content }` array, in particular). Skip
+  // the invalid entries rather than let `groupMessageParts` throw deep inside a
+  // render pass, which would blank the whole chat instead of one message.
+  const validMessages = createMessagesGuard('kai-chat');
+
   // Slot detection is driven by the CHAT_SLOTS registry (single source of truth)
   // so slot names never drift between the view, the facade, and the docs.
   const [slots, setSlots] = createSignal<Record<string, boolean>>({});
@@ -78,7 +85,7 @@ defineWebComponent<Props, Events>('kai-chat', {
 
   return (
   <ChatThread
-    messages={props.messages} value={props.value as string | ComposerDoc | undefined} placeholder={props.placeholder as string}
+    messages={validMessages(props.messages)} value={props.value as string | ComposerDoc | undefined} placeholder={props.placeholder as string}
     loading={flag('loading')} suggestions={props.suggestions as string[] | undefined}
     suggestionMode={props.suggestionMode as 'submit' | 'fill'} persistSuggestions={flag('persistSuggestions')}
     proseSize={props.proseSize as ProseSize}

@@ -308,6 +308,41 @@ describe('reasoning', () => {
       raw: { source: 'openrouter.reasoning_details', payload: details },
     });
   });
+
+  // Regression: the adapter never passed `index`, so every block folded into
+  // part 0. Parallel blocks concatenated into one disclosure AND the later
+  // block's `raw` overwrote the earlier one, destroying the verbatim
+  // round-trip `raw` exists for.
+  it('keeps parallel reasoning blocks distinct, each with its own raw', async () => {
+    const h = harness();
+    const rawA = { source: 'openrouter.reasoning_details', payload: [{ type: 'reasoning.encrypted', data: 'A' }] };
+    const rawB = { source: 'openrouter.reasoning_details', payload: [{ type: 'reasoning.encrypted', data: 'B' }] };
+    const chunks: ModelStreamChunk[] = [
+      { reasoning: 'first', reasoningIndex: 0, reasoningRaw: rawA },
+      { reasoning: 'second', reasoningIndex: 1, reasoningRaw: rawB },
+      { reasoning: '-more', reasoningIndex: 0 },
+      { finishReason: 'stop' },
+    ];
+    await consumeModelStream(replay(chunks), h.stream);
+
+    const blocks = h.message().parts.flatMap((p) => (p.type === 'reasoning' ? [p] : []));
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0]).toMatchObject({ index: 0, text: 'first-more', raw: rawA });
+    expect(blocks[1]).toMatchObject({ index: 1, text: 'second', raw: rawB });
+  });
+
+  it('degrades to block 0 when the provider reports no reasoning index', async () => {
+    const h = harness();
+    const chunks: ModelStreamChunk[] = [
+      { reasoning: 'a' },
+      { reasoning: 'b' },
+      { finishReason: 'stop' },
+    ];
+    await consumeModelStream(replay(chunks), h.stream);
+    const blocks = h.message().parts.flatMap((p) => (p.type === 'reasoning' ? [p] : []));
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]).toMatchObject({ index: 0, text: 'ab' });
+  });
 });
 
 describe('structured outputs (Path B)', () => {

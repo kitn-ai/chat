@@ -1,7 +1,17 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { ChatMessage } from '../../src/elements/chat-types';
-export type { ChatMessage } from '../../src/elements/chat-types';
+// The whole content model, not just the envelope: a React consumer typing a
+// `parts` array or an `addSource` argument needs these too, and re-exporting
+// only `ChatMessage` is the same missing-annotation gap one layer up.
+export type {
+  ChatMessage, ChatMessageAction, CustomAction, AvatarData, FeedbackVote, MessagePart,
+  MessageSource, RawOrigin,
+} from '../../src/elements/chat-types';
+export type { ToolPart } from '../../src/components/tool-types';
+export type { ToolKind } from '../../src/components/tool-classify';
+export type { CardEnvelope } from '../../src/primitives/card-contract';
+export type { AttachmentData } from '../../src/components/attachment-types';
 import type { AttachmentData } from '../../src/components/attachment-types';
 import {
   appendMessage, updateMessage, removeMessage, addSuggestion, removeSuggestion,

@@ -77,9 +77,10 @@ All rich props (arrays, objects) must be set as **JavaScript properties**, not H
 
   const chat = document.querySelector('kai-chat');
 
-  // Set rich props as JS properties
+  // Set rich props as JS properties. A message's content is an ordered
+  // `parts` array (see the ChatMessage schema below).
   chat.messages = [
-    { id: '1', role: 'assistant', content: 'Hello! How can I help?' }
+    { id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello! How can I help?' }] }
   ];
 
   // Listen for events via addEventListener
@@ -314,7 +315,8 @@ The full app shell in one tag — a collapsible conversation-list sidebar (left)
       messageCount: 5, lastMessageAt: '2026-06-13T10:00:00Z', updatedAt: '2026-06-13T10:00:00Z' },
   ];
   workspace.messages = [
-    { id: 'm1', role: 'assistant', content: 'Hello! How can I help?', actions: ['copy', 'like'] },
+    { id: 'm1', role: 'assistant', parts: [{ type: 'text', text: 'Hello! How can I help?' }],
+      actions: ['copy', 'like'] },
   ];
   workspace.models = [
     { id: 'claude-4', name: 'Claude 4 Opus', provider: 'Anthropic' },
@@ -327,10 +329,13 @@ The full app shell in one tag — a collapsible conversation-list sidebar (left)
 
   workspace.addEventListener('kai-submit', async (e) => {
     const text = e.detail.value;
-    const history = [...workspace.messages, { id: crypto.randomUUID(), role: 'user', content: text }];
+    const history = [...workspace.messages,
+      { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text }] }];
     workspace.messages = history;
     workspace.loading = true;
-    // …stream reply, reassign workspace.messages each chunk
+    // …stream the reply, folding each delta onto the assistant message's
+    // trailing text part and reassigning workspace.messages per chunk
+    // (see "ChatMessage schema" below)
     workspace.loading = false;
   });
 </script>
@@ -1660,24 +1665,61 @@ A grouped, filterable command / mention palette (the `@`-picker pattern).
 
 ## ChatMessage schema
 
+A message's content is an **ordered `parts` array**. There is no `content` string: it was removed in 0.20.0. Text, reasoning, tool calls, generative-UI cards, citations and file attachments all live in `parts`, in the order the model produced them, so a post-tool answer renders below its tool panel instead of being glued onto the pre-tool text.
+
 ```ts
 interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
-  content: string;
-  reasoning?: { text: string; label?: string };
-  tools?: ToolPart[];
-  attachments?: AttachmentData[];
-  actions?: ('copy' | 'like' | 'dislike' | 'regenerate' | 'edit')[];
+  /** The ONLY content channel. Ordered. */
+  parts: MessagePart[];
+  /** Action buttons under the message. Chrome, not content. */
+  actions?: (ChatMessageAction | CustomAction)[];
+  avatar?: { src?: string; fallback?: string; alt?: string };
+  /** Controlled feedback vote; wins over the element's optimistic state. */
+  feedback?: 'like' | 'dislike';
+}
+
+/** Six variants, one per kind of content. Every variant may also carry `raw`,
+ *  the untranslated provider block it was normalized from, so a turn can be
+ *  echoed back to the model verbatim. */
+type MessagePart =
+  | { type: 'text'; text: string; raw?: RawOrigin }
+  | { type: 'reasoning'; text: string; label?: string; index?: number; signature?: string; raw?: RawOrigin }
+  | { type: 'tool'; tool: ToolPart; raw?: RawOrigin }
+  | { type: 'card'; envelope: CardEnvelope; raw?: RawOrigin }
+  | { type: 'source'; source: MessageSource; raw?: RawOrigin }
+  | { type: 'file'; attachment: AttachmentData; raw?: RawOrigin };
+
+interface RawOrigin {
+  /** Tagged origin, e.g. 'anthropic.content_block', 'openai.delta'. */
+  source: string;
+  payload: unknown;
+}
+
+/** A citation. Exported as `MessageSource`; the bare `Source` name belongs to
+ *  the citation-chip component. */
+interface MessageSource {
+  id?: string;
+  url?: string;
+  title?: string;
+  snippet?: string;
+  index?: number;
 }
 
 interface ToolPart {
   type: string;
+  /** Semantic classification for rendering. Derived with `classifyTool(type)`
+   *  when you do not set it; an explicit value is preserved. */
+  kind?: 'command' | 'file-change' | 'search' | 'fetch' | 'mcp' | 'image' | 'generic';
   state: 'input-streaming' | 'input-available' | 'output-available' | 'output-error';
   input?: Record<string, unknown>;
+  /** Raw accumulated argument fragments, for character-level streaming. */
+  rawInput?: string;
   output?: Record<string, unknown>;
   toolCallId?: string;
   errorText?: string;
+  raw?: RawOrigin;
 }
 
 interface AttachmentData {
@@ -1711,6 +1753,27 @@ interface SlashCommand {
   description?: string;
   category?: string;
 }
+```
+
+### Streaming into `parts`
+
+Two rules, and both bite:
+
+1. **Reassign a NEW array containing a NEW message object on every chunk.** Mutating a message object in place does not re-render.
+2. **Fold each delta onto the message's TRAILING text part.** Replacing `parts` with a fresh single-text array re-renders fine but silently deletes any reasoning / tool / card parts the turn already produced. Opening a new text part when the last part is not text is what keeps a post-tool answer out of the pre-tool text.
+
+`@kitn.ai/ui/state` ships the fold as `appendTextPart(parts, delta)`; it is five lines if you would rather inline it:
+
+```js
+import { appendTextPart } from '@kitn.ai/ui/state';
+
+// ✅ re-renders, and keeps every part already on the message
+chat.messages = chat.messages.map((m) =>
+  m.id === assistantId ? { ...m, parts: appendTextPart(m.parts, delta) } : m);
+
+// ❌ re-renders, but drops the message's reasoning/tool/card parts
+chat.messages = chat.messages.map((m) =>
+  m.id === assistantId ? { ...m, parts: [{ type: 'text', text: answer }] } : m);
 ```
 
 ---

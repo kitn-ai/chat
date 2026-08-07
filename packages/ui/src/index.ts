@@ -283,11 +283,12 @@ export type {
 } from './components/attachments';
 
 // Chat message types — public API for consumers who need to type their own message arrays.
-// NOTE: chat-types.ts also exports an unrelated `Source` interface (a citation), but
+// NOTE: chat-types.ts also exports an unrelated `Source` interface (a citation), and
 // `Source` is already a public component export (./components/source, a citation
-// chip/trigger), so re-exporting both under the same name is a duplicate-identifier
-// error, so the message-part `Source` interface stays reachable only via
-// `Extract<MessagePart, { type: 'source' }>['source']` rather than a direct import.
+// chip/trigger), so re-exporting both under that name is a duplicate-identifier error.
+// The citation type therefore ships under its alias `MessageSource`, which is also the
+// argument type of the public `AssistantStream.addSource(source)`.
 export type {
-  ChatMessage, ChatMessageAction, CustomAction, AvatarData, FeedbackVote, MessagePart, RawOrigin,
+  ChatMessage, ChatMessageAction, CustomAction, AvatarData, FeedbackVote, MessagePart,
+  MessageSource, RawOrigin,
 } from './elements/chat-types';

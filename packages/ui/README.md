@@ -49,9 +49,10 @@ npm run build   # emits dist/kai.es.js
 
     const chat = document.querySelector('kai-chat');
 
-    // Rich data is set as JS properties (not HTML attributes)
+    // Rich data is set as JS properties (not HTML attributes). A message's
+    // content is an ordered `parts` array.
     chat.messages = [
-      { id: '1', role: 'assistant', content: 'Hello! How can I help?' },
+      { id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello! How can I help?' }] },
     ];
 
     // Events are non-bubbling kai-* CustomEvents dispatched on the element
@@ -142,14 +143,15 @@ The components are deliberately **transport-agnostic**: `<kai-chat>` just render
     if (!text) return;
 
     // 1. Show the user message immediately
-    const history = [...chat.messages, { id: crypto.randomUUID(), role: 'user', content: text }];
+    const history = [...chat.messages,
+      { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text }] }];
     chat.messages = history;
     chat.value = '';        // clear the input
     chat.loading = true;
 
     // 2. Add an empty assistant message we'll stream into
     const assistantId = crypto.randomUUID();
-    chat.messages = [...history, { id: assistantId, role: 'assistant', content: '' }];
+    chat.messages = [...history, { id: assistantId, role: 'assistant', parts: [] }];
 
     try {
       // In production, replace this URL with your own proxy endpoint.
@@ -162,14 +164,28 @@ The components are deliberately **transport-agnostic**: `<kai-chat>` just render
         body: JSON.stringify({
           model: 'anthropic/claude-sonnet-4',
           stream: true,
-          messages: history.map((m) => ({ role: m.role, content: m.content })),
+          // The wire format is a flat string; flatten the text parts for it.
+          messages: history.map((m) => ({
+            role: m.role,
+            content: m.parts.map((p) => (p.type === 'text' ? p.text : '')).join(''),
+          })),
         }),
       });
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
-      let answer = '';
+
+      // Fold each delta onto the message's TRAILING text part, opening a new one
+      // when the last part is not text. Do NOT replace `parts` wholesale: that
+      // drops any reasoning/tool/card parts already on the message.
+      // `@kitn.ai/ui/state` exports this same function as `appendTextPart`.
+      const appendText = (parts, delta) => {
+        const last = parts[parts.length - 1];
+        return last?.type === 'text'
+          ? [...parts.slice(0, -1), { ...last, text: last.text + delta }]
+          : [...parts, { type: 'text', text: delta }];
+      };
 
       while (true) {
         const { value, done } = await reader.read();
@@ -187,17 +203,16 @@ The components are deliberately **transport-agnostic**: `<kai-chat>` just render
           try {
             const delta = JSON.parse(payload).choices?.[0]?.delta?.content;
             if (!delta) continue;
-            answer += delta;
             // Replace the assistant message with a NEW object so the row re-renders
             chat.messages = chat.messages.map((m) =>
-              m.id === assistantId ? { ...m, content: answer } : m
+              m.id === assistantId ? { ...m, parts: appendText(m.parts, delta) } : m
             );
           } catch { /* ignore non-JSON keep-alive lines */ }
         }
       }
     } catch (err) {
       chat.messages = chat.messages.map((m) =>
-        m.id === assistantId ? { ...m, content: '⚠️ ' + err.message } : m
+        m.id === assistantId ? { ...m, parts: appendText(m.parts, '⚠️ ' + err.message) } : m
       );
     } finally {
       chat.loading = false;
@@ -268,7 +283,7 @@ You can trigger either option from the streaming completion (auto-read replies) 
 
 ## State helpers & hooks
 
-`@kitn.ai/ui/state` ships immutable helpers (`appendMessage`, `upsertMessage`, `updateMessage`, `removeMessage`, `appendContent`) and a streaming handle (`createAssistantStream`) so you don't hand-roll array mutations. React apps get `useKaiChat` (from `@kitn.ai/ui/react`); SolidJS apps get `createKaiChat` (from `@kitn.ai/ui`). Both return a `bind` object to spread directly onto the element:
+`@kitn.ai/ui/state` ships immutable helpers (`appendMessage`, `upsertMessage`, `updateMessage`, `removeMessage`, `appendText`, `textMessage`), the part-level folds they build on (`appendTextPart`, `appendReasoningPart`, `upsertToolPart`), and a streaming handle (`createAssistantStream`) so you don't hand-roll array mutations. React apps get `useKaiChat` (from `@kitn.ai/ui/react`); SolidJS apps get `createKaiChat` (from `@kitn.ai/ui`). Both return a `bind` object to spread directly onto the element:
 
 ```tsx
 import { Chat, useKaiChat } from '@kitn.ai/ui/react';
@@ -277,7 +292,7 @@ import { createAssistantStream } from '@kitn.ai/ui/state';
 function App() {
   const chat = useKaiChat({
     async onSubmit({ value }) {
-      chat.append({ id: crypto.randomUUID(), role: 'user', content: value });
+      chat.append({ id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: value }] });
       const s = chat.streamAssistant();
       for await (const part of backend(value)) s.appendText(part);
       s.done();

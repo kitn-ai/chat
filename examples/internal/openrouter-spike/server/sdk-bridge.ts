@@ -45,6 +45,23 @@ export function reasoningTextOf(delta: ChatStreamDelta): string {
   return out;
 }
 
+/**
+ * The provider's BLOCK index for this delta's reasoning, when it reports one.
+ *
+ * OpenRouter's `reasoningDetails` entries carry an optional `index`; the plain
+ * `delta.reasoning` string carries none, so that path degrades to block 0. The
+ * first entry that declares an index wins, matching `reasoningTextOf`'s
+ * left-to-right read of the same array.
+ */
+export function reasoningIndexOf(delta: ChatStreamDelta): number | undefined {
+  const details: ReasoningDetailUnion[] | undefined = delta.reasoningDetails;
+  if (!Array.isArray(details)) return undefined;
+  for (const d of details) {
+    if (d && typeof d === 'object' && 'index' in d && typeof d.index === 'number') return d.index;
+  }
+  return undefined;
+}
+
 function toolCallDelta(tc: ChatStreamToolCall): ModelToolCallDelta {
   return {
     index: tc.index,
@@ -90,6 +107,9 @@ export function toModelChunk(chunk: ChatStreamChunk): ModelStreamChunk | null {
     const reasoning = delta ? reasoningTextOf(delta) : '';
     if (reasoning) {
       out.reasoning = reasoning;
+      // Keeps parallel reasoning blocks distinct downstream. Absent means block 0.
+      const reasoningIndex = delta ? reasoningIndexOf(delta) : undefined;
+      if (reasoningIndex !== undefined) out.reasoningIndex = reasoningIndex;
       // The ROUND-TRIP channel. `reasoningDetails` is the provider's own block
       // list, opaque entries (`reasoning.encrypted`, signed thinking blobs)
       // included. Anthropic-backed models return 400 if a thinking block is

@@ -6,6 +6,7 @@ import { ChatThread, type ChatThreadContextUsage, type ChatThreadController } fr
 import { ConversationList, CollapsedRail } from '../components/conversation-list';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '../ui/resizable';
 import { cardComponentsFromTags } from './message';
+import { createMessagesGuard } from './validate-messages';
 import type { AttachmentData } from '../components/attachments';
 import type { TriggerDef } from '../components/composer';
 import type { ChatMessage } from './chat-types';
@@ -107,6 +108,12 @@ defineWebComponent<Props, Events>('kai-workspace', {
   sidebarCollapsed: undefined, defaultSidebarCollapsed: undefined, collapseBelow: undefined, compact: undefined,
   noConversations: undefined, cardTypes: undefined,
 }, (props, { dispatch, flag, expose, element }) => {
+  // `messages` is an untyped boundary: a consumer can hand it anything at
+  // runtime (a pre-0.20.0 `{ id, role, content }` array, in particular). Skip
+  // the invalid entries rather than let `groupMessageParts` throw deep inside a
+  // render pass, which would blank the whole workspace instead of one message.
+  const validMessages = createMessagesGuard('kai-workspace');
+
   // Which injection slots the consumer has filled. A bare <slot> is always a
   // truthy JSX node, so we render each region wrapper ONLY when readSlots reports
   // projected light-DOM content (re-read on childList mutation).
@@ -186,7 +193,7 @@ defineWebComponent<Props, Events>('kai-workspace', {
   // own state (e.g. an uncontrolled draft) survives the collapse/expand.
   const threadEl = (
     <ChatThread
-      messages={props.messages} value={props.value as string | undefined} placeholder={props.placeholder as string}
+      messages={validMessages(props.messages)} value={props.value as string | undefined} placeholder={props.placeholder as string}
       loading={flag('loading')} suggestions={props.suggestions as string[] | undefined}
       suggestionMode={props.suggestionMode as 'submit' | 'fill'} proseSize={props.proseSize as ProseSize}
       codeTheme={props.codeTheme as string} codeHighlight={flag('codeHighlight')}
