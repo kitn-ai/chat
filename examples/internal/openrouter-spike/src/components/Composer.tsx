@@ -10,7 +10,7 @@ interface ComposerProps {
 }
 
 /**
- * The bottom composer. Stays UNCONTROLLED — assigning a plain string `value`
+ * The bottom composer. Stays UNCONTROLLED: assigning a plain string `value`
  * flips `<kai-prompt-input>` into controlled mode and collapses its shadow-DOM
  * selection, so clear-on-submit goes through the element's `clear()` method.
  */

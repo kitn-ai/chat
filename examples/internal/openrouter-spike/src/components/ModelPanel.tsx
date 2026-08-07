@@ -18,7 +18,7 @@ interface ModelPanelProps {
  *
  * Everything in this panel belongs INSIDE the assistant turn and cannot get
  * there. `ChatMessage` has `content`, `reasoning`, `tools`, `attachments`,
- * `actions`, `avatar` and `feedback` — no `sources`, no `cards`. `<kai-thread>`
+ * `actions`, `avatar` and `feedback`: no `sources`, no `cards`. `<kai-thread>`
  * exposes no per-message slot either (`Message` has an `inject` slot, but the
  * thread element does not forward one). So a model-produced citation row and a
  * model-produced card have to be rendered in a tray under the thread, detached
@@ -39,7 +39,7 @@ export function ModelPanel({ theme, sources, cards, onCardResolved, error, stats
       {sources.length > 0 && (
         <section className="panel-block">
           <h2 className="panel-title">
-            Sources <span className="panel-note">rendered outside the message — ChatMessage has no `sources`</span>
+            Sources <span className="panel-note">rendered outside the message: ChatMessage has no `sources`</span>
           </h2>
           <Sources theme={theme} sources={sources} numbered showFavicon />
         </section>
@@ -48,7 +48,7 @@ export function ModelPanel({ theme, sources, cards, onCardResolved, error, stats
       {cards.length > 0 && (
         <section className="panel-block">
           <h2 className="panel-title">
-            Cards <span className="panel-note">rendered outside the message — ChatMessage has no `cards`</span>
+            Cards <span className="panel-note">rendered outside the message: ChatMessage has no `cards`</span>
           </h2>
           <Cards
             theme={theme}
@@ -69,7 +69,7 @@ function StatsRow({ stats }: { stats: TurnStats }) {
     stats.reasoningChunks > 0
       ? `streamed (${stats.reasoningChunks} deltas, ${stats.reasoningChars} chars)`
       : stats.reasoningTokens
-        ? `hidden — ${stats.reasoningTokens} reasoning tokens billed, 0 deltas`
+        ? `hidden: ${stats.reasoningTokens} reasoning tokens billed, 0 deltas`
         : 'none';
 
   return (

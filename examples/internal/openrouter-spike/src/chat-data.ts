@@ -1,5 +1,5 @@
 // Spike scaffolding: ids, the scenario rail, and the composer suggestions.
-// There is no canned responder here — every reply comes from a real model.
+// There is no canned responder here: every reply comes from a real model.
 
 export function newId(): string {
   return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'

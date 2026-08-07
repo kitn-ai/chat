@@ -2,7 +2,7 @@
 // PARTS the kit actually ends up with. No API key, no network.
 //
 // The sink is the kit's REAL `createAssistantStream` (from `@kitn.ai/ui/state`),
-// not a stub — so these tests also pin the kit's part lifecycle and its
+// not a stub, so these tests also pin the kit's part lifecycle and its
 // new-reference-per-mutation contract.
 import { describe, expect, it } from 'vitest';
 import { createAssistantStream, partsToText, type SetMessages } from '@kitn.ai/ui/state';
@@ -46,10 +46,10 @@ function harness() {
 }
 
 /** Tool panels, in message order. `parts` is a union, so `flatMap` is the narrowing
- *  filter — there is no `message.tools` array any more. */
+ *  filter: there is no `message.tools` array any more. */
 const toolsOf = (m: ChatMessage): ToolPart[] => m.parts.flatMap((p) => (p.type === 'tool' ? [p.tool] : []));
 
-/** The reasoning block (index 0 — the fixtures never emit parallel blocks). */
+/** The reasoning block (index 0, the fixtures never emit parallel blocks). */
 const reasoningOf = (m: ChatMessage): Extract<MessagePart, { type: 'reasoning' }> | undefined =>
   m.parts.flatMap((p) => (p.type === 'reasoning' ? [p] : []))[0];
 
@@ -116,7 +116,7 @@ describe('a tool-calling turn', () => {
     await consumeModelStream(replay(TOOL_TURN), h.stream, {
       onToolArgumentsDelta: (call) => {
         partials.push(call.argumentsText);
-        // The ToolPart is live in the message at this point — assert it is still
+        // The ToolPart is live in the message at this point: assert it is still
         // `input-streaming` and carries NO partial input.
         const tool = toolsOf(h.message())[0];
         states.push(tool?.state ?? 'missing');
@@ -136,7 +136,7 @@ describe('a tool-calling turn', () => {
   it('hands the kit a NEW message + parts array reference on every mutation', async () => {
     const h = harness();
     await consumeModelStream(replay(TOOL_TURN), h.stream);
-    // Every setter call produced a distinct array — the "new reference per chunk"
+    // Every setter call produced a distinct array: the "new reference per chunk"
     // contract <kai-thread> relies on.
     expect(new Set(h.arrayRefs).size).toBe(h.arrayRefs.length);
     expect(h.arrayRefs.length).toBeGreaterThan(5);
@@ -274,7 +274,7 @@ describe('reasoning', () => {
 
     const hidden = harness();
     const b = await consumeModelStream(replay(HIDDEN_REASONING), hidden.stream);
-    // The model DID reason — 512 tokens of it — but nothing streamed, so
+    // The model DID reason (512 tokens of it) but nothing streamed, so
     // <kai-reasoning> has nothing to render. The count is the only evidence.
     expect(b.reasoningChunks).toBe(0);
     expect(b.reasoning).toBe('');
@@ -316,7 +316,7 @@ describe('structured outputs (Path B)', () => {
     const buffered = bufferText(h.stream);
     const turn = await consumeModelStream(replay(STRUCTURED_CARD_TURN), buffered);
 
-    // The raw JSON must NEVER have been appended into the visible message — not
+    // The raw JSON must NEVER have been appended into the visible message: not
     // as a text part, not as anything.
     expect(h.message().parts).toEqual([]);
     expect(turn.text).toBe(buffered.buffered());
@@ -420,7 +420,7 @@ describe('the second turn (tool results back to the model)', () => {
       { type: 'text', text: "It's **12 °C** and raining in Paris — take a coat. ☔️" },
     ]);
     // `partsToText` still concatenates for the places that genuinely need a flat
-    // string (copy-to-clipboard, the provider wire) — that is now a deliberate
+    // string (copy-to-clipboard, the provider wire): that is now a deliberate
     // flattening, not the content model.
     expect(partsToText(h.message().parts)).toBe(
       "Let me check Paris for you.It's **12 °C** and raining in Paris — take a coat. ☔️",

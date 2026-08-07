@@ -27,7 +27,7 @@ export function ThreadView({ theme, messages, loading, partialArgs }: ThreadView
   const pending = Object.entries(partialArgs).filter(([, text]) => {
     try {
       JSON.parse(text);
-      return false; // already complete — the ToolPart shows it properly now
+      return false; // already complete: the ToolPart shows it properly now
     } catch {
       return true;
     }

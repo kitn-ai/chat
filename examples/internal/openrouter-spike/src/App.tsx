@@ -12,7 +12,7 @@ import { ThemeToggle } from './components/ThemeToggle';
 export type Theme = 'light' | 'dark';
 
 /**
- * ⚠ SPIKE — not a supported starter. See README.md.
+ * ⚠ SPIKE, not a supported starter. See README.md.
  *
  * A copy of `examples/starters/react/` with the fake responder replaced by a
  * REAL model over OpenRouter, so the kit's tool / reasoning / card components
@@ -102,7 +102,7 @@ export default function App() {
                 {configError && <span className="model model-bad">proxy unreachable: {configError}</span>}
               </div>
               <div className="bar-right">
-                {/* Path A vs Path B — the generative-UI comparison. */}
+                {/* Path A vs Path B: the generative-UI comparison. */}
                 <Segmented
                   theme={theme}
                   size="sm"

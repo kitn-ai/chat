@@ -13,7 +13,7 @@
 type ByteSource = AsyncIterable<Uint8Array | string> | ReadableStream<Uint8Array>;
 
 /** Adapt a WHATWG ReadableStream to an async iterable. Never rely on
- *  `for await (… of res.body)` — Safari still lacks async iteration on it. */
+ *  `for await (… of res.body)`: Safari still lacks async iteration on it. */
 export async function* readableToAsyncIterable(
   stream: ReadableStream<Uint8Array>,
 ): AsyncGenerator<Uint8Array> {
@@ -89,7 +89,7 @@ export async function* sseJson<T>(source: ByteSource): AsyncGenerator<T> {
     try {
       yield JSON.parse(payload) as T;
     } catch {
-      // a keep-alive or a provider's stray line — ignore rather than throw
+      // a keep-alive or a provider's stray line: ignore rather than throw
     }
   }
 }

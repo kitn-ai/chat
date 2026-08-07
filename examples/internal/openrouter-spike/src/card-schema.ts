@@ -1,4 +1,4 @@
-// PATH B — generative UI via STRUCTURED OUTPUTS.
+// PATH B: generative UI via STRUCTURED OUTPUTS.
 //
 // The spec's open product question is "where do cards come from: a dedicated
 // tool the model calls, or structured output?". `~deepseek/deepseek-v4-flash-latest`
@@ -6,8 +6,8 @@
 //
 // The schema is HAND-DERIVED from the kit's confirm-card contract
 // (`ConfirmCardData` in packages/ui/src/components/confirm-card.tsx) because the
-// kit's own JSON Schemas — which exist, at
-// `packages/ui/src/primitives/card-schemas/confirm.schema.json` — are NOT
+// kit's own JSON Schemas (which exist, at
+// `packages/ui/src/primitives/card-schemas/confirm.schema.json`) are NOT
 // reachable through the package `exports` map. See ../FINDINGS.md, section
 // "The card JSON Schemas are built but not exported".
 import type { CardEnvelope } from '@kitn.ai/ui';
@@ -60,7 +60,7 @@ const CONFIRM_ENVELOPE_SCHEMA = {
  *
  * NOTE the wrapper. `response_format` constrains the WHOLE assistant message, so
  * a bare envelope schema would mean the model can never speak prose again. The
- * only workable shape is `{ reply, card }` — which is itself a finding: with
+ * only workable shape is `{ reply, card }`, which is itself a finding: with
  * structured outputs the chat text and the generative UI have to share one
  * schema, and the kit has no type for "a message that carries both".
  */

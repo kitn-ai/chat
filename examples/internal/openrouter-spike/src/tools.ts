@@ -1,5 +1,5 @@
 // The three tools the model can call, plus their LOCAL (canned, deterministic)
-// implementations. No third-party network calls — the spike is about the UI wire,
+// implementations. No third-party network calls: the spike is about the UI wire,
 // not about real weather.
 //
 // Each tool is picked to land in a DIFFERENT kit component:
@@ -65,7 +65,7 @@ export const TOOL_SPECS: ToolSpec[] = [
       name: 'propose_action',
       description:
         'Ask the user to approve an action before you take it. Renders an approval card in the UI. ' +
-        'Returns immediately with status "awaiting_user" — do NOT assume the user approved; ' +
+        'Returns immediately with status "awaiting_user": do NOT assume the user approved; ' +
         'tell them the card is waiting for them.',
       parameters: {
         type: 'object',
@@ -88,14 +88,14 @@ export const TOOL_SPECS: ToolSpec[] = [
 
 /**
  * The system prompt is built PER CARD MODE. It must only advertise tools that
- * are actually in the request — a prompt that mentions `propose_action` while
+ * are actually in the request: a prompt that mentions `propose_action` while
  * the tool list omits it makes the model burn reasoning tokens on the
  * contradiction (observed live before this was fixed).
  */
 export function buildSystemPrompt(includeProposeAction: boolean): string {
   return [
     'You are a demo assistant embedded in the @kitn.ai/ui component kit.',
-    'Use your tools eagerly — the whole point of this demo is to show the tool UI.',
+    'Use your tools eagerly: the whole point of this demo is to show the tool UI.',
     '- get_weather: for anything about weather.',
     '- search_docs: for anything about @kitn.ai/ui, kai-* elements, theming, or installation. Cite the sources you get back.',
     ...(includeProposeAction
@@ -153,7 +153,7 @@ const DOCS: { title: string; url: string; snippet: string; tags: string[] }[] = 
     title: 'Streaming',
     url: 'https://ui.kitn.ai/guides/recipes/streaming',
     snippet:
-      'Read OpenAI-format SSE and assign a NEW messages array per chunk. Mutating the array in place does not re-render — the elements compare references.',
+      'Read OpenAI-format SSE and assign a NEW messages array per chunk. Mutating the array in place does not re-render: the elements compare references.',
     tags: ['stream', 'sse', 'token', 'render', 'chunk'],
   },
   {
@@ -181,7 +181,7 @@ const DOCS: { title: string; url: string; snippet: string; tags: string[] }[] = 
     title: 'Web component contract',
     url: 'https://ui.kitn.ai/guides/web-components',
     snippet:
-      'Array and object props are JS PROPERTIES, never HTML attributes. Events are non-bubbling kai-* CustomEvents — listen on the element itself.',
+      'Array and object props are JS PROPERTIES, never HTML attributes. Events are non-bubbling kai-* CustomEvents: listen on the element itself.',
     tags: ['property', 'attribute', 'event', 'contract', 'custom element'],
   },
 ];

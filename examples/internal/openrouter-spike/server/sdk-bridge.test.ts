@@ -1,6 +1,6 @@
 // Pins the ONE provider-specific layer. The fixtures below are typed as the
 // installed SDK's `ChatStreamChunk`, so if @openrouter/sdk renames a field this
-// test stops COMPILING — which is the whole point of keeping the mapping thin
+// test stops COMPILING, which is the whole point of keeping the mapping thin
 // and isolated from `src/model-stream.ts`.
 //
 // Runs in node with no key and no network.
@@ -121,7 +121,7 @@ describe('toSdkMessages', () => {
         content: 'Let me check.',
         toolCalls: [{ id: 'call_1', type: 'function', function: { name: 'get_weather', arguments: '{"city":"Paris"}' } }],
       },
-      // `toolCallId`, not `tool_call_id` — the SDK serialises it.
+      // `toolCallId`, not `tool_call_id`: the SDK serialises it.
       { role: 'tool', toolCallId: 'call_1', content: '{"temperature":12}' },
     ]);
   });

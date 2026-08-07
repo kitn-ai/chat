@@ -1,4 +1,4 @@
-// Browser-side transport. Talks ONLY to the local dev proxy — no provider SDK,
+// Browser-side transport. Talks ONLY to the local dev proxy: no provider SDK,
 // no API key, no openrouter.ai host anywhere in this file (or in any file the
 // client bundle reaches).
 import { sseJson } from './sse-frames';

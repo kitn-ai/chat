@@ -1275,8 +1275,8 @@ describe('scaffold', () => {
 
   // Round-1 fix review found a real bug (integrations/ollama.ts's `html` route
   // template still built a `role, content` ChatMessage literal) that this suite
-  // never caught, because every test above only ever passes `integration: 'mock'`
-  // — the one integration with no route template to sweep. Every integration's
+  // never caught, because every test above only ever passes `integration: 'mock'`,
+  // the one integration with no route template to sweep. Every integration's
   // templates are static strings baked into its catalog file, so a bad one is a
   // silent, permanent bug: fix the systemic gap by exercising every registered
   // integration here, not just the one the earlier tests happened to use.
@@ -1308,7 +1308,7 @@ describe('scaffold', () => {
     }
   });
 
-  // Same integration sweep, on a strict-TS framework — catches a bad route
+  // Same integration sweep, on a strict-TS framework: catches a bad route
   // template that only shows up once TypeScript output (not plain JS) is involved.
   it('every registered integration emits parts-shaped ChatMessage literals on a TS framework (react)', async () => {
     for (const integration of listIntegrations()) {
@@ -1332,8 +1332,8 @@ describe('scaffold', () => {
   // `type` field to `string`, so `setMessages([...history, …])` no longer
   // satisfies `ChatMessage[]`. This is a string-level proxy for "would compile
   // under strict", not a real compiler run (a temp-file + tsc/ts-morph harness
-  // was judged too heavy for this suite — flagged to the coordinator as a
-  // possible follow-up) — but it pins the exact annotation every prior fix
+  // was judged too heavy for this suite; flagged to the coordinator as a
+  // possible follow-up), but it pins the exact annotation every prior fix
   // relied on, on every strict-TS framework this bug hit.
   it('every strict-TS framework annotates the mock-path `history` const as ChatMessage[]', async () => {
     for (const framework of ['react', 'next', 'vue', 'svelte', 'tanstack-start'] as const) {

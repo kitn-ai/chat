@@ -16,7 +16,7 @@ import { buildSystemPrompt, runTool, toolsFor, type SourceItem } from '../tools'
 import { STRUCTURED_SYSTEM_SUFFIX, parseReplyWithCard } from '../card-schema';
 import { newId } from '../chat-data';
 
-/** Hard cap on the tool loop — a runaway model is a runaway bill. */
+/** Hard cap on the tool loop: a runaway model is a runaway bill. */
 const MAX_ROUNDS = 4;
 
 /** Everything the debug panel shows. Most of it exists to answer one question:
@@ -98,7 +98,7 @@ export function useSpikeChat(chat: KaiChatController, cardMode: CardMode): Spike
 
       const stream = chat.streamAssistant();
       // In structured mode the whole message is JSON, so it must NOT be appended
-      // into the visible thread — buffer it, parse, then append just the prose.
+      // into the visible thread: buffer it, parse, then append just the prose.
       const buffered = structured ? bufferText(stream) : null;
       const sink = buffered ?? stream;
 
@@ -147,7 +147,7 @@ export function useSpikeChat(chat: KaiChatController, cardMode: CardMode): Spike
           wireRef.current.push(assistantWireMessage(turn));
 
           if (turn.toolCalls.length > 0 && usable.length === 0) {
-            throw new Error('Every tool call the model emitted was malformed — see the tool panels.');
+            throw new Error('Every tool call the model emitted was malformed: see the tool panels.');
           }
 
           if (usable.length > 0) {
@@ -161,11 +161,11 @@ export function useSpikeChat(chat: KaiChatController, cardMode: CardMode): Spike
             continue; // another round: let the model answer with the results
           }
 
-          // No tool calls left — this round produced the final answer.
+          // No tool calls left: this round produced the final answer.
           if (buffered) {
             // FINDING: `AssistantStream` has no `setText`/`replaceText`, so this
             // appends. It reads as a SET only because `bufferText` swallowed every
-            // text delta — the message holds no text part, so the append opens the
+            // text delta: the message holds no text part, so the append opens the
             // first one. A kit-level "replace the text" op is the missing piece.
             const { value, error: schemaError } = parseReplyWithCard(buffered.buffered());
             if (schemaError || !value) {
@@ -189,7 +189,7 @@ export function useSpikeChat(chat: KaiChatController, cardMode: CardMode): Spike
         const message = e instanceof Error ? e.message : String(e);
         setError(message);
         // Leave whatever streamed in place; just make the failure visible. Only
-        // TEXT counts as "the user already saw something" — a lone tool panel or
+        // TEXT counts as "the user already saw something": a lone tool panel or
         // reasoning block still needs the failure spelled out.
         if (!chat.messages.some((m) => m.id === stream.id && partsToText(m.parts))) {
           stream.appendText(`_The request failed: ${message}_`);

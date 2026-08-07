@@ -1,7 +1,7 @@
 /**
  * Unit tests for the `<kai-message>` facade's boundary validation.
  *
- * `message` is an untyped consumer-facing property — nothing stops a consumer
+ * `message` is an untyped consumer-facing property; nothing stops a consumer
  * from handing it the pre-0.20.0 `{ id, role, content }` shape (the shape this
  * whole plan removed). `parts` is a REQUIRED field internally
  * (`groupMessageParts` no longer tolerates a missing one), so the facade must
@@ -23,7 +23,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  // Restore FIRST, unconditionally — a failed assertion above must not leave
+  // Restore FIRST, unconditionally: a failed assertion above must not leave
   // a stale mock bleeding console.error output into the next test.
   errorSpy.mockRestore();
   document.querySelectorAll('kai-message').forEach((el) => el.remove());
@@ -44,7 +44,7 @@ describe('<kai-message> boundary validation', () => {
     expect(errorSpy).toHaveBeenCalledTimes(1);
     expect(errorSpy.mock.calls[0][0]).toMatch(/kai-message.*'parts' array/i);
     // Renders nothing for the bad message rather than a broken/partial row.
-    // (shadowRoot.textContent alone isn't a safe "empty" check — it also
+    // (shadowRoot.textContent alone isn't a safe "empty" check: it also
     // includes the injected compiled-CSS <style> tag's text.)
     expect(el.shadowRoot!.querySelector('[part="row"]')).toBeNull();
   });

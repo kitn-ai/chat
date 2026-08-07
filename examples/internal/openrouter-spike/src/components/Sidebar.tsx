@@ -13,7 +13,7 @@ interface SidebarProps {
 }
 
 /**
- * The rail — `<kai-conversations>` repurposed as a scenario picker. Selecting an
+ * The rail: `<kai-conversations>` repurposed as a scenario picker. Selecting an
  * entry starts a fresh thread and fires its prompt at the real model, so each
  * kit component (tool panel / sources / cards) is one click away.
  */

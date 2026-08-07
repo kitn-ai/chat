@@ -39,7 +39,7 @@ export function cardComponentsFromTags(types?: CardTagMap, theme = 'auto'): Card
 
 /** Renders one envelope as a dynamically-created custom element, setting the
  *  envelope's data/id/title/resolution as DOM properties (reactive) plus the
- *  `theme` + `data-card-id` chrome — mirrors `<kai-cards>`'s `CardSlot` so a
+ *  `theme` + `data-card-id` chrome, mirroring `<kai-cards>`'s `CardSlot` so a
  *  custom card behaves identically whether it arrives via `<kai-cards>` or a
  *  `card` message part here. */
 function CardTagSlot(props: { tag: string; envelope: CardEnvelope; theme: string }): JSX.Element {

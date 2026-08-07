@@ -1,7 +1,7 @@
 // A dev-server-only proxy that keeps OPENROUTER_API_KEY server-side.
 //
 // SECURITY CONTRACT (the whole point of the file):
-//   · the key is read with Vite's `loadEnv(mode, root, '')` — the EMPTY prefix
+//   · the key is read with Vite's `loadEnv(mode, root, '')`: the EMPTY prefix
 //     is what makes an UNPREFIXED var readable. Vite only inlines `VITE_`-
 //     prefixed vars into client code, so an unprefixed name can never reach the
 //     bundle. There is no VITE_OPENROUTER_API_KEY and there must never be one.
@@ -9,7 +9,7 @@
 //     only ever talks to `POST /api/chat`.
 //   · the key is never logged, never echoed in an error body, never sent to the
 //     browser. `/api/config` reports a boolean.
-//   · `apply: 'serve'` — this plugin does not exist in a production build. A
+//   · `apply: 'serve'`: this plugin does not exist in a production build. A
 //     `vite build` of this app is a static site with NO server; a real
 //     deployment needs its own route. Said again in the README.
 import { loadEnv, type Plugin } from 'vite';
@@ -39,7 +39,7 @@ function readEnv(root: string, mode: string): ProxyEnv {
   return {
     key: pick('OPENROUTER_API_KEY'),
     // Passed through VERBATIM, including the leading `~` of the floating-latest
-    // alias — `~deepseek/deepseek-v4-flash-latest` is a real, cheaper slug than
+    // alias: `~deepseek/deepseek-v4-flash-latest` is a real, cheaper slug than
     // the pinned `deepseek/deepseek-v4-flash`.
     model: pick('OPENROUTER_MODEL') || DEFAULT_MODEL,
     reasoningEffort: pick('OPENROUTER_REASONING_EFFORT') || 'medium',
@@ -67,13 +67,13 @@ export function openrouterProxy(): Plugin {
 
   return {
     name: 'openrouter-spike-proxy',
-    apply: 'serve', // dev only — see the security contract above
+    apply: 'serve', // dev only (see the security contract above)
     configResolved(config) {
       root = config.root;
       mode = config.mode;
     },
     configureServer(server) {
-      // GET /api/config — what the client is allowed to know. NEVER the key.
+      // GET /api/config: what the client is allowed to know. NEVER the key.
       server.middlewares.use('/api/config', (_req, res) => {
         const env = readEnv(root, mode);
         json(res, 200, {
@@ -84,7 +84,7 @@ export function openrouterProxy(): Plugin {
         });
       });
 
-      // POST /api/chat — run one turn through the SDK, re-emit our neutral
+      // POST /api/chat: run one turn through the SDK, re-emit our neutral
       // chunk shape as SSE.
       server.middlewares.use('/api/chat', (req, res) => {
         void handleChat(req, res, readEnv(root, mode));
@@ -109,7 +109,7 @@ async function handleChat(req: IncomingMessage, res: ServerResponse, env: ProxyE
         code: 'missing_key',
         message:
           'OPENROUTER_API_KEY is not set. Copy .env.example to .env.local and paste your key ' +
-          '(UNPREFIXED — never VITE_OPENROUTER_API_KEY), then restart the dev server.',
+          '(UNPREFIXED, never VITE_OPENROUTER_API_KEY), then restart the dev server.',
       },
     });
   }
@@ -127,7 +127,7 @@ async function handleChat(req: IncomingMessage, res: ServerResponse, env: ProxyE
   const abort = new AbortController();
   req.on('close', () => abort.abort());
 
-  // The client never picks the model or the token cap — the server does, from
+  // The client never picks the model or the token cap: the server does, from
   // env. One less thing a public bundle can influence.
   const client = new OpenRouter({ apiKey: env.key });
   const structured = body.cardMode === 'structured';
@@ -168,7 +168,7 @@ async function handleChat(req: IncomingMessage, res: ServerResponse, env: ProxyE
     }
     stream = result;
   } catch (e) {
-    // Deliberately does not echo the request — it carries the Authorization header.
+    // Deliberately does not echo the request: it carries the Authorization header.
     return json(res, 502, { error: { message: `OpenRouter call failed: ${errorText(e)}` } });
   }
 

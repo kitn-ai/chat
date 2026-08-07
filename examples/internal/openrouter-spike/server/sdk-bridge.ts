@@ -3,12 +3,12 @@
 // This is the only file that knows @openrouter/sdk exists, and it runs
 // SERVER-SIDE ONLY (the Vite dev proxy imports it; nothing under src/ does).
 // `src/model-stream.ts` never sees an SDK type, which is what keeps it
-// mergeable into `@kitn.ai/ui` — the kit must not depend on a provider SDK.
+// mergeable into `@kitn.ai/ui`: the kit must not depend on a provider SDK.
 //
 // Verified against the INSTALLED @openrouter/sdk 1.2.11:
-//   · `chat.send({ chatRequest: { … } })` — the payload IS nested under
+//   · `chat.send({ chatRequest: { … } })`: the payload IS nested under
 //     `chatRequest`. The README's flat form is wrong for this version.
-//   · streaming `chat.send` resolves to `EventStream<ChatStreamChunk>` — the
+//   · streaming `chat.send` resolves to `EventStream<ChatStreamChunk>`: the
 //     chat-completions delta surface, NOT the Responses-style
 //     `response.function_call_arguments.delta` events (those belong to
 //     `betaResponses.send`).
@@ -26,7 +26,7 @@ import type { ModelStreamChunk, ModelToolCallDelta, ModelUsage, WireMessage } fr
 /**
  * Pull reasoning text out of a delta. OpenRouter emits reasoning two ways and
  * often BOTH in the same delta, so `reasoning` wins and `reasoningDetails` is
- * only a fallback — otherwise every token is appended twice.
+ * only a fallback; otherwise every token is appended twice.
  *
  * Detail entries with no readable text (`reasoning.encrypted`, and the opaque
  * signed-thinking blobs) are skipped: there is nothing to show and the kit's
@@ -96,7 +96,7 @@ export function toModelChunk(chunk: ChatStreamChunk): ModelStreamChunk | null {
       // rebuilt from text + signature rather than echoed verbatim, so the
       // untranslated array rides along and the adapter pins it to the reasoning
       // part as `raw`. `delta.reasoning` alone carries no such payload, so a
-      // plain-string reasoning delta gets no `raw` — there is nothing to attach.
+      // plain-string reasoning delta gets no `raw`: there is nothing to attach.
       if (Array.isArray(delta?.reasoningDetails) && delta.reasoningDetails.length > 0) {
         out.reasoningRaw = { source: 'openrouter.reasoning_details', payload: delta.reasoningDetails };
       }

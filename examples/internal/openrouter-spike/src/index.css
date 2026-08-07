@@ -87,7 +87,7 @@ body {
   min-height: 0;
 }
 
-/* Live partial tool-call arguments — the kit's ToolPart cannot hold these. */
+/* Live partial tool-call arguments: the kit's ToolPart cannot hold these. */
 .partial-args {
   border-top: 1px dashed var(--color-border);
   padding: 0.5rem 1rem;

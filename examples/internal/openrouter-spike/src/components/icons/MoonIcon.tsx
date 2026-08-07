@@ -1,7 +1,7 @@
 import type { SVGProps } from 'react';
 
 /**
- * Moon glyph — shown in light mode (tap the toggle → dark). moon/sun aren't in the
+ * Moon glyph, shown in light mode (tap the toggle → dark). moon/sun aren't in the
  * kit's `<Icon>` set, so the example owns them. Props spread straight onto the
  * `<svg>`, so `slot="icon"`, `className`, and `aria-hidden` pass through and it
  * drops into `<Button>`'s icon slot.

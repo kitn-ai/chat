@@ -1,12 +1,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// model-stream.ts — THE PORTABLE ADAPTER. The point of the spike.
+// model-stream.ts: THE PORTABLE ADAPTER. The point of the spike.
 //
 // The kit ships `createAssistantStream` (a fluent builder over one in-flight
 // assistant message) but nothing that FEEDS it from a model. This is that piece.
 //
 // PORTABILITY RULES (this file is the candidate for `@kitn.ai/ui/state`):
 //   · no React, no Solid, no DOM, no fetch, no SSE
-//   · NO PROVIDER SDK. The input is `ModelStreamChunk` — our own minimal
+//   · NO PROVIDER SDK. The input is `ModelStreamChunk`: our own minimal
 //     structural shape. Mapping a provider's chunks onto it is somebody else's
 //     job (here: server/sdk-bridge.ts). The kit must never depend on
 //     @openrouter/sdk, the OpenAI SDK, or an SSE wire format.
@@ -29,7 +29,7 @@ import {
 // ── The provider-neutral chunk shape ─────────────────────────────────────────
 
 /** One fragment of a tool call. `index` is the ONLY thing guaranteed to
- *  correlate fragments — `id`, `name` and `arguments` each arrive whenever the
+ *  correlate fragments: `id`, `name` and `arguments` each arrive whenever the
  *  provider feels like it, and `arguments` is partial JSON. */
 export interface ModelToolCallDelta {
   index: number;
@@ -84,7 +84,7 @@ export interface ModelStreamChunk {
  * The subset of the kit's `AssistantStream` this adapter drives. Declared
  * structurally so the adapter has no runtime dependency on a stream
  * implementation and can be tested against a recorder. The kit's real
- * `AssistantStream` satisfies it as-is — same method names, same arities, and
+ * `AssistantStream` satisfies it as-is: same method names, same arities, and
  * its `AssistantStream` returns are assignable to `unknown`.
  */
 export interface AssistantStreamSink {
@@ -107,7 +107,7 @@ export interface ModelToolCall {
   /** The RAW accumulated argument fragments. Echo THIS back to the model on the
    *  next turn, not a re-stringified parse. */
   argumentsText: string;
-  /** Parsed arguments — present only when `argumentsText` was a valid JSON object. */
+  /** Parsed arguments: present only when `argumentsText` was a valid JSON object. */
   input?: Record<string, unknown>;
   /** Why this call is unusable (malformed/truncated args, missing name). */
   error?: string;
@@ -116,7 +116,7 @@ export interface ModelToolCall {
 /** Everything one assistant turn produced. */
 export interface ModelTurn {
   /**
-   * The turn as ORDERED MESSAGE PARTS — the kit's content model, built with the
+   * The turn as ORDERED MESSAGE PARTS: the kit's content model, built with the
    * kit's own part builders, so it is exactly what the sink was driven with.
    *
    * Covers this turn only. A multi-round tool loop calls `consumeModelStream`
@@ -128,7 +128,7 @@ export interface ModelTurn {
    */
   parts: MessagePart[];
   /** Flat concatenation of the text deltas. Kept because the PROVIDER wire format
-   *  is a flat string — see `assistantWireMessage`. Not the content model. */
+   *  is a flat string (see `assistantWireMessage`). Not the content model. */
   text: string;
   /** Flat concatenation of the reasoning deltas, for the same reason. */
   reasoning: string;
@@ -176,7 +176,7 @@ const snapshot = (c: MutableCall): ModelToolCall => ({
 });
 
 /**
- * The provider-shaped tool-call block, REASSEMBLED from the fragments — this is
+ * The provider-shaped tool-call block, REASSEMBLED from the fragments: this is
  * the object `assistantWireMessage` echoes on the next turn, kept on the part so
  * an encoder can round-trip without re-deriving it.
  *
@@ -199,7 +199,7 @@ function clip(s: string, n: number): string {
  * arbitrarily many chunks in provider-dependent order.
  *
  * A ToolPart is pushed (`input-streaming`) the first time a call has BOTH an id
- * and a non-empty name — announcing earlier would create a panel whose `type` is
+ * and a non-empty name: announcing earlier would create a panel whose `type` is
  * the empty string. Everything before that is buffered.
  */
 export function createToolCallAccumulator(sink: AssistantStreamSink, opts: ConsumeOptions = {}) {
@@ -225,7 +225,7 @@ export function createToolCallAccumulator(sink: AssistantStreamSink, opts: Consu
 
     if (typeof raw.arguments === 'string' && raw.arguments !== '') {
       call.argumentsText += raw.arguments;
-      // NOTE: nothing is written to the ToolPart here — `input` cannot hold a
+      // NOTE: nothing is written to the ToolPart here: `input` cannot hold a
       // half-parsed JSON string. See ConsumeOptions.onToolArgumentsDelta.
       opts.onToolArgumentsDelta?.(snapshot(call));
     }
@@ -326,7 +326,7 @@ function teeSink(a: AssistantStreamSink, b: AssistantStreamSink): AssistantStrea
  * Read one turn's worth of `ModelStreamChunk`s and drive `sink` with them.
  *
  * The sink is expected to be the kit's `AssistantStream`, which produces a NEW
- * message object (and a new `parts` array) on every mutation — that is what makes
+ * message object (and a new `parts` array) on every mutation: that is what makes
  * `<kai-thread>` re-render. This adapter calls the sink once per delta and never
  * batches; batching is a host concern.
  */
@@ -418,7 +418,7 @@ export function applyToolFailure(sink: AssistantStreamSink, toolCallId: string, 
  * Needed for STRUCTURED OUTPUTS: when `response_format` is a JSON schema, the
  * assistant's whole message is raw JSON, so streaming it into `<kai-thread>`
  * shows the user a wall of braces. Buffer, parse, then `appendText` the human
- * part — which behaves as a SET, because nothing text-shaped ever reached the
+ * part, which behaves as a SET, because nothing text-shaped ever reached the
  * message (the kit has no replace-the-text operation; `appendTextPart` only ever
  * extends or opens a text part).
  */
@@ -456,7 +456,7 @@ export interface WireMessage {
 
 /**
  * Rebuild the assistant message for the next turn. Uses the RAW `argumentsText`
- * rather than `JSON.stringify(input)` — providers validate the echoed tool block
+ * rather than `JSON.stringify(input)`: providers validate the echoed tool block
  * against what they emitted, and a re-stringify changes key order and whitespace.
  *
  * Reads `turn.text`, NOT `partsToText(turn.parts)`: the wire is provider-facing

@@ -1,4 +1,4 @@
-// Handcrafted fixtures in OUR provider-neutral `ModelStreamChunk` shape — the
+// Handcrafted fixtures in OUR provider-neutral `ModelStreamChunk` shape: the
 // adapter's actual input. They let the whole pipeline be proven with NO API key
 // and NO network.
 //
@@ -16,7 +16,7 @@ export const TOOL_TURN: ModelStreamChunk[] = [
   { text: ' Paris for you.' },
   // Opens with id + name and an empty argument string.
   { toolCalls: [{ index: 0, id: 'call_wx_001', name: 'get_weather', arguments: '' }] },
-  // …then fragments. Later fragments carry NO id — only `index` correlates them.
+  // …then fragments. Later fragments carry NO id: only `index` correlates them.
   { toolCalls: [{ index: 0, arguments: '{"ci' }] },
   { toolCalls: [{ index: 0, arguments: 'ty":"Pa' }] },
   { toolCalls: [{ index: 0, arguments: 'ris","un' }] },
@@ -31,7 +31,7 @@ export const TOOL_TURN: ModelStreamChunk[] = [
 export const PARALLEL_TOOLS: ModelStreamChunk[] = [
   { toolCalls: [{ index: 0, id: 'call_a', name: 'search_docs', arguments: '' }] },
   { toolCalls: [{ index: 0, arguments: '{"que' }] },
-  // index 1 opens with only a NAME — no id yet.
+  // index 1 opens with only a NAME: no id yet.
   { toolCalls: [{ index: 1, name: 'get_weather', arguments: '' }] },
   { toolCalls: [{ index: 1, arguments: '{"city' }] },
   { toolCalls: [{ index: 0, arguments: 'ry":"theming"}' }] },
@@ -40,7 +40,7 @@ export const PARALLEL_TOOLS: ModelStreamChunk[] = [
   { finishReason: 'tool_calls' },
 ];
 
-/** 3. The arguments stream is CUT OFF — the model hit its token cap mid-JSON. */
+/** 3. The arguments stream is CUT OFF: the model hit its token cap mid-JSON. */
 export const TRUNCATED_ARGS: ModelStreamChunk[] = [
   { toolCalls: [{ index: 0, id: 'call_cut', name: 'propose_action', arguments: '' }] },
   { toolCalls: [{ index: 0, arguments: '{"title":"Deploy to prod' }] },
@@ -108,7 +108,7 @@ export function toSseText(chunks: ModelStreamChunk[]): string {
   );
 }
 
-/** The SSE text as UTF-8 byte chunks of `size` bytes — boundaries land mid-frame,
+/** The SSE text as UTF-8 byte chunks of `size` bytes: boundaries land mid-frame,
  *  mid-JSON and mid-codepoint, exactly like a socket. */
 export async function* replayBytes(sse: string, size = 17): AsyncGenerator<Uint8Array> {
   const bytes = new TextEncoder().encode(sse);

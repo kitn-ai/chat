@@ -1,7 +1,7 @@
 import type { SVGProps } from 'react';
 
 /**
- * Sun glyph — shown in dark mode (tap the toggle → light). See `MoonIcon` for why
+ * Sun glyph, shown in dark mode (tap the toggle → light). See `MoonIcon` for why
  * the example owns these icons. Props spread straight onto the `<svg>`.
  */
 export function SunIcon({ size = 20, ...props }: { size?: number } & SVGProps<SVGSVGElement>) {
