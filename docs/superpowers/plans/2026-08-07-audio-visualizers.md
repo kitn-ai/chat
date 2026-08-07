@@ -942,10 +942,13 @@ git commit -m "feat(primitives): add visualizer state sequences and RAF sequence
   - `useAudioAnalysis(source: () => MediaStream | HTMLMediaElement | undefined, options?: AudioAnalysisOptions): { bands: Accessor<number[]>; volume: Accessor<number> }`
   - `useVoiceRecorder()` gains `stream: Accessor<MediaStream | undefined>`
 
-**This is the highest-risk task in the plan.** Two Web Audio footguns are fatal and silent:
+**This is the highest-risk task in the plan.** Three Web Audio footguns, all silent:
 
-1. `createMediaElementSource` **throws** if called twice for the same element. Guard with a module-level `WeakMap`.
-2. Routing an `HTMLMediaElement` through an `AnalyserNode` and **not** reconnecting to `destination` mutes the element with no error. Always wire `source -> analyser -> destination` for element sources.
+1. `createMediaElementSource` **throws** if called twice for the same element, and there is no API to ask whether one already exists. Guard with a module-level `WeakMap`.
+2. Routing an `HTMLMediaElement` through Web Audio and never reaching `destination` mutes the element with no error. Worse, the spike established it does NOT stop the analyser producing data, so the visualizer keeps animating over silence and nothing signals the fault.
+3. Putting the analyser **in** the audio path means each extra consumer adds a parallel route to `destination`, roughly doubling amplitude per visualizer on the same element.
+
+The shape that avoids all three: `elNode -> ctx.destination` exactly ONCE at creation, and `elNode -> analyser` per consumer as a **terminal** side-tap with nothing downstream. An `AnalyserNode` still receives data with no outgoing connection, verified in Chromium via `OfflineAudioContext` (see the spike report), so the analyser never needs to be in the path. On cleanup use the specific-edge form `elNode.disconnect(analyser)`; a bare `disconnect()` would tear down `destination` and every other consumer's tap.
 
 A `MediaStream` source must NOT connect to `destination`, or the microphone echoes back through the speakers.
 
@@ -1243,12 +1246,18 @@ export function useAudioAnalysis(
       let elNode = elementSources.get(el);
       if (!elNode) {
         elNode = ctx.createMediaElementSource(el);
+        // Exactly once, at creation. Routing the element through Web Audio and
+        // never reaching destination mutes it silently, and doing this per
+        // consumer instead would stack parallel paths and double the volume.
+        elNode.connect(ctx.destination);
         elementSources.set(el, elNode);
       }
       node = elNode;
+      // Terminal side-tap. An AnalyserNode still receives data with nothing
+      // connected downstream (verified in Chromium via OfflineAudioContext, see
+      // the spike report), so keeping the analyser OUT of the audio path means
+      // N visualizers on one element cannot sum to N times the amplitude.
       node.connect(analyser);
-      // Required. Routing through an analyser and stopping there mutes playback.
-      analyser.connect(ctx.destination);
     }
 
     const freq = new Float32Array(analyser.frequencyBinCount);
@@ -4633,7 +4642,7 @@ Create `packages/ui/e2e/audio-visualizer.spec.ts` covering:
 3. **The WebGL fallback.** Block WebGL via `page.addInitScript` overriding `HTMLCanvasElement.prototype.getContext` to return null for `webgl`, load `variant="aura"`, and assert bars render instead. Screenshot it.
 4. **Reduced motion.** `page.emulateMedia({ reducedMotion: 'reduce' })`, load `variant="radial" state="thinking"`, and assert the container has no `animate-spin` class. Screenshot two frames a second apart and assert they are identical.
 5. **Live microphone.** Launch with `--use-fake-device-for-media-stream --use-fake-ui-for-media-stream` and `permissions: ['microphone']`. Drive `<kai-voice-input>`, wire its `stream` to the visualizer, and assert the bands become non-zero within 3 seconds. This is the one check nothing else covers: it proves `useAudioAnalysis` works against a real `getUserMedia` stream, not a mock.
-6. **Element audio does not go silent.** Create an `<audio>` with a short generated WAV data URI, set it as `audioElement`, call `play()`, and assert `audio.paused === false` and `currentTime` advances past 0.1s. **This is the `createMediaElementSource` footgun.** If someone drops the `analyser.connect(ctx.destination)` line, playback mutes with no error and only this test catches it.
+6. **Element audio does not go silent, and does not double.** Create an `<audio>` with a short generated WAV data URI, set it as `audioElement`, call `play()`, and assert `audio.paused === false` and `currentTime` advances past 0.1s. **This is the `createMediaElementSource` footgun.** If someone drops the `elNode.connect(ctx.destination)` line, playback mutes with no error and only this test catches it. Note the spike found `paused`/`currentTime` alone cannot distinguish silence, so also render through an `OfflineAudioContext` and assert the output buffer is non-zero. Then mount a SECOND visualizer against the same element and assert the rendered amplitude is unchanged, which is the regression guard for the doubling bug.
 
 - [ ] **Step 2: Run it**
 
