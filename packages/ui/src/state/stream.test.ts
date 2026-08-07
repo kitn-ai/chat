@@ -36,9 +36,20 @@ describe('createAssistantStream', () => {
     s.upsertTool('t1', { state: 'output-available', output: { hits: 3 } });
     const parts = sink.get()[0].parts;
     expect(parts).toHaveLength(1);
-    const tool = (parts[0] as { tool: { state: string; output?: unknown } }).tool;
+    const tool = (parts[0] as { tool: { state: string; input?: unknown; output?: unknown } }).tool;
     expect(tool.state).toBe('output-available');
     expect(tool.output).toEqual({ hits: 3 });
+    // the earlier input must survive the merge -- this is what distinguishes merge from replace.
+    expect(tool.input).toEqual({ q: 'x' });
+  });
+
+  it('does not emit when upsertTool is a no-op', () => {
+    const sink = makeSink();
+    const s = createAssistantStream(sink.set);
+    s.upsertTool('tc1', { type: 'bash', state: 'input-streaming', input: { a: 1 } });
+    const before = sink.emissions.length;
+    s.upsertTool('tc1', { input: { a: 1 } });
+    expect(sink.emissions.length).toBe(before);
   });
 
   it('abort(reason) marks non-settled tool parts output-error without dropping the message', () => {
@@ -60,6 +71,16 @@ describe('createAssistantStream', () => {
     s.abort('too late');
     const tool = (sink.get()[0].parts[0] as { tool: { state: string } }).tool;
     expect(tool.state).toBe('output-available');
+  });
+
+  it('abort() with no reason still settles non-available tools, with errorText undefined', () => {
+    const sink = makeSink();
+    const s = createAssistantStream(sink.set, { id: 'a1' });
+    s.upsertTool('t1', { type: 'search', state: 'input-streaming' });
+    s.abort();
+    const tool = (sink.get()[0].parts[0] as { tool: { state: string; errorText?: string } }).tool;
+    expect(tool.state).toBe('output-error');
+    expect(tool.errorText).toBeUndefined();
   });
 
   it('opens a new text part after a tool call', () => {
@@ -103,6 +124,15 @@ describe('createAssistantStream', () => {
     s.appendText('a');
     s.appendText('b');
     expect(seen[0]).not.toBe(seen[1]);
+  });
+
+  it('leaves preceding messages intact and splices around a non-zero index', () => {
+    const sink = makeSink([{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }]);
+    const s = createAssistantStream(sink.set);
+    s.appendText('reply');
+    const msgs = sink.get();
+    expect(msgs.map((m) => m.id)).toEqual(['u1', s.id]);
+    expect(msgs[0].parts).toEqual([{ type: 'text', text: 'hi' }]);
   });
 
   it('done() is a no-op call that settles the stream against further mutation', () => {

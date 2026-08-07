@@ -8,6 +8,11 @@ import { appendReasoningPart, appendTextPart, upsertToolPart, type ReasoningOpts
 /** The one universal contract: a functional-updater setter (React setState shape). */
 export type SetMessages = (updater: (prev: ChatMessage[]) => ChatMessage[]) => void;
 
+function newId(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return 'kai-' + Math.random().toString(36).slice(2);
+}
+
 /** A fluent builder for one in-flight assistant message. Owns no state. */
 export interface AssistantStream {
   readonly id: string;
@@ -26,18 +31,20 @@ export function createAssistantStream(
   set: SetMessages,
   init: Partial<ChatMessage> = {},
 ): AssistantStream {
-  const id = init.id ?? crypto.randomUUID();
+  const id = init.id ?? newId();
   let settled = false;
+  let currentParts: MessagePart[] = init.parts ?? [];
 
-  set((prev) => [...prev, { id, role: 'assistant', parts: [], ...init }]);
+  set((prev) => [...prev, { id, role: 'assistant', parts: currentParts, ...init }]);
 
   const mutate = (fn: (parts: MessagePart[]) => MessagePart[]) => {
     if (settled) return;
+    const next = fn(currentParts);
+    if (next === currentParts) return;
+    currentParts = next;
     set((prev) => {
       const i = prev.findIndex((m) => m.id === id);
       if (i < 0) return prev;
-      const next = fn(prev[i].parts);
-      if (next === prev[i].parts) return prev;
       return [...prev.slice(0, i), { ...prev[i], parts: next }, ...prev.slice(i + 1)];
     });
   };

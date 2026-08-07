@@ -556,13 +556,21 @@ Expected: FAIL, `upsertTool is not a function` and `parts` undefined.
 Replace the body of `packages/ui/src/state/stream.ts`:
 
 ```ts
-import type { ChatMessage, MessagePart, RawOrigin, Source } from '../elements/chat-types';
+import type { ChatMessage, MessagePart, Source } from '../elements/chat-types';
 import type { ToolPart } from '../components/tool-types';
 import type { CardEnvelope } from '../primitives/card-contract';
 import type { AttachmentData } from '../components/attachment-types';
 import { appendReasoningPart, appendTextPart, upsertToolPart, type ReasoningOpts } from './parts';
 
 export type SetMessages = (updater: (prev: ChatMessage[]) => ChatMessage[]) => void;
+
+// Guarded id generator: crypto.randomUUID() is unavailable on older Node during SSR
+// and in non-secure-context browsers. Matches the existing guard shape in
+// src/elements/default-input.tsx (fileToAttachment).
+function newId(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return 'kai-' + Math.random().toString(36).slice(2);
+}
 
 export interface AssistantStream {
   readonly id: string;
@@ -580,18 +588,23 @@ export function createAssistantStream(
   set: SetMessages,
   init: Partial<ChatMessage> = {},
 ): AssistantStream {
-  const id = init.id ?? crypto.randomUUID();
+  const id = init.id ?? newId();
   let settled = false;
+  // Local mirror of this message's parts. Lets `mutate` decide whether to call
+  // `set` at all WITHOUT calling `set` first -- required so a no-op fold (e.g. an
+  // upsertTool patch that fingerprints identically) never touches the setter.
+  let currentParts: MessagePart[] = init.parts ?? [];
 
-  set((prev) => [...prev, { id, role: 'assistant', parts: [], ...init }]);
+  set((prev) => [...prev, { id, role: 'assistant', parts: currentParts, ...init }]);
 
   const mutate = (fn: (parts: MessagePart[]) => MessagePart[]) => {
     if (settled) return;
+    const next = fn(currentParts);
+    if (next === currentParts) return;
+    currentParts = next;
     set((prev) => {
       const i = prev.findIndex((m) => m.id === id);
       if (i < 0) return prev;
-      const next = fn(prev[i].parts);
-      if (next === prev[i].parts) return prev;
       return [...prev.slice(0, i), { ...prev[i], parts: next }, ...prev.slice(i + 1)];
     });
   };
@@ -617,7 +630,11 @@ export function createAssistantStream(
 }
 ```
 
-Keep the existing `onStreamSettled` export unchanged.
+Keep the existing `onStreamSettled` export's BEHAVIOR unchanged (wrap every mutator, return the
+wrapper to preserve the fluent chain, fire `onSettle()` on `done()`/`abort()`). Its forwarded
+method list must still be updated to match the new `AssistantStream` shape (drop `setText`/
+`setReasoning`/`updateTool`/`patch`, add `addCard`/`addSource`/`addFile`) -- a byte-identical copy
+of the old function will not compile against the new interface.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
