@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { ChatMessage } from '@kitn.ai/ui';
+import { partsToText } from '@kitn.ai/ui/state';
 import type { Theme } from '../types';
 
 /**
@@ -34,7 +35,7 @@ function onMessageAction(e: Event) {
     const m = props.messages.find((x) => x.id === detail.messageId);
     if (!m) return;
     window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(new SpeechSynthesisUtterance(m.content));
+    window.speechSynthesis.speak(new SpeechSynthesisUtterance(partsToText(m.parts)));
   }
 }
 </script>

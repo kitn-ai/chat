@@ -25,7 +25,7 @@ async function boot(host: HTMLElement): Promise<void> {
   async function send(raw: string): Promise<void> {
     const text = raw.trim();
     if (!text) return;
-    store.append({ id: newId(), role: 'user', content: text });
+    store.append({ id: newId(), role: 'user', parts: [{ type: 'text', text }] });
     const stream = store.streamAssistant();
     await streamFakeReply(text, (delta) => stream.appendText(delta));
     stream.done();

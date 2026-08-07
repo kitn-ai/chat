@@ -2,11 +2,12 @@
 // PARTS the kit actually ends up with. No API key, no network.
 //
 // The sink is the kit's REAL `createAssistantStream` (from `@kitn.ai/ui/state`),
-// not a stub — so these tests also pin the kit's ToolPart lifecycle and its
+// not a stub — so these tests also pin the kit's part lifecycle and its
 // new-reference-per-mutation contract.
 import { describe, expect, it } from 'vitest';
-import { createAssistantStream, type SetMessages } from '@kitn.ai/ui/state';
+import { createAssistantStream, partsToText, type SetMessages } from '@kitn.ai/ui/state';
 import type { ChatMessage } from '@kitn.ai/ui/react';
+import type { MessagePart, ToolPart } from '@kitn.ai/ui';
 import {
   applyToolOutput,
   assistantWireMessage,
@@ -44,6 +45,21 @@ function harness() {
   return { stream, message: () => messages.find((m) => m.id === 'assistant-1')!, arrayRefs };
 }
 
+/** Tool panels, in message order. `parts` is a union, so `flatMap` is the narrowing
+ *  filter — there is no `message.tools` array any more. */
+const toolsOf = (m: ChatMessage): ToolPart[] => m.parts.flatMap((p) => (p.type === 'tool' ? [p.tool] : []));
+
+/** The reasoning block (index 0 — the fixtures never emit parallel blocks). */
+const reasoningOf = (m: ChatMessage): Extract<MessagePart, { type: 'reasoning' }> | undefined =>
+  m.parts.flatMap((p) => (p.type === 'reasoning' ? [p] : []))[0];
+
+/** What the adapter reassembles and pins to a settled ToolPart so the next turn's
+ *  wire echo can be rebuilt from the part alone. */
+const toolRaw = (id: string, name: string, args: string) => ({
+  source: 'custom.model-stream.tool_call',
+  payload: { id, name, arguments: args },
+});
+
 describe('a tool-calling turn', () => {
   it('reassembles fragmented arguments into one input-available ToolPart', async () => {
     const h = harness();
@@ -65,20 +81,32 @@ describe('a tool-calling turn', () => {
     expect(turn.usage).toMatchObject({ reasoningTokens: 38 });
 
     // --- what the KIT ended up holding ---
-    const m = h.message();
-    expect(m.content).toBe('Let me check Paris for you.');
-    expect(m.reasoning).toEqual({
-      text: 'The user wants weather. I should call get_weather with city=Paris.',
-      label: 'Thinking',
-    });
-    expect(m.tools).toEqual([
+    // ORDERED parts, not three parallel fields: the thinking, then the preamble
+    // the model wrote before calling the tool, then the tool panel itself.
+    expect(h.message().parts).toEqual([
       {
-        type: 'get_weather',
-        toolCallId: 'call_wx_001',
-        state: 'input-available',
-        input: { city: 'Paris', units: 'metric' },
+        type: 'reasoning',
+        index: 0,
+        label: 'Thinking',
+        text: 'The user wants weather. I should call get_weather with city=Paris.',
+      },
+      { type: 'text', text: 'Let me check Paris for you.' },
+      {
+        type: 'tool',
+        tool: {
+          type: 'get_weather',
+          kind: 'generic',
+          toolCallId: 'call_wx_001',
+          state: 'input-available',
+          input: { city: 'Paris', units: 'metric' },
+          raw: toolRaw('call_wx_001', 'get_weather', '{"city":"Paris","units":"metric"}'),
+        },
       },
     ]);
+
+    // `ModelTurn.parts` is teed off the same builders, so it cannot drift from
+    // what the sink received.
+    expect(turn.parts).toEqual(h.message().parts);
   });
 
   it('never exposes a half-parsed ToolPart: input appears only once the JSON is whole', async () => {
@@ -90,7 +118,7 @@ describe('a tool-calling turn', () => {
         partials.push(call.argumentsText);
         // The ToolPart is live in the message at this point — assert it is still
         // `input-streaming` and carries NO partial input.
-        const tool = h.message().tools?.[0];
+        const tool = toolsOf(h.message())[0];
         states.push(tool?.state ?? 'missing');
         expect(tool?.input).toBeUndefined();
       },
@@ -105,7 +133,7 @@ describe('a tool-calling turn', () => {
     expect(new Set(states)).toEqual(new Set(['input-streaming']));
   });
 
-  it('hands the kit a NEW message + tools array reference on every mutation', async () => {
+  it('hands the kit a NEW message + parts array reference on every mutation', async () => {
     const h = harness();
     await consumeModelStream(replay(TOOL_TURN), h.stream);
     // Every setter call produced a distinct array — the "new reference per chunk"
@@ -114,6 +142,8 @@ describe('a tool-calling turn', () => {
     expect(h.arrayRefs.length).toBeGreaterThan(5);
     const messageObjects = h.arrayRefs.map((refs) => refs.find((m) => m.id === 'assistant-1'));
     expect(new Set(messageObjects).size).toBe(messageObjects.length);
+    const partsArrays = messageObjects.map((m) => m?.parts);
+    expect(new Set(partsArrays).size).toBe(partsArrays.length);
   });
 });
 
@@ -130,7 +160,7 @@ describe('the full browser path (bytes → SSE → JSON → adapter)', () => {
       expect(r.turn).toEqual(results[0].turn);
       expect(r.message).toEqual(results[0].message);
     }
-    expect(results[0].message.tools?.[0].input).toEqual({ city: 'Paris', units: 'metric' });
+    expect(toolsOf(results[0].message)[0].input).toEqual({ city: 'Paris', units: 'metric' });
   });
 
   it('works off a WHATWG ReadableStream (the res.body path) and survives keep-alives', async () => {
@@ -140,7 +170,7 @@ describe('the full browser path (bytes → SSE → JSON → adapter)', () => {
       h.stream,
     );
     expect(turn.toolCalls[0].input).toEqual({ city: 'Paris', units: 'metric' });
-    expect(h.message().content).toBe('Let me check Paris for you.');
+    expect(partsToText(h.message().parts)).toBe('Let me check Paris for you.');
   });
 
   it('ignores non-JSON frames instead of throwing', async () => {
@@ -163,10 +193,26 @@ describe('parallel tool calls', () => {
     expect(turn.toolCalls[0].input).toEqual({ query: 'theming' });
     expect(turn.toolCalls[1].input).toEqual({ city: 'Tokyo' });
 
-    expect(h.message().tools).toEqual([
-      { type: 'search_docs', toolCallId: 'call_a', state: 'input-available', input: { query: 'theming' } },
-      { type: 'get_weather', toolCallId: 'call_b', state: 'input-available', input: { city: 'Tokyo' } },
+    expect(toolsOf(h.message())).toEqual([
+      {
+        type: 'search_docs',
+        kind: 'search',
+        toolCallId: 'call_a',
+        state: 'input-available',
+        input: { query: 'theming' },
+        raw: toolRaw('call_a', 'search_docs', '{"query":"theming"}'),
+      },
+      {
+        type: 'get_weather',
+        kind: 'generic',
+        toolCallId: 'call_b',
+        state: 'input-available',
+        input: { city: 'Tokyo' },
+        raw: toolRaw('call_b', 'get_weather', '{"city":"Tokyo"}'),
+      },
     ]);
+    // Two panels, no text and no reasoning around them.
+    expect(h.message().parts.map((p) => p.type)).toEqual(['tool', 'tool']);
   });
 });
 
@@ -179,12 +225,14 @@ describe('failure modes', () => {
     expect(turn.toolCalls[0].input).toBeUndefined();
     expect(turn.toolCalls[0].error).toMatch(/token limit/);
 
-    const tool = h.message().tools![0];
+    const tool = toolsOf(h.message())[0];
     expect(tool.state).toBe('output-error');
     expect(tool.type).toBe('propose_action');
     expect(tool.errorText).toMatch(/Malformed tool arguments/);
     // The raw fragment is surfaced so a human can see what actually arrived.
     expect(tool.errorText).toContain('Deploy to prod');
+    // …and it survives on the part itself, not just in the error prose.
+    expect(tool.raw).toEqual(toolRaw('call_cut', 'propose_action', '{"title":"Deploy to prod'));
   });
 
   it('surfaces an in-band error and fails the in-flight tool call', async () => {
@@ -194,8 +242,11 @@ describe('failure modes', () => {
     expect(turn.error).toEqual({ code: 'server_error', message: 'Upstream provider dropped the connection' });
     expect(turn.finishReason).toBe('error');
     expect(turn.text).toBe('Checking');
-    expect(h.message().tools![0]).toMatchObject({ type: 'get_weather', state: 'output-error' });
-    expect(h.message().tools![0].errorText).toMatch(/dropped the connection/);
+    const tool = toolsOf(h.message())[0];
+    expect(tool).toMatchObject({ type: 'get_weather', state: 'output-error' });
+    expect(tool.errorText).toMatch(/dropped the connection/);
+    // The text that did arrive is kept as its own part, ahead of the dead panel.
+    expect(h.message().parts.map((p) => p.type)).toEqual(['text', 'tool']);
   });
 });
 
@@ -204,10 +255,13 @@ describe('a plain answer turn', () => {
     const h = harness();
     const turn = await consumeModelStream(replay(FINAL_TURN), h.stream);
     expect(turn.text).toBe("It's **12 °C** and raining in Paris — take a coat. ☔️");
-    expect(h.message().content).toBe("It's **12 °C** and raining in Paris — take a coat. ☔️");
+    // One text part, nothing else: no empty reasoning block, no tool panel.
+    expect(h.message().parts).toEqual([
+      { type: 'text', text: "It's **12 °C** and raining in Paris — take a coat. ☔️" },
+    ]);
     expect(turn.finishReason).toBe('stop');
     expect(turn.usage).toMatchObject({ totalTokens: 858, costUsd: 0.000_081 });
-    expect(h.message().tools).toBeUndefined();
+    expect(toolsOf(h.message())).toEqual([]);
   });
 });
 
@@ -216,7 +270,7 @@ describe('reasoning', () => {
     const streamed = harness();
     const a = await consumeModelStream(replay(TOOL_TURN), streamed.stream);
     expect(a.reasoningChunks).toBe(2);
-    expect(streamed.message().reasoning?.text).not.toBe('');
+    expect(reasoningOf(streamed.message())?.text).not.toBe('');
 
     const hidden = harness();
     const b = await consumeModelStream(replay(HIDDEN_REASONING), hidden.stream);
@@ -225,13 +279,34 @@ describe('reasoning', () => {
     expect(b.reasoningChunks).toBe(0);
     expect(b.reasoning).toBe('');
     expect(b.usage?.reasoningTokens).toBe(512);
-    expect(hidden.message().reasoning).toBeUndefined();
+    expect(reasoningOf(hidden.message())).toBeUndefined();
   });
 
   it('accepts a custom disclosure label', async () => {
     const h = harness();
     await consumeModelStream(replay(TOOL_TURN), h.stream, { reasoningLabel: 'Reasoning' });
-    expect(h.message().reasoning?.label).toBe('Reasoning');
+    expect(reasoningOf(h.message())?.label).toBe('Reasoning');
+  });
+
+  it('pins the provider block to the reasoning part when the bridge supplies one', async () => {
+    const h = harness();
+    // What server/sdk-bridge.ts attaches when OpenRouter sends `reasoningDetails`
+    // rather than a bare `reasoning` string: the untranslated array, so an encoder
+    // can echo the block back verbatim instead of rebuilding it.
+    const details = [{ type: 'reasoning.encrypted', data: 'BLOB' }];
+    const chunks: ModelStreamChunk[] = [
+      { reasoning: 'weighed it up' },
+      { reasoning: ' carefully', reasoningRaw: { source: 'openrouter.reasoning_details', payload: details } },
+      { finishReason: 'stop' },
+    ];
+    await consumeModelStream(replay(chunks), h.stream);
+    expect(reasoningOf(h.message())).toEqual({
+      type: 'reasoning',
+      index: 0,
+      label: 'Thinking',
+      text: 'weighed it up carefully',
+      raw: { source: 'openrouter.reasoning_details', payload: details },
+    });
   });
 });
 
@@ -241,9 +316,13 @@ describe('structured outputs (Path B)', () => {
     const buffered = bufferText(h.stream);
     const turn = await consumeModelStream(replay(STRUCTURED_CARD_TURN), buffered);
 
-    // The raw JSON must NEVER have been appended into the visible message.
-    expect(h.message().content).toBe('');
+    // The raw JSON must NEVER have been appended into the visible message — not
+    // as a text part, not as anything.
+    expect(h.message().parts).toEqual([]);
     expect(turn.text).toBe(buffered.buffered());
+    // `ModelTurn.parts` still reports it: it describes what the MODEL produced,
+    // not what the host chose to show.
+    expect(turn.parts).toEqual([{ type: 'text', text: buffered.buffered() }]);
 
     const { value, error } = parseReplyWithCard(buffered.buffered());
     expect(error).toBeUndefined();
@@ -263,8 +342,11 @@ describe('structured outputs (Path B)', () => {
       },
     });
 
-    h.stream.setText(value!.reply);
-    expect(h.message().content).toBe('I can redeploy staging for you — confirm below.');
+    // FINDING: `AssistantStream` has no `setText`/`replaceText`. `appendText` is
+    // the substitute and is only correct BECAUSE the buffer guarantees the message
+    // holds no text part yet, so the append opens the one and only text part.
+    h.stream.appendText(value!.reply);
+    expect(h.message().parts).toEqual([{ type: 'text', text: 'I can redeploy staging for you — confirm below.' }]);
   });
 
   it('degrades to a readable error when the model goes off-schema', async () => {
@@ -275,7 +357,8 @@ describe('structured outputs (Path B)', () => {
     expect(value).toBeUndefined();
     expect(error).toMatch(/not valid JSON/);
     // …and the user has seen NOTHING at all, because the text was buffered.
-    expect(h.message().content).toBe('');
+    expect(h.message().parts).toEqual([]);
+    expect(partsToText(h.message().parts)).toBe('');
   });
 });
 
@@ -288,13 +371,16 @@ describe('the second turn (tool results back to the model)', () => {
     const output = { city: 'Paris', condition: 'Light rain', temperature: 12 };
     applyToolOutput(h.stream, call.id, output);
 
-    expect(h.message().tools).toEqual([
+    expect(toolsOf(h.message())).toEqual([
       {
         type: 'get_weather',
+        kind: 'generic',
         toolCallId: 'call_wx_001',
         state: 'output-available',
         input: { city: 'Paris', units: 'metric' },
         output,
+        // the patch carried no `raw`, so the settled snapshot survives the merge
+        raw: toolRaw('call_wx_001', 'get_weather', '{"city":"Paris","units":"metric"}'),
       },
     ]);
 
@@ -320,14 +406,23 @@ describe('the second turn (tool results back to the model)', () => {
     expect(assistantWireMessage(turn).toolCalls).toBeUndefined();
   });
 
-  it('appends the follow-up answer onto the SAME assistant message', async () => {
+  it('opens a SECOND text part for the follow-up answer, after the tool panel', async () => {
     const h = harness();
     await consumeModelStream(replay(TOOL_TURN), h.stream);
     await consumeModelStream(replay(FINAL_TURN), h.stream);
-    // FINDING: ChatMessage.content is one flat string, so the pre-tool preamble
-    // and the post-tool answer are glued together with no separator and no way
-    // to order them around the tool panel.
-    expect(h.message().content).toBe(
+    // FIXED by parts: the pre-tool preamble and the post-tool answer are two
+    // separate text parts either side of the panel, in the order they happened.
+    // Under the old flat `content` string they were glued into
+    // "…for you.It's **12 °C**…" with no separator and no way to order them.
+    expect(h.message().parts.map((p) => p.type)).toEqual(['reasoning', 'text', 'tool', 'text']);
+    expect(h.message().parts.filter((p) => p.type === 'text')).toEqual([
+      { type: 'text', text: 'Let me check Paris for you.' },
+      { type: 'text', text: "It's **12 °C** and raining in Paris — take a coat. ☔️" },
+    ]);
+    // `partsToText` still concatenates for the places that genuinely need a flat
+    // string (copy-to-clipboard, the provider wire) — that is now a deliberate
+    // flattening, not the content model.
+    expect(partsToText(h.message().parts)).toBe(
       "Let me check Paris for you.It's **12 °C** and raining in Paris — take a coat. ☔️",
     );
   });

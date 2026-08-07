@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ChatMessage } from '@kitn.ai/ui';
+  import { partsToText } from '@kitn.ai/ui/state';
   import type { KaiThreadElement } from '@kitn.ai/ui/elements';
   import type { Theme } from '../lib/types';
 
@@ -35,7 +36,7 @@
       const m = messages.find((x) => x.id === detail.messageId);
       if (!m) return;
       window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(new SpeechSynthesisUtterance(m.content));
+      window.speechSynthesis.speak(new SpeechSynthesisUtterance(partsToText(m.parts)));
     }
   }
 </script>

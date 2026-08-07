@@ -1,4 +1,5 @@
 import type { ChatMessage } from '@kitn.ai/ui';
+import { partsToText } from '@kitn.ai/ui/state';
 import type { AppState, Theme } from './state';
 import { SUGGESTIONS, TRIGGERS, type Conversation } from './chat-data';
 import { createVoiceInput } from './voice-input';
@@ -139,7 +140,7 @@ export function createView(root: HTMLElement, callbacks: ViewCallbacks): View {
     const m = currentMessages.find((x) => x.id === detail.messageId);
     if (!m) return;
     window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(new SpeechSynthesisUtterance(m.content));
+    window.speechSynthesis.speak(new SpeechSynthesisUtterance(partsToText(m.parts)));
   });
 
   promptInput.addEventListener('kai-voice', () => {

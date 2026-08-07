@@ -1,4 +1,6 @@
 // Self-contained sample data + a local fake streaming responder, no backend.
+import type { MessagePart } from '@kitn.ai/ui';
+
 export interface Conversation {
   id: string;
   title: string;
@@ -10,7 +12,7 @@ export interface Conversation {
 export interface Msg {
   id: string;
   role: 'user' | 'assistant';
-  content: string;
+  parts: MessagePart[];
 }
 
 export function newId(): string {
@@ -29,16 +31,16 @@ export const CONVERSATIONS: Conversation[] = [
 
 export const THREADS: Record<string, Msg[]> = {
   c1: [
-    { id: 'c1u', role: 'user', content: 'What is @kitn.ai/ui?' },
-    { id: 'c1a', role: 'assistant', content: '**@kitn.ai/ui** is a set of framework-agnostic web components for AI chat UIs: message threads, streaming, markdown, tool panels, and more. This demo composes its `<kai-conversations>`, `<kai-thread>`, and `<kai-prompt-input>` elements by hand.' },
+    { id: 'c1u', role: 'user', parts: [{ type: 'text', text: 'What is @kitn.ai/ui?' }] },
+    { id: 'c1a', role: 'assistant', parts: [{ type: 'text', text: '**@kitn.ai/ui** is a set of framework-agnostic web components for AI chat UIs: message threads, streaming, markdown, tool panels, and more. This demo composes its `<kai-conversations>`, `<kai-thread>`, and `<kai-prompt-input>` elements by hand.' }] },
   ],
   c2: [
-    { id: 'c2u', role: 'user', content: 'How do I build my own chat instead of dropping in `<kai-chat>`?' },
-    { id: 'c2a', role: 'assistant', content: "Feed your `messages` to a `<kai-thread>`, put a `<kai-prompt-input>` below, and wire `kai-submit` to append + stream. That's exactly what this example does. Read `App.svelte`." },
+    { id: 'c2u', role: 'user', parts: [{ type: 'text', text: 'How do I build my own chat instead of dropping in `<kai-chat>`?' }] },
+    { id: 'c2a', role: 'assistant', parts: [{ type: 'text', text: "Feed your `messages` to a `<kai-thread>`, put a `<kai-prompt-input>` below, and wire `kai-submit` to append + stream. That's exactly what this example does. Read `App.svelte`." }] },
   ],
   c3: [
-    { id: 'c3u', role: 'user', content: 'How does dark mode work?' },
-    { id: 'c3a', role: 'assistant', content: "Each element takes a `theme` prop (`light` / `dark` / `auto`). Drive it from app state. Toggle it with the button top-right. The kit's `--color-*` tokens flip under a `.dark` class for your own surrounding chrome." },
+    { id: 'c3u', role: 'user', parts: [{ type: 'text', text: 'How does dark mode work?' }] },
+    { id: 'c3a', role: 'assistant', parts: [{ type: 'text', text: "Each element takes a `theme` prop (`light` / `dark` / `auto`). Drive it from app state. Toggle it with the button top-right. The kit's `--color-*` tokens flip under a `.dark` class for your own surrounding chrome." }] },
   ],
 };
 

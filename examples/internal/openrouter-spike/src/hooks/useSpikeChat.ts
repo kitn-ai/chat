@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import type { KaiChatController } from '@kitn.ai/ui/react';
 import type { CardEnvelope, CardResolution } from '@kitn.ai/ui';
+import { partsToText } from '@kitn.ai/ui/state';
 import {
   applyToolOutput,
   assistantWireMessage,
@@ -93,11 +94,11 @@ export function useSpikeChat(chat: KaiChatController, cardMode: CardMode): Spike
         });
       }
       wireRef.current.push({ role: 'user', content: text });
-      chat.append({ id: newId(), role: 'user', content: text });
+      chat.append({ id: newId(), role: 'user', parts: [{ type: 'text', text }] });
 
       const stream = chat.streamAssistant();
       // In structured mode the whole message is JSON, so it must NOT be appended
-      // into the visible thread — buffer it, parse, then setText the prose.
+      // into the visible thread — buffer it, parse, then append just the prose.
       const buffered = structured ? bufferText(stream) : null;
       const sink = buffered ?? stream;
 
@@ -162,17 +163,21 @@ export function useSpikeChat(chat: KaiChatController, cardMode: CardMode): Spike
 
           // No tool calls left — this round produced the final answer.
           if (buffered) {
+            // FINDING: `AssistantStream` has no `setText`/`replaceText`, so this
+            // appends. It reads as a SET only because `bufferText` swallowed every
+            // text delta — the message holds no text part, so the append opens the
+            // first one. A kit-level "replace the text" op is the missing piece.
             const { value, error: schemaError } = parseReplyWithCard(buffered.buffered());
             if (schemaError || !value) {
               acc.structuredError = schemaError ?? 'unknown structured-output failure';
               setStats({ ...acc });
               // Show SOMETHING rather than an empty bubble.
-              stream.setText(
+              stream.appendText(
                 `The model's structured output did not match the card schema.\n\n> ${acc.structuredError}`,
               );
               wireRef.current.push({ role: 'assistant', content: buffered.buffered() });
             } else {
-              stream.setText(value.reply);
+              stream.appendText(value.reply);
               if (value.card) setCards((c) => [...c, value.card!]);
               wireRef.current.push({ role: 'assistant', content: value.reply });
             }
@@ -183,9 +188,11 @@ export function useSpikeChat(chat: KaiChatController, cardMode: CardMode): Spike
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
         setError(message);
-        // Leave whatever streamed in place; just make the failure visible.
-        if (!chat.messages.some((m) => m.id === stream.id && m.content)) {
-          stream.setText(`_The request failed: ${message}_`);
+        // Leave whatever streamed in place; just make the failure visible. Only
+        // TEXT counts as "the user already saw something" — a lone tool panel or
+        // reasoning block still needs the failure spelled out.
+        if (!chat.messages.some((m) => m.id === stream.id && partsToText(m.parts))) {
+          stream.appendText(`_The request failed: ${message}_`);
         }
       } finally {
         stream.done();

@@ -18,7 +18,8 @@ import {
   ResizablePanel,
   ResizableHandle,
 } from "@kitn.ai/ui";
-import type { ConversationGroup, ConversationSummary } from "@kitn.ai/ui";
+import type { ConversationGroup, ConversationSummary, MessagePart } from "@kitn.ai/ui";
+import { appendTextPart, partsToText } from "@kitn.ai/ui/state";
 import { ArrowUp, Copy, Plus, RefreshCw, ThumbsDown, ThumbsUp } from "lucide-solid";
 
 // ─── Static seed data ────────────────────────────────────────────────────────
@@ -65,19 +66,22 @@ const seedConversations: ConversationSummary[] = [
 interface ChatMessage {
   id: string;
   role: "user" | "assistant";
-  content: string;
+  parts: MessagePart[];
 }
 
 const INITIAL_MESSAGES: ChatMessage[] = [
   {
     id: "u1",
     role: "user",
-    content: "How does SolidJS reactivity differ from React hooks?",
+    parts: [{ type: "text", text: "How does SolidJS reactivity differ from React hooks?" }],
   },
   {
     id: "a1",
     role: "assistant",
-    content: `**SolidJS** takes a fundamentally different approach to reactivity.
+    parts: [
+      {
+        type: "text",
+        text: `**SolidJS** takes a fundamentally different approach to reactivity.
 
 ### Signals vs useState
 
@@ -98,16 +102,21 @@ return <p>{count}</p>; // whole function re-executes
 1. **No re-renders** — SolidJS components run once; only reactive expressions update
 2. **No dependency arrays** — \`createEffect\` auto-tracks dependencies
 3. **No stale closures** — signals are getter functions, always current`,
+      },
+    ],
   },
   {
     id: "u2",
     role: "user",
-    content: "What about createEffect vs useEffect?",
+    parts: [{ type: "text", text: "What about createEffect vs useEffect?" }],
   },
   {
     id: "a2",
     role: "assistant",
-    content: `\`createEffect\` in SolidJS auto-tracks all reactive dependencies — no dependency array needed.
+    parts: [
+      {
+        type: "text",
+        text: `\`createEffect\` in SolidJS auto-tracks all reactive dependencies — no dependency array needed.
 
 \`\`\`typescript
 // SolidJS — auto-tracks count and name
@@ -122,6 +131,8 @@ useEffect(() => {
 \`\`\`
 
 The biggest win: **no stale closure bugs**. Because \`count()\` is a function call, you always get the latest value.`,
+      },
+    ],
   },
 ];
 
@@ -189,7 +200,11 @@ export default function App() {
     const text = inputValue().trim();
     if (!text || isLoading()) return;
 
-    const userMsg: ChatMessage = { id: `u${Date.now()}`, role: "user", content: text };
+    const userMsg: ChatMessage = {
+      id: `u${Date.now()}`,
+      role: "user",
+      parts: [{ type: "text", text }],
+    };
     setMessages((prev) => [...prev, userMsg]);
     setInputValue("");
     setIsLoading(true);
@@ -198,15 +213,14 @@ export default function App() {
     const reply = cannedReply(text);
     const words = reply.split(" ");
     const assistantId = `a${Date.now()}`;
-    setMessages((prev) => [...prev, { id: assistantId, role: "assistant", content: "" }]);
+    setMessages((prev) => [...prev, { id: assistantId, role: "assistant", parts: [] }]);
 
     let i = 0;
     const timer = setInterval(() => {
       i += 1;
+      const delta = (i > 1 ? " " : "") + words[i - 1];
       setMessages((prev) =>
-        prev.map((m) =>
-          m.id === assistantId ? { ...m, content: words.slice(0, i).join(" ") } : m,
-        ),
+        prev.map((m) => (m.id === assistantId ? { ...m, parts: appendTextPart(m.parts, delta) } : m)),
       );
       if (i >= words.length) {
         clearInterval(timer);
@@ -265,7 +279,7 @@ export default function App() {
                                   markdown
                                   class="text-foreground prose flex-1 rounded-lg bg-transparent p-0"
                                 >
-                                  {msg.content}
+                                  {partsToText(msg.parts)}
                                 </MessageContent>
                                 <MessageActions class="-ml-2.5 flex gap-0 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
                                   <Button variant="ghost" size="icon-sm" class="rounded-full">
@@ -289,7 +303,7 @@ export default function App() {
                           <Message class="mx-auto flex w-full max-w-3xl flex-col gap-2 px-6 items-end">
                             <div class="group flex flex-col items-end gap-1">
                               <MessageContent class="bg-muted text-primary max-w-[85%] rounded-3xl px-5 py-2.5">
-                                {msg.content}
+                                {partsToText(msg.parts)}
                               </MessageContent>
                             </div>
                           </Message>

@@ -1,5 +1,6 @@
 import { CUSTOM_ELEMENTS_SCHEMA, Component, computed, input } from '@angular/core';
 import type { ChatMessage } from '@kitn.ai/ui';
+import { partsToText } from '@kitn.ai/ui/state';
 import type { Theme } from '../../types';
 
 /**
@@ -38,7 +39,7 @@ export class ThreadView {
       const m = this.messages().find((x) => x.id === detail.messageId);
       if (!m) return;
       window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(new SpeechSynthesisUtterance(m.content));
+      window.speechSynthesis.speak(new SpeechSynthesisUtterance(partsToText(m.parts)));
     }
   }
 }

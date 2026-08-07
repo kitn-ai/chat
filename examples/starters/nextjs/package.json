@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@kitn.ai/ui": "file:../../..",
+    "@kitn.ai/ui": "file:../../../packages/ui",
     "next": "^15.5.19",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"

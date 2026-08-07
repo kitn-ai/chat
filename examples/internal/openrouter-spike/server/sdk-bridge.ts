@@ -88,7 +88,19 @@ export function toModelChunk(chunk: ChatStreamChunk): ModelStreamChunk | null {
     if (typeof delta?.content === 'string' && delta.content) out.text = delta.content;
 
     const reasoning = delta ? reasoningTextOf(delta) : '';
-    if (reasoning) out.reasoning = reasoning;
+    if (reasoning) {
+      out.reasoning = reasoning;
+      // The ROUND-TRIP channel. `reasoningDetails` is the provider's own block
+      // list, opaque entries (`reasoning.encrypted`, signed thinking blobs)
+      // included. Anthropic-backed models return 400 if a thinking block is
+      // rebuilt from text + signature rather than echoed verbatim, so the
+      // untranslated array rides along and the adapter pins it to the reasoning
+      // part as `raw`. `delta.reasoning` alone carries no such payload, so a
+      // plain-string reasoning delta gets no `raw` — there is nothing to attach.
+      if (Array.isArray(delta?.reasoningDetails) && delta.reasoningDetails.length > 0) {
+        out.reasoningRaw = { source: 'openrouter.reasoning_details', payload: delta.reasoningDetails };
+      }
+    }
 
     if (Array.isArray(delta?.toolCalls) && delta.toolCalls.length > 0) {
       out.toolCalls = delta.toolCalls.map(toolCallDelta);
