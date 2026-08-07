@@ -958,13 +958,21 @@ beforeEach(() => {
   created.connections = [];
   created.disconnects = 0;
   vi.stubGlobal('AudioContext', FakeAudioContext);
-  vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
-    // Run exactly one frame synchronously so an update happens without a loop.
-    cb(performance.now() + 1000);
-    return 1;
-  });
-  vi.stubGlobal('cancelAnimationFrame', () => {});
+  // Queue frames rather than invoking the callback inline. A synchronous rAF
+  // stub is not what any browser does, and it would recurse `step` forever.
+  rafQueue = [];
+  vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => rafQueue.push(cb));
+  vi.stubGlobal('cancelAnimationFrame', () => { rafQueue = []; });
 });
+
+let rafQueue: FrameRequestCallback[] = [];
+
+/** Run one animation frame's worth of queued callbacks. */
+function flushFrame(t = 1000) {
+  const q = rafQueue;
+  rafQueue = [];
+  q.forEach((cb) => cb(t));
+}
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -1120,6 +1128,16 @@ function getContext(): AudioContext | undefined {
  */
 const elementSources = new WeakMap<HTMLMediaElement, MediaElementAudioSourceNode>();
 
+/**
+ * `instanceof MediaStream` is not usable here: that global does not exist in
+ * every environment (jsdom included), and referencing it throws a
+ * ReferenceError rather than returning false. Every DOM element carries a
+ * `tagName`; a MediaStream never does.
+ */
+function isMediaElement(src: MediaStream | HTMLMediaElement): src is HTMLMediaElement {
+  return 'tagName' in src;
+}
+
 /** Resume a context parked by the autoplay policy, on the first user gesture. */
 function resumeOnGesture(ctx: AudioContext): () => void {
   if (ctx.state !== 'suspended') return () => {};
@@ -1170,12 +1188,12 @@ export function useAudioAnalysis(
     analyser.smoothingTimeConstant = opts.smoothingTimeConstant;
 
     let node: AudioNode;
-    if (src instanceof MediaStream || 'getAudioTracks' in src) {
-      node = ctx.createMediaStreamSource(src as MediaStream);
+    if (!isMediaElement(src)) {
+      node = ctx.createMediaStreamSource(src);
       node.connect(analyser);
       // Deliberately NOT connected to destination: that would echo the mic.
     } else {
-      const el = src as HTMLMediaElement;
+      const el = src;
       let elNode = elementSources.get(el);
       if (!elNode) {
         elNode = ctx.createMediaElementSource(el);
@@ -1210,7 +1228,7 @@ export function useAudioAnalysis(
       analyser.disconnect();
       // Do NOT disconnect a cached element source node: another consumer may
       // still be using it, and it can never be recreated for this element.
-      if (!(src instanceof MediaStream) && !('getAudioTracks' in src)) return;
+      if (isMediaElement(src)) return;
       node.disconnect();
     });
   });
