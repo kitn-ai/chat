@@ -4247,9 +4247,18 @@ The correct subject:
   axis, folding over itself, rather than a flat washer.
 - **Scale tracks audio.** The whole form grows when the speaker is talking, so
   `uIntensity` should drive ring radius and not only brightness.
-- **The centre is genuinely transparent.** The reference reads correctly on both
-  white and black. An opaque white centre would be indistinguishable on white and
-  obviously wrong on black, so test against a dark background.
+- **The entire canvas is transparent except the ribbons.** Not just the hollow
+  centre: alpha is zero everywhere the strokes are not, so the effect composites
+  over any background colour. The black in the motion reference is the page
+  showing through, not part of the effect. Premultiplied output
+  (`fragColor = vec4(col * alpha, alpha)`) with a genuinely zero alpha outside the
+  band is what makes that work, and `gl.clearColor(0, 0, 0, 0)` plus the
+  `ONE, ONE_MINUS_SRC_ALPHA` blend in `shader-canvas.tsx` is what preserves it.
+
+  Verify on at least three backgrounds: white, black, and a mid-tone. A shader
+  that writes opaque black outside the band looks perfect on the reference's dark
+  page and is obviously broken on the kit's light theme. This applies to the wave
+  variant too.
 
 **Reference-quality warning.** If you are working from a GIF, the speckle across
 the background is palette dithering, a GIF artifact, NOT the shader's own dither.
@@ -4895,6 +4904,8 @@ git commit -m "docs: add the audio visualizer page and MCP catalog entry"
 Create `packages/ui/e2e/audio-visualizer.spec.ts` covering:
 
 1. **The full matrix.** All six variants across all five states at `size="md"`, in light and dark. Screenshot each. Assert the element rendered geometry: `part="bar"` or `part="cell"` present for the DOM variants, a `<canvas>` with non-zero `width` for wave and aura.
+
+1b. **Shader transparency on three backgrounds.** Render `wave` and `aura` over white, black, and a mid-tone, and assert the background shows through everywhere the effect is not drawn. Sample a pixel well outside the drawn geometry on each and confirm it equals the page background, not black. A shader that writes opaque black outside its shape looks correct on a dark page and is obviously broken on the kit's light theme, and only a multi-background check catches it.
 2. **The shader chunk actually loads.** Watch network requests while switching to `variant="aura"` and assert a JS chunk was fetched. This is the only end-to-end proof the lazy boundary works in a browser rather than just in the bundle.
 3. **The WebGL fallback.** Block WebGL via `page.addInitScript` overriding `HTMLCanvasElement.prototype.getContext` to return null for `webgl`, load `variant="aura"`, and assert bars render instead. Screenshot it.
 4. **Reduced motion.** `page.emulateMedia({ reducedMotion: 'reduce' })`, load `variant="radial" state="thinking"`, and assert the container has no `animate-spin` class. Screenshot two frames a second apart and assert they are identical.
