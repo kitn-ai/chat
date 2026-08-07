@@ -170,30 +170,24 @@ git commit -m "feat(tools): semantic tool classification with a generic fallback
 - Modify: `packages/ui/src/elements/chat-types.ts:34-49`
 
 **Interfaces:**
-- Consumes: `ToolPart` (Task 1), `CardEnvelope` from `../primitives/card-contract`, `AttachmentData` from `../components/attachment-types`.
-- Produces: `RawOrigin`, `Source`, `MessagePart`, the rewritten `ChatMessage`.
+- Consumes: `ToolPart` and `RawOrigin` (Task 1, already imported and re-exported in this file), `CardEnvelope` from `../primitives/card-contract`, `AttachmentData` from `../components/attachment-types`.
+- Produces: `Source`, `MessagePart`, the rewritten `ChatMessage`.
 
 This task is types only, so it has no runtime test. Its gate is `nx typecheck ui` failing everywhere `content` was read, which is the point: it produces the worklist for Tasks 4 through 10.
 
 - [ ] **Step 1: Add the new types**
+
+`RawOrigin` already lives in this file's import list by the time this task starts:
+Task 1's layering fix made `chat-types.ts` do `import type { ToolPart, RawOrigin } from
+'../components/tool-types';` and re-export `RawOrigin` from there. `RawOrigin` is
+defined in `components/tool-types.ts`, not here, because `components/` may not import
+from `elements/` and `ToolPart` needs it. Do not redefine `RawOrigin` in this file.
 
 In `packages/ui/src/elements/chat-types.ts`, add above the `ChatMessage` interface:
 
 ```ts
 import type { CardEnvelope } from '../primitives/card-contract';
 import type { AttachmentData } from '../components/attachment-types';
-
-/** The untranslated provider payload a part was normalized from.
- *
- *  Optional in the type but REQUIRED in practice for round-trip fidelity. Anthropic
- *  returns a 400 invalid_request_error if `thinking` blocks are modified, reordered,
- *  filtered or RECONSTRUCTED, so an encoder must send `raw.payload` back verbatim
- *  rather than rebuilding a block from `text` + `signature`. */
-export interface RawOrigin {
-  /** Tagged origin, e.g. 'anthropic.content_block', 'openai.delta', `custom.${string}`. */
-  source: string;
-  payload: unknown;
-}
 
 /** A citation the model produced. */
 export interface Source {

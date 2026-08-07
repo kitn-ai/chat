@@ -1,17 +1,10 @@
-import type { ToolPart } from '../components/tool-types';
+import type { ToolPart, RawOrigin } from '../components/tool-types';
 import type { AttachmentData } from '../components/attachment-types';
 
-/** The untranslated provider payload a part was normalized from.
- *
- *  Optional in the type but REQUIRED in practice for round-trip fidelity. Anthropic
- *  returns a 400 invalid_request_error if `thinking` blocks are modified, reordered,
- *  filtered or RECONSTRUCTED, so an encoder must send `raw.payload` back verbatim
- *  rather than rebuilding a block from `text` + `signature`. */
-export interface RawOrigin {
-  /** Tagged origin, e.g. 'anthropic.content_block', 'openai.delta', `custom.${string}`. */
-  source: string;
-  payload: unknown;
-}
+/** Re-exported so consumers of chat-types (and MessagePart) can keep using
+ *  RawOrigin unqualified. It is defined in components/tool-types.ts, not here,
+ *  to keep the components -> elements import direction one-way. */
+export type { RawOrigin };
 
 /** The five built-in action buttons (each carries its own curated icon + label). */
 export type ChatMessageAction = 'copy' | 'like' | 'dislike' | 'regenerate' | 'edit';

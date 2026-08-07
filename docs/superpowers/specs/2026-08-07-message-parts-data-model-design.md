@@ -100,7 +100,11 @@ they have no evidence to offer. They arranged never to need it. We cannot.
 
 ## The data model
 
-`packages/ui/src/elements/chat-types.ts`.
+`packages/ui/src/elements/chat-types.ts`, except `RawOrigin`, which lives in
+`packages/ui/src/components/tool-types.ts` and is re-exported from `chat-types.ts`.
+It has to live there: `ToolPart` (in `tool-types.ts`) needs it, and `components/` may
+not import from `elements/` (that would make the two-way, since `chat-types.ts`
+already imports `ToolPart` from `components/tool-types.ts`).
 
 ```ts
 /** The untranslated provider payload a part was normalized from. Optional in the
@@ -269,7 +273,8 @@ contract (B) or the artifact work (D).
 One PR. Everything below moves together so CI stays green and the change has a single
 revert point.
 
-- `packages/ui/src/elements/chat-types.ts` - the types above.
+- `packages/ui/src/elements/chat-types.ts` - the types above, except `RawOrigin`
+  (defined in `components/tool-types.ts`, re-exported here).
 - `packages/ui/src/state/stream.ts` - part-oriented `createAssistantStream`.
 - `packages/ui/src/primitives/` - new `classifyTool` + the input fingerprint helper.
 - Every element reading `message.content`, `message.reasoning`, `message.tools` or

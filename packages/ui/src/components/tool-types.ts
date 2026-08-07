@@ -1,5 +1,16 @@
 import type { ToolKind } from './tool-classify';
-import type { RawOrigin } from '../elements/chat-types';
+
+/** The untranslated provider payload a part was normalized from.
+ *
+ *  Optional in the type but REQUIRED in practice for round-trip fidelity. Anthropic
+ *  returns a 400 invalid_request_error if `thinking` blocks are modified, reordered,
+ *  filtered or RECONSTRUCTED, so an encoder must send `raw.payload` back verbatim
+ *  rather than rebuilding a block from `text` + `signature`. */
+export interface RawOrigin {
+  /** Tagged origin, e.g. 'anthropic.content_block', 'openai.delta', `custom.${string}`. */
+  source: string;
+  payload: unknown;
+}
 
 /** A tool-call part rendered by <Tool>. Pure type — kept JSX-free so it can be
  *  imported by the framework-neutral state core and the React typecheck pass. */
