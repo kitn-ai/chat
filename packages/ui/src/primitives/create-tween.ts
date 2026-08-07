@@ -1,13 +1,60 @@
 import { createSignal, onCleanup, type Accessor } from 'solid-js';
 
 export type Transition =
-  | { duration: number; ease?: 'linear' | 'easeOut' | 'easeInOut' }
+  | { duration: number; ease?: 'linear' | 'easeIn' | 'easeOut' | 'easeInOut' }
   | { type: 'spring'; duration: number; bounce: number };
 
+/**
+ * Builds an easing function from a CSS-style cubic bezier. The curve's
+ * endpoints are fixed at (0, 0) and (1, 1); (x1, y1) and (x2, y2) are the
+ * two control points. Given a progress value `t` used as the curve's `x`,
+ * solves `X(s) === t` for the curve parameter `s` via Newton-Raphson (a
+ * handful of iterations converges for these curves), falls back to
+ * bisection if the derivative gets too small or a step would leave
+ * [0, 1], then returns `Y(s)`.
+ */
+function cubicBezier(x1: number, y1: number, x2: number, y2: number): (t: number) => number {
+  const x = (s: number) => 3 * (1 - s) * (1 - s) * s * x1 + 3 * (1 - s) * s * s * x2 + s * s * s;
+  const y = (s: number) => 3 * (1 - s) * (1 - s) * s * y1 + 3 * (1 - s) * s * s * y2 + s * s * s;
+  const xDerivative = (s: number) =>
+    3 * (1 - s) * (1 - s) * x1 + 6 * (1 - s) * s * (x2 - x1) + 3 * s * s * (1 - x2);
+
+  function bisect(t: number): number {
+    let lo = 0;
+    let hi = 1;
+    for (let i = 0; i < 30; i++) {
+      const mid = (lo + hi) / 2;
+      if (x(mid) < t) lo = mid;
+      else hi = mid;
+    }
+    return (lo + hi) / 2;
+  }
+
+  return (t: number) => {
+    if (t <= 0) return 0;
+    if (t >= 1) return 1;
+
+    let s = t;
+    for (let i = 0; i < 8; i++) {
+      const derivative = xDerivative(s);
+      if (Math.abs(derivative) < 1e-6) return y(bisect(t));
+
+      const next = s - (x(s) - t) / derivative;
+      if (next <= 0 || next >= 1) return y(bisect(t));
+
+      s = next;
+    }
+    return y(s);
+  };
+}
+
+// Matches motion's named curves so the visualizers feel like their LiveKit
+// counterparts rather than a plausible-looking approximation.
 const EASINGS = {
   linear: (t: number) => t,
-  easeOut: (t: number) => 1 - Math.pow(1 - t, 3),
-  easeInOut: (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2),
+  easeIn: cubicBezier(0.42, 0, 1, 1),
+  easeOut: cubicBezier(0, 0, 0.58, 1),
+  easeInOut: cubicBezier(0.42, 0, 0.58, 1),
 } as const;
 
 /**

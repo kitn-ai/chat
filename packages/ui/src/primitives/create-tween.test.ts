@@ -178,3 +178,106 @@ describe('createTween', () => {
     });
   });
 });
+
+// Reference values below are computed straight from the cubic-bezier
+// formulas for each curve, not eyeballed: solving X(s) = 0.5 for
+// easeOut's (0, 0, 0.58, 1) gives Y(s) ≈ 0.6846, and easeIn's
+// (0.42, 0, 1, 1) is easeOut mirrored (its control points are easeOut's
+// reflected through (0.5, 0.5)), giving Y(s) ≈ 0.3154 at the same point.
+describe('named easings as cubic beziers', () => {
+  const NAMES = ['linear', 'easeIn', 'easeOut', 'easeInOut'] as const;
+
+  // The fake requestAnimationFrame stub holds a single pending callback, not
+  // a queue, so two tweens must be driven one after the other; scheduling a
+  // second one before advancing the first would silently drop the first
+  // tween's frame instead of running both.
+
+  it('easeOut matches the (0, 0, 0.58, 1) curve: steeper than linear at the midpoint', () => {
+    createRoot((dispose) => {
+      const eased = createTween(0);
+      eased.to(1, { duration: 1, ease: 'easeOut' });
+      advance(500);
+      const easedAtHalf = eased.value();
+
+      const linear = createTween(0);
+      linear.to(1, { duration: 1, ease: 'linear' });
+      advance(500);
+      const linearAtHalf = linear.value();
+
+      expect(easedAtHalf).toBeCloseTo(0.68, 2);
+      expect(easedAtHalf).toBeGreaterThan(linearAtHalf);
+      dispose();
+    });
+  });
+
+  it('easeIn matches the (0.42, 0, 1, 1) curve: shallower than linear at the midpoint', () => {
+    createRoot((dispose) => {
+      const eased = createTween(0);
+      eased.to(1, { duration: 1, ease: 'easeIn' });
+      advance(500);
+      const easedAtHalf = eased.value();
+
+      const linear = createTween(0);
+      linear.to(1, { duration: 1, ease: 'linear' });
+      advance(500);
+      const linearAtHalf = linear.value();
+
+      expect(easedAtHalf).toBeCloseTo(0.32, 2);
+      expect(easedAtHalf).toBeLessThan(linearAtHalf);
+      dispose();
+    });
+  });
+
+  it('easeInOut matches the (0.42, 0, 0.58, 1) curve: at the midpoint, and symmetric about it', () => {
+    createRoot((dispose) => {
+      const mid = createTween(0);
+      mid.to(1, { duration: 1, ease: 'easeInOut' });
+      advance(500);
+      expect(mid.value()).toBeCloseTo(0.5, 2);
+
+      const early = createTween(0);
+      early.to(1, { duration: 1, ease: 'easeInOut' });
+      advance(250);
+      const atQuarter = early.value();
+
+      const late = createTween(0);
+      late.to(1, { duration: 1, ease: 'easeInOut' });
+      advance(750);
+      const atThreeQuarters = late.value();
+
+      expect(atQuarter).toBeCloseTo(1 - atThreeQuarters, 2);
+      dispose();
+    });
+  });
+
+  it('every named easing returns exactly 0 at t = 0 and exactly 1 at t = 1', () => {
+    createRoot((dispose) => {
+      for (const ease of NAMES) {
+        const t = createTween(0);
+        t.to(1, { duration: 1, ease });
+        advance(0);
+        expect(t.value()).toBe(0);
+        advance(1000);
+        expect(t.value()).toBe(1);
+      }
+      dispose();
+    });
+  });
+
+  it('every named easing is monotonically non-decreasing across a sweep of t', () => {
+    createRoot((dispose) => {
+      for (const ease of NAMES) {
+        const t = createTween(0);
+        t.to(1, { duration: 1, ease });
+        let previous = t.value();
+        for (let i = 0; i < 20; i++) {
+          advance(50); // 0.05 of the 1s duration per step
+          const current = t.value();
+          expect(current).toBeGreaterThanOrEqual(previous);
+          previous = current;
+        }
+      }
+      dispose();
+    });
+  });
+});
