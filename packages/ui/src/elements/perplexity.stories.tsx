@@ -319,7 +319,11 @@ export const Perplexity: Story = {
                         render prose/lists/tables; the cited prose above is hand-woven
                         JSX because a markdown string can't host inline citation chips. */}
                     <kai-message
-                      ref={(el) => { const m = el as El; m.content = PIPELINE_MD; m.avatar = 'none'; }}
+                      ref={(el) => {
+                        const m = el as El;
+                        m.message = { id: 'perplexity-pipeline', role: 'assistant', parts: [{ type: 'text', text: PIPELINE_MD }] };
+                        m.avatar = 'none';
+                      }}
                       style={{ display: 'block' }}
                     ></kai-message>
 
@@ -471,7 +475,7 @@ export const Perplexity: Story = {
       <kai-source href="…arxiv…" label="2" headline="…" description="…"></kai-source>.
     </p>
     <!-- a markdown sub-block via kai-message (real markdown; can't host inline chips) -->
-    <kai-message><!-- content set as a property: a numbered pipeline list --></kai-message>
+    <kai-message><!-- message set as a property: a numbered pipeline list --></kai-message>
     <!-- media / images strip: thumbnail tiles -->
     <div class="media-strip">…tiles…</div>
     <!-- answer action toolbar -->
@@ -501,7 +505,10 @@ export const Perplexity: Story = {
   document.querySelector('kai-nav').items = [/* { id, label, icon } rail rows */];
   document.querySelector('kai-tabs').items = [{ id: 'answer', label: 'Answer' }, { id: 'sources', label: 'Sources' }, { id: 'images', label: 'Images' }];
   document.querySelector('kai-tabs').defaultValue = 'answer';
-  document.querySelector('kai-message').content = '**Typical pipeline**\\n\\n1. …';
+  document.querySelector('kai-message').message = {
+    id: 'pipeline', role: 'assistant',
+    parts: [{ type: 'text', text: '**Typical pipeline**\\n\\n1. …' }],
+  };
   document.querySelector('kai-sources').sources = [{ href: '…', title: '…', description: '…' }, /* … */];
   document.querySelector('kai-suggestions').suggestions = [/* related questions */];
   document.querySelector('kai-suggestions').layout = 'list';

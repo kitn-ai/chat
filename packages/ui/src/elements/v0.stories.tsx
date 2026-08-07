@@ -464,10 +464,14 @@ export const V0: Story = {
               <div class="min-h-0 flex-1 overflow-y-auto">
                 <div class="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-5">
                   <For each={THREAD}>
-                    {(turn) => (
+                    {(turn, i) => (
                       <div class="flex flex-col gap-2">
                         <kai-message
-                          ref={(el) => { const m = el as El; m.role = turn.role; m.content = turn.md; m.avatar = 'none'; }}
+                          ref={(el) => {
+                            const m = el as El;
+                            m.message = { id: `v0-turn-${i()}`, role: turn.role, parts: [{ type: 'text', text: turn.md }] };
+                            m.avatar = 'none';
+                          }}
                           style={{ display: 'block' }}
                         ></kai-message>
                         {/* A generation → a version chip + Restore. The chip marks
@@ -594,7 +598,7 @@ export const V0: Story = {
 
     <!-- Each assistant generation is a VERSION. kai-artifact has only URL history,
          not a v2/v3 model, so the chip + Restore are hand-wired to navigate(). -->
-    <kai-message><!-- content set as a property: the assistant turn --></kai-message>
+    <kai-message><!-- message set as a property: the assistant turn --></kai-message>
     <kai-badge>v2</kai-badge>
     <kai-button variant="ghost">Restore this version</kai-button>
 

@@ -433,7 +433,11 @@ export const Lovable: Story = {
                 {/* agent turn: prose + plan + build log */}
                 <div class="flex flex-col gap-3">
                   <kai-message
-                    ref={(el) => { const m = el as El; m.content = AGENT_INTRO; m.avatar = 'none'; }}
+                    ref={(el) => {
+                      const m = el as El;
+                      m.message = { id: 'lovable-intro', role: 'assistant', parts: [{ type: 'text', text: AGENT_INTRO }] };
+                      m.avatar = 'none';
+                    }}
                     style={{ display: 'block' }}
                   ></kai-message>
 
@@ -465,7 +469,11 @@ export const Lovable: Story = {
                 {/* final agent turn + the checkpoint/version controls */}
                 <div class="flex flex-col gap-2.5">
                   <kai-message
-                    ref={(el) => { const m = el as El; m.content = AGENT_DONE; m.avatar = 'none'; }}
+                    ref={(el) => {
+                      const m = el as El;
+                      m.message = { id: 'lovable-done', role: 'assistant', parts: [{ type: 'text', text: AGENT_DONE }] };
+                      m.avatar = 'none';
+                    }}
                     style={{ display: 'block' }}
                   ></kai-message>
                   <div class="flex items-center gap-2">
@@ -570,7 +578,11 @@ export const Lovable: Story = {
                   </div>
                   <div class="min-w-0 flex-1 overflow-auto rounded-xl border border-border bg-background p-4">
                     <kai-message
-                      ref={(el) => { const m = el as El; m.content = CODE_MD; m.avatar = 'none'; }}
+                      ref={(el) => {
+                        const m = el as El;
+                        m.message = { id: 'lovable-code', role: 'assistant', parts: [{ type: 'text', text: CODE_MD }] };
+                        m.avatar = 'none';
+                      }}
                       style={{ display: 'block' }}
                     ></kai-message>
                   </div>
@@ -605,7 +617,7 @@ export const Lovable: Story = {
   <!-- LEFT: the conversation + the composer -->
   <section class="chat">
     <div class="user-bubble">Build a SaaS analytics dashboard with KPI cards, a chart, and a customers table.</div>
-    <kai-message><!-- agent prose, content set as a property --></kai-message>
+    <kai-message><!-- agent prose, message set as a property --></kai-message>
     <kai-tasks><!-- the build plan: data = { mode:'progress', tasks:[...] } --></kai-tasks>
     <div class="build-log"><!-- Created src/App.tsx, Created StatCard.tsx, ... --></div>
     <kai-message><!-- "Helm is live - preview it on the right." --></kai-message>
@@ -651,7 +663,10 @@ export const Lovable: Story = {
   // Array/object props are JS properties (the kai- contract); scalars are attributes.
   document.querySelector('kai-prompt-input').attach = false;
   document.querySelector('kai-tasks').data = { mode:'progress', heading:'Plan', tasks:[/* { id, label, checked } */] };
-  document.querySelector('kai-message').content = "I'll build **Helm**, a SaaS analytics dashboard...";
+  document.querySelector('kai-message').message = {
+    id: 'intro', role: 'assistant',
+    parts: [{ type: 'text', text: "I'll build **Helm**, a SaaS analytics dashboard..." }],
+  };
   document.querySelector('kai-tabs').items = [{ id:'preview', label:'Preview' }, { id:'code', label:'Code' }];
   document.querySelector('kai-file-tree').files = [{ path:'src/App.tsx' }, /* ... */];
   // Interactions: tabs swap Preview/Code; the device toggle resizes the viewport; refresh replays a reload bar.

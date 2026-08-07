@@ -1096,7 +1096,11 @@ export const SplitWorkspace: Story = {
     const AgentBody = (props: { agent: Agent }) => (
       <div class="flex flex-col gap-2 px-3 py-2.5">
         <kai-message
-          ref={(el) => { const m = el as El; m.role = 'assistant'; m.content = props.agent.body; m.avatar = 'none'; }}
+          ref={(el) => {
+            const m = el as El;
+            m.message = { id: props.agent.id, role: 'assistant', parts: [{ type: 'text', text: props.agent.body }] };
+            m.avatar = 'none';
+          }}
           style={{ display: 'block' }}
         ></kai-message>
       </div>

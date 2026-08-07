@@ -379,7 +379,11 @@ export const Codex: Story = {
                 <div class="flex flex-col gap-5">
                   {/* The agent's summary turn (real markdown). */}
                   <kai-message
-                    ref={(el) => { const m = el as El; m.content = SUMMARY_MD; m.avatar = 'none'; }}
+                    ref={(el) => {
+                      const m = el as El;
+                      m.message = { id: 'codex-summary', role: 'assistant', parts: [{ type: 'text', text: SUMMARY_MD }] };
+                      m.avatar = 'none';
+                    }}
                     style={{ display: 'block' }}
                   ></kai-message>
 

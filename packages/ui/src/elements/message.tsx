@@ -61,8 +61,6 @@ interface Props extends Record<string, unknown> {
   message?: ChatMessage;
   /** Convenience for simple cases when not passing a `message` object. */
   role?: 'user' | 'assistant';
-  /** Convenience content (used when `message` is not set). */
-  content?: string;
   /** Force markdown on/off. Defaults to on for assistant, off for user. */
   markdown?: boolean;
   /** Text/markdown sizing for the message body. */
@@ -107,7 +105,6 @@ interface Events {
 defineWebComponent<Props, Events>('kai-message', {
   message: undefined,
   role: 'assistant',
-  content: undefined,
   markdown: undefined,
   proseSize: 'sm',
   codeTheme: 'github-dark-dimmed',
@@ -123,8 +120,28 @@ defineWebComponent<Props, Events>('kai-message', {
     props.message ?? {
       id: 'message',
       role: props.role ?? 'assistant',
-      parts: [{ type: 'text', text: props.content ?? '' }],
+      parts: [],
     };
+  // `message` is an untyped boundary: a consumer can hand it anything at
+  // runtime (a pre-0.20.0 `{ id, role, content }` object, in particular).
+  // `parts` is a REQUIRED field, so validate it here rather than let
+  // `MessageBody`/`groupMessageParts` throw deep inside a Solid render pass;
+  // an uncaught exception there blanks the whole element instead of just this
+  // one message. Warn once per bad message (not on every unrelated re-render)
+  // and render nothing for it, matching the old pre-parts fallback behavior
+  // (an unusable message rendered an empty body, not a crash).
+  let lastWarnedMessage: unknown;
+  const hasValidParts = (): boolean => {
+    const m = msg();
+    if (Array.isArray(m.parts)) return true;
+    if (m !== lastWarnedMessage) {
+      lastWarnedMessage = m;
+      console.error(
+        "<kai-message>: 'message' must have a 'parts' array. The 'content' string field was removed in 0.20.0.",
+      );
+    }
+    return false;
+  };
   // Copy + vote state lives here (above the rendered body) so it survives a
   // re-render when the host swaps in a fresh `message` object during streaming.
   const feedback = createMessageFeedback({
@@ -142,7 +159,7 @@ defineWebComponent<Props, Events>('kai-message', {
   // `kai-message-action{action:'copy'}`.
   expose({
     /** Copy the message content to the clipboard and show the copied check. */
-    copy: () => feedback.handleAction(msg(), 'copy'),
+    copy: () => { if (hasValidParts()) feedback.handleAction(msg(), 'copy'); },
   });
 
   // Read declarative <kai-action> children from light DOM.
@@ -223,27 +240,31 @@ defineWebComponent<Props, Events>('kai-message', {
   );
 
   return (
-    <ChatConfig
-      proseSize={props.proseSize}
-      codeTheme={props.codeTheme}
-      codeHighlight={flag('codeHighlight')}
-      portalMount={outer.portalMount()}
-    >
-      <Show
-        when={showRail()}
-        fallback={
-          <Message class={`${rowGroup()}${isUser() ? 'flex-col items-end' : 'flex-col items-start'}`}>
-            {body()}
-          </Message>
-        }
+    // No fallback: an invalid `message` (missing `parts`) renders nothing for
+    // this element rather than crashing. `hasValidParts()` already logged why.
+    <Show when={hasValidParts()}>
+      <ChatConfig
+        proseSize={props.proseSize}
+        codeTheme={props.codeTheme}
+        codeHighlight={flag('codeHighlight')}
+        portalMount={outer.portalMount()}
       >
-        <Message class={rowGroup()}>
-          {avatarRail()}
-          <div class={`flex min-w-0 flex-1 flex-col ${isUser() ? 'items-end' : 'items-start'}`}>
-            {body()}
-          </div>
-        </Message>
-      </Show>
-    </ChatConfig>
+        <Show
+          when={showRail()}
+          fallback={
+            <Message class={`${rowGroup()}${isUser() ? 'flex-col items-end' : 'flex-col items-start'}`}>
+              {body()}
+            </Message>
+          }
+        >
+          <Message class={rowGroup()}>
+            {avatarRail()}
+            <div class={`flex min-w-0 flex-1 flex-col ${isUser() ? 'items-end' : 'items-start'}`}>
+              {body()}
+            </div>
+          </Message>
+        </Show>
+      </ChatConfig>
+    </Show>
   );
 });

@@ -130,7 +130,7 @@ export function isAnyStreaming(pair: ComparePair | null): boolean {
 /** Map a `CompareCandidate`'s flat legacy fields (content/reasoning/tools/
  *  attachments) into the ordered `MessagePart[]` `MessageBody` now renders.
  *  `CompareCandidate` stays its own independent shape (it is `<kai-compare>`'s
- *  public `data` JSON, not a `ChatMessage`) — this is purely a render-time
+ *  public `data` JSON, not a `ChatMessage`). This is purely a render-time
  *  adapter, applied at each `MessageBody` call site. Order: reasoning (the
  *  thinking trace) → tool calls (the actions taken) → attachments (anything
  *  produced) → the final text answer, mirroring how an assistant turn reads. */

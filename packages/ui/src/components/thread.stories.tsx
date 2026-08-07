@@ -131,7 +131,7 @@ export const WithAvatars: Story = {
   ...src(`<Thread messages={messagesWithAvatars} />`),
 };
 
-/** Ordering: `parts` render in a single pass, in array order — reasoning, then
+/** Ordering: `parts` render in a single pass, in array order: reasoning, then
  *  plain text, then a tool call, then more text. Every other fixture on this page
  *  is single-type (all text, or all-with-avatar), so this is the one story that
  *  would actually catch an ordering regression (e.g. a render path that groups by
