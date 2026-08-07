@@ -1,0 +1,31 @@
+/* No top divider above the input — the composer floats against the thread. Extra
+   bottom padding lifts the input + hint off the viewport edge. */
+.composer {
+  padding: 0.75rem 1rem 1.5rem;
+}
+
+/* Match the composer to the centered message column above it. */
+.composer > * {
+  display: block;
+  width: 100%;
+  max-width: 48rem;
+  margin: 0 auto;
+}
+
+/* Muted, centered helper line under the input pointing out the / and @ triggers. */
+.composer-hint {
+  margin: 0.5rem auto 0;
+  font-size: 0.75rem;
+  text-align: center;
+  color: var(--color-muted-foreground);
+}
+
+.composer-hint kbd {
+  font-family: inherit;
+  font-size: 0.6875rem;
+  padding: 0.05rem 0.3rem;
+  border-radius: 0.25rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-muted);
+  color: var(--color-foreground);
+}

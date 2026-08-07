@@ -6,7 +6,12 @@
   "packageManager": "pnpm@10.24.0",
   "engines": { "node": ">=22" },
   "scripts": {
-    "dev": "nx run-many -t dev",
+    "dev": "nx run-many -t dev -p ui docs",
+    "example:react": "pnpm --filter @kitn.ai/ui-example-react dev",
+    "example:vue": "pnpm --filter @kitn.ai/ui-example-vue dev",
+    "example:svelte": "pnpm --filter @kitn.ai/ui-example-svelte dev",
+    "example:vanilla": "pnpm --filter @kitn.ai/ui-example-vanilla dev",
+    "example:angular": "pnpm --filter @kitn.ai/ui-example-angular dev",
     "build": "nx run-many -t build",
     "test": "nx run-many -t test",
     "typecheck": "nx run-many -t typecheck",

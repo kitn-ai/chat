@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>kitn · composable web components</title>
+
+  <!-- One import of the local build registers every kai-* element. -->
+  <script type="module" src="../../../dist/kai.es.js"></script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+  <div class="shell">
+    <!-- ───────────────────────── sidebar index ───────────────────────── -->
+    <aside class="index">
+      <div class="brand">
+        <span class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+        <span><b>kitn</b><br><small>web components</small></span>
+      </div>
+      <nav>
+        <ol class="toc">
+          <li><a href="#sec-dropin">Batteries-included <small>3</small></a></li>
+          <li><a href="#sec-messages">Messages <small>6</small></a></li>
+          <li><a href="#sec-media">Attachments &amp; media <small>5</small></a></li>
+          <li><a href="#sec-composer">Composer <small>3</small></a></li>
+          <li><a href="#sec-meta">Header &amp; meta <small>6</small></a></li>
+          <li><a href="#sec-status">Status &amp; motion <small>5</small></a></li>
+        </ol>
+      </nav>
+      <div class="index-foot">
+        compose in plain HTML,<br>React or Vue.<br><br>
+        <code>npm run examples</code>
+      </div>
+    </aside>
+
+    <!-- ───────────────────────── main ───────────────────────── -->
+    <main>
+      <header class="hero">
+        <div>
+          <h1>Composable<br><em>web components</em></h1>
+          <p>Every primitive in the kit, shipped as a framework-agnostic custom element. Drop them into any page — data in via properties, interactions out via events.</p>
+          <div class="kpi">
+            <div><b>28</b><span>elements</span></div>
+            <div><b>~80kb</b><span>gzip, shared</span></div>
+            <div><b>0</b><span>framework deps</span></div>
+          </div>
+        </div>
+        <button class="theme-btn" id="theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg> Theme</button>
+      </header>
+
+      <!-- 01 ───────────────────────── batteries-included ── -->
+      <section id="sec-dropin">
+        <div class="sec-head">
+          <span class="num">01</span>
+          <div><h2>Batteries-included</h2><p>The drop-in layer — whole surfaces in a single tag.</p></div>
+        </div>
+        <div class="grid">
+          <div class="spec">
+            <header><span class="tag"><span class="nm">kai-conversations</span></span><span class="desc">Sidebar of conversations with grouping &amp; selection.</span></header>
+            <div class="stage tall"><kai-conversations id="list" style="display:block;height:100%"></kai-conversations></div>
+          </div>
+          <div class="spec">
+            <header><span class="tag"><span class="nm">kai-chat</span></span><span class="desc">The full chat UI — set <b>.messages</b>, listen for <b>submit</b>. Try sending a message.</span></header>
+            <div class="stage tall"><kai-chat id="chat" style="display:block;height:100%" chat-title="Assistant" search voice></kai-chat></div>
+          </div>
+          <div class="spec col-full">
+            <header><span class="tag"><span class="nm">kai-prompt-input</span> <b>entity-pills</b></span><span class="desc">Standalone composer with attachments &amp; entity pills — type <b>/</b> for skills or <b>@</b> for agents.</span></header>
+            <div class="stage block"><kai-prompt-input id="pi" placeholder="Ask anything…  (try typing / or @)"></kai-prompt-input></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 02 ───────────────────────── messages ── -->
+      <section id="sec-messages">
+        <div class="sec-head">
+          <span class="num">02</span>
+          <div><h2>Messages</h2><p>Compose your own message list from the parts a turn is made of.</p></div>
+        </div>
+        <div class="grid">
+          <div class="spec col-full">
+            <header><span class="tag"><span class="nm">kai-message</span> <b>role="assistant"</b></span><span class="desc">One assistant turn: reasoning, a tool call, an attachment, and action buttons — from a single <b>message</b> object.</span></header>
+            <div class="stage block"><kai-message id="msg-a"></kai-message></div>
+          </div>
+          <div class="spec">
+            <header><span class="tag"><span class="nm">kai-message</span> <b>role="user"</b></span><span class="desc">A user turn.</span></header>
+            <div class="stage block"><kai-message id="msg-u" role="user"></kai-message></div>
+          </div>
+          <div class="spec">
+            <header><span class="tag"><span class="nm">kai-markdown</span></span><span class="desc">Token-themed markdown with fenced code.</span></header>
+            <div class="stage block"><kai-markdown id="md"></kai-markdown></div>
+          </div>
+          <div class="spec">
+            <header><span class="tag"><span class="nm">kai-reasoning</span> <b>streaming</b></span><span class="desc">Collapsible thinking; auto-opens while streaming.</span></header>
+            <div class="stage block"><kai-reasoning id="reason" label="Reasoning" streaming></kai-reasoning></div>
+          </div>
+          <div class="spec">
+            <header><span class="tag"><span class="nm">kai-chain-of-thought</span></span><span class="desc">Step-by-step reasoning with connectors.</span></header>
+            <div class="stage block"><kai-chain-of-thought id="cot"></kai-chain-of-thought></div>
+          </div>
+          <div class="spec col-full">
+            <header><span class="tag"><span class="nm">kai-code-block</span> <b>language="ts"</b></span><span class="desc">A single highlighted code block with copy.</span></header>
+            <div class="stage block"><kai-code-block id="code" language="ts"></kai-code-block></div>
+          </div>
+          <div class="spec col-full">
+            <header><span class="tag"><span class="nm">kai-tool</span> <b>open</b></span><span class="desc">A tool-call panel — input, output, and a state badge.</span></header>
+            <div class="stage block"><kai-tool id="tool" open></kai-tool></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 03 ───────────────────────── attachments & media ── -->
+      <section id="sec-media">
+        <div class="sec-head">
+          <span class="num">03</span>
+          <div><h2>Attachments &amp; media</h2><p>One element, presentation chosen by attribute.</p></div>
+        </div>
+        <div class="grid">
+          <div class="spec">
+            <header><span class="tag"><span class="nm">kai-attachments</span> <b>variant="inline" hover-card</b></span><span class="desc">Compact icon + label chips with a hover preview.</span></header>
+            <div class="stage block"><kai-attachments id="att-inline" variant="inline" hover-card></kai-attachments></div>
+          </div>
+          <div class="spec">
+            <header><span class="tag"><span class="nm">kai-attachments</span> <b>variant="grid" removable</b></span><span class="desc">Visual tiles, removable on hover.</span></header>
+            <div class="stage block"><kai-attachments id="att-grid" variant="grid" removable></kai-attachments></div>
+          </div>
+          <div class="spec">
+            <header><span class="tag"><span class="nm">kai-image</span></span><span class="desc">base64 / byte-array image with skeleton.</span></header>
+            <div class="stage center"><kai-image id="img" alt="demo" style="width:96px"></kai-image></div>
+          </div>
+          <div class="spec">
+            <header><span class="tag"><span class="nm">kai-source</span> <b>show-favicon</b></span><span class="desc">A citation link with a hover preview.</span></header>
+            <div class="stage"><kai-source id="src" href="https://kitn.dev" headline="kitn — the kit" description="Composable SolidJS + web-component chat UI." show-favicon></kai-source></div>
+          </div>
+          <div class="spec col-full">
+            <header><span class="tag"><span class="nm">kai-sources</span></span><span class="desc">A wrapped row of citations.</span></header>
+            <div class="stage block"><kai-sources id="srcs"></kai-sources></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 04 ───────────────────────── composer ── -->
+      <section id="sec-composer">
+        <div class="sec-head">
+          <span class="num">04</span>
+          <div><h2>Composer</h2><p>Input affordances you can place anywhere.</p></div>
+        </div>
+        <div class="grid">
+          <div class="spec col-full">
+            <header><span class="tag"><span class="nm">kai-suggestions</span></span><span class="desc">Suggestion chips; clicking one fills the input above and fires <b>select</b>.</span></header>
+            <div class="stage block"><kai-suggestions id="suggs"></kai-suggestions></div>
+          </div>
+          <div class="spec">
+            <header><span class="tag"><span class="nm">kai-file-upload</span></span><span class="desc">Click / drag-drop dropzone; <b>slot</b>-overridable label.</span></header>
+            <div class="stage block"><kai-file-upload id="fu"></kai-file-upload></div>
+          </div>
+          <div class="spec">
+            <header><span class="tag"><span class="nm">kai-voice-input</span> · kai-thinking-bar</span><span class="desc">Mic capture (function property) + a shimmering “thinking” bar.</span></header>
+            <div class="stage"><kai-voice-input id="voice"></kai-voice-input><kai-thinking-bar id="think" text="Thinking…" stoppable style="flex:1"></kai-thinking-bar></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 05 ───────────────────────── header & meta ── -->
+      <section id="sec-meta">
+        <div class="sec-head">
+          <span class="num">05</span>
+          <div><h2>Header &amp; meta</h2><p>The small pieces around a conversation.</p></div>
+        </div>
+        <div class="grid">
+          <div class="spec">
+            <header><span class="tag"><span class="nm">kai-model-switcher</span></span><span class="desc">Model dropdown; emits <b>modelchange</b>.</span></header>
+            <div class="stage"><kai-model-switcher id="models"></kai-model-switcher></div>
+          </div>
+          <div class="spec">
+            <header><span class="tag"><span class="nm">kai-context</span></span><span class="desc">Token-usage meter with a breakdown.</span></header>
+            <div class="stage"><kai-context id="ctx"></kai-context></div>
+          </div>
+          <div class="spec">
+            <header><span class="tag"><span class="nm">kai-scope-picker</span></span><span class="desc">Scope a chat by author or tag.</span></header>
+            <div class="stage"><kai-scope-picker id="scope"></kai-scope-picker></div>
+          </div>
+          <div class="spec">
+            <header><span class="tag"><span class="nm">kai-checkpoint</span> · kai-skills</span><span class="desc">Bookmark button + active-skill badges.</span></header>
+            <div class="stage"><kai-checkpoint id="cp" label="Checkpoint" tooltip="Restore"></kai-checkpoint><kai-skills id="skills"></kai-skills></div>
+          </div>
+          <div class="spec col-full">
+            <header><span class="tag"><span class="nm">kai-feedback-bar</span></span><span class="desc">Inline thumbs up/down banner.</span></header>
+            <div class="stage"><kai-feedback-bar id="fb" bar-title="Was this helpful?"></kai-feedback-bar></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 06 ───────────────────────── status & motion ── -->
+      <section id="sec-status">
+        <div class="sec-head">
+          <span class="num">06</span>
+          <div><h2>Status &amp; motion</h2><p>Loaders, streaming text, and empty states.</p></div>
+        </div>
+        <div class="grid">
+          <div class="spec">
+            <header><span class="tag"><span class="nm">kai-loader</span> <b>variant=…</b></span><span class="desc">Twelve loader styles.</span></header>
+            <div class="stage center" style="gap:1.6rem">
+              <kai-loader variant="circular"></kai-loader>
+              <kai-loader variant="dots"></kai-loader>
+              <kai-loader variant="wave"></kai-loader>
+              <kai-loader variant="bars"></kai-loader>
+              <kai-loader variant="pulse-dot"></kai-loader>
+            </div>
+          </div>
+          <div class="spec">
+            <header><span class="tag"><span class="nm">kai-text-shimmer</span></span><span class="desc">Animated shimmering text.</span></header>
+            <div class="stage center"><kai-text-shimmer text="Generating response…"></kai-text-shimmer></div>
+          </div>
+          <div class="spec col-full">
+            <header><span class="tag"><span class="nm">kai-response-stream</span> <b>mode="typewriter"</b></span><span class="desc">Reveals text character-by-character; emits <b>complete</b>.</span></header>
+            <div class="stage block"><kai-response-stream id="stream" speed="30"></kai-response-stream>
+              <button class="pill-btn" id="replay" style="margin-top:.8rem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> Replay</button></div>
+          </div>
+          <div class="spec col-full">
+            <header><span class="tag"><span class="nm">kai-empty</span></span><span class="desc">Empty-state layout — <b>media</b> &amp; default slots.</span></header>
+            <div class="stage block">
+              <kai-empty empty-title="No conversations yet" description="Start chatting to see them here.">
+                <span slot="media">✦</span>
+                <button class="pill-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg> New chat</button>
+              </kai-empty>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <aside class="console" aria-label="Event console">
+    <div class="console-head">
+      <button class="console-toggle" id="console-toggle" aria-expanded="false">
+        <span class="chev">▸</span> event log
+        <span class="console-count" id="console-count" data-n="0">0</span>
+      </button>
+      <div class="console-tools">
+        <button id="console-clear">clear</button>
+        <button id="console-hide">hide ▾</button>
+      </div>
+    </div>
+    <div class="console-body" id="log-body" tabindex="0" role="log" aria-label="Event log" aria-live="polite"><span class="empty">Interactions appear here — click a model, send a message, remove an attachment…</span></div>
+  </aside>
+
+  <!-- Shown only if the component bundle fails to load (see main.js boot guard). -->
+  <div id="boot-error" style="display:none;position:fixed;inset:0;z-index:100;background:var(--bg);color:var(--ink);padding:3rem;font-family:var(--font-display)">
+    <div style="max-width:640px;margin:0 auto">
+      <h2 style="margin:0 0 1rem">The component bundle didn't load</h2>
+      <p style="color:var(--ink-2);line-height:1.6">These are ES-module web components, so this page must be <strong>served over HTTP</strong> (not opened as a <code>file://</code> page) from the <strong>repo root</strong> (it loads the local build at <code>../../../dist/</code>).</p>
+      <pre style="background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:1rem;overflow:auto;font-family:var(--font-mono)">npm run build        <span style="opacity:.6"># once, to produce dist/</span>
+npm run examples     <span style="opacity:.6"># serves the repo root on :8000</span></pre>
+      <p>then open <a id="boot-link" href="#">http://localhost:8000/examples/composable/index.html</a></p>
+    </div>
+  </div>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>

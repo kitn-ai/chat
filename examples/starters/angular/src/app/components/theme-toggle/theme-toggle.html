@@ -1,0 +1,13 @@
+<kai-button
+  [theme]="theme()"
+  variant="ghost"
+  size="icon"
+  label="Toggle light/dark theme"
+  (click)="toggle.emit()"
+>
+  @if (theme() === 'light') {
+    <app-moon-icon slot="icon" aria-hidden="true"></app-moon-icon>
+  } @else {
+    <app-sun-icon slot="icon" aria-hidden="true"></app-sun-icon>
+  }
+</kai-button>

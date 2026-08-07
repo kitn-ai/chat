@@ -1,5 +1,11 @@
 packages:
   - 'packages/*'
   - 'apps/*'
-  - 'examples/react'
-# the remaining examples/* are added during the examples-refresh PRs (PR 2+)
+  - 'examples/starters/react'
+  - 'examples/starters/vue'
+  - 'examples/starters/svelte'
+  - 'examples/starters/vanilla'
+  - 'examples/starters/angular'
+  - 'examples/starters/solid'
+# nextjs + tanstack-start stay standalone `file:` consumers (not workspace members).
+# demos/* and internal/* are not workspace members.

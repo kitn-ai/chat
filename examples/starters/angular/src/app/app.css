@@ -1,0 +1,36 @@
+/* Full-height workspace shell. Colors come from the kit's --color-* tokens, which
+   flip to dark under the `.dark` class we toggle on `.app`. <kai-resizable> fills
+   this box (its `:host` is `height:100%`) and owns the sidebar | main split, the
+   panel widths, and the draggable divider. */
+.app {
+  height: 100dvh;
+  background: var(--color-background);
+  color: var(--color-foreground);
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: 100%;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.bar-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.brand {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-muted-foreground);
+}

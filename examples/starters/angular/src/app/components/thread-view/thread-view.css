@@ -1,0 +1,6 @@
+/* <kai-thread> scrolls internally and centers its own fixed-width column, so the
+   host just needs to fill the remaining height of the main flex column. */
+.thread {
+  flex: 1;
+  min-height: 0;
+}

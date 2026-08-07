@@ -1,0 +1,18 @@
+<div class="composer">
+  <kai-prompt-input
+    #prompt
+    [theme]="theme()"
+    placeholder="Message the demo…"
+    [loading]="loading()"
+    [suggestions]="suggestions()"
+    [triggers]="triggers()"
+    [voice]="true"
+    (kai-voice)="handleVoice()"
+    (kai-value-change)="onValueChange($event)"
+    (kai-submit)="onSubmit($event)"
+    (kai-suggestion-click)="onSuggestionClick($event)"
+  ></kai-prompt-input>
+  <p class="composer-hint">
+    Type <kbd>/</kbd> for skills · <kbd>&#64;</kbd> for agents
+  </p>
+</div>

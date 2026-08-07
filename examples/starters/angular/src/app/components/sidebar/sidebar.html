@@ -1,0 +1,12 @@
+<aside class="sidebar">
+  <kai-conversations
+    [theme]="theme()"
+    [groups]="emptyGroups"
+    [conversations]="conversations()"
+    [attr.active-id]="activeId()"
+    [collapsed]="collapsed()"
+    (kai-conversation-select)="onSelect($event)"
+    (kai-new-chat)="newChat.emit()"
+    (kai-toggle-sidebar)="toggle.emit()"
+  ></kai-conversations>
+</aside>

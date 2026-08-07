@@ -1,0 +1,24 @@
+/* The sidebar is its own surface: `--color-muted` sits a step off `--color-background`
+   in both themes (near-white grey in light, a shade lighter than the base in dark). That
+   #f4f4f5-on-white step is subtle, so a 1px right border marks the at-rest sidebar | main
+   division: <kai-resizable>'s `line` handle is transparent at rest and only tints on
+   hover/drag, so the boundary has to come from the panel itself. The border uses
+   `var(--color-border)`, which now tracks the shell's light/dark tokens because the parent
+   <ResizableItem theme={theme}> forwards the theme (a light hairline in light mode, dark in
+   dark). `box-sizing: border-box` keeps the 1px inside the 280px item so it doesn't shift
+   the content width. Collapse is handled by the parent <ResizableItem collapsed> (the panel
+   + its divider drop out), so the old `.sidebar.collapsed` rule is gone. */
+.sidebar {
+  background: var(--color-muted);
+  border-right: 1px solid var(--color-border);
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.sidebar > * {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
