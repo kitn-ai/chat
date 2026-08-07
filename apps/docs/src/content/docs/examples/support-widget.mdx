@@ -8,7 +8,7 @@ import MockSite from '../../../components/MockSite.tsx';
 <p class="kai-lede">Drop a chat assistant into the corner of any page. A floating button toggles a compact `<kai-chat>` window; because the component lives in its own Shadow DOM, the host site's CSS can't leak in and the widget's styles can't leak out. The page below is a placeholder host — scroll it, toggle its light/dark, and chat with the widget.</p>
 
 <MockSite client:only="solid" chatTitle="Help" suggestions={["How do I reset my password?", "What are your pricing tiers?"]} messages={[
-  { id: 'w0', role: 'assistant', content: "Hi! I'm the docs assistant. Ask me anything, or scroll the page behind me — I stay put." },
+  { id: 'w0', role: 'assistant', parts: [{ type: 'text', text: "Hi! I'm the docs assistant. Ask me anything, or scroll the page behind me — I stay put." }] },
 ]} />
 
 ## How it works

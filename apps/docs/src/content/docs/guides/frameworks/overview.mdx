@@ -36,7 +36,7 @@ Then use them in your templates:
       await customElements.whenDefined('kai-chat');
 
       const chat = document.querySelector('kai-chat');
-      chat.messages = [{ id: '1', role: 'assistant', content: 'Hello!' }];
+      chat.messages = [{ id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello!' }] }];
       chat.addEventListener('kai-submit', (e) => console.log(e.detail));
     </script>
     ```
@@ -45,7 +45,7 @@ Then use them in your templates:
     ```vue
     <script setup>
     import '@kitn.ai/ui/elements';
-    const messages = ref([{ id: '1', role: 'assistant', content: 'Hello!' }]);
+    const messages = ref([{ id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello!' }] }]);
     </script>
 
     <template>
@@ -60,7 +60,7 @@ Then use them in your templates:
     ```svelte
     <script>
     import '@kitn.ai/ui/elements';
-    let messages = [{ id: '1', role: 'assistant', content: 'Hello!' }];
+    let messages = [{ id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello!' }] }];
     </script>
 
     <kai-chat
@@ -93,7 +93,7 @@ The one thing to get right: Arrays and objects must be set in JavaScript, not as
 const chat = document.querySelector('kai-chat');
 
 // Right: set the array in JavaScript.
-chat.messages = [{ id: '1', role: 'assistant', content: 'Hello!' }];
+chat.messages = [{ id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello!' }] }];
 
 // Wrong: an attribute is a string, so the element never gets the array.
 // <kai-chat messages="[...]"></kai-chat>

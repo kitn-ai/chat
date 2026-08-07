@@ -31,8 +31,8 @@ chat.addEventListener('kai-submit', async (e) => {
   const assistantId = crypto.randomUUID();
   chat.messages = [
     ...chat.messages,
-    { id: crypto.randomUUID(), role: 'user', content: userText },
-    { id: assistantId, role: 'assistant', content: '' },
+    { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: userText }] },
+    { id: assistantId, role: 'assistant', parts: [] },
   ];
   chat.loading = true;
 
@@ -51,7 +51,7 @@ chat.addEventListener('kai-submit', async (e) => {
     if (done) break;
     answer += decoder.decode(value, { stream: true });
     chat.messages = chat.messages.map((m) =>
-      m.id === assistantId ? { ...m, content: answer } : m
+      m.id === assistantId ? { ...m, parts: [{ type: 'text', text: answer }] } : m
     );
   }
 

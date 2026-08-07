@@ -57,14 +57,16 @@ import ResizableSplitDemo from '../../../components/ResizableSplitDemo.tsx';
     const aId = crypto.randomUUID();
     chat.messages = [
       ...chat.messages,
-      { id: crypto.randomUUID(), role: 'user', content: prompt },
-      { id: aId, role: 'assistant', content: '' },
+      { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: prompt }] },
+      { id: aId, role: 'assistant', parts: [] },
     ];
     chat.loading = true;
-    // stream tokens into the assistant message
+    // stream tokens into the assistant message's parts
+    let answer = '';
     for await (const token of streamFromYourModel(prompt)) {
+      answer += token;
       chat.messages = chat.messages.map((m) =>
-        m.id === aId ? { ...m, content: m.content + token } : m,
+        m.id === aId ? { ...m, parts: [{ type: 'text', text: answer }] } : m,
       );
     }
     chat.loading = false;

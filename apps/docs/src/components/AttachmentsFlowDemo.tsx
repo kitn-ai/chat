@@ -25,11 +25,16 @@ interface AttachmentData {
   title?: string;
 }
 
+interface MessagePart {
+  type: 'text' | 'file';
+  text?: string;
+  attachment?: AttachmentData;
+}
+
 interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
-  content: string;
-  attachments?: AttachmentData[];
+  parts: MessagePart[];
   actions?: string[];
 }
 
@@ -91,10 +96,12 @@ function useThread(getPrompt: () => AnyEl | undefined) {
     const userMsg: ChatMessage = {
       id: nextId(),
       role: 'user',
-      content: text || '',
-      ...(attachments.length > 0 ? { attachments } : {}),
+      parts: [
+        ...attachments.map((a): MessagePart => ({ type: 'file', attachment: a })),
+        ...(text ? [{ type: 'text' as const, text }] : []),
+      ],
     };
-    thread = [...thread, userMsg, { id: aId, role: 'assistant', content: '' }];
+    thread = [...thread, userMsg, { id: aId, role: 'assistant', parts: [] }];
     renderThread();
     const prompt = getPrompt();
     if (prompt) prompt.loading = true;
@@ -108,7 +115,7 @@ function useThread(getPrompt: () => AnyEl | undefined) {
       const done = i >= words.length;
       thread = thread.map((m) =>
         m.id === aId
-          ? { ...m, content: words.slice(0, i).join(''), ...(done ? { actions: ['copy'] } : {}) }
+          ? { ...m, parts: [{ type: 'text', text: words.slice(0, i).join('') }], ...(done ? { actions: ['copy'] } : {}) }
           : m,
       );
       renderThread();
@@ -138,16 +145,20 @@ const INLINE_SEED: ChatMessage[] = [
   {
     id: 'i-u0',
     role: 'user',
-    content: 'Can you review this design spec?',
-    attachments: [
-      { id: 'i-prev-1', type: 'file', filename: 'design-spec.pdf', mediaType: 'application/pdf' },
+    parts: [
+      { type: 'file', attachment: { id: 'i-prev-1', type: 'file', filename: 'design-spec.pdf', mediaType: 'application/pdf' } },
+      { type: 'text', text: 'Can you review this design spec?' },
     ],
   },
   {
     id: 'i-a0',
     role: 'assistant',
-    content:
-      "Got it — I can see **design-spec.pdf** on your message above. Click the paperclip in the composer to attach a file of your own, then hit send.",
+    parts: [
+      {
+        type: 'text',
+        text: "Got it — I can see **design-spec.pdf** on your message above. Click the paperclip in the composer to attach a file of your own, then hit send.",
+      },
+    ],
     actions: ['copy'],
   },
 ];
@@ -219,8 +230,12 @@ const DROP_SEED: ChatMessage[] = [
   {
     id: 'd-a0',
     role: 'assistant',
-    content:
-      'Drop files onto the zone above (or click to browse). They stage in the composer below as removable chips — then hit send.',
+    parts: [
+      {
+        type: 'text',
+        text: 'Drop files onto the zone above (or click to browse). They stage in the composer below as removable chips — then hit send.',
+      },
+    ],
     actions: ['copy'],
   },
 ];

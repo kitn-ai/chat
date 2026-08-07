@@ -53,14 +53,19 @@ const GROUPS = [
 ];
 
 // ChatMessage seed (verified against element-meta.json kai-chat.messages shape)
-type ChatMsg = { id: string; role: 'user' | 'assistant'; content: string; actions?: string[] };
+type MessagePart = { type: 'text'; text: string };
+type ChatMsg = { id: string; role: 'user' | 'assistant'; parts: MessagePart[]; actions?: string[] };
 const SEED_MESSAGES: ChatMsg[] = [
-  { id: 'm1', role: 'user', content: 'How does the resizable layout work?' },
+  { id: 'm1', role: 'user', parts: [{ type: 'text', text: 'How does the resizable layout work?' }] },
   {
     id: 'm2',
     role: 'assistant',
-    content:
-      'Wrap `<kai-resizable-item>` children inside `<kai-resizable>`. Set `size`, `min`, and `max` on each item — a draggable divider appears automatically between them. Use the toggle above to swap the sidebar to either side.',
+    parts: [
+      {
+        type: 'text',
+        text: 'Wrap `<kai-resizable-item>` children inside `<kai-resizable>`. Set `size`, `min`, and `max` on each item — a draggable divider appears automatically between them. Use the toggle above to swap the sidebar to either side.',
+      },
+    ],
     actions: ['copy', 'like', 'dislike'],
   },
 ];
@@ -92,8 +97,8 @@ export default function ResizableSplitDemo() {
     const aId = nextId();
     chatEl.messages = [
       ...(chatEl.messages ?? []),
-      { id: nextId(), role: 'user' as const, content: text },
-      { id: aId, role: 'assistant' as const, content: '' },
+      { id: nextId(), role: 'user' as const, parts: [{ type: 'text', text }] },
+      { id: aId, role: 'assistant' as const, parts: [] },
     ];
     (chatEl as any).loading = true;
     const words = REPLY.split(/(\s+)/);
@@ -105,7 +110,7 @@ export default function ResizableSplitDemo() {
       const done = i >= words.length;
       chatEl!.messages = (chatEl!.messages ?? []).map((m) =>
         m.id === aId
-          ? { ...m, content: partial, ...(done ? { actions: ['copy', 'like', 'dislike'] } : {}) }
+          ? { ...m, parts: [{ type: 'text', text: partial }], ...(done ? { actions: ['copy', 'like', 'dislike'] } : {}) }
           : m,
       );
       if (!done) timer = window.setTimeout(tick, 38);

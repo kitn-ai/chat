@@ -18,13 +18,17 @@ const BASE_MESSAGES = [
   {
     id: '1',
     role: 'user',
-    content: 'How do I center a div?',
+    parts: [{ type: 'text', text: 'How do I center a div?' }],
   },
   {
     id: '2',
     role: 'assistant',
-    content:
-      'The modern way is a one-liner:\n\n```css\n.box {\n  display: grid;\n  place-items: center;\n}\n```\n\nThat centers the child on both axes. For flex, use `display: flex; align-items: center; justify-content: center;` on the parent.',
+    parts: [
+      {
+        type: 'text',
+        text: 'The modern way is a one-liner:\n\n```css\n.box {\n  display: grid;\n  place-items: center;\n}\n```\n\nThat centers the child on both axes. For flex, use `display: flex; align-items: center; justify-content: center;` on the parent.',
+      },
+    ],
     actions: ['copy', 'like', 'dislike'],
   },
 ];
@@ -35,7 +39,7 @@ const LOADING_MESSAGES = [
   {
     id: '1',
     role: 'user',
-    content: 'Explain async/await in JavaScript.',
+    parts: [{ type: 'text', text: 'Explain async/await in JavaScript.' }],
   },
 ];
 
@@ -60,13 +64,17 @@ const MODEL_MESSAGES = [
   {
     id: '1',
     role: 'user',
-    content: 'Compare the three available models for code generation.',
+    parts: [{ type: 'text', text: 'Compare the three available models for code generation.' }],
   },
   {
     id: '2',
     role: 'assistant',
-    content:
-      'All three handle code well, but each has a different strength:\n\n- **GPT-4o** — fast, broad language coverage, strong at refactoring.\n- **Claude 3.5 Sonnet** — excellent at following long instructions and nuanced edits.\n- **Gemini 1.5 Pro** — large context window, good at repo-wide analysis.',
+    parts: [
+      {
+        type: 'text',
+        text: 'All three handle code well, but each has a different strength:\n\n- **GPT-4o** — fast, broad language coverage, strong at refactoring.\n- **Claude 3.5 Sonnet** — excellent at following long instructions and nuanced edits.\n- **Gemini 1.5 Pro** — large context window, good at repo-wide analysis.',
+      },
+    ],
     actions: ['copy', 'like', 'dislike'],
   },
 ];
@@ -90,12 +98,14 @@ const TRIGGER_MESSAGES = [
   {
     id: '1',
     role: 'user',
-    content: 'Review the checkout path',
+    parts: [{ type: 'text', text: 'Review the checkout path' }],
   },
   {
     id: '2',
     role: 'assistant',
-    content: 'Type `/` for a skill or `@` for an agent or plugin — each selection drops an atomic pill into the input below.',
+    parts: [
+      { type: 'text', text: 'Type `/` for a skill or `@` for an agent or plugin — each selection drops an atomic pill into the input below.' },
+    ],
     actions: ['copy'],
   },
 ];

@@ -22,10 +22,15 @@ interface ContextUsage {
   estimatedCost?: number;
 }
 
+interface MessagePart {
+  type: 'text';
+  text: string;
+}
+
 interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
-  content: string;
+  parts: MessagePart[];
   actions?: string[];
 }
 
@@ -63,17 +68,22 @@ const SEED_MESSAGES: ChatMessage[] = [
   {
     id: 'u1',
     role: 'user',
-    content: 'Summarize the quarterly board deck and flag anything that needs a decision.',
+    parts: [{ type: 'text', text: 'Summarize the quarterly board deck and flag anything that needs a decision.' }],
   },
   {
     id: 'a1',
     role: 'assistant',
-    content:
-      "Here's the gist of the deck:\n\n" +
-      '- **Revenue** is up 18% QoQ, driven mostly by the enterprise tier.\n' +
-      '- **Net retention** held at 112% — healthy, but down two points from last quarter.\n' +
-      '- **Cash runway** is 14 months at the current burn.\n\n' +
-      'One slide needs a decision: the proposed pricing change on slide 22 would lift ARPU but the model assumes flat churn, which the retention dip contradicts. Worth pressure-testing before the vote.',
+    parts: [
+      {
+        type: 'text',
+        text:
+          "Here's the gist of the deck:\n\n" +
+          '- **Revenue** is up 18% QoQ, driven mostly by the enterprise tier.\n' +
+          '- **Net retention** held at 112% — healthy, but down two points from last quarter.\n' +
+          '- **Cash runway** is 14 months at the current burn.\n\n' +
+          'One slide needs a decision: the proposed pricing change on slide 22 would lift ARPU but the model assumes flat churn, which the retention dip contradicts. Worth pressure-testing before the vote.',
+      },
+    ],
     actions: ['copy', 'like', 'dislike'],
   },
 ];
@@ -136,8 +146,8 @@ export default function ModelContextDemo(props: Props) {
     const aId = nextId();
     host.messages = [
       ...(host.messages ?? []),
-      { id: nextId(), role: 'user', content: text },
-      { id: aId, role: 'assistant', content: '' },
+      { id: nextId(), role: 'user', parts: [{ type: 'text', text }] },
+      { id: aId, role: 'assistant', parts: [] },
     ];
     (host as any).loading = true;
 
@@ -155,7 +165,7 @@ export default function ModelContextDemo(props: Props) {
       const done = i >= words.length;
       host!.messages = (host!.messages ?? []).map((m) =>
         m.id === aId
-          ? { ...m, content: partial, ...(done ? { actions: ['copy', 'like', 'dislike'] } : {}) }
+          ? { ...m, parts: [{ type: 'text', text: partial }], ...(done ? { actions: ['copy', 'like', 'dislike'] } : {}) }
           : m,
       );
       // Each streamed chunk adds output tokens — the meter fills as we go.

@@ -47,26 +47,26 @@ Svelte detects non-primitive values and assigns them as DOM properties rather th
   import '@kitn.ai/ui/elements';
 
   let messages = [
-    { id: '1', role: 'assistant', content: 'Hello! How can I help?' },
+    { id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello! How can I help?' }] },
   ];
 
   async function handleSubmit(e) {
     const userText = e.detail.value;
     const history = [
       ...messages,
-      { id: crypto.randomUUID(), role: 'user', content: userText },
+      { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: userText }] },
     ];
     messages = history;
 
     const assistantId = crypto.randomUUID();
-    messages = [...history, { id: assistantId, role: 'assistant', content: '' }];
+    messages = [...history, { id: assistantId, role: 'assistant', parts: [] }];
 
     let reply = '';
     for await (const token of streamFromYourAPI(history)) {
       reply += token;
       // Reassign the array so Svelte detects the update.
       messages = messages.map((m) =>
-        m.id === assistantId ? { ...m, content: reply } : m
+        m.id === assistantId ? { ...m, parts: [{ type: 'text', text: reply }] } : m
       );
     }
   }

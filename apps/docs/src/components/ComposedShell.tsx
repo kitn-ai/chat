@@ -7,10 +7,15 @@ import { loadKit } from './example/kit';
 
 type AnyEl = HTMLElement & Record<string, unknown>;
 
+interface MessagePart {
+  type: 'text';
+  text: string;
+}
+
 interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
-  content: string;
+  parts: MessagePart[];
   actions?: string[];
 }
 
@@ -42,12 +47,16 @@ const CONVERSATIONS = [
 ];
 
 const SEED_MESSAGES: ChatMessage[] = [
-  { id: 'u1', role: 'user', content: 'How does this shell differ from using `<kai-chat>`?' },
+  { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'How does this shell differ from using `<kai-chat>`?' }] },
   {
     id: 'a1',
     role: 'assistant',
-    content:
-      '`<kai-chat>` is the 90% path — one element gives you the full thread, composer, and header chrome. **This shell** steps down one layer:\n\n- `<kai-resizable>` owns the layout (sidebar | main | any extra panels).\n- `<kai-conversations>` renders the list.\n- Each `<kai-message>` is a separate element you create and wire.\n- `<kai-prompt-input>` is the standalone composer.\n\nYou control the data flow and can slot in anything — a canvas, an artifact viewer, a debug inspector.',
+    parts: [
+      {
+        type: 'text',
+        text: '`<kai-chat>` is the 90% path — one element gives you the full thread, composer, and header chrome. **This shell** steps down one layer:\n\n- `<kai-resizable>` owns the layout (sidebar | main | any extra panels).\n- `<kai-conversations>` renders the list.\n- Each `<kai-message>` is a separate element you create and wire.\n- `<kai-prompt-input>` is the standalone composer.\n\nYou control the data flow and can slot in anything — a canvas, an artifact viewer, a debug inspector.',
+      },
+    ],
     actions: ['copy', 'like', 'dislike'],
   },
 ];
@@ -99,8 +108,8 @@ export default function ComposedShell() {
     const aId = nextId();
     thread = [
       ...thread,
-      { id: nextId(), role: 'user', content: text },
-      { id: aId, role: 'assistant', content: '' },
+      { id: nextId(), role: 'user', parts: [{ type: 'text', text }] },
+      { id: aId, role: 'assistant', parts: [] },
     ];
     renderThread();
     if (inputEl) inputEl.loading = true;
@@ -114,7 +123,7 @@ export default function ComposedShell() {
       const done = i >= words.length;
       thread = thread.map((m) =>
         m.id === aId
-          ? { ...m, content: partial, ...(done ? { actions: ['copy', 'like', 'dislike'] } : {}) }
+          ? { ...m, parts: [{ type: 'text', text: partial }], ...(done ? { actions: ['copy', 'like', 'dislike'] } : {}) }
           : m,
       );
       renderThread();

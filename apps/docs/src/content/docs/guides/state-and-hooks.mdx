@@ -31,19 +31,22 @@ import {
   upsertMessage,
   updateMessage,
   removeMessage,
-  appendContent,
+  appendText,
   addSuggestion,
   removeSuggestion,
 } from '@kitn.ai/ui/state';
 
 // Append a user turn
-setMessages((m) => appendMessage(m, { id: crypto.randomUUID(), role: 'user', content: text }));
+setMessages((m) => appendMessage(m, { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text }] }));
 
 // Patch a field on an existing message (e.g. correct the text after an edit)
-setMessages((m) => updateMessage(m, id, { content: corrected }));
+setMessages((m) => updateMessage(m, id, { parts: [{ type: 'text', text: corrected }] }));
 
 // Insert-or-replace by id (useful for streaming placeholders)
-setMessages((m) => upsertMessage(m, { id, role: 'assistant', content: partial }));
+setMessages((m) => upsertMessage(m, { id, role: 'assistant', parts: [{ type: 'text', text: partial }] }));
+
+// Append a delta onto an existing message's trailing text part (streaming primitive)
+setMessages((m) => appendText(m, id, delta));
 ```
 
 `ChatMessage` is exported from `@kitn.ai/ui` (and re-exported from `@kitn.ai/ui/react`) if
@@ -74,14 +77,14 @@ The full handle:
 
 | Method | Purpose |
 |---|---|
-| `appendText(chunk)` | Append a text delta |
-| `setText(full)` | Replace the full text (for non-streaming providers) |
-| `appendReasoning(chunk)` | Append to the reasoning field |
-| `upsertTool(tool)` | Insert or update a tool-call block |
-| `updateTool(id, patch)` | Patch fields on an existing tool call |
-| `patch(fields)` | Merge arbitrary fields onto the message |
+| `appendText(chunk)` | Append a text delta to the trailing text part |
+| `appendReasoning(chunk, opts?)` | Append a reasoning delta (`opts` can set `label`, provider `index`, or `signature`) |
+| `upsertTool(toolCallId, patch)` | Insert a tool part (first call) or merge `patch` onto its `ToolPart` (later calls), keyed by `toolCallId` |
+| `addCard(envelope)` | Append a generative-UI card part |
+| `addSource(source)` | Append a citation part |
+| `addFile(attachment)` | Append a file/attachment part |
 | `done()` | Mark the message complete |
-| `abort()` | Mark the message aborted |
+| `abort(reason?)` | Mark the message aborted; flips any in-flight tool parts to `output-error` |
 
 You can pass an optional `init` object (a `Partial<ChatMessage>`) as the second argument to
 seed the message before the stream starts — for example a stable id you generated up front so
@@ -102,7 +105,7 @@ import { Chat, useKaiChat } from '@kitn.ai/ui/react';
 function App() {
   const chat = useKaiChat({
     async onSubmit({ value }) {
-      chat.append({ id: crypto.randomUUID(), role: 'user', content: value });
+      chat.append({ id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: value }] });
       const s = chat.streamAssistant();
       for await (const part of backend(value)) s.appendText(part);
       s.done();
@@ -134,7 +137,7 @@ import { createKaiChat } from '@kitn.ai/ui';
 
 const chat = createKaiChat({
   async onSubmit({ value }) {
-    chat.append({ id: crypto.randomUUID(), role: 'user', content: value });
+    chat.append({ id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: value }] });
     const s = chat.streamAssistant();
     for await (const part of backend(value)) s.appendText(part);
     s.done();
@@ -175,7 +178,7 @@ const set = (fn) => { el.messages = fn(el.messages ?? []); };
 
 el.addEventListener('kai-submit', async (e) => {
   const id = crypto.randomUUID();
-  set((m) => appendMessage(m, { id: crypto.randomUUID(), role: 'user', content: e.detail.value }));
+  set((m) => appendMessage(m, { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: e.detail.value }] }));
 
   const s = createAssistantStream(set);
   for await (const part of backend(e.detail.value)) s.appendText(part);

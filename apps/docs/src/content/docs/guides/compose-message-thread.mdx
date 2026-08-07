@@ -32,11 +32,11 @@ Register the elements once, then create a `<kai-message>` for each turn and hand
 const thread = document.getElementById('thread');
 
 const turns = [
-  { id: 'm-u', role: 'user', content: 'Which model handled this, and what did it cost?' },
+  { id: 'm-u', role: 'user', parts: [{ type: 'text', text: 'Which model handled this, and what did it cost?' }] },
   {
     id: 'm-a',
     role: 'assistant',
-    content: 'Here is the summary you asked for. The citation is below.',
+    parts: [{ type: 'text', text: 'Here is the summary you asked for. The citation is below.' }],
     actions: ['copy', 'like', 'dislike', 'regenerate'],
   },
 ];

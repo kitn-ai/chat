@@ -14,7 +14,7 @@ const cdnSteps = [
   // Registration is async, so wait for the element before setting properties.
   await customElements.whenDefined('kai-chat');
   document.getElementById('chat').messages = [
-    { role: 'assistant', content: 'Hi! Ask me anything.' },
+    { id: 'welcome', role: 'assistant', parts: [{ type: 'text', text: 'Hi! Ask me anything.' }] },
   ];
 <\/script>` },
 ];

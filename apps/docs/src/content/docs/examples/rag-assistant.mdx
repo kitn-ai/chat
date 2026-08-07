@@ -41,16 +41,18 @@ import RagAssistantDemo from '../../../components/RagAssistantDemo.tsx';
 
     chat.messages = [
       ...chat.messages,
-      { id: crypto.randomUUID(), role: 'user', content: prompt },
-      { id: aId, role: 'assistant', content: '' },
+      { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: prompt }] },
+      { id: aId, role: 'assistant', parts: [] },
     ];
     chat.loading = true;
 
     // stream tokens from your RAG backend
     const { reply, sources } = await fetchRagAnswer(prompt);
+    let answer = '';
     for await (const token of reply) {
+      answer += token;
       chat.messages = chat.messages.map((m) =>
-        m.id === aId ? { ...m, content: m.content + token } : m,
+        m.id === aId ? { ...m, parts: [{ type: 'text', text: answer }] } : m,
       );
     }
 

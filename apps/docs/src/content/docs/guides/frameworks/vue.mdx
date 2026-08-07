@@ -78,25 +78,26 @@ The `.prop` modifier forces Vue to set the value as a live DOM property rather t
 import '@kitn.ai/ui/elements';
 import { ref } from 'vue';
 
-type Message = { id: string; role: 'user' | 'assistant'; content: string };
+type MessagePart = { type: 'text'; text: string };
+type Message = { id: string; role: 'user' | 'assistant'; parts: MessagePart[] };
 
 const messages = ref<Message[]>([
-  { id: '1', role: 'assistant', content: 'Hello! How can I help?' },
+  { id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello! How can I help?' }] },
 ]);
 
 const onSubmit = async (e: CustomEvent<{ value: string }>) => {
-  const userMsg = { id: crypto.randomUUID(), role: 'user' as const, content: e.detail.value };
+  const userMsg = { id: crypto.randomUUID(), role: 'user' as const, parts: [{ type: 'text' as const, text: e.detail.value }] };
   const history = [...messages.value, userMsg];
   messages.value = history;
 
   const aid = crypto.randomUUID();
-  messages.value = [...history, { id: aid, role: 'assistant', content: '' }];
+  messages.value = [...history, { id: aid, role: 'assistant', parts: [] }];
 
   let answer = '';
   for await (const token of streamFromYourAPI(history)) {
     answer += token;
     messages.value = messages.value.map((m) =>
-      m.id === aid ? { ...m, content: answer } : m,
+      m.id === aid ? { ...m, parts: [{ type: 'text', text: answer }] } : m,
     );
   }
 };
@@ -138,7 +139,7 @@ const conversations = ref([
   },
 ]);
 const activeId = ref('c1');
-const messages = ref([{ id: '1', role: 'assistant', content: 'Hi!' }]);
+const messages = ref([{ id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hi!' }] }]);
 
 const onSelect = (e: CustomEvent<{ id: string }>) => {
   activeId.value = e.detail.id;

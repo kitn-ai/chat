@@ -11,10 +11,15 @@ interface SourceItem {
   description?: string;
 }
 
+interface MessagePart {
+  type: 'text';
+  text: string;
+}
+
 interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
-  content: string;
+  parts: MessagePart[];
   actions?: string[];
 }
 
@@ -31,17 +36,22 @@ const SEED_MESSAGES: ChatMessage[] = [
   {
     id: 'u1',
     role: 'user',
-    content: 'How does WebAssembly improve frontend performance compared to JavaScript?',
+    parts: [{ type: 'text', text: 'How does WebAssembly improve frontend performance compared to JavaScript?' }],
   },
   {
     id: 'a1',
     role: 'assistant',
-    content:
-      'WebAssembly runs at near-native speed because browsers execute it as typed bytecode rather than parsing and JIT-compiling text. Three production examples show the gains:\n\n' +
-      '1. **Figma** replaced their asm.js rendering pipeline with Wasm and cut load time by **3×** [1].\n' +
-      '2. **Google Earth** ported its C++ engine to Wasm and dropped per-frame render time from 40 ms to 12 ms [2].\n' +
-      '3. **Shopify** adopted Wasm for Liquid template parsing and saw consistent sub-millisecond parse times on large templates [3].\n\n' +
-      'The pattern is the same in each case: move the hot path out of JS into a compiled module, keep the DOM/API calls in JS, and let each layer do what it does best.',
+    parts: [
+      {
+        type: 'text',
+        text:
+          'WebAssembly runs at near-native speed because browsers execute it as typed bytecode rather than parsing and JIT-compiling text. Three production examples show the gains:\n\n' +
+          '1. **Figma** replaced their asm.js rendering pipeline with Wasm and cut load time by **3×** [1].\n' +
+          '2. **Google Earth** ported its C++ engine to Wasm and dropped per-frame render time from 40 ms to 12 ms [2].\n' +
+          '3. **Shopify** adopted Wasm for Liquid template parsing and saw consistent sub-millisecond parse times on large templates [3].\n\n' +
+          'The pattern is the same in each case: move the hot path out of JS into a compiled module, keep the DOM/API calls in JS, and let each layer do what it does best.',
+      },
+    ],
     actions: ['copy', 'like', 'dislike'],
   },
 ];
@@ -100,8 +110,8 @@ export default function RagAssistantDemo(props: Props) {
     const aId = nextId();
     host.messages = [
       ...(host.messages ?? []),
-      { id: nextId(), role: 'user', content: text },
-      { id: aId, role: 'assistant', content: '' },
+      { id: nextId(), role: 'user', parts: [{ type: 'text', text }] },
+      { id: aId, role: 'assistant', parts: [] },
     ];
     (host as any).loading = true;
 
@@ -115,7 +125,7 @@ export default function RagAssistantDemo(props: Props) {
       const done = i >= words.length;
       host!.messages = (host!.messages ?? []).map((m) =>
         m.id === aId
-          ? { ...m, content: partial, ...(done ? { actions: ['copy', 'like', 'dislike'] } : {}) }
+          ? { ...m, parts: [{ type: 'text', text: partial }], ...(done ? { actions: ['copy', 'like', 'dislike'] } : {}) }
           : m,
       );
       if (!done) {

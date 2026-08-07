@@ -76,7 +76,7 @@ const result = streamText({
 
 ## Tool calls and reasoning
 
-`streamText` also surfaces tool calls (`result.fullStream`) and reasoning. They map onto the message contract: a tool call becomes an entry in a message's `tools[]` whose `state` advances `input-streaming` → `input-available` → `output-available` (or `output-error`), and reasoning sets `reasoning.text`. The text-only SSE bridge above doesn't carry them — to render them, emit extra frames from `fullStream` and read them on the browser. See the [tool](/components/tool/) and [reasoning](/components/reasoning/) components for what AI/UI draws.
+`streamText` also surfaces tool calls (`result.fullStream`) and reasoning. They map onto the message contract: a tool call becomes a `{ type: 'tool' }` part in the message's `parts` array whose `tool.state` advances `input-streaming` → `input-available` → `output-available` (or `output-error`), and reasoning becomes a `{ type: 'reasoning' }` part with its `text` set. The text-only SSE bridge above doesn't carry them — to render them, emit extra frames from `fullStream` and read them on the browser. See the [tool](/components/tool/) and [reasoning](/components/reasoning/) components for what AI/UI draws.
 
 ## Next steps
 

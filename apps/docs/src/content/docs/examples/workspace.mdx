@@ -36,8 +36,12 @@ import WorkspaceDemo from '../../../components/WorkspaceDemo.tsx';
 
   // Seed the active thread.
   ws.messages = [
-    { id: 'u1', role: 'user', content: 'How do I share state across the panels?' },
-    { id: 'a1', role: 'assistant', content: 'Keep one source of truth and reassign it on each change …', actions: ['copy', 'like', 'dislike'] },
+    { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'How do I share state across the panels?' }] },
+    {
+      id: 'a1', role: 'assistant',
+      parts: [{ type: 'text', text: 'Keep one source of truth and reassign it on each change …' }],
+      actions: ['copy', 'like', 'dislike'],
+    },
   ];
   ws.activeId = 'c1';
 
@@ -59,13 +63,15 @@ import WorkspaceDemo from '../../../components/WorkspaceDemo.tsx';
     const aId = crypto.randomUUID();
     ws.messages = [
       ...ws.messages,
-      { id: crypto.randomUUID(), role: 'user', content: value },
-      { id: aId, role: 'assistant', content: '' },
+      { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: value }] },
+      { id: aId, role: 'assistant', parts: [] },
     ];
     ws.loading = true;
+    let answer = '';
     for await (const token of streamFromYourModel(value)) {
+      answer += token;
       ws.messages = ws.messages.map((m) =>
-        m.id === aId ? { ...m, content: m.content + token } : m,
+        m.id === aId ? { ...m, parts: [{ type: 'text', text: answer }] } : m,
       );
     }
     ws.loading = false;
@@ -76,7 +82,7 @@ import WorkspaceDemo from '../../../components/WorkspaceDemo.tsx';
 **Key data shapes:**
 
 - `conversations` — each entry needs `id`, `title`, `scope` (`{ type: 'collection' }`), `messageCount`, `lastMessageAt`, and `updatedAt`. The component uses the timestamps to bucket rows into "Today", "Yesterday", "Last 7 days", etc.
-- `messages` — the same `ChatMessage[]` shape as `<kai-chat>`: `id`, `role`, `content`, plus optional `actions`, `reasoning`, `tools`, and `attachments`.
+- `messages` — the same `ChatMessage[]` shape as `<kai-chat>`: `id`, `role`, an ordered `parts` array (`text`, `reasoning`, `tool`, `card`, `source`, `file`), plus optional `actions`.
 
 **Sidebar controls:**
 

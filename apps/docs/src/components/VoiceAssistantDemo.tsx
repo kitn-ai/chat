@@ -13,10 +13,15 @@ import IconMic from '~icons/lucide/mic';
 import IconVolume from '~icons/lucide/volume-2';
 import IconSquare from '~icons/lucide/square';
 
+interface MessagePart {
+  type: 'text';
+  text: string;
+}
+
 interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
-  content: string;
+  parts: MessagePart[];
   actions?: string[];
 }
 
@@ -90,8 +95,8 @@ export default function VoiceAssistantDemo(props: Props) {
     const aId = nextId();
     host.messages = [
       ...(host.messages ?? []),
-      { id: nextId(), role: 'user', content: text },
-      { id: aId, role: 'assistant', content: '' },
+      { id: nextId(), role: 'user', parts: [{ type: 'text', text }] },
+      { id: aId, role: 'assistant', parts: [] },
     ];
     (host as any).loading = true;
 
@@ -108,7 +113,7 @@ export default function VoiceAssistantDemo(props: Props) {
         m.id === aId
           ? {
               ...m,
-              content: partial,
+              parts: [{ type: 'text', text: partial }],
               ...(done ? { actions: ['copy', 'like', 'dislike'] } : {}),
             }
           : m,

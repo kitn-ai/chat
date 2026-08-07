@@ -51,8 +51,8 @@ Set data in JavaScript and listen for **CustomEvents** on the element:
     },
   ];
   ws.messages = [
-    { id: 'm1', role: 'user', content: 'How do I drop the whole chat app in with one tag?' },
-    { id: 'm2', role: 'assistant', content: 'Use <kai-workspace> and set the three core properties.' },
+    { id: 'm1', role: 'user', parts: [{ type: 'text', text: 'How do I drop the whole chat app in with one tag?' }] },
+    { id: 'm2', role: 'assistant', parts: [{ type: 'text', text: 'Use <kai-workspace> and set the three core properties.' }] },
   ];
   ws.models = [{ id: 'claude-4-opus', name: 'Claude 4 Opus', provider: 'Anthropic' }];
   ws.activeId = '1';

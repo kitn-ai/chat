@@ -7,10 +7,15 @@ import { createSignal, onMount, onCleanup, Show } from 'solid-js';
 import { loadKit } from './example/kit';
 import IconSparkles from '~icons/lucide/sparkles';
 
+interface MessagePart {
+  type: 'text';
+  text: string;
+}
+
 interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
-  content: string;
+  parts: MessagePart[];
   actions?: string[];
 }
 
@@ -27,9 +32,9 @@ const REPLIES: Record<string, string> = {
   'Theme the components to match my brand':
     'Every component reads from design tokens, so one block of CSS custom properties restyles the whole kit:\n\n```css\n:root {\n  --color-brand: oklch(0.62 0.21 13);\n  --color-surface: oklch(0.99 0 0);\n  --radius: 0.75rem;\n}\n```\n\nNo shadow-piercing and no per-component overrides — set the tokens once and every `kai-*` element follows.',
   'Stream tokens from my own backend':
-    'Listen for `kai-submit`, append a placeholder assistant message, then patch its `content` as chunks arrive:\n\n```js\nchat.addEventListener(\'kai-submit\', async (e) => {\n  const id = crypto.randomUUID();\n  chat.messages = [...chat.messages, { id, role: \'assistant\', content: \'\' }];\n  for await (const token of stream(e.detail.value)) {\n    chat.messages = chat.messages.map((m) =>\n      m.id === id ? { ...m, content: m.content + token } : m,\n    );\n  }\n});\n```\n\nReassigning the `messages` array is what triggers the re-render — mutate-and-reassign, never mutate in place.',
+    'Listen for `kai-submit`, append a placeholder assistant message, then patch its `parts` as chunks arrive:\n\n```js\nchat.addEventListener(\'kai-submit\', async (e) => {\n  const id = crypto.randomUUID();\n  chat.messages = [...chat.messages, { id, role: \'assistant\', parts: [] }];\n  let text = \'\';\n  for await (const token of stream(e.detail.value)) {\n    text += token;\n    chat.messages = chat.messages.map((m) =>\n      m.id === id ? { ...m, parts: [{ type: \'text\', text }] } : m,\n    );\n  }\n});\n```\n\nReassigning the `messages` array is what triggers the re-render — mutate-and-reassign, never mutate in place.',
   'Render tool calls and citations':
-    'Messages carry structured fields beyond `content`. Set `reasoning` for chain-of-thought, `tools` for tool invocations, and pair `<kai-chat>` with `<kai-sources>` for numbered citations:\n\n```js\nmsg.tools = [{ name: \'search\', state: \'done\', result: \'…\' }];\nsources.numbered = true;\nsources.sources = [{ href, title }];\n```\n\nEach renders in its own collapsible, theme-aware block — no extra wiring.',
+    'A message\'s `parts` array carries more than text. Add a `{ type: \'reasoning\', text }` part for chain-of-thought, a `{ type: \'tool\', tool }` part for tool invocations, and pair `<kai-chat>` with `<kai-sources>` for numbered citations:\n\n```js\nmsg.parts = [...msg.parts, { type: \'tool\', tool: { type: \'search\', state: \'output-available\', output: { … } } }];\nsources.numbered = true;\nsources.sources = [{ href, title }];\n```\n\nEach part renders in its own collapsible, theme-aware block, in the order it appears — no extra wiring.',
 };
 
 const DEFAULT_REPLY =
@@ -52,8 +57,8 @@ export default function EmptyStateDemo() {
     const aId = nextId();
     host.messages = [
       ...(host.messages ?? []),
-      { id: nextId(), role: 'user', content: prompt },
-      { id: aId, role: 'assistant', content: '' },
+      { id: nextId(), role: 'user', parts: [{ type: 'text', text: prompt }] },
+      { id: aId, role: 'assistant', parts: [] },
     ];
     (host as any).loading = true;
     const words = reply.split(/(\s+)/);
@@ -64,7 +69,7 @@ export default function EmptyStateDemo() {
       const partial = words.slice(0, i).join('');
       const done = i >= words.length;
       host!.messages = (host!.messages ?? []).map((m) =>
-        m.id === aId ? { ...m, content: partial, ...(done ? { actions: ['copy', 'like', 'dislike'] } : {}) } : m,
+        m.id === aId ? { ...m, parts: [{ type: 'text', text: partial }], ...(done ? { actions: ['copy', 'like', 'dislike'] } : {}) } : m,
       );
       if (!done) timer = window.setTimeout(tick, 38);
       else (host as any).loading = false;

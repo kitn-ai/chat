@@ -15,10 +15,13 @@ import { Aside } from '@astrojs/starlight/components';
 type Message = {
   id: string;
   role: 'user' | 'assistant';
-  content: string;                 // the text, streamed in token by token
-  reasoning?: { text: string; label?: string };
-  tools?: ToolCall[];              // tool calls, in order
+  parts: MessagePart[];             // ordered — render in the order they appear
 };
+
+type MessagePart =
+  | { type: 'text'; text: string }  // the text, streamed in token by token
+  | { type: 'reasoning'; text: string; label?: string }
+  | { type: 'tool'; tool: ToolCall };
 
 type ToolCall = {
   type: string;                    // the tool name, e.g. 'web_search'
@@ -32,9 +35,9 @@ type ToolCall = {
 
 Three things stream into a message, and they map from any model:
 
-- **Text** → append to `content`.
-- **Reasoning** → set `reasoning.text`; it renders in a collapsible [reasoning](/components/reasoning/) panel.
-- **Tool calls** → push a `ToolCall` and advance its `state` as the arguments arrive (`input-streaming` → `input-available`) and the result returns (`output-available`, or `output-error`).
+- **Text** → append to a `{ type: 'text' }` part's `text`.
+- **Reasoning** → set a `{ type: 'reasoning' }` part's `text`; it renders in a collapsible [reasoning](/components/reasoning/) panel.
+- **Tool calls** → push a `{ type: 'tool' }` part and advance its `tool.state` as the arguments arrive (`input-streaming` → `input-available`) and the result returns (`output-available`, or `output-error`).
 
 Set `messages` in JavaScript — arrays can't be HTML attributes — and assign a **new array** on each update. That reassignment is what drives the re-render.
 

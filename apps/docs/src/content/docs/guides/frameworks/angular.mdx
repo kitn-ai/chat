@@ -54,7 +54,8 @@ Each element styles itself inside Shadow DOM. Import `@kitn.ai/ui/theme.css` onl
 // app.component.ts
 import { Component, CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 
-type Message = { id: string; role: 'user' | 'assistant'; content: string };
+type MessagePart = { type: 'text'; text: string };
+type Message = { id: string; role: 'user' | 'assistant'; parts: MessagePart[] };
 
 @Component({
   selector: 'app-root',
@@ -64,7 +65,7 @@ type Message = { id: string; role: 'user' | 'assistant'; content: string };
 })
 export class AppComponent {
   messages: Message[] = [
-    { id: '1', role: 'assistant', content: 'Hello! How can I help?' },
+    { id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello! How can I help?' }] },
   ];
 
   async onSubmit(e: Event) {
@@ -72,18 +73,18 @@ export class AppComponent {
     // Reassign a new array so Angular change detection picks it up.
     const history: Message[] = [
       ...this.messages,
-      { id: crypto.randomUUID(), role: 'user', content: value },
+      { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: value }] },
     ];
     this.messages = history;
 
     const aid = crypto.randomUUID();
-    this.messages = [...history, { id: aid, role: 'assistant', content: '' }];
+    this.messages = [...history, { id: aid, role: 'assistant', parts: [] }];
 
     let answer = '';
     for await (const token of streamFromYourAPI(history)) {
       answer += token;
       this.messages = this.messages.map((m) =>
-        m.id === aid ? { ...m, content: answer } : m
+        m.id === aid ? { ...m, parts: [{ type: 'text', text: answer }] } : m
       );
     }
   }

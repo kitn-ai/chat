@@ -62,7 +62,7 @@ Per-item content stays a **property**, never a slot. Messages, generative-UI car
 
 ```js
 chat.messages = [
-  { id: '1', role: 'assistant', content: 'How can I help?' },
+  { id: '1', role: 'assistant', parts: [{ type: 'text', text: 'How can I help?' }] },
 ];
 ```
 

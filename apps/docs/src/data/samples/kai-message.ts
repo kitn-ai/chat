@@ -13,25 +13,35 @@ const AVATAR_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#10b981"/><text x="32" y="42" font-size="28" text-anchor="middle" fill="white">K</text></svg>',
   );
 
-/** A rich assistant message: markdown, reasoning block, a tool call, an attachment, and actions. */
+/** A rich assistant message: markdown, reasoning block, a tool call, an attachment, and actions.
+ *  `message` is the same `{ id, role, parts }` shape `<kai-chat>` uses per message — `parts` is
+ *  ordered (reasoning -> tool -> file -> text, mirroring how an assistant turn reads). */
 const ASSISTANT_MESSAGE = {
   id: 'm-a',
   role: 'assistant',
-  content:
-    "Here's the plan, with a quick code sample:\n\n```js\nconst kit = useChat();\n```\n\nThat wires the kit into your component.",
-  reasoning: { text: 'The user wants X, so I should do Y then Z.', label: 'Reasoning' },
-  tools: [{ type: 'search', state: 'output-available', input: { query: 'kitn docs' }, output: { hits: 3 } }],
-  attachments: [
+  parts: [
+    { type: 'reasoning', text: 'The user wants X, so I should do Y then Z.', label: 'Reasoning' },
     {
-      id: '1',
+      type: 'tool',
+      tool: { type: 'search', state: 'output-available', input: { query: 'kitn docs' }, output: { hits: 3 } },
+    },
+    {
       type: 'file',
-      filename: 'architecture.png',
-      mediaType: 'image/png',
-      url:
-        'data:image/svg+xml;utf8,' +
-        encodeURIComponent(
-          '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><rect width="96" height="96" rx="12" fill="#7c3aed"/><text x="48" y="60" font-size="42" text-anchor="middle" fill="white">◆</text></svg>',
-        ),
+      attachment: {
+        id: '1',
+        type: 'file',
+        filename: 'architecture.png',
+        mediaType: 'image/png',
+        url:
+          'data:image/svg+xml;utf8,' +
+          encodeURIComponent(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><rect width="96" height="96" rx="12" fill="#7c3aed"/><text x="48" y="60" font-size="42" text-anchor="middle" fill="white">◆</text></svg>',
+          ),
+      },
+    },
+    {
+      type: 'text',
+      text: "Here's the plan, with a quick code sample:\n\n```js\nconst kit = useChat();\n```\n\nThat wires the kit into your component.",
     },
   ],
   actions: ['copy', 'like', 'dislike', 'regenerate'],
@@ -41,14 +51,14 @@ const ASSISTANT_MESSAGE = {
 const USER_MESSAGE = {
   id: 'm-u',
   role: 'user',
-  content: 'How do I compose these myself?',
+  parts: [{ type: 'text', text: 'How do I compose these myself?' }],
 };
 
 /** An assistant message with an avatar (from `message.avatar`) and a custom action. */
 const AVATAR_MESSAGE = {
   id: 'm-av',
   role: 'assistant',
-  content: 'I have an avatar, a custom **Share** action, and the built-in copy and like buttons.',
+  parts: [{ type: 'text', text: 'I have an avatar, a custom **Share** action, and the built-in copy and like buttons.' }],
   avatar: { src: AVATAR_SVG, alt: 'Kitn', fallback: 'K' },
   actions: ['copy', 'like', { id: 'share', label: 'Share', icon: 'share' }],
 };

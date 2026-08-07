@@ -50,31 +50,31 @@ import {
 } from '@kitn.ai/ui';
 import '@kitn.ai/ui/theme.css';
 
-type ChatMessage = { id: string; role: 'user' | 'assistant'; content: string };
+type ChatMessage = { id: string; role: 'user' | 'assistant'; parts: { type: 'text'; text: string }[] };
 
 export function Chat() {
   const [messages, setMessages] = createSignal<ChatMessage[]>([
-    { id: '1', role: 'assistant', content: 'How can I help?' },
+    { id: '1', role: 'assistant', parts: [{ type: 'text', text: 'How can I help?' }] },
   ]);
 
   const handleSubmit = async () => {
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
       role: 'user',
-      content: input(),
+      parts: [{ type: 'text', text: input() }],
     };
     const history = [...messages(), userMsg];
     setMessages(history);
     setInput('');
 
     const aid = crypto.randomUUID();
-    setMessages([...history, { id: aid, role: 'assistant', content: '' }]);
+    setMessages([...history, { id: aid, role: 'assistant', parts: [] }]);
 
     let answer = '';
     for await (const token of streamFromYourAPI(history)) {
       answer += token;
       setMessages((prev) =>
-        prev.map((m) => (m.id === aid ? { ...m, content: answer } : m)),
+        prev.map((m) => (m.id === aid ? { ...m, parts: [{ type: 'text', text: answer }] } : m)),
       );
     }
   };
@@ -89,7 +89,7 @@ export function Chat() {
             <For each={messages()}>
               {(msg) => (
                 <Message>
-                  <MessageContent markdown>{msg.content}</MessageContent>
+                  <MessageContent markdown>{msg.parts.map((p) => p.text).join('')}</MessageContent>
                 </Message>
               )}
             </For>
@@ -173,18 +173,19 @@ When you want a complete chat in one tag, register the `kai-*` elements and use 
 import '@kitn.ai/ui/elements';
 import { createSignal } from 'solid-js';
 
-type Message = { id: string; role: 'user' | 'assistant'; content: string };
+type MessagePart = { type: 'text'; text: string };
+type Message = { id: string; role: 'user' | 'assistant'; parts: MessagePart[] };
 
 function Shell() {
   const [messages, setMessages] = createSignal<Message[]>([
-    { id: '1', role: 'assistant', content: 'Hello! How can I help?' },
+    { id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello! How can I help?' }] },
   ]);
 
   const handleSubmit = (e: CustomEvent<{ value: string }>) => {
     const userMsg: Message = {
       id: crypto.randomUUID(),
       role: 'user',
-      content: e.detail.value,
+      parts: [{ type: 'text', text: e.detail.value }],
     };
     setMessages((prev) => [...prev, userMsg]);
     // …call your model, then append the assistant reply

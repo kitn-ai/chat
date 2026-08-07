@@ -51,7 +51,7 @@ Once registered, the elements behave like any other HTML tag:
 
   // Arrays can't be attributes, so set messages in JavaScript.
   chat.messages = [
-    { id: '1', role: 'assistant', content: 'Hello! How can I help?' },
+    { id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello! How can I help?' }] },
   ];
 
   chat.addEventListener('kai-submit', (e) => {

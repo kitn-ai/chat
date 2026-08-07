@@ -7,10 +7,15 @@ import { loadKit } from './example/kit';
 
 // Minimal local types so we don't need to import from the kit bundle at
 // island build time — the real types are identical.
+interface MessagePart {
+  type: 'text';
+  text: string;
+}
+
 interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
-  content: string;
+  parts: MessagePart[];
   actions?: string[];
 }
 
@@ -71,13 +76,17 @@ const THREADS: Record<string, ChatMessage[]> = {
     {
       id: 'u1',
       role: 'user',
-      content: 'Can you explain how SolidJS reactivity differs from React hooks?',
+      parts: [{ type: 'text', text: 'Can you explain how SolidJS reactivity differs from React hooks?' }],
     },
     {
       id: 'a1',
       role: 'assistant',
-      content:
-        'SolidJS uses **fine-grained signals**: components run exactly once, and only the specific DOM expressions that read a signal re-evaluate when it changes.\n\nReact hooks re-run the *entire* component function on each render, then a virtual DOM diff patches the real DOM. SolidJS skips the virtual DOM entirely — updates are direct and surgical.',
+      parts: [
+        {
+          type: 'text',
+          text: 'SolidJS uses **fine-grained signals**: components run exactly once, and only the specific DOM expressions that read a signal re-evaluate when it changes.\n\nReact hooks re-run the *entire* component function on each render, then a virtual DOM diff patches the real DOM. SolidJS skips the virtual DOM entirely — updates are direct and surgical.',
+        },
+      ],
       actions: ['copy', 'like', 'dislike'],
     },
   ],
@@ -85,13 +94,17 @@ const THREADS: Record<string, ChatMessage[]> = {
     {
       id: 'u2',
       role: 'user',
-      content: 'How does Astro island architecture keep the page fast?',
+      parts: [{ type: 'text', text: 'How does Astro island architecture keep the page fast?' }],
     },
     {
       id: 'a2',
       role: 'assistant',
-      content:
-        'Astro ships **zero JS by default**. Interactive components ("islands") are hydrated independently — only the JS for each island loads, and only when needed (`client:visible`, `client:idle`, etc.). The rest of the page is static HTML.',
+      parts: [
+        {
+          type: 'text',
+          text: 'Astro ships **zero JS by default**. Interactive components ("islands") are hydrated independently — only the JS for each island loads, and only when needed (`client:visible`, `client:idle`, etc.). The rest of the page is static HTML.',
+        },
+      ],
       actions: ['copy', 'like', 'dislike'],
     },
   ],
@@ -99,13 +112,17 @@ const THREADS: Record<string, ChatMessage[]> = {
     {
       id: 'u3',
       role: 'user',
-      content: 'What are the biggest breaking changes in Tailwind CSS v4?',
+      parts: [{ type: 'text', text: 'What are the biggest breaking changes in Tailwind CSS v4?' }],
     },
     {
       id: 'a3',
       role: 'assistant',
-      content:
-        "Tailwind v4 moves configuration from `tailwind.config.js` to CSS `@theme` blocks. The `@apply` directive still works, but the utility class names are now generated from CSS variables. Most projects need a codemod run — `npx @tailwindcss/upgrade` handles the common cases automatically.",
+      parts: [
+        {
+          type: 'text',
+          text: "Tailwind v4 moves configuration from `tailwind.config.js` to CSS `@theme` blocks. The `@apply` directive still works, but the utility class names are now generated from CSS variables. Most projects need a codemod run — `npx @tailwindcss/upgrade` handles the common cases automatically.",
+        },
+      ],
       actions: ['copy', 'like', 'dislike'],
     },
   ],
@@ -113,13 +130,17 @@ const THREADS: Record<string, ChatMessage[]> = {
     {
       id: 'u4',
       role: 'user',
-      content: 'What are the trickiest Shadow DOM gotchas when building web components?',
+      parts: [{ type: 'text', text: 'What are the trickiest Shadow DOM gotchas when building web components?' }],
     },
     {
       id: 'a4',
       role: 'assistant',
-      content:
-        "A few to watch for:\n\n1. **Global CSS doesn't pierce Shadow DOM** — only inherited properties and CSS custom properties cross the boundary.\n2. **`document.querySelector` won't find elements inside a shadow root** — use `el.shadowRoot.querySelector`.\n3. **Form association** requires `ElementInternals` + `formAssociated = true`.\n4. **Slot assignment** is eager — slotted children render immediately even if you didn't expect them.",
+      parts: [
+        {
+          type: 'text',
+          text: "A few to watch for:\n\n1. **Global CSS doesn't pierce Shadow DOM** — only inherited properties and CSS custom properties cross the boundary.\n2. **`document.querySelector` won't find elements inside a shadow root** — use `el.shadowRoot.querySelector`.\n3. **Form association** requires `ElementInternals` + `formAssociated = true`.\n4. **Slot assignment** is eager — slotted children render immediately even if you didn't expect them.",
+        },
+      ],
       actions: ['copy', 'like', 'dislike'],
     },
   ],
@@ -176,8 +197,8 @@ export default function WorkspaceDemo() {
     const msgs = (host.messages as ChatMessage[]) ?? [];
     host.messages = [
       ...msgs,
-      { id: nextId(), role: 'user', content: text },
-      { id: aId, role: 'assistant', content: '' },
+      { id: nextId(), role: 'user', parts: [{ type: 'text', text }] },
+      { id: aId, role: 'assistant', parts: [] },
     ];
     host.loading = true;
     // Update local thread store.
@@ -192,7 +213,7 @@ export default function WorkspaceDemo() {
       const done = i >= words.length;
       host!.messages = ((host!.messages as ChatMessage[]) ?? []).map((m) =>
         m.id === aId
-          ? { ...m, content: partial, ...(done ? { actions: ['copy', 'like', 'dislike'] } : {}) }
+          ? { ...m, parts: [{ type: 'text', text: partial }], ...(done ? { actions: ['copy', 'like', 'dislike'] } : {}) }
           : m,
       );
       THREADS[activeId] = host!.messages as ChatMessage[];

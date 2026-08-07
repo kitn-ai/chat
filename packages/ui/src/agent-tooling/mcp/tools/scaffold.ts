@@ -113,6 +113,14 @@ function jsArray(items: string[]): string {
 }
 
 /**
+ * Reduce a ChatMessage's `parts` array to the plain `content` string an
+ * OpenAI-format chat-completions POST body expects. Text-only extraction —
+ * the scaffolder never emits tool/reasoning parsing (that's a later
+ * sub-project), so any non-text part is simply skipped here.
+ */
+const PARTS_TO_CONTENT = `m.parts.map((p) => (p.type === 'text' ? p.text : '')).join('')`;
+
+/**
  * The shared client-side mock stream body, parameterised by how each framework
  * commits a messages update. Two operations keep the contract correct:
  *   - `commitInitial(expr)` appends the user + empty-assistant pair.
@@ -144,13 +152,13 @@ function mockStreamBody(opts: {
 }): string {
   const { pad, read, commitInitial, commitMap, setLoading, strictRoles = false } = opts;
   const asConst = strictRoles ? ' as const' : '';
-  const mapBody = `(m.id === assistantId ? { ...m, content: answer } : m)`;
+  const mapBody = `(m.id === assistantId ? { ...m, parts: [{ type: 'text', text: answer }] } : m)`;
   return [
     `${pad}const value = e.detail.value.trim();`,
     `${pad}if (!value) return;`,
-    `${pad}const history = [...${read}, { id: crypto.randomUUID(), role: 'user'${asConst}, content: value }];`,
+    `${pad}const history = [...${read}, { id: crypto.randomUUID(), role: 'user'${asConst}, parts: [{ type: 'text', text: value }] }];`,
     `${pad}const assistantId = crypto.randomUUID();`,
-    `${pad}${commitInitial(`[...history, { id: assistantId, role: 'assistant'${asConst}, content: '' }]`)}`,
+    `${pad}${commitInitial(`[...history, { id: assistantId, role: 'assistant'${asConst}, parts: [] }]`)}`,
     `${pad}${setLoading('true')}`,
     `${pad}// No backend: stream a canned reply client-side, one token at a time.`,
     `${pad}const reply = ${JSON.stringify(MOCK_REPLY)};`,
@@ -218,16 +226,19 @@ function isWorkspace(archetype: Archetype): boolean {
 const SAMPLE_AGENTIC_MESSAGE = {
   id: 'sample-assistant',
   role: 'assistant' as const,
-  content: 'Searched the web for current pricing.',
-  reasoning: { text: 'I should call the search tool to get up-to-date data.' },
-  tools: [
+  parts: [
+    { type: 'reasoning' as const, text: 'I should call the search tool to get up-to-date data.' },
     {
-      type: 'search',
-      state: 'output-available' as const,
-      input: { query: 'current pricing' },
-      output: { results: ['Result A', 'Result B'] },
-      toolCallId: 'tc_001',
+      type: 'tool' as const,
+      tool: {
+        type: 'search',
+        state: 'output-available' as const,
+        input: { query: 'current pricing' },
+        output: { results: ['Result A', 'Result B'] },
+        toolCallId: 'tc_001',
+      },
     },
+    { type: 'text' as const, text: 'Searched the web for current pricing.' },
   ],
 };
 
@@ -282,7 +293,7 @@ function componentTags(archetype: Archetype, chatFill: string): string {
   if (hasEmbedded) {
     lines.push(
       `  <!-- kai-tool / kai-reasoning render INSIDE the thread, not as siblings.`,
-      `       Seed messages with { tools: [...], reasoning: { text: '...' } } — see the sample in the script below. -->`,
+      `       Seed messages with parts: [{ type: 'reasoning', text: '...' }, { type: 'tool', tool: {...} }, ...] — see the sample in the script below. -->`,
     );
   }
 
@@ -393,8 +404,8 @@ function htmlWiring(ctx: RenderCtx, archetype: Archetype): string {
       ]
     : [];
   const bodyPayload = ctx.defaultModel
-    ? `{ model, messages: history.map((m) => ({ role: m.role, content: m.content })) }`
-    : `{ messages: history.map((m) => ({ role: m.role, content: m.content })) }`;
+    ? `{ model, messages: history.map((m) => ({ role: m.role, content: ${PARTS_TO_CONTENT} })) }`
+    : `{ messages: history.map((m) => ({ role: m.role, content: ${PARTS_TO_CONTENT} })) }`;
 
   return [
     ...head,
@@ -404,9 +415,9 @@ function htmlWiring(ctx: RenderCtx, archetype: Archetype): string {
     ``,
     ...modelLines,
     `        // messages is a JS PROPERTY (objects can't be HTML attributes)`,
-    `        const history = [...chat.messages, { id: crypto.randomUUID(), role: 'user', content: value }];`,
+    `        const history = [...chat.messages, { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: value }] }];`,
     `        const assistantId = crypto.randomUUID();`,
-    `        chat.messages = [...history, { id: assistantId, role: 'assistant', content: '' }];`,
+    `        chat.messages = [...history, { id: assistantId, role: 'assistant', parts: [] }];`,
     `        chat.loading = true;`,
     ``,
     `        const res = await fetch('/api/chat', {`,
@@ -435,7 +446,7 @@ function htmlWiring(ctx: RenderCtx, archetype: Archetype): string {
     `              const delta = JSON.parse(payload).choices?.[0]?.delta?.content;`,
     `              if (!delta) continue;`,
     `              answer += delta;`,
-    `              chat.messages = chat.messages.map((m) => (m.id === assistantId ? { ...m, content: answer } : m));`,
+    `              chat.messages = chat.messages.map((m) => (m.id === assistantId ? { ...m, parts: [{ type: 'text', text: answer }] } : m));`,
     `            } catch { /* skip keep-alive lines */ }`,
     `          }`,
     `        }`,
@@ -517,7 +528,7 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
 
   // SCAF-4: Inline ChatMessage type for strict-TS consumers; avoids implicit-any on useState/handler.
   // SCAF-11: state must be the library's 4-value union (not bare string); reasoning carries optional label.
-  const chatMessageType = `type ChatMessage = { id: string; role: 'user' | 'assistant'; content: string; reasoning?: { text: string; label?: string }; tools?: { type: string; state: 'input-streaming' | 'input-available' | 'output-available' | 'output-error'; input?: Record<string, unknown>; output?: Record<string, unknown>; toolCallId?: string }[] };`;
+  const chatMessageType = `type ChatMessage = { id: string; role: 'user' | 'assistant'; parts: ({ type: 'text'; text: string } | { type: 'reasoning'; text: string; label?: string } | { type: 'tool'; tool: { type: string; state: 'input-streaming' | 'input-available' | 'output-available' | 'output-error'; input?: Record<string, unknown>; output?: Record<string, unknown>; toolCallId?: string } })[] };`;
 
   // SCAF-9: seed sample messages for agentic archetype so tool+reasoning render immediately.
   const sampleMessagesInit = hasEmbedded
@@ -546,8 +557,8 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
     ? `  // SCAF-8: change this to any provider/model string you want to use.\n  const model = '${defaultModel}';`
     : '';
   const bodyPayload = defaultModel
-    ? `{ model, messages: history.map((m) => ({ role: m.role, content: m.content })) }`
-    : `{ messages: history.map((m) => ({ role: m.role, content: m.content })) }`;
+    ? `{ model, messages: history.map((m) => ({ role: m.role, content: ${PARTS_TO_CONTENT} })) }`
+    : `{ messages: history.map((m) => ({ role: m.role, content: ${PARTS_TO_CONTENT} })) }`;
 
   // onSubmit body: mock streams a canned reply client-side; otherwise fetch /api/chat.
   const onSubmitBody = isMock
@@ -563,9 +574,9 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
     : [
         `    const value = e.detail.value.trim();`,
         `    if (!value) return;`,
-        `    const history: ChatMessage[] = [...messages, { id: crypto.randomUUID(), role: 'user' as const, content: value }];`,
+        `    const history: ChatMessage[] = [...messages, { id: crypto.randomUUID(), role: 'user' as const, parts: [{ type: 'text', text: value }] }];`,
         `    const assistantId = crypto.randomUUID();`,
-        `    setMessages([...history, { id: assistantId, role: 'assistant' as const, content: '' }]);`,
+        `    setMessages([...history, { id: assistantId, role: 'assistant' as const, parts: [] }]);`,
         `    setLoading(true);`,
         `    const res = await fetch('/api/chat', {`,
         `      method: 'POST',`,
@@ -591,7 +602,7 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
         `          const delta = JSON.parse(payload).choices?.[0]?.delta?.content;`,
         `          if (!delta) continue;`,
         `          answer += delta;`,
-        `          setMessages((ms) => ms.map((m) => (m.id === assistantId ? { ...m, content: answer } : m)));`,
+        `          setMessages((ms) => ms.map((m) => (m.id === assistantId ? { ...m, parts: [{ type: 'text', text: answer }] } : m)));`,
         `        } catch { /* skip keep-alives */ }`,
         `      }`,
         `    }`,
@@ -768,7 +779,7 @@ function renderVue(archetype: Archetype, ctx: RenderCtx): string {
   const companionLines: string[] = [];
   if (hasEmbedded) {
     companionLines.push(
-      `    <!-- kai-tool / kai-reasoning render INSIDE the thread — set tools/reasoning on each message object. -->`,
+      `    <!-- kai-tool / kai-reasoning render INSIDE the thread — set them as parts on each message object. -->`,
     );
   }
   for (const t of standaloneCompanionTags) {
@@ -784,8 +795,8 @@ function renderVue(archetype: Archetype, ctx: RenderCtx): string {
 
   // SCAF-8: include model when the integration forwards it.
   const bodyPayload = defaultModel
-    ? `{ model, messages: history.map((m) => ({ role: m.role, content: m.content })) }`
-    : `{ messages: history.map((m) => ({ role: m.role, content: m.content })) }`;
+    ? `{ model, messages: history.map((m) => ({ role: m.role, content: ${PARTS_TO_CONTENT} })) }`
+    : `{ messages: history.map((m) => ({ role: m.role, content: ${PARTS_TO_CONTENT} })) }`;
 
   const onSubmitBody = isMock
     ? mockStreamBody({
@@ -800,9 +811,9 @@ function renderVue(archetype: Archetype, ctx: RenderCtx): string {
     : [
         `    const value = e.detail.value.trim();`,
         `    if (!value) return;`,
-        `    const history: ChatMessage[] = [...messages.value, { id: crypto.randomUUID(), role: 'user' as const, content: value }];`,
+        `    const history: ChatMessage[] = [...messages.value, { id: crypto.randomUUID(), role: 'user' as const, parts: [{ type: 'text', text: value }] }];`,
         `    const assistantId = crypto.randomUUID();`,
-        `    messages.value = [...history, { id: assistantId, role: 'assistant' as const, content: '' }];`,
+        `    messages.value = [...history, { id: assistantId, role: 'assistant' as const, parts: [] }];`,
         `    loading.value = true;`,
         `    // POST to /api/chat, then stream the OpenAI-format SSE into the`,
         `    // assistant message (reassign messages.value per chunk) — see the Streaming recipe.`,
@@ -836,7 +847,7 @@ function renderVue(archetype: Archetype, ctx: RenderCtx): string {
         `          const delta = JSON.parse(payload).choices?.[0]?.delta?.content;`,
         `          if (!delta) continue;`,
         `          answer += delta;`,
-        `          messages.value = messages.value.map((m) => (m.id === assistantId ? { ...m, content: answer } : m));`,
+        `          messages.value = messages.value.map((m) => (m.id === assistantId ? { ...m, parts: [{ type: 'text', text: answer }] } : m));`,
         `        } catch { /* skip keep-alives */ }`,
         `      }`,
         `    }`,
@@ -845,7 +856,7 @@ function renderVue(archetype: Archetype, ctx: RenderCtx): string {
 
   // SCAF-10: ChatMessage type for strict-TS Vue consumers — matches the React SCAF-4 type.
   // SCAF-11: state must be the library's 4-value union (not bare string); reasoning carries optional label.
-  const chatMessageType = `type ChatMessage = { id: string; role: 'user' | 'assistant'; content: string; reasoning?: { text: string; label?: string }; tools?: { type: string; state: 'input-streaming' | 'input-available' | 'output-available' | 'output-error'; input?: Record<string, unknown>; output?: Record<string, unknown>; toolCallId?: string }[] };`;
+  const chatMessageType = `type ChatMessage = { id: string; role: 'user' | 'assistant'; parts: ({ type: 'text'; text: string } | { type: 'reasoning'; text: string; label?: string } | { type: 'tool'; tool: { type: string; state: 'input-streaming' | 'input-available' | 'output-available' | 'output-error'; input?: Record<string, unknown>; output?: Record<string, unknown>; toolCallId?: string } })[] };`;
 
   // SCAF-9: sample seeding for agentic archetype.
   const sampleSeed = hasEmbedded
@@ -983,8 +994,8 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
 
   // SCAF-8: include model when the integration forwards it.
   const bodyPayload = defaultModel
-    ? `{ model, messages: history.map((m) => ({ role: m.role, content: m.content })) }`
-    : `{ messages: history.map((m) => ({ role: m.role, content: m.content })) }`;
+    ? `{ model, messages: history.map((m) => ({ role: m.role, content: ${PARTS_TO_CONTENT} })) }`
+    : `{ messages: history.map((m) => ({ role: m.role, content: ${PARTS_TO_CONTENT} })) }`;
 
   const onSubmitBody = isMock
     ? mockStreamBody({
@@ -999,9 +1010,9 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
     : [
         `    const value = e.detail.value.trim();`,
         `    if (!value) return;`,
-        `    const history = [...messages, { id: crypto.randomUUID(), role: 'user' as const, content: value }];`,
+        `    const history = [...messages, { id: crypto.randomUUID(), role: 'user' as const, parts: [{ type: 'text', text: value }] }];`,
         `    const assistantId = crypto.randomUUID();`,
-        `    messages = [...history, { id: assistantId, role: 'assistant' as const, content: '' }];`,
+        `    messages = [...history, { id: assistantId, role: 'assistant' as const, parts: [] }];`,
         `    loading = true;`,
         ...(defaultModel
           ? [
@@ -1033,7 +1044,7 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
         `          const delta = JSON.parse(payload).choices?.[0]?.delta?.content;`,
         `          if (!delta) continue;`,
         `          answer += delta;`,
-        `          messages = messages.map((m) => (m.id === assistantId ? { ...m, content: answer } : m));`,
+        `          messages = messages.map((m) => (m.id === assistantId ? { ...m, parts: [{ type: 'text', text: answer }] } : m));`,
         `        } catch { /* skip keep-alives */ }`,
         `      }`,
         `    }`,
@@ -1042,7 +1053,7 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
 
   // SCAF-10: ChatMessage type for strict-TS Svelte consumers — matches the React SCAF-4 type.
   // SCAF-11: state must be the library's 4-value union (not bare string); reasoning carries optional label.
-  const chatMessageType = `  type ChatMessage = { id: string; role: 'user' | 'assistant'; content: string; reasoning?: { text: string; label?: string }; tools?: { type: string; state: 'input-streaming' | 'input-available' | 'output-available' | 'output-error'; input?: Record<string, unknown>; output?: Record<string, unknown>; toolCallId?: string }[] };`;
+  const chatMessageType = `  type ChatMessage = { id: string; role: 'user' | 'assistant'; parts: ({ type: 'text'; text: string } | { type: 'reasoning'; text: string; label?: string } | { type: 'tool'; tool: { type: string; state: 'input-streaming' | 'input-available' | 'output-available' | 'output-error'; input?: Record<string, unknown>; output?: Record<string, unknown>; toolCallId?: string } })[] };`;
 
   // SCAF-9: seed sample messages for agentic archetype.
   const sampleMessagesInit = hasEmbedded
@@ -1195,7 +1206,7 @@ function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
   }
   const companions = companionJsxLines.join('\n');
 
-  const chatMessageType = `type ChatMessage = { id: string; role: 'user' | 'assistant'; content: string; reasoning?: { text: string; label?: string }; tools?: { type: string; state: 'input-streaming' | 'input-available' | 'output-available' | 'output-error'; input?: Record<string, unknown>; output?: Record<string, unknown>; toolCallId?: string }[] };`;
+  const chatMessageType = `type ChatMessage = { id: string; role: 'user' | 'assistant'; parts: ({ type: 'text'; text: string } | { type: 'reasoning'; text: string; label?: string } | { type: 'tool'; tool: { type: string; state: 'input-streaming' | 'input-available' | 'output-available' | 'output-error'; input?: Record<string, unknown>; output?: Record<string, unknown>; toolCallId?: string } })[] };`;
 
   const sampleMessagesInit = hasEmbedded
     ? [
@@ -1221,8 +1232,8 @@ function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
     ? `  // SCAF-8: change this to any provider/model string you want to use.\n  const model = '${defaultModel}';`
     : '';
   const bodyPayload = defaultModel
-    ? `{ model, messages: history.map((m) => ({ role: m.role, content: m.content })) }`
-    : `{ messages: history.map((m) => ({ role: m.role, content: m.content })) }`;
+    ? `{ model, messages: history.map((m) => ({ role: m.role, content: ${PARTS_TO_CONTENT} })) }`
+    : `{ messages: history.map((m) => ({ role: m.role, content: ${PARTS_TO_CONTENT} })) }`;
 
   const onSubmitBody = isMock
     ? mockStreamBody({
@@ -1236,9 +1247,9 @@ function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
     : [
         `    const value = e.detail.value.trim();`,
         `    if (!value) return;`,
-        `    const history: ChatMessage[] = [...messages, { id: crypto.randomUUID(), role: 'user' as const, content: value }];`,
+        `    const history: ChatMessage[] = [...messages, { id: crypto.randomUUID(), role: 'user' as const, parts: [{ type: 'text', text: value }] }];`,
         `    const assistantId = crypto.randomUUID();`,
-        `    setMessages([...history, { id: assistantId, role: 'assistant' as const, content: '' }]);`,
+        `    setMessages([...history, { id: assistantId, role: 'assistant' as const, parts: [] }]);`,
         `    setLoading(true);`,
         `    const res = await fetch('/api/chat', {`,
         `      method: 'POST',`,
@@ -1264,7 +1275,7 @@ function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
         `          const delta = JSON.parse(payload).choices?.[0]?.delta?.content;`,
         `          if (!delta) continue;`,
         `          answer += delta;`,
-        `          setMessages((ms) => ms.map((m) => (m.id === assistantId ? { ...m, content: answer } : m)));`,
+        `          setMessages((ms) => ms.map((m) => (m.id === assistantId ? { ...m, parts: [{ type: 'text', text: answer }] } : m)));`,
         `        } catch { /* skip keep-alives */ }`,
         `      }`,
         `    }`,
@@ -1658,14 +1669,14 @@ function interactionPatternsBlock(): string {
     `// const set = (fn) => { el.messages = fn(el.messages ?? []); };`,
     ``,
     `// Low-level helpers from @kitn.ai/ui/state:`,
-    `// import { appendMessage, updateMessage, appendContent, createAssistantStream } from '@kitn.ai/ui/state';`,
+    `// import { appendMessage, updateMessage, appendText, createAssistantStream } from '@kitn.ai/ui/state';`,
     ``,
     `// Streaming loop (framework-agnostic):`,
     `// const stream = createAssistantStream(set);`,
-    `// stream.appendText(chunk);       // text delta`,
-    `// stream.appendReasoning(chunk);  // reasoning delta`,
-    `// stream.upsertTool(toolCall);    // tool call delta`,
-    `// stream.done();                  // seal the message`,
+    `// stream.appendText(chunk);                // text delta, appended to the trailing text part`,
+    `// stream.appendReasoning(chunk);            // reasoning delta`,
+    `// stream.upsertTool(toolCallId, patch);     // tool call delta (patch merges into the ToolPart)`,
+    `// stream.done();                            // seal the message`,
     ``,
     `// One-liner for React (batteries-included):`,
     `// import { useKaiChat } from '@kitn.ai/ui/react';`,

@@ -54,16 +54,18 @@ import SkillsAssistantDemo from '../../../components/SkillsAssistantDemo.tsx';
 
     chat.messages = [
       ...chat.messages,
-      { id: crypto.randomUUID(), role: 'user', content: prompt },
-      { id: aId, role: 'assistant', content: '' },
+      { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: prompt }] },
+      { id: aId, role: 'assistant', parts: [] },
     ];
     chat.loading = true;
 
     // Dispatch to the matching capability on your backend.
     const reply = await runCapability(prompt);
+    let answer = '';
     for await (const token of reply) {
+      answer += token;
       chat.messages = chat.messages.map((m) =>
-        m.id === aId ? { ...m, content: m.content + token } : m,
+        m.id === aId ? { ...m, parts: [{ type: 'text', text: answer }] } : m,
       );
     }
     chat.loading = false;

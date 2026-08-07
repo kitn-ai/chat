@@ -42,34 +42,35 @@ import '@kitn.ai/ui/elements';
 import { Chat } from '@kitn.ai/ui/react';
 import { useState } from 'react';
 
+type MessagePart = { type: 'text'; text: string };
 type Message = {
   id: string;
   role: 'user' | 'assistant';
-  content: string;
+  parts: MessagePart[];
 };
 
 export function App() {
   const [messages, setMessages] = useState<Message[]>([
-    { id: '1', role: 'assistant', content: 'How can I help?' },
+    { id: '1', role: 'assistant', parts: [{ type: 'text', text: 'How can I help?' }] },
   ]);
 
   const handleSubmit = async (e: CustomEvent<{ value: string }>) => {
     const userMsg: Message = {
       id: crypto.randomUUID(),
       role: 'user',
-      content: e.detail.value,
+      parts: [{ type: 'text', text: e.detail.value }],
     };
     const history = [...messages, userMsg];
     setMessages(history);
 
     const aid = crypto.randomUUID();
-    setMessages([...history, { id: aid, role: 'assistant', content: '' }]);
+    setMessages([...history, { id: aid, role: 'assistant', parts: [] }]);
 
     let answer = '';
     for await (const token of streamFromYourAPI(history)) {
       answer += token;
       setMessages((prev) =>
-        prev.map((m) => (m.id === aid ? { ...m, content: answer } : m)),
+        prev.map((m) => (m.id === aid ? { ...m, parts: [{ type: 'text', text: answer }] } : m)),
       );
     }
   };
@@ -205,7 +206,7 @@ import '@kitn.ai/ui/elements';
 export function RawChat() {
   const ref = useRef<HTMLElement>(null);
   const [messages, setMessages] = useState([
-    { id: '1', role: 'assistant', content: 'Hello!' },
+    { id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello!' }] },
   ]);
 
   useEffect(() => {
@@ -222,7 +223,7 @@ export function RawChat() {
       const { value } = (e as CustomEvent<{ value: string }>).detail;
       setMessages((prev) => [
         ...prev,
-        { id: crypto.randomUUID(), role: 'user', content: value },
+        { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: value }] },
       ]);
     };
     el.addEventListener('kai-submit', onSubmit);

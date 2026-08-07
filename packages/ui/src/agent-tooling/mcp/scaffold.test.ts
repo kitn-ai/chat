@@ -1252,4 +1252,23 @@ describe('scaffold', () => {
       expect(text, `${framework}: missing createKaiChat`).toContain('createKaiChat');
     }
   });
+
+  // ── message-parts migration: the scaffolder must emit `parts`, never `content` ──
+
+  it('emits parts-shaped messages, never a content string', async () => {
+    for (const framework of ['react', 'vue', 'svelte', 'html', 'next', 'tanstack-start'] as const) {
+      const out = await scaffold.handler({
+        framework, useCase: 'drop-in-chat', integration: 'mock', placement: 'full-page',
+      });
+      const emitted = JSON.stringify(out);
+      // The INTERACTION PATTERNS reference block (appended to every scaffold)
+      // legitimately shows kai-compare's `CompareCandidate.content` — an
+      // independent type from `ChatMessage`, unaffected by the parts migration
+      // (see response-compare-types.ts). Scope the content-string ban to the
+      // scaffolder's OWN emitted code (blocks 1-4), not that reference snippet.
+      const ownCode = emitted.split('=== INTERACTION PATTERNS ===')[0];
+      expect(ownCode).not.toMatch(/content:\s*\\?'\\?'/);
+      expect(emitted).toContain('parts:');
+    }
+  });
 });

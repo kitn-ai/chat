@@ -51,12 +51,12 @@ You'll lean on two patterns over and over: set rich data on a JavaScript propert
 
   // Seed the thread. Arrays can't be attributes, so this goes in JavaScript.
   chat.messages = [
-    { id: '1', role: 'assistant', content: 'Hello! How can I help?' },
+    { id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello! How can I help?' }] },
   ];
 
   // kai-submit fires when the user sends.
   chat.addEventListener('kai-submit', (e) => {
-    const userMessage = { id: crypto.randomUUID(), role: 'user', content: e.detail.value };
+    const userMessage = { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: e.detail.value }] };
     chat.messages = [...chat.messages, userMessage];
     // Call your model here, then append an assistant message.
   });
@@ -82,8 +82,8 @@ chat.addEventListener('kai-submit', async (e) => {
   const assistantId = crypto.randomUUID();
   chat.messages = [
     ...chat.messages,
-    { id: crypto.randomUUID(), role: 'user', content: userText },
-    { id: assistantId, role: 'assistant', content: '' },
+    { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: userText }] },
+    { id: assistantId, role: 'assistant', parts: [] },
   ];
   chat.loading = true;
 
@@ -105,7 +105,7 @@ chat.addEventListener('kai-submit', async (e) => {
 
     // Replace with a new object each chunk — mutation in place won't re-render.
     chat.messages = chat.messages.map((m) =>
-      m.id === assistantId ? { ...m, content: answer } : m
+      m.id === assistantId ? { ...m, parts: [{ type: 'text', text: answer }] } : m
     );
   }
 
@@ -128,7 +128,7 @@ The element behaves the same everywhere. Only the binding syntax differs.
   await customElements.whenDefined('kai-chat');
 
   const chat = document.getElementById('chat');
-  chat.messages = [{ id: '1', role: 'assistant', content: 'Hello!' }];
+  chat.messages = [{ id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello!' }] }];
   chat.addEventListener('kai-submit', (e) => console.log(e.detail.value));
 </script>
 ```
@@ -138,7 +138,7 @@ The element behaves the same everywhere. Only the binding syntax differs.
 import { Chat } from '@kitn.ai/ui/react';
 
 export function App() {
-  const messages = [{ id: '1', role: 'assistant', content: 'Hello!' }];
+  const messages = [{ id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello!' }] }];
   return (
     <Chat
       messages={messages}
@@ -161,7 +161,7 @@ export function App() {
 
 <script setup>
 import '@kitn.ai/ui/elements';
-const messages = [{ id: '1', role: 'assistant', content: 'Hello!' }];
+const messages = [{ id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello!' }] }];
 const onSubmit = (e) => console.log(e.detail.value);
 </script>
 ```
@@ -170,7 +170,7 @@ const onSubmit = (e) => console.log(e.detail.value);
 ```svelte
 <script>
   import '@kitn.ai/ui/elements';
-  const messages = [{ id: '1', role: 'assistant', content: 'Hello!' }];
+  const messages = [{ id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello!' }] }];
 </script>
 
 <kai-chat

@@ -8,29 +8,39 @@ import ChatDemo from '../../../components/ChatDemo.tsx';
 <p class="kai-lede">Agents do more than generate text — they think, call tools, and sometimes fail. `<kai-chat>` surfaces all of it: a collapsible reasoning block before the answer and a live tool-call panel per invocation, each showing its lifecycle state and full input/output.</p>
 
 <ChatDemo client:only="solid" chatTitle="Research agent" placeholder="Ask the agent…" suggestions={["What are the top AI papers this week?", "Compare GPT-4o and Claude 4 on coding tasks"]} messages={[
-  { id: 'u1', role: 'user', content: 'What is the current price of NVDA and how does it compare to its 52-week high?' },
+  { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'What is the current price of NVDA and how does it compare to its 52-week high?' }] },
   {
     id: 'a1',
     role: 'assistant',
-    content: "NVDA is trading at **$132.40**, which is **18% below** its 52-week high of $161.58 reached in January. The stock has pulled back alongside broader semiconductor rotation but analysts maintain an average price target of $155.\n\nNote: the `get_quote` call below succeeded, but `get_news` timed out — retry if you need the latest headlines.",
-    reasoning: {
-      label: 'Thought for 6 seconds',
-      text: "The user wants two data points: the current price and the 52-week high. I'll call `get_quote` for both in one request, then check `get_news` for context.\n\nI should present the comparison as a percentage delta — easier to parse than raw numbers alone.",
-    },
-    tools: [
+    parts: [
       {
-        type: 'get_quote',
-        state: 'output-available',
-        toolCallId: 'call_q1',
-        input: { ticker: 'NVDA', fields: ['price', '52w_high', 'analyst_target'] },
-        output: { price: 132.40, week52High: 161.58, analystTarget: 155.00, currency: 'USD' },
+        type: 'reasoning',
+        label: 'Thought for 6 seconds',
+        text: "The user wants two data points: the current price and the 52-week high. I'll call `get_quote` for both in one request, then check `get_news` for context.\n\nI should present the comparison as a percentage delta — easier to parse than raw numbers alone.",
       },
       {
-        type: 'get_news',
-        state: 'output-error',
-        toolCallId: 'call_n1',
-        input: { ticker: 'NVDA', limit: 5 },
-        errorText: 'Request timed out after 5 000 ms. The news API may be rate-limited — retry in a few seconds.',
+        type: 'tool',
+        tool: {
+          type: 'get_quote',
+          state: 'output-available',
+          toolCallId: 'call_q1',
+          input: { ticker: 'NVDA', fields: ['price', '52w_high', 'analyst_target'] },
+          output: { price: 132.40, week52High: 161.58, analystTarget: 155.00, currency: 'USD' },
+        },
+      },
+      {
+        type: 'tool',
+        tool: {
+          type: 'get_news',
+          state: 'output-error',
+          toolCallId: 'call_n1',
+          input: { ticker: 'NVDA', limit: 5 },
+          errorText: 'Request timed out after 5 000 ms. The news API may be rate-limited — retry in a few seconds.',
+        },
+      },
+      {
+        type: 'text',
+        text: "NVDA is trading at **$132.40**, which is **18% below** its 52-week high of $161.58 reached in January. The stock has pulled back alongside broader semiconductor rotation but analysts maintain an average price target of $155.\n\nNote: the `get_quote` call below succeeded, but `get_news` timed out — retry if you need the latest headlines.",
       },
     ],
     actions: ['copy', 'like', 'dislike', 'regenerate'],
@@ -39,7 +49,7 @@ import ChatDemo from '../../../components/ChatDemo.tsx';
 
 ## How it works
 
-Each assistant message in `messages` carries optional `reasoning` and `tools` fields. `<kai-chat>` renders them automatically — no extra elements needed.
+Each assistant message's `parts` array can include `reasoning` and `tool` parts alongside its `text` part. `<kai-chat>` renders every part in order automatically — no extra elements needed.
 
 ```js
 import '@kitn.ai/ui/elements';
@@ -49,33 +59,40 @@ await customElements.whenDefined('kai-chat');
 const chat = document.getElementById('chat');
 
 chat.messages = [
-  { id: 'u1', role: 'user', content: 'Current price of NVDA vs its 52-week high?' },
+  { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'Current price of NVDA vs its 52-week high?' }] },
   {
     id: 'a1',
     role: 'assistant',
-    // Streaming text answer
-    content: 'NVDA is at **$132.40**, 18% below its 52-week high of $161.58.',
-    // Collapsed thinking block — expands on click
-    reasoning: {
-      label: 'Thought for 6 seconds',
-      text: "I'll call get_quote for price + 52w_high, then summarise the delta.",
-    },
-    // Tool-call panels — each shows its lifecycle state
-    tools: [
+    parts: [
+      // Collapsed thinking block — expands on click
       {
-        type: 'get_quote',
-        state: 'output-available',       // complete — shows input + output
-        toolCallId: 'call_q1',
-        input:  { ticker: 'NVDA', fields: ['price', '52w_high'] },
-        output: { price: 132.40, week52High: 161.58 },
+        type: 'reasoning',
+        label: 'Thought for 6 seconds',
+        text: "I'll call get_quote for price + 52w_high, then summarise the delta.",
+      },
+      // Tool-call panels — each shows its lifecycle state
+      {
+        type: 'tool',
+        tool: {
+          type: 'get_quote',
+          state: 'output-available',       // complete — shows input + output
+          toolCallId: 'call_q1',
+          input:  { ticker: 'NVDA', fields: ['price', '52w_high'] },
+          output: { price: 132.40, week52High: 161.58 },
+        },
       },
       {
-        type: 'get_news',
-        state: 'output-error',           // failed — shows errorText in red
-        toolCallId: 'call_n1',
-        input:     { ticker: 'NVDA', limit: 5 },
-        errorText: 'Request timed out after 5 000 ms.',
+        type: 'tool',
+        tool: {
+          type: 'get_news',
+          state: 'output-error',           // failed — shows errorText in red
+          toolCallId: 'call_n1',
+          input:     { ticker: 'NVDA', limit: 5 },
+          errorText: 'Request timed out after 5 000 ms.',
+        },
       },
+      // Streaming text answer — last, so it reads as the final word
+      { type: 'text', text: 'NVDA is at **$132.40**, 18% below its 52-week high of $161.58.' },
     ],
     actions: ['copy', 'like', 'dislike', 'regenerate'],
   },
@@ -91,12 +108,12 @@ chat.messages = [
 | `output-available` | Input + output, collapsible |
 | `output-error` | Input + `errorText` in the error colour |
 
-Build the live streaming experience by patching the tool's `state` field as your backend emits events — the same `chat.messages = chat.messages.map(…)` pattern used for token-by-token content streaming.
+Build the live streaming experience by patching the tool part's `tool.state` field as your backend emits events — the same `chat.messages = chat.messages.map(…)` pattern used for token-by-token text streaming.
 
-### The `reasoning` shape
+### The `reasoning` part shape
 
 ```ts
-reasoning?: { text: string; label?: string }
+{ type: 'reasoning'; text: string; label?: string }
 ```
 
 `label` sets the collapsed trigger text (e.g. `"Thought for 6 seconds"`). The `text` renders as markdown inside the collapsible panel. Use the standalone `<kai-reasoning>` element when you need it outside a chat thread.

@@ -16,7 +16,7 @@ import ReasoningAssistantDemo from '../../../components/ReasoningAssistantDemo.t
 
 ## How it works
 
-Reasoning lives on the message, not in a separate element. Each `ChatMessage` can carry a `reasoning` object alongside its `content`; `<kai-chat>` renders it as a collapsible block above the answer. The `label` is the trigger text (defaults to `Reasoning`) and `text` is rendered as markdown.
+Reasoning lives in the message's `parts` array, not in a separate element. Add a `{ type: 'reasoning', text, label? }` part ahead of the `{ type: 'text', … }` part; `<kai-chat>` renders it as a collapsible block above the answer. The `label` is the trigger text (defaults to `Reasoning`) and `text` is rendered as markdown.
 
 ```html
 <kai-chat id="chat" chat-title="Senior engineer assistant"></kai-chat>
@@ -35,23 +35,25 @@ Reasoning lives on the message, not in a separate element. Each `ChatMessage` ca
 
     chat.messages = [
       ...chat.messages,
-      { id: crypto.randomUUID(), role: 'user', content: prompt },
-      { id: aId, role: 'assistant', content: '' },
+      { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: prompt }] },
+      { id: aId, role: 'assistant', parts: [] },
     ];
     chat.loading = true; // shows the thinking indicator
 
     // stream the final answer token-by-token
     const { reply, reasoning } = await askAssistant(prompt);
+    let answer = '';
     for await (const token of reply) {
+      answer += token;
       chat.messages = chat.messages.map((m) =>
-        m.id === aId ? { ...m, content: m.content + token } : m,
+        m.id === aId ? { ...m, parts: [{ type: 'text', text: answer }] } : m,
       );
     }
 
-    // attach the reasoning once the answer is complete
+    // attach the reasoning part (ahead of the text part) once the answer is complete
     chat.messages = chat.messages.map((m) =>
       m.id === aId
-        ? { ...m, reasoning, actions: ['copy', 'like', 'dislike'] }
+        ? { ...m, parts: [{ type: 'reasoning', ...reasoning }, ...m.parts], actions: ['copy', 'like', 'dislike'] }
         : m,
     );
     chat.loading = false;
@@ -59,14 +61,14 @@ Reasoning lives on the message, not in a separate element. Each `ChatMessage` ca
 </script>
 ```
 
-**`reasoning` shape** — set on any assistant message:
+**`reasoning` part shape** — `{ type: 'reasoning', text, label? }`:
 
 | field | type | notes |
 |---|---|---|
 | `text` | `string` | The reasoning body, rendered as markdown |
 | `label` | `string?` | Trigger text — defaults to `Reasoning` (e.g. `Thought for 4s`) |
 
-Attaching `reasoning` only after the answer finishes keeps the thinking indicator clean while tokens stream, then reveals the working in one step. The block stays collapsed by default, so readers who want the answer see it first and can open the reasoning on demand.
+Attaching the reasoning part only after the answer finishes keeps the thinking indicator clean while tokens stream, then reveals the working in one step. The block stays collapsed by default, so readers who want the answer see it first and can open the reasoning on demand.
 
 ## Next steps
 
