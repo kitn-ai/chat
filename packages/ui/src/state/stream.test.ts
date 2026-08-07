@@ -43,13 +43,13 @@ describe('createAssistantStream', () => {
     expect(tool.input).toEqual({ q: 'x' });
   });
 
-  it('does not emit when upsertTool is a no-op', () => {
+  it('does not produce a new messages array when upsertTool is a no-op', () => {
     const sink = makeSink();
     const s = createAssistantStream(sink.set);
     s.upsertTool('tc1', { type: 'bash', state: 'input-streaming', input: { a: 1 } });
-    const before = sink.emissions.length;
+    const before = sink.get();
     s.upsertTool('tc1', { input: { a: 1 } });
-    expect(sink.emissions.length).toBe(before);
+    expect(sink.get()).toBe(before);
   });
 
   it('abort(reason) marks non-settled tool parts output-error without dropping the message', () => {
@@ -133,6 +133,15 @@ describe('createAssistantStream', () => {
     const msgs = sink.get();
     expect(msgs.map((m) => m.id)).toEqual(['u1', s.id]);
     expect(msgs[0].parts).toEqual([{ type: 'text', text: 'hi' }]);
+  });
+
+  it('drops deltas for a message removed externally, without resurrecting it', () => {
+    const sink = makeSink();
+    const s = createAssistantStream(sink.set);
+    s.appendText('a');
+    sink.set(() => []); // consumer clears the thread mid-stream
+    s.appendText('b');
+    expect(sink.get()).toEqual([]);
   });
 
   it('done() is a no-op call that settles the stream against further mutation', () => {

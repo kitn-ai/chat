@@ -33,18 +33,16 @@ export function createAssistantStream(
 ): AssistantStream {
   const id = init.id ?? newId();
   let settled = false;
-  let currentParts: MessagePart[] = init.parts ?? [];
 
-  set((prev) => [...prev, { id, role: 'assistant', parts: currentParts, ...init }]);
+  set((prev) => [...prev, { id, role: 'assistant', parts: [], ...init }]);
 
   const mutate = (fn: (parts: MessagePart[]) => MessagePart[]) => {
     if (settled) return;
-    const next = fn(currentParts);
-    if (next === currentParts) return;
-    currentParts = next;
     set((prev) => {
       const i = prev.findIndex((m) => m.id === id);
       if (i < 0) return prev;
+      const next = fn(prev[i].parts);
+      if (next === prev[i].parts) return prev;
       return [...prev.slice(0, i), { ...prev[i], parts: next }, ...prev.slice(i + 1)];
     });
   };

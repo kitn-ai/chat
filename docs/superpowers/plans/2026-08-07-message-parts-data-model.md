@@ -590,21 +590,24 @@ export function createAssistantStream(
 ): AssistantStream {
   const id = init.id ?? newId();
   let settled = false;
-  // Local mirror of this message's parts. Lets `mutate` decide whether to call
-  // `set` at all WITHOUT calling `set` first -- required so a no-op fold (e.g. an
-  // upsertTool patch that fingerprints identically) never touches the setter.
-  let currentParts: MessagePart[] = init.parts ?? [];
 
-  set((prev) => [...prev, { id, role: 'assistant', parts: currentParts, ...init }]);
+  set((prev) => [...prev, { id, role: 'assistant', parts: [], ...init }]);
 
+  // Store-truthful: folds from `prev[i].parts`, the store's OWN current value, never
+  // from a locally held mirror. A mirror can silently diverge from the store (e.g. a
+  // consumer patches this in-flight message through its own setMessages -- a
+  // tool-approval UI, a "remove this part" action, a persisted rehydrate) and then
+  // clobber that edit on the next delta, or skip a real change because it looks like
+  // a no-op against the stale mirror. Calling `set` with an identity updater on a
+  // no-op fold is fine: React bails via Object.is, Solid's reference equals does the
+  // same, so no re-render happens either way.
   const mutate = (fn: (parts: MessagePart[]) => MessagePart[]) => {
     if (settled) return;
-    const next = fn(currentParts);
-    if (next === currentParts) return;
-    currentParts = next;
     set((prev) => {
       const i = prev.findIndex((m) => m.id === id);
       if (i < 0) return prev;
+      const next = fn(prev[i].parts);
+      if (next === prev[i].parts) return prev;
       return [...prev.slice(0, i), { ...prev[i], parts: next }, ...prev.slice(i + 1)];
     });
   };
