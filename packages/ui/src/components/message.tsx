@@ -257,8 +257,8 @@ function MessageActionBar(props: MessageActionBarProps) {
 export interface MessageBodyProps {
   /** The message's ordered parts (text, reasoning, tool, card, source, file),
    *  rendered in a single pass in the order they appear. `source` parts carry
-   *  citation data but render no UI yet — the citation row is a later
-   *  sub-project — so they are matched nowhere below and fall through to no
+   *  citation data but render no UI yet (the citation row is a later
+   *  sub-project), so they are matched nowhere below and fall through to no
    *  output, on purpose, not by omission. */
   parts: MessagePart[];
   /** Add/override card type -> component entries, forwarded to `CardRenderer`
@@ -292,10 +292,41 @@ export interface MessageBodyProps {
   afterBody?: JSX.Element;
 }
 
+/** One render group over an ordered `parts` array: a run of consecutive `file`
+ *  parts collapses into a single `'files'` group so they share one
+ *  `<Attachments>` row (matching the pre-parts layout) instead of each opening
+ *  its own; every other part is its own `'single'` group. Pure and
+ *  order-preserving: it only decides where the `<Attachments>` wrapper
+ *  boundaries fall, never reorders or drops anything. */
+export type MessagePartGroup =
+  | { kind: 'single'; part: Exclude<MessagePart, { type: 'file' }> }
+  | { kind: 'files'; parts: Extract<MessagePart, { type: 'file' }>[] };
+
+export function groupMessageParts(parts: MessagePart[] | undefined | null): MessagePartGroup[] {
+  const groups: MessagePartGroup[] = [];
+  // Tolerate a missing/nullish `parts` the same way <For>'s `each` already
+  // does (renders nothing) rather than throwing, so a caller still on the
+  // pre-parts MessageBody props degrades to an empty body instead of crashing
+  // the whole render tree.
+  for (const part of parts ?? []) {
+    if (part.type === 'file') {
+      const last = groups[groups.length - 1];
+      if (last?.kind === 'files') {
+        groups[groups.length - 1] = { kind: 'files', parts: [...last.parts, part] };
+        continue;
+      }
+      groups.push({ kind: 'files', parts: [part] });
+      continue;
+    }
+    groups.push({ kind: 'single', part });
+  }
+  return groups;
+}
+
 /**
  * The shared message body: the message's `parts` rendered in a single ordered
- * pass — text, reasoning, tool calls, generative-UI cards, and file attachments
- * interleaved exactly as they appear — followed by the action bar. This is the
+ * pass (text, reasoning, tool calls, generative-UI cards, and file attachments
+ * interleaved exactly as they appear), followed by the action bar. This is the
  * single source of truth for how a message renders, consumed by `ChatThread`
  * (the `<For>` over `messages`), the standalone `<kai-message>` facade, and (in
  * future) `kai-compare` for each candidate. Pure/prop-driven: all interaction
@@ -306,48 +337,69 @@ function MessageBody(props: MessageBodyProps) {
     <>
       {/* before-body (inject): a per-message header above everything else. */}
       <Show when={props.beforeBody}>{props.beforeBody}</Show>
-      <For each={props.parts}>
-        {(part) => (
+      <For each={groupMessageParts(props.parts)}>
+        {(group) => (
           <Switch fallback={null}>
-            <Match when={part.type === 'text' && part}>
-              {(p) => (
-                <MessageContent
-                  part="bubble content"
-                  markdown={props.markdown}
-                  class={props.isUser
-                    ? 'bg-muted text-primary max-w-[85%] rounded-2xl px-4 py-2'
-                    : 'bg-transparent p-0'}
-                >
-                  {p().text}
-                </MessageContent>
-              )}
-            </Match>
-            <Match when={part.type === 'reasoning' && part}>
-              {(p) => (
-                <Reasoning class="mb-2 w-full">
-                  <ReasoningTrigger>{p().label ?? 'Reasoning'}</ReasoningTrigger>
-                  <ReasoningContent markdown>{p().text}</ReasoningContent>
-                </Reasoning>
-              )}
-            </Match>
-            <Match when={part.type === 'tool' && part}>
-              {(p) => <Tool toolPart={p().tool} class="mb-2 w-full" />}
-            </Match>
-            <Match when={part.type === 'card' && part}>
-              {(p) => <CardRenderer envelope={p().envelope} types={props.cardTypes} />}
-            </Match>
-            <Match when={part.type === 'file' && part}>
-              {(p) => (
+            <Match when={group.kind === 'files' && group}>
+              {(g) => (
                 <Attachments variant="inline" class={props.isUser ? 'mb-2 justify-end' : 'mb-2'}>
-                  <Attachment data={p().attachment}><AttachmentPreview /><AttachmentInfo /></Attachment>
+                  <For each={g().parts}>
+                    {(fp) => (
+                      <Attachment data={fp.attachment}>
+                        <AttachmentPreview />
+                        <AttachmentInfo />
+                      </Attachment>
+                    )}
+                  </For>
                 </Attachments>
               )}
             </Match>
-            {/* `source` parts intentionally have no `<Match>` here — the citation
-                row is a later sub-project. They still flow through this `<For>`
-                (nothing filters them out of `parts`), they just render nothing
-                via `fallback`. When the citation UI ships, add its `<Match>`
-                right here rather than reaching for a placeholder now. */}
+            <Match when={group.kind === 'single' && group}>
+              {(g) => {
+                // Captured once so each `<Match when>` below narrows the SAME
+                // reference: calling the `g()` accessor repeatedly defeats
+                // TypeScript's discriminated-union narrowing even though the
+                // underlying value is identical each call.
+                const part = g().part;
+                return (
+                  <Switch fallback={null}>
+                    <Match when={part.type === 'text' && part}>
+                      {(p) => (
+                        <MessageContent
+                          part="bubble content"
+                          markdown={props.markdown}
+                          class={props.isUser
+                            ? 'bg-muted text-primary max-w-[85%] rounded-2xl px-4 py-2'
+                            : 'bg-transparent p-0'}
+                        >
+                          {p().text}
+                        </MessageContent>
+                      )}
+                    </Match>
+                    <Match when={part.type === 'reasoning' && part}>
+                      {(p) => (
+                        <Reasoning class="mb-2 w-full">
+                          <ReasoningTrigger>{p().label ?? 'Reasoning'}</ReasoningTrigger>
+                          <ReasoningContent markdown>{p().text}</ReasoningContent>
+                        </Reasoning>
+                      )}
+                    </Match>
+                    <Match when={part.type === 'tool' && part}>
+                      {(p) => <Tool toolPart={p().tool} class="mb-2 w-full" />}
+                    </Match>
+                    <Match when={part.type === 'card' && part}>
+                      {(p) => <CardRenderer envelope={p().envelope} types={props.cardTypes} />}
+                    </Match>
+                    {/* `source` parts get an explicit no-op match: the citation
+                        row is a later sub-project, so this is a one-line swap
+                        when it ships. This keeps `fallback` meaning "genuinely
+                        unknown variant" rather than doing double duty for
+                        source too. */}
+                    <Match when={part.type === 'source'}>{null}</Match>
+                  </Switch>
+                );
+              }}
+            </Match>
           </Switch>
         )}
       </For>

@@ -58,8 +58,16 @@ describe('Thread message rendering', () => {
     };
     const { container } = render(() => <Thread messages={[message]} />);
     const text = container.textContent ?? '';
-    expect(text.indexOf('Checking.')).toBeLessThan(text.indexOf('Done.'));
-    expect(text).toContain('get_weather');
+    // A grouped render (all tools, then all text concatenated) would still put
+    // "Checking." before "Done." and would still contain "get_weather", so a
+    // real three-way check is required to prove genuine interleaving, not just
+    // grouping-by-luck.
+    const iChecking = text.indexOf('Checking.');
+    const iTool = text.indexOf('get_weather');
+    const iDone = text.indexOf('Done.');
+    expect(iChecking).toBeGreaterThanOrEqual(0);
+    expect(iTool).toBeGreaterThan(iChecking);
+    expect(iDone).toBeGreaterThan(iTool);
   });
 });
 
