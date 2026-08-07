@@ -4,3 +4,5 @@ export { appendMessage, upsertMessage, updateMessage, removeMessage, appendConte
 export { addSuggestion, removeSuggestion } from './suggestions';
 export { createAssistantStream, onStreamSettled } from './stream';
 export type { SetMessages, AssistantStream } from './stream';
+export { appendTextPart, appendReasoningPart, upsertToolPart, fingerprint } from './parts';
+export type { ReasoningOpts } from './parts';
