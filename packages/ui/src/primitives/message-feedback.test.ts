@@ -94,13 +94,15 @@ describe('createMessageFeedback', () => {
     });
   });
 
-  it('copy concatenates only text parts, skipping reasoning/tool parts', () => {
+  it('copy concatenates only text parts, skipping reasoning/tool/card parts', () => {
     createRoot((dispose) => {
       const fb = createMessageFeedback({ emit: vi.fn() });
       const m = msg({
         parts: [
           { type: 'text', text: 'A' },
           { type: 'reasoning', text: 'thinking...' },
+          { type: 'tool', tool: { type: 'get_weather', state: 'output-available' } },
+          { type: 'card', envelope: { type: 'weather-card', id: 'c1', data: {} } },
           { type: 'text', text: 'B' },
         ],
       });
