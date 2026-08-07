@@ -35,6 +35,15 @@ export function useVoiceRecorder(options: UseVoiceRecorderOptions = {}) {
       setIsRecording(true);
       return new Promise<Blob>((resolve) => { resolveBlob = resolve; });
     } catch (err) {
+      // getUserMedia may have already succeeded (stream() is live) even
+      // though something after it threw, e.g. an unsupported mimeType
+      // rejected by `new MediaRecorder(...)`. Leaving that stream open would
+      // keep the microphone live with no indication anything is recording.
+      const liveStream = stream();
+      if (liveStream) {
+        liveStream.getTracks().forEach((t) => t.stop());
+        setStream(undefined);
+      }
       setError(err instanceof Error ? err.message : 'Microphone access denied');
       setIsRecording(false);
       throw err;

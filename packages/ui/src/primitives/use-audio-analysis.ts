@@ -115,12 +115,17 @@ export function useAudioAnalysis(
       let elNode = elementSources.get(el);
       if (!elNode) {
         elNode = ctx.createMediaElementSource(el);
+        // Connect to destination exactly once, right here at creation, so the
+        // audio path does not depend on how many visualizers attach. An
+        // AnalyserNode still receives data with nothing connected downstream
+        // of it, so every consumer's analyser below is a terminal side-tap:
+        // it never also connects to destination. If it did, N consumers on
+        // one element would sum to N times the amplitude.
+        elNode.connect(ctx.destination);
         elementSources.set(el, elNode);
       }
       node = elNode;
       node.connect(analyser);
-      // Required. Routing through an analyser and stopping there mutes playback.
-      analyser.connect(ctx.destination);
     }
 
     const freq = new Float32Array(analyser.frequencyBinCount);
@@ -144,9 +149,13 @@ export function useAudioAnalysis(
       cancelAnimationFrame(raf);
       stopResume();
       analyser.disconnect();
-      // Do NOT disconnect a cached element source node: another consumer may
-      // still be using it, and it can never be recreated for this element.
-      if (isMediaElement(src)) return;
+      if (isMediaElement(src)) {
+        // Never fully disconnect a cached element source node: another
+        // consumer may still be using it, and it can never be recreated for
+        // this element. Only drop this consumer's own tap into it.
+        node.disconnect(analyser);
+        return;
+      }
       node.disconnect();
     });
   });

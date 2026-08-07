@@ -33,7 +33,17 @@ class FakeAudioContext {
       throw new Error('HTMLMediaElement already connected to a MediaElementSourceNode');
     }
     created.elementSources.push(el);
-    return { connect: () => created.connections.push('element->analyser'), disconnect: () => {} };
+    const destination = this.destination;
+    return {
+      // Models the real graph: this node connects to destination exactly
+      // once (at creation) and to N analysers (one per consumer). Recording
+      // an opaque 'element->analyser' string for every connect() call would
+      // hide a regression where destination gets connected more than once.
+      connect: (dest: unknown) => {
+        created.connections.push(dest === destination ? 'element->destination' : 'element->analyser');
+      },
+      disconnect: () => {},
+    };
   }
   createMediaStreamSource(s: unknown) {
     created.streamSources.push(s);
@@ -120,7 +130,9 @@ describe('useAudioAnalysis', () => {
       expect(created.elementSources).toHaveLength(1);
       expect(created.connections).toContain('element->analyser');
       // Without this the consumer's audio goes silent with no error.
-      expect(created.connections).toContain('analyser->destination');
+      expect(created.connections).toContain('element->destination');
+      // The analyser is a terminal side-tap; it never sits in the audio path.
+      expect(created.connections).not.toContain('analyser->destination');
       dispose();
     });
   });
@@ -148,6 +160,18 @@ describe('useAudioAnalysis', () => {
     }
     expect(threw).toBe(false);
     expect(created.elementSources).toHaveLength(1);
+
+    // The element connects to destination exactly once, at creation, no
+    // matter how many visualizers attach: two consumers on one <audio> must
+    // not double the output.
+    const toDestination = created.connections.filter((c) => c === 'element->destination');
+    expect(toDestination).toHaveLength(1);
+    // Both mounts still get their own analyser tap, so a second consumer
+    // really does receive data.
+    const toAnalyser = created.connections.filter((c) => c === 'element->analyser');
+    expect(toAnalyser).toHaveLength(2);
+    // The analyser must never sit in the audio path, for either mount.
+    expect(created.connections).not.toContain('analyser->destination');
   });
 
   it('disconnects the analyser on cleanup', async () => {
