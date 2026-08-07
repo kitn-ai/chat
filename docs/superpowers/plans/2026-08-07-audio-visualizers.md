@@ -26,6 +26,52 @@
 
 ---
 
+## Execution order and verification gates
+
+Task numbers below are stable identifiers, not the execution sequence. Run them
+in this order:
+
+```
+1  2  3  [SPIKE]  4  5  6  7  8  9  10  [BROWSER CHECKPOINT]
+11  12  13  14 (human gate)  15  16  17  18  19
+```
+
+**[SPIKE] — done 2026-08-07, all five checks PASS.** Ran before Task 4 because
+nothing in the plan had touched a real build or browser, and this epic
+introduces the first Web Audio and the first WebGL in the repository. Findings,
+now facts rather than assumptions: `nx build ui` succeeds; a dynamic `import()`
+does split into its own chunk under `treeshake: false` (proven with a throwaway
+module, not inferred from config comments); `kai-*` elements register and
+upgrade in a real browser with a populated shadow root; raw WebGL works in a
+shadow-root canvas with exact pixel readback; and an `AnalyserNode` with nothing
+connected downstream still receives data while the audio goes silent. Full
+evidence in `.superpowers/sdd/2026-08-07-audio-visualizers/spike-report.md`.
+
+That last finding changed the Task 3 design: the analyser must NOT sit in the
+audio path. See Task 3.
+
+**[BROWSER CHECKPOINT] after Task 10.** The original plan deferred all browser
+verification to Task 18, which would have put twelve tasks on an unverified
+foundation. Task 10 is the earliest point where the element exists, is
+registered, and has a story to load, so it is the earliest honest checkpoint.
+It cannot move earlier: Task 9 imports the dispatcher from Task 8, which imports
+all three DOM variants.
+
+Run against `pnpm dev` (Storybook static cannot register web components). Confirm
+`<kai-audio-visualizer>` upgrades, that all three DOM variants render geometry,
+that `bands` set as a JS property moves the bars, and that `nx build ui` still
+passes with the element registered. Any failure here stops the shader work until
+it is resolved.
+
+**Reviewer standing instruction.** Every task reviewer is told: the brief may be
+wrong, and anything that would fail at runtime in a real browser or build is a
+finding even when the brief mandates it. This is not optional politeness. Of the
+defects found so far, most originated in this plan rather than in the
+implementations, and they were caught because reviewers checked the plan's
+claims against reality instead of treating the brief as ground truth.
+
+---
+
 ## File Structure
 
 **Create:**
@@ -4625,6 +4671,56 @@ git commit -m "test(e2e): add audio visualizer visual verification"
 - [ ] **Step 5: Present the evidence**
 
 Show Rob: the screenshot matrix, the aura in all five states at `lg`, the mic-driven run, and the terminal output of the five gate commands. Do not claim the epic is done without those in front of him.
+
+---
+
+## Task 19: Consumer regression
+
+**Files:**
+- No source files. This task runs an existing project skill and fixes what it finds.
+
+**Interfaces:**
+- Consumes: the built package.
+- Produces: evidence that a real consumer of the published package can use the element.
+
+**Why this exists.** Everything else in this plan tests the kit's internals. None
+of it tests what someone installing `@kitn.ai/ui` actually hits: packaging,
+exports, SSR, the scaffold output, and the behavior across React, Vue, Svelte,
+Angular, and plain HTML. `CLAUDE.md` is explicit that the unit suite catches none
+of those, and this repo has a documented history of consumer-facing packaging
+bugs that every internal check passed straight through.
+
+Two things in this epic make it a live risk rather than a formality:
+
+1. **The lazy shader chunk crosses a packaging boundary.** The spike proved the
+   chunk splits in our own build. It did not prove a consumer's bundler resolves
+   it, or that it survives SSR where `WebGL`, `AudioContext`, and `matchMedia`
+   are all absent.
+2. **`<kai-audio-visualizer>` takes four JS-property-only inputs** (`stream`,
+   `audioElement`, `bands`, `shader`). Framework wrappers have historically been
+   where property-versus-attribute handling breaks.
+
+- [ ] **Step 1: Run the smoke pass**
+
+Invoke the project skill `/consumer-regression` with `smoke`. That is one
+parallel pass across the framework matrix plus a report.
+
+- [ ] **Step 2: Triage**
+
+If the smoke pass is clean, record that and stop. If it finds anything, run the
+full `regression` mode, which is the build, triage, fix, re-verify loop.
+
+- [ ] **Step 3: Verify the SSR path specifically**
+
+Independent of what smoke reports, confirm by hand that importing the element in
+an SSR context does not throw. The element must render nothing and construct no
+`AudioContext` on the server. Task 3 and Task 8 both claim SSR safety; this is
+where that claim meets a real server render.
+
+- [ ] **Step 4: Record the outcome**
+
+Append the result to the ledger. If anything was fixed, commit it with a
+`fix(consumer):` message naming the framework and the failure.
 
 ---
 
