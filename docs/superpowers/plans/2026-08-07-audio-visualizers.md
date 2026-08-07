@@ -604,13 +604,25 @@ export function barInterval(state: VisualizerState, barCount: number): number {
 
 // ---------------------------------------------------------------- grid
 
-/** Walk the perimeter of a ring `spread` cells out from center, clockwise. */
+/**
+ * Walk the perimeter of a ring `spread` cells out from center, clockwise.
+ *
+ * TWO DELIBERATE DIVERGENCES from upstream `use-agent-audio-visualizer-grid.ts`,
+ * approved 2026-08-07. Upstream derives the x axis from `centerY` (the row
+ * count), which emits out-of-range columns once rows and columns differ enough:
+ * a 20x3 grid yields x of -7 and 9 for a valid range of 0..2. Upstream also
+ * treats `spread === 0` as unset, so asking for the tightest ring gives the
+ * widest. Neither is visible on a square grid, which is upstream's only shipped
+ * configuration, so visual fidelity is untouched. We expose `row-count` and
+ * `column-count` independently, so consumers can reach both.
+ */
 function gridRing(rows: number, columns: number, spread: number): Coordinate[] {
   const seq: Coordinate[] = [];
+  const centerX = Math.floor(columns / 2);
   const centerY = Math.floor(rows / 2);
-  const topLeft = { x: Math.max(0, centerY - spread), y: Math.max(0, centerY - spread) };
+  const topLeft = { x: Math.max(0, centerX - spread), y: Math.max(0, centerY - spread) };
   const bottomRight = {
-    x: columns - 1 - topLeft.x,
+    x: Math.min(columns - 1, centerX + spread),
     y: Math.min(rows - 1, centerY + spread),
   };
 
@@ -633,7 +645,10 @@ export function gridSequence(
   switch (state) {
     case 'connecting': {
       const maxSpread = Math.floor(Math.max(rows, columns) / 2);
-      const clamped = spread ? Math.min(spread, maxSpread) : maxSpread;
+      // `!== undefined`, not a truthiness check: spread 0 means the tightest
+      // ring, and upstream's `spread ? ... : ...` silently turns it into the
+      // widest. See the divergence note on gridRing.
+      const clamped = spread !== undefined ? Math.min(spread, maxSpread) : maxSpread;
       const ring = gridRing(rows, columns, clamped);
       return ring.length ? ring : [center];
     }
