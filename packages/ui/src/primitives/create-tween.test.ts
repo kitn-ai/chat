@@ -14,6 +14,10 @@ beforeEach(() => {
     return 1;
   });
   vi.stubGlobal('cancelAnimationFrame', () => { frame = undefined; });
+  // requestAnimationFrame's timestamp and performance.now() share a time
+  // origin per spec, so the production code can read either. Keep them on
+  // the same fake clock here or the two would silently disagree.
+  vi.stubGlobal('performance', { now: () => now });
 });
 
 afterEach(() => vi.unstubAllGlobals());
@@ -158,5 +162,19 @@ describe('createTween', () => {
     const before = t.value();
     advance(1000);
     expect(t.value()).toBe(before);
+  });
+
+  it('eases from the moment to() is called, even after a long idle gap', () => {
+    createRoot((dispose) => {
+      const t = createTween(0);
+      t.to(1, { duration: 1, ease: 'linear' });
+      advance(1000);                 // first tween completes, loop goes idle
+      expect(t.value()).toBeCloseTo(1, 6);
+      advance(5000);                 // long idle with no tween running
+      t.to(0, { duration: 1, ease: 'linear' });
+      advance(500);                  // half of the NEW tween's duration
+      expect(t.value()).toBeCloseTo(0.5, 1);   // must ease, not snap to 0
+      dispose();
+    });
   });
 });

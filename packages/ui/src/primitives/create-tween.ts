@@ -51,14 +51,6 @@ export function createTween(initial: number): {
   const [value, setValue] = createSignal(initial);
   let raf = 0;
   let disposed = false;
-  // The most recent requestAnimationFrame timestamp this tween has observed.
-  // Seeds each new leg's origin so elapsed time is measured from when the
-  // leg actually started rather than from an arbitrary point on whatever
-  // absolute clock the platform's rAF timestamps use. Before this tween has
-  // ever ticked there is nothing to seed from, so it defaults to 0, which
-  // lines up with the leg having started "now" as far as the caller is
-  // concerned.
-  let lastNow = 0;
 
   const stop = () => {
     if (raf) cancelAnimationFrame(raf);
@@ -103,9 +95,15 @@ export function createTween(initial: number): {
     let to_ = b;
     if (pingPong) setValue(a);
 
-    let legStart = lastNow;
+    // requestAnimationFrame's timestamp and performance.now() share a time
+    // origin per spec, so capturing the origin here, at the moment to() is
+    // called, is directly comparable to the `now` a later frame reports.
+    // That means elapsed time is measured from when this leg actually
+    // started, correct on the very first frame with no lazy-capture dance
+    // and no risk of an idle gap since the last tween being charged against
+    // this one.
+    let legStart = performance.now();
     const step = (now: number) => {
-      lastNow = now;
       const t = Math.min(1, (now - legStart) / durationMs);
       setValue(from + (to_ - from) * ease(t));
 
@@ -120,11 +118,10 @@ export function createTween(initial: number): {
         return;
       }
 
-      // Reverse and run again, anchoring the next leg on the current frame's
-      // timestamp since that IS a known point on the clock.
+      // Reverse and run again, from a fresh origin for the new leg.
       setValue(to_);
       [from, to_] = [to_, from];
-      legStart = now;
+      legStart = performance.now();
       raf = requestAnimationFrame(step);
     };
 
