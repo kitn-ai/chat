@@ -1388,6 +1388,10 @@ beforeEach(() => {
     return 1;
   });
   vi.stubGlobal('cancelAnimationFrame', () => { frame = undefined; });
+  // performance.now() must read the SAME fake clock as the frames. The tween
+  // stamps its origin from it, so leaving this real would have the two clocks
+  // disagree by however long the process has been up.
+  vi.stubGlobal('performance', { now: () => now });
 });
 
 afterEach(() => vi.unstubAllGlobals());
@@ -1522,6 +1526,24 @@ describe('createTween', () => {
     });
   });
 
+  it('eases from the moment to() is called, even after a long idle gap', () => {
+    // The loop stops when a tween settles, so this is the COMMON path: every
+    // state change calls to() on an idle tween. Seeding the origin from a stale
+    // frame timestamp would charge the idle gap against the new duration and
+    // snap instantly.
+    createRoot((dispose) => {
+      const t = createTween(0);
+      t.to(1, { duration: 1, ease: 'linear' });
+      advance(1000);
+      expect(t.value()).toBeCloseTo(1, 6);
+      advance(5000);
+      t.to(0, { duration: 1, ease: 'linear' });
+      advance(500);
+      expect(t.value()).toBeCloseTo(0.5, 1);
+      dispose();
+    });
+  });
+
   it('stops animating after dispose', () => {
     let t!: ReturnType<typeof createTween>;
     createRoot((dispose) => {
@@ -1646,10 +1668,15 @@ export function createTween(initial: number): {
     let to_ = b;
     if (pingPong) setValue(a);
 
-    let start = 0;
+    // Origin is stamped when to() is called, NOT lazily on the first frame.
+    // rAF timestamps share their time origin with performance.now(), so the two
+    // are directly comparable. Seeding from a frame instead would charge the
+    // idle gap since the previous tween finished against this tween's duration:
+    // the loop stops when a tween settles, so every state change calls to() on
+    // an idle tween and would snap straight to the target instead of easing.
+    let startedAt = performance.now();
     const step = (now: number) => {
-      if (!start) start = now;
-      const t = Math.min(1, (now - start) / durationMs);
+      const t = Math.min(1, (now - startedAt) / durationMs);
       setValue(from + (to_ - from) * ease(t));
 
       if (t < 1) {
@@ -1663,10 +1690,10 @@ export function createTween(initial: number): {
         return;
       }
 
-      // Reverse and run again.
+      // Reverse and run again, restamping the origin for the new leg.
       setValue(to_);
       [from, to_] = [to_, from];
-      start = 0;
+      startedAt = performance.now();
       raf = requestAnimationFrame(step);
     };
 
