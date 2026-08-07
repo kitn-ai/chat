@@ -1,0 +1,192 @@
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.app {
+  height: 100dvh;
+  background: var(--color-background);
+  color: var(--color-foreground);
+}
+
+.sidebar {
+  background: var(--color-muted);
+  border-right: 1px solid var(--color-border);
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.sidebar > * {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: 100%;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.bar-left,
+.bar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.brand {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-muted-foreground);
+  white-space: nowrap;
+}
+
+.model {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.6875rem;
+  color: var(--color-muted-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-bad {
+  color: var(--color-destructive, crimson);
+}
+
+/* <kai-thread> scrolls internally; the wrapper just takes the leftover height. */
+.thread-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.thread {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Live partial tool-call arguments — the kit's ToolPart cannot hold these. */
+.partial-args {
+  border-top: 1px dashed var(--color-border);
+  padding: 0.5rem 1rem;
+  font-size: 0.75rem;
+  background: color-mix(in oklab, var(--color-muted) 60%, transparent);
+}
+
+.partial-args-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  overflow: hidden;
+}
+
+.partial-args-id {
+  color: var(--color-muted-foreground);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  flex: none;
+}
+
+.partial-args-row code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.partial-args-caret {
+  animation: blink 1s steps(2, start) infinite;
+}
+
+@keyframes blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+/* The tray for everything ChatMessage cannot carry. */
+.panel {
+  border-top: 1px solid var(--color-border);
+  padding: 0.75rem 1rem;
+  max-height: 40vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.panel-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.panel-title {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-muted-foreground);
+  margin: 0;
+}
+
+.panel-note {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+  opacity: 0.75;
+}
+
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin: 0;
+  font-size: 0.75rem;
+}
+
+.stat {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.stat dt {
+  color: var(--color-muted-foreground);
+}
+
+.stat dd {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.composer {
+  padding: 0.75rem 1rem 1.5rem;
+}
+
+.composer > * {
+  display: block;
+  width: 100%;
+  max-width: 48rem;
+  margin: 0 auto;
+}

@@ -1,0 +1,30 @@
+{
+  "name": "@kitn.ai/ui-example-openrouter-spike",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "SPIKE (not a supported starter): drives the kit's tool/reasoning/card components from a real model over OpenRouter.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b --pretty false",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@kitn.ai/ui": "workspace:*",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "//": "@openrouter/sdk is a DEV dependency on purpose: it is used only by the Vite dev-server proxy (server/), never by anything under src/. Nothing in the client bundle imports it.",
+  "devDependencies": {
+    "@openrouter/sdk": "^1.2.11",
+    "@types/node": "^22.19.21",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "~5.7.2",
+    "vite": "^6.0.0",
+    "vitest": "^4.1.2"
+  }
+}
