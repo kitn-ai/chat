@@ -24,7 +24,7 @@ const meta = {
       description: componentDescription([
         'Renders live audio as bars, a grid, a ring, a wave, or a glowing aurora. Set `stream` or `audioElement` to tap real audio, or `bands` to drive it yourself.',
         'With no audio source at all it animates from `state` alone: idle, connecting, listening, thinking, speaking. That is what drives it when the audio cannot be tapped, like browser speech synthesis, which exposes no audio node.',
-        '`wave`, `aurora`, and `custom` render through WebGL behind a dynamic import, and fall back to bars if that fails or WebGL is unavailable. See ShaderVariants, AuroraStates, and CustomShader below. See Microphone for the real thing: click-to-enable, so nothing here auto-prompts for a permission Storybook cannot answer.',
+        '`wave`, `aurora`, and `custom` render through WebGL behind a dynamic import, and fall back to bars if that fails or WebGL is unavailable. See ShaderVariants, AuroraStates, and CustomShader below. See Microphone for the real thing, click-to-enable so nothing here auto-prompts for a permission Storybook cannot answer, and MicrophoneAll for all six looks on the same live voice at once.',
       ]),
     },
   },
@@ -364,6 +364,105 @@ export const Microphone: Story = {
           {stream() ? 'Stop microphone' : requesting() ? 'Requesting...' : 'Enable microphone'}
         </Button>
         <Show when={error()}>{(message) => <Notice severity="error">{message()}</Notice>}</Show>
+      </div>
+    );
+  },
+};
+
+/**
+ * All six variants, one live microphone, side by side.
+ *
+ * Same click-to-enable pattern as Microphone above -- one button, one
+ * `getUserMedia` call, one `MediaStream` -- but that single stream is set on
+ * all six `<AudioVisualizer>` instances at once instead of switching one
+ * through a control. Six `useAudioAnalysis` instances end up tapping the
+ * same stream simultaneously: each calls its own `ctx.createMediaStreamSource
+ * (stream)`, which -- unlike `createMediaElementSource` -- has no
+ * once-per-element restriction, so this is expected to just work, but it had
+ * never actually been exercised with six concurrent consumers before this
+ * story. Verified in the browser: all six react independently to the same
+ * stream, not just the first.
+ */
+export const MicrophoneAll: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'One microphone, all six looks at once, so they can be compared on the same live voice instead of one at a time through a control. `custom` reuses the spectrum shader from CustomShader below so it visibly responds to `uBands` too.',
+      },
+    },
+    controls: { include: [] },
+  },
+  render: () => {
+    const [stream, setStream] = createSignal<MediaStream | undefined>();
+    const [error, setError] = createSignal<string | null>(null);
+    const [requesting, setRequesting] = createSignal(false);
+
+    const stopTracks = (s: MediaStream | undefined) => s?.getTracks().forEach((t) => t.stop());
+
+    const toggle = async () => {
+      const live = stream();
+      if (live) {
+        stopTracks(live);
+        setStream(undefined);
+        return;
+      }
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setError('getUserMedia is not available in this browser context.');
+        return;
+      }
+      setError(null);
+      setRequesting(true);
+      try {
+        setStream(await navigator.mediaDevices.getUserMedia({ audio: true }));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Microphone access failed.');
+      } finally {
+        setRequesting(false);
+      }
+    };
+
+    // Six tiles share this one stream: stop every track once here, not per
+    // tile -- there is exactly one MediaStream to release, no matter how
+    // many visualizers are tapping it.
+    onCleanup(() => stopTracks(stream()));
+
+    return (
+      <div style={{ display: 'flex', 'flex-direction': 'column', gap: '16px', 'align-items': 'center' }}>
+        <Button onClick={() => void toggle()} disabled={requesting()} aria-pressed={!!stream()}>
+          {stream() ? 'Stop microphone' : requesting() ? 'Requesting...' : 'Enable microphone'}
+        </Button>
+        <Show when={error()}>{(message) => <Notice severity="error">{message()}</Notice>}</Show>
+        <div
+          style={{
+            display: 'grid',
+            'grid-template-columns': 'repeat(3, minmax(0, 1fr))',
+            'column-gap': '40px',
+            'row-gap': '24px',
+            'justify-items': 'center',
+          }}
+        >
+          <For each={ALL_VARIANTS}>
+            {(v) => (
+              <div style={{ display: 'flex', 'flex-direction': 'column', gap: '8px', 'align-items': 'center' }}>
+                <AudioVisualizer
+                  variant={v}
+                  state={stream() ? 'speaking' : 'idle'}
+                  size="sm"
+                  stream={stream()}
+                  // SPECTRUM_SHADER is hardcoded for 5 bands. `sm` defaults
+                  // bar/custom to 3, which would declare `uBands` at length 3
+                  // while the shader body still indexes up to uBands[4] --
+                  // force 5 here so the shader's band count and the analyser's
+                  // actually match.
+                  barCount={v === 'custom' ? 5 : undefined}
+                  shader={v === 'custom' ? { fragment: SPECTRUM_SHADER } : undefined}
+                />
+                <code style={{ 'font-size': '11px', opacity: 0.6 }}>{v}</code>
+              </div>
+            )}
+          </For>
+        </div>
       </div>
     );
   },
