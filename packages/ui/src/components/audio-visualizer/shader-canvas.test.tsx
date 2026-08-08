@@ -78,6 +78,43 @@ describe('buildFragmentSource', () => {
     expect(src).toContain('uniform mat4 pose[2];');
   });
 
+  it('infers an array size from value.length when arraySize is omitted, so the declaration cannot disagree with the setter', () => {
+    const src = buildFragmentSource(MAIN, {
+      uBands: { type: '1fv', value: [0, 0, 0] },
+    }, 'highp');
+    expect(src).toContain('uniform float uBands[3];');
+  });
+
+  it('does NOT infer an array for a single vector/matrix instance passed as its natural-length array', () => {
+    // A 3fv's value IS an array (that's how the WebGL *fv setters work) but
+    // represents ONE vec3, not an array of 3 floats -- same for a single
+    // mat4 passed as its natural 16-element array. Neither should grow an
+    // unwanted `[N]`.
+    const src = buildFragmentSource(MAIN, {
+      uColor: { type: '3fv', value: [1, 0, 0] },
+      uMat: { type: 'Matrix4fv', value: new Array(16).fill(0) },
+    }, 'highp');
+    expect(src).toContain('uniform vec3 uColor;');
+    expect(src).not.toContain('uColor[');
+    expect(src).toContain('uniform mat4 uMat;');
+    expect(src).not.toContain('uMat[');
+  });
+
+  it('infers array size consistently for matrix types too: two mat4s with no arraySize declares [2]', () => {
+    const src = buildFragmentSource(MAIN, {
+      pose: { type: 'Matrix4fv', value: new Array(32).fill(0) },
+    }, 'highp');
+    expect(src).toContain('uniform mat4 pose[2];');
+  });
+
+  it('an explicit arraySize always wins over the inferred one', () => {
+    const src = buildFragmentSource(MAIN, {
+      uBands: { type: '1fv', value: [0, 0, 0], arraySize: 8 },
+    }, 'highp');
+    expect(src).toContain('uniform float uBands[8];');
+    expect(src).not.toContain('uBands[3]');
+  });
+
   it('keeps the caller shader body intact', () => {
     expect(buildFragmentSource(MAIN, {}, 'highp')).toContain(MAIN);
   });
@@ -111,7 +148,16 @@ describe('buildFragmentSource', () => {
  * shader actually draws anything correct -- that remains a browser-only
  * concern, called out in the task report.
  */
-function createFakeGL() {
+interface FakeGLFailures {
+  /** Fragment shader fails COMPILE_STATUS; the vertex shader still succeeds. */
+  failFragmentCompile?: boolean;
+  /** `gl.createProgram()` returns null, as some drivers do under resource pressure. */
+  failProgramCreation?: boolean;
+  /** Program LINK_STATUS is false. */
+  failLink?: boolean;
+}
+
+function createFakeGL(failures: FakeGLFailures = {}) {
   const calls: string[] = [];
   const record = (name: string) => calls.push(name);
   const locations = new Map<string, object>();
@@ -119,17 +165,21 @@ function createFakeGL() {
     VERTEX_SHADER: 1, FRAGMENT_SHADER: 2, COMPILE_STATUS: 3, LINK_STATUS: 4,
     ARRAY_BUFFER: 5, STATIC_DRAW: 6, FLOAT: 7, BLEND: 8, ONE: 9,
     ONE_MINUS_SRC_ALPHA: 10, TRIANGLE_STRIP: 11, COLOR_BUFFER_BIT: 12,
-    createShader: () => { record('createShader'); return {}; },
+    createShader: (type: number) => { record('createShader'); return { __type: type }; },
     shaderSource: () => {},
     compileShader: () => { record('compileShader'); },
-    getShaderParameter: () => true,
-    getShaderInfoLog: () => '',
+    getShaderParameter: (shader: { __type: number }) =>
+      !(failures.failFragmentCompile && shader.__type === gl.FRAGMENT_SHADER),
+    getShaderInfoLog: () => 'fake shader compile error',
     deleteShader: () => { record('deleteShader'); },
-    createProgram: () => { record('createProgram'); return {}; },
+    createProgram: () => {
+      record('createProgram');
+      return failures.failProgramCreation ? null : {};
+    },
     attachShader: () => {},
     linkProgram: () => {},
-    getProgramParameter: () => true,
-    getProgramInfoLog: () => '',
+    getProgramParameter: () => !failures.failLink,
+    getProgramInfoLog: () => 'fake link error',
     useProgram: () => {},
     deleteProgram: () => { record('deleteProgram'); },
     createBuffer: () => { record('createBuffer'); return {}; },
@@ -239,5 +289,48 @@ describe('ShaderCanvas: cleanup', () => {
     expect(calls).toContain('deleteProgram');
     expect(calls.filter((c) => c === 'deleteShader')).toHaveLength(2);
     expect(calls).toContain('deleteBuffer');
+  });
+});
+
+describe('ShaderCanvas: cleans up whatever already compiled when a later stage fails', () => {
+  installFakeClock();
+
+  it('deletes the vertex shader too when the fragment shader fails to compile', () => {
+    const { gl, calls } = createFakeGL({ failFragmentCompile: true });
+    stubGetContext(gl);
+    const onError = vi.fn();
+
+    render(() => <ShaderCanvas fragment={MAIN} onError={onError} />);
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    // One delete from compile()'s own cleanup of the failed fragment shader,
+    // one from ShaderCanvas explicitly deleting the vertex shader that DID
+    // compile -- nothing to leak a shader object into the GL context.
+    expect(calls.filter((c) => c === 'deleteShader')).toHaveLength(2);
+    expect(calls).not.toContain('deleteProgram');
+  });
+
+  it('deletes both shaders when program creation fails', () => {
+    const { gl, calls } = createFakeGL({ failProgramCreation: true });
+    stubGetContext(gl);
+    const onError = vi.fn();
+
+    render(() => <ShaderCanvas fragment={MAIN} onError={onError} />);
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(calls.filter((c) => c === 'deleteShader')).toHaveLength(2);
+    expect(calls).not.toContain('deleteProgram');
+  });
+
+  it('deletes the program and both shaders when linking fails', () => {
+    const { gl, calls } = createFakeGL({ failLink: true });
+    stubGetContext(gl);
+    const onError = vi.fn();
+
+    render(() => <ShaderCanvas fragment={MAIN} onError={onError} />);
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(calls.filter((c) => c === 'deleteShader')).toHaveLength(2);
+    expect(calls.filter((c) => c === 'deleteProgram')).toHaveLength(1);
   });
 });

@@ -8,12 +8,35 @@ export type UniformType =
 export interface UniformSpec {
   type: UniformType;
   value: number | number[];
-  /** For array uniforms (`1fv`, or a matrix type repeated), the declared length. */
+  /**
+   * For array uniforms (`1fv`, `3fv`, `4fv`, or a matrix type repeated), the
+   * declared length. Optional: when `value` is longer than one instance of
+   * the type, the length is inferred from `value.length` -- see
+   * `inferArraySize`.
+   *
+   * Set this explicitly, rather than relying on inference, if the array's
+   * LENGTH can change while the component stays mounted (e.g. a per-band
+   * uniform whose band count tracks a reactive `size`/`barCount` prop): the
+   * recompile decision reads this field directly, not the inferred value, so
+   * a length-only change from an inferred 3 to an inferred 4 elements will
+   * NOT trigger a recompile, and the shader stays compiled against the old
+   * array size. Passing `arraySize` explicitly makes that change visible to
+   * the recompile check the same way any other structural change is.
+   */
   arraySize?: number;
 }
 
 export interface ShaderCanvasProps {
-  /** GLSL defining `mainImage(out vec4 fragColor, in vec2 fragCoord)`. */
+  /**
+   * GLSL defining `mainImage(out vec4 fragColor, in vec2 fragCoord)`.
+   *
+   * MUST output PREMULTIPLIED colour: `fragColor = vec4(rgb * alpha, alpha);`,
+   * not `vec4(rgb, alpha)`. The canvas context uses the browser default
+   * `premultipliedAlpha: true` (see `ShaderCanvas`'s doc for why), so a
+   * naturally written soft/anti-aliased edge that returns straight (not
+   * premultiplied) colour composites with a dark fringe or halo -- most
+   * visible on a light page background.
+   */
   fragment: string;
   /**
    * Custom uniforms. THIS CANVAS DECLARES THEM FOR YOU by injecting
@@ -56,6 +79,43 @@ const GLSL_TYPE: Record<UniformType, string> = {
   Matrix2fv: 'mat2', Matrix3fv: 'mat3', Matrix4fv: 'mat4',
 };
 
+/**
+ * How many raw scalars make up ONE instance of an "*fv"/matrix uniform's
+ * GLSL type -- e.g. one `3fv` (a single vec3) is 3 floats, one `Matrix4fv`
+ * (a single mat4) is 16. Only these six types take an array `value` where
+ * "array" is ambiguous between "one instance, passed as an array because
+ * that is how the `*fv` GPU setters work" and "a genuine GLSL array of N
+ * instances the caller forgot to size." `inferArraySize` below uses this to
+ * tell the two apart: `value.length` equal to one unit's size is a single
+ * instance (no `[N]`); a whole-number multiple greater than one is an
+ * unsized array, so its size gets inferred.
+ */
+const UNIFORM_UNIT_SIZE: Partial<Record<UniformType, number>> = {
+  '1fv': 1, '3fv': 3, '4fv': 4,
+  Matrix2fv: 4, Matrix3fv: 9, Matrix4fv: 16,
+};
+
+/**
+ * When a caller omits `arraySize` on an array-capable uniform (`1fv`, `3fv`,
+ * `4fv`, or a matrix type) but `value` is longer than one instance of that
+ * type, infer the array length from `value.length` instead of silently
+ * declaring a scalar.
+ *
+ * This closes a real internal inconsistency: without it, `{ type: '1fv',
+ * value: [a, b, c] }` declared `uniform float name;` (scalar) while
+ * `setUniform` unconditionally called `gl.uniform1fv(location, [a, b, c])`
+ * -- a mismatch WebGL reports as `INVALID_OPERATION` with no JS exception
+ * and no `onError`, just a stale or zero value on screen. This function is
+ * what keeps the declaration and the setter from ever being able to
+ * disagree.
+ */
+function inferArraySize(u: UniformSpec): number | undefined {
+  const unit = UNIFORM_UNIT_SIZE[u.type];
+  if (!unit || !Array.isArray(u.value)) return undefined;
+  const instances = u.value.length / unit;
+  return instances > 1 && Number.isInteger(instances) ? instances : undefined;
+}
+
 /** Every ShaderToy built-in we support, declared for every shader. */
 const BUILTINS = [
   'uniform float iTime;',
@@ -75,9 +135,14 @@ void main() { gl_Position = vec4(aVertexPosition, 1.0); }
  * custom uniforms, the caller's body, and a `main()` that forwards to
  * `mainImage`.
  *
+ * Declares every entry in `uniforms` for the caller (`uniform <type>
+ * <name>;`, injected right after the precision qualifier). Declaring the
+ * SAME uniform name inside `fragment` too is a GLSL redefinition and fails
+ * to compile -- that is the contract this function exists to protect.
+ *
  * Split out from the component because it is the only part testable without
- * a GPU (jsdom has no WebGL at all), and it is where a compile-breaking
- * duplicate declaration would show up.
+ * a GPU (jsdom has no WebGL at all), and it is where both a compile-breaking
+ * duplicate declaration and an array-size mismatch would show up.
  */
 export function buildFragmentSource(
   fragment: string,
@@ -86,7 +151,8 @@ export function buildFragmentSource(
 ): string {
   const declarations = Object.entries(uniforms)
     .map(([name, u]) => {
-      const size = u.arraySize ? `[${u.arraySize}]` : '';
+      const arraySize = u.arraySize ?? inferArraySize(u);
+      const size = arraySize ? `[${arraySize}]` : '';
       return `uniform ${GLSL_TYPE[u.type]} ${name}${size};`;
     })
     .join('\n');
@@ -159,9 +225,13 @@ function setUniform(
  * multipass, or device orientation. Those are what make upstream's runner
  * 988 lines, and an audio visualizer needs none of them.
  *
- * Renders with a fully transparent clear colour (`gl.clearColor(0,0,0,0)`)
- * plus premultiplied blending, so the shader composites over whatever page
- * background sits behind it instead of punching an opaque box.
+ * Renders with a fully transparent clear colour (`gl.clearColor(0,0,0,0)`).
+ * Compositing over the page comes from the canvas context's default
+ * `premultipliedAlpha: true`, NOT from `gl.blendFunc` (see the comment at
+ * the blend call site for why that call has no effect on today's
+ * single-pass output). Because of that default, `fragment` MUST output
+ * premultiplied colour -- see the doc on the `fragment` prop for the exact
+ * contract.
  *
  * Reactivity note: only `fragment`, `precision`, and the STRUCTURE of
  * `uniforms` (which names exist, with which types/sizes) trigger a rebuild
@@ -241,10 +311,20 @@ export function ShaderCanvas(props: ShaderCanvasProps): JSX.Element {
     gl.enableVertexAttribArray(attr);
     gl.vertexAttribPointer(attr, 3, gl.FLOAT, false, 0, 0);
 
-    // Transparent clear plus premultiplied blending: alpha is zero everywhere
-    // the shader does not draw, so it composites over any page background
-    // instead of punching an opaque box (verified against light/dark/photo
-    // backgrounds in the browser IVP, not here -- jsdom cannot render pixels).
+    // This blendFunc has NO effect on today's output: `gl.clear` runs
+    // immediately before the single `gl.drawArrays` every frame (see draw()
+    // below), so the framebuffer is always transparent-black at draw time --
+    // there is nothing behind the draw call to blend against. The actual
+    // transparency mechanism is the canvas context's default
+    // `premultipliedAlpha: true` combined with `clearColor(0,0,0,0)` below:
+    // the browser composites the canvas's own premultiplied RGBA buffer over
+    // the page. That default is also why `fragment` must output premultiplied
+    // colour (see the `fragment` prop's doc) -- an unpremultiplied translucent
+    // edge produces a dark fringe on a light page.
+    //
+    // The call stays enabled anyway: it is exactly what a future multipass or
+    // non-clearing render path would need, and silently dropping it now would
+    // be a behavioural change for that later path, not a cleanup.
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 
@@ -256,6 +336,9 @@ export function ShaderCanvas(props: ShaderCanvasProps): JSX.Element {
     const uDate = loc('iDate');
     const customLocations = Object.keys(uniforms).map((n) => [n, loc(n)] as const);
 
+    // Only .xy (pointer position) is implemented. ShaderToy's iMouse.zw
+    // carries click-down position; this canvas has no pointerdown tracking,
+    // so .zw stays permanently zero.
     const mouse = [0, 0, 0, 0];
     const onMove = (e: PointerEvent) => {
       const r = canvas.getBoundingClientRect();
