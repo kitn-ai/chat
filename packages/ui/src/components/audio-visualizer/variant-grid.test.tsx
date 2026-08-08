@@ -1,8 +1,9 @@
-import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { createSignal } from 'solid-js';
 import { render, cleanup } from '@solidjs/testing-library';
 import { GridVisualizer } from './variant-grid';
+import { installFakeClock } from '../../test-utils/fake-clock';
 
 afterEach(cleanup);
 
@@ -125,6 +126,33 @@ describe('GridVisualizer', () => {
     expect(seen).toHaveLength(6);
     expect(seen.every((s) => s.value() === 0)).toBe(true);
   });
+
+  it('keeps the render-prop live when bands update via a signal, not just at mount', async () => {
+    const [bands, setBands] = createSignal([0, 1]);
+    const seen: { index: number; highlighted: () => boolean; value: () => number }[] = [];
+    render(() => (
+      <GridVisualizer
+        state="speaking" size="md" frozen={false}
+        rowCount={3} columnCount={2} bands={bands()}
+      >
+        {(item) => { seen.push(item); return <span />; }}
+      </GridVisualizer>
+    ));
+    expect(seen.map((s) => s.value())).toEqual([0, 1, 0, 1, 0, 1]);
+    expect(seen.map((s) => s.highlighted())).toEqual([false, true, true, true, false, true]);
+
+    setBands([1, 0]);
+    await flush();
+
+    // This is the streaming-audio case <Index> exists for: bands change on
+    // nearly every frame while speaking. Re-invoking the SAME closures
+    // captured on first render (not reading fresh items from a rerender,
+    // which would pass even against a resolved-value implementation) is what
+    // proves `value()`/`highlighted()` track `bands` live rather than
+    // freezing them at mount. Column roles are now the mirror of above.
+    expect(seen.map((s) => s.value())).toEqual([1, 0, 1, 0, 1, 0]);
+    expect(seen.map((s) => s.highlighted())).toEqual([true, false, true, true, true, false]);
+  });
 });
 
 // `state="speaking"` above keeps things static enough (thresholds, not the
@@ -134,28 +162,7 @@ describe('GridVisualizer', () => {
 // RAF/performance clock as variant-bar.test.tsx and create-tween.test.ts: a
 // single pending callback advanced by hand for deterministic ticking.
 describe('GridVisualizer frozen and live sequencing', () => {
-  let frame: ((t: number) => void) | undefined;
-  let now = 0;
-
-  beforeEach(() => {
-    now = 0;
-    frame = undefined;
-    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
-      frame = cb;
-      return 1;
-    });
-    vi.stubGlobal('cancelAnimationFrame', () => { frame = undefined; });
-    vi.stubGlobal('performance', { now: () => now });
-  });
-
-  afterEach(() => vi.unstubAllGlobals());
-
-  function advance(ms: number) {
-    now += ms;
-    const f = frame;
-    frame = undefined;
-    f?.(now);
-  }
+  const { advance, isFramePending } = installFakeClock();
 
   it('never arms requestAnimationFrame while frozen, so the highlight stays pinned to the sequence\'s first frame', () => {
     const { container } = render(() => (
@@ -164,7 +171,7 @@ describe('GridVisualizer frozen and live sequencing', () => {
 
     // listening's first frame lights only the center cell (index 4 of 3x3).
     expect(lit(container).map((e) => e.dataset.kaiIndex)).toEqual(['4']);
-    expect(frame).toBeUndefined();
+    expect(isFramePending()).toBe(false);
 
     advance(5000);
     expect(lit(container).map((e) => e.dataset.kaiIndex)).toEqual(['4']);

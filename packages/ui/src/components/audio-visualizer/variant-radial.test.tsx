@@ -1,9 +1,10 @@
-import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { createSignal } from 'solid-js';
 import { render, cleanup } from '@solidjs/testing-library';
 import { RadialVisualizer } from './variant-radial';
 import { defaultRadialBarCount } from './sizes';
+import { installFakeClock } from '../../test-utils/fake-clock';
 
 afterEach(cleanup);
 
@@ -99,6 +100,30 @@ describe('RadialVisualizer', () => {
     // The positioning wrapper still places custom markup on the ring.
     expect(spokes(container)).toHaveLength(4);
   });
+
+  it('keeps the render-prop live when bands update via a signal, not just at mount', async () => {
+    const [bands, setBands] = createSignal([0, 0.5, 1, 0]);
+    const seen: { index: number; highlighted: () => boolean; value: () => number }[] = [];
+    render(() => (
+      <RadialVisualizer state="speaking" size="md" frozen={false} barCount={4} bands={bands()}>
+        {(item) => { seen.push(item); return <span />; }}
+      </RadialVisualizer>
+    ));
+    expect(seen.map((s) => s.value())).toEqual([0, 0.5, 1, 0]);
+
+    setBands([1, 0, 0.25, 0.75]);
+    await flush();
+
+    // This is the streaming-audio case <Index> exists for: bands change on
+    // nearly every frame while speaking. Re-invoking the SAME closures
+    // captured on first render (not reading fresh items from a rerender,
+    // which would pass even against a resolved-value implementation) is what
+    // proves `value()` tracks `bands` live rather than freezing it at mount.
+    // (`highlighted()` is not asserted here: radial lights the whole ring
+    // while speaking regardless of band values, so it carries no signal --
+    // see the "lights the whole ring while speaking" test above.)
+    expect(seen.map((s) => s.value())).toEqual([1, 0, 0.25, 0.75]);
+  });
 });
 
 describe('RadialVisualizer barCount divisibility warning', () => {
@@ -152,28 +177,7 @@ describe('RadialVisualizer barCount divisibility warning', () => {
 // variant-bar.test.tsx and variant-grid.test.tsx: a single pending callback we
 // advance by hand so ticking is deterministic instead of racing real timers.
 describe('RadialVisualizer frozen and live sequencing', () => {
-  let frame: ((t: number) => void) | undefined;
-  let now = 0;
-
-  beforeEach(() => {
-    now = 0;
-    frame = undefined;
-    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
-      frame = cb;
-      return 1;
-    });
-    vi.stubGlobal('cancelAnimationFrame', () => { frame = undefined; });
-    vi.stubGlobal('performance', { now: () => now });
-  });
-
-  afterEach(() => vi.unstubAllGlobals());
-
-  function advance(ms: number) {
-    now += ms;
-    const f = frame;
-    frame = undefined;
-    f?.(now);
-  }
+  const { advance, isFramePending } = installFakeClock();
 
   it('never arms requestAnimationFrame while frozen, so the highlight stays pinned to the sequence\'s first frame', () => {
     const { container } = render(() => (
@@ -186,7 +190,7 @@ describe('RadialVisualizer frozen and live sequencing', () => {
 
     // The proof it is truly frozen, not just "hasn't ticked yet": no RAF was
     // ever armed, so there is nothing pending to advance.
-    expect(frame).toBeUndefined();
+    expect(isFramePending()).toBe(false);
 
     advance(5000);
     expect(bars(container).map((b) => b.dataset.kaiHighlighted)).toEqual(initial);
@@ -246,7 +250,7 @@ describe('RadialVisualizer frozen and live sequencing', () => {
     ));
     const host = container.querySelector('[data-kai-state="thinking"]') as HTMLElement;
 
-    expect(frame).toBeUndefined();
+    expect(isFramePending()).toBe(false);
     bars(container).forEach((b) => expect(b.dataset.kaiHighlighted).toBe('true'));
     expect(host.className).not.toContain('animate-spin');
 

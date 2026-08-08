@@ -1,34 +1,10 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { createRoot } from 'solid-js';
 import { createTween } from './create-tween';
+import { installFakeClock } from '../test-utils/fake-clock';
 
 /** Drive RAF manually so we can step time deterministically. */
-let frame: ((t: number) => void) | undefined;
-let now = 0;
-
-beforeEach(() => {
-  now = 0;
-  frame = undefined;
-  vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
-    frame = cb;
-    return 1;
-  });
-  vi.stubGlobal('cancelAnimationFrame', () => { frame = undefined; });
-  // requestAnimationFrame's timestamp and performance.now() share a time
-  // origin per spec, so the production code can read either. Keep them on
-  // the same fake clock here or the two would silently disagree.
-  vi.stubGlobal('performance', { now: () => now });
-});
-
-afterEach(() => vi.unstubAllGlobals());
-
-/** Advance the fake clock and run the pending frame. */
-function advance(ms: number) {
-  now += ms;
-  const f = frame;
-  frame = undefined;
-  f?.(now);
-}
+const { advance } = installFakeClock();
 
 describe('createTween', () => {
   it('starts at the initial value', () => {

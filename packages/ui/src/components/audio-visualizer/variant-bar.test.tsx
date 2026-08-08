@@ -1,9 +1,10 @@
-import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { createSignal } from 'solid-js';
 import { render, cleanup } from '@solidjs/testing-library';
 import { BarVisualizer } from './variant-bar';
 import { defaultBarCount } from './sizes';
+import { installFakeClock } from '../../test-utils/fake-clock';
 
 afterEach(cleanup);
 
@@ -112,6 +113,39 @@ describe('BarVisualizer', () => {
     expect(seen.map((s) => s.value())).toEqual([0.25, 0.75]);
     expect(seen.every((s) => s.highlighted())).toBe(true);
   });
+
+  // Parity with GridVisualizer's equivalent test: same accessor, same guard.
+  it('zeroes the render-prop value in every state except speaking, even with stale bands', () => {
+    const seen: { index: number; highlighted: () => boolean; value: () => number }[] = [];
+    render(() => (
+      <BarVisualizer state="idle" size="md" frozen={false} barCount={3} bands={[0.9, 0.9, 0.9]}>
+        {(item) => { seen.push(item); return <span />; }}
+      </BarVisualizer>
+    ));
+    expect(seen).toHaveLength(3);
+    expect(seen.every((s) => s.value() === 0)).toBe(true);
+  });
+
+  it('keeps the render-prop live when bands update via a signal, not just at mount', async () => {
+    const [bands, setBands] = createSignal([0.1, 0.2, 0.3]);
+    const seen: { index: number; highlighted: () => boolean; value: () => number }[] = [];
+    render(() => (
+      <BarVisualizer state="speaking" size="md" bands={bands()} frozen={false} barCount={3}>
+        {(item) => { seen.push(item); return <span />; }}
+      </BarVisualizer>
+    ));
+    expect(seen.map((s) => s.value())).toEqual([0.1, 0.2, 0.3]);
+
+    setBands([0.9, 0.8, 0.7]);
+    await flush();
+
+    // This is the streaming-audio case <Index> exists for: bands change on
+    // nearly every frame while speaking. Re-invoking the SAME closures
+    // captured on first render (not reading fresh items from a rerender,
+    // which would pass even against a resolved-value implementation) is what
+    // proves `value()` tracks `bands` live rather than freezing it at mount.
+    expect(seen.map((s) => s.value())).toEqual([0.9, 0.8, 0.7]);
+  });
 });
 
 // `state="speaking"` above keeps `highlighted` constant true regardless of
@@ -122,28 +156,7 @@ describe('BarVisualizer', () => {
 // mirrors create-tween.test.ts: a single pending callback we advance by hand
 // so ticking is deterministic instead of racing real timers.
 describe('BarVisualizer frozen and live sequencing', () => {
-  let frame: ((t: number) => void) | undefined;
-  let now = 0;
-
-  beforeEach(() => {
-    now = 0;
-    frame = undefined;
-    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
-      frame = cb;
-      return 1;
-    });
-    vi.stubGlobal('cancelAnimationFrame', () => { frame = undefined; });
-    vi.stubGlobal('performance', { now: () => now });
-  });
-
-  afterEach(() => vi.unstubAllGlobals());
-
-  function advance(ms: number) {
-    now += ms;
-    const f = frame;
-    frame = undefined;
-    f?.(now);
-  }
+  const { advance, isFramePending } = installFakeClock();
 
   it('never arms requestAnimationFrame while frozen, so the highlight stays pinned to the sequence\'s first frame', () => {
     const { container } = render(() => (
@@ -156,7 +169,7 @@ describe('BarVisualizer frozen and live sequencing', () => {
 
     // The proof it is truly frozen, not just "hasn't ticked yet": no RAF was
     // ever armed, so there is nothing pending to advance.
-    expect(frame).toBeUndefined();
+    expect(isFramePending()).toBe(false);
 
     advance(5000);
     expect(bars(container).map((b) => b.dataset.kaiHighlighted)).toEqual(initial);
