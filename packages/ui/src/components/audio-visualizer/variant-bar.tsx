@@ -24,6 +24,11 @@ export interface VariantProps {
    * for them to stay live. Destructuring them into a plain variable freezes
    * them at that moment. `::part(bar)` handles restyling; this is for
    * replacing the markup outright.
+   *
+   * In bar and grid, your returned element IS the drawn item. Radial is the
+   * exception: it always wraps whatever you return in its own positioning
+   * element, because each spoke must be absolutely placed around the ring.
+   * You still control the markup inside that wrapper, just not its position.
    */
   children?: (item: { index: number; highlighted: () => boolean; value: () => number }) => JSX.Element;
 }

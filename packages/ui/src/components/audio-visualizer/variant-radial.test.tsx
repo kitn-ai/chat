@@ -49,6 +49,27 @@ describe('RadialVisualizer', () => {
     expect(bars(container)[0]!.style.minHeight).toBe(`${expected}px`);
   });
 
+  it('floors barCount at 1, so a zero or negative value never divides by zero for dotSize', () => {
+    // A floored count of 1 is never divisible by 4, so this also fires the
+    // divisibility warning; mock it so the test output stays clean.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const zero = render(() => (
+      <RadialVisualizer state="idle" size="md" bands={[]} frozen={false} barCount={0} radius={40} />
+    ));
+    expect(bars(zero.container)).toHaveLength(1);
+    expect(spokes(zero.container)).toHaveLength(1);
+    expect(bars(zero.container)[0]!.style.width).toBe(`${(40 * Math.PI) / 1}px`);
+    cleanup();
+
+    const negative = render(() => (
+      <RadialVisualizer state="idle" size="md" bands={[]} frozen={false} barCount={-5} radius={40} />
+    ));
+    expect(bars(negative.container)).toHaveLength(1);
+
+    warn.mockRestore();
+  });
+
   it('collapses every bar to zero height outside speaking, even with oversized bands', () => {
     const { container } = render(() => (
       <RadialVisualizer state="listening" size="md" bands={[5, 10, 100, 1]} frozen={false} barCount={4} />

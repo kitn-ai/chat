@@ -16,7 +16,11 @@ import type { VariantProps } from './variant-bar';
 export function RadialVisualizer(
   props: VariantProps & { barCount?: number; radius?: number },
 ): JSX.Element {
-  const count = () => props.barCount ?? defaultRadialBarCount(props.size);
+  // Floored at 1: at barCount 0, dotSize below divides by zero (Infinity),
+  // and 0 % 4 === 0 slips past the divisibility warning silently. The
+  // dispatcher only ever passes positive counts today, but the element
+  // facade exposes `bar-count` as a consumer-facing attribute next.
+  const count = () => Math.max(1, props.barCount ?? defaultRadialBarCount(props.size));
   const radius = () => props.radius ?? RADIAL_RADIUS[props.size];
 
   // Upstream warns when the ring cannot split into four even quadrants -- not
@@ -105,6 +109,13 @@ export function RadialVisualizer(
                 transform: `rotate(${(i / count()) * Math.PI * 2}rad) translateY(${radius()}px)`,
               }}
             >
+              {/*
+                Unlike bar/grid, the render-prop's output does NOT become the
+                positioned element itself: it renders INSIDE this wrapper's
+                rotate+translateY placement, since something has to place the
+                spoke on the ring even when the caller owns its markup. See
+                the `children` doc on VariantProps in variant-bar.tsx.
+              */}
               {props.children?.(item) ?? (
                 <div
                   part="bar"
