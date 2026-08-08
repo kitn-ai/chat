@@ -74,20 +74,20 @@ describe('kai-audio-visualizer declarative API', () => {
 
   it('coerces a string bar-count attribute to a number', () => {
     const { container } = render(() => <AudioVisualizer barCount={num('7')} />);
-    expect(container.querySelectorAll('[part="bar"]')).toHaveLength(7);
+    expect(container.querySelectorAll('[part~="bar"]')).toHaveLength(7);
   });
 
   it('coerces string row-count and column-count', () => {
     const { container } = render(() => (
       <AudioVisualizer variant="grid" rowCount={num('3')} columnCount={num('4')} />
     ));
-    expect(container.querySelectorAll('[part="cell"]')).toHaveLength(12);
+    expect(container.querySelectorAll('[part~="cell"]')).toHaveLength(12);
   });
 
   it('a blank bar-count attribute falls back to the size default, not NaN bars', () => {
     const { container } = render(() => <AudioVisualizer barCount={num('')} />);
     // size defaults to 'md' -> defaultBarCount('md') === 5
-    expect(container.querySelectorAll('[part="bar"]')).toHaveLength(5);
+    expect(container.querySelectorAll('[part~="bar"]')).toHaveLength(5);
   });
 
   it('applies a color attribute to the rendered geometry', () => {
@@ -100,7 +100,7 @@ describe('kai-audio-visualizer declarative API', () => {
     const { container } = render(() => (
       <AudioVisualizer state="speaking" barCount={2} bands={[0.25, 0.75]} />
     ));
-    const heights = Array.from(container.querySelectorAll('[part="bar"]')).map(
+    const heights = Array.from(container.querySelectorAll('[part~="bar"]')).map(
       (b) => (b as HTMLElement).style.height,
     );
     expect(heights).toEqual(['25%', '75%']);
@@ -115,7 +115,7 @@ describe('kai-audio-visualizer declarative API', () => {
     ));
     setBands([0.9, 0.9]);
     await waitFor(() => {
-      const heights = Array.from(container.querySelectorAll('[part="bar"]')).map(
+      const heights = Array.from(container.querySelectorAll('[part~="bar"]')).map(
         (b) => (b as HTMLElement).style.height,
       );
       expect(heights).toEqual(['90%', '90%']);
@@ -124,7 +124,7 @@ describe('kai-audio-visualizer declarative API', () => {
 
   it('defaults every optional attribute to a working visualizer', () => {
     const { container } = render(() => <AudioVisualizer />);
-    expect(container.querySelectorAll('[part="bar"]')).toHaveLength(5);
+    expect(container.querySelectorAll('[part~="bar"]')).toHaveLength(5);
     expect(container.querySelector('[data-kai-state="idle"]')).toBeTruthy();
   });
 
@@ -141,7 +141,7 @@ describe('kai-audio-visualizer declarative API', () => {
       typeof AudioVisualizerFacade
     >[0];
     const { container } = render(() => AudioVisualizerFacade(attrProps));
-    expect(container.querySelectorAll('[part="cell"]')).toHaveLength(12);
+    expect(container.querySelectorAll('[part~="cell"]')).toHaveLength(12);
     const grid = container.querySelector('.grid') as HTMLElement;
     expect(grid.style.gridTemplateColumns).toBe('repeat(4, 1fr)');
   });

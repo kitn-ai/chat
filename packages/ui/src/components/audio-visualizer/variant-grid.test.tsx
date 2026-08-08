@@ -7,7 +7,10 @@ import { installFakeClock } from '../../test-utils/fake-clock';
 
 afterEach(cleanup);
 
-const cells = (c: HTMLElement) => Array.from(c.querySelectorAll('[part="cell"]')) as HTMLElement[];
+// `~=` (token match), not `=` (exact match): `part` is a space-separated
+// token list, and a highlighted cell's `part` is "cell highlighted", so
+// `[part="cell"]` would silently stop matching it the moment it lights up.
+const cells = (c: HTMLElement) => Array.from(c.querySelectorAll('[part~="cell"]')) as HTMLElement[];
 const lit = (c: HTMLElement) => cells(c).filter((e) => e.dataset.kaiHighlighted === 'true');
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
@@ -93,7 +96,7 @@ describe('GridVisualizer', () => {
       </GridVisualizer>
     ));
     expect(container.querySelectorAll('[data-custom]')).toHaveLength(6);
-    expect(container.querySelectorAll('[part="cell"]')).toHaveLength(0);
+    expect(container.querySelectorAll('[part~="cell"]')).toHaveLength(0);
   });
 
   it('hands the render-prop the live highlight state and level, per column', () => {

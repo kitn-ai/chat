@@ -95,8 +95,15 @@ export function GridVisualizer(
           };
           return (
             props.children?.(item) ?? (
+              // The lit state is a SECOND part TOKEN (`part(cell highlighted)`),
+              // not a `data-*` attribute selector on `::part(cell)`: a CSS
+              // attribute selector cannot follow a pseudo-element, so
+              // `::part(cell)[data-kai-highlighted="true"]` never matches
+              // anything from outside the shadow root. `data-kai-highlighted`
+              // stays on the element for the render-prop and for styling from
+              // inside the shadow root; `part` is the external seam.
               <div
-                part="cell"
+                part={item.highlighted() ? 'cell highlighted' : 'cell'}
                 data-kai-index={item.index}
                 data-kai-highlighted={item.highlighted()}
                 class={cn(

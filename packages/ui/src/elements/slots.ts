@@ -560,17 +560,30 @@ export const THREAD_SLOTS: SlotDef[] = [
 
 /** Styleable `::part`s of `<kai-audio-visualizer>`. Every DOM variant (`bar`,
  *  `grid`, `radial`) shares the `bar`/`cell` markup pattern; the shader variants
- *  (`wave`, `aurora`) share the `canvas` part. */
+ *  (`wave`, `aurora`) share the `canvas` part. Lit items ALSO carry the
+ *  `highlighted` part token, so `::part(bar highlighted)`/`::part(cell
+ *  highlighted)` selects only the lit ones. `::part(bar)[data-kai-highlighted=
+ *  "true"]` looks plausible but is invalid CSS: a CSS attribute selector
+ *  cannot follow a pseudo-element (`CSS.supports(selector(...))` returns
+ *  `false` for it in Chromium, and `insertRule` throws). `data-kai-index` /
+ *  `data-kai-highlighted` still exist on the element for consumers reading
+ *  them from INSIDE the shadow root or via the Solid render-prop; they are
+ *  just not reachable from an external `::part()` selector. */
 export const AUDIO_VISUALIZER_PARTS: PartDef[] = [
   {
     name: 'bar',
-    doc: 'A single bar in the `bar` variant, or a single spoke in the `radial` variant. Carries `data-kai-index` and `data-kai-highlighted` ("true"/"false"), so lit and idle bars can be styled differently.',
-    recipe: 'kai-audio-visualizer::part(bar) { border-radius: 2px }\nkai-audio-visualizer::part(bar)[data-kai-highlighted="true"] { background: var(--brand) }',
+    doc: 'A single bar in the `bar` variant, or a single spoke in the `radial` variant. Also carries `data-kai-index` and `data-kai-highlighted` ("true"/"false") for use inside the shadow root; to style the lit state from OUTSIDE, combine with the `highlighted` part below rather than an attribute selector.',
+    recipe: 'kai-audio-visualizer::part(bar) { border-radius: 2px }\nkai-audio-visualizer::part(bar highlighted) { background: var(--brand) }',
   },
   {
     name: 'cell',
-    doc: 'A single dot in the `grid` variant. Carries `data-kai-index` and `data-kai-highlighted` ("true"/"false"), so lit and idle cells can be styled differently.',
-    recipe: 'kai-audio-visualizer::part(cell) { border-radius: 9999px }\nkai-audio-visualizer::part(cell)[data-kai-highlighted="true"] { background: var(--brand) }',
+    doc: 'A single dot in the `grid` variant. Also carries `data-kai-index` and `data-kai-highlighted` ("true"/"false") for use inside the shadow root; to style the lit state from OUTSIDE, combine with the `highlighted` part below rather than an attribute selector.',
+    recipe: 'kai-audio-visualizer::part(cell) { border-radius: 9999px }\nkai-audio-visualizer::part(cell highlighted) { background: var(--brand) }',
+  },
+  {
+    name: 'highlighted',
+    doc: 'A second part TOKEN present on a `bar` or `cell` exactly when the sequencer or live audio has it lit, not a standalone styleable element. Combine it in the same `::part()` argument: `::part(bar highlighted)` or `::part(cell highlighted)`. This is the external equivalent of the internal `data-kai-highlighted="true"` attribute, which a `::part()` selector cannot reach (an attribute selector cannot follow a pseudo-element).',
+    recipe: 'kai-audio-visualizer::part(bar highlighted) { background: var(--brand) }\nkai-audio-visualizer::part(cell highlighted) { background: var(--brand) }',
   },
   {
     name: 'canvas',

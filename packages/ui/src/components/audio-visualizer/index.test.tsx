@@ -21,12 +21,12 @@ afterEach(() => vi.unstubAllGlobals());
 describe('AudioVisualizer dispatch', () => {
   it('renders bars by default', () => {
     const { container } = render(() => <AudioVisualizer />);
-    expect(container.querySelectorAll('[part="bar"]').length).toBeGreaterThan(0);
+    expect(container.querySelectorAll('[part~="bar"]').length).toBeGreaterThan(0);
   });
 
   it('renders cells for the grid variant', () => {
     const { container } = render(() => <AudioVisualizer variant="grid" />);
-    expect(container.querySelectorAll('[part="cell"]').length).toBe(25);
+    expect(container.querySelectorAll('[part~="cell"]').length).toBe(25);
   });
 
   it('renders spokes for the radial variant', () => {
@@ -36,7 +36,7 @@ describe('AudioVisualizer dispatch', () => {
 
   it('falls back to bars for an unknown variant', () => {
     const { container } = render(() => <AudioVisualizer variant={'nonsense' as never} />);
-    expect(container.querySelectorAll('[part="bar"]').length).toBeGreaterThan(0);
+    expect(container.querySelectorAll('[part~="bar"]').length).toBeGreaterThan(0);
   });
 
   it('normalizes a LiveKit state alias onto ours', () => {
@@ -49,7 +49,7 @@ describe('AudioVisualizer dispatch', () => {
     const { container } = render(() => (
       <AudioVisualizer variant="bar" state="speaking" barCount={3} bands={[0.2, 0.4, 0.6]} />
     ));
-    const heights = Array.from(container.querySelectorAll('[part="bar"]')).map(
+    const heights = Array.from(container.querySelectorAll('[part~="bar"]')).map(
       (b) => (b as HTMLElement).style.height,
     );
     expect(heights).toEqual(['20%', '40%', '60%']);
@@ -75,7 +75,7 @@ describe('AudioVisualizer dispatch', () => {
     // not a member of the VisualizerVariant type, hence the cast.
     const { container } = render(() => <AudioVisualizer variant={'aura' as never} />);
     // The dynamic import has not resolved on the first synchronous frame.
-    expect(container.querySelectorAll('[part="bar"]').length).toBeGreaterThan(0);
+    expect(container.querySelectorAll('[part~="bar"]').length).toBeGreaterThan(0);
   });
 
   it('freezes the sequence when the user prefers reduced motion', async () => {
@@ -118,7 +118,7 @@ describe('AudioVisualizer shader load failure', () => {
 
     await waitFor(() => expect(warn).toHaveBeenCalledTimes(1));
     expect(warn.mock.calls[0]?.[0]).toContain('variant="wave"');
-    expect(container.querySelectorAll('[part="bar"]').length).toBeGreaterThan(0);
+    expect(container.querySelectorAll('[part~="bar"]').length).toBeGreaterThan(0);
   });
 });
 
@@ -155,14 +155,14 @@ describe('AudioVisualizer shader reports itself unavailable', () => {
     // before checking that bars are STILL what's showing, or this assertion
     // would pass trivially regardless of whether the fix exists.
     await waitFor(() => expect(waveMounted).toBe(true));
-    expect(container.querySelectorAll('[part="bar"]').length).toBeGreaterThan(0);
+    expect(container.querySelectorAll('[part~="bar"]').length).toBeGreaterThan(0);
 
     // Not a flicker: an unrelated prop change must not retry the shader (it
     // would, if the fallback depended on some transient "still loading" state
     // rather than a permanent flag).
     setCls('b');
     await Promise.resolve();
-    expect(container.querySelectorAll('[part="bar"]').length).toBeGreaterThan(0);
+    expect(container.querySelectorAll('[part~="bar"]').length).toBeGreaterThan(0);
   });
 
   it('switching to a different shader variant after a failure attempts the new one rather than staying failed', async () => {
@@ -280,7 +280,20 @@ describe('AudioVisualizer volume from caller-supplied bands', () => {
     expect(captured!.volume).toBe(0.42);
   });
 
-  it('constructs no AudioContext when bands is supplied, even for a shader variant', async () => {
+  it('constructs no AudioContext when bands is supplied, even alongside a real stream and for a shader variant', async () => {
+    // A REAL `stream` prop this time, alongside `bands` -- the previous
+    // version of this test passed neither `stream` nor `audioElement`, so
+    // `source()` (`props.bands ? undefined : props.stream ?? props.audioElement`)
+    // returned `undefined` whether or not the `bands ? undefined : ...`
+    // short-circuit existed at all: with no stream to fall through to
+    // either, deleting the short-circuit would ALSO have left `source()`
+    // returning `undefined`, so the assertion below could not tell the two
+    // apart. A stream present is what makes it discriminating: if the
+    // short-circuit were removed, `source()` would return the stream
+    // (truthy) instead, and `useAudioAnalysis`'s effect would reach
+    // `getContext()` and call `new AudioContext()` -- exactly what this
+    // spy would catch.
+    //
     // A spy constructor, not `undefined` like the Round-1 DOM-variant test:
     // this needs to prove the constructor is never CALLED, not merely that
     // the component tolerates it being absent (getContext() already handles
@@ -297,7 +310,9 @@ describe('AudioVisualizer volume from caller-supplied bands', () => {
       },
     }));
 
-    render(() => <AudioVisualizer variant="wave" bands={[0.1, 0.2, 0.3]} />);
+    render(() => (
+      <AudioVisualizer variant="wave" bands={[0.1, 0.2, 0.3]} stream={{} as MediaStream} />
+    ));
 
     await waitFor(() => expect(mounted).toBe(true));
     expect(AudioContextSpy).not.toHaveBeenCalled();
@@ -420,7 +435,7 @@ describe('AudioVisualizer children render-prop', () => {
       <AudioVisualizer variant="bar">{renderItem}</AudioVisualizer>
     ));
     expect(container.querySelectorAll('[data-custom]').length).toBeGreaterThan(0);
-    expect(container.querySelectorAll('[part="bar"]')).toHaveLength(0);
+    expect(container.querySelectorAll('[part~="bar"]')).toHaveLength(0);
   });
 
   it('forwards children to the grid variant, replacing its default markup', () => {
@@ -428,7 +443,7 @@ describe('AudioVisualizer children render-prop', () => {
       <AudioVisualizer variant="grid">{renderItem}</AudioVisualizer>
     ));
     expect(container.querySelectorAll('[data-custom]')).toHaveLength(25);
-    expect(container.querySelectorAll('[part="cell"]')).toHaveLength(0);
+    expect(container.querySelectorAll('[part~="cell"]')).toHaveLength(0);
   });
 
   it('forwards children to the radial variant, rendered inside each spoke', () => {
@@ -440,13 +455,13 @@ describe('AudioVisualizer children render-prop', () => {
     // itself.
     expect(container.querySelectorAll('[data-kai-spoke]')).toHaveLength(24);
     expect(container.querySelectorAll('[data-custom]')).toHaveLength(24);
-    expect(container.querySelectorAll('[part="bar"]')).toHaveLength(0);
+    expect(container.querySelectorAll('[part~="bar"]')).toHaveLength(0);
   });
 
   it('also works passed as an explicit prop rather than nested JSX', () => {
     const { container } = render(() => <AudioVisualizer variant="bar" children={renderItem} />);
     expect(container.querySelectorAll('[data-custom]').length).toBeGreaterThan(0);
-    expect(container.querySelectorAll('[part="bar"]')).toHaveLength(0);
+    expect(container.querySelectorAll('[part~="bar"]')).toHaveLength(0);
   });
 
   it('does not throw and renders the default markup when no children are given', () => {
@@ -455,7 +470,7 @@ describe('AudioVisualizer children render-prop', () => {
     // `props.children?.(item)`, which only short-circuits on null/undefined
     // -- a falsy-but-defined value would throw "is not a function" here.
     const { container } = render(() => <AudioVisualizer variant="bar" />);
-    expect(container.querySelectorAll('[part="bar"]').length).toBeGreaterThan(0);
+    expect(container.querySelectorAll('[part~="bar"]').length).toBeGreaterThan(0);
     expect(container.querySelectorAll('[data-custom]')).toHaveLength(0);
   });
 

@@ -8,7 +8,10 @@ import { installFakeClock } from '../../test-utils/fake-clock';
 
 afterEach(cleanup);
 
-const bars = (c: HTMLElement) => Array.from(c.querySelectorAll('[part="bar"]')) as HTMLElement[];
+// `~=` (token match), not `=` (exact match): `part` is a space-separated
+// token list, and a highlighted bar's `part` is "bar highlighted", so
+// `[part="bar"]` would silently stop matching it the moment it lights up.
+const bars = (c: HTMLElement) => Array.from(c.querySelectorAll('[part~="bar"]')) as HTMLElement[];
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
 describe('defaultBarCount', () => {
@@ -100,7 +103,7 @@ describe('BarVisualizer', () => {
       </BarVisualizer>
     ));
     expect(container.querySelectorAll('[data-custom]')).toHaveLength(2);
-    expect(container.querySelectorAll('[part="bar"]')).toHaveLength(0);
+    expect(container.querySelectorAll('[part~="bar"]')).toHaveLength(0);
   });
 
   it('hands the render-prop the live highlight state and level', () => {

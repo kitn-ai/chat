@@ -22,8 +22,9 @@ export interface VariantProps {
    * markup is only mapped once per position (see the `<Index>` note below),
    * so you must CALL `highlighted()` and `value()` from inside your own JSX
    * for them to stay live. Destructuring them into a plain variable freezes
-   * them at that moment. `::part(bar)` handles restyling; this is for
-   * replacing the markup outright.
+   * them at that moment. `::part(bar)` / `::part(bar highlighted)` (or
+   * `cell`) handle restyling from outside; this render-prop is for replacing
+   * the markup outright.
    *
    * In bar and grid, your returned element IS the drawn item. Radial is the
    * exception: it always wraps whatever you return in its own positioning
@@ -93,8 +94,15 @@ export function BarVisualizer(props: VariantProps & { barCount?: number }): JSX.
           };
           return (
             props.children?.(item) ?? (
+              // The lit state is a SECOND part TOKEN (`part(bar highlighted)`),
+              // not a `data-*` attribute selector on `::part(bar)`: a CSS
+              // attribute selector cannot follow a pseudo-element, so
+              // `::part(bar)[data-kai-highlighted="true"]` never matches
+              // anything from outside the shadow root. `data-kai-highlighted`
+              // stays on the element for the render-prop and for styling from
+              // inside the shadow root; `part` is the external seam.
               <div
-                part="bar"
+                part={item.highlighted() ? 'bar highlighted' : 'bar'}
                 data-kai-index={item.index}
                 data-kai-highlighted={item.highlighted()}
                 class={cn(

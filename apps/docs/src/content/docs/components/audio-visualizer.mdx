@@ -115,15 +115,19 @@ This opens a second `getUserMedia` stream alongside `kai-voice-input`'s own inte
 
 ## Styling
 
-Restyle the `bar`, `cell`, or `canvas` part from outside. Bar and cell items carry `data-kai-index` and `data-kai-highlighted`. `data-kai-highlighted` is always present, as `"true"` or `"false"`, so match the value, not just the attribute, or the selector also catches every idle item:
+Restyle the `bar`, `cell`, or `canvas` part from outside. A lit bar or cell also carries the `highlighted` part, as a second token in the same `part` attribute, so target it by combining both names in one `::part()`:
 
 ```css
-/* wrong: data-kai-highlighted is always present, so this matches idle bars too */
-kai-audio-visualizer::part(bar)[data-kai-highlighted] { background: var(--brand); }
+/* wrong: a CSS attribute selector cannot follow a pseudo-element, so this
+   never matches anything -- CSS.supports(selector(...)) returns false for it */
+kai-audio-visualizer::part(bar)[data-kai-highlighted="true"] { background: var(--brand); }
 
 /* right */
-kai-audio-visualizer::part(bar)[data-kai-highlighted="true"] { background: var(--brand); }
+kai-audio-visualizer::part(bar highlighted) { background: var(--brand); }
+kai-audio-visualizer::part(cell highlighted) { background: var(--brand); }
 ```
+
+Bar and cell items also carry `data-kai-index` and `data-kai-highlighted` (`"true"`/`"false"`) for reading from inside the shadow root, or from a render-prop when composing the Solid component directly, but a `::part()` selector from outside cannot see them.
 
 <PartTable tag="kai-audio-visualizer" />
 
@@ -134,6 +138,10 @@ Set `variant="custom"` and a `shader` property to render your own fragment shade
 ```html
 <kai-audio-visualizer id="viz" variant="custom"></kai-audio-visualizer>
 <script type="module">
+  import '@kitn.ai/ui/elements';
+
+  await customElements.whenDefined('kai-audio-visualizer');
+
   document.getElementById('viz').shader = {
     fragment: `
       void mainImage(out vec4 fragColor, in vec2 fragCoord) {
@@ -145,6 +153,10 @@ Set `variant="custom"` and a `shader` property to render your own fragment shade
   };
 </script>
 ```
+
+<Aside type="caution" title="Registration and upgrade order">
+Without `import '@kitn.ai/ui/elements'`, `<kai-audio-visualizer>` never registers and `variant="custom"` never renders. Without the `customElements.whenDefined` guard, the `shader` property write can land before the element upgrades and gets clobbered when it does. Skipping either one produces a blank 112px box with no console output, not an error.
+</Aside>
 
 Your fragment must define `mainImage(out vec4 fragColor, in vec2 fragCoord)`. The canvas declares every uniform below for you and injects them ahead of your source. Redeclaring any of them (`uniform float iTime;`, `uniform vec3 uColor;`, and so on) inside `fragment` is a GLSL redefinition and fails to compile.
 
@@ -175,7 +187,7 @@ Your fragment must define `mainImage(out vec4 fragColor, in vec2 fragCoord)`. Th
 ## Notes
 
 - `wave`, `aurora`, and `custom` load behind a dynamic import and fall back to `bar` if the chunk fails or WebGL is not available. A `kai-chat`-only page never pays for the shader runtime.
-- `prefers-reduced-motion` freezes the scripted animation on the `bar`, `grid`, `radial`, and `aurora` variants: no easing, no pulsing, no drift.
+- `prefers-reduced-motion` freezes the scripted animation on all six variants (`bar`, `grid`, `radial`, `wave`, `aurora`, and `custom`): no easing, no pulsing, no drift.
 - `aura` is accepted as an alias for `aurora`, for markup ported from LiveKit.
 
 ## Composed from

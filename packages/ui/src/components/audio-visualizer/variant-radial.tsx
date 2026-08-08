@@ -117,8 +117,15 @@ export function RadialVisualizer(
                 the `children` doc on VariantProps in variant-bar.tsx.
               */}
               {props.children?.(item) ?? (
+                // The lit state is a SECOND part TOKEN (`part(bar highlighted)`),
+                // not a `data-*` attribute selector on `::part(bar)`: a CSS
+                // attribute selector cannot follow a pseudo-element, so
+                // `::part(bar)[data-kai-highlighted="true"]` never matches
+                // anything from outside the shadow root. `data-kai-highlighted`
+                // stays on the element for the render-prop and for styling
+                // from inside the shadow root; `part` is the external seam.
                 <div
-                  part="bar"
+                  part={item.highlighted() ? 'bar highlighted' : 'bar'}
                   data-kai-index={item.index}
                   data-kai-highlighted={item.highlighted()}
                   class={cn(
