@@ -215,12 +215,36 @@ describe('useAudioAnalysis', () => {
     });
   });
 
-  it('emits zeros and touches nothing when AudioContext is unavailable (SSR)', () => {
+  it('emits zeros and touches nothing when AudioContext is unavailable (SSR)', async () => {
     vi.stubGlobal('AudioContext', undefined);
-    createRoot((dispose) => {
+    await createRoot(async (dispose) => {
       const { bands, volume } = useAudioAnalysis(() => fakeStream(), { bands: 5 });
+      // The signals read zero SYNCHRONOUSLY regardless of the guard: see
+      // "produces non-zero bands once a frame actually runs" above --
+      // `bands()`/`volume()` are zero-filled at mount either way, before
+      // any frame has run. Without letting the effect's first run actually
+      // happen (createEffect's first run is deferred to a microtask, even
+      // inside a bare createRoot -- confirmed in create-tween.test.ts),
+      // this assertion alone cannot tell "the SSR guard correctly bailed"
+      // from "the effect just hasn't run yet." (Verified: adding the
+      // assertions below to the OLD, non-awaiting version of this test
+      // still passed trivially -- the `await` is the actual fix, not just
+      // the added assertions.)
+      await Promise.resolve();
       expect(bands()).toEqual([0, 0, 0, 0, 0]);
       expect(volume()).toBe(0);
+      // The actual guard: `getContext()`'s `typeof AudioContext ===
+      // 'undefined'` check must make the effect bail out BEFORE ever
+      // touching Web Audio. `created.streamSources`/`connections` staying
+      // empty is direct proof `ctx.createMediaStreamSource` (and therefore
+      // `new AudioContext()`) was never reached -- not an inference from
+      // signals that would read the same either way. (`new AudioContext()`
+      // with the global stubbed to `undefined`, as here, throws `TypeError:
+      // AudioContext is not a constructor` -- confirmed directly in Node --
+      // so a missing guard would not silently pass this test either; it
+      // would throw during the `await` above instead.)
+      expect(created.streamSources).toHaveLength(0);
+      expect(created.connections).toHaveLength(0);
       dispose();
     });
   });

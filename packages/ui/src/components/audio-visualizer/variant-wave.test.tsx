@@ -290,12 +290,12 @@ describe('WaveVisualizer: state -> uniform mapping', () => {
 // land; this proves HOW they got there, which is the part a regression could
 // silently break (e.g. collapsing the opacity array to a scalar but forgetting
 // to also pass `{ duration: 0 }`, which would still read correct at the
-// instant of mount yet leave a stray animation ticking). `installFakeClock`'s
-// single-pending-callback stub can't distinguish which of the three tweens is
-// pending, but "none at all" vs "at least one" is exactly what these need.
-// The real (unmocked) ShaderCanvas is fine here: jsdom's `getContext('webgl')`
-// returns null before it ever reaches its own `requestAnimationFrame` call,
-// so it contributes zero frame registrations either way.
+// instant of mount yet leave a stray animation ticking). `isFramePending`
+// reports whether ANYTHING is pending, not which of the three tweens it is,
+// but "none at all" vs "at least one" is exactly what these need. The real
+// (unmocked) ShaderCanvas is fine here: jsdom's `getContext('webgl')` returns
+// null before it ever reaches its own `requestAnimationFrame` call, so it
+// contributes zero frame registrations either way.
 describe('WaveVisualizer: frozen never arms a tween animation frame', () => {
   const { isFramePending } = installFakeClock();
 
@@ -334,9 +334,16 @@ describe('WaveVisualizer: does not defeat ShaderCanvas\'s recompile guard', () =
 
   afterEach(() => vi.restoreAllMocks());
 
+  // `uniformHistory` (added, not part of the real WebGL API) records every
+  // `1f` value ever pushed to a given uniform NAME, in push order -- only
+  // what the test below needs to PROVE a value-bearing uniform (`uMix`, the
+  // opacity pulse) genuinely changed across the fake clock's advance loop,
+  // not just infer it from the absence of a second `createProgram` call.
   function stubFakeGL() {
     const calls: string[] = [];
     const locations = new Map<string, object>();
+    const locationNames = new Map<object, string>();
+    const uniformHistory: Record<string, number[]> = {};
     const gl = {
       VERTEX_SHADER: 1, FRAGMENT_SHADER: 2, COMPILE_STATUS: 3, LINK_STATUS: 4,
       ARRAY_BUFFER: 5, STATIC_DRAW: 6, FLOAT: 7, BLEND: 8, ONE: 9,
@@ -364,21 +371,40 @@ describe('WaveVisualizer: does not defeat ShaderCanvas\'s recompile guard', () =
       enable: () => {},
       blendFunc: () => {},
       getUniformLocation: (_program: unknown, name: string) => {
-        if (!locations.has(name)) locations.set(name, {});
+        if (!locations.has(name)) {
+          const loc = {};
+          locations.set(name, loc);
+          locationNames.set(loc, name);
+        }
         return locations.get(name)!;
       },
-      uniform1f: () => {}, uniform1i: () => {}, uniform1fv: () => {}, uniform2fv: () => {},
+      uniform1f: (loc: object, value: number) => {
+        const name = locationNames.get(loc);
+        if (name) (uniformHistory[name] ??= []).push(value);
+      },
+      uniform1i: () => {}, uniform1fv: () => {}, uniform2fv: () => {},
       uniform3fv: () => {}, uniform4fv: () => {},
       uniformMatrix2fv: () => {}, uniformMatrix3fv: () => {}, uniformMatrix4fv: () => {},
       clearColor: () => {}, clear: () => {}, drawArrays: () => {}, viewport: () => {},
     };
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(((type: string) =>
       type === 'webgl' || type === 'experimental-webgl' ? gl : null) as never);
-    return calls;
+    return { calls, uniformHistory };
   }
 
+  // `installFakeClock`'s stub used to hold a single pending callback, not a
+  // queue: ShaderCanvas's own `draw` loop always re-registers itself last
+  // (see its own `raf = requestAnimationFrame(draw)` at the end of every
+  // call), so it permanently "won" the single slot and the amplitude/
+  // frequency/opacity tweens -- separate requestAnimationFrame consumers --
+  // never got to fire. That made `createProgram` staying at 1 trivially true
+  // regardless of whether the recompile guard worked at all: nothing was
+  // ever actually ticking. `uMix` (the opacity pulse, which ping-pongs
+  // forever at `listening`) is captured below specifically to prove the
+  // precondition this test claims to exercise -- a uniform VALUE genuinely
+  // changing every frame -- not just infer it from the advance loop running.
   it('compiles exactly once while the amplitude/frequency/opacity tweens progress through several frames', async () => {
-    const calls = stubFakeGL();
+    const { calls, uniformHistory } = stubFakeGL();
     const { default: WaveVisualizer } = await import('./variant-wave');
 
     render(() => (
@@ -391,6 +417,16 @@ describe('WaveVisualizer: does not defeat ShaderCanvas\'s recompile guard', () =
     // reflection of the tween ever finishing.
     for (let i = 0; i < 10 && isFramePending(); i++) advance(50);
 
+    // The precondition: uMix's pushed value genuinely varied across the
+    // loop, proof the opacity tween's OWN requestAnimationFrame loop
+    // actually ran concurrently with ShaderCanvas's draw loop, not just
+    // that ten advance() calls happened.
+    const mixHistory = uniformHistory.uMix ?? [];
+    expect(mixHistory.length).toBeGreaterThan(1);
+    expect(new Set(mixHistory).size).toBeGreaterThan(1);
+
+    // The actual claim: even with that genuine per-frame churn, the GL
+    // program was never recompiled a second time.
     expect(calls.filter((c) => c === 'createProgram')).toHaveLength(1);
   });
 });

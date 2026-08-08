@@ -284,7 +284,7 @@ describe('ShaderCanvas: recompiles on shader structure, not per-frame uniform va
 });
 
 describe('ShaderCanvas: cleanup', () => {
-  installFakeClock();
+  const { isFramePending } = installFakeClock();
 
   it('cancels the pending animation frame and deletes the program, shaders, and buffer on unmount', () => {
     const { gl, calls } = createFakeGL();
@@ -292,6 +292,13 @@ describe('ShaderCanvas: cleanup', () => {
 
     const { unmount } = render(() => <ShaderCanvas fragment={MAIN} />);
     expect(calls).toContain('createProgram');
+    // The control: draw() is registered (via its own requestAnimationFrame
+    // call at the end of the compile effect) before anything is torn down,
+    // so there IS something for cancelAnimationFrame to cancel -- without
+    // this, isFramePending() reading false after unmount below would not
+    // distinguish "cancelled" from "there was never anything pending in the
+    // first place."
+    expect(isFramePending()).toBe(true);
     calls.length = 0;
 
     unmount();
@@ -299,6 +306,11 @@ describe('ShaderCanvas: cleanup', () => {
     expect(calls).toContain('deleteProgram');
     expect(calls.filter((c) => c === 'deleteShader')).toHaveLength(2);
     expect(calls).toContain('deleteBuffer');
+    // The claim the title makes: unmount actually cancels draw's pending
+    // frame, not just deletes the GL objects it would have kept driving.
+    // Without this, an unmounted canvas would still fire `draw` against a
+    // deleted program on the next animation frame.
+    expect(isFramePending()).toBe(false);
   });
 });
 

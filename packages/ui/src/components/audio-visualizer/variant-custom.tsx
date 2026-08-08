@@ -207,7 +207,12 @@ export default function CustomVisualizer(props: ShaderVariantProps): JSX.Element
     const t = shaderTargets(props.state);
     const transition = props.frozen ? { duration: 0 } : { duration: 0.5, ease: 'easeOut' as const };
     intensity.to(Array.isArray(t.intensity) && props.frozen ? t.intensity[0] : t.intensity, transition);
-    speed.to(t.speed, { duration: 0 });
+    // `iTime` is never frozen by ShaderCanvas itself -- it is the raw clock,
+    // always advancing. A custom shader written the conventional way
+    // (`iTime * uSpeed`) is the ONLY thing that can honour reduced motion,
+    // and only if `uSpeed` is actually pinned at 0 here. Matches
+    // variant-aurora.tsx's `speed.to(props.frozen ? 0 : t.speed, ...)`.
+    speed.to(props.frozen ? 0 : t.speed, { duration: 0 });
   });
 
   // Live volume takes over intensity while speaking, with no easing so the

@@ -326,24 +326,57 @@ describe('CustomVisualizer: an invalid consumer uniform never throws, and routes
     expect(String(error.mock.calls[0]?.[1] ?? error.mock.calls[0]?.[0])).toContain('uBroken');
   });
 
-  it('reports the failure only once even though ShaderCanvas would otherwise read uniforms every frame', async () => {
+  // On a validation failure the outer `<Show>` gate never mounts
+  // `ShaderCanvas` at all -- there is nothing left to "re-read uniforms
+  // every frame" the way a mounted shader canvas would. The REAL thing the
+  // `reported` latch guards is `result` (the memo wrapping `customUniforms`)
+  // recomputing on ANY of ITS OWN dependencies changing -- `props.bands` and
+  // `props.volume` chief among them, both of which change routinely while
+  // `state === 'speaking'` -- while `props.shader` itself stays the SAME
+  // broken spec. Each such recompute re-throws the identical error, and the
+  // effect watching `result()` re-runs every time (a memo's output is a
+  // fresh object literal each call, so `Object.is` always reports it
+  // "changed" downstream, even when the message text is byte-identical) --
+  // `reported` is what keeps that from calling `console.error` and
+  // `onUnavailable` again on every single one of those.
+  it('reports the failure only once even though `result` recomputes on every bands/volume change while the same bad shader stays in effect', async () => {
     vi.doMock('./shader-canvas', async (importOriginal) => {
       const actual = await importOriginal<typeof import('./shader-canvas')>();
       return { ...actual, ShaderCanvas: () => null };
     });
     const { default: CustomVisualizer } = await import('./variant-custom');
     const onUnavailable = vi.fn();
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
 
+    const [volume, setVolume] = createSignal(0);
+    const [bands, setBands] = createSignal([0.1, 0.2, 0.3]);
     render(() => (
       <CustomVisualizer
         {...baseProps}
+        state="speaking"
+        volume={volume()}
+        bands={bands()}
         shader={{ fragment: FRAGMENT, uniforms: { uBroken: { type: '3fv', value: 5 as unknown as number[] } } }}
         onUnavailable={onUnavailable}
       />
     ));
 
     expect(onUnavailable).toHaveBeenCalledTimes(1);
+    expect(error).toHaveBeenCalledTimes(1);
+
+    // Several per-frame-shaped changes to bands/volume -- the same bad
+    // uBroken is still declared, so `result` recomputes and re-throws the
+    // SAME error each time. Without the `reported` latch, each of these
+    // would spam a fresh console.error + onUnavailable call.
+    setVolume(0.2);
+    await Promise.resolve();
+    setBands([0.4, 0.5, 0.6]);
+    await Promise.resolve();
+    setVolume(0.9);
+    await Promise.resolve();
+
+    expect(onUnavailable).toHaveBeenCalledTimes(1);
+    expect(error).toHaveBeenCalledTimes(1);
   });
 
   // CustomVisualizer is a public default export usable standalone (a shader
@@ -491,6 +524,22 @@ describe('CustomVisualizer: state/volume -> uniform mapping', () => {
     expect(c.uniforms.uIntensity?.value).toBeCloseTo(0.5, 6);
   });
 
+  // `iTime` is never frozen by ShaderCanvas -- it is the raw, always-running
+  // clock. A custom shader written the conventional way (`iTime * uSpeed`)
+  // can only honour `prefers-reduced-motion` if `uSpeed` itself goes to 0;
+  // otherwise it animates at full rate regardless of what the user asked
+  // their OS for. wave (`variant-wave.tsx`) and aurora (`variant-aurora.tsx`)
+  // both zero their speed uniform when frozen; this is custom's match.
+  it('pins uSpeed at 0 when frozen, regardless of state, and leaves it non-zero un-frozen (the control case)', async () => {
+    const frozen = await renderCustom({ state: 'listening', frozen: true });
+    expect(frozen.uniforms.uSpeed?.value).toBe(0);
+    cleanup();
+
+    const unfrozen = await renderCustom({ state: 'listening', frozen: false });
+    expect(unfrozen.uniforms.uSpeed?.value).not.toBe(0);
+    expect(unfrozen.uniforms.uSpeed?.value).toBeGreaterThan(0);
+  });
+
   it('keeps the uniform SHAPE (names, types, sizes) identical across different states, so ShaderCanvas never recompiles on a value-only change', async () => {
     const shapeOf = (c: CapturedProps) =>
       Object.entries(c.uniforms)
@@ -525,6 +574,18 @@ describe('CustomVisualizer: does not defeat ShaderCanvas\'s recompile guard', ()
 
   afterEach(() => vi.restoreAllMocks());
 
+  // `installFakeClock`'s stub used to hold a single pending callback, not a
+  // queue: ShaderCanvas's own `draw` loop always re-registers itself last
+  // (see its own `raf = requestAnimationFrame(draw)` at the end of every
+  // call), so it permanently "won" the single slot and `intensity`'s tween
+  // step -- a SEPARATE requestAnimationFrame consumer -- never got to fire.
+  // That made `createProgram` staying at 1 trivially true regardless of
+  // whether the recompile guard worked at all: nothing was ever actually
+  // ticking. `uIntensity` is captured below specifically to prove the
+  // precondition this test claims to exercise -- a uniform VALUE genuinely
+  // changing every frame -- not just infer it from the advance loop running.
+  // `state="listening"` un-frozen pulses intensity as a ping-pong target
+  // (see shaderTargets), so it never settles across the whole loop.
   it('compiles exactly once while intensity/speed/volume tick through several frames with a consumer uniform present', async () => {
     const gl = fakeGL();
     const calls: string[] = [];
@@ -547,6 +608,16 @@ describe('CustomVisualizer: does not defeat ShaderCanvas\'s recompile guard', ()
 
     for (let i = 0; i < 10 && isFramePending(); i++) advance(50);
 
+    // The precondition: uIntensity's pushed value genuinely varied across the
+    // loop, proof the tween's OWN requestAnimationFrame loop actually ran
+    // concurrently with ShaderCanvas's draw loop, not just that ten
+    // advance() calls happened.
+    const intensityHistory = gl.uniformHistory.uIntensity ?? [];
+    expect(intensityHistory.length).toBeGreaterThan(1);
+    expect(new Set(intensityHistory).size).toBeGreaterThan(1);
+
+    // The actual claim: even with that genuine per-frame churn, the GL
+    // program was never recompiled a second time.
     expect(calls).toHaveLength(1);
   });
 });
@@ -556,9 +627,17 @@ describe('CustomVisualizer: does not defeat ShaderCanvas\'s recompile guard', ()
  * shader-canvas.test.tsx. Every call is a recording no-op that reports
  * success (or the requested failure). None of this proves a shader actually
  * draws anything correct on screen -- that remains a browser-only concern.
+ *
+ * `uniformHistory` (an added property, not part of the real WebGL API) is
+ * every `1f` value ever pushed to a given uniform NAME, in push order --
+ * only what the recompile-guard test below needs to PROVE a value-bearing
+ * uniform (`uSpeed`) genuinely changed across the fake clock's advance loop,
+ * not just infer it from the absence of a second `createProgram` call.
  */
 function fakeGL(failures: { failFragmentCompile?: boolean } = {}) {
   const locations = new Map<string, object>();
+  const locationNames = new Map<object, string>();
+  const uniformHistory: Record<string, number[]> = {};
   const gl = {
     VERTEX_SHADER: 1, FRAGMENT_SHADER: 2, COMPILE_STATUS: 3, LINK_STATUS: 4,
     ARRAY_BUFFER: 5, STATIC_DRAW: 6, FLOAT: 7, BLEND: 8, ONE: 9,
@@ -587,13 +666,22 @@ function fakeGL(failures: { failFragmentCompile?: boolean } = {}) {
     enable: () => {},
     blendFunc: () => {},
     getUniformLocation: (_program: unknown, name: string) => {
-      if (!locations.has(name)) locations.set(name, {});
+      if (!locations.has(name)) {
+        const loc = {};
+        locations.set(name, loc);
+        locationNames.set(loc, name);
+      }
       return locations.get(name)!;
     },
-    uniform1f: () => {}, uniform1i: () => {}, uniform1fv: () => {}, uniform2fv: () => {},
+    uniform1f: (loc: object, value: number) => {
+      const name = locationNames.get(loc);
+      if (name) (uniformHistory[name] ??= []).push(value);
+    },
+    uniform1i: () => {}, uniform1fv: () => {}, uniform2fv: () => {},
     uniform3fv: () => {}, uniform4fv: () => {},
     uniformMatrix2fv: () => {}, uniformMatrix3fv: () => {}, uniformMatrix4fv: () => {},
     clearColor: () => {}, clear: () => {}, drawArrays: () => {}, viewport: () => {},
+    uniformHistory,
   };
-  return gl as unknown as WebGLRenderingContext & { createProgram: () => object };
+  return gl as unknown as WebGLRenderingContext & { createProgram: () => object; uniformHistory: typeof uniformHistory };
 }

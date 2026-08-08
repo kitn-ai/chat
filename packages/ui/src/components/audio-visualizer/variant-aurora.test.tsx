@@ -38,9 +38,17 @@ const baseProps: ShaderVariantProps = {
  * A minimal stand-in for WebGLRenderingContext, matching the one duplicated
  * in shader-canvas.test.tsx and variant-custom.test.tsx. Every call is a
  * recording no-op that reports success (or the requested failure).
+ *
+ * `uniformHistory` (an added property, not part of the real WebGL API) is
+ * every `1f` value ever pushed to a given uniform NAME, in push order --
+ * only what the recompile-guard test below needs to PROVE a value-bearing
+ * uniform (`uIntensity`) genuinely changed across the fake clock's advance
+ * loop, not just infer it from the absence of a second `createProgram` call.
  */
 function fakeGL(failures: { failFragmentCompile?: boolean } = {}) {
   const locations = new Map<string, object>();
+  const locationNames = new Map<object, string>();
+  const uniformHistory: Record<string, number[]> = {};
   const gl = {
     VERTEX_SHADER: 1, FRAGMENT_SHADER: 2, COMPILE_STATUS: 3, LINK_STATUS: 4,
     ARRAY_BUFFER: 5, STATIC_DRAW: 6, FLOAT: 7, BLEND: 8, ONE: 9,
@@ -69,15 +77,24 @@ function fakeGL(failures: { failFragmentCompile?: boolean } = {}) {
     enable: () => {},
     blendFunc: () => {},
     getUniformLocation: (_program: unknown, name: string) => {
-      if (!locations.has(name)) locations.set(name, {});
+      if (!locations.has(name)) {
+        const loc = {};
+        locations.set(name, loc);
+        locationNames.set(loc, name);
+      }
       return locations.get(name)!;
     },
-    uniform1f: () => {}, uniform1i: () => {}, uniform1fv: () => {}, uniform2fv: () => {},
+    uniform1f: (loc: object, value: number) => {
+      const name = locationNames.get(loc);
+      if (name) (uniformHistory[name] ??= []).push(value);
+    },
+    uniform1i: () => {}, uniform1fv: () => {}, uniform2fv: () => {},
     uniform3fv: () => {}, uniform4fv: () => {},
     uniformMatrix2fv: () => {}, uniformMatrix3fv: () => {}, uniformMatrix4fv: () => {},
     clearColor: () => {}, clear: () => {}, drawArrays: () => {}, viewport: () => {},
+    uniformHistory,
   };
-  return gl as unknown as WebGLRenderingContext & { createProgram: () => object };
+  return gl as unknown as WebGLRenderingContext & { createProgram: () => object; uniformHistory: typeof uniformHistory };
 }
 
 describe('AuroraVisualizer: onError reaches onUnavailable, with differentiated log severity', () => {
@@ -349,6 +366,18 @@ describe('AuroraVisualizer: frozen never arms a tween animation frame', () => {
 // change across several animation frames genuinely does not trigger a second
 // `createProgram` call -- the exact defect class Task 11 fixed inside
 // ShaderCanvas itself, guarded here from this component's side.
+//
+// `installFakeClock`'s stub used to hold a single pending callback, not a
+// queue: ShaderCanvas's own `draw` loop always re-registers itself last (see
+// its own `raf = requestAnimationFrame(draw)` at the end of every call), so
+// it permanently "won" the single slot and the intensity/complexity/
+// amplitude/scale tweens -- separate requestAnimationFrame consumers --
+// never got to fire. That made `createProgram` staying at 1 trivially true
+// regardless of whether the recompile guard worked at all: nothing was ever
+// actually ticking. `uIntensity` (the pulse, which ping-pongs forever at
+// `listening`) is captured below specifically to prove the precondition
+// this test claims to exercise -- a uniform VALUE genuinely changing every
+// frame -- not just infer it from the advance loop running.
 describe('AuroraVisualizer: does not defeat ShaderCanvas\'s recompile guard', () => {
   const { advance, isFramePending } = installFakeClock();
 
@@ -369,6 +398,14 @@ describe('AuroraVisualizer: does not defeat ShaderCanvas\'s recompile guard', ()
     // listening's intensity pulse ping-pongs forever, so this keeps a frame
     // pending indefinitely -- the loop bound is just a safety net.
     for (let i = 0; i < 10 && isFramePending(); i++) advance(50);
+
+    // The precondition: uIntensity's pushed value genuinely varied across
+    // the loop, proof the pulse tween's OWN requestAnimationFrame loop
+    // actually ran concurrently with ShaderCanvas's draw loop, not just
+    // that ten advance() calls happened.
+    const intensityHistory = gl.uniformHistory.uIntensity ?? [];
+    expect(intensityHistory.length).toBeGreaterThan(1);
+    expect(new Set(intensityHistory).size).toBeGreaterThan(1);
 
     expect(calls).toHaveLength(1);
   });
