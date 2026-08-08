@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
+import { createSignal } from 'solid-js';
 import { render, cleanup } from '@solidjs/testing-library';
 import { installFakeClock } from '../../test-utils/fake-clock';
 import { buildFragmentSource, type UniformSpec } from './shader-canvas';
-import type { ShaderVariantProps } from './index';
+import type { ShaderVariantProps, ShaderSpec } from './index';
 
 // jsdom has no WebGL at all, so a custom shader never compiles or draws in
 // these tests -- see shader-canvas.test.tsx. What IS testable without a GPU:
@@ -174,6 +175,68 @@ describe('customUniforms', () => {
         ),
       ).not.toThrow();
     });
+
+    describe('fixed-arity types: 2f, 3f, 4f, Matrix2fv, Matrix3fv, Matrix4fv', () => {
+      // Tuple order [type, arity, correctValue] on purpose: it.each's
+      // printf-style title consumes format specifiers positionally against
+      // the row, so keeping `arity` second lets both titles below reference
+      // it with a plain `%i` without also having to spell out `value`.
+      const cases: Array<[UniformSpec['type'], number, number[]]> = [
+        ['2f', 2, [1, 2]],
+        ['3f', 3, [1, 2, 3]],
+        ['4f', 4, [1, 2, 3, 4]],
+        ['Matrix2fv', 4, [1, 0, 0, 1]],
+        ['Matrix3fv', 9, new Array(9).fill(0)],
+        ['Matrix4fv', 16, new Array(16).fill(0)],
+      ];
+
+      it.each(cases)('accepts %s at its correct arity (%i)', async (type, _arity, value) => {
+        const { customUniforms } = await import('./variant-custom');
+        expect(() =>
+          customUniforms(
+            { color: '#000', intensity: 1, speed: 1, complexity: 0.5, volume: 0, bands: [0] },
+            { uBroken: { type, value } },
+          ),
+        ).not.toThrow();
+      });
+
+      it.each(cases)('rejects %s given the wrong length (correct arity is %i)', async (type, arity) => {
+        const { customUniforms } = await import('./variant-custom');
+        const wrongLength = new Array(arity + 1).fill(0);
+        expect(() =>
+          customUniforms(
+            { color: '#000', intensity: 1, speed: 1, complexity: 0.5, volume: 0, bands: [0] },
+            { uBroken: { type, value: wrongLength } },
+          ),
+        ).toThrow(/uBroken/);
+      });
+    });
+
+    describe('ambiguous repeated-array types (1fv, 3fv, 4fv) are deliberately NOT arity-checked', () => {
+      // These support a legitimate multi-instance array via shader-canvas's
+      // own inference (see FIXED_ARITY's doc) -- a "wrong" length for a
+      // single instance is a VALID array of N instances, so nothing here
+      // should ever throw purely on length.
+      it('accepts a 3fv given a length that is not a multiple of 3 (or of anything) without throwing', async () => {
+        const { customUniforms } = await import('./variant-custom');
+        expect(() =>
+          customUniforms(
+            { color: '#000', intensity: 1, speed: 1, complexity: 0.5, volume: 0, bands: [0] },
+            { uOdd: { type: '3fv', value: [1, 2, 3, 4, 5] } },
+          ),
+        ).not.toThrow();
+      });
+
+      it('accepts a 1fv of any length, including a single element', async () => {
+        const { customUniforms } = await import('./variant-custom');
+        expect(() =>
+          customUniforms(
+            { color: '#000', intensity: 1, speed: 1, complexity: 0.5, volume: 0, bands: [0] },
+            { uOdd: { type: '1fv', value: [1, 2, 3, 4, 5, 6, 7] } },
+          ),
+        ).not.toThrow();
+      });
+    });
   });
 });
 
@@ -281,6 +344,47 @@ describe('CustomVisualizer: an invalid consumer uniform never throws, and routes
     ));
 
     expect(onUnavailable).toHaveBeenCalledTimes(1);
+  });
+
+  // CustomVisualizer is a public default export usable standalone (a shader
+  // editor, a Storybook control surface), where `props.shader` can change
+  // after mount unlike the shipped dispatcher path (which tears the
+  // component down on the first onUnavailable and never gives it a second
+  // shader to react to). This is the scenario the dispatcher's own
+  // permanent-`unavailable` flag masks.
+  it('reports a SECOND, DIFFERENT bad uniform after an intervening valid render -- the `reported` guard must reset, not latch permanently', async () => {
+    vi.doMock('./shader-canvas', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('./shader-canvas')>();
+      return { ...actual, ShaderCanvas: () => null };
+    });
+    const { default: CustomVisualizer } = await import('./variant-custom');
+    const onUnavailable = vi.fn();
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const [shader, setShader] = createSignal<ShaderSpec>({
+      fragment: FRAGMENT,
+      uniforms: { uBroken: { type: '1f', value: [1, 2, 3] as unknown as number } },
+    });
+
+    render(() => <CustomVisualizer {...baseProps} shader={shader()} onUnavailable={onUnavailable} />);
+
+    expect(onUnavailable).toHaveBeenCalledTimes(1);
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(String(error.mock.calls[0]?.[0])).toContain('uBroken');
+
+    // Fixed -- a valid render in between. No new failure to report.
+    setShader({ fragment: FRAGMENT });
+    await Promise.resolve();
+    expect(onUnavailable).toHaveBeenCalledTimes(1);
+
+    // A DIFFERENT bad uniform. Without the reset, `reported` would still be
+    // `true` from the first failure and this would go silent.
+    setShader({ fragment: FRAGMENT, uniforms: { uOther: { type: '3fv', value: 5 as unknown as number[] } } });
+    await Promise.resolve();
+
+    expect(onUnavailable).toHaveBeenCalledTimes(2);
+    expect(error).toHaveBeenCalledTimes(2);
+    expect(String(error.mock.calls[1]?.[0])).toContain('uOther');
   });
 });
 

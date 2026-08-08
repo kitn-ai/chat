@@ -30,7 +30,15 @@ export function normalizeVariant(input: string | undefined): VisualizerVariant {
 
 /** A consumer-supplied fragment shader, for `variant="custom"`. */
 export interface ShaderSpec {
-  /** GLSL source defining `mainImage(out vec4 fragColor, in vec2 fragCoord)`. */
+  /**
+   * GLSL source defining `mainImage(out vec4 fragColor, in vec2 fragCoord)`.
+   *
+   * MUST output premultiplied colour: `fragColor = vec4(rgb * alpha, alpha);`,
+   * never `vec4(rgb, alpha)`. The canvas composites using the browser's
+   * default `premultipliedAlpha: true`; a translucent edge written the
+   * natural (straight-alpha) way gets a dark fringe where it meets a light
+   * page background.
+   */
   fragment: string;
   /**
    * Custom uniforms. The canvas DECLARES these for you; declaring them in the
@@ -70,6 +78,12 @@ export interface AudioVisualizerProps {
   audioElement?: HTMLMediaElement;
   /** Pre-computed levels. Set this and no AudioContext is ever constructed. */
   bands?: number[];
+  /**
+   * Custom fragment shader for `variant="custom"`. See `ShaderSpec` for the
+   * full contract -- most importantly, `fragment` MUST output premultiplied
+   * colour (`vec4(rgb * alpha, alpha)`, not `vec4(rgb, alpha)`), or
+   * translucent edges get dark fringes on light backgrounds.
+   */
   shader?: ShaderSpec;
   class?: string;
   /**

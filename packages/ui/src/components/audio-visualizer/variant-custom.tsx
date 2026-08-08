@@ -14,33 +14,73 @@ import type { ShaderVariantProps } from './index';
  * past that check (`el.shader = {...}`), or any attribute-driven wrapper
  * that never touches TypeScript at all -- so an unrecognized `type` string
  * is checked again here, at runtime, against genuinely untrusted input.
+ *
+ * A `Record<UniformType, true>` literal, not a `Set`: if `UniformType` ever
+ * grows a member, this object literal fails to typecheck until a matching
+ * key is added here too, so the two cannot silently drift apart. Same
+ * compiler-enforced-completeness technique as `effectiveArraySize` in
+ * shader-canvas.tsx. Membership is checked with a strict `=== true` value
+ * comparison (`uniformProblem` below), not `in` or `.hasOwnProperty`: a
+ * bracket lookup with an untrusted key can resolve to an INHERITED
+ * `Object.prototype` member (e.g. `spec.type === 'toString'`), and `in`
+ * would treat that as present. Comparing the looked-up VALUE to `true`
+ * rejects that case too, since `Object.prototype.toString` is a function,
+ * never `true`.
  */
-const KNOWN_UNIFORM_TYPES = new Set<UniformType>([
-  '1f', '1i', '1fv', '2f', '3f', '3fv', '4f', '4fv',
-  'Matrix2fv', 'Matrix3fv', 'Matrix4fv',
-]);
+const KNOWN_UNIFORM_TYPES: Record<UniformType, true> = {
+  '1f': true, '1i': true, '1fv': true, '2f': true, '3f': true, '3fv': true,
+  '4f': true, '4fv': true, Matrix2fv: true, Matrix3fv: true, Matrix4fv: true,
+};
 
 /** `1f` and `1i` take a plain number. Every other type takes an array. */
 const SCALAR_UNIFORM_TYPES = new Set<UniformType>(['1f', '1i']);
+
+/**
+ * Exact element count for the uniform types whose arity is a fixed constant
+ * of the type name -- `2f` a vec2 (2), `3f` a vec3 (3), `4f` a vec4 (4), and
+ * `Matrix2fv`/`Matrix3fv`/`Matrix4fv` a 2x2/3x3/4x4 matrix (4/9/16) -- and
+ * needs no import from shader-canvas.tsx's private unit-size table to know.
+ *
+ * Deliberately excludes `1fv`/`3fv`/`4fv`: shader-canvas.tsx's own
+ * `inferArraySize` treats THOSE three as a legitimate multi-instance array
+ * whenever `value.length` is a multiple of their unit greater than one, with
+ * no explicit `arraySize` required to opt in -- `uBands` below is exactly
+ * that pattern (`1fv`, an unbounded length). A fixed-length check on them
+ * would reject a consumer's genuinely valid array uniform, not just a
+ * mistake. A matrix ARRAY is technically eligible for the same inference in
+ * shader-canvas.tsx, but has no legitimate use in this component's
+ * single-pass ShaderToy-style shader model, and `ShaderSpec.uniforms`
+ * exposes no `arraySize` a consumer could use to request one deliberately --
+ * so treating a matrix uniform as always-one-instance here is a reasonable,
+ * simpler default. A consumer who genuinely needs an array of matrices is
+ * not served by this check; see the task report for that tradeoff.
+ */
+const FIXED_ARITY: Partial<Record<UniformType, number>> = {
+  '2f': 2, '3f': 3, '4f': 4,
+  Matrix2fv: 4, Matrix3fv: 9, Matrix4fv: 16,
+};
 
 /**
  * Checks one consumer-declared uniform's `value` against its `type`,
  * returning a problem description, or `undefined` if it is safe to hand to
  * WebGL.
  *
- * Deliberately coarse -- scalar-vs-array, not exact vector/matrix length. A
- * `1f` handed an array, or a `3fv` handed a bare number, is what makes
- * WebGL's `uniform*` setters throw a `TypeError`: the WebIDL binding fails
- * to convert the argument at all. An array of the WRONG length for its type
- * (a `3fv` given 4 numbers) is a GL-level `INVALID_OPERATION` recorded on
- * the context, not a JS exception -- it degrades the picture rather than
- * crashing the render loop, so checking it is out of scope here.
+ * The scalar-vs-array check is what matters most for safety: a `1f` handed
+ * an array, or a `3fv` handed a bare number, is what makes WebGL's
+ * `uniform*` setters throw a `TypeError` -- the WebIDL binding fails to
+ * convert the argument at all. The fixed-arity check below it is a
+ * correctness improvement on top of that, not a safety one: an array of the
+ * wrong length for a type WebGL treats as fixed-size is a GL-level
+ * `INVALID_OPERATION` recorded on the context, not a JS exception -- it
+ * degrades the picture rather than crashing the render loop -- but it is
+ * cheap to catch here with a clear message instead of a silent blank patch
+ * on screen.
  */
 function uniformProblem(name: string, spec: UniformSpec): string | undefined {
   if (spec == null || typeof spec !== 'object') {
     return `uniform "${name}" is not a valid declaration (expected an object with "type" and "value").`;
   }
-  if (!KNOWN_UNIFORM_TYPES.has(spec.type)) {
+  if (KNOWN_UNIFORM_TYPES[spec.type] !== true) {
     return `uniform "${name}" has an unrecognized type "${String(spec.type)}".`;
   }
   if (SCALAR_UNIFORM_TYPES.has(spec.type)) {
@@ -54,6 +94,10 @@ function uniformProblem(name: string, spec: UniformSpec): string | undefined {
     spec.value.some((v) => typeof v !== 'number' || !Number.isFinite(v))
   ) {
     return `uniform "${name}" is declared "${spec.type}" (an array) but its value is not an array of finite numbers.`;
+  }
+  const arity = FIXED_ARITY[spec.type];
+  if (arity !== undefined && spec.value.length !== arity) {
+    return `uniform "${name}" is declared "${spec.type}", which takes exactly ${arity} numbers, but its value has ${spec.value.length}.`;
   }
   return undefined;
 }
@@ -205,14 +249,25 @@ export default function CustomVisualizer(props: ShaderVariantProps): JSX.Element
     }
   });
 
-  // Guards against reporting more than once: ShaderCanvas reads `uniforms`
-  // fresh every animation frame (see its own reactivity note), so `result`
-  // above can keep re-evaluating to the same error more than once before
-  // the `Show` below actually unmounts it.
+  // Guards against reporting the SAME failure more than once: ShaderCanvas
+  // reads `uniforms` fresh every animation frame (see its own reactivity
+  // note), so `result` above can keep re-evaluating to the same error more
+  // than once before the `Show` below actually unmounts it. Reset on a
+  // successful `result` (not left permanently `true` once tripped): the
+  // dispatcher's own `unavailable` flag is permanent for a mount, but this
+  // component is a public default export usable standalone (e.g. a shader
+  // editor or a Storybook control surface) where `props.shader` can change
+  // after mount -- a consumer who fixes one bad uniform and then introduces
+  // a DIFFERENT one in the same mount must still see and hear about the
+  // second mistake, not silence because the first one already fired.
   let reported = false;
   createEffect(() => {
     const { error } = result();
-    if (!error || reported) return;
+    if (!error) {
+      reported = false;
+      return;
+    }
+    if (reported) return;
     reported = true;
     console.error(`<kai-audio-visualizer variant="custom">: ${error}`);
     props.onUnavailable();
