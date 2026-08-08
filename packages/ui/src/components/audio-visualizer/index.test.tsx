@@ -122,6 +122,84 @@ describe('AudioVisualizer shader load failure', () => {
   });
 });
 
+// A shader chunk can load fine and still be unable to render -- most notably
+// no WebGL, which only a MOUNTED component can discover (it is the one
+// calling `canvas.getContext('webgl')`). `Shader()` alone can't distinguish
+// that from a working component, so a mounted shader reports it via calling
+// `onUnavailable`, and the dispatcher must fall back to bars permanently, the
+// same as a failed import -- not just on the first render after the call, but
+// across later reactive updates too, and reset on switching variants.
+describe('AudioVisualizer shader reports itself unavailable', () => {
+  afterEach(() => {
+    vi.doUnmock('./variant-wave');
+    vi.doUnmock('./variant-aurora');
+  });
+
+  it('falls back to bars permanently once a mounted shader calls onUnavailable, even across an unrelated rerender', async () => {
+    let waveMounted = false;
+    vi.doMock('./variant-wave', () => ({
+      default: (props: { onUnavailable: () => void }) => {
+        waveMounted = true;
+        props.onUnavailable();
+        return null;
+      },
+    }));
+
+    const [cls, setCls] = createSignal('a');
+    const { container } = render(() => <AudioVisualizer variant="wave" class={cls()} />);
+
+    // Bars already show on the very first synchronous frame, before the chunk
+    // has even resolved -- that is the ORDINARY "still loading" fallback, not
+    // proof `onUnavailable` did anything. Wait for the mocked shader to
+    // actually mount (and therefore have already called `onUnavailable`)
+    // before checking that bars are STILL what's showing, or this assertion
+    // would pass trivially regardless of whether the fix exists.
+    await waitFor(() => expect(waveMounted).toBe(true));
+    expect(container.querySelectorAll('[part="bar"]').length).toBeGreaterThan(0);
+
+    // Not a flicker: an unrelated prop change must not retry the shader (it
+    // would, if the fallback depended on some transient "still loading" state
+    // rather than a permanent flag).
+    setCls('b');
+    await Promise.resolve();
+    expect(container.querySelectorAll('[part="bar"]').length).toBeGreaterThan(0);
+  });
+
+  it('switching to a different shader variant after a failure attempts the new one rather than staying failed', async () => {
+    let waveMounted = false;
+    vi.doMock('./variant-wave', () => ({
+      default: (props: { onUnavailable: () => void }) => {
+        waveMounted = true;
+        props.onUnavailable();
+        return null;
+      },
+    }));
+    let auroraMounted = false;
+    vi.doMock('./variant-aurora', () => ({
+      default: () => {
+        auroraMounted = true;
+        return null;
+      },
+    }));
+
+    const [variant, setVariant] = createSignal<'wave' | 'aurora'>('wave');
+    render(() => <AudioVisualizer variant={variant()} />);
+
+    // Establish that wave really did mount and report itself unavailable
+    // before switching, so the next assertion is proof of a RESET, not just
+    // aurora happening to succeed on its own.
+    await waitFor(() => expect(waveMounted).toBe(true));
+
+    setVariant('aurora');
+
+    // If `unavailable` were not reset on a variant change, the dispatcher's
+    // `<Show>` gate would stay permanently closed and aurora's component
+    // would never actually be instantiated here, regardless of its own chunk
+    // loading fine -- this would time out rather than fail fast.
+    await waitFor(() => expect(auroraMounted).toBe(true));
+  });
+});
+
 // Nothing above exercises a prop change after mount, which is exactly how the
 // band-count-reactivity bug (index.tsx calling `bandCount()` once instead of
 // passing the accessor) went unnoticed: `useAudioAnalysis` is Solid setup

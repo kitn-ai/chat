@@ -103,6 +103,13 @@ export interface ShaderVariantProps extends Omit<VariantProps, 'children'> {
   complexity?: number;
   /** Only meaningful for `variant="custom"`. */
   shader?: ShaderSpec;
+  /**
+   * Call this if the shader cannot render at all -- most commonly
+   * `canvas.getContext('webgl')` returning null. Permanent for this mount:
+   * the dispatcher swaps to the bar fallback and will not retry the shader
+   * on any later reactive update, only on switching to a different variant.
+   */
+  onUnavailable: () => void;
 }
 
 /**
@@ -154,10 +161,21 @@ export function AudioVisualizer(props: AudioVisualizerProps): JSX.Element {
   // Lazily loaded shader component, or undefined until it resolves. Failure is
   // not fatal: the bar fallback below stays on screen.
   const [Shader, setShader] = createSignal<Component<ShaderVariantProps> | undefined>();
+  // A mounted shader can ALSO fail after its chunk loads fine -- most notably
+  // WebGL being unavailable, which only a mounted component can discover (it
+  // is the one calling `canvas.getContext('webgl')`). This is a separate flag
+  // from `Shader` itself: `Shader()` staying undefined already makes a failed
+  // *import* permanent (nothing ever sets it), but a shader that DID load and
+  // mount needs its own signal to force the fallback despite `Shader()` being
+  // truthy. `onUnavailable` below is what a mounted shader calls to set it.
+  const [unavailable, setUnavailable] = createSignal(false);
   createEffect(() => {
     const v = variant();
     const load = SHADER_VARIANTS[v];
     setShader(undefined);
+    // Switching variants gets a fresh attempt: a failure on `aurora` must not
+    // carry over and permanently block `wave` too.
+    setUnavailable(false);
     if (!load) return;
     let cancelled = false;
     void load()
@@ -211,9 +229,19 @@ export function AudioVisualizer(props: AudioVisualizerProps): JSX.Element {
           <RadialVisualizer {...domShared()} barCount={props.barCount} radius={props.radius} />
         </Match>
         <Match when={isShader()}>
-          {/* Bars stand in until the chunk resolves, and permanently if it cannot. */}
+          {/*
+            Bars stand in until the chunk resolves, and permanently if it
+            cannot -- either because the import itself failed (`Shader()`
+            never becomes truthy) or because the mounted shader called
+            `onUnavailable` (checked here via `!unavailable()`, since
+            `Shader()` alone cannot tell a working component from one that
+            loaded fine but can't actually render, e.g. no WebGL). Both cases
+            fall back to the same `BarVisualizer`, and `when` still narrows to
+            the component reference on the success path, matching the
+            `(Comp) => ...` extraction below.
+          */}
           <Show
-            when={Shader()}
+            when={!unavailable() && Shader()}
             fallback={<BarVisualizer {...domShared()} barCount={props.barCount} />}
           >
             {(Comp) => {
@@ -224,6 +252,7 @@ export function AudioVisualizer(props: AudioVisualizerProps): JSX.Element {
                   volume={analysis.volume()}
                   complexity={props.complexity}
                   shader={props.shader}
+                  onUnavailable={() => setUnavailable(true)}
                 />
               );
             }}
