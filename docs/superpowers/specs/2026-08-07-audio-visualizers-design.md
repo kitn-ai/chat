@@ -193,7 +193,9 @@ section 9).
 
 ```css
 kai-audio-visualizer::part(bar) { border-radius: 2px; background: var(--brand-dim); }
-kai-audio-visualizer::part(bar)[data-kai-highlighted] { background: var(--brand); }
+/* Note the ="true". The attribute is always present, as "true" or "false",
+   so a bare [data-kai-highlighted] presence selector matches idle bars too. */
+kai-audio-visualizer::part(bar)[data-kai-highlighted="true"] { background: var(--brand); }
 ```
 
 The exported Solid `<AudioVisualizer>` additionally accepts a children render-prop for
