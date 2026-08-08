@@ -1,4 +1,4 @@
-import { For, type JSX } from 'solid-js';
+import { Index, type JSX } from 'solid-js';
 import { cn } from '../../utils/cn';
 import { normalizeVolumeBands } from '../../primitives/audio-bands';
 import { useSequencer } from '../../primitives/use-sequencer';
@@ -9,7 +9,8 @@ import type { VariantProps } from './variant-bar';
 /**
  * A grid of dots that pulses with the audio.
  *
- * Ported from livekit/components-js `agent-audio-visualizer-grid.tsx`
+ * Ported from livekit/components-js
+ * `packages/shadcn/components/agents-ui/agent-audio-visualizer-grid.tsx`
  * (Apache License 2.0).
  */
 export function GridVisualizer(
@@ -74,21 +75,30 @@ export function GridVisualizer(
         ...(props.color ? { color: props.color } : {}),
       }}
     >
-      <For each={items()}>
-        {(index) => {
+      {/*
+        <Index>, not <For>, matching BarVisualizer: `items()` positions are
+        stable, but mapping by POSITION (rather than by `===` on the array
+        value) is the correct primitive here too, and it keeps the render-prop
+        contract identical across variants. See the note in variant-bar.tsx.
+      */}
+      <Index each={items()}>
+        {(_value, index) => {
           // Every column repeats down every row, so a cell's level comes from
           // its column band, not its flat position: index % cols(), not index.
-          const item = () => ({
+          // `highlighted`/`value` are live accessors: the callback below runs
+          // once per position, so a consumer's render-prop must call them
+          // itself to stay current rather than close over a one-time snapshot.
+          const item = {
             index,
-            highlighted: isLit(index),
-            value: levels()[index % cols()] ?? 0,
-          });
+            highlighted: () => isLit(index),
+            value: () => levels()[index % cols()] ?? 0,
+          };
           return (
-            props.children?.(item()) ?? (
+            props.children?.(item) ?? (
               <div
                 part="cell"
-                data-kai-index={index}
-                data-kai-highlighted={isLit(index)}
+                data-kai-index={item.index}
+                data-kai-highlighted={item.highlighted()}
                 class={cn(
                   'place-self-center rounded-full bg-current/10 transition-all ease-out',
                   'data-[kai-highlighted=true]:bg-current',
@@ -102,7 +112,7 @@ export function GridVisualizer(
             )
           );
         }}
-      </For>
+      </Index>
     </div>
   );
 }

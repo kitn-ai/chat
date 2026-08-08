@@ -1,5 +1,6 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
+import { createSignal } from 'solid-js';
 import { render, cleanup } from '@solidjs/testing-library';
 import { GridVisualizer } from './variant-grid';
 
@@ -7,6 +8,7 @@ afterEach(cleanup);
 
 const cells = (c: HTMLElement) => Array.from(c.querySelectorAll('[part="cell"]')) as HTMLElement[];
 const lit = (c: HTMLElement) => cells(c).filter((e) => e.dataset.kaiHighlighted === 'true');
+const flush = () => new Promise((r) => setTimeout(r, 0));
 
 describe('GridVisualizer', () => {
   it('renders rowCount x columnCount cells', () => {
@@ -86,7 +88,7 @@ describe('GridVisualizer', () => {
   it('lets a caller render each cell themselves', () => {
     const { container } = render(() => (
       <GridVisualizer state="idle" size="md" bands={[]} frozen={false} rowCount={2} columnCount={3}>
-        {(item) => <span data-custom={item.index}>{item.value}</span>}
+        {(item) => <span data-custom={item.index}>{item.value()}</span>}
       </GridVisualizer>
     ));
     expect(container.querySelectorAll('[data-custom]')).toHaveLength(6);
@@ -94,7 +96,7 @@ describe('GridVisualizer', () => {
   });
 
   it('hands the render-prop the live highlight state and level, per column', () => {
-    const seen: { index: number; highlighted: boolean; value: number }[] = [];
+    const seen: { index: number; highlighted: () => boolean; value: () => number }[] = [];
     render(() => (
       <GridVisualizer
         state="speaking" size="md" frozen={false}
@@ -106,12 +108,12 @@ describe('GridVisualizer', () => {
     // Column 0 is silent (band 0), column 1 is full (band 1); the middle row
     // (threshold 0) lights regardless, the outer rows only light column 1.
     expect(seen.map((s) => s.index)).toEqual([0, 1, 2, 3, 4, 5]);
-    expect(seen.map((s) => s.value)).toEqual([0, 1, 0, 1, 0, 1]);
-    expect(seen.map((s) => s.highlighted)).toEqual([false, true, true, true, false, true]);
+    expect(seen.map((s) => s.value())).toEqual([0, 1, 0, 1, 0, 1]);
+    expect(seen.map((s) => s.highlighted())).toEqual([false, true, true, true, false, true]);
   });
 
   it('zeroes the render-prop value in every state except speaking, even with stale bands', () => {
-    const seen: { index: number; highlighted: boolean; value: number }[] = [];
+    const seen: { index: number; highlighted: () => boolean; value: () => number }[] = [];
     render(() => (
       <GridVisualizer
         state="idle" size="md" frozen={false}
@@ -121,6 +123,96 @@ describe('GridVisualizer', () => {
       </GridVisualizer>
     ));
     expect(seen).toHaveLength(6);
-    expect(seen.every((s) => s.value === 0)).toBe(true);
+    expect(seen.every((s) => s.value() === 0)).toBe(true);
+  });
+});
+
+// `state="speaking"` above keeps things static enough (thresholds, not the
+// clock) that the render-prop's staleness bug (finding 2) never showed up.
+// These exercise a SCRIPTED state, where the highlight genuinely changes
+// from frame to frame, plus the `frozen` contract (finding 3). Same fake
+// RAF/performance clock as variant-bar.test.tsx and create-tween.test.ts: a
+// single pending callback advanced by hand for deterministic ticking.
+describe('GridVisualizer frozen and live sequencing', () => {
+  let frame: ((t: number) => void) | undefined;
+  let now = 0;
+
+  beforeEach(() => {
+    now = 0;
+    frame = undefined;
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      frame = cb;
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => { frame = undefined; });
+    vi.stubGlobal('performance', { now: () => now });
+  });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  function advance(ms: number) {
+    now += ms;
+    const f = frame;
+    frame = undefined;
+    f?.(now);
+  }
+
+  it('never arms requestAnimationFrame while frozen, so the highlight stays pinned to the sequence\'s first frame', () => {
+    const { container } = render(() => (
+      <GridVisualizer state="listening" size="md" bands={[]} frozen={true} rowCount={3} columnCount={3} />
+    ));
+
+    // listening's first frame lights only the center cell (index 4 of 3x3).
+    expect(lit(container).map((e) => e.dataset.kaiIndex)).toEqual(['4']);
+    expect(frame).toBeUndefined();
+
+    advance(5000);
+    expect(lit(container).map((e) => e.dataset.kaiIndex)).toEqual(['4']);
+  });
+
+  it('pins the highlight to the first frame while frozen, even across an unrelated rerender', async () => {
+    const [cls, setCls] = createSignal('a');
+    const { container } = render(() => (
+      <GridVisualizer
+        state="listening" size="md" bands={[]} frozen={true}
+        rowCount={3} columnCount={3} class={cls()}
+      />
+    ));
+    expect(lit(container).map((e) => e.dataset.kaiIndex)).toEqual(['4']);
+
+    setCls('b');
+    await flush();
+
+    expect(lit(container).map((e) => e.dataset.kaiIndex)).toEqual(['4']);
+  });
+
+  it('un-freezing lets the tick advance, the control case proving the frozen assertions above are not coincidental', () => {
+    const { container } = render(() => (
+      <GridVisualizer state="listening" size="md" bands={[]} frozen={false} rowCount={3} columnCount={3} />
+    ));
+    expect(lit(container).map((e) => e.dataset.kaiIndex)).toEqual(['4']);
+
+    advance(100); // the default grid interval
+    expect(lit(container)).toHaveLength(0);
+  });
+
+  it('hands the render-prop accessors that reflect the CURRENT sequence frame, not a mount-time snapshot', () => {
+    const seen: { index: number; highlighted: () => boolean; value: () => number }[] = [];
+    render(() => (
+      <GridVisualizer state="listening" size="md" bands={[]} frozen={false} rowCount={3} columnCount={3}>
+        {(item) => { seen.push(item); return <span />; }}
+      </GridVisualizer>
+    ));
+
+    expect(seen.map((s) => s.highlighted())).toEqual([
+      false, false, false,
+      false, true, false,
+      false, false, false,
+    ]);
+
+    advance(100);
+
+    // Same closures as above, called again: they must reflect the new tick.
+    expect(seen.every((s) => s.highlighted() === false)).toBe(true);
   });
 });

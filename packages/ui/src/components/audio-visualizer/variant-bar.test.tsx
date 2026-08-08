@@ -1,5 +1,6 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
+import { createSignal } from 'solid-js';
 import { render, cleanup } from '@solidjs/testing-library';
 import { BarVisualizer } from './variant-bar';
 import { defaultBarCount } from './sizes';
@@ -7,6 +8,7 @@ import { defaultBarCount } from './sizes';
 afterEach(cleanup);
 
 const bars = (c: HTMLElement) => Array.from(c.querySelectorAll('[part="bar"]')) as HTMLElement[];
+const flush = () => new Promise((r) => setTimeout(r, 0));
 
 describe('defaultBarCount', () => {
   it('uses 3 bars at the two smallest sizes and 5 above', () => {
@@ -93,7 +95,7 @@ describe('BarVisualizer', () => {
   it('lets a caller render each bar themselves', () => {
     const { container } = render(() => (
       <BarVisualizer state="speaking" size="md" bands={[0.5, 0.5]} frozen={false} barCount={2}>
-        {(item) => <span data-custom={item.index}>{item.value}</span>}
+        {(item) => <span data-custom={item.index}>{item.value()}</span>}
       </BarVisualizer>
     ));
     expect(container.querySelectorAll('[data-custom]')).toHaveLength(2);
@@ -101,13 +103,102 @@ describe('BarVisualizer', () => {
   });
 
   it('hands the render-prop the live highlight state and level', () => {
-    const seen: { index: number; highlighted: boolean; value: number }[] = [];
+    const seen: { index: number; highlighted: () => boolean; value: () => number }[] = [];
     render(() => (
       <BarVisualizer state="speaking" size="md" bands={[0.25, 0.75]} frozen={false} barCount={2}>
         {(item) => { seen.push(item); return <span />; }}
       </BarVisualizer>
     ));
-    expect(seen.map((s) => s.value)).toEqual([0.25, 0.75]);
-    expect(seen.every((s) => s.highlighted)).toBe(true);
+    expect(seen.map((s) => s.value())).toEqual([0.25, 0.75]);
+    expect(seen.every((s) => s.highlighted())).toBe(true);
+  });
+});
+
+// `state="speaking"` above keeps `highlighted` constant true regardless of
+// tick, which is exactly why the render-prop's staleness bug (finding 2) was
+// invisible there. These exercise a SCRIPTED state, where the highlight set
+// genuinely changes from frame to frame, plus the `frozen` contract that
+// pins the sequencer at frame 0 (finding 3). The fake RAF/performance clock
+// mirrors create-tween.test.ts: a single pending callback we advance by hand
+// so ticking is deterministic instead of racing real timers.
+describe('BarVisualizer frozen and live sequencing', () => {
+  let frame: ((t: number) => void) | undefined;
+  let now = 0;
+
+  beforeEach(() => {
+    now = 0;
+    frame = undefined;
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      frame = cb;
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => { frame = undefined; });
+    vi.stubGlobal('performance', { now: () => now });
+  });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  function advance(ms: number) {
+    now += ms;
+    const f = frame;
+    frame = undefined;
+    f?.(now);
+  }
+
+  it('never arms requestAnimationFrame while frozen, so the highlight stays pinned to the sequence\'s first frame', () => {
+    const { container } = render(() => (
+      <BarVisualizer state="listening" size="md" bands={[]} frozen={true} barCount={4} />
+    ));
+
+    // listening's first frame lights only the center bar (index 2 of 4).
+    const initial = bars(container).map((b) => b.dataset.kaiHighlighted);
+    expect(initial).toEqual(['false', 'false', 'true', 'false']);
+
+    // The proof it is truly frozen, not just "hasn't ticked yet": no RAF was
+    // ever armed, so there is nothing pending to advance.
+    expect(frame).toBeUndefined();
+
+    advance(5000);
+    expect(bars(container).map((b) => b.dataset.kaiHighlighted)).toEqual(initial);
+  });
+
+  it('pins the highlight to the first frame while frozen, even across an unrelated rerender', async () => {
+    const [cls, setCls] = createSignal('a');
+    const { container } = render(() => (
+      <BarVisualizer state="listening" size="md" bands={[]} frozen={true} barCount={4} class={cls()} />
+    ));
+    const initial = bars(container).map((b) => b.dataset.kaiHighlighted);
+    expect(initial).toEqual(['false', 'false', 'true', 'false']);
+
+    setCls('b');
+    await flush();
+
+    expect(bars(container).map((b) => b.dataset.kaiHighlighted)).toEqual(initial);
+  });
+
+  it('un-freezing lets the tick advance, the control case proving the frozen assertions above are not coincidental', () => {
+    const { container } = render(() => (
+      <BarVisualizer state="listening" size="md" bands={[]} frozen={false} barCount={4} />
+    ));
+    expect(bars(container).map((b) => b.dataset.kaiHighlighted)).toEqual(['false', 'false', 'true', 'false']);
+
+    advance(500); // the listening interval
+    expect(bars(container).map((b) => b.dataset.kaiHighlighted)).toEqual(['false', 'false', 'false', 'false']);
+  });
+
+  it('hands the render-prop accessors that reflect the CURRENT sequence frame, not a mount-time snapshot', () => {
+    const seen: { index: number; highlighted: () => boolean; value: () => number }[] = [];
+    render(() => (
+      <BarVisualizer state="listening" size="md" bands={[]} frozen={false} barCount={4}>
+        {(item) => { seen.push(item); return <span />; }}
+      </BarVisualizer>
+    ));
+
+    expect(seen.map((s) => s.highlighted())).toEqual([false, false, true, false]);
+
+    advance(500);
+
+    // Same closures as above, called again: they must reflect the new tick.
+    expect(seen.map((s) => s.highlighted())).toEqual([false, false, false, false]);
   });
 });

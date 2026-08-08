@@ -1,4 +1,4 @@
-import { For, type JSX } from 'solid-js';
+import { Index, type JSX } from 'solid-js';
 import { cn } from '../../utils/cn';
 import { normalizeVolumeBands } from '../../primitives/audio-bands';
 import { useSequencer } from '../../primitives/use-sequencer';
@@ -17,18 +17,23 @@ export interface VariantProps {
   color?: string;
   class?: string;
   /**
-   * Render each element yourself. Receives the element's index, whether the
-   * sequence has it lit, and its 0..1 level. `::part(bar)` handles restyling;
-   * this is for replacing the markup outright.
+   * Render each element yourself. Receives the element's static index plus
+   * `highlighted` and `value` as live accessors, not plain values: the
+   * markup is only mapped once per position (see the `<Index>` note below),
+   * so you must CALL `highlighted()` and `value()` from inside your own JSX
+   * for them to stay live. Destructuring them into a plain variable freezes
+   * them at that moment. `::part(bar)` handles restyling; this is for
+   * replacing the markup outright.
    */
-  children?: (item: { index: number; highlighted: boolean; value: number }) => JSX.Element;
+  children?: (item: { index: number; highlighted: () => boolean; value: () => number }) => JSX.Element;
 }
 
 /**
  * Vertical bars that rise with the audio while speaking, and run a scripted
  * pattern in every other state.
  *
- * Ported from livekit/components-js `agent-audio-visualizer-bar.tsx`
+ * Ported from livekit/components-js
+ * `packages/shadcn/components/agents-ui/agent-audio-visualizer-bar.tsx`
  * (Apache License 2.0).
  */
 export function BarVisualizer(props: VariantProps & { barCount?: number }): JSX.Element {
@@ -58,19 +63,35 @@ export function BarVisualizer(props: VariantProps & { barCount?: number }): JSX.
         ...(props.color ? { color: props.color } : {}),
       }}
     >
-      <For each={levels()}>
+      {/*
+        <Index>, not <For>: Solid's <For> keys nodes by `===` on the array
+        VALUE, and `levels()` is an array of plain numbers that changes on
+        nearly every frame while speaking. That would tear down and recreate
+        every bar node each frame instead of patching it in place, which both
+        churns the DOM on the hottest path here and defeats
+        `transition-colors duration-250` right at the listening -> speaking
+        boundary (a freshly created node has no prior value to transition
+        from). <Index> maps by POSITION instead, so each bar's DOM node is
+        created once and its `level` accessor updates in place.
+      */}
+      <Index each={levels()}>
         {(level, i) => {
-          const item = () => ({
-            index: i(),
-            highlighted: highlighted().includes(i()),
-            value: level,
-          });
+          // `index` is a plain number (stable per position under <Index>).
+          // `highlighted`/`value` are live accessors, not plain values: the
+          // callback below runs once per position, so anything a consumer's
+          // render-prop wants to stay current must call these itself rather
+          // than close over a one-time snapshot.
+          const item = {
+            index: i,
+            highlighted: () => highlighted().includes(i),
+            value: () => level(),
+          };
           return (
-            props.children?.(item()) ?? (
+            props.children?.(item) ?? (
               <div
                 part="bar"
-                data-kai-index={i()}
-                data-kai-highlighted={item().highlighted}
+                data-kai-index={item.index}
+                data-kai-highlighted={item.highlighted()}
                 class={cn(
                   'rounded-full bg-current/10 transition-colors duration-250 ease-linear',
                   'data-[kai-highlighted=true]:bg-current',
@@ -78,13 +99,13 @@ export function BarVisualizer(props: VariantProps & { barCount?: number }): JSX.
                 style={{
                   width: `${BAR_WIDTH[props.size]}px`,
                   'min-height': `${BAR_WIDTH[props.size]}px`,
-                  height: `${level * 100}%`,
+                  height: `${level() * 100}%`,
                 }}
               />
             )
           );
         }}
-      </For>
+      </Index>
     </div>
   );
 }
