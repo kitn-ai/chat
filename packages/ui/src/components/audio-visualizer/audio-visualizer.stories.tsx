@@ -6,6 +6,8 @@ import { SIZES } from './sizes';
 
 const STATES = ['idle', 'connecting', 'listening', 'thinking', 'speaking'] as const;
 const VARIANTS = ['bar', 'grid', 'radial'] as const;
+/** Every look, including the WebGL ones, for the `variant` control. */
+const ALL_VARIANTS = ['bar', 'grid', 'radial', 'wave', 'aurora', 'custom'] as const;
 
 const meta = {
   title: 'Components/Elements/AudioVisualizer',
@@ -18,17 +20,17 @@ const meta = {
         exclude: ['use:eventListener', 'stream', 'audioElement', 'shader', 'bands', 'spread', 'interval', 'complexity'],
       },
       description: componentDescription([
-        'Renders live audio as bars, a grid, or a ring. Set `stream` or `audioElement` to tap real audio, or `bands` to drive it yourself.',
+        'Renders live audio as bars, a grid, a ring, a wave, or a glowing aurora. Set `stream` or `audioElement` to tap real audio, or `bands` to drive it yourself.',
         'With no audio source at all it animates from `state` alone: idle, connecting, listening, thinking, speaking. That is what drives it when the audio cannot be tapped, like browser speech synthesis, which exposes no audio node.',
-        '`wave`, `aurora`, and `custom` also exist on `variant` as WebGL shader looks; they are not covered by these stories.',
+        '`wave`, `aurora`, and `custom` render through WebGL behind a dynamic import, and fall back to bars if that fails or WebGL is unavailable. See ShaderVariants, AuroraStates, and CustomShader below. A live-microphone story is deliberately excluded: it would prompt for a permission Storybook cannot answer.',
       ]),
     },
   },
   argTypes: {
     variant: {
       control: 'select',
-      options: [...VARIANTS],
-      description: 'Which DOM look to render.',
+      options: [...ALL_VARIANTS],
+      description: 'Which look to render. `wave`, `aurora`, and `custom` render through WebGL; `custom` needs a `shader` to draw anything.',
       table: { defaultValue: { summary: 'bar' } },
     },
     state: {
@@ -170,4 +172,71 @@ export const Sizes: Story = {
       </For>
     </div>
   ),
+};
+
+export const ShaderVariants: Story = {
+  parameters: {
+    docs: { description: { story: 'Wave and aurora render through WebGL. Both load on demand and fall back to bars where WebGL is unavailable.' } },
+  },
+  render: () => (
+    <div style={{ display: 'flex', gap: '32px', 'align-items': 'center' }}>
+      <AudioVisualizer variant="wave" state="listening" size="md" />
+      <AudioVisualizer variant="aurora" state="listening" size="md" />
+    </div>
+  ),
+};
+
+export const AuroraStates: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'The aurora across every state. Compare against the reference before locking the look. ' +
+          '`speaking` shows its steady base radius: this canvas has no live microphone to drive the ' +
+          'voice-reactive growth, since `bands`/`volume` here are never fed by real audio.',
+      },
+    },
+  },
+  render: () => (
+    <div style={{ display: 'flex', gap: '24px', 'align-items': 'center', 'flex-wrap': 'wrap' }}>
+      <For each={STATES}>
+        {(s) => (
+          <div style={{ display: 'flex', 'flex-direction': 'column', gap: '8px', 'align-items': 'center' }}>
+            <AudioVisualizer variant="aurora" state={s} size="md" />
+            <code style={{ 'font-size': '11px', opacity: 0.6 }}>{s}</code>
+          </div>
+        )}
+      </For>
+    </div>
+  ),
+};
+
+const SPECTRUM_SHADER = `
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+  vec2 uv = fragCoord / iResolution.xy;
+  int idx = int(uv.x * float(BAND_COUNT));
+  float level = 0.0;
+  for (int i = 0; i < BAND_COUNT; i++) {
+    if (i == idx) level = uBands[i];
+  }
+  float lit = step(uv.y, level);
+  fragColor = vec4(uColor * lit, lit);
+}`.replace(/BAND_COUNT/g, '5');
+
+export const CustomShader: Story = {
+  parameters: {
+    docs: { description: { story: 'Set `variant="custom"` and a `shader` to render your own GLSL. It receives the ShaderToy built-ins plus `uColor`, `uIntensity`, `uSpeed`, `uComplexity`, `uVolume`, and `uBands[]`. Never declare those in your shader: the canvas declares them for you.' } },
+  },
+  render: () => {
+    const bands = useFakeBands(5);
+    return (
+      <AudioVisualizer
+        variant="custom"
+        state="speaking"
+        size="lg"
+        bands={bands()}
+        shader={{ fragment: SPECTRUM_SHADER }}
+      />
+    );
+  },
 };
