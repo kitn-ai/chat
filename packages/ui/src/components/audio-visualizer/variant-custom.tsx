@@ -1,6 +1,263 @@
-import type { JSX } from 'solid-js';
+import { createEffect, createMemo, Show, type JSX } from 'solid-js';
+import { ShaderCanvas, hexToRgb, DEFAULT_SHADER_COLOR, type UniformSpec, type UniformType } from './shader-canvas';
+import { createTween } from '../../primitives/create-tween';
+import { shaderTargets } from '../../primitives/visualizer-sequences';
+import { CONTAINER_HEIGHT } from './sizes';
+import type { ShaderVariantProps } from './index';
 
-/** Placeholder. Replaced by Task 15. Renders nothing so the bar fallback shows. */
-export default function Placeholder(): JSX.Element {
-  return null;
+/**
+ * Every `UniformType` shader-canvas.tsx knows how to declare and push to the
+ * GPU, duplicated here because that module does not export its `GLSL_TYPE`
+ * map. `ShaderSpec.uniforms` narrows `type` to `UniformType` at the TS level
+ * (see `index.tsx`), but a consumer can still reach this component through
+ * the `<kai-audio-visualizer>` custom element with a plain JS object cast
+ * past that check (`el.shader = {...}`), or any attribute-driven wrapper
+ * that never touches TypeScript at all -- so an unrecognized `type` string
+ * is checked again here, at runtime, against genuinely untrusted input.
+ */
+const KNOWN_UNIFORM_TYPES = new Set<UniformType>([
+  '1f', '1i', '1fv', '2f', '3f', '3fv', '4f', '4fv',
+  'Matrix2fv', 'Matrix3fv', 'Matrix4fv',
+]);
+
+/** `1f` and `1i` take a plain number. Every other type takes an array. */
+const SCALAR_UNIFORM_TYPES = new Set<UniformType>(['1f', '1i']);
+
+/**
+ * Checks one consumer-declared uniform's `value` against its `type`,
+ * returning a problem description, or `undefined` if it is safe to hand to
+ * WebGL.
+ *
+ * Deliberately coarse -- scalar-vs-array, not exact vector/matrix length. A
+ * `1f` handed an array, or a `3fv` handed a bare number, is what makes
+ * WebGL's `uniform*` setters throw a `TypeError`: the WebIDL binding fails
+ * to convert the argument at all. An array of the WRONG length for its type
+ * (a `3fv` given 4 numbers) is a GL-level `INVALID_OPERATION` recorded on
+ * the context, not a JS exception -- it degrades the picture rather than
+ * crashing the render loop, so checking it is out of scope here.
+ */
+function uniformProblem(name: string, spec: UniformSpec): string | undefined {
+  if (spec == null || typeof spec !== 'object') {
+    return `uniform "${name}" is not a valid declaration (expected an object with "type" and "value").`;
+  }
+  if (!KNOWN_UNIFORM_TYPES.has(spec.type)) {
+    return `uniform "${name}" has an unrecognized type "${String(spec.type)}".`;
+  }
+  if (SCALAR_UNIFORM_TYPES.has(spec.type)) {
+    if (typeof spec.value !== 'number' || !Number.isFinite(spec.value)) {
+      return `uniform "${name}" is declared "${spec.type}" (a number) but its value is not a finite number.`;
+    }
+    return undefined;
+  }
+  if (
+    !Array.isArray(spec.value) ||
+    spec.value.some((v) => typeof v !== 'number' || !Number.isFinite(v))
+  ) {
+    return `uniform "${name}" is declared "${spec.type}" (an array) but its value is not an array of finite numbers.`;
+  }
+  return undefined;
+}
+
+/**
+ * Uniforms every custom shader receives without asking: the standard set
+ * (`uColor`, `uIntensity`, `uSpeed`, `uComplexity`) plus the audio pair that
+ * ONLY this variant gets. Upstream's shader path only ever hands a shader a
+ * scalar volume; `uBands` -- a per-band `float` array -- has no equivalent
+ * there, so a spectrum-reactive custom shader is possible here and not
+ * there. `iTime`/`iResolution`/`iMouse`/`iFrame`/`iDate` are declared by
+ * `ShaderCanvas` itself for every shader, custom or not, so they are not
+ * repeated here.
+ *
+ * `extra` is a consumer's `ShaderSpec.uniforms` -- untrusted input. Every
+ * entry is checked with `uniformProblem` before being merged in; a bad
+ * `type`/`value` pairing throws rather than being handed to `ShaderCanvas`,
+ * where the mismatch would otherwise throw a `TypeError` inside WebGL's
+ * `uniform*` setters, called from `ShaderCanvas`'s OWN
+ * `requestAnimationFrame` loop, where nothing catches it and the canvas
+ * silently stops animating. `CustomVisualizer` below is what turns that
+ * throw into the same `onUnavailable` seam every other shader failure uses
+ * -- see its own doc for how.
+ *
+ * Pure and synchronous: reads no signals, schedules nothing. Task 15 reuses
+ * it as-is.
+ */
+export function customUniforms(
+  values: {
+    color: string;
+    intensity: number;
+    speed: number;
+    complexity: number;
+    volume: number;
+    bands: number[];
+  },
+  extra?: Record<string, UniformSpec>,
+): Record<string, UniformSpec> {
+  // GLSL has no zero-length arrays, so an empty band list still declares
+  // one -- and the declared length always comes from THIS array's own
+  // length (`arraySize: bands.length`), never a separately tracked count,
+  // so the declaration and the value pushed to the GPU can never disagree.
+  const bands = values.bands.length ? values.bands : [0];
+
+  const standard: Record<string, UniformSpec> = {
+    uColor: { type: '3fv', value: hexToRgb(values.color) },
+    uIntensity: { type: '1f', value: values.intensity },
+    uSpeed: { type: '1f', value: values.speed },
+    uComplexity: { type: '1f', value: values.complexity },
+    uVolume: { type: '1f', value: values.volume },
+    uBands: { type: '1fv', value: bands, arraySize: bands.length },
+  };
+
+  if (!extra) return standard;
+
+  for (const [name, spec] of Object.entries(extra)) {
+    const problem = uniformProblem(name, spec);
+    if (problem) throw new Error(problem);
+  }
+
+  return { ...standard, ...extra };
+}
+
+/**
+ * Renders a consumer-supplied fragment shader.
+ *
+ * The shader must define `mainImage(out vec4 fragColor, in vec2 fragCoord)`
+ * and gets the five ShaderToy built-ins (`iTime`, `iResolution`, `iMouse`,
+ * `iFrame`, `iDate`) plus every uniform `customUniforms` above declares.
+ * `ShaderCanvas` DECLARES all of them for you -- declaring the SAME name
+ * again inside the shader body is a GLSL redefinition and fails to compile.
+ *
+ * `fragColor` MUST be premultiplied: `vec4(rgb * alpha, alpha)`, never
+ * `vec4(rgb, alpha)`. The canvas composites using the browser's default
+ * `premultipliedAlpha: true`; a translucent edge written the natural
+ * (straight-alpha) way gets a dark fringe where it meets a light page. For
+ * example, a shader painting a soft circle that fades to transparent at its
+ * edge:
+ *
+ * ```glsl
+ * void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+ *   vec2 uv = fragCoord / iResolution.xy;
+ *   float alpha = smoothstep(1.0, 0.0, length(uv - 0.5) * 2.0) * uIntensity;
+ *   fragColor = vec4(uColor * alpha, alpha); // premultiplied -- NOT vec4(uColor, alpha)
+ * }
+ * ```
+ *
+ * `uVolume` (scalar) and `uBands` (a `float[N]` array, `N` tracking the
+ * visualizer's actual band count) are this task's differentiating feature:
+ * upstream's shader path only ever hands a shader a scalar, so a
+ * spectrum-reactive custom shader is only possible here.
+ *
+ * A bad `props.shader.uniforms` entry (an unrecognized `type`, or a `value`
+ * that does not match it) is logged loudly via `console.error` -- it is a
+ * bug in the consumer's shader spec they need to see -- and routed through
+ * `props.onUnavailable`, same as a shader compile or link failure. A
+ * missing WebGL context logs quietly via `console.warn`: that is an
+ * expected environment limitation, not a bug. `props.shader` being absent
+ * entirely is neither: it renders an empty placeholder and does not call
+ * `onUnavailable` at all, since nothing was ever asked to render.
+ */
+export default function CustomVisualizer(props: ShaderVariantProps): JSX.Element {
+  const intensity = createTween(0.3);
+  const speed = createTween(1);
+
+  createEffect(() => {
+    const t = shaderTargets(props.state);
+    const transition = props.frozen ? { duration: 0 } : { duration: 0.5, ease: 'easeOut' as const };
+    intensity.to(Array.isArray(t.intensity) && props.frozen ? t.intensity[0] : t.intensity, transition);
+    speed.to(t.speed, { duration: 0 });
+  });
+
+  // Live volume takes over intensity while speaking, with no easing so the
+  // picture tracks the audio exactly.
+  createEffect(() => {
+    if (props.state !== 'speaking') return;
+    intensity.to(0.3 + 0.7 * props.volume, { duration: 0 });
+  });
+
+  // Recomputed whenever a dependency changes -- same as every other shader
+  // variant's uniforms object; see ShaderCanvas's reactivity note on why
+  // that is fine (only STRUCTURE triggers a recompile, not a value change).
+  // The try/catch is what keeps a bad `props.shader.uniforms` entry from
+  // ever reaching ShaderCanvas: without it, `customUniforms`'s throw (see
+  // its own doc) would happen wherever THIS expression gets evaluated,
+  // which includes ShaderCanvas's own requestAnimationFrame loop -- a raw
+  // browser callback nothing else catches.
+  //
+  // Deliberately kept a PURE derivation (no console/onUnavailable calls
+  // here): those are side effects, and belong in the createEffect below,
+  // not in a memo whose body should be safe to (re)run purely for its
+  // return value.
+  const result = createMemo<{ uniforms?: Record<string, UniformSpec>; error?: string }>(() => {
+    try {
+      const uniforms = customUniforms(
+        {
+          color: props.color ?? DEFAULT_SHADER_COLOR,
+          intensity: intensity.value(),
+          speed: speed.value(),
+          complexity: props.complexity ?? 0.5,
+          volume: props.volume,
+          bands: props.bands,
+        },
+        props.shader?.uniforms,
+      );
+      return { uniforms };
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+
+  // Guards against reporting more than once: ShaderCanvas reads `uniforms`
+  // fresh every animation frame (see its own reactivity note), so `result`
+  // above can keep re-evaluating to the same error more than once before
+  // the `Show` below actually unmounts it.
+  let reported = false;
+  createEffect(() => {
+    const { error } = result();
+    if (!error || reported) return;
+    reported = true;
+    console.error(`<kai-audio-visualizer variant="custom">: ${error}`);
+    props.onUnavailable();
+  });
+
+  const containerStyle = (): JSX.CSSProperties => ({
+    height: `${CONTAINER_HEIGHT[props.size]}px`,
+    'aspect-ratio': '1',
+  });
+
+  return (
+    <Show
+      when={props.shader?.fragment}
+      fallback={<div data-kai-state={props.state} class={props.class} style={containerStyle()} />}
+    >
+      {(fragment) => (
+        <Show
+          when={result().uniforms}
+          fallback={<div data-kai-state={props.state} class={props.class} style={containerStyle()} />}
+        >
+          {(u) => (
+            <div data-kai-state={props.state} class={props.class} style={containerStyle()}>
+              <ShaderCanvas
+                fragment={fragment()}
+                precision={props.size === 'icon' || props.size === 'sm' ? 'mediump' : 'highp'}
+                uniforms={u()}
+                onError={(message) => {
+                  // "not available" is ShaderCanvas's literal wording for a
+                  // missing WebGL context (see its own doc) -- an expected
+                  // environment limitation, not a bug, so it logs quietly.
+                  // Anything else is a compile or link failure IN THE
+                  // CONSUMER'S SHADER, which they need to see, so it is loud.
+                  const missingContext = /not available/i.test(message);
+                  if (missingContext) {
+                    console.warn('<kai-audio-visualizer variant="custom">: shader unavailable', message);
+                  } else {
+                    console.error('<kai-audio-visualizer variant="custom">: shader error', message);
+                  }
+                  props.onUnavailable();
+                }}
+              />
+            </div>
+          )}
+        </Show>
+      )}
+    </Show>
+  );
 }

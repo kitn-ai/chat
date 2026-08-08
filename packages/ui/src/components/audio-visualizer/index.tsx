@@ -9,6 +9,7 @@ import { BarVisualizer, type VariantProps } from './variant-bar';
 import { GridVisualizer } from './variant-grid';
 import { RadialVisualizer } from './variant-radial';
 import { defaultBarCount, defaultGridCount, defaultRadialBarCount, type VisualizerSize } from './sizes';
+import type { UniformType } from './shader-canvas';
 
 export type VisualizerVariant = 'bar' | 'grid' | 'radial' | 'wave' | 'aurora' | 'custom';
 
@@ -34,8 +35,17 @@ export interface ShaderSpec {
   /**
    * Custom uniforms. The canvas DECLARES these for you; declaring them in the
    * shader too is a compile error.
+   *
+   * `type` is narrowed to `UniformType`, not a bare string: an unrecognized
+   * type here is caught by TypeScript for a TS-authored `shader` prop, before
+   * it can produce `uniform undefined <name>;` in the assembled source (a
+   * confusing compile error). A consumer reaching this through the
+   * `<kai-audio-visualizer>` custom element or an attribute-driven wrapper
+   * bypasses this check entirely (it is JS at that boundary, not TS) --
+   * `variant-custom.tsx`'s `customUniforms` re-checks `type` at runtime for
+   * exactly that reason.
    */
-  uniforms?: Record<string, { type: string; value: number | number[] }>;
+  uniforms?: Record<string, { type: UniformType; value: number | number[] }>;
 }
 
 export interface AudioVisualizerProps {
