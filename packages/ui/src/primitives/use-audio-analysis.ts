@@ -59,6 +59,19 @@ function getContext(): AudioContext | undefined {
 const elementSources = new WeakMap<HTMLMediaElement, MediaElementAudioSourceNode>();
 
 /**
+ * `createMediaStreamSource` does NOT throw on a second call for the same
+ * stream, unlike the element API above -- it is legal per spec to build
+ * several independent source nodes from one MediaStream. In practice several
+ * simultaneous nodes reading the same stream is a known source of
+ * intermittent silent data loss in Chromium (observed here as `volume`
+ * sticking at 0 for several seconds with three or more visualizers on one
+ * live microphone). Cache and share one node per stream, exactly like the
+ * element path, so N consumers is one node with N analyser taps rather than
+ * N nodes racing each other.
+ */
+const streamSources = new WeakMap<MediaStream, MediaStreamAudioSourceNode>();
+
+/**
  * `instanceof MediaStream` is not usable here: that global does not exist in
  * every environment (jsdom included), and referencing it throws a
  * ReferenceError instead of returning false. Every DOM element carries a
@@ -126,9 +139,16 @@ export function useAudioAnalysis(
 
     let node: AudioNode;
     if (!isMediaElement(src)) {
-      node = ctx.createMediaStreamSource(src);
+      let streamNode = streamSources.get(src);
+      if (!streamNode) {
+        streamNode = ctx.createMediaStreamSource(src);
+        streamSources.set(src, streamNode);
+      }
+      node = streamNode;
       node.connect(analyser);
       // Deliberately NOT connected to destination: that would echo the mic.
+      // Unlike the element path below, a stream source NEVER reaches
+      // destination, cached or not.
     } else {
       const el = src;
       let elNode = elementSources.get(el);
@@ -168,14 +188,13 @@ export function useAudioAnalysis(
       cancelAnimationFrame(raf);
       stopResume();
       analyser.disconnect();
-      if (isMediaElement(src)) {
-        // Never fully disconnect a cached element source node: another
-        // consumer may still be using it, and it can never be recreated for
-        // this element. Only drop this consumer's own tap into it.
-        node.disconnect(analyser);
-        return;
-      }
-      node.disconnect();
+      // Both the element and stream source nodes above are cached and shared
+      // across every consumer of the same element/stream: another consumer
+      // may still be using this one, and it can never be recreated. Drop
+      // only this consumer's own tap into it (the two-argument form), never
+      // the no-argument node.disconnect() -- that would tear the source down
+      // for everyone still using it.
+      node.disconnect(analyser);
     });
   });
 

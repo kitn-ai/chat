@@ -11,6 +11,10 @@ const created = {
   streamSources: [] as unknown[],
   connections: [] as string[],
   disconnects: 0,
+  // A no-arg disconnect() on a shared source node kills it for every
+  // consumer still using it. The two-arg form removes just one tap. Track
+  // which kind actually happened, since both call the same method name.
+  streamFullDisconnects: 0,
 };
 
 class FakeAnalyser {
@@ -46,8 +50,18 @@ class FakeAudioContext {
     };
   }
   createMediaStreamSource(s: unknown) {
+    // Unlike createMediaElementSource above, the real API does NOT throw on a
+    // second call for the same stream -- it is legal per spec to build
+    // several independent source nodes from one MediaStream. Modeling that
+    // (no throw, just another push) is the point: the bug this fake exists to
+    // catch is silent, not an exception.
     created.streamSources.push(s);
-    return { connect: () => created.connections.push('stream->analyser'), disconnect: () => {} };
+    return {
+      connect: () => created.connections.push('stream->analyser'),
+      disconnect: (arg?: unknown) => {
+        if (arg === undefined) created.streamFullDisconnects++;
+      },
+    };
   }
   resume() { this.state = 'running'; return Promise.resolve(); }
 }
@@ -59,12 +73,18 @@ class FakeAudioContext {
  * `step` loop honest: it can recurse via a plain `requestAnimationFrame(step)`
  * exactly as it would in a browser, and only advances a frame when a test
  * asks for one.
+ *
+ * Keyed by id, not a flat array: real cancelAnimationFrame(id) cancels only
+ * that one registration. Several consumers sharing one stream each run their
+ * own step loop concurrently, so one consumer's cleanup must not cancel a
+ * still-live sibling's pending frame.
  */
-let rafQueue: FrameRequestCallback[] = [];
+let rafQueue = new Map<number, FrameRequestCallback>();
+let nextRafId = 1;
 function flushFrame(t = 1000) {
-  const queue = rafQueue;
-  rafQueue = [];
-  queue.forEach((cb) => cb(t));
+  const callbacks = [...rafQueue.values()];
+  rafQueue.clear();
+  callbacks.forEach((cb) => cb(t));
 }
 
 beforeEach(() => {
@@ -72,14 +92,17 @@ beforeEach(() => {
   created.streamSources = [];
   created.connections = [];
   created.disconnects = 0;
-  rafQueue = [];
+  created.streamFullDisconnects = 0;
+  rafQueue = new Map();
+  nextRafId = 1;
   vi.stubGlobal('AudioContext', FakeAudioContext);
   vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
-    rafQueue.push(cb);
-    return rafQueue.length;
+    const id = nextRafId++;
+    rafQueue.set(id, cb);
+    return id;
   });
-  vi.stubGlobal('cancelAnimationFrame', () => {
-    rafQueue = [];
+  vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+    rafQueue.delete(id);
   });
 });
 
@@ -212,6 +235,89 @@ describe('useAudioAnalysis', () => {
       // assertion instead of relying on another test to exercise it by accident.
       expect(bands().every((b) => b > 0)).toBe(true);
       dispose();
+    });
+  });
+
+  // A `MediaStream` has no equivalent of createMediaElementSource's throw on
+  // a second call, so nothing forced this caching before now. Multiple
+  // independent MediaStreamAudioSourceNodes reading the same stream is legal
+  // per spec, but is a known source of intermittent silent data loss in
+  // Chromium: with three or more simultaneous nodes on one live microphone
+  // stream, `volume` was observed sticking at 0 for 5+ seconds with no
+  // recovery on some of them. These tests pin the structural fix -- one
+  // shared node, N terminal analyser taps -- which is unit-testable. The
+  // Chromium flakiness itself is NOT: it is a real-engine, real-hardware,
+  // multi-second timing phenomenon that a synchronous jsdom fake cannot
+  // reproduce (see the report for what a browser-level check would need).
+  describe('sharing one MediaStream across consumers', () => {
+    it('creates exactly ONE source node for two consumers on the same stream, and both receive data', async () => {
+      const s = fakeStream();
+      await createRoot(async (dispose) => {
+        const a = useAudioAnalysis(() => s, { bands: 3 });
+        const b = useAudioAnalysis(() => s, { bands: 3 });
+        await Promise.resolve();
+        expect(created.streamSources).toHaveLength(1);
+        flushFrame();
+        expect(a.bands().some((x) => x > 0)).toBe(true);
+        expect(b.bands().some((x) => x > 0)).toBe(true);
+        dispose();
+      });
+    });
+
+    it('produces non-zero values for all six consumers on one shared stream (the failing case)', async () => {
+      const s = fakeStream();
+      await createRoot(async (dispose) => {
+        const consumers = Array.from({ length: 6 }, () => useAudioAnalysis(() => s, { bands: 3 }));
+        await Promise.resolve();
+        expect(created.streamSources).toHaveLength(1);
+        flushFrame();
+        consumers.forEach((c) => {
+          expect(c.volume()).toBeGreaterThan(0);
+        });
+        dispose();
+      });
+    });
+
+    it('leaves the survivor working, and never fully disconnects the shared node, when one of two consumers unmounts', async () => {
+      const s = fakeStream();
+      let disposeB: (() => void) | undefined;
+      let b: ReturnType<typeof useAudioAnalysis> | undefined;
+
+      await createRoot(async (dispose) => {
+        const a = useAudioAnalysis(() => s, { bands: 3 });
+        createRoot((d) => {
+          disposeB = d;
+          b = useAudioAnalysis(() => s, { bands: 3 });
+        });
+        await Promise.resolve();
+        expect(created.streamSources).toHaveLength(1);
+
+        // B leaves; A must keep receiving data, and the shared node itself
+        // must not have been torn down for everyone.
+        disposeB?.();
+        expect(created.streamFullDisconnects).toBe(0);
+
+        flushFrame();
+        expect(a.bands().some((x) => x > 0)).toBe(true);
+
+        dispose();
+      });
+
+      // B's own analyser is gone, but the shared source node was never
+      // fully disconnected on B's way out.
+      expect(b).toBeDefined();
+      expect(created.streamFullDisconnects).toBe(0);
+    });
+
+    it('leaves the single-consumer path unchanged: still one node, still never connected to destination', async () => {
+      await createRoot(async (dispose) => {
+        useAudioAnalysis(() => fakeStream(), { bands: 3 });
+        await Promise.resolve();
+        expect(created.streamSources).toHaveLength(1);
+        expect(created.connections).toContain('stream->analyser');
+        expect(created.connections).not.toContain('analyser->destination');
+        dispose();
+      });
     });
   });
 
