@@ -194,7 +194,7 @@ async function waitShaderReady(loc: Locator): Promise<void> {
   await loc.locator('canvas').waitFor({ state: 'attached', timeout: 10_000 });
 }
 async function waitDomReady(loc: Locator): Promise<void> {
-  await loc.locator('[part="bar"], [part="cell"]').first().waitFor({ state: 'attached', timeout: 10_000 });
+  await loc.locator('[part~="bar"], [part~="cell"]').first().waitFor({ state: 'attached', timeout: 10_000 });
 }
 
 /**
@@ -324,7 +324,7 @@ test.describe('Check 1+2: full matrix, all states, light+dark, shader compiles',
           ).toBe(true);
         } else {
           await waitDomReady(loc);
-          const parts = loc.locator('[part="bar"], [part="cell"]');
+          const parts = loc.locator('[part~="bar"], [part~="cell"]');
           const count = await parts.count();
           expect(count, `${variant}/${s} part count`).toBeGreaterThan(0);
           for (let i = 0; i < count; i++) {
@@ -551,12 +551,12 @@ test.describe('Check 5: WebGL unavailable falls back to bars', () => {
     await gotoAnchor(page);
     const locs = await mountRow(page, [{ id: 'webgl-fallback', variant: 'aurora', state: 'listening', size: 'md' }]);
     const loc = locs['webgl-fallback']!;
-    await waitDomReady(loc); // must fall back to bars, which HAVE [part=bar]
+    await waitDomReady(loc); // must fall back to bars, which carry part="bar" (or "bar highlighted")
 
     const canvasCount = await loc.locator('canvas').count();
     expect(canvasCount, 'a canvas should NOT be present once the shader reports unavailable').toBe(0);
 
-    const bars = loc.locator('[part="bar"]');
+    const bars = loc.locator('[part~="bar"]');
     const barCount = await bars.count();
     expect(barCount, 'fallback bar count').toBeGreaterThan(0);
     for (let i = 0; i < barCount; i++) {
@@ -805,7 +805,7 @@ test.describe('Check 8: element audio not silenced, not doubled', () => {
     const readBars = async () =>
       page.evaluate(() => {
         const el = document.querySelector('[data-test-id="audio-vis-1"]');
-        const bars = el?.shadowRoot?.querySelectorAll('[part="bar"]');
+        const bars = el?.shadowRoot?.querySelectorAll('[part~="bar"]');
         if (!bars) return [];
         return Array.from(bars).map((b) => parseFloat((b as HTMLElement).style.height) || 0);
       });
@@ -949,7 +949,7 @@ test.describe('Check 9: live microphone (fake device) drives useAudioAnalysis', 
         const maxHeight = async () =>
           page.evaluate(() => {
             const el = document.querySelector('[data-test-id="mic-test"]');
-            const bars = el?.shadowRoot?.querySelectorAll('[part="bar"]');
+            const bars = el?.shadowRoot?.querySelectorAll('[part~="bar"]');
             if (!bars) return 0;
             return Math.max(...Array.from(bars).map((b) => parseFloat((b as HTMLElement).style.height) || 0));
           });
@@ -960,7 +960,7 @@ test.describe('Check 9: live microphone (fake device) drives useAudioAnalysis', 
 
         const finalHeights = await page.evaluate(() => {
           const el = document.querySelector('[data-test-id="mic-test"]');
-          const bars = el?.shadowRoot?.querySelectorAll('[part="bar"]');
+          const bars = el?.shadowRoot?.querySelectorAll('[part~="bar"]');
           return bars ? Array.from(bars).map((b) => (b as HTMLElement).style.height) : [];
         });
         writeFileSync(join(DIRS.mic, 'bands.txt'), JSON.stringify(finalHeights, null, 2));
