@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, type Accessor } from 'solid-js';
+import { createSignal, onCleanup, untrack, type Accessor } from 'solid-js';
 
 export type Transition =
   | { duration: number; ease?: 'linear' | 'easeIn' | 'easeOut' | 'easeInOut' }
@@ -114,7 +114,25 @@ export function createTween(initial: number): {
     if (disposed) return;
 
     const pingPong = Array.isArray(target);
-    const [a, b] = pingPong ? target : [value(), target];
+    // Untracked: `.to()` is an imperative command ("animate to this
+    // target"), not a reactive read. Its normal caller is a createEffect
+    // reacting to some OTHER signal (e.g. state changing); reading this
+    // tween's own `value()` here without untrack() would make that effect
+    // implicitly depend on the tween's own signal too. That is invisible
+    // for a single tween (it would just restart itself every frame and
+    // still crawl toward the target) but is fatal the moment a caller
+    // creates a SECOND tween and `.to()`'s both from the same effect (see
+    // the wave shader variant, which does exactly this for amplitude and
+    // frequency): a browser fires one frame's queued
+    // requestAnimationFrame callbacks in the order they were registered, so
+    // the FIRST tween's step -- which runs first, and whose `setValue`
+    // synchronously re-triggers the (now-dependent) effect -- cancels the
+    // SECOND tween's already-queued step before the browser ever reaches
+    // it. That repeats identically every single frame, so the second
+    // tween's `step` never fires even once and its value never leaves its
+    // initial one, permanently, no matter how long the effect keeps
+    // "restarting" it.
+    const [a, b] = pingPong ? target : [untrack(value), target];
 
     if (!transition || (!isSpring(transition) && transition.duration === 0)) {
       setValue(pingPong ? a : b);
@@ -137,8 +155,10 @@ export function createTween(initial: number): {
       : EASINGS[transition.ease ?? 'easeOut'];
 
     // A ping-pong starts from its first value rather than wherever it was, so
-    // the pulse reads the same every time it restarts.
-    let from = pingPong ? a : value();
+    // the pulse reads the same every time it restarts. `a` is already an
+    // untracked read of the current value (or the ping-pong's first target
+    // value) from above -- reused here instead of reading `value()` again.
+    let from = a;
     let to_ = b;
     if (pingPong) setValue(a);
 

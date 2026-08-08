@@ -177,6 +177,73 @@ describe('WaveVisualizer: state -> uniform mapping', () => {
     expect(frozen.uniforms.uFrequency?.value).not.toBe(0);
   });
 
+  // Regression for a real browser bug the epic's end-to-end verification
+  // caught: uFrequency read 0 in every state, forever -- an oscilloscope
+  // that never oscillated -- while uAmplitude, built the very same way one
+  // line above it, worked. The root cause was in createTween, not here: see
+  // create-tween.test.ts's "does not depend on its own value merely by
+  // being .to()'d" tests for the actual, RELIABLE regression guard (verified
+  // by revert-and-rerun to fail against the pre-fix code and pass against
+  // the fix). Calling `.to()` on amplitude and then frequency from inside
+  // the SAME effect made that effect implicitly depend on amplitude's own
+  // signal (an untracked `value()` read gone missing), so writes from
+  // amplitude's own step() kept re-triggering the effect.
+  //
+  // This test asserts the state this component is SUPPOSED to reach after
+  // real animation frames elapse -- the coordinator's specific ask, and a
+  // gap the earlier synchronous assertions in this file genuinely cannot
+  // see (they check the props object at the instant of mount, before any
+  // requestAnimationFrame has fired, which reads identically whether
+  // frequency merely "hasn't started yet" or "can never start"). It does
+  // NOT use the shared `installFakeClock` stub, which holds a single
+  // pending callback and so cannot represent two independently scheduled
+  // tweens at all -- see that stub's own doc. But be honest about what it
+  // proves: checked empirically (revert create-tween.ts's fix, keep this
+  // test, rerun), this test still PASSED against the pre-fix code. jsdom's
+  // requestAnimationFrame does not batch one frame's callbacks the way a
+  // real browser does -- confirmed separately: registering two callbacks
+  // where the first cancels the second lets the second complete anyway,
+  // because jsdom does not process them as one atomic batch. The exact
+  // browser race (one callback's synchronous side effect cancelling an
+  // already-queued sibling before it gets its turn) genuinely cannot be
+  // reproduced in jsdom. This test is real coverage of the CORRECT
+  // behavior and would catch a plain regression to the old code, but the
+  // create-tween.test.ts tests are the ones that actually discriminate the
+  // original defect.
+  it('frequency actually reaches a non-zero value over real animation frames while listening, not just amplitude', async () => {
+    const c = await renderWave({ state: 'listening', frozen: false });
+
+    // jsdom's own requestAnimationFrame timestamp does not share an origin
+    // with performance.now() the way a real browser's does (confirmed
+    // empirically: the first callback can report a timestamp several
+    // hundred ms BEHIND performance.now()) -- so the wait here is generous
+    // enough to absorb that skew and still leave the tween's real 200ms
+    // duration room to complete, not a tight bound on the animation itself.
+    await new Promise((r) => setTimeout(r, 1500));
+
+    const t = waveTargets('listening');
+    expect(c.uniforms.uAmplitude?.value).toBeCloseTo(t.amplitude, 2);
+    expect(c.uniforms.uFrequency?.value).toBeCloseTo(t.frequency, 0);
+    expect(c.uniforms.uFrequency?.value).toBeGreaterThan(1);
+  });
+
+  it('frequency tracks 20 + 60 * volume while speaking with a non-zero volume, and keeps tracking it after a real animation frame elapses', async () => {
+    const c = await renderWave({ state: 'speaking', volume: 0.6 });
+
+    // The instant (duration: 0) live-volume write happens synchronously at
+    // mount, so this much is already covered above without waiting -- but
+    // asserting it again AFTER real frames elapse proves the base-target
+    // effect's non-instant tween (which also fires for `speaking`, see
+    // variant-wave.tsx) never clobbers the live-volume value once the
+    // requestAnimationFrame machinery actually starts running for real.
+    expect(c.uniforms.uFrequency?.value).toBeCloseTo(20 + 60 * 0.6, 6);
+
+    await new Promise((r) => setTimeout(r, 300));
+
+    expect(c.uniforms.uFrequency?.value).toBeCloseTo(20 + 60 * 0.6, 6);
+    expect(c.uniforms.uAmplitude?.value).toBeCloseTo(0.015 + 0.4 * 0.6, 6);
+  });
+
   it('frozen collapses an array (pulse) opacity target to its first value instead of ping-ponging', async () => {
     const t = waveTargets('listening');
     expect(Array.isArray(t.opacity)).toBe(true);

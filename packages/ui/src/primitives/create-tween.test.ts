@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { createRoot } from 'solid-js';
+import { describe, it, expect, vi } from 'vitest';
+import { createRoot, createEffect } from 'solid-js';
 import { createTween } from './create-tween';
 import { installFakeClock } from '../test-utils/fake-clock';
 
@@ -255,5 +255,102 @@ describe('named easings as cubic beziers', () => {
       }
       dispose();
     });
+  });
+});
+
+// A real browser bug, found by the audio-visualizer epic's end-to-end
+// verification: the wave shader's `uFrequency` uniform read 0 in every
+// state, forever, while `uAmplitude` (built the same way, one line above it)
+// worked. Root cause was here, not in the wave variant: `to()` read this
+// tween's own `value()` WITHOUT `untrack()`, so calling `.to()` from inside
+// a createEffect (the normal way to use this primitive -- see the class doc)
+// made that effect implicitly depend on the tween's own signal. Every write
+// from the tween's own `step()` then re-triggered the effect, which called
+// `.to()` again -- harmless for a single tween (it just restarts itself and
+// still crawls toward the target), but fatal for a SECOND tween `.to()`'d
+// later in the SAME effect (exactly what the wave variant does for amplitude
+// then frequency): a browser fires one frame's queued
+// `requestAnimationFrame` callbacks in registration order, so the first
+// tween's step -- which runs first and whose `setValue` synchronously
+// re-triggers the effect -- cancels the second tween's already-queued step
+// before the browser ever reaches it. That repeated identically every
+// frame, forever, so the second tween's `step` never fired even once.
+//
+// The shared `installFakeClock` stub used everywhere else in this file
+// cannot reproduce this: it holds a single pending callback, not a real
+// per-registration queue, so it can never represent "two independently
+// scheduled callbacks queued for the same frame" in the first place -- see
+// its own doc. These tests use jsdom's REAL `requestAnimationFrame`
+// (confirmed to support multiple independently pending callbacks, unlike
+// the stub) with real timers instead.
+describe('createTween: does not depend on its own value merely by being .to()\'d', () => {
+  // `createEffect`'s FIRST run is not synchronous even inside `createRoot`
+  // (confirmed empirically: it flushes on the next microtask, unlike
+  // `@solidjs/testing-library`'s `render()`, which flushes before returning
+  // -- that is why the rest of this file, and variant-wave.test.tsx, never
+  // needed this). One `await Promise.resolve()` is enough to observe it.
+  //
+  // Disposal is wrapped in try/finally: with real timers and a real
+  // `requestAnimationFrame`, a tween that is never disposed keeps its RAF
+  // loop running past the end of ITS OWN test and into whichever test runs
+  // next, corrupting that test's timing. An assertion failure must not skip
+  // cleanup.
+  it('an effect that calls .to() on a tween does not re-run merely because that tween\'s OWN value changes -- and the tween still reaches its target', async () => {
+    vi.unstubAllGlobals(); // real requestAnimationFrame/performance for this test, not the fake clock's single-slot stub.
+    let dispose = () => {};
+    try {
+      let runs = 0;
+      const t = createRoot((d) => {
+        dispose = d;
+        const tween = createTween(0);
+        createEffect(() => {
+          runs++;
+          tween.to(10, { duration: 0.15, ease: 'linear' });
+        });
+        return tween;
+      });
+      await Promise.resolve();
+      expect(runs).toBe(1);
+
+      await new Promise((r) => setTimeout(r, 1500));
+
+      // The bug, reproduced in isolation: reading `value()` inside `.to()`
+      // without `untrack()` made this effect depend on `t`'s own signal, so
+      // every `setValue()` call from `step()` re-ran it -- climbing into the
+      // dozens within a few hundred ms, not staying at 1.
+      expect(runs).toBe(1);
+      expect(t.value()).toBeCloseTo(10, 0);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('a SECOND tween .to()\'d from the same effect as a first one still reaches its own target -- the exact shape of the wave shader bug (amplitude worked, frequency stayed stuck at 0 forever)', async () => {
+    vi.unstubAllGlobals();
+    let dispose = () => {};
+    try {
+      const { first, second } = createRoot((d) => {
+        dispose = d;
+        const first = createTween(0);
+        const second = createTween(0);
+        createEffect(() => {
+          first.to(10, { duration: 0.15, ease: 'linear' });
+          second.to(10, { duration: 0.15, ease: 'linear' });
+        });
+        return { first, second };
+      });
+      await Promise.resolve();
+
+      await new Promise((r) => setTimeout(r, 1500));
+
+      expect(first.value()).toBeCloseTo(10, 0);
+      // Before the fix, this stayed at EXACTLY 0 forever: the first tween's
+      // step always fired first (registered first, every restart cycle) and
+      // its write always re-triggered the effect before the browser ever
+      // reached the second tween's already-queued step for that same frame.
+      expect(second.value()).toBeCloseTo(10, 0);
+    } finally {
+      dispose();
+    }
   });
 });
