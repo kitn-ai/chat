@@ -1776,6 +1776,10 @@ git commit -m "feat(primitives): add numeric tween for shader uniforms"
 
 **Rendering contract, shared by all three DOM variants.** Every drawn element carries `part` (`bar` or `cell`), `data-kai-index`, and `data-kai-highlighted`, so consumers restyle from outside the shadow root. Bands are forced to all-zero unless `state === 'speaking'`; in every other state the sequence alone drives the highlight. `frozen` comes from `prefers-reduced-motion` and pins the sequencer at its first frame.
 
+**Use `<Index>`, never `<For>`, for the drawn elements.** Solid's `<For>` keys each rendered item by `===` on the array *value*, so an array of numbers that changes every audio frame tears down and recreates most of the DOM nodes rather than patching them. That has two consequences and both are bad: it defeats the `transition-colors duration-250` exactly at the `listening` to `speaking` boundary, because a freshly created node has no prior state to transition from, and it churns the DOM on the highest-frequency path in the component. `<For>` is for lists whose membership changes; `<Index>` is for arrays whose values change in place, which is precisely this case.
+
+**The children render-prop must hand out accessors, not resolved values.** With `<Index>`, the mapper runs once per position and never re-runs when a value changes, so passing a plain `{ index, highlighted, value }` object would freeze whatever a consumer renders. The built-in markup only stays live because Solid's compiler wraps each of its own literal attribute bindings in a per-attribute effect; a consumer's function gets none of that. `index` is genuinely static per position and stays a number; `highlighted` and `value` are getters the consumer calls inside their own JSX.
+
 Sizes are numbers in a plain table, not Tailwind classes. Upstream uses `cva` with literal arbitrary values (`w-[4px]`), which cannot be interpolated and forces five variants per geometry. Inline styles from a table are shorter and let `barCount` vary freely.
 
 - [ ] **Step 1: Write the failing test**
@@ -1951,7 +1955,7 @@ export function defaultGridCount(size: VisualizerSize): number {
 Create `packages/ui/src/components/audio-visualizer/variant-bar.tsx`:
 
 ```tsx
-import { For, type JSX } from 'solid-js';
+import { Index, type JSX } from 'solid-js';
 import { cn } from '../../utils/cn';
 import { normalizeVolumeBands } from '../../primitives/audio-bands';
 import { useSequencer } from '../../primitives/use-sequencer';
@@ -2048,25 +2052,30 @@ Add to `VariantProps` in `variant-bar.tsx`:
    * sequence has it lit, and its 0..1 level. `::part(bar)` handles restyling;
    * this is for replacing the markup outright.
    */
-  children?: (item: { index: number; highlighted: boolean; value: number }) => JSX.Element;
+  children?: (item: {
+    index: number;
+    highlighted: () => boolean;
+    value: () => number;
+  }) => JSX.Element;
 ```
 
 Then in `BarVisualizer`, wrap the default bar:
 
 ```tsx
-      <For each={levels()}>
+      {/* Index, not For: the array's VALUES change every audio frame while its
+          length does not. For would recreate these nodes and kill the transition. */}
+      <Index each={levels()}>
         {(level, i) => {
-          const item = () => ({
-            index: i(),
-            highlighted: highlighted().includes(i()),
-            value: level,
-          });
+          // Accessors, not resolved values. The Index mapper runs once per
+          // position, so anything handed to a consumer's render function has to
+          // stay callable or it freezes at mount.
+          const isLit = () => highlighted().includes(i);
           return (
-            props.children?.(item()) ?? (
+            props.children?.({ index: i, highlighted: isLit, value: level }) ?? (
               <div
                 part="bar"
-                data-kai-index={i()}
-                data-kai-highlighted={item().highlighted}
+                data-kai-index={i}
+                data-kai-highlighted={isLit()}
                 class={cn(
                   'rounded-full bg-current/10 transition-colors duration-250 ease-linear',
                   'data-[kai-highlighted=true]:bg-current',
@@ -2074,7 +2083,7 @@ Then in `BarVisualizer`, wrap the default bar:
                 style={{
                   width: `${BAR_WIDTH[props.size]}px`,
                   'min-height': `${BAR_WIDTH[props.size]}px`,
-                  height: `${level * 100}%`,
+                  height: `${level() * 100}%`,
                 }}
               />
             )
@@ -2252,7 +2261,7 @@ Expected: FAIL, cannot resolve `./variant-grid`.
 Create `packages/ui/src/components/audio-visualizer/variant-grid.tsx`:
 
 ```tsx
-import { For, type JSX } from 'solid-js';
+import { Index, type JSX } from 'solid-js';
 import { cn } from '../../utils/cn';
 import { normalizeVolumeBands } from '../../primitives/audio-bands';
 import { useSequencer } from '../../primitives/use-sequencer';
@@ -2495,7 +2504,7 @@ Expected: FAIL, cannot resolve `./variant-radial`.
 Create `packages/ui/src/components/audio-visualizer/variant-radial.tsx`:
 
 ```tsx
-import { For, type JSX } from 'solid-js';
+import { Index, type JSX } from 'solid-js';
 import { cn } from '../../utils/cn';
 import { normalizeVolumeBands } from '../../primitives/audio-bands';
 import { useSequencer } from '../../primitives/use-sequencer';
