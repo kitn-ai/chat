@@ -51,19 +51,23 @@ function auroraTargets(state: VisualizerState): {
 }
 
 /**
- * Live `prefers-color-scheme`, for `uTheme` (fact sheet section 4: a real
- * branch in the color math, not just a compositing background -- see
- * `aurora.glsl.ts`'s module doc). Defaults to light (matching
- * `usePrefersReducedMotion` and `createDarkMode`'s own `false`-until-resolved
- * default elsewhere in this package) until `matchMedia` resolves, and is a
- * no-op under SSR or in an environment without it (jsdom included: it does
- * not implement `matchMedia` at all).
+ * Live `prefers-color-scheme`, used ONLY as the fallback when no caller
+ * supplies `props.dark` -- see `AuroraVisualizer`'s `resolvedDark` below.
+ * That is the standalone case (this component mounted directly, with no
+ * facade resolving a `theme` attribute above it), and it is also why this
+ * defaults to light (matching `usePrefersReducedMotion` and
+ * `createDarkMode`'s own `false`-until-resolved default elsewhere in this
+ * package) until `matchMedia` resolves, and is a no-op under SSR or in an
+ * environment without it (jsdom included: it does not implement
+ * `matchMedia` at all).
  *
- * No `theme` prop reaches this component: neither `ShaderVariantProps` nor
- * the dispatcher above it (`index.tsx`) carries one, and both are out of
- * this task's file scope. This is the closest available signal without
- * touching either -- see the task report's concerns for the follow-up this
- * implies.
+ * `<kai-audio-visualizer theme="light">` on a dark OS needs to render the
+ * LIGHT pipeline. This hook alone cannot know that (it only ever sees the
+ * OS preference, never an explicit override) -- `define.tsx`'s
+ * `createDarkMode` is what resolves `theme="light"|"dark"|"auto"` against
+ * the media query correctly (explicit wins, `auto` follows the query), one
+ * layer up. `props.dark` is meant to carry that ALREADY-RESOLVED boolean
+ * down from there; this hook only fills the gap when nothing does.
  */
 function usePrefersDark(): Accessor<boolean> {
   const [dark, setDark] = createSignal(false);
@@ -89,14 +93,28 @@ function usePrefersDark(): Accessor<boolean> {
  * of whatever this component also does at the state layer, so the live
  * volume is folded into `uScale` here, in exactly one place (`scaleValue`),
  * and nowhere else.
+ *
+ * `dark` is an extra field on top of `ShaderVariantProps`, not yet a member
+ * of that shared type: it is meant to carry the FACADE's already-resolved
+ * `theme="light"|"dark"|"auto"` decision (see `define.tsx`'s
+ * `createDarkMode`), threaded down through the dispatcher, once that wiring
+ * lands (see the task report for the exact shape requested). Optional, with
+ * a live `prefers-color-scheme` fallback, so this component still works
+ * correctly when mounted standalone (no facade above it resolving a
+ * `theme` attribute at all).
  */
-export default function AuroraVisualizer(props: ShaderVariantProps): JSX.Element {
+export default function AuroraVisualizer(props: ShaderVariantProps & { dark?: boolean }): JSX.Element {
   const intensity = createTween(1.0);
   const speed = createTween(0.5);
   const complexity = createTween(0.4);
   const amplitude = createTween(1.2);
   const scale = createTween(0.2);
-  const isDark = usePrefersDark();
+  // Fallback only -- see usePrefersDark's and resolvedDark's own docs.
+  const systemDark = usePrefersDark();
+  // An explicit `props.dark` (the facade's already-resolved theme) always
+  // wins; falling back to the system media query is only correct when
+  // nothing upstream resolved a theme at all (the standalone case).
+  const resolvedDark = () => props.dark ?? systemDark();
 
   createEffect(() => {
     const t = auroraTargets(props.state);
@@ -140,6 +158,15 @@ export default function AuroraVisualizer(props: ShaderVariantProps): JSX.Element
   const scaleValue = () =>
     props.state === 'speaking' && props.volume > 0 ? 0.2 + 0.2 * props.volume : scale.value();
 
+  // uTheme: 0 selects the shader's DARK colour pipeline, 1 selects LIGHT
+  // (aurora.glsl.ts, fact sheet section 4 -- a real branch in the colour
+  // math, not just a compositing background). Named and isolated here,
+  // deliberately not inlined into the uniforms object below: inverting this
+  // one line silently swaps the two pipelines, and both render something
+  // plausible, so the mapping needs to stay obvious at a glance rather than
+  // buried in a longer expression.
+  const uThemeValue = () => (resolvedDark() ? 0 : 1);
+
   return (
     <div
       data-kai-state={props.state}
@@ -158,7 +185,7 @@ export default function AuroraVisualizer(props: ShaderVariantProps): JSX.Element
           uComplexity: { type: '1f', value: complexity.value() },
           uAmplitude: { type: '1f', value: amplitude.value() },
           uScale: { type: '1f', value: scaleValue() },
-          uTheme: { type: '1f', value: isDark() ? 0 : 1 },
+          uTheme: { type: '1f', value: uThemeValue() },
         }}
         onError={(message) => {
           // "not available" is ShaderCanvas's literal wording for a missing

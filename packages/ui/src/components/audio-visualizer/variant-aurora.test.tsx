@@ -146,7 +146,7 @@ describe('AuroraVisualizer: state -> uniform mapping', () => {
     });
   });
 
-  async function renderAurora(props: Partial<ShaderVariantProps> = {}) {
+  async function renderAurora(props: Partial<ShaderVariantProps & { dark?: boolean }> = {}) {
     const { default: AuroraVisualizer } = await import('./variant-aurora');
     render(() => <AuroraVisualizer {...baseProps} {...props} />);
     return captured!;
@@ -210,6 +210,28 @@ describe('AuroraVisualizer: state -> uniform mapping', () => {
     }));
     const c = await renderAurora();
     expect(c.uniforms.uTheme?.value).toBe(1);
+  });
+
+  // This is the regression Rob's dispatcher agent caught: <kai-audio-visualizer
+  // theme="light"> on a dark OS was rendering the DARK pipeline, because
+  // nothing threaded the facade's already-resolved theme down and this
+  // component sniffed the media query itself instead. `props.dark` is the
+  // fix's seam -- an explicit value must win over the system preference in
+  // BOTH directions, not just happen to agree with it.
+  it('an explicit dark=false (light) wins over a system that prefers dark', async () => {
+    vi.stubGlobal('matchMedia', (q: string) => ({
+      matches: true, media: q, addEventListener: () => {}, removeEventListener: () => {},
+    }));
+    const c = await renderAurora({ dark: false });
+    expect(c.uniforms.uTheme?.value).toBe(1);
+  });
+
+  it('an explicit dark=true wins over a system that prefers light', async () => {
+    vi.stubGlobal('matchMedia', (q: string) => ({
+      matches: false, media: q, addEventListener: () => {}, removeEventListener: () => {},
+    }));
+    const c = await renderAurora({ dark: true });
+    expect(c.uniforms.uTheme?.value).toBe(0);
   });
 
   it('frozen lands listening\'s targets immediately, skipping the tween, and pins speed at 0', async () => {
