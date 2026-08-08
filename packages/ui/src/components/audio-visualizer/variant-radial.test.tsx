@@ -1,0 +1,257 @@
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import '@testing-library/jest-dom/vitest';
+import { createSignal } from 'solid-js';
+import { render, cleanup } from '@solidjs/testing-library';
+import { RadialVisualizer } from './variant-radial';
+import { defaultRadialBarCount } from './sizes';
+
+afterEach(cleanup);
+
+const bars = (c: HTMLElement) => Array.from(c.querySelectorAll('[part="bar"]')) as HTMLElement[];
+const spokes = (c: HTMLElement) => Array.from(c.querySelectorAll('[data-kai-spoke]')) as HTMLElement[];
+const flush = () => new Promise((r) => setTimeout(r, 0));
+
+describe('defaultRadialBarCount', () => {
+  it('uses 12 bars at the two smallest sizes and 24 above', () => {
+    expect(defaultRadialBarCount('icon')).toBe(12);
+    expect(defaultRadialBarCount('sm')).toBe(12);
+    expect(defaultRadialBarCount('md')).toBe(24);
+  });
+});
+
+describe('RadialVisualizer', () => {
+  it('renders one bar per position around the ring', () => {
+    const { container } = render(() => (
+      <RadialVisualizer state="idle" size="md" bands={[]} frozen={false} barCount={8} />
+    ));
+    expect(bars(container)).toHaveLength(8);
+  });
+
+  it('spaces the spokes evenly around a full turn', () => {
+    const { container } = render(() => (
+      <RadialVisualizer state="idle" size="md" bands={[]} frozen={false} barCount={4} radius={40} />
+    ));
+    const transforms = spokes(container).map((s) => s.style.transform);
+    expect(transforms[0]).toContain('rotate(0rad)');
+    expect(transforms[1]).toContain(`rotate(${Math.PI / 2}rad)`);
+    expect(transforms[2]).toContain(`rotate(${Math.PI}rad)`);
+    transforms.forEach((t) => expect(t).toContain('translateY(40px)'));
+  });
+
+  it('sizes each dot from the circumference so bars never overlap', () => {
+    const { container } = render(() => (
+      <RadialVisualizer state="idle" size="md" bands={[]} frozen={false} barCount={8} radius={40} />
+    ));
+    const expected = (40 * Math.PI) / 8;
+    expect(bars(container)[0]!.style.width).toBe(`${expected}px`);
+    // dotSize doubles as min-height, so a dot still shows at zero height.
+    expect(bars(container)[0]!.style.minHeight).toBe(`${expected}px`);
+  });
+
+  it('collapses every bar to zero height outside speaking, even with oversized bands', () => {
+    const { container } = render(() => (
+      <RadialVisualizer state="listening" size="md" bands={[5, 10, 100, 1]} frozen={false} barCount={4} />
+    ));
+    bars(container).forEach((b) => expect(b.style.height).toBe('0px'));
+  });
+
+  it('extends bars from the bands while speaking', () => {
+    const { container } = render(() => (
+      <RadialVisualizer
+        state="speaking" size="md" frozen={false}
+        barCount={4} radius={40} bands={[0, 0.5, 1, 0]}
+      />
+    ));
+    const dot = (40 * Math.PI) / 4;
+    const heights = bars(container).map((b) => b.style.height);
+    expect(heights[0]).toBe('0px');
+    expect(heights[1]).toBe(`${dot * 10 * 0.5}px`);
+    expect(heights[2]).toBe(`${dot * 10 * 1}px`);
+    expect(heights[3]).toBe('0px');
+  });
+
+  it('lights the whole ring and spins while thinking', () => {
+    const { container } = render(() => (
+      <RadialVisualizer state="thinking" size="md" bands={[]} frozen={false} barCount={8} />
+    ));
+    // `thinking` overrides the scripted highlight groups: the whole ring
+    // reads as lit and the container spins instead of blinking a subset.
+    bars(container).forEach((b) => expect(b.dataset.kaiHighlighted).toBe('true'));
+    const host = container.querySelector('[data-kai-state="thinking"]') as HTMLElement;
+    expect(host.className).toContain('animate-spin');
+  });
+
+  it('lights the whole ring while speaking', () => {
+    const { container } = render(() => (
+      <RadialVisualizer state="speaking" size="md" bands={[0.5, 0.5, 0.5, 0.5]} frozen={false} barCount={4} />
+    ));
+    bars(container).forEach((b) => expect(b.dataset.kaiHighlighted).toBe('true'));
+  });
+
+  it('lets a caller render each bar themselves', () => {
+    const { container } = render(() => (
+      <RadialVisualizer state="idle" size="md" bands={[]} frozen={false} barCount={4}>
+        {(item) => <span data-custom={item.index}>{item.value()}</span>}
+      </RadialVisualizer>
+    ));
+    expect(container.querySelectorAll('[data-custom]')).toHaveLength(4);
+    expect(container.querySelectorAll('[part="bar"]')).toHaveLength(0);
+    // The positioning wrapper still places custom markup on the ring.
+    expect(spokes(container)).toHaveLength(4);
+  });
+});
+
+describe('RadialVisualizer barCount divisibility warning', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('warns once when barCount is not divisible by 4', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    render(() => (
+      <RadialVisualizer state="idle" size="md" bands={[]} frozen={false} barCount={7} />
+    ));
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[0]).toContain('barCount 7');
+  });
+
+  it('does not warn when barCount is divisible by 4', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    render(() => (
+      <RadialVisualizer state="idle" size="md" bands={[]} frozen={false} barCount={8} />
+    ));
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('does not warn for the size defaults (12 and 24 are both divisible by 4)', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    render(() => <RadialVisualizer state="idle" size="icon" bands={[]} frozen={false} />);
+    render(() => <RadialVisualizer state="idle" size="md" bands={[]} frozen={false} />);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('does not refire the warning on an unrelated reactive rerender', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const [cls, setCls] = createSignal('a');
+    render(() => (
+      <RadialVisualizer state="idle" size="md" bands={[]} frozen={false} barCount={7} class={cls()} />
+    ));
+    expect(warn).toHaveBeenCalledTimes(1);
+
+    setCls('b');
+    await flush();
+
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+});
+
+// `state="listening"` below is a SCRIPTED state, where the highlight set
+// genuinely changes from frame to frame, plus the `frozen` contract that pins
+// the sequencer at frame 0. `speaking` (used in the tests above) would leave
+// `highlighted` constant `true` regardless of tick, which is exactly why the
+// render-prop's staleness bug (finding 2) went unnoticed in the other two
+// variants' first pass. The fake RAF/performance clock mirrors
+// variant-bar.test.tsx and variant-grid.test.tsx: a single pending callback we
+// advance by hand so ticking is deterministic instead of racing real timers.
+describe('RadialVisualizer frozen and live sequencing', () => {
+  let frame: ((t: number) => void) | undefined;
+  let now = 0;
+
+  beforeEach(() => {
+    now = 0;
+    frame = undefined;
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      frame = cb;
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => { frame = undefined; });
+    vi.stubGlobal('performance', { now: () => now });
+  });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  function advance(ms: number) {
+    now += ms;
+    const f = frame;
+    frame = undefined;
+    f?.(now);
+  }
+
+  it('never arms requestAnimationFrame while frozen, so the highlight stays pinned to the sequence\'s first frame', () => {
+    const { container } = render(() => (
+      <RadialVisualizer state="listening" size="md" bands={[]} frozen={true} barCount={8} />
+    ));
+
+    // listening's first frame lights the first radial group of 8: 0, 2, 4, 6.
+    const initial = bars(container).map((b) => b.dataset.kaiHighlighted);
+    expect(initial).toEqual(['true', 'false', 'true', 'false', 'true', 'false', 'true', 'false']);
+
+    // The proof it is truly frozen, not just "hasn't ticked yet": no RAF was
+    // ever armed, so there is nothing pending to advance.
+    expect(frame).toBeUndefined();
+
+    advance(5000);
+    expect(bars(container).map((b) => b.dataset.kaiHighlighted)).toEqual(initial);
+  });
+
+  it('pins the highlight to the first frame while frozen, even across an unrelated rerender', async () => {
+    const [cls, setCls] = createSignal('a');
+    const { container } = render(() => (
+      <RadialVisualizer state="listening" size="md" bands={[]} frozen={true} barCount={8} class={cls()} />
+    ));
+    const initial = bars(container).map((b) => b.dataset.kaiHighlighted);
+    expect(initial).toEqual(['true', 'false', 'true', 'false', 'true', 'false', 'true', 'false']);
+
+    setCls('b');
+    await flush();
+
+    expect(bars(container).map((b) => b.dataset.kaiHighlighted)).toEqual(initial);
+  });
+
+  it('un-freezing lets the tick advance, the control case proving the frozen assertions above are not coincidental', () => {
+    const { container } = render(() => (
+      <RadialVisualizer state="listening" size="md" bands={[]} frozen={false} barCount={8} />
+    ));
+    expect(bars(container).map((b) => b.dataset.kaiHighlighted)).toEqual([
+      'true', 'false', 'true', 'false', 'true', 'false', 'true', 'false',
+    ]);
+
+    advance(500); // the listening interval
+    expect(bars(container).map((b) => b.dataset.kaiHighlighted)).toEqual([
+      'false', 'true', 'false', 'true', 'false', 'true', 'false', 'true',
+    ]);
+  });
+
+  it('hands the render-prop accessors that reflect the CURRENT sequence frame, not a mount-time snapshot', () => {
+    const seen: { index: number; highlighted: () => boolean; value: () => number }[] = [];
+    render(() => (
+      <RadialVisualizer state="listening" size="md" bands={[]} frozen={false} barCount={8}>
+        {(item) => { seen.push(item); return <span />; }}
+      </RadialVisualizer>
+    ));
+
+    expect(seen.map((s) => s.highlighted())).toEqual([
+      true, false, true, false, true, false, true, false,
+    ]);
+
+    advance(500);
+
+    // Same closures as above, called again: they must reflect the new tick.
+    expect(seen.map((s) => s.highlighted())).toEqual([
+      false, true, false, true, false, true, false, true,
+    ]);
+  });
+
+  it('does not spin while frozen for reduced motion, even though thinking still lights the whole ring', () => {
+    const { container } = render(() => (
+      <RadialVisualizer state="thinking" size="md" bands={[]} frozen={true} barCount={8} />
+    ));
+    const host = container.querySelector('[data-kai-state="thinking"]') as HTMLElement;
+
+    expect(frame).toBeUndefined();
+    bars(container).forEach((b) => expect(b.dataset.kaiHighlighted).toBe('true'));
+    expect(host.className).not.toContain('animate-spin');
+
+    advance(5000);
+    bars(container).forEach((b) => expect(b.dataset.kaiHighlighted).toBe('true'));
+    expect(host.className).not.toContain('animate-spin');
+  });
+});
