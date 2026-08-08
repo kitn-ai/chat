@@ -146,7 +146,7 @@ export interface AudioVisualizerProps extends WebComponentProps {
   /** Pre-computed levels, 0..1. Set this and no AudioContext is ever built, which is what keeps headless/SSR rendering and browser-speech-synthesis playback (which exposes no audio node) free of Web Audio entirely. JS property only. A new array reference is required for each update; mutating the existing array in place will not re-render. */
   bands?: number[];
   /** Custom fragment shader for `variant="custom"`. JS property only. */
-  shader?: { fragment: string; uniforms?: Record<string, { type: string; value: number | number[]; }> };
+  shader?: { fragment: string; uniforms?: Record<string, { type: "1f" | "1i" | "1fv" | "2f" | "3f" | "3fv" | "4f" | "4fv" | "Matrix2fv" | "Matrix3fv" | "Matrix4fv"; value: number | number[] }> };
 }
 
 export const AudioVisualizer = /*#__PURE__*/ createWebComponent<AudioVisualizerProps>(
