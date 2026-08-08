@@ -62,6 +62,14 @@ export interface AudioVisualizerProps {
   bands?: number[];
   shader?: ShaderSpec;
   class?: string;
+  /**
+   * Render each DOM variant's items yourself -- the same render-prop the
+   * underlying bar/grid/radial component takes, imported rather than
+   * redeclared so the two cannot drift. Not used by the shader variants
+   * (`wave`/`aurora`/`custom`): a fragment shader has no per-item DOM for it
+   * to replace.
+   */
+  children?: VariantProps['children'];
 }
 
 /** Tracks `prefers-reduced-motion`, live. */
@@ -82,12 +90,14 @@ export function usePrefersReducedMotion(): Accessor<boolean> {
 
 /**
  * Props a shader variant (`wave`, `aurora`, `custom`) receives from the
- * dispatcher: everything a DOM variant gets, plus the scalar `volume` reading
+ * dispatcher: everything a DOM variant gets, minus `children` (a fragment
+ * shader has no per-item DOM for a render-prop to replace, so the field is
+ * dropped rather than inherited-but-unused), plus the scalar `volume` reading
  * (shaders read one number, not per-band levels) and the shader-specific
  * knobs. This is the compile-time contract Tasks 12 to 15 build against --
  * keep it honest rather than casting around a looser type at the render site.
  */
-export interface ShaderVariantProps extends VariantProps {
+export interface ShaderVariantProps extends Omit<VariantProps, 'children'> {
   volume: number;
   /** Pattern density, 0..1. */
   complexity?: number;
@@ -161,6 +171,10 @@ export function AudioVisualizer(props: AudioVisualizerProps): JSX.Element {
     onCleanup(() => { cancelled = true; });
   });
 
+  // Props every variant shares. Deliberately WITHOUT `children`: this is the
+  // object spread into the shader component (`<C>` below), and
+  // ShaderVariantProps has no slot for it. Do not add `children` here -- add
+  // it to `domShared` instead, or the exclusion below stops meaning anything.
   const shared = (): VariantProps => ({
     state: state(),
     size: size(),
@@ -168,6 +182,11 @@ export function AudioVisualizer(props: AudioVisualizerProps): JSX.Element {
     frozen: reduced(),
     color: props.color,
   });
+
+  // The three DOM variants (bar/grid/radial), including the bar fallback
+  // shown while a shader chunk loads or fails, additionally get the
+  // caller's render-prop.
+  const domShared = (): VariantProps => ({ ...shared(), children: props.children });
 
   const a11y = () =>
     props.label
@@ -177,11 +196,11 @@ export function AudioVisualizer(props: AudioVisualizerProps): JSX.Element {
   return (
     <div class={cn('inline-flex', props.class)} {...a11y()}>
       <Switch
-        fallback={<BarVisualizer {...shared()} barCount={props.barCount} />}
+        fallback={<BarVisualizer {...domShared()} barCount={props.barCount} />}
       >
         <Match when={variant() === 'grid'}>
           <GridVisualizer
-            {...shared()}
+            {...domShared()}
             rowCount={props.rowCount}
             columnCount={props.columnCount}
             spread={props.spread}
@@ -189,13 +208,13 @@ export function AudioVisualizer(props: AudioVisualizerProps): JSX.Element {
           />
         </Match>
         <Match when={variant() === 'radial'}>
-          <RadialVisualizer {...shared()} barCount={props.barCount} radius={props.radius} />
+          <RadialVisualizer {...domShared()} barCount={props.barCount} radius={props.radius} />
         </Match>
         <Match when={isShader()}>
           {/* Bars stand in until the chunk resolves, and permanently if it cannot. */}
           <Show
             when={Shader()}
-            fallback={<BarVisualizer {...shared()} barCount={props.barCount} />}
+            fallback={<BarVisualizer {...domShared()} barCount={props.barCount} />}
           >
             {(Comp) => {
               const C = Comp();

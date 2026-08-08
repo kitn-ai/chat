@@ -160,3 +160,78 @@ describe('AudioVisualizer band count reactivity', () => {
     expect(options.bands()).toBe(7);
   });
 });
+
+// The dispatcher declared `children` on AudioVisualizerProps but never
+// forwarded it, so the render-prop each DOM variant supports had no public
+// path to it -- dead code from a consumer's perspective. These prove it
+// actually reaches each variant (not just that the dispatcher still renders),
+// that it works whether passed as nested JSX or an explicit prop, and that
+// the shader path is deliberately excluded rather than incidentally so.
+describe('AudioVisualizer children render-prop', () => {
+  const renderItem = (item: { index: number }) => <span data-custom={item.index} />;
+
+  // In an afterEach, not at the end of the shader test's body: if an earlier
+  // assertion there throws, a cleanup step after it never runs and the mock
+  // leaks into whatever test happens to run next (same lesson as the
+  // shader-load-failure describe above).
+  afterEach(() => vi.doUnmock('./variant-wave'));
+
+  it('forwards children to the bar variant, replacing its default markup', () => {
+    const { container } = render(() => (
+      <AudioVisualizer variant="bar">{renderItem}</AudioVisualizer>
+    ));
+    expect(container.querySelectorAll('[data-custom]').length).toBeGreaterThan(0);
+    expect(container.querySelectorAll('[part="bar"]')).toHaveLength(0);
+  });
+
+  it('forwards children to the grid variant, replacing its default markup', () => {
+    const { container } = render(() => (
+      <AudioVisualizer variant="grid">{renderItem}</AudioVisualizer>
+    ));
+    expect(container.querySelectorAll('[data-custom]')).toHaveLength(25);
+    expect(container.querySelectorAll('[part="cell"]')).toHaveLength(0);
+  });
+
+  it('forwards children to the radial variant, rendered inside each spoke', () => {
+    const { container } = render(() => (
+      <AudioVisualizer variant="radial">{renderItem}</AudioVisualizer>
+    ));
+    // The spoke wrapper stays (radial positions it via CSS transform); only
+    // the markup INSIDE it is replaced, unlike bar/grid which swap the node
+    // itself.
+    expect(container.querySelectorAll('[data-kai-spoke]')).toHaveLength(24);
+    expect(container.querySelectorAll('[data-custom]')).toHaveLength(24);
+    expect(container.querySelectorAll('[part="bar"]')).toHaveLength(0);
+  });
+
+  it('also works passed as an explicit prop rather than nested JSX', () => {
+    const { container } = render(() => <AudioVisualizer variant="bar" children={renderItem} />);
+    expect(container.querySelectorAll('[data-custom]').length).toBeGreaterThan(0);
+    expect(container.querySelectorAll('[part="bar"]')).toHaveLength(0);
+  });
+
+  it('does not throw and renders the default markup when no children are given', () => {
+    // Guards against Solid ever handing `props.children` a non-nullish,
+    // non-function default (e.g. an empty string): every variant calls it as
+    // `props.children?.(item)`, which only short-circuits on null/undefined
+    // -- a falsy-but-defined value would throw "is not a function" here.
+    const { container } = render(() => <AudioVisualizer variant="bar" />);
+    expect(container.querySelectorAll('[part="bar"]').length).toBeGreaterThan(0);
+    expect(container.querySelectorAll('[data-custom]')).toHaveLength(0);
+  });
+
+  it('does not forward children to a shader variant', async () => {
+    let captured: Record<string, unknown> | undefined;
+    vi.doMock('./variant-wave', () => ({
+      default: (props: Record<string, unknown>) => {
+        captured = props;
+        return null;
+      },
+    }));
+
+    render(() => <AudioVisualizer variant="wave">{renderItem}</AudioVisualizer>);
+
+    await waitFor(() => expect(captured).toBeDefined());
+    expect(captured?.children).toBeUndefined();
+  });
+});
