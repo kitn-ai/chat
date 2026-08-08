@@ -586,11 +586,11 @@
       },
       {
         "name": "shader",
-        "type": "undefined | { fragment: string; uniforms?: undefined | Record<string, { type: string; value: number | number[]; }> }",
+        "type": "undefined | { fragment: string; uniforms?: undefined | Record<string, { type: \"1f\" | \"1i\" | \"1fv\" | \"2f\" | \"3f\" | \"3fv\" | \"4f\" | \"4fv\" | \"Matrix2fv\" | \"Matrix3fv\" | \"Matrix4fv\"; value: number | number[] }> }",
         "optional": true,
         "scalar": false,
         "description": "Custom fragment shader for `variant=\"custom\"`. JS property only.",
-        "displayType": "undefined | { fragment: string; uniforms?: undefined | Record<string, { type: string; value: number | number[]; }> }"
+        "displayType": "undefined | { fragment: string; uniforms?: undefined | Record<string, { type: \"1f\" | \"1i\" | \"1fv\" | \"2f\" | \"3f\" | \"3fv\" | \"4f\" | \"4fv\" | \"Matrix2fv\" | \"Matrix3fv\" | \"Matrix4fv\"; value: number | number[] }> }"
       }
     ],
     "events": [],
