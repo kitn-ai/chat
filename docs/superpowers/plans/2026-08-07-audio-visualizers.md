@@ -111,9 +111,9 @@ claims against reality instead of treating the brief as ground truth.
 | `packages/ui/src/components/audio-visualizer/index.tsx` | Dispatcher, lazy shader map, reduced-motion |
 | `packages/ui/src/components/audio-visualizer/shader-canvas.tsx` | ShaderToy-compatible WebGL runner |
 | `packages/ui/src/components/audio-visualizer/wave.glsl.ts` | Wave fragment shader (Apache 2.0, verbatim) |
-| `packages/ui/src/components/audio-visualizer/aura.glsl.ts` | Aura fragment shader (original) |
+| `packages/ui/src/components/audio-visualizer/aurora.glsl.ts` | Aura fragment shader (original) |
 | `packages/ui/src/components/audio-visualizer/variant-wave.tsx` | Wave renderer |
-| `packages/ui/src/components/audio-visualizer/variant-aura.tsx` | Aura renderer |
+| `packages/ui/src/components/audio-visualizer/variant-aurora.tsx` | Aura renderer |
 | `packages/ui/src/components/audio-visualizer/variant-custom.tsx` | BYO-shader renderer |
 | `packages/ui/src/elements/audio-visualizer.tsx` | `<kai-audio-visualizer>` facade |
 | `packages/ui/NOTICE` | Apache 2.0 attribution |
@@ -2751,7 +2751,21 @@ import { GridVisualizer } from './variant-grid';
 import { RadialVisualizer } from './variant-radial';
 import { defaultBarCount, type VisualizerSize } from './sizes';
 
-export type VisualizerVariant = 'bar' | 'grid' | 'radial' | 'wave' | 'aura' | 'custom';
+export type VisualizerVariant = 'bar' | 'grid' | 'radial' | 'wave' | 'aurora' | 'custom';
+
+/**
+ * `aura` is LiveKit's name for this look. Ours is `aurora`. Accept theirs so
+ * markup ported from LiveKit works unchanged, the same way `normalizeState`
+ * accepts their room-lifecycle state names.
+ */
+const VARIANT_ALIASES: Record<string, VisualizerVariant> = { aura: 'aurora' };
+
+export function normalizeVariant(input: string | undefined): VisualizerVariant {
+  if (!input) return 'bar';
+  const known = ['bar', 'grid', 'radial', 'wave', 'aurora', 'custom'];
+  if (known.includes(input)) return input as VisualizerVariant;
+  return VARIANT_ALIASES[input] ?? 'bar';
+}
 
 /** A consumer-supplied fragment shader, for `variant="custom"`. */
 export interface ShaderSpec {
@@ -2817,12 +2831,12 @@ export function usePrefersReducedMotion(): Accessor<boolean> {
  */
 const SHADER_VARIANTS: Record<string, () => Promise<{ default: Component<never> }>> = {
   wave: () => import('./variant-wave'),
-  aura: () => import('./variant-aura'),
+  aurora: () => import('./variant-aurora'),
   custom: () => import('./variant-custom'),
 };
 
 export function AudioVisualizer(props: AudioVisualizerProps): JSX.Element {
-  const variant = () => props.variant ?? 'bar';
+  const variant = () => normalizeVariant(props.variant);
   const size = () => props.size ?? 'md';
   const state = (): VisualizerState => normalizeState(props.state);
   const reduced = usePrefersReducedMotion();
@@ -2919,9 +2933,9 @@ export function AudioVisualizer(props: AudioVisualizerProps): JSX.Element {
 
 - [ ] **Step 4: Stub the three shader variants so the dynamic imports resolve**
 
-The dispatcher references `./variant-wave`, `./variant-aura`, `./variant-custom`, which Tasks 12 to 15 build. Create minimal default exports now so typecheck and tests pass, and so the lazy boundary is exercised from this task onward.
+The dispatcher references `./variant-wave`, `./variant-aurora`, `./variant-custom`, which Tasks 12 to 15 build. Create minimal default exports now so typecheck and tests pass, and so the lazy boundary is exercised from this task onward.
 
-Create each of `variant-wave.tsx`, `variant-aura.tsx`, `variant-custom.tsx` in `packages/ui/src/components/audio-visualizer/` with:
+Create each of `variant-wave.tsx`, `variant-aurora.tsx`, `variant-custom.tsx` in `packages/ui/src/components/audio-visualizer/` with:
 
 ```tsx
 import type { JSX } from 'solid-js';
@@ -4187,15 +4201,67 @@ the point; reading the source is what we are avoiding. See spec section 1.
 ## Task 14: Aura shader
 
 **Files:**
-- Create: `packages/ui/src/components/audio-visualizer/aura.glsl.ts`
+- Create: `packages/ui/src/components/audio-visualizer/aurora.glsl.ts`
 
 **Interfaces:**
 - Consumes: nothing.
 - Produces: `export default` a GLSL source string reading `uColor`, `uIntensity`, `uSpeed`, `uComplexity`.
 
-**STOP AND READ.** This is the one task with a licensing constraint and a human review gate.
+**STOP AND READ. This task changed on 2026-08-07.** Do not start from the starter
+shader further down this task; it is retained only as a record of what the plan
+guessed before a measured prototype existed.
 
-**You must not open** `agent-audio-visualizer-aura.tsx` or `use-agent-audio-visualizer-aura.ts` from `livekit/components-js`. Upstream's aura shader is under a restrictive UNCRN license that is incompatible with publishing `@kitn.ai/ui` to npm, and a framework port would leave that GLSL byte-identical. The visual effect is not protectable; that specific source is. Build from the brief below, which is spec section 8.
+**The base is now an adopted prototype**, approved by Rob, at
+`.superpowers/sdd/2026-08-07-audio-visualizers/reference/aura-prototype/`
+(durable copy at `/Users/home/Projects/kitn-ai/aurora-prototype/`). It was built
+in a parallel session and already matches the reference within a few percent on
+every scalar metric.
+
+**Read in this order before writing any shader code:**
+
+1. `README.md` in that folder: adoption terms, binding rules, naming.
+2. `aura-shader-handoff.md`: all eight sections. **Later sections supersede
+   earlier ones.** Section 5 has the verification anchors; section 8 has the
+   final architecture.
+3. `lk-aura-factsheet.md`: the two-team clean-room functional spec for the target
+   look. This is your ONLY sanctioned window into how LiveKit's shader works.
+
+**The visual target is mode 3, "veil", in `aura-proto.html`:** 36 phase-offset
+warped copies of one ring with the analytic neighbour-distance blur, per the fact
+sheet. Port that construction into `aurora.glsl.ts` under this epic's uniform
+contract. The per-state speed / scale / amplitude / frequency / brightness table
+is fact sheet section 5.
+
+To see it live: `python3 -m http.server <any free port>` in that folder, then open
+`aura-proto.html?play`. It has a slider panel, presets, and live mic drive.
+
+**The binding rule is unchanged.** Never open `agent-audio-visualizer-aura.tsx`
+or `use-agent-audio-visualizer-aura.ts` from `livekit/components-js`. Upstream's
+shader is under a restrictive UNCRN license incompatible with publishing
+`@kitn.ai/ui` to npm, and a framework port would leave that GLSL byte-identical.
+The visual effect is not protectable; that specific source is.
+
+**Naming.** The shipped variant is `aurora`, not `aura`. `aura` is accepted only
+as a LiveKit-markup compatibility alias (see `normalizeVariant` in Task 8).
+
+**Provenance, and what to surface at the gate.** The prototype has three modes.
+Modes 1 (braid) and 2 (wind) are fully clean-room and shippable anywhere. Mode 3
+(veil), the one we are porting, derives from the fact sheet under a two-team
+clean room. **Whether veil ships in the published npm package is Rob's decision
+at the Task 14 human review gate.** Raise it there as an explicit question. Do
+not decide it yourself, and do not assume adoption as the base settles it.
+
+**Task 13.5 is largely satisfied by this package.** `lk-frames/` holds 100
+captured frames of LiveKit's live demo, and `analyze.mjs` / `measure-travel.mjs`
+are the measurement harness. Reuse them for the tuning loop in Step 3 rather than
+re-capturing. The independent measurements in
+`.superpowers/sdd/2026-08-07-audio-visualizers/reference/metrics.json` and
+`reactivity.json` came from a separate pass over Rob's own recording; use them as
+a cross-check, not as a competing model. Where the two disagree, the prototype's
+harness measured LiveKit directly and wins.
+
+**Out of scope, noted for the epic backlog:** the slider playground has value as
+a dev-facing Storybook or docs-site "aurora lab" page. Not this task.
 
 **Visual target.** A luminous **ring**, not a filled shape. A reference still is at
 `.superpowers/sdd/2026-08-07-audio-visualizers/reference/`; look at it before writing anything.
@@ -4272,7 +4338,7 @@ and measurements; Step 3 below tunes against them with numeric tolerances.
 
 - [ ] **Step 1: Write the shader**
 
-Create `packages/ui/src/components/audio-visualizer/aura.glsl.ts`:
+Create `packages/ui/src/components/audio-visualizer/aurora.glsl.ts`:
 
 ```ts
 /**
@@ -4417,7 +4483,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
 - [ ] **Step 2: Commit the first draft**
 
 ```bash
-git add packages/ui/src/components/audio-visualizer/aura.glsl.ts
+git add packages/ui/src/components/audio-visualizer/aurora.glsl.ts
 git commit -m "feat(components): add original aura fragment shader"
 ```
 
@@ -4480,16 +4546,16 @@ The spec calls this the one genuinely uncertain deliverable. "Reads as premium" 
 ## Task 15: Aura variant and shader stories
 
 **Files:**
-- Replace: `packages/ui/src/components/audio-visualizer/variant-aura.tsx` (the Task 8 placeholder)
+- Replace: `packages/ui/src/components/audio-visualizer/variant-aurora.tsx` (the Task 8 placeholder)
 - Modify: `packages/ui/src/components/audio-visualizer/audio-visualizer.stories.tsx`
 
 **Interfaces:**
 - Consumes: `ShaderCanvas` (Task 11), `customUniforms`, `hexToRgb` (Task 13), `shaderTargets` (Task 2), `createTween` (Task 4), the aura shader (Task 14).
-- Produces: `export default function AuraVisualizer(props: VariantProps & { volume?: number; complexity?: number }): JSX.Element`
+- Produces: `export default function AuroraVisualizer(props: VariantProps & { volume?: number; complexity?: number }): JSX.Element`
 
 - [ ] **Step 1: Write the variant**
 
-Replace `packages/ui/src/components/audio-visualizer/variant-aura.tsx`:
+Replace `packages/ui/src/components/audio-visualizer/variant-aurora.tsx`:
 
 ```tsx
 import { createEffect, type JSX } from 'solid-js';
@@ -4499,15 +4565,15 @@ import { shaderTargets } from '../../primitives/visualizer-sequences';
 import { CONTAINER_HEIGHT } from './sizes';
 import { customUniforms } from './variant-custom';
 import type { VariantProps } from './variant-bar';
-import auraShader from './aura.glsl';
+import auroraShader from './aurora.glsl';
 
 /**
  * A glowing organic aura.
  *
- * The shader is original work (see aura.glsl.ts). Only the state-to-uniform
+ * The shader is original work (see aurora.glsl.ts). Only the state-to-uniform
  * mapping follows the architecture LiveKit documents publicly.
  */
-export default function AuraVisualizer(
+export default function AuroraVisualizer(
   props: VariantProps & { volume?: number; complexity?: number },
 ): JSX.Element {
   const intensity = createTween(0.3);
@@ -4534,7 +4600,7 @@ export default function AuraVisualizer(
       style={{ height: `${CONTAINER_HEIGHT[props.size]}px`, 'aspect-ratio': '1' }}
     >
       <ShaderCanvas
-        fragment={auraShader}
+        fragment={auroraShader}
         precision={props.size === 'icon' || props.size === 'sm' ? 'mediump' : 'highp'}
         uniforms={customUniforms({
           color: props.color ?? DEFAULT_SHADER_COLOR,
@@ -4568,7 +4634,7 @@ export const ShaderVariants: Story = {
   ),
 };
 
-export const AuraStates: Story = {
+export const AuroraStates: Story = {
   parameters: {
     docs: { description: { story: 'The aura across every state. Compare against the visual brief before locking the look.' } },
   },
@@ -4623,20 +4689,20 @@ export const CustomShader: Story = {
 pnpm dev
 ```
 
-Open Storybook, check ShaderVariants, AuraStates, and CustomShader. Expected: the wave animates, the aura glows and breathes, and the custom spectrum shows five bars driven by `uBands`.
+Open Storybook, check ShaderVariants, AuroraStates, and CustomShader. Expected: the wave animates, the aura glows and breathes, and the custom spectrum shows five bars driven by `uBands`.
 
 If a shader shows nothing, read the console. A duplicate uniform declaration is the usual cause.
 
 - [ ] **Step 4: Capture renders for the review gate**
 
-Screenshot AuraStates at `size="lg"` in light and dark. These go to Rob before any tuning. Do not skip this: Task 14 step 3 is a gate, not a suggestion.
+Screenshot AuroraStates at `size="lg"` in light and dark. These go to Rob before any tuning. Do not skip this: Task 14 step 3 is a gate, not a suggestion.
 
 - [ ] **Step 5: Run the gate and commit**
 
 ```bash
 pnpm --filter @kitn.ai/ui exec vitest run --project=unit
 nx typecheck ui
-git add packages/ui/src/components/audio-visualizer/variant-aura.tsx packages/ui/src/components/audio-visualizer/audio-visualizer.stories.tsx
+git add packages/ui/src/components/audio-visualizer/variant-aurora.tsx packages/ui/src/components/audio-visualizer/audio-visualizer.stories.tsx
 git commit -m "feat(components): add audio visualizer aura variant"
 ```
 
@@ -4688,7 +4754,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 The following file is ORIGINAL work and is NOT derived from LiveKit or any
 third party:
 
-  src/components/audio-visualizer/aura.glsl.ts
+  src/components/audio-visualizer/aurora.glsl.ts
 ```
 
 - [ ] **Step 2: Confirm every ported file carries its header**
@@ -4710,7 +4776,7 @@ Expected: no output. Any filename printed is missing its attribution comment; ad
 Then confirm the aura shader claims originality instead:
 
 ```bash
-grep -c "ORIGINAL WORK" packages/ui/src/components/audio-visualizer/aura.glsl.ts
+grep -c "ORIGINAL WORK" packages/ui/src/components/audio-visualizer/aurora.glsl.ts
 ```
 
 Expected: 1.
@@ -4724,7 +4790,7 @@ Create `packages/ui/scripts/verify-shader-lazy.mjs`:
  * Guard: the WebGL shader path must never land in the register-all bundle.
  *
  * vite.config.ts sets `treeshake: false` on kai.es.js by design, so a static
- * import of variant-wave / variant-aura / shader-canvas would silently add
+ * import of variant-wave / variant-aurora / shader-canvas would silently add
  * ~25-30 KB to every consumer's bundle, including one who only uses <kai-chat>.
  * GLSL barely compresses, so it is real weight.
  *
@@ -4741,7 +4807,7 @@ const bundle = resolve(root, 'dist/kai.es.js');
 const SHADER_MARKERS = [
   'mainImage(gl_FragColor',   // shader-canvas's main() wrapper
   'uniform vec2 iResolution', // the built-in declarations
-  'valueNoise',               // aura.glsl
+  'valueNoise',               // aurora.glsl
 ];
 
 const code = readFileSync(bundle, 'utf8');
@@ -4752,7 +4818,7 @@ if (leaked.length > 0) {
     `\nverify-shader-lazy: the shader path leaked into dist/kai.es.js.\n` +
     `Found: ${leaked.join(', ')}\n\n` +
     `The register-all bundle disables tree-shaking, so a static import of\n` +
-    `variant-wave / variant-aura / variant-custom / shader-canvas ships to every\n` +
+    `variant-wave / variant-aurora / variant-custom / shader-canvas ships to every\n` +
     `consumer. Keep SHADER_VARIANTS in components/audio-visualizer/index.tsx as\n` +
     `dynamic import() calls.\n`,
   );
@@ -4783,7 +4849,7 @@ Expected: `verify-shader-lazy: OK, shader path is lazy (...)`.
 Now prove the guard works. Temporarily add a static import at the top of `components/audio-visualizer/index.tsx`:
 
 ```ts
-import './variant-aura';
+import './variant-aurora';
 ```
 
 ```bash
