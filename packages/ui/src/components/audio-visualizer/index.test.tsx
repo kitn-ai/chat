@@ -304,6 +304,63 @@ describe('AudioVisualizer volume from caller-supplied bands', () => {
   });
 });
 
+// `<kai-audio-visualizer theme="light">` on a dark OS must render the
+// aurora's LIGHT pipeline, but nothing supplied `props.theme` to the
+// dispatcher's resolution, so it fell back to sniffing `prefers-color-scheme`
+// locally and an explicit `theme` attribute was silently ignored. These
+// mount a real system-prefers-dark media query and prove an explicit
+// `theme="light"` still wins, and that `theme="auto"` correctly follows it,
+// all the way through to the boolean a shader variant actually receives.
+describe('AudioVisualizer theme resolution for shader variants', () => {
+  afterEach(() => vi.doUnmock('./variant-wave'));
+
+  it('an explicit theme="light" wins over a dark media query, through to what the shader receives', async () => {
+    // Overrides the file-level beforeEach's matchMedia stub (always
+    // `matches: false`) for just this test: the system prefers dark.
+    vi.stubGlobal('matchMedia', (q: string) => ({
+      matches: q.includes('dark'),
+      media: q,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+
+    let captured: { dark: boolean } | undefined;
+    vi.doMock('./variant-wave', () => ({
+      default: (props: { dark: boolean }) => {
+        captured = props;
+        return null;
+      },
+    }));
+
+    render(() => <AudioVisualizer variant="wave" theme="light" />);
+
+    await waitFor(() => expect(captured).toBeDefined());
+    expect(captured!.dark).toBe(false);
+  });
+
+  it('theme="auto" follows the media query', async () => {
+    vi.stubGlobal('matchMedia', (q: string) => ({
+      matches: q.includes('dark'),
+      media: q,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+
+    let captured: { dark: boolean } | undefined;
+    vi.doMock('./variant-wave', () => ({
+      default: (props: { dark: boolean }) => {
+        captured = props;
+        return null;
+      },
+    }));
+
+    render(() => <AudioVisualizer variant="wave" theme="auto" />);
+
+    await waitFor(() => expect(captured).toBeDefined());
+    expect(captured!.dark).toBe(true);
+  });
+});
+
 // Nothing above exercises a prop change after mount, which is exactly how the
 // band-count-reactivity bug (index.tsx calling `bandCount()` once instead of
 // passing the accessor) went unnoticed: `useAudioAnalysis` is Solid setup

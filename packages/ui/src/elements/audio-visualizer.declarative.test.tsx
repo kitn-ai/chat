@@ -65,6 +65,13 @@ describe('num(): the facade\'s attribute coercion helper', () => {
 });
 
 describe('kai-audio-visualizer declarative API', () => {
+  // In an afterEach, not at the end of the one test below that mocks a
+  // shader chunk: if an earlier assertion in that test throws, a cleanup
+  // step sitting after it never runs, and the mock leaks into whatever test
+  // happens to run next. Harmless (a no-op) for every other test here, since
+  // doUnmock on an already-unmocked module does nothing.
+  afterEach(() => vi.doUnmock('../components/audio-visualizer/variant-custom'));
+
   it('coerces a string bar-count attribute to a number', () => {
     const { container } = render(() => <AudioVisualizer barCount={num('7')} />);
     expect(container.querySelectorAll('[part="bar"]')).toHaveLength(7);
@@ -137,6 +144,41 @@ describe('kai-audio-visualizer declarative API', () => {
     expect(container.querySelectorAll('[part="cell"]')).toHaveLength(12);
     const grid = container.querySelector('.grid') as HTMLElement;
     expect(grid.style.gridTemplateColumns).toBe('repeat(4, 1fr)');
+  });
+
+  it('forwards the facade context\'s resolved dark boolean through to what a shader variant receives', async () => {
+    // defineWebComponent already resolves theme='light'|'dark'|'auto' against
+    // a live prefers-color-scheme listener (createDarkMode) to drive every
+    // element's `.dark` class -- that resolved boolean is what `ctx.dark`
+    // carries. The facade's own job is just relaying it as an explicit
+    // 'light'/'dark' <AudioVisualizer theme=...>, never re-deriving the
+    // auto-vs-explicit rule itself. Prove that relay reaches all the way to
+    // what a shader variant actually receives, with a hand-rolled ctx the
+    // way defineWebComponent would supply one (see define.tsx).
+    //
+    // Uses `variant-custom`, not `variant-wave`: another agent is
+    // concurrently editing the latter in this same worktree, and mocking a
+    // file mid-edit elsewhere turned out to make this test file's own module
+    // graph interact badly with `index.test.tsx`'s (also `variant-wave`)
+    // when both files run in the same invocation -- reproducible, and gone
+    // entirely once this test stopped sharing a mocked specifier with that
+    // file. `variant-custom` is untouched by any other test in either file.
+    let captured: { dark: boolean } | undefined;
+    vi.doMock('../components/audio-visualizer/variant-custom', () => ({
+      default: (props: { dark: boolean }) => {
+        captured = props;
+        return null;
+      },
+    }));
+
+    render(() =>
+      AudioVisualizerFacade({ variant: 'custom' } as unknown as Parameters<typeof AudioVisualizerFacade>[0], {
+        dark: () => true,
+      }),
+    );
+
+    await waitFor(() => expect(captured).toBeDefined());
+    expect(captured!.dark).toBe(true);
   });
 });
 

@@ -1,7 +1,7 @@
 import type { JSX } from 'solid-js';
 import { AudioVisualizer, type ShaderSpec, type VisualizerVariant } from '../components/audio-visualizer';
 import type { VisualizerSize } from '../components/audio-visualizer/sizes';
-import { defineWebComponent } from './define';
+import { defineWebComponent, type WebComponentContext } from './define';
 
 interface Props extends Record<string, unknown> {
   /** Look to render: `bar` (default), `grid`, `radial`, `wave`, `aurora`, `custom`.
@@ -62,9 +62,30 @@ export function num(value: unknown): number | undefined {
  * exercised directly in tests (a plain Solid component call, no shadow DOM
  * involved) without needing `defineWebComponent`'s browser-only custom-element
  * upgrade path. Identical to what was previously an inline arrow passed to
- * `defineWebComponent` below; behavior is unchanged.
+ * `defineWebComponent` below, plus forwarding the resolved theme (see `dark`
+ * below) once that context field existed to forward.
+ *
+ * `ctx` is optional so the existing declarative test (which calls this
+ * directly with just `props`, the way it did before `dark` existed) keeps
+ * working unchanged. `defineWebComponent` always supplies a real one; the
+ * `false` fallback only matters for that reduced, no-shadow-DOM call path.
  */
-export function AudioVisualizerFacade(props: Props): JSX.Element {
+export function AudioVisualizerFacade(
+  props: Props,
+  ctx?: Pick<WebComponentContext, 'dark'>,
+): JSX.Element {
+  // Every element already resolves `theme='light'|'dark'|'auto'` against a
+  // live `prefers-color-scheme` listener in `defineWebComponent` (see
+  // `createDarkMode`), to drive the `.dark` class every element's content
+  // sits inside. A WebGL shader cannot read that class or a CSS custom
+  // property, so `<kai-audio-visualizer variant="aurora">` needs the ALREADY
+  // -RESOLVED boolean forwarded explicitly instead. Passing it through as a
+  // definite 'light'/'dark' (never 'auto') means the resolution RULE itself
+  // -- explicit wins, 'auto' follows the media query -- lives in exactly one
+  // place (`createDarkMode`); this is a plain relay, not a second
+  // implementation of that rule.
+  const dark = ctx?.dark?.() ?? false;
+
   return (
     <AudioVisualizer
       variant={props.variant as VisualizerVariant | undefined}
@@ -83,6 +104,7 @@ export function AudioVisualizerFacade(props: Props): JSX.Element {
       audioElement={props.audioElement as HTMLMediaElement | undefined}
       bands={props.bands as number[] | undefined}
       shader={props.shader as ShaderSpec | undefined}
+      theme={dark ? 'dark' : 'light'}
     />
   );
 }

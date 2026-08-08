@@ -78,6 +78,17 @@ export interface WebComponentContext<E = Record<string, unknown>> {
    * convention). Methods are attached when the facade renders (on element upgrade).
    */
   expose: (methods: Record<string, (...args: never[]) => unknown>) => void;
+  /**
+   * Whether the element should currently render its dark-mode look --
+   * exactly the SAME resolved value that already drives the `.dark` class
+   * every facade's content sits inside (not a second computation of the
+   * `theme='light'|'dark'|'auto'` rule; see `createDarkMode` above). Most
+   * facades never need this directly, since the injected kit CSS already
+   * flips its custom properties under `.dark`. It exists for content that
+   * cannot read CSS at all -- e.g. a WebGL shader baking a colour choice
+   * into a GLSL uniform, which is why `kai-audio-visualizer` reads it.
+   */
+  dark: () => boolean;
 }
 
 /** camelCase prop name → kebab-case attribute (`hoverCard` → `hover-card`). */
@@ -223,7 +234,7 @@ export function defineWebComponent<P extends Record<string, unknown>, E = Record
         <div classList={{ dark: isDark() }} style={{ display: 'contents', color: 'var(--color-foreground)' }}>
           <div ref={portalNode} />
           <ChatConfig portalMount={portalNode}>
-            {Facade(props as unknown as P, { element, dispatch, flag, expose })}
+            {Facade(props as unknown as P, { element, dispatch, flag, expose, dark: isDark })}
           </ChatConfig>
         </div>
       </>
