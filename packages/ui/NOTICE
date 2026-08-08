@@ -1,0 +1,33 @@
+@kitn.ai/ui
+Copyright (c) kitn.ai
+
+This product includes software developed at LiveKit
+(https://github.com/livekit/components-js), licensed under the
+Apache License, Version 2.0.
+
+The following files are ports or verbatim copies of LiveKit work:
+
+  src/primitives/audio-bands.ts
+      from packages/react/src/hooks/useTrackVolume.ts
+  src/primitives/visualizer-sequences.ts
+      from packages/shadcn/hooks/agents-ui/use-agent-audio-visualizer-{bar,grid,radial,wave}.ts
+  src/components/audio-visualizer/sizes.ts
+  src/components/audio-visualizer/variant-bar.tsx
+  src/components/audio-visualizer/variant-grid.tsx
+  src/components/audio-visualizer/variant-radial.tsx
+  src/components/audio-visualizer/variant-wave.tsx
+      from packages/shadcn/components/agents-ui/agent-audio-visualizer-{bar,grid,radial,wave}.tsx
+  src/components/audio-visualizer/wave.glsl.ts
+      verbatim, from agent-audio-visualizer-wave.tsx
+
+You may obtain a copy of the Apache License 2.0 at
+http://www.apache.org/licenses/LICENSE-2.0
+
+The following file is ORIGINAL work and is NOT derived from LiveKit or any
+third party:
+
+  src/components/audio-visualizer/aurora.glsl.ts
+
+Its own provenance (whether it may itself later be attributed, relicensed,
+or otherwise handled) is a separate, pending decision and is not resolved
+by this NOTICE.
