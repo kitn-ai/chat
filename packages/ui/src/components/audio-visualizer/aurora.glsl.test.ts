@@ -53,4 +53,44 @@ describe('aurora.glsl', () => {
       expect(auroraShader).toContain(m);
     }
   });
+
+  it('declares no precision qualifier itself', () => {
+    // ShaderCanvas injects `precision <lowp|mediump|highp> float;` ahead of
+    // the built-ins and this file's body (see buildFragmentSource in
+    // shader-canvas.tsx); a second declaration here would be redundant with
+    // -- and could silently disagree with -- the one ShaderCanvas controls.
+    expect(auroraShader).not.toMatch(/precision\s+(lowp|mediump|highp)\s+float\s*;/);
+  });
+
+  it('clamps rgb to [0,1] before the premultiply in BOTH colour-pipeline branches, not just one', () => {
+    // Only a clamped natural colour in [0,1], multiplied by alpha at the
+    // single shared premultiply line below, guarantees rgb*alpha <= alpha
+    // (componentwise) -- a valid premultiplied pixel. A branch that skips
+    // the clamp can write rgb > alpha for achievable inputs: this is exactly
+    // what an earlier review round caught in the dark branch (`tm *
+    // brightness` exceeding 1 at the thinking/connecting pulse peaks,
+    // uIntensity up to 2.5, with no clamp before the multiply) -- the
+    // "hotter than premultiplied" state this file exists to eliminate, and
+    // what the fact sheet's own "nothing is ever white" measured fact
+    // forbids. This test guards both branches so that regression can't come
+    // back in either one, and can't be satisfied by clamping only one side.
+    const ifIndex = auroraShader.indexOf('if (uTheme < 0.5) {');
+    const elseIndex = auroraShader.indexOf('} else {');
+    const premultiplyIndex = auroraShader.indexOf('fragColor = vec4(rgb * alpha, alpha)');
+    expect(ifIndex).toBeGreaterThan(-1);
+    expect(elseIndex).toBeGreaterThan(ifIndex);
+    expect(premultiplyIndex).toBeGreaterThan(elseIndex);
+
+    const darkBranch = auroraShader.slice(ifIndex, elseIndex);
+    const lightBranch = auroraShader.slice(elseIndex, premultiplyIndex);
+
+    expect(darkBranch).toMatch(/rgb\s*=\s*clamp\(/);
+    expect(lightBranch).toMatch(/rgb\s*=\s*clamp\(/);
+
+    // Belt and braces: exactly two clamped rgb assignments in the whole
+    // file, so this can't quietly pass because both matches landed in the
+    // same branch.
+    const matches = auroraShader.match(/rgb\s*=\s*clamp\(/g) ?? [];
+    expect(matches).toHaveLength(2);
+  });
 });

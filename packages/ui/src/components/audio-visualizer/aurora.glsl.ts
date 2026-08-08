@@ -184,27 +184,40 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
   vec3 image = accum / float(STRAND_COUNT);
 
   // Deterministic per-pixel dither, +/- 1/510, identical on all channels
-  // (fact sheet section 3).
+  // (fact sheet section 3). Kept as a plain vec3 offset, not pre-mixed into
+  // the image accumulator, so each branch can add it at the point the fact
+  // sheet actually specifies (see the dark branch below).
   float n = fract(sin(dot(fragCoord, vec2(12.9898, 78.233))) * 43758.5453);
-  vec3 dithered = image + vec3((n - 0.5) / 255.0);
+  vec3 dither = vec3((n - 0.5) / 255.0);
 
   float brightness = uIntensity;
   vec3 rgb;
   float alpha;
 
   if (uTheme < 0.5) {
-    // Dark pipeline (fact sheet section 4): pre-gain, Reinhard-4 tonemap,
-    // Rec.601 luma alpha.
-    vec3 x1 = 1.2 * dithered;
+    // Dark pipeline (fact sheet section 4): RGB1 = 1.2 * I, THEN add
+    // dither, THEN tonemap -- dither is added after the pre-gain, not
+    // before, so its written amplitude stays +/- 1/510 rather than being
+    // scaled up by the 1.2 pre-gain too.
+    vec3 x1 = 1.2 * image + dither;
     vec3 tm = 4.0 * x1 / (1.0 + 4.0 * x1);
     float luma = dot(tm, vec3(0.299, 0.587, 0.114));
-    rgb = tm * brightness;
+    // Clamped to [0,1] before the premultiply below, mirroring the light
+    // branch. tm approaches but is not strictly bounded under 1/brightness,
+    // and uIntensity reaches 2.5 at the thinking/connecting pulse peaks, so
+    // tm * brightness can exceed 1 for achievable inputs. Unclamped, that
+    // would write rgb > alpha once premultiplied -- exactly the "hotter
+    // than premultiplied" state this port exists to eliminate, and what
+    // the fact sheet's own "nothing is ever white" measured fact forbids.
+    rgb = clamp(tm * brightness, 0.0, 1.0);
     alpha = clamp(luma * brightness, 0.0, 1.0);
   } else {
-    // Light pipeline (fact sheet section 4): brightness curve on vector
-    // length, hue direction kept, saturation extrapolated 3x about gray.
-    float mag = length(dithered);
-    vec3 dir = dithered / max(mag, 1.0e-5);
+    // Light pipeline (fact sheet section 4): RGB1 = I, then add dither;
+    // brightness curve on vector length, hue direction kept, saturation
+    // extrapolated 3x about gray.
+    vec3 x1 = image + dither;
+    float mag = length(x1);
+    vec3 dir = x1 / max(mag, 1.0e-5);
     float mag2 = 2.0 * mag / (1.0 + 2.0 * mag);
     vec3 x2 = dir * mag2;
     float gray = dot(x2, vec3(0.2, 0.5, 0.1));
@@ -212,8 +225,12 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     alpha = clamp(mag2 * clamp(brightness, 1.0, 2.0), 0.0, 1.0);
   }
 
-  // PREMULTIPLIED output -- see the module doc above for why this departs
-  // from the fact sheet's own (deliberately non-premultiplied) pipeline.
+  // PREMULTIPLIED output. Both branches above clamp their natural rgb to
+  // [0,1] before this line, which is what makes rgb * alpha <= alpha
+  // (componentwise) a property the code enforces unconditionally, not one
+  // that happens to hold for the inputs this was tested against. See the
+  // module doc above for why this departs from the fact sheet's own
+  // (deliberately non-premultiplied) pipeline.
   fragColor = vec4(rgb * alpha, alpha);
 }
 `;
