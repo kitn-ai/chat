@@ -200,6 +200,110 @@ describe('AudioVisualizer shader reports itself unavailable', () => {
   });
 });
 
+// The shader variants drive their entire reactivity from `volume`, a scalar
+// -- never from `bands` directly (aurora folds it into ring radius, wave
+// into amplitude and frequency). `source()` correctly returns undefined
+// whenever caller-supplied `bands` is set (that's what keeps the bands path
+// free of an AudioContext), but nothing computed `volume` FROM that array:
+// `analysis.volume()` just sat at its initial 0 forever, so a shader fed
+// `bands` looked static with no error and no clue why, even though the three
+// DOM variants next to it animated correctly from the very same prop.
+describe('AudioVisualizer volume from caller-supplied bands', () => {
+  afterEach(() => {
+    vi.doUnmock('./variant-wave');
+    vi.restoreAllMocks();
+  });
+
+  it('derives a non-zero volume from bands with no source, and tracks a bands change', async () => {
+    let captured: { volume: number } | undefined;
+    vi.doMock('./variant-wave', () => ({
+      default: (props: { volume: number }) => {
+        // Capture the PROPS OBJECT reference, not a copy of its current
+        // value: Solid compiles `volume={volume()}` into a live getter on
+        // this component's props, so reading `captured.volume` again later
+        // re-evaluates the dispatcher's accessor fresh off the current
+        // `bands` signal. Copying the number out now (`{ volume: props.volume }`)
+        // would freeze it at this instant instead, the same footgun as
+        // capturing a resolved value instead of an accessor in the
+        // band-count-reactivity tests above.
+        captured = props;
+        return null;
+      },
+    }));
+
+    const [bands, setBands] = createSignal([0.2, 0.4, 0.6]);
+    render(() => <AudioVisualizer variant="wave" bands={bands()} />);
+
+    await waitFor(() => expect(captured).toBeDefined());
+    const first = captured!.volume;
+    expect(first).toBeGreaterThan(0);
+
+    setBands([0.9, 0.9, 0.9]);
+    await waitFor(() => expect(captured!.volume).not.toBe(first));
+    expect(captured!.volume).toBeGreaterThan(0);
+  });
+
+  it('gives volume 0 for an all-zero bands array', async () => {
+    let captured: { volume: number } | undefined;
+    vi.doMock('./variant-wave', () => ({
+      default: (props: { volume: number }) => {
+        captured = props;
+        return null;
+      },
+    }));
+
+    render(() => <AudioVisualizer variant="wave" bands={[0, 0, 0]} />);
+
+    await waitFor(() => expect(captured).toBeDefined());
+    expect(captured!.volume).toBe(0);
+  });
+
+  it('uses the analyser volume unchanged when a real source is given and bands is not', async () => {
+    // A regression guard for the live-audio path: this change must not touch
+    // what a shader sees when there IS a real source.
+    vi.spyOn(UseAudioAnalysisModule, 'useAudioAnalysis').mockReturnValue({
+      bands: () => [],
+      volume: () => 0.42,
+    });
+
+    let captured: { volume: number } | undefined;
+    vi.doMock('./variant-wave', () => ({
+      default: (props: { volume: number }) => {
+        captured = props;
+        return null;
+      },
+    }));
+
+    render(() => <AudioVisualizer variant="wave" stream={{} as MediaStream} />);
+
+    await waitFor(() => expect(captured).toBeDefined());
+    expect(captured!.volume).toBe(0.42);
+  });
+
+  it('constructs no AudioContext when bands is supplied, even for a shader variant', async () => {
+    // A spy constructor, not `undefined` like the Round-1 DOM-variant test:
+    // this needs to prove the constructor is never CALLED, not merely that
+    // the component tolerates it being absent (getContext() already handles
+    // a missing AudioContext gracefully either way, so "renders without
+    // throwing" alone would not distinguish the two).
+    const AudioContextSpy = vi.fn();
+    vi.stubGlobal('AudioContext', AudioContextSpy);
+
+    let mounted = false;
+    vi.doMock('./variant-wave', () => ({
+      default: () => {
+        mounted = true;
+        return null;
+      },
+    }));
+
+    render(() => <AudioVisualizer variant="wave" bands={[0.1, 0.2, 0.3]} />);
+
+    await waitFor(() => expect(mounted).toBe(true));
+    expect(AudioContextSpy).not.toHaveBeenCalled();
+  });
+});
+
 // Nothing above exercises a prop change after mount, which is exactly how the
 // band-count-reactivity bug (index.tsx calling `bandCount()` once instead of
 // passing the accessor) went unnoticed: `useAudioAnalysis` is Solid setup

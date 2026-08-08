@@ -182,6 +182,25 @@ export function AudioVisualizer(props: AudioVisualizerProps): JSX.Element {
   const analysis = useAudioAnalysis(source, { bands: bandCount });
   const bands = () => props.bands ?? analysis.bands();
 
+  // The shader variants read `volume`, a scalar, not `bands`. When
+  // caller-supplied `bands` short-circuits Web Audio above, `analysis.volume()`
+  // sits at its initial 0 forever (nothing ever computes it), so a shader
+  // fed `bands` would otherwise look static despite the DOM variants next to
+  // it correctly animating. Derive it from the same `bands` this component
+  // is already using -- root-mean-square, matching how `reduceToVolume` in
+  // `primitives/audio-bands.ts` reduces real analyser output to a scalar, so
+  // the two paths agree in character. Not reused directly: `reduceToVolume`
+  // takes a `Uint8Array` of byte frequency data (0..255), not a `number[]` of
+  // already-normalized 0..1 levels, so contorting it to accept both shapes
+  // would be worse than the few lines below.
+  const volume = () => {
+    if (!props.bands) return analysis.volume();
+    if (props.bands.length === 0) return 0;
+    let sum = 0;
+    for (const b of props.bands) sum += b * b;
+    return Math.sqrt(sum / props.bands.length);
+  };
+
   // Lazily loaded shader component, or undefined until it resolves. Failure is
   // not fatal: the bar fallback below stays on screen.
   const [Shader, setShader] = createSignal<Component<ShaderVariantProps> | undefined>();
@@ -273,7 +292,7 @@ export function AudioVisualizer(props: AudioVisualizerProps): JSX.Element {
               return (
                 <C
                   {...shared()}
-                  volume={analysis.volume()}
+                  volume={volume()}
                   complexity={props.complexity}
                   shader={props.shader}
                   onUnavailable={() => setUnavailable(true)}
