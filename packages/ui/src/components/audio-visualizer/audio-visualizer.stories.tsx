@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
-import { createSignal, onCleanup, For } from 'solid-js';
-import { AudioVisualizer } from './index';
+import { createSignal, onCleanup, Show, For } from 'solid-js';
+import { AudioVisualizer, type AudioVisualizerProps } from './index';
+import { Button } from '../../ui/button';
+import { Notice } from '../../ui/notice';
 import { componentDescription } from '../../stories/docs/element-controls';
 import { SIZES } from './sizes';
 
@@ -22,7 +24,7 @@ const meta = {
       description: componentDescription([
         'Renders live audio as bars, a grid, a ring, a wave, or a glowing aurora. Set `stream` or `audioElement` to tap real audio, or `bands` to drive it yourself.',
         'With no audio source at all it animates from `state` alone: idle, connecting, listening, thinking, speaking. That is what drives it when the audio cannot be tapped, like browser speech synthesis, which exposes no audio node.',
-        '`wave`, `aurora`, and `custom` render through WebGL behind a dynamic import, and fall back to bars if that fails or WebGL is unavailable. See ShaderVariants, AuroraStates, and CustomShader below. A live-microphone story is deliberately excluded: it would prompt for a permission Storybook cannot answer.',
+        '`wave`, `aurora`, and `custom` render through WebGL behind a dynamic import, and fall back to bars if that fails or WebGL is unavailable. See ShaderVariants, AuroraStates, and CustomShader below. See Microphone for the real thing: click-to-enable, so nothing here auto-prompts for a permission Storybook cannot answer.',
       ]),
     },
   },
@@ -80,31 +82,82 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** Bar variant, listening state: the scripted center-blink idle-conversation look. */
-export const Default: Story = {
-  args: { variant: 'bar', state: 'listening', size: 'md' },
-};
-
 /**
- * Synthetic levels so the speaking state animates without a microphone.
- * A NEW array reference every tick: mutating in place would not re-render.
+ * Synthetic levels so `speaking` animates without a microphone.
+ *
+ * Matches the real analyser's cadence -- `useAudioAnalysis`'s
+ * `updateInterval: 32` (about 31fps) -- with a `requestAnimationFrame` loop
+ * throttled to the same 32ms, not `setInterval`, which the real analyser
+ * never uses either. A NEW array reference every tick: mutating in place
+ * would not re-render.
+ *
+ * Each band sums three sines at different rates with its own phase, mapped
+ * into 0..1: smooth everywhere (no `Math.abs`, so no sharp corner at a zero
+ * crossing) and a pure function of time, so it stays deterministic. Low
+ * bands swing wider and slower, high bands move less and faster -- the shape
+ * a voice's levels actually have.
  */
 function useFakeBands(count: number) {
   const [bands, setBands] = createSignal<number[]>(new Array(count).fill(0));
-  const id = setInterval(() => {
-    setBands(Array.from({ length: count }, (_, i) => 0.25 + 0.7 * Math.abs(Math.sin(Date.now() / 400 + i))));
-  }, 60);
-  onCleanup(() => clearInterval(id));
+  if (typeof requestAnimationFrame === 'undefined') return bands;
+
+  let raf = 0;
+  let last = 0;
+  const step = (now: number) => {
+    if (now - last >= 32) {
+      const t = now / 1000;
+      setBands(
+        Array.from({ length: count }, (_, i) => {
+          const depth = 1 - i / Math.max(1, count - 1); // 1 for the lowest band, 0 for the highest
+          const amplitude = 0.18 + 0.24 * depth;
+          const rate = 0.6 + i * 0.15;
+          const phase = i * 1.9;
+          const wave =
+            0.55 * Math.sin(2 * Math.PI * rate * t + phase) +
+            0.3 * Math.sin(2 * Math.PI * rate * 2.7 * t + phase * 1.4) +
+            0.15 * Math.sin(2 * Math.PI * rate * 0.45 * t + phase * 0.7);
+          return 0.5 + amplitude * wave;
+        }),
+      );
+      last = now;
+    }
+    raf = requestAnimationFrame(step);
+  };
+  raf = requestAnimationFrame(step);
+  onCleanup(() => cancelAnimationFrame(raf));
+
   return bands;
 }
 
-export const Speaking: Story = {
+/** Bar variant, speaking state, synthetic bands: the visualizer doing its
+ *  actual job. See Listening below for the scripted, no-audio behavior every
+ *  other state runs, and Microphone for the real thing. */
+export const Default: Story = {
+  args: { variant: 'bar', state: 'speaking', size: 'md' },
   parameters: {
-    docs: { description: { story: 'Driven by synthetic levels. Set `bands` to a new array reference per frame; mutating in place does not re-render.' } },
+    docs: {
+      description: {
+        story: 'Driven by synthetic levels standing in for a microphone. Switch `state` in Controls to see the scripted, no-audio look every other state runs.',
+      },
+    },
   },
-  render: () => {
+  render: (args: AudioVisualizerProps) => {
     const bands = useFakeBands(5);
-    return <AudioVisualizer variant="bar" state="speaking" size="md" bands={bands()} />;
+    return <AudioVisualizer {...args} bands={bands()} />;
+  },
+};
+
+/** Bar variant, listening state: the scripted center-blink idle-conversation
+ *  look, carried from LiveKit. Not the default here: without live audio it
+ *  reads as a slow blink rather than a working visualizer. */
+export const Listening: Story = {
+  args: { variant: 'bar', state: 'listening', size: 'md' },
+  parameters: {
+    docs: {
+      description: {
+        story: 'The scripted `listening` sequence: blink the center bar every 500ms, no audio involved. See StateMatrix below for `connecting` and `thinking` too, across every variant.',
+      },
+    },
   },
 };
 
@@ -237,6 +290,81 @@ export const CustomShader: Story = {
         bands={bands()}
         shader={{ fragment: SPECTRUM_SHADER }}
       />
+    );
+  },
+};
+
+/**
+ * A real microphone, click-to-enable.
+ *
+ * Nothing here calls `getUserMedia` on mount -- it renders an idle
+ * visualizer and a button, so there is no permission prompt for Storybook's
+ * automated a11y run to hang on. Only the click handler asks for the
+ * microphone; a second click stops the tracks and returns to idle.
+ *
+ * `state` is forced to `speaking` while the stream is live: every other
+ * state deliberately ignores audio and runs its own scripted sequence
+ * instead (see Listening above), so a mic story left on `listening` would
+ * just blink and look exactly as broken as the bug this fixes.
+ */
+export const Microphone: Story = {
+  args: { variant: 'bar' },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Click to grant the microphone, click again to release it. Switch `variant` in Controls to hear the same stream drive any of the six looks -- `wave` and `aurora` read `volume`, which the dispatcher derives from the live stream, so they react too. Denied or unavailable permission shows the reason instead of failing silently.',
+      },
+    },
+    controls: { include: ['variant'] },
+  },
+  render: (args: AudioVisualizerProps) => {
+    const [stream, setStream] = createSignal<MediaStream | undefined>();
+    const [error, setError] = createSignal<string | null>(null);
+    const [requesting, setRequesting] = createSignal(false);
+
+    const stopTracks = (s: MediaStream | undefined) => s?.getTracks().forEach((t) => t.stop());
+
+    const toggle = async () => {
+      const live = stream();
+      if (live) {
+        stopTracks(live);
+        setStream(undefined);
+        return;
+      }
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setError('getUserMedia is not available in this browser context.');
+        return;
+      }
+      setError(null);
+      setRequesting(true);
+      try {
+        setStream(await navigator.mediaDevices.getUserMedia({ audio: true }));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Microphone access failed.');
+      } finally {
+        setRequesting(false);
+      }
+    };
+
+    // A leaked mic is worse than a broken story: stop the tracks on
+    // cleanup (navigating away) even if a click never released them.
+    onCleanup(() => stopTracks(stream()));
+
+    return (
+      <div style={{ display: 'flex', 'flex-direction': 'column', gap: '16px', 'align-items': 'center' }}>
+        <AudioVisualizer
+          variant={args.variant}
+          state={stream() ? 'speaking' : 'idle'}
+          size="md"
+          stream={stream()}
+          shader={args.variant === 'custom' ? { fragment: SPECTRUM_SHADER } : undefined}
+        />
+        <Button onClick={() => void toggle()} disabled={requesting()} aria-pressed={!!stream()}>
+          {stream() ? 'Stop microphone' : requesting() ? 'Requesting...' : 'Enable microphone'}
+        </Button>
+        <Show when={error()}>{(message) => <Notice severity="error">{message()}</Notice>}</Show>
+      </div>
     );
   },
 };
