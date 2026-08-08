@@ -2,8 +2,16 @@ import { createSignal, createEffect, onCleanup, type Accessor } from 'solid-js';
 import { reduceToBands, reduceToVolume } from './audio-bands';
 
 export interface AudioAnalysisOptions {
-  /** Number of frequency buckets to produce. Default 5. */
-  bands?: number;
+  /**
+   * Number of frequency buckets to produce, or a live accessor for it.
+   * Default 5.
+   *
+   * An accessor is resolved INSIDE the analysis effect, so a change to
+   * whatever signal backs it (e.g. a caller's variant or size switching)
+   * rebuilds the analyser at the new bucket count instead of silently
+   * leaving `bands()` padded or truncated to a stale size.
+   */
+  bands?: number | (() => number);
   /** Low bin index of the pass window. NOT a frequency. Default 100. */
   loPass?: number;
   /** High bin index of the pass window. NOT a frequency. Default 200. */
@@ -24,6 +32,11 @@ const DEFAULTS = {
   smoothingTimeConstant: 0.55,
   updateInterval: 32,
 } as const;
+
+/** `bands` accepts a plain number or a live accessor; read whichever was given. */
+function resolveBandCount(bands: number | (() => number)): number {
+  return typeof bands === 'function' ? bands() : bands;
+}
 
 /**
  * One AudioContext for the whole page. Contexts are expensive and browsers cap
@@ -82,15 +95,21 @@ export function useAudioAnalysis(
   options: AudioAnalysisOptions = {},
 ): { bands: Accessor<number[]>; volume: Accessor<number> } {
   const opts = { ...DEFAULTS, ...options };
-  const [bands, setBands] = createSignal<number[]>(new Array(opts.bands).fill(0));
+  const [bands, setBands] = createSignal<number[]>(new Array(resolveBandCount(opts.bands)).fill(0));
   const [volume, setVolume] = createSignal(0);
 
   createEffect(() => {
     const src = source();
+    // Read INSIDE the effect, not from the outer `opts.bands` closure: when
+    // this is an accessor, calling it here is what makes the effect track it,
+    // so a later change reruns this whole setup (new analyser, right-sized
+    // arrays) instead of leaving the old bucket count wired up forever.
+    const bandCount = resolveBandCount(opts.bands);
 
-    // Reset to a correctly-sized zero array whenever the source goes away, so a
-    // stale picture never lingers after the mic stops.
-    setBands(new Array(opts.bands).fill(0));
+    // Reset to a correctly-sized zero array whenever the source or the band
+    // count changes, so a stale picture never lingers after the mic stops or
+    // the requested resolution changes.
+    setBands(new Array(bandCount).fill(0));
     setVolume(0);
 
     if (!src) return;
@@ -137,7 +156,7 @@ export function useAudioAnalysis(
       if (now - last >= opts.updateInterval) {
         analyser.getFloatFrequencyData(freq);
         analyser.getByteFrequencyData(bytes);
-        setBands(reduceToBands(freq, opts.bands, opts.loPass, opts.hiPass));
+        setBands(reduceToBands(freq, bandCount, opts.loPass, opts.hiPass));
         setVolume(reduceToVolume(bytes));
         last = now;
       }

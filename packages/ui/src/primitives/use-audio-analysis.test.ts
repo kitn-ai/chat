@@ -224,4 +224,44 @@ describe('useAudioAnalysis', () => {
       dispose();
     });
   });
+
+  // `bands` also accepts a live accessor (e.g. a consumer's variant/size
+  // switching post-mount). A plain number must still work exactly as above;
+  // these two prove the additive change did not regress the common case
+  // while adding the reactive one.
+  describe('a reactive band count', () => {
+    it('still accepts a plain number for bands, unchanged', async () => {
+      await createRoot(async (dispose) => {
+        const { bands } = useAudioAnalysis(() => fakeStream(), { bands: 6 });
+        await Promise.resolve();
+        expect(bands()).toEqual([0, 0, 0, 0, 0, 0]);
+        flushFrame();
+        expect(bands()).toHaveLength(6);
+        dispose();
+      });
+    });
+
+    it('rebuilds the analyser at the new bucket count when an accessor-valued bands signal changes', async () => {
+      await createRoot(async (dispose) => {
+        const [bandCount, setBandCount] = createSignal(3);
+        const { bands } = useAudioAnalysis(() => fakeStream(), { bands: bandCount });
+        await Promise.resolve();
+        flushFrame();
+        expect(bands()).toHaveLength(3);
+
+        setBandCount(7);
+        await Promise.resolve();
+        // The effect reruns (cleanup + rebuild) as soon as the accessor
+        // changes: the array is already resized to the NEW count before any
+        // new frame has read the analyser, which is the bug this closes --
+        // previously a stale-length array would linger, silently padded or
+        // truncated by normalizeVolumeBands, until an unmount/remount.
+        expect(bands()).toEqual([0, 0, 0, 0, 0, 0, 0]);
+
+        flushFrame();
+        expect(bands()).toHaveLength(7);
+        dispose();
+      });
+    });
+  });
 });

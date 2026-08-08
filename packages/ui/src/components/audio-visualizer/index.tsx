@@ -81,6 +81,21 @@ export function usePrefersReducedMotion(): Accessor<boolean> {
 }
 
 /**
+ * Props a shader variant (`wave`, `aurora`, `custom`) receives from the
+ * dispatcher: everything a DOM variant gets, plus the scalar `volume` reading
+ * (shaders read one number, not per-band levels) and the shader-specific
+ * knobs. This is the compile-time contract Tasks 12 to 15 build against --
+ * keep it honest rather than casting around a looser type at the render site.
+ */
+export interface ShaderVariantProps extends VariantProps {
+  volume: number;
+  /** Pattern density, 0..1. */
+  complexity?: number;
+  /** Only meaningful for `variant="custom"`. */
+  shader?: ShaderSpec;
+}
+
+/**
  * Shader variants live behind a dynamic import so the WebGL runtime and the
  * GLSL strings (about 25 to 30 KB) never reach a consumer who does not ask for
  * them.
@@ -92,7 +107,7 @@ export function usePrefersReducedMotion(): Accessor<boolean> {
  * a static one does not (verified empirically). Never convert these entries
  * to static imports.
  */
-const SHADER_VARIANTS: Record<string, () => Promise<{ default: Component<never> }>> = {
+const SHADER_VARIANTS: Record<string, () => Promise<{ default: Component<ShaderVariantProps> }>> = {
   wave: () => import('./variant-wave'),
   aurora: () => import('./variant-aurora'),
   custom: () => import('./variant-custom'),
@@ -119,12 +134,16 @@ export function AudioVisualizer(props: AudioVisualizerProps): JSX.Element {
   // A caller-supplied `bands` array short-circuits Web Audio entirely, which is
   // what keeps the headless and SSR paths free of an AudioContext.
   const source = () => (props.bands ? undefined : props.stream ?? props.audioElement);
-  const analysis = useAudioAnalysis(source, { bands: bandCount() });
+  // Pass the ACCESSOR, not its current value: useAudioAnalysis reads it inside
+  // its own effect, so a later variant/size/barCount change rebuilds the
+  // analyser at the new count instead of leaving it wired to whatever the
+  // count happened to be at mount.
+  const analysis = useAudioAnalysis(source, { bands: bandCount });
   const bands = () => props.bands ?? analysis.bands();
 
   // Lazily loaded shader component, or undefined until it resolves. Failure is
   // not fatal: the bar fallback below stays on screen.
-  const [Shader, setShader] = createSignal<Component<never> | undefined>();
+  const [Shader, setShader] = createSignal<Component<ShaderVariantProps> | undefined>();
   createEffect(() => {
     const v = variant();
     const load = SHADER_VARIANTS[v];
@@ -179,7 +198,7 @@ export function AudioVisualizer(props: AudioVisualizerProps): JSX.Element {
             fallback={<BarVisualizer {...shared()} barCount={props.barCount} />}
           >
             {(Comp) => {
-              const C = Comp() as Component<Record<string, unknown>>;
+              const C = Comp();
               return (
                 <C
                   {...shared()}

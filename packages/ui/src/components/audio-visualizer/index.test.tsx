@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
+import { createSignal } from 'solid-js';
 import { render, cleanup, waitFor } from '@solidjs/testing-library';
 import { AudioVisualizer } from './index';
+import * as UseAudioAnalysisModule from '../../primitives/use-audio-analysis';
 
 afterEach(cleanup);
 
@@ -98,7 +100,13 @@ describe('AudioVisualizer dispatch', () => {
 // permanently -- not just before resolution settles -- and that the failure
 // is reported once via console.warn rather than thrown.
 describe('AudioVisualizer shader load failure', () => {
-  afterEach(() => vi.restoreAllMocks());
+  // In an afterEach, not at the end of the test body: if an earlier
+  // assertion in the test throws, a cleanup step sitting after it never
+  // runs, and the mock leaks into whatever test happens to run next.
+  afterEach(() => {
+    vi.doUnmock('./variant-wave');
+    vi.restoreAllMocks();
+  });
 
   it('falls back to bars permanently and warns once when the shader chunk fails to load', async () => {
     vi.doMock('./variant-wave', () => {
@@ -111,7 +119,44 @@ describe('AudioVisualizer shader load failure', () => {
     await waitFor(() => expect(warn).toHaveBeenCalledTimes(1));
     expect(warn.mock.calls[0]?.[0]).toContain('variant="wave"');
     expect(container.querySelectorAll('[part="bar"]').length).toBeGreaterThan(0);
+  });
+});
 
-    vi.doUnmock('./variant-wave');
+// Nothing above exercises a prop change after mount, which is exactly how the
+// band-count-reactivity bug (index.tsx calling `bandCount()` once instead of
+// passing the accessor) went unnoticed: `useAudioAnalysis` is Solid setup
+// code, called exactly once per component instance, so the only way to prove
+// the COUNT stays live is to capture the accessor it was actually given and
+// call it again after a post-mount prop change -- a DOM-level assertion can't
+// distinguish this, since every variant re-pads/truncates whatever `bands()`
+// array it receives to its own count regardless of the array's real length.
+describe('AudioVisualizer band count reactivity', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('re-requests the analyser bucket count when barCount changes post-mount', async () => {
+    const spy = vi
+      .spyOn(UseAudioAnalysisModule, 'useAudioAnalysis')
+      .mockReturnValue({ bands: () => [], volume: () => 0 });
+
+    const [barCount, setBarCount] = createSignal(3);
+    render(() => (
+      <AudioVisualizer variant="bar" stream={{} as MediaStream} barCount={barCount()} />
+    ));
+
+    // Solid components run their setup function once, so useAudioAnalysis
+    // must be called exactly once for this instance -- if a future change
+    // regressed to calling it per-render, this would catch that too.
+    expect(spy).toHaveBeenCalledTimes(1);
+    const options = spy.mock.calls[0]?.[1] as { bands: () => number };
+    expect(options.bands()).toBe(3);
+
+    setBarCount(7);
+    await Promise.resolve();
+
+    // Same accessor, called again: it must reflect the NEW prop, not a
+    // mount-time snapshot. Before the fix this field was a plain number (3),
+    // so calling it here would have thrown "options.bands is not a function"
+    // -- itself proof the old shape was broken, not just stale.
+    expect(options.bands()).toBe(7);
   });
 });
