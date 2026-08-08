@@ -3,7 +3,7 @@
 
 # @kitn.ai/ui
 
-> Framework-agnostic, Shadow-DOM web components for building AI chat interfaces — works in React, Vue, Angular, Svelte, or plain HTML. 79 custom elements, every one prefixed `kai-` (e.g. `<kai-chat>`, `<kai-artifact>`): streaming responses, markdown + code rendering, reasoning/tool panels, attachments, conversation sidebar, voice input. Zero framework dependency for consumers; the SolidJS runtime it is authored in is bundled in, so the host needs nothing.
+> Framework-agnostic, Shadow-DOM web components for building AI chat interfaces — works in React, Vue, Angular, Svelte, or plain HTML. 80 custom elements, every one prefixed `kai-` (e.g. `<kai-chat>`, `<kai-artifact>`): streaming responses, markdown + code rendering, reasoning/tool panels, attachments, conversation sidebar, voice input. Zero framework dependency for consumers; the SolidJS runtime it is authored in is bundled in, so the host needs nothing.
 
 ## Install
 
@@ -37,7 +37,7 @@ Drop an element into any framework (React, Vue, plain HTML). Data in via JS prop
 - `<kai-prompt-input>` — standalone composer with send button.
 
 **Layer 2 — composable primitives** (`import { … } from '@kitn.ai/ui'`):
-All 79 elements are also exported individually. Use them for custom layouts or features `<kai-chat>` does not expose (ChainOfThought, FeedbackBar, ThinkingBar, VoiceInput, …). Your bundler tree-shakes the rest.
+All 80 elements are also exported individually. Use them for custom layouts or features `<kai-chat>` does not expose (ChainOfThought, FeedbackBar, ThinkingBar, VoiceInput, …). Your bundler tree-shakes the rest.
 
 ## Key rules for the web components
 
@@ -99,7 +99,7 @@ For Tailwind builds: `@import "@kitn.ai/ui/theme.css"` in your CSS.
 
 ## Docs
 
-- Full element reference (all 79 elements, every prop/event): ./llms-full.txt — https://kitn.dev/llms-full.txt
+- Full element reference (all 80 elements, every prop/event): ./llms-full.txt — https://kitn.dev/llms-full.txt
 - Machine-readable Custom Elements Manifest: https://unpkg.com/@kitn.ai/ui/dist/custom-elements.json
 - Working examples: https://github.com/kitn-ai/ui/tree/main/examples
 - Storybook: https://storybook.kitn.dev
@@ -173,7 +173,7 @@ The same rule applies to every array/object property (`models`, `context`, `sugg
 
 ---
 
-## Element reference (79 elements, generated from custom-elements.json)
+## Element reference (80 elements, generated from custom-elements.json)
 
 Every element also accepts the `theme` attribute. Array/object properties are marked with a `—` attribute: they must be set as JS properties.
 
@@ -264,6 +264,41 @@ Every element also accepts the `theme` attribute. Array/object properties are ma
 | Part | Description |
 |---|---|
 | `::part(preview)` | The image shown in an attachment’s hover-card preview. Bounded by default (max ~320×256, aspect preserved) so a large image never blows up the card — raise or lower the cap from outside. — `kai-attachments::part(preview) { max-width: 32rem; max-height: 24rem }` |
+
+---
+
+### `kai-audio-visualizer` / `AudioVisualizer`
+
+**Properties** (every element also accepts `theme="light|dark|auto"`; only scalar props work as HTML attributes):
+
+| Property | Attribute | Type | Description |
+|---|---|---|---|
+| `variant` | `variant` | `undefined \| string` | Look to render: `bar` (default), `grid`, `radial`, `wave`, `aurora`, `custom`. `aura` is accepted as a LiveKit-markup alias for `aurora`. Attribute: `variant`. |
+| `state` | `state` | `undefined \| string` | `idle` (default), `connecting`, `listening`, `thinking`, `speaking`. LiveKit's room-lifecycle state names are accepted as aliases. Attribute: `state`. |
+| `size` | `size` | `undefined \| string` | `icon` \| `sm` \| `md` (default) \| `lg` \| `xl`. Attribute: `size`. |
+| `barCount` | `bar-count` | `undefined \| number` | Bars to draw. Bar and radial only. Attribute: `bar-count`. |
+| `rowCount` | `row-count` | `undefined \| number` | Grid rows. Attribute: `row-count`. |
+| `columnCount` | `column-count` | `undefined \| number` | Grid columns. Attribute: `column-count`. |
+| `radius` | `radius` | `undefined \| number` | Radial only: ring distance from center, in px. Attribute: `radius`. |
+| `spread` | `spread` | `undefined \| number` | Grid only: ring distance for the connecting animation, in cells. Attribute: `spread`. |
+| `interval` | `interval` | `undefined \| number` | Grid only: ms between scripted frames. Attribute: `interval`. |
+| `color` | `color` | `undefined \| string` | CSS color for the geometry, overriding the inherited `currentColor`. Attribute: `color`. |
+| `complexity` | `complexity` | `undefined \| number` | Shader variants only: pattern density, 0..1. Attribute: `complexity`. |
+| `label` | `label` | `undefined \| string` | Setting this makes the element an announced image (`role="img"`) instead of decorative (`aria-hidden`). Attribute: `label`. |
+| `stream` | — | `undefined \| MediaStream` | Live microphone or WebRTC audio to analyze. JS property only. |
+| `audioElement` | — | `undefined \| HTMLMediaElement` | An `<audio>` or `<video>` element to tap for its audio. JS property only. |
+| `bands` | — | `undefined \| number[]` | Pre-computed levels, 0..1. Set this and no AudioContext is ever built, which is what keeps headless/SSR rendering and browser-speech-synthesis playback (which exposes no audio node) free of Web Audio entirely. JS property only. A new array reference is required for each update; mutating the existing array in place will not re-render. |
+| `shader` | — | `undefined \| { fragment: string; uniforms?: undefined \| Record<string, { type: string; value: number \| number[]; }> }` | Custom fragment shader for `variant="custom"`. JS property only. |
+
+_No events._
+
+**Styleable parts** (restyle from outside via `kai-audio-visualizer::part(name)`):
+
+| Part | Description |
+|---|---|
+| `::part(bar)` | A single bar in the `bar` variant, or a single spoke in the `radial` variant. Carries `data-kai-index` and `data-kai-highlighted` ("true"/"false"), so lit and idle bars can be styled differently. — `kai-audio-visualizer::part(bar) { border-radius: 2px } kai-audio-visualizer::part(bar)[data-kai-highlighted="true"] { background: var(--brand) }` |
+| `::part(cell)` | A single dot in the `grid` variant. Carries `data-kai-index` and `data-kai-highlighted` ("true"/"false"), so lit and idle cells can be styled differently. — `kai-audio-visualizer::part(cell) { border-radius: 9999px } kai-audio-visualizer::part(cell)[data-kai-highlighted="true"] { background: var(--brand) }` |
+| `::part(canvas)` | The WebGL canvas backing the `wave` and `aurora` variants. Restyle its size or radius, or layer a mask/filter, from outside. — `kai-audio-visualizer::part(canvas) { border-radius: 0.75rem }` |
 
 ---
 

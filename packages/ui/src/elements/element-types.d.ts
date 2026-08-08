@@ -164,6 +164,43 @@ export interface KaiAttachmentsElement extends HTMLElement {
   emptyText?: string;
 }
 
+export interface KaiAudioVisualizerElement extends HTMLElement {
+  /** Color mode (`auto` follows prefers-color-scheme). */
+  theme?: 'light' | 'dark' | 'auto';
+  /** Look to render: `bar` (default), `grid`, `radial`, `wave`, `aurora`, `custom`. `aura` is accepted as a LiveKit-markup alias for `aurora`. Attribute: `variant`. */
+  variant?: string;
+  /** `idle` (default), `connecting`, `listening`, `thinking`, `speaking`. LiveKit's room-lifecycle state names are accepted as aliases. Attribute: `state`. */
+  state?: string;
+  /** `icon` | `sm` | `md` (default) | `lg` | `xl`. Attribute: `size`. */
+  size?: string;
+  /** Bars to draw. Bar and radial only. Attribute: `bar-count`. */
+  barCount?: number;
+  /** Grid rows. Attribute: `row-count`. */
+  rowCount?: number;
+  /** Grid columns. Attribute: `column-count`. */
+  columnCount?: number;
+  /** Radial only: ring distance from center, in px. Attribute: `radius`. */
+  radius?: number;
+  /** Grid only: ring distance for the connecting animation, in cells. Attribute: `spread`. */
+  spread?: number;
+  /** Grid only: ms between scripted frames. Attribute: `interval`. */
+  interval?: number;
+  /** CSS color for the geometry, overriding the inherited `currentColor`. Attribute: `color`. */
+  color?: string;
+  /** Shader variants only: pattern density, 0..1. Attribute: `complexity`. */
+  complexity?: number;
+  /** Setting this makes the element an announced image (`role="img"`) instead of decorative (`aria-hidden`). Attribute: `label`. */
+  label?: string;
+  /** Live microphone or WebRTC audio to analyze. JS property only. */
+  stream?: MediaStream;
+  /** An `<audio>` or `<video>` element to tap for its audio. JS property only. */
+  audioElement?: HTMLMediaElement;
+  /** Pre-computed levels, 0..1. Set this and no AudioContext is ever built, which is what keeps headless/SSR rendering and browser-speech-synthesis playback (which exposes no audio node) free of Web Audio entirely. JS property only. A new array reference is required for each update; mutating the existing array in place will not re-render. */
+  bands?: number[];
+  /** Custom fragment shader for `variant="custom"`. JS property only. */
+  shader?: { fragment: string; uniforms?: Record<string, { type: string; value: number | number[]; }> };
+}
+
 export interface KaiAvatarElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: 'light' | 'dark' | 'auto';
@@ -1366,6 +1403,7 @@ declare global {
     'kai-agent-card': KaiAgentCardElement;
     'kai-artifact': KaiArtifactElement;
     'kai-attachments': KaiAttachmentsElement;
+    'kai-audio-visualizer': KaiAudioVisualizerElement;
     'kai-avatar': KaiAvatarElement;
     'kai-badge': KaiBadgeElement;
     'kai-button': KaiButtonElement;
