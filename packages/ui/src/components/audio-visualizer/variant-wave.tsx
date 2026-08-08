@@ -75,7 +75,13 @@ export default function WaveVisualizer(props: ShaderVariantProps): JSX.Element {
         // visible difference on a line this thin.
         precision={props.size === 'icon' || props.size === 'sm' ? 'mediump' : 'highp'}
         uniforms={{
-          uSpeed: { type: '1f', value: targets().speed },
+          // uSpeed drives the shader's own time-based phase animation, not a
+          // tween -- so frozen (prefers-reduced-motion) must zero it directly
+          // rather than relying on any tween's instant-landing logic. uAmplitude
+          // and uFrequency stay as their frozen-collapsed values: they shape a
+          // static wave, they do not move it, so the result is a still picture
+          // of the wave rather than a flat line.
+          uSpeed: { type: '1f', value: props.frozen ? 0 : targets().speed },
           uAmplitude: { type: '1f', value: amplitude.value() },
           uFrequency: { type: '1f', value: frequency.value() },
           uMix: { type: '1f', value: opacity.value() },

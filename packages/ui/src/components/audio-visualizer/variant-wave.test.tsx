@@ -152,6 +152,31 @@ describe('WaveVisualizer: state -> uniform mapping', () => {
     expect(c.uniforms.uFrequency?.value).toBe(t.frequency);
   });
 
+  it('frozen zeroes uSpeed so the shader\'s own time-based phase animation stops, while amplitude and frequency keep shaping a static (not flat) wave', async () => {
+    // uSpeed is read straight from waveTargets(state), not a tween, so
+    // frozen's instant-landing transitions do nothing to it on their own --
+    // it needs its own explicit frozen check. Without one, the line keeps
+    // travelling at full rate for a user who asked the OS to reduce motion
+    // (the defect this test guards against).
+    const frozen = await renderWave({ state: 'listening', frozen: true });
+    expect(frozen.uniforms.uSpeed?.value).toBe(0);
+
+    cleanup();
+
+    const notFrozen = await renderWave({ state: 'listening', frozen: false });
+    expect(notFrozen.uniforms.uSpeed?.value).toBe(waveTargets('listening').speed);
+    expect(notFrozen.uniforms.uSpeed?.value).not.toBe(0);
+
+    // The still picture is a static WAVE, not a blank line: amplitude and
+    // frequency (shape, not travel) still land on listening's non-zero
+    // target while frozen.
+    const t = waveTargets('listening');
+    expect(frozen.uniforms.uAmplitude?.value).toBeCloseTo(t.amplitude, 6);
+    expect(frozen.uniforms.uAmplitude?.value).not.toBe(0);
+    expect(frozen.uniforms.uFrequency?.value).toBe(t.frequency);
+    expect(frozen.uniforms.uFrequency?.value).not.toBe(0);
+  });
+
   it('frozen collapses an array (pulse) opacity target to its first value instead of ping-ponging', async () => {
     const t = waveTargets('listening');
     expect(Array.isArray(t.opacity)).toBe(true);
