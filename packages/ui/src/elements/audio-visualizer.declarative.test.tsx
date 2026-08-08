@@ -1,20 +1,23 @@
 /**
  * Unit tests for the declarative `<kai-audio-visualizer>` API.
  *
- * Mirrors toast.declarative.test.tsx: `defineWebComponent` needs a real
- * browser (Constructable Stylesheets, shadow roots) and is unsuitable for
- * jsdom, so we exercise `AudioVisualizer` directly with the values the facade
- * would hand it after attribute coercion, rather than upgrading a real custom
- * element. The `num()` coercion helper itself, which is where the facade's
- * own logic lives (everything else is a straight pass-through), is tested
- * directly below too.
+ * `defineWebComponent` needs a real browser (Constructable Stylesheets, shadow
+ * roots) for the custom-element upgrade itself, which is unsuitable for jsdom,
+ * so most cases exercise `AudioVisualizer` directly with the values the facade
+ * would hand it after attribute coercion. But the facade's own wiring (which
+ * prop gets `num()`'d into which `AudioVisualizer` prop) is a plain Solid
+ * component call with no shadow DOM involved, so it IS testable directly: one
+ * test below calls the extracted `AudioVisualizerFacade` render function with
+ * raw string values, the way an attribute would arrive. The `num()` coercion
+ * helper and the `normalizeVariant` alias contract it relies on are each
+ * tested directly too.
  */
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup, waitFor } from '@solidjs/testing-library';
 import { createSignal } from 'solid-js';
-import { AudioVisualizer, type VisualizerVariant } from '../components/audio-visualizer';
-import { num } from './audio-visualizer';
+import { AudioVisualizer, normalizeVariant } from '../components/audio-visualizer';
+import { num, AudioVisualizerFacade } from './audio-visualizer';
 
 afterEach(cleanup);
 
@@ -26,7 +29,7 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-describe('num() — the facade\'s attribute coercion helper', () => {
+describe('num(): the facade\'s attribute coercion helper', () => {
   it('coerces a numeric string', () => {
     expect(num('7')).toBe(7);
   });
@@ -118,22 +121,44 @@ describe('kai-audio-visualizer declarative API', () => {
     expect(container.querySelector('[data-kai-state="idle"]')).toBeTruthy();
   });
 
-  it('passes the "aura" LiveKit alias through untouched, resolving identically to "aurora"', () => {
-    // The facade's job is to pass `variant` straight through and let
-    // normalizeVariant (../components/audio-visualizer) do the alias
-    // resolution -- the same contract as `state`. Both currently render the
-    // shader path's synchronous bar fallback (the chunk loads async), so
-    // asserting a specific bar count would really be testing that fallback,
-    // not the alias. Asserting the two render IDENTICALLY, whatever that
-    // markup is, proves "aura" was not mangled into something else.
-    // Cast, exactly like the facade does: AudioVisualizerProps.variant is
-    // typed narrowly as VisualizerVariant even though normalizeVariant (what
-    // actually consumes it at runtime) accepts any string. The facade's
-    // pass-through cast is what this test is proving is safe.
-    const alias = render(() => <AudioVisualizer variant={'aura' as VisualizerVariant} />);
-    const aliasHtml = alias.container.innerHTML;
-    cleanup();
-    const canonical = render(() => <AudioVisualizer variant="aurora" />);
-    expect(aliasHtml).toBe(canonical.container.innerHTML);
+  it('invokes the real facade wiring with raw string attribute values, catching a swapped prop slot', () => {
+    // Everything above renders AudioVisualizer directly with values the test
+    // computed itself, so the wiring inside AudioVisualizerFacade (which prop
+    // gets num()'d into which AudioVisualizer prop) is never actually
+    // exercised -- a copy-paste swap, e.g. num(props.rowCount) landing in the
+    // columnCount slot, would go uncaught. Call the real facade function with
+    // STRING values, the way component-register hands it attributes, and
+    // assert on a shape a rows/columns swap could produce identically by
+    // total cell count (3*4 === 4*3) but NOT by grid-template-columns.
+    const attrProps = { variant: 'grid', rowCount: '3', columnCount: '4' } as unknown as Parameters<
+      typeof AudioVisualizerFacade
+    >[0];
+    const { container } = render(() => AudioVisualizerFacade(attrProps));
+    expect(container.querySelectorAll('[part="cell"]')).toHaveLength(12);
+    const grid = container.querySelector('.grid') as HTMLElement;
+    expect(grid.style.gridTemplateColumns).toBe('repeat(4, 1fr)');
+  });
+});
+
+describe('normalizeVariant(): the aura -> aurora LiveKit-markup alias contract', () => {
+  // The facade passes `variant` straight through untouched and relies on
+  // normalizeVariant (../components/audio-visualizer) to resolve LiveKit's
+  // `aura` naming to this kit's `aurora`. No other test in the repo exercises
+  // normalizeVariant directly, so this is the only regression guard for that
+  // contract. Verified to actually fail when the alias is removed: see the
+  // fix report in task-9-report.md for the delete-the-alias RED proof.
+  it('resolves the aura alias to aurora', () => {
+    expect(normalizeVariant('aura')).toBe('aurora');
+  });
+
+  it('passes every known variant through unchanged', () => {
+    for (const v of ['bar', 'grid', 'radial', 'wave', 'aurora', 'custom']) {
+      expect(normalizeVariant(v)).toBe(v);
+    }
+  });
+
+  it('falls back to bar for an unrecognized variant, and for undefined', () => {
+    expect(normalizeVariant('not-a-real-variant')).toBe('bar');
+    expect(normalizeVariant(undefined)).toBe('bar');
   });
 });

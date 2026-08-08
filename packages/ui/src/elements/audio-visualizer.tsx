@@ -1,3 +1,4 @@
+import type { JSX } from 'solid-js';
 import { AudioVisualizer, type ShaderSpec, type VisualizerVariant } from '../components/audio-visualizer';
 import type { VisualizerSize } from '../components/audio-visualizer/sizes';
 import { defineWebComponent } from './define';
@@ -57,6 +58,36 @@ export function num(value: unknown): number | undefined {
 }
 
 /**
+ * The facade's render logic, extracted to a named function so it can be
+ * exercised directly in tests (a plain Solid component call, no shadow DOM
+ * involved) without needing `defineWebComponent`'s browser-only custom-element
+ * upgrade path. Identical to what was previously an inline arrow passed to
+ * `defineWebComponent` below; behavior is unchanged.
+ */
+export function AudioVisualizerFacade(props: Props): JSX.Element {
+  return (
+    <AudioVisualizer
+      variant={props.variant as VisualizerVariant | undefined}
+      state={props.state as string | undefined}
+      size={props.size as VisualizerSize | undefined}
+      barCount={num(props.barCount)}
+      rowCount={num(props.rowCount)}
+      columnCount={num(props.columnCount)}
+      radius={num(props.radius)}
+      spread={num(props.spread)}
+      interval={num(props.interval)}
+      color={props.color as string | undefined}
+      complexity={num(props.complexity)}
+      label={props.label as string | undefined}
+      stream={props.stream as MediaStream | undefined}
+      audioElement={props.audioElement as HTMLMediaElement | undefined}
+      bands={props.bands as number[] | undefined}
+      shader={props.shader as ShaderSpec | undefined}
+    />
+  );
+}
+
+/**
  * `<kai-audio-visualizer>` renders live audio as bars, a grid, a ring, a wave,
  * or a glowing aurora. It also animates from `state` alone with no audio at
  * all, which is what you want when the source cannot be tapped (browser
@@ -97,23 +128,4 @@ defineWebComponent<Props>('kai-audio-visualizer', {
   audioElement: undefined,
   bands: undefined,
   shader: undefined,
-}, (props) => (
-  <AudioVisualizer
-    variant={props.variant as VisualizerVariant | undefined}
-    state={props.state as string | undefined}
-    size={props.size as VisualizerSize | undefined}
-    barCount={num(props.barCount)}
-    rowCount={num(props.rowCount)}
-    columnCount={num(props.columnCount)}
-    radius={num(props.radius)}
-    spread={num(props.spread)}
-    interval={num(props.interval)}
-    color={props.color as string | undefined}
-    complexity={num(props.complexity)}
-    label={props.label as string | undefined}
-    stream={props.stream as MediaStream | undefined}
-    audioElement={props.audioElement as HTMLMediaElement | undefined}
-    bands={props.bands as number[] | undefined}
-    shader={props.shader as ShaderSpec | undefined}
-  />
-));
+}, AudioVisualizerFacade);
