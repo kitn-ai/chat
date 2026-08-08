@@ -161,12 +161,22 @@ function createFakeGL(failures: FakeGLFailures = {}) {
   const calls: string[] = [];
   const record = (name: string) => calls.push(name);
   const locations = new Map<string, object>();
+  // Every fragment-shader source string ShaderCanvas has ever handed to
+  // shaderSource(), in call order -- one entry per (re)compile. Lets a test
+  // assert not just THAT a rebuild happened, but that the rebuilt
+  // declaration actually reflects the new state (see the "declares the NEW
+  // array size" test below), the end-to-end assertion that would have
+  // caught the shapeKey/declaration mismatch.
+  const fragmentSources: string[] = [];
   const gl = {
     VERTEX_SHADER: 1, FRAGMENT_SHADER: 2, COMPILE_STATUS: 3, LINK_STATUS: 4,
     ARRAY_BUFFER: 5, STATIC_DRAW: 6, FLOAT: 7, BLEND: 8, ONE: 9,
     ONE_MINUS_SRC_ALPHA: 10, TRIANGLE_STRIP: 11, COLOR_BUFFER_BIT: 12,
     createShader: (type: number) => { record('createShader'); return { __type: type }; },
-    shaderSource: () => {},
+    shaderSource: (shader: { __type: number }, source: string) => {
+      record('shaderSource');
+      if (shader.__type === gl.FRAGMENT_SHADER) fragmentSources.push(source);
+    },
     compileShader: () => { record('compileShader'); },
     getShaderParameter: (shader: { __type: number }) =>
       !(failures.failFragmentCompile && shader.__type === gl.FRAGMENT_SHADER),
@@ -200,7 +210,7 @@ function createFakeGL(failures: FakeGLFailures = {}) {
     uniformMatrix2fv: () => {}, uniformMatrix3fv: () => {}, uniformMatrix4fv: () => {},
     clearColor: () => {}, clear: () => {}, drawArrays: () => {}, viewport: () => {},
   };
-  return { gl: gl as unknown as WebGLRenderingContext, calls };
+  return { gl: gl as unknown as WebGLRenderingContext, calls, fragmentSources };
 }
 
 function stubGetContext(gl: WebGLRenderingContext) {
@@ -332,5 +342,54 @@ describe('ShaderCanvas: cleans up whatever already compiled when a later stage f
     expect(onError).toHaveBeenCalledTimes(1);
     expect(calls.filter((c) => c === 'deleteShader')).toHaveLength(2);
     expect(calls.filter((c) => c === 'deleteProgram')).toHaveLength(1);
+  });
+});
+
+describe('ShaderCanvas: an array uniform relying on inferred arraySize still recompiles when its length changes', () => {
+  installFakeClock();
+
+  // Pins the fix for a residual the coordinator caught in review round 1:
+  // the band count is REACTIVE (derived from `variant`/`size` elsewhere in
+  // the dispatcher), so a `uBands`-style uniform's `value.length` genuinely
+  // changes while a shader variant stays mounted -- e.g. switching from
+  // `bar` (5 bands) to `radial` (24 bands). Before this fix, `shapeKey` read
+  // only the explicit `arraySize` field, so a length-only change on an
+  // inferred-size array left the shape key unchanged, the effect never
+  // re-ran, and the compiled declaration stayed at the OLD size while the
+  // setter pushed the NEW (longer) array -- the exact
+  // declaration/setter mismatch this whole file exists to prevent,
+  // reachable through inference instead of an explicit mismatch.
+
+  it('rebuilds the program when value.length changes with no explicit arraySize on either side', async () => {
+    const { gl, calls } = createFakeGL();
+    stubGetContext(gl);
+    const [bands, setBands] = createSignal([0, 0, 0]);
+
+    render(() => (
+      <ShaderCanvas fragment={MAIN} uniforms={{ uBands: { type: '1fv', value: bands() } }} />
+    ));
+    expect(calls.filter((c) => c === 'createProgram')).toHaveLength(1);
+
+    setBands([0, 0, 0, 0, 0]);
+    await flush();
+
+    expect(calls.filter((c) => c === 'createProgram')).toHaveLength(2);
+  });
+
+  it('declares the NEW array size in the rebuilt source, not the stale one', async () => {
+    const { gl, fragmentSources } = createFakeGL();
+    stubGetContext(gl);
+    const [bands, setBands] = createSignal([0, 0, 0]);
+
+    render(() => (
+      <ShaderCanvas fragment={MAIN} uniforms={{ uBands: { type: '1fv', value: bands() } }} />
+    ));
+    expect(fragmentSources[0]).toContain('uniform float uBands[3];');
+
+    setBands([0, 0, 0, 0, 0]);
+    await flush();
+
+    expect(fragmentSources[1]).toContain('uniform float uBands[5];');
+    expect(fragmentSources[1]).not.toContain('uBands[3]');
   });
 });

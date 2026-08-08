@@ -10,18 +10,13 @@ export interface UniformSpec {
   value: number | number[];
   /**
    * For array uniforms (`1fv`, `3fv`, `4fv`, or a matrix type repeated), the
-   * declared length. Optional: when `value` is longer than one instance of
-   * the type, the length is inferred from `value.length` -- see
-   * `inferArraySize`.
-   *
-   * Set this explicitly, rather than relying on inference, if the array's
-   * LENGTH can change while the component stays mounted (e.g. a per-band
-   * uniform whose band count tracks a reactive `size`/`barCount` prop): the
-   * recompile decision reads this field directly, not the inferred value, so
-   * a length-only change from an inferred 3 to an inferred 4 elements will
-   * NOT trigger a recompile, and the shader stays compiled against the old
-   * array size. Passing `arraySize` explicitly makes that change visible to
-   * the recompile check the same way any other structural change is.
+   * declared length. Optional: when omitted, it is inferred from
+   * `value.length` -- see `inferArraySize`. The inferred length is exactly
+   * what the recompile check uses too (see `effectiveArraySize`), so a
+   * length change recompiles the shader whether `arraySize` was passed
+   * explicitly or left to be inferred -- e.g. a per-band uniform whose
+   * length tracks a reactive `size`/`barCount` prop stays correct across a
+   * band-count change with no extra care from the caller.
    */
   arraySize?: number;
 }
@@ -116,6 +111,27 @@ function inferArraySize(u: UniformSpec): number | undefined {
   return instances > 1 && Number.isInteger(instances) ? instances : undefined;
 }
 
+/**
+ * The array length a uniform will actually be declared and compiled with:
+ * the caller's explicit `arraySize` if given, otherwise `inferArraySize`'s
+ * guess from `value.length`.
+ *
+ * `buildFragmentSource` (the declaration) and `uniformShapeKey` (the
+ * recompile trigger) both call this SAME function, on purpose -- it is the
+ * one source of truth for "how big is this array," so the two can never
+ * disagree. Before this existed, an uninferred array uniform's declaration
+ * came from `value.length` but the recompile check only looked at the
+ * explicit `arraySize` field: a reactive `value.length` change (e.g. a
+ * `uBands` uniform whose length tracks a `size`/`barCount` prop, which does
+ * change while a shader variant stays mounted) would silently NOT recompile,
+ * reintroducing the exact declaration/setter mismatch this file exists to
+ * prevent, just one door over. Routing both call sites through the same
+ * function makes that impossible rather than merely documented.
+ */
+function effectiveArraySize(u: UniformSpec): number | undefined {
+  return u.arraySize ?? inferArraySize(u);
+}
+
 /** Every ShaderToy built-in we support, declared for every shader. */
 const BUILTINS = [
   'uniform float iTime;',
@@ -151,7 +167,7 @@ export function buildFragmentSource(
 ): string {
   const declarations = Object.entries(uniforms)
     .map(([name, u]) => {
-      const arraySize = u.arraySize ?? inferArraySize(u);
+      const arraySize = effectiveArraySize(u);
       const size = arraySize ? `[${arraySize}]` : '';
       return `uniform ${GLSL_TYPE[u.type]} ${name}${size};`;
     })
@@ -168,19 +184,26 @@ export function buildFragmentSource(
 
 /**
  * A stable fingerprint of the uniforms' STRUCTURE -- name, GLSL type, and
- * array size -- deliberately excluding `value`. Two calls with the same
- * names/types/sizes but different values return the same string.
+ * EFFECTIVE array size (`effectiveArraySize`, explicit or inferred, never
+ * raw `u.arraySize` alone) -- deliberately excluding `value` itself. Two
+ * calls with the same names/types/sizes but different values return the
+ * same string; two calls where an array's `value.length` differs, even with
+ * no explicit `arraySize` on either side, return DIFFERENT strings, because
+ * that length difference is exactly what `buildFragmentSource` would
+ * declare differently.
  *
  * This is what lets the component recompile only when the shader itself
  * must change, not every time a uniform's value updates (which, for an
- * audio-reactive uniform, is every animation frame).
+ * audio-reactive uniform, is every animation frame) -- while still
+ * recompiling on every change that actually changes the declared source,
+ * including a length-only change to an inferred-size array.
  */
 function uniformShapeKey(uniforms: Record<string, UniformSpec>): string {
   return Object.keys(uniforms)
     .sort()
     .map((name) => {
       const u = uniforms[name]!;
-      return `${name}:${u.type}:${u.arraySize ?? ''}`;
+      return `${name}:${u.type}:${effectiveArraySize(u) ?? ''}`;
     })
     .join('|');
 }
