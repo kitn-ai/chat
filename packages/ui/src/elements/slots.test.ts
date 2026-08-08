@@ -215,6 +215,7 @@ describe('ELEMENT_COMPOSITION registry (single source of truth the build extract
     expect(Object.keys(ELEMENT_COMPOSITION).sort()).toEqual([
       'kai-agent-card',
       'kai-attachments',
+      'kai-audio-visualizer',
       'kai-badge',
       'kai-button',
       'kai-card',

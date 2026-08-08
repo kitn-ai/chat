@@ -109,4 +109,18 @@ describe('GridVisualizer', () => {
     expect(seen.map((s) => s.value)).toEqual([0, 1, 0, 1, 0, 1]);
     expect(seen.map((s) => s.highlighted)).toEqual([false, true, true, true, false, true]);
   });
+
+  it('zeroes the render-prop value in every state except speaking, even with stale bands', () => {
+    const seen: { index: number; highlighted: boolean; value: number }[] = [];
+    render(() => (
+      <GridVisualizer
+        state="idle" size="md" frozen={false}
+        rowCount={2} columnCount={3} bands={[0.9, 0.9, 0.9]}
+      >
+        {(item) => { seen.push(item); return <span />; }}
+      </GridVisualizer>
+    ));
+    expect(seen).toHaveLength(6);
+    expect(seen.every((s) => s.value === 0)).toBe(true);
+  });
 });

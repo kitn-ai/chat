@@ -35,7 +35,12 @@ export function GridVisualizer(
   const sequence = () => gridSequence(props.state, rows(), cols(), props.spread);
   const active = () => sequence()[tick() % sequence().length] ?? { x: -1, y: -1 };
 
-  const levels = () => normalizeVolumeBands(props.bands, cols());
+  // Bands only mean anything while speaking. Everywhere else the sequence is
+  // the whole story, so a stale level never leaks into a scripted state (same
+  // guard as BarVisualizer, so the render-prop's `value` means one thing
+  // across every variant).
+  const levels = () =>
+    props.state === 'speaking' ? normalizeVolumeBands(props.bands, cols()) : new Array(cols()).fill(0);
 
   /**
    * While speaking, a cell lights when its column's level clears a threshold
