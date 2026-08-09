@@ -209,6 +209,7 @@ function createFakeGL(failures: FakeGLFailures = {}) {
     uniform3fv: () => {}, uniform4fv: () => {},
     uniformMatrix2fv: () => {}, uniformMatrix3fv: () => {}, uniformMatrix4fv: () => {},
     clearColor: () => {}, clear: () => {}, drawArrays: () => {}, viewport: () => {},
+    isContextLost: () => false,
   };
   return { gl: gl as unknown as WebGLRenderingContext, calls, fragmentSources };
 }
@@ -311,6 +312,62 @@ describe('ShaderCanvas: cleanup', () => {
     // Without this, an unmounted canvas would still fire `draw` against a
     // deleted program on the next animation frame.
     expect(isFramePending()).toBe(false);
+  });
+});
+
+/**
+ * Regression coverage for the audio-visualizer regression investigation
+ * (2026-08-09): Chrome caps concurrent WebGL contexts around 16 and silently
+ * evicts the oldest once a page exceeds it -- confirmed directly in-browser
+ * on the AudioVisualizer docs page (18 shader canvases mounted at once after
+ * the one-story-per-variant stories restructure, 2 of them lost). Before
+ * this fix, `draw`'s requestAnimationFrame loop had no way to learn a
+ * context died mid-mount: it kept calling `gl.clear`/`gl.drawArrays` every
+ * frame forever, all silent no-ops on a lost context, so the canvas just
+ * kept showing whatever was on screen the instant it died -- a shader that
+ * "moves for a second, then freezes like a static image," with no error and
+ * no `onUnavailable` call to let the dispatcher fall back to bars.
+ */
+describe('ShaderCanvas: WebGL context lost after a successful compile', () => {
+  const { advance, isFramePending } = installFakeClock();
+
+  it('reports onError and stops the draw loop when the context is lost mid-mount', () => {
+    const { gl, calls } = createFakeGL();
+    stubGetContext(gl);
+    const onError = vi.fn();
+
+    render(() => <ShaderCanvas fragment={MAIN} onError={onError} />);
+    expect(onError).not.toHaveBeenCalled();
+    expect(isFramePending()).toBe(true);
+
+    calls.length = 0;
+    const canvas = document.querySelector('canvas')!;
+    canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true }));
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0]![0]).toMatch(/context/i);
+    // The pending frame that was driving the shader is cancelled outright,
+    // not merely a no-op next time it fires -- this is the loop actually
+    // stopping, not just the failure being reported.
+    expect(isFramePending()).toBe(false);
+
+    // Advancing the clock further must not resume drawing (nothing left to
+    // call gl.clear/drawArrays against) and must not report a second time.
+    advance(1000);
+    expect(calls.filter((c) => c === 'clear')).toHaveLength(0);
+    expect(onError).toHaveBeenCalledTimes(1);
+  });
+
+  it('calling preventDefault on the loss event is what the listener does, not left to the browser default', () => {
+    const { gl } = createFakeGL();
+    stubGetContext(gl);
+    render(() => <ShaderCanvas fragment={MAIN} />);
+
+    const canvas = document.querySelector('canvas')!;
+    const event = new Event('webglcontextlost', { cancelable: true });
+    canvas.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
   });
 });
 

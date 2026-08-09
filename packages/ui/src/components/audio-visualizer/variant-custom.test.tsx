@@ -681,6 +681,7 @@ function fakeGL(failures: { failFragmentCompile?: boolean } = {}) {
     uniform3fv: () => {}, uniform4fv: () => {},
     uniformMatrix2fv: () => {}, uniformMatrix3fv: () => {}, uniformMatrix4fv: () => {},
     clearColor: () => {}, clear: () => {}, drawArrays: () => {}, viewport: () => {},
+    isContextLost: () => false,
     uniformHistory,
   };
   return gl as unknown as WebGLRenderingContext & { createProgram: () => object; uniformHistory: typeof uniformHistory };

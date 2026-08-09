@@ -390,7 +390,35 @@ export function ShaderCanvas(props: ShaderCanvasProps): JSX.Element {
     let frame = 0;
     let raf = 0;
 
+    // A context can be lost AFTER a successful compile -- most commonly the
+    // browser evicting this canvas because too many WebGL contexts are alive
+    // on the page at once (Chrome caps concurrent contexts around 16 and
+    // silently kills the oldest). Without this listener, `draw` below would
+    // keep calling `gl.clear`/`gl.drawArrays` every frame forever -- all
+    // no-ops on a lost context per the WebGL spec -- so the canvas would just
+    // keep showing whatever was on screen the instant it died: a
+    // live-looking shader that permanently freezes with no error and no
+    // `onUnavailable`, since nothing here would ever learn it happened.
+    // `preventDefault()` is required by spec to even ALLOW a future
+    // `webglcontextrestored`; this component does not attempt to recover on
+    // one, matching the "permanent for this mount" contract `onUnavailable`
+    // already documents in index.tsx for every other failure path -- a
+    // restored context still needs its program/shaders recompiled from
+    // scratch, and the dispatcher's bar fallback is a fine landing spot.
+    let lost = false;
+    const onContextLost = (e: Event) => {
+      e.preventDefault();
+      lost = true;
+      cancelAnimationFrame(raf);
+      props.onError?.('WebGL context was lost.');
+    };
+    canvas.addEventListener('webglcontextlost', onContextLost, false);
+
     const draw = (now: number) => {
+      // Belt-and-braces alongside the listener above: if a context is lost
+      // by some path that does not fire `webglcontextlost` synchronously
+      // before the next frame, this still stops issuing GL calls against it.
+      if (lost || gl.isContextLost()) return;
       resize();
       const seconds = (now - start) / 1000;
 
@@ -427,6 +455,7 @@ export function ShaderCanvas(props: ShaderCanvasProps): JSX.Element {
       cancelAnimationFrame(raf);
       ro?.disconnect();
       canvas.removeEventListener('pointermove', onMove);
+      canvas.removeEventListener('webglcontextlost', onContextLost);
       gl.deleteProgram(program);
       gl.deleteShader(vs);
       gl.deleteShader(fs);

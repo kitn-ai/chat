@@ -386,6 +386,7 @@ describe('WaveVisualizer: does not defeat ShaderCanvas\'s recompile guard', () =
       uniform3fv: () => {}, uniform4fv: () => {},
       uniformMatrix2fv: () => {}, uniformMatrix3fv: () => {}, uniformMatrix4fv: () => {},
       clearColor: () => {}, clear: () => {}, drawArrays: () => {}, viewport: () => {},
+      isContextLost: () => false,
     };
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(((type: string) =>
       type === 'webgl' || type === 'experimental-webgl' ? gl : null) as never);

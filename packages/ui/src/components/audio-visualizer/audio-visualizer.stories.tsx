@@ -24,7 +24,7 @@ const meta = {
       description: componentDescription([
         'Renders live audio as bars, a grid, a ring, a wave, or a glowing aurora. Set `stream` or `audioElement` to tap real audio, or `bands` to drive it yourself.',
         'With no audio source at all it animates from `state` alone: idle, connecting, listening, thinking, speaking. That is what drives it when the audio cannot be tapped, like browser speech synthesis, which exposes no audio node.',
-        '`wave`, `aurora`, and `custom` render through WebGL behind a dynamic import, and fall back to bars if that fails or WebGL is unavailable. Each look gets its own story below, across all five states. See StateMatrix for the three DOM variants side by side, Microphone for the real thing -- click-to-enable, since Storybook cannot answer a permission prompt -- and MicrophoneAll for all six looks on the same live voice at once.',
+        '`wave`, `aurora`, and `custom` render through WebGL behind a dynamic import, and fall back to bars if that fails or WebGL is unavailable. Each look gets its own story, across all five states -- see Wave, Aurora, and Custom in the sidebar. They are not embedded on this page: five live WebGL canvases each is already close to a browser\'s concurrent context limit, so stacking three of them (plus MicrophoneAll) into one autodocs page reliably exceeds it. See StateMatrix for the three DOM variants side by side, Microphone for the real thing -- click-to-enable, since Storybook cannot answer a permission prompt -- and MicrophoneAll (sidebar too) for all six looks on the same live voice at once.',
       ]),
     },
   },
@@ -161,7 +161,16 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
   // simple, instead of being declared and ignored.
   float segments = mix(1.0, 8.0, uComplexity);
   float lit = step(uv.y, level) * step(0.15, fract(uv.y * segments));
-  fragColor = vec4(uColor * lit, lit);
+  // uIntensity is CustomVisualizer's own state-driven tween (shaderTargets in
+  // primitives/visualizer-sequences.ts): a steady 0.3 at idle, a pulse
+  // between two targets for listening/connecting/thinking, and live volume
+  // at speaking. Scaling brightness by it is what gives the five state tiles
+  // in the Custom story any visual difference at all -- previously this
+  // shader read only uBands/uComplexity, so five tiles fed the SAME shared
+  // synthetic bands rendered pixel-identical regardless of state, with
+  // uIntensity computed correctly but never consumed.
+  float shown = lit * uIntensity;
+  fragColor = vec4(uColor * shown, shown);
 }`.replace(/BAND_COUNT/g, '5');
 
 // ---------------------------------------------------------------- layout
@@ -327,6 +336,22 @@ export const Radial: Story = {
 
 export const Wave: Story = {
   args: { size: 'md' },
+  // `!autodocs`: keep this OFF the generated Docs page while it stays fully
+  // navigable as its own story. The Docs page (tags: ['autodocs'] on `meta`)
+  // renders every story in this file inline at once, and this story alone is
+  // 5 live WebGL contexts. Tried `docs.story.inline: false` first (renders a
+  // story in its own iframe on the Docs page instead of mounting it inline)
+  // and measured no improvement: same-origin iframes share Chrome's renderer
+  // process, so the ~16-context cap is shared across them too -- confirmed
+  // in-browser, still 16 live / 2 silently failing to compile with all four
+  // shader stories split into their own iframes. Wave, Aurora, Custom (5
+  // each) plus MicrophoneAll's 3 is 18 wanted at once either way, so this
+  // story is excluded from the Docs page outright instead, leaving real
+  // headroom under the cap rather than sitting right at its edge. Its
+  // description below, the sidebar entry, and Controls all stay fully
+  // intact -- only the Docs page's inline embed is skipped. See
+  // MicrophoneAll below for the other contributor to the same page.
+  tags: ['!autodocs'],
   parameters: {
     controls: { include: ['size', 'color'] },
     docs: {
@@ -354,6 +379,8 @@ export const Wave: Story = {
 
 export const Aurora: Story = {
   args: { size: 'md' },
+  // See Wave's `!autodocs` comment above -- same reason, same measurement.
+  tags: ['!autodocs'],
   parameters: {
     controls: { include: ['size', 'color', 'theme'] },
     docs: {
@@ -380,6 +407,8 @@ export const Aurora: Story = {
 
 export const Custom: Story = {
   args: { size: 'md', complexity: 0.5 },
+  // See Wave's `!autodocs` comment above -- same reason, same measurement.
+  tags: ['!autodocs'],
   parameters: {
     controls: { include: ['size', 'color', 'complexity'] },
     docs: {
@@ -389,7 +418,9 @@ export const Custom: Story = {
           'plus `uColor`, `uIntensity`, `uSpeed`, `uComplexity`, `uVolume`, and `uBands[]` -- never declare ' +
           'those yourself, the canvas declares them for you. This story\'s shader is hardcoded for 5 bands, so ' +
           'every tile forces `barCount={5}` to match, and slices each lit bar by `complexity` to give that ' +
-          'control something to show. `theme` is not listed: this shader does not read it yet either.',
+          'control something to show, and scales overall brightness by `uIntensity` so the five states read as ' +
+          'more than a relabelled copy of each other: a steady dim idle, a pulsing listening/connecting/thinking, ' +
+          'and a bright, volume-driven speaking. `theme` is not listed: this shader does not read it yet either.',
       },
     },
   },
@@ -568,6 +599,11 @@ export const Microphone: Story = {
  * stream, not just the first.
  */
 export const MicrophoneAll: Story = {
+  // See Wave's `!autodocs` comment above -- same reason, same measurement.
+  // This story is the OTHER contributor to the Docs page's WebGL context
+  // count (3 more: its wave/aurora/custom tiles), on top of Wave/Aurora/
+  // Custom's 5 each.
+  tags: ['!autodocs'],
   parameters: {
     docs: {
       description: {
