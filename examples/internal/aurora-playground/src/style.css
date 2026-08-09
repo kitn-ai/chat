@@ -1,0 +1,18 @@
+html, body { margin: 0; background: #050505; color: #9ab; font: 12px/1.4 ui-monospace, monospace; }
+#wrap { display: flex; gap: 24px; align-items: flex-start; }
+#stage { width: fit-content; background: #050505; position: relative; }
+canvas { display: block; }
+#panel { display: none; padding: 14px 16px; max-height: 100vh; overflow-y: auto;
+         background: #0c0e10; border-left: 1px solid #1c2226; min-width: 310px; box-sizing: border-box; }
+#panel.on { display: block; }
+.row { display: grid; grid-template-columns: 88px 1fr 52px; gap: 8px; align-items: center; margin: 3px 0; }
+.row label { color: #7a8a94; }
+.row output { text-align: right; color: #cde; }
+input[type=range] { width: 100%; accent-color: #2db5d1; }
+h3 { margin: 14px 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #4a5a64; }
+h3:first-child { margin-top: 0; }
+button { background: #16333b; color: #7fd6e8; border: 1px solid #2db5d1; border-radius: 4px;
+         padding: 4px 10px; font: inherit; cursor: pointer; margin: 2px 4px 2px 0; }
+button:hover { background: #1d4450; }
+button.active { background: #2db5d1; color: #041014; }
+#msg { color: #6fcf97; min-height: 16px; }
