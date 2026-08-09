@@ -652,10 +652,13 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
   // SCAF-2: Next.js App Router requires 'use client' for components that use hooks/interactivity.
   const useClientDirective = framework === 'next' ? [`'use client';`, ``] : [];
 
-  // SCAF-6: For Next.js ONLY — use next/dynamic with { ssr: false } so the elements
-  // bundle (which calls delegateEvents(events, doc = window.document) at module-eval)
-  // never runs on the server during prerender → avoids "window is not defined" crash.
-  // Plain `react` (Vite) has no SSR and keeps the top-level imports unchanged.
+  // SCAF-6: For Next.js ONLY — use next/dynamic with { ssr: false }. NOT because
+  // importing the package on the server crashes: `@kitn.ai/ui/react`, `@kitn.ai/ui/elements`
+  // and the state helpers are all SSR-import-safe (verified by prerendering a server
+  // component that statically imports them). The reason is rendering: <kai-*> are
+  // CLIENT-ONLY custom elements, and the server has no customElements registry, so a
+  // server-rendered <kai-chat> is an inert unupgraded tag that mismatches the upgraded
+  // client tree on hydration. Plain `react` (Vite) has no SSR and keeps top-level imports.
   if (framework === 'next') {
     // Build dynamic() calls for every renderable wrapper in the archetype.
     const dynamicImports = wrapperNames.map(
@@ -672,7 +675,9 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
       `import { useState } from 'react';`,
       `import dynamic from 'next/dynamic';`,
       `import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
-      `// kai-* bundle Solid's client runtime → load client-only so SSR/prerender doesn't crash`,
+      `// <kai-*> are client-only custom elements (the server has no customElements`,
+      `// registry) → load client-only so hydration doesn't mismatch. The package itself`,
+      `// is SSR-import-safe; importing it from a server component is fine.`,
       ...dynamicImports,
       ``,
       ...nextConfigNote,
@@ -1585,12 +1590,28 @@ function compose(
   // (per-element tree-shaking + autoloader) without changing the default import above.
   // Leads with "the default is right" rather than a size headline; the debug tool
   // carries the full KB breakdown for developers who ask for it.
+  // The default varies by framework, so describe what THIS scaffold actually emits:
+  // every framework but `next` emits a top-level `import '@kitn.ai/ui/elements'`;
+  // the next output loads the React wrappers through next/dynamic instead, and each
+  // wrapper lazy-registers its own element on first client mount.
+  const defaultLoadNote =
+    framework === 'next'
+      ? [
+          `The scaffold emits NO \`import '@kitn.ai/ui/elements'\` — it loads the React`,
+          `wrappers through next/dynamic, and each wrapper lazy-registers ITS element on`,
+          `first client mount, so you already ship only the elements you use. Leave it as`,
+          `is. Two other modes exist if you drop the wrappers for raw \`<kai-*>\` tags:`,
+        ]
+      : [
+          `The scaffold uses \`import '@kitn.ai/ui/elements'\` (register-all) — the right`,
+          `default: it registers every kai-* element and is SSR-safe, so leave it as is.`,
+          `Two opt-in modes load less if a page only ever uses a few elements:`,
+        ];
+
   const block4 = [
     `=== LOADING OPTIONS ===`,
     ``,
-    `The scaffold uses \`import '@kitn.ai/ui/elements'\` (register-all) — the right`,
-    `default: it registers every kai-* element and is SSR-safe, so leave it as is.`,
-    `Two opt-in modes load less if a page only ever uses a few elements:`,
+    ...defaultLoadNote,
     ``,
     `  Per-element (bundler apps): import '@kitn.ai/ui/elements/<file>'`,
     `    Registers just that element; your bundler tree-shakes the rest away.`,

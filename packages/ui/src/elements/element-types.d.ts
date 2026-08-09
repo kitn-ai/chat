@@ -3,8 +3,22 @@
 // `document.querySelector('kai-message')` is typed and gets prop autocomplete.
 
 
-// Re-exports for `import { … } from '@kitn.ai/ui/elements'`.
-export type { ChatMessage, ChatMessageAction } from './chat-types';
+// Re-exports for `import { … } from '@kitn.ai/ui/elements'`. Mirrors the names the
+// shipped dist/elements.d.ts inlines, so both copies expose the same surface.
+export type {
+  AvatarData,
+  ChatMessage,
+  ChatMessageAction,
+  CustomAction,
+  FeedbackVote,
+  MessagePart,
+  MessageSource,
+  RawOrigin,
+} from './chat-types';
+export type { ToolPart } from '../components/tool-types';
+export type { ToolKind } from '../components/tool-classify';
+export type { AttachmentData } from '../components/attachment-types';
+export type { CardEnvelope, CardResolution } from '../primitives/card-contract';
 export type { CodeHighlightingOptions } from '../primitives/highlighter';
 export declare function configureCodeHighlighting(options: CodeHighlightingOptions): void;
 export declare function isCodeHighlightingEnabled(): boolean;

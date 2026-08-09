@@ -6,24 +6,136 @@
 import { writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-// Self-contained inline type declarations for the three runtime-adjacent exports
-// of the `./elements` subpath. These mirror the source types in ./chat-types and
-// ../primitives/highlighter, but are INLINED here so the shipped .d.ts has NO
+// Self-contained inline type declarations for the runtime-adjacent exports of the
+// `./elements` subpath. These mirror the source types in ./chat-types,
+// ../components/tool-types, ../components/attachment-types, ../primitives/card-contract
+// and ../primitives/highlighter, but are INLINED here so the shipped .d.ts has NO
 // relative import that would resolve a library .ts SOURCE file into a consumer's
 // type graph (tsc compiles a .ts reached from a .d.ts even under skipLibCheck —
-// the root cause of LIB-2). Keep these in sync with the source if those types
-// change (they are stable, simple shapes).
-const INLINE_ELEMENT_TYPES = `// --- Inlined from src/elements/chat-types.ts (kept self-contained: no source imports) ---
+// the root cause of LIB-2).
+//
+// ★ These are NOT free-form prose: `src/elements/inline-element-types.test.ts` compiles
+// this block against the real source types and fails on ANY structural drift in
+// ChatMessage. Edit the source types, then re-run that test — do not hand-patch one
+// side and assume the other followed.
+export const INLINE_ELEMENT_TYPES = `// --- Inlined from src/elements/chat-types.ts + the types it references
+//     (kept self-contained: no source imports) ---
 export type ChatMessageAction = 'copy' | 'like' | 'dislike' | 'regenerate' | 'edit';
+
+/** A like/dislike feedback vote on an assistant message. */
+export type FeedbackVote = 'like' | 'dislike';
+
+/** A host-defined action button. \`icon\` is a curated registry name; unknown/absent
+ *  icons render label-only. */
+export interface CustomAction {
+  id: string;
+  label: string;
+  icon?: string;
+  tooltip?: string;
+}
+
+/** The speaker avatar for a message row. */
+export interface AvatarData {
+  src?: string;
+  fallback?: string;
+  alt?: string;
+}
+
+/** The untranslated provider payload a part was normalized from. Optional in the
+ *  type but REQUIRED in practice for round-trip fidelity (Anthropic rejects
+ *  reconstructed \`thinking\` blocks — send \`raw.payload\` back verbatim). */
+export interface RawOrigin {
+  /** Tagged origin, e.g. 'anthropic.content_block', 'openai.delta', \`custom.\${string}\`. */
+  source: string;
+  payload: unknown;
+}
+
+/** Semantic classification of a tool call, used to pick a rendering. */
+export type ToolKind = 'command' | 'file-change' | 'search' | 'fetch' | 'mcp' | 'image' | 'generic';
+
+/** A tool-call part rendered by <kai-tool>. */
+export interface ToolPart {
+  /** The tool name exactly as the provider reported it. */
+  type: string;
+  /** Semantic classification for rendering. Derive with \`classifyTool(type)\`. */
+  kind?: ToolKind;
+  state: 'input-streaming' | 'input-available' | 'output-available' | 'output-error';
+  /** Last VALID parsed snapshot, fingerprint-deduped. The primary channel. */
+  input?: Record<string, unknown>;
+  /** Raw accumulated argument fragments, for character-level streaming. */
+  rawInput?: string;
+  output?: Record<string, unknown>;
+  toolCallId?: string;
+  errorText?: string;
+  raw?: RawOrigin;
+}
+
+/** A message attachment descriptor. */
+export interface AttachmentData {
+  id: string;
+  type: 'file' | 'source-document';
+  filename?: string;
+  mediaType?: string;
+  url?: string;
+  title?: string;
+}
+
+/** A citation the model produced (the payload of a \`source\` part). */
+export interface MessageSource {
+  id?: string;
+  url?: string;
+  title?: string;
+  snippet?: string;
+  /** Citation marker number, when the model numbers its citations. */
+  index?: number;
+}
+
+/** How a card was resolved by the user. */
+export type CardResolution =
+  | { kind: 'action'; action: string; payload?: unknown; at?: string }
+  | { kind: 'submit'; data: unknown; at?: string }
+  | { kind: 'dismissed'; at?: string }
+  | { kind: 'expired'; reason?: string; at?: string };
+
+/** A card the agent/server asks the chat to render. */
+export interface CardEnvelope<TType extends string = string, TData = unknown> {
+  type: TType;
+  id: string;
+  data: TData;
+  title?: string;
+  resolution?: CardResolution;
+}
+
+/** One ordered piece of message content. Closed union: extension happens at the
+ *  CARD layer via the card registry, not by adding variants here. */
+export type MessagePart =
+  | { type: 'text'; text: string; raw?: RawOrigin }
+  | {
+      type: 'reasoning';
+      text: string;
+      label?: string;
+      /** Provider block index. Keeps parallel reasoning blocks distinct. */
+      index?: number;
+      /** Informational only. \`raw\` is the round-trip channel, not this. */
+      signature?: string;
+      raw?: RawOrigin;
+    }
+  | { type: 'tool'; tool: ToolPart; raw?: RawOrigin }
+  | { type: 'card'; envelope: CardEnvelope; raw?: RawOrigin }
+  | { type: 'source'; source: MessageSource; raw?: RawOrigin }
+  | { type: 'file'; attachment: AttachmentData; raw?: RawOrigin };
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
-  content: string;
-  reasoning?: { text: string; label?: string };
-  tools?: { type: string; state: 'input-streaming' | 'input-available' | 'output-available' | 'output-error'; input?: Record<string, unknown>; output?: Record<string, unknown>; toolCallId?: string; errorText?: string }[];
-  attachments?: { id: string; type: 'file' | 'source-document'; filename?: string; mediaType?: string; url?: string; title?: string }[];
-  actions?: (ChatMessageAction | { id: string; label: string; icon?: string; tooltip?: string })[];
-  avatar?: { src?: string; fallback?: string; alt?: string };
+  /** The ONLY content channel. Ordered. The \`content\` string was removed in 0.20.0. */
+  parts: MessagePart[];
+  /** Action buttons under the message. Chrome, not content. */
+  actions?: (ChatMessageAction | CustomAction)[];
+  /** Optional speaker avatar shown to the left of the message column. */
+  avatar?: AvatarData;
+  /** Controlled feedback vote; wins over the facade's optimistic state. */
+  feedback?: FeedbackVote;
 }
 
 // --- Inlined from src/primitives/highlighter.ts ---
@@ -182,8 +294,22 @@ ${tagMap}
   const srcOut = `${banner}
 ${importLines}
 
-// Re-exports for \`import { … } from '@kitn.ai/ui/elements'\`.
-export type { ChatMessage, ChatMessageAction } from './chat-types';
+// Re-exports for \`import { … } from '@kitn.ai/ui/elements'\`. Mirrors the names the
+// shipped dist/elements.d.ts inlines, so both copies expose the same surface.
+export type {
+  AvatarData,
+  ChatMessage,
+  ChatMessageAction,
+  CustomAction,
+  FeedbackVote,
+  MessagePart,
+  MessageSource,
+  RawOrigin,
+} from './chat-types';
+export type { ToolPart } from '../components/tool-types';
+export type { ToolKind } from '../components/tool-classify';
+export type { AttachmentData } from '../components/attachment-types';
+export type { CardEnvelope, CardResolution } from '../primitives/card-contract';
 export type { CodeHighlightingOptions } from '../primitives/highlighter';
 export declare function configureCodeHighlighting(options: CodeHighlightingOptions): void;
 export declare function isCodeHighlightingEnabled(): boolean;

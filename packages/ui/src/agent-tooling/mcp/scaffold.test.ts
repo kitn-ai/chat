@@ -289,7 +289,9 @@ describe('scaffold', () => {
   });
 
   // SCAF-6: next uses next/dynamic { ssr: false } — no top-level @kitn.ai/ui/elements or
-  // @kitn.ai/ui/react import (they'd run on the server and crash with "window is not defined").
+  // @kitn.ai/ui/react import. NOT because importing them on the server crashes (both
+  // entries are SSR-import-safe): <kai-*> are client-only custom elements, so a
+  // server-rendered tag never upgrades and mismatches on hydration.
   it('next scaffold uses next/dynamic with ssr:false and has NO top-level elements/react import (SCAF-6)', async () => {
     const out = await scaffold.handler({
       useCase: 'drop-in-chat',
@@ -1066,6 +1068,49 @@ describe('scaffold', () => {
     // autoloader — positioned as a CDN/<script> tool (dist/elements/autoloader.js), NOT a bundler import
     expect(text).toMatch(/autoloader\.js/);
     expect(text).toMatch(/CDN|not importable through a bundler/i);
+  });
+
+  // SCAF-16: the note must describe what the scaffold ACTUALLY emits. `next` emits no
+  // `import '@kitn.ai/ui/elements'` (the dynamic-imported wrappers self-register), so
+  // claiming "the scaffold uses import '@kitn.ai/ui/elements'" there is simply false.
+  it('SCAF-16: loading-options note matches the elements import the output really emits', async () => {
+    for (const framework of ['html', 'react', 'next', 'vue', 'svelte', 'tanstack-start'] as const) {
+      const out = await scaffold.handler({
+        useCase: 'drop-in-chat',
+        integration: 'openrouter',
+        placement: 'full-page',
+        framework,
+      });
+      const text = (out.content as { type: string; text: string }[])[0].text;
+      const frontend = text.split('=== LOADING OPTIONS ===')[0];
+      const note = text.split('=== LOADING OPTIONS ===')[1] ?? '';
+      const emitsRegisterAll = /import '@kitn\.ai\/ui\/elements';/.test(frontend);
+      if (emitsRegisterAll) {
+        expect(note, `${framework}: emits register-all but the note denies it`).toContain(
+          "The scaffold uses `import '@kitn.ai/ui/elements'` (register-all)",
+        );
+      } else {
+        expect(note, `${framework}: emits no register-all but the note claims it`).toContain(
+          "The scaffold emits NO `import '@kitn.ai/ui/elements'`",
+        );
+      }
+    }
+  });
+
+  // The next island exists for hydration, not for a prerender crash — a server
+  // component that statically imports the package prerenders clean.
+  it('SCAF-6: next scaffold explains ssr:false as client-only elements, not a crash', async () => {
+    const out = await scaffold.handler({
+      useCase: 'drop-in-chat',
+      integration: 'openrouter',
+      placement: 'full-page',
+      framework: 'next',
+    });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+    const frontend = text.split('=== LOADING OPTIONS ===')[0];
+    expect(frontend).toMatch(/client-only custom elements/);
+    expect(frontend).toMatch(/hydration/);
+    expect(frontend).not.toMatch(/doesn't crash|is not defined/);
   });
 
   it('SCAF-16: loading-options note appears across every framework', async () => {
