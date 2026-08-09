@@ -4,7 +4,14 @@ import { AudioVisualizer, type AudioVisualizerProps } from './index';
 import { Button } from '../../ui/button';
 import { Notice } from '../../ui/notice';
 import { componentDescription } from '../../stories/docs/element-controls';
-import { SIZES, CONTAINER_HEIGHT, type VisualizerSize } from './sizes';
+import {
+  SIZES,
+  CONTAINER_HEIGHT,
+  defaultBarCount,
+  defaultGridCount,
+  defaultRadialBarCount,
+  type VisualizerSize,
+} from './sizes';
 
 const STATES = ['idle', 'connecting', 'listening', 'thinking', 'speaking'] as const;
 const VARIANTS = ['bar', 'grid', 'radial'] as const;
@@ -54,7 +61,13 @@ const meta = {
       table: { defaultValue: { summary: 'auto' } },
     },
     barCount: {
-      control: { type: 'number', min: 1, max: 24 },
+      // Raised from 24: that used to be radial's own default AND the
+      // control's ceiling, so the control could never actually exercise
+      // anything past what radial already renders by default. `Tile`'s
+      // `overflow: hidden` was already built to absorb "an extreme control
+      // value (a huge barCount, say)" -- this control just could not reach
+      // one before.
+      control: { type: 'number', min: 1, max: 48 },
       description: 'Bar and radial only.',
     },
     rowCount: {
@@ -109,14 +122,29 @@ type Story = StoryObj<typeof meta>;
  * never uses either. A NEW array reference every tick: mutating in place
  * would not re-render.
  *
- * Each band sums three sines at different rates with its own phase, mapped
- * into 0..1: smooth everywhere (no `Math.abs`, so no sharp corner at a zero
- * crossing) and a pure function of time, so it stays deterministic. Low
- * bands swing wider and slower, high bands move less and faster -- the shape
- * a voice's levels actually have.
+ * `count` is an ACCESSOR, not a number, and is read fresh every frame rather
+ * than captured once at mount -- each call site derives it from the same
+ * band-count logic `AudioVisualizer` itself uses (`index.tsx`'s
+ * `bandCount()`, backed by `defaultBarCount`/`defaultGridCount`/
+ * `defaultRadialBarCount` in `sizes.ts`), so the generated array always
+ * matches what the mounted tile actually wants -- including after a
+ * `barCount`/`columnCount`/`size` control changes. Generating the wrong
+ * width is exactly the bug this fixes: `normalizeVolumeBands` pads a short
+ * array by repeating its LAST value, so a fixed-width generator feeding a
+ * variant that wants more bands than that left the extras frozen on
+ * whichever value happened to be last, not actually varying.
+ *
+ * Each band mixes a slow, spatially smooth "envelope" -- its phase drifts
+ * across POSITION in the row, not per-band index, so neighbouring bands stay
+ * correlated and move together instead of independently -- with a smaller,
+ * faster per-band ripple layered on top for texture. Amplitude falls off
+ * from low bands to high (`depth`), the shape a voice's spectrum actually
+ * has. Both terms are sums of `Math.sin`, smooth everywhere -- no
+ * `Math.abs`, so no sharp corner at a zero crossing -- and a pure function
+ * of time, so it stays deterministic.
  */
-function useFakeBands(count: number) {
-  const [bands, setBands] = createSignal<number[]>(new Array(count).fill(0));
+function useFakeBands(count: () => number) {
+  const [bands, setBands] = createSignal<number[]>(new Array(Math.max(1, count())).fill(0));
   if (typeof requestAnimationFrame === 'undefined') return bands;
 
   let raf = 0;
@@ -124,17 +152,27 @@ function useFakeBands(count: number) {
   const step = (now: number) => {
     if (now - last >= 32) {
       const t = now / 1000;
+      const n = Math.max(1, count());
       setBands(
-        Array.from({ length: count }, (_, i) => {
-          const depth = 1 - i / Math.max(1, count - 1); // 1 for the lowest band, 0 for the highest
-          const amplitude = 0.18 + 0.24 * depth;
-          const rate = 0.6 + i * 0.15;
-          const phase = i * 1.9;
-          const wave =
-            0.55 * Math.sin(2 * Math.PI * rate * t + phase) +
-            0.3 * Math.sin(2 * Math.PI * rate * 2.7 * t + phase * 1.4) +
-            0.15 * Math.sin(2 * Math.PI * rate * 0.45 * t + phase * 0.7);
-          return 0.5 + amplitude * wave;
+        Array.from({ length: n }, (_, i) => {
+          const pos = n <= 1 ? 0 : i / (n - 1); // 0 for the lowest band, 1 for the highest
+          const depth = 1 - pos;
+          const amplitude = 0.16 + 0.26 * depth;
+
+          // Shared envelope: phase drifts across `pos`, so bands next to
+          // each other are nearly in lockstep and only diverge gradually
+          // moving from low to high, instead of moving independently.
+          const envelopePhase = pos * Math.PI * 1.2;
+          const envelope =
+            0.5 * Math.sin(2 * Math.PI * 0.8 * t + envelopePhase) +
+            0.3 * Math.sin(2 * Math.PI * 2.1 * t + envelopePhase * 1.3) +
+            0.2 * Math.sin(2 * Math.PI * 0.4 * t + envelopePhase * 0.5);
+
+          // Faster, smaller per-band ripple on top -- weighted low enough
+          // that the shared envelope above still dominates.
+          const ripple = 0.15 * Math.sin(2 * Math.PI * (2.5 + pos * 1.5) * t + i * 0.5);
+
+          return 0.5 + amplitude * (0.8 * envelope + 0.2 * ripple);
         }),
       );
       last = now;
@@ -249,7 +287,11 @@ export const Bar: Story = {
     },
   },
   render: (args: AudioVisualizerProps) => {
-    const bands = useFakeBands(5);
+    // Same band-count logic bar itself falls back to (`defaultBarCount` in
+    // sizes.ts): `barCount` follows the control, and re-reading it every
+    // frame (rather than once at mount) keeps the generated width in sync
+    // if the control changes after mount.
+    const bands = useFakeBands(() => args.barCount ?? defaultBarCount(args.size ?? 'md'));
     return (
       <StateRow size={args.size ?? 'md'}>
         {(s) => (
@@ -280,7 +322,10 @@ export const Grid: Story = {
     },
   },
   render: (args: AudioVisualizerProps) => {
-    const bands = useFakeBands(5);
+    // Grid keys off `columnCount` (falling back to `defaultGridCount`), not
+    // `barCount` -- the same source `AudioVisualizer`'s own `bandCount()`
+    // reads for this variant.
+    const bands = useFakeBands(() => args.columnCount ?? defaultGridCount(args.size ?? 'md'));
     return (
       <StateRow size={args.size ?? 'md'}>
         {(s) => (
@@ -315,7 +360,13 @@ export const Radial: Story = {
     },
   },
   render: (args: AudioVisualizerProps) => {
-    const bands = useFakeBands(5);
+    // Radial defaults to `defaultRadialBarCount` (24 at `md`), not the 5
+    // every other variant happens to default to -- generating a fixed-width
+    // 5 here is exactly the bug this story used to have: 19 of the 24
+    // spokes rendered frozen on band 5's value, since `normalizeVolumeBands`
+    // pads a short array by repeating its last entry. `barCount` still wins
+    // when set, and is re-read every frame so the width tracks the control.
+    const bands = useFakeBands(() => args.barCount ?? defaultRadialBarCount(args.size ?? 'md'));
     return (
       <StateRow size={args.size ?? 'md'}>
         {(s) => (
@@ -368,7 +419,12 @@ export const Wave: Story = {
     },
   },
   render: (args: AudioVisualizerProps) => {
-    const bands = useFakeBands(5);
+    // Wave has no `barCount` control -- it only reads `volume`, a scalar
+    // reduced from `bands` -- but generate at the same width `bandCount()`
+    // falls back to for a non-grid/non-radial variant (`defaultBarCount`),
+    // so a shader-load failure's bar fallback (which also has no
+    // `barCount` here) gets a matching width too.
+    const bands = useFakeBands(() => defaultBarCount(args.size ?? 'md'));
     return (
       <StateRow size={args.size ?? 'md'}>
         {(s) => <AudioVisualizer variant="wave" state={s} size={args.size} color={args.color} bands={bands()} />}
@@ -394,7 +450,10 @@ export const Aurora: Story = {
     },
   },
   render: (args: AudioVisualizerProps) => {
-    const bands = useFakeBands(5);
+    // Same reasoning as Wave above: no `barCount` control here either, only
+    // `volume` is read, so generate at the same width the bar fallback
+    // would default to.
+    const bands = useFakeBands(() => defaultBarCount(args.size ?? 'md'));
     return (
       <StateRow size={args.size ?? 'md'}>
         {(s) => (
@@ -425,7 +484,12 @@ export const Custom: Story = {
     },
   },
   render: (args: AudioVisualizerProps) => {
-    const bands = useFakeBands(5);
+    // Pinned, not derived: SPECTRUM_SHADER's `uBands` loop is hardcoded to 5
+    // (`BAND_COUNT` above), and every tile here forces `barCount={5}` to
+    // match. Feeding a generalised, size-following count would desync the
+    // two -- `uBands` is a fixed-length uniform array, and indexing it out
+    // of bounds produced visible garbage earlier in this component's history.
+    const bands = useFakeBands(() => 5);
     return (
       <StateRow size={args.size ?? 'md'}>
         {(s) => (
@@ -474,7 +538,14 @@ export const StateMatrix: Story = {
     },
   },
   render: () => {
-    const bands = useFakeBands(5);
+    // One `bands()` feeds bar, grid, AND radial tiles below, all fixed at
+    // `size="sm"`. Generate at the widest of the three's own defaults
+    // (radial's, 12 at `sm`) so every variant's internal
+    // `normalizeVolumeBands` call only ever truncates, never pads -- padding
+    // is what repeats a frozen last value across the extra slots.
+    const bands = useFakeBands(() =>
+      Math.max(defaultBarCount('sm'), defaultGridCount('sm'), defaultRadialBarCount('sm')),
+    );
     const LABEL_COL = 64;
     return (
       <div style={{ display: 'flex', 'flex-direction': 'column', gap: '16px' }}>
