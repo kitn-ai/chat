@@ -12,6 +12,7 @@ import {
   defaultRadialBarCount,
   type VisualizerSize,
 } from './sizes';
+import { VOICE_BANDS, VOICE_FRAME_MS } from './audio-visualizer.voice-fixture';
 
 const STATES = ['idle', 'connecting', 'listening', 'thinking', 'speaking'] as const;
 const VARIANTS = ['bar', 'grid', 'radial'] as const;
@@ -195,18 +196,29 @@ function bandLevel(t: number, pos: number, seed: number): number {
 
 /**
  * Per-variant phase offsets for `useFakeBands` below -- arbitrary distinct
- * constants, not meaningful as values. Without these, bar/grid/radial/custom
- * all reading the same wall-clock time would pulse in exact lockstep when
- * their stories are browsed near each other, which was a large part of why
- * the old data read as one looping GIF copied across every tile.
+ * constants, not meaningful as values. Without these, wave/aurora/
+ * state-matrix all reading the same wall-clock time would pulse in exact
+ * lockstep when their stories are browsed near each other, which was a
+ * large part of why the old data read as one looping GIF copied across
+ * every tile. Bar, grid, radial, and custom read real recorded voice
+ * instead (`useVoiceBands` below) and use the OFFSET_* frame offsets
+ * further down for the same reason.
  */
-const SEED_BAR = 0;
-const SEED_GRID = 2.7;
-const SEED_RADIAL = 5.3;
-const SEED_CUSTOM = 8.1;
 const SEED_WAVE = 11.9;
 const SEED_AURORA = 14.6;
 const SEED_STATE_MATRIX = 17.2;
+
+/**
+ * Per-variant frame offsets for `useVoiceBands` below, spread a quarter of
+ * the fixture's 192-frame loop apart (see audio-visualizer.voice-fixture.ts)
+ * so bar/grid/radial/custom -- all reading the same recorded loop -- show
+ * different points in it at any given wall-clock moment, the same reason
+ * the SEED_* constants above exist for the synthetic generator.
+ */
+const OFFSET_BAR = 0;
+const OFFSET_GRID = 48;
+const OFFSET_RADIAL = 96;
+const OFFSET_CUSTOM = 144;
 
 /**
  * Synthetic levels so `speaking` animates without a microphone.
@@ -252,6 +264,84 @@ function useFakeBands(count: () => number, seed = 0) {
       const t = now / 1000;
       const n = Math.max(1, count());
       setBands(Array.from({ length: n }, (_, i) => bandLevel(t, n <= 1 ? 0 : i / (n - 1), seed)));
+      last = now;
+    }
+    raf = requestAnimationFrame(step);
+  };
+  raf = requestAnimationFrame(step);
+  onCleanup(() => cancelAnimationFrame(raf));
+
+  return bands;
+}
+
+/**
+ * Linear interpolation across the band axis, from the fixture's native
+ * width to whatever `count` the caller wants.
+ *
+ * The recorded fixture (audio-visualizer.voice-fixture.ts) is 5 bands wide.
+ * Bar and grid want 5, and custom is pinned at 5, so those hit the
+ * `count === source.length` fast path and play the real values back
+ * verbatim. Radial defaults to 24 and its `barCount` control reaches 48 --
+ * padding a short array by repeating its last value is what
+ * `normalizeVolumeBands` does elsewhere in this component, and is exactly
+ * why the OLD radial story had 19 of 24 spokes frozen on band 5's value.
+ * This instead treats the 5 real samples as points spread evenly across
+ * 0..1 and interpolates between the two nearest ones for every target band,
+ * so a wider fan-out still reads as one continuous spectrum -- preserving
+ * the spectral tilt and the envelope -- rather than a handful of real
+ * values followed by a wall of duplicates.
+ */
+function resampleBands(source: readonly number[], count: number): number[] {
+  const target = Math.max(1, count);
+  if (target === source.length) return source.slice();
+  if (source.length <= 1) return new Array(target).fill(source[0] ?? 0);
+  const lastIndex = source.length - 1;
+  return Array.from({ length: target }, (_, i) => {
+    const pos = target <= 1 ? 0 : (i / (target - 1)) * lastIndex;
+    const lo = Math.floor(pos);
+    const hi = Math.min(lastIndex, lo + 1);
+    const frac = pos - lo;
+    return source[lo] + (source[hi] - source[lo]) * frac;
+  });
+}
+
+/**
+ * Real recorded voice, looped and resampled per variant width -- see
+ * audio-visualizer.voice-fixture.ts for the recording, the trim, and why
+ * the loop point does not jump.
+ *
+ * Same throttled-`requestAnimationFrame` shape as `useFakeBands` above, at
+ * the fixture's own `VOICE_FRAME_MS` (32ms, matching `useAudioAnalysis`'s
+ * real `updateInterval`) rather than `setInterval`. `now` is the absolute
+ * `requestAnimationFrame` timestamp, not time-since-mount, so the frame
+ * index is `Math.floor(now / VOICE_FRAME_MS)` -- deterministic and
+ * consistent across every call site regardless of when its component
+ * happened to mount.
+ *
+ * `offsetFrames` (the OFFSET_* constants above) shifts each call site into
+ * a different point of the 192-frame loop, so bar/grid/radial/custom -- all
+ * reading the same recording -- do not pulse in lockstep when their stories
+ * sit next to each other, the same problem the SEED_* constants solve for
+ * the synthetic generator.
+ *
+ * `count` is an ACCESSOR, read fresh every frame, same contract as
+ * `useFakeBands`: a `barCount`/`columnCount`/`size` control change is
+ * picked up without remounting, and `resampleBands` (above) reshapes the
+ * fixture's 5 real bands to match rather than padding.
+ */
+function useVoiceBands(count: () => number, offsetFrames = 0) {
+  const loopLength = VOICE_BANDS.length;
+  const [bands, setBands] = createSignal<number[]>(
+    resampleBands(VOICE_BANDS[offsetFrames % loopLength], count()),
+  );
+  if (typeof requestAnimationFrame === 'undefined') return bands;
+
+  let raf = 0;
+  let last = 0;
+  const step = (now: number) => {
+    if (now - last >= VOICE_FRAME_MS) {
+      const frameIndex = (Math.floor(now / VOICE_FRAME_MS) + offsetFrames) % loopLength;
+      setBands(resampleBands(VOICE_BANDS[frameIndex], count()));
       last = now;
     }
     raf = requestAnimationFrame(step);
@@ -347,9 +437,9 @@ function StateRow(props: {
 
 // ---------------------------------------------------------------- per-variant
 
-/** Vertical bars, LiveKit's original look. Driven by synthetic levels while
- *  `speaking`; every other state runs its own scripted sequence with no
- *  audio involved -- `listening` blinks the center bar every 500ms. */
+/** Vertical bars, LiveKit's original look. Driven by a real recorded voice
+ *  while `speaking`; every other state runs its own scripted sequence with
+ *  no audio involved -- `listening` blinks the center bar every 500ms. */
 export const Bar: Story = {
   args: { size: 'md' },
   parameters: {
@@ -357,9 +447,10 @@ export const Bar: Story = {
     docs: {
       description: {
         story:
-          'Driven by synthetic levels while `speaking`. Every other state runs its own scripted sequence with ' +
-          'no audio involved -- `listening` blinks the center bar every 500ms, carried from LiveKit. `theme` ' +
-          'is not listed: bar already adapts through CSS `currentColor`, so the prop has nothing to do here.',
+          'Driven by a real recorded voice while `speaking` (see audio-visualizer.voice-fixture.ts). Every ' +
+          'other state runs its own scripted sequence with no audio involved -- `listening` blinks the center ' +
+          'bar every 500ms, carried from LiveKit. `theme` is not listed: bar already adapts through CSS ' +
+          '`currentColor`, so the prop has nothing to do here.',
       },
     },
   },
@@ -368,7 +459,7 @@ export const Bar: Story = {
     // sizes.ts): `barCount` follows the control, and re-reading it every
     // frame (rather than once at mount) keeps the generated width in sync
     // if the control changes after mount.
-    const bands = useFakeBands(() => args.barCount ?? defaultBarCount(args.size ?? 'md'), SEED_BAR);
+    const bands = useVoiceBands(() => args.barCount ?? defaultBarCount(args.size ?? 'md'), OFFSET_BAR);
     return (
       <StateRow size={args.size ?? 'md'}>
         {(s) => (
@@ -402,7 +493,7 @@ export const Grid: Story = {
     // Grid keys off `columnCount` (falling back to `defaultGridCount`), not
     // `barCount` -- the same source `AudioVisualizer`'s own `bandCount()`
     // reads for this variant.
-    const bands = useFakeBands(() => args.columnCount ?? defaultGridCount(args.size ?? 'md'), SEED_GRID);
+    const bands = useVoiceBands(() => args.columnCount ?? defaultGridCount(args.size ?? 'md'), OFFSET_GRID);
     return (
       <StateRow size={args.size ?? 'md'}>
         {(s) => (
@@ -438,12 +529,14 @@ export const Radial: Story = {
   },
   render: (args: AudioVisualizerProps) => {
     // Radial defaults to `defaultRadialBarCount` (24 at `md`), not the 5
-    // every other variant happens to default to -- generating a fixed-width
-    // 5 here is exactly the bug this story used to have: 19 of the 24
-    // spokes rendered frozen on band 5's value, since `normalizeVolumeBands`
-    // pads a short array by repeating its last entry. `barCount` still wins
-    // when set, and is re-read every frame so the width tracks the control.
-    const bands = useFakeBands(() => args.barCount ?? defaultRadialBarCount(args.size ?? 'md'), SEED_RADIAL);
+    // the fixture is recorded at -- `resampleBands` (above `useVoiceBands`)
+    // interpolates the 5 real bands up to whatever width is wanted instead
+    // of padding, which is exactly the bug this story used to have: 19 of
+    // the 24 spokes rendered frozen on band 5's value, since
+    // `normalizeVolumeBands` pads a short array by repeating its last
+    // entry. `barCount` still wins when set, and is re-read every frame so
+    // the width tracks the control.
+    const bands = useVoiceBands(() => args.barCount ?? defaultRadialBarCount(args.size ?? 'md'), OFFSET_RADIAL);
     return (
       <StateRow size={args.size ?? 'md'}>
         {(s) => (
@@ -566,7 +659,10 @@ export const Custom: Story = {
     // match. Feeding a generalised, size-following count would desync the
     // two -- `uBands` is a fixed-length uniform array, and indexing it out
     // of bounds produced visible garbage earlier in this component's history.
-    const bands = useFakeBands(() => 5, SEED_CUSTOM);
+    // 5 also happens to be the fixture's own native width, so this hits
+    // `resampleBands`' passthrough fast path and plays the recording back
+    // verbatim, no interpolation involved.
+    const bands = useVoiceBands(() => 5, OFFSET_CUSTOM);
     return (
       <StateRow size={args.size ?? 'md'}>
         {(s) => (
