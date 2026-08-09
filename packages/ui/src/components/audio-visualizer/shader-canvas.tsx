@@ -263,21 +263,52 @@ function setUniform(
  * because a caller typically re-creates the `uniforms` object every render
  * (e.g. `{ uVolume: { type: '1f', value: volume() } }`); tracking that
  * object directly would tear down and recompile the whole program on every
- * frame the volume changes.
+ * frame the volume changes. `fragment` and `precision` are ALSO read through
+ * their own memos, not directly, for the same reason: a variant's `precision`
+ * is commonly computed from a prop (`size`) that arrives via a dispatcher
+ * spread bundling unrelated fast-changing signals (`bands`), so an unmemoized
+ * read can mark this effect stale on every one of those, even though
+ * `precision`'s resolved value never changes. See the comment above
+ * `fragmentMemo`/`precisionMemo` below for the measured failure this caused.
  */
 export function ShaderCanvas(props: ShaderCanvasProps): JSX.Element {
   let canvas!: HTMLCanvasElement;
 
   const shapeKey = createMemo(() => uniformShapeKey(props.uniforms ?? {}));
+  // `fragment` and `precision` get the SAME insulation as `shapeKey` above,
+  // and for the same underlying reason. A variant's props are commonly built
+  // with `{...shared()}` (see index.tsx's dispatcher: `shared()` returns
+  // `state`/`size`/`bands`/`frozen`/`color` together). Solid's spread-prop
+  // merging re-invokes the WHOLE source function on ANY property read from
+  // the merged result -- so a variant computing `precision` from `props.size`
+  // (e.g. aurora/wave's `props.size === 'icon' || ... ? 'mediump' :
+  // 'highp'`) transitively re-runs `shared()`, and thus re-reads `bands()`,
+  // on every read of `precision`, even though `size` itself never changes.
+  // Reading `props.precision` directly inside the compile effect below
+  // subscribed it to THAT transitive `bands()` read -- at ~31 band updates a
+  // second, `precision`'s own resolved value never changed, but the effect
+  // reran on every single one anyway, tearing down and recompiling the whole
+  // GL program 15-20 times a second in production (measured on the Aurora
+  // story: ~70 recompiles in 4s, `iTime` pinned under 0.33s and periodically
+  // NEGATIVE from `start` being re-stamped mid-flight). `shapeKey` already
+  // proved this class of leak is real for `uniforms`; `fragment`/`precision`
+  // needed the identical fix, matching the one just applied to
+  // `use-sequencer.ts` for the same root cause (an effect transitively
+  // subscribed to a signal it should not be, via a prop getter chain) --
+  // wrap in a memo so only the RESOLVED value, never the act of reading it,
+  // can mark the effect stale.
+  const fragmentMemo = createMemo(() => props.fragment);
+  const precisionMemo = createMemo(() => props.precision ?? 'highp');
 
   createEffect(() => {
-    const precision = props.precision ?? 'highp';
-    const fragment = props.fragment;
-    // Establishes the effect's dependency on uniform STRUCTURE only -- see
-    // the reactivity note above. The actual uniforms map is read via
-    // untrack() below so the effect does not also depend on the object
-    // reference itself (which would defeat the point of depending on the
-    // shape key instead).
+    // Reads ONLY the three memos below -- never `props.fragment` /
+    // `props.precision` / `props.uniforms` directly -- so this effect's
+    // dependency set is exactly {fragmentMemo, precisionMemo, shapeKey}, and
+    // nothing a caller's props chain does elsewhere (spread-derived or not)
+    // can mark it stale without one of those three RESOLVED values actually
+    // changing.
+    const fragment = fragmentMemo();
+    const precision = precisionMemo();
     shapeKey();
     const uniforms = untrack(() => props.uniforms ?? {});
     const source = buildFragmentSource(fragment, uniforms, precision);
@@ -420,7 +451,16 @@ export function ShaderCanvas(props: ShaderCanvasProps): JSX.Element {
       // before the next frame, this still stops issuing GL calls against it.
       if (lost || gl.isContextLost()) return;
       resize();
-      const seconds = (now - start) / 1000;
+      // Clamped at 0: a browser's rAF callback receives the timestamp for
+      // when the current frame BEGAN, captured before this component's
+      // synchronous setup finishes and stamps `start` -- so the very first
+      // frame or two can compute a few milliseconds negative even with
+      // nothing wrong. Harmless and self-correcting either way (confirmed:
+      // the pathological, CONTINUOUSLY-recurring negative values reported in
+      // production were `start` being re-stamped by a spuriously re-running
+      // effect, not this), but there is no reason `iTime` should ever go
+      // negative for a caller, so it does not.
+      const seconds = Math.max(0, (now - start) / 1000);
 
       if (uTime) gl.uniform1f(uTime, seconds);
       if (uResolution) gl.uniform2fv(uResolution, [canvas.width, canvas.height]);

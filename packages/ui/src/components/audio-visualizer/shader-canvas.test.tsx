@@ -462,3 +462,69 @@ describe('ShaderCanvas: an array uniform relying on inferred arraySize still rec
     expect(fragmentSources[1]).not.toContain('uBands[3]');
   });
 });
+
+/**
+ * Regression coverage for the production recompile-storm investigation
+ * (2026-08-09): the Aurora/Wave Storybook stories measured ~70 `createProgram`
+ * calls in 4 seconds (should be at most 5, one per canvas, ever) and `iTime`
+ * pinned under 0.33s with recurring negative values, from `start` being
+ * re-stamped every time the compile effect spuriously re-ran.
+ *
+ * Root cause: `ShaderCanvas`'s compile effect read `props.precision` and
+ * `props.fragment` DIRECTLY (the round-1/round-2 `shapeKey` fix only
+ * insulated `uniforms`). `index.tsx`'s dispatcher builds a shader variant's
+ * props with a PLAIN function (`shared()`, not a memo) bundling `state`/
+ * `size`/`bands`/`frozen`/`color` together, spread onto the variant
+ * (`<C {...shared()} .../>`). Solid's spread-prop merging re-invokes the
+ * WHOLE source function on ANY property read from the merged result -- so
+ * aurora/wave computing `precision` from `props.size` (`size === 'icon' ?
+ * 'mediump' : 'highp'`) also transitively re-read `bands()`, every single
+ * time, because both come out of the same `shared()` call. `precision`'s
+ * OWN resolved value never changed, but the effect reran on every one of
+ * ~31 band updates a second anyway. Same failure class as a bug just fixed
+ * in `use-sequencer.ts` (an effect transitively subscribed to a signal
+ * reached through unrelated prop plumbing, not the one it actually cares
+ * about). Fixed by wrapping `fragment`/`precision` in their own memos,
+ * exactly like `shapeKey` already does for `uniforms`.
+ *
+ * EVERY OTHER describe block in this file hand-builds a flat
+ * `ShaderCanvasProps` object and therefore CANNOT reproduce this: the leak
+ * lives in the SHAPE of how a variant's props arrive (a spread of a
+ * non-memoized function that bundles an unrelated fast-changing signal),
+ * not in any one prop's own value. This is why round 2's test suite was
+ * green while the guard was actually broken in production -- proven here by
+ * reverting the fix and confirming this specific test (and only this one)
+ * fails; see the task report's TDD section for that RED/GREEN pair.
+ */
+describe('ShaderCanvas: immune to a spread-prop leak from an unrelated fast-changing signal', () => {
+  installFakeClock();
+
+  it('does not recompile when precision is derived through a spread that also carries a ticking signal (production regression reproduction)', async () => {
+    const { gl, calls } = createFakeGL();
+    stubGetContext(gl);
+
+    const [bands, setBands] = createSignal([0, 0, 0]);
+    // Mirrors index.tsx's `shared()` exactly: one PLAIN function (not a
+    // memo), several fields, spread onto the child below -- not passed as
+    // individual JSX attributes, which is what makes this reproduce the
+    // real bug rather than a synthetic shortcut.
+    const shared = () => ({ size: 'md' as const, bands: bands() });
+
+    function Variant(props: { size: 'md' | 'icon'; bands: number[] }) {
+      return (
+        <ShaderCanvas fragment={MAIN} precision={props.size === 'icon' ? 'mediump' : 'highp'} />
+      );
+    }
+
+    render(() => <Variant {...shared()} />);
+    expect(calls.filter((c) => c === 'createProgram')).toHaveLength(1);
+
+    // ~32ms real analyser cadence, 10 ticks.
+    for (let i = 0; i < 10; i++) {
+      setBands([i, i, i]);
+      await flush();
+    }
+
+    expect(calls.filter((c) => c === 'createProgram')).toHaveLength(1);
+  });
+});

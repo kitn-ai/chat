@@ -47,6 +47,7 @@ const DIRS = {
   theme: join(SHOT_ROOT, '7-theme-override'),
   audio: join(SHOT_ROOT, '8-element-audio'),
   mic: join(SHOT_ROOT, '9-mic'),
+  recompile: join(SHOT_ROOT, '10-recompile-guard'),
 };
 for (const d of Object.values(DIRS)) mkdirSync(d, { recursive: true });
 
@@ -972,4 +973,153 @@ test.describe('Check 9: live microphone (fake device) drives useAudioAnalysis', 
       await browser.close();
     }
   });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Check 10: the shader recompile guard holds under the REAL dispatcher props
+// chain (regression, 2026-08-09).
+//
+// Production measurement on this exact story (Aurora, via a standalone
+// instrumented Playwright probe, 4s window, 5 canvases): ~70 `createProgram`
+// calls, `iTime` pinned under 0.33s with recurring NEGATIVE values. Root
+// cause: `ShaderCanvas`'s compile effect read `props.precision` directly;
+// `variant-aurora.tsx`/`variant-wave.tsx` compute `precision` from
+// `props.size`, which arrives via `index.tsx`'s dispatcher spreading a
+// PLAIN function (`shared()`, not a memo) that also bundles `bands`. Solid's
+// spread-prop merging re-invokes the whole source function on ANY property
+// read from the merged result, so reading `precision` transitively re-read
+// `bands()` too -- at the ~31/sec synthetic band cadence these stories
+// drive, recompiling the whole GL program on nearly every tick even though
+// `precision` itself never changed.
+//
+// This class of leak is invisible to a jsdom unit test that hand-builds a
+// flat `ShaderCanvasProps` object (see `shader-canvas.test.tsx`'s own
+// regression test for the closest a unit test can get, driving a minimal
+// spread-of-a-function reproduction) -- it depends on the REAL dispatcher's
+// prop-plumbing shape, Solid's real compiled spread semantics, and a real
+// GL driver actually recompiling. Only a real story, in a real browser,
+// proves the fix holds end to end.
+//
+// Verification bar: at most one `createProgram` call per canvas for the
+// story's lifetime (5, one per state row), and `iTime` climbing
+// monotonically with no backwards step, on every canvas independently.
+// ─────────────────────────────────────────────────────────────────────────
+
+/** Hooks installed BEFORE navigation so they see every WebGL context the
+ *  page ever creates: counts total `createProgram` calls, and tracks each
+ *  program's own `iTime` uniform writes as an independent series (so 5
+ *  canvases interleaving their own RAF loops cannot look "non-monotonic"
+ *  just from being merged into one global timeline -- each program's
+ *  series must be monotonic on its own). */
+async function installRecompileGuardProbe(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const w = window as unknown as {
+      __avProgramsCreated: number;
+      __avSeries: Map<WebGLProgram, number[]>;
+    };
+    w.__avProgramsCreated = 0;
+    w.__avSeries = new Map();
+
+    const proto = WebGLRenderingContext.prototype;
+    const cp = proto.createProgram;
+    proto.createProgram = function (this: WebGLRenderingContext) {
+      w.__avProgramsCreated++;
+      return cp.call(this);
+    };
+
+    const getLoc = proto.getUniformLocation;
+    const locToProgram = new WeakMap<WebGLUniformLocation, WebGLProgram>();
+    proto.getUniformLocation = function (this: WebGLRenderingContext, prog: WebGLProgram, name: string) {
+      const loc = getLoc.call(this, prog, name);
+      if (name === 'iTime' && loc) locToProgram.set(loc, prog);
+      return loc;
+    };
+
+    const u1f = proto.uniform1f;
+    proto.uniform1f = function (this: WebGLRenderingContext, loc: WebGLUniformLocation | null, v: number) {
+      const prog = loc ? locToProgram.get(loc) : undefined;
+      if (prog) {
+        if (!w.__avSeries.has(prog)) w.__avSeries.set(prog, []);
+        w.__avSeries.get(prog)!.push(v);
+      }
+      return u1f.call(this, loc, v);
+    };
+  });
+}
+
+interface RecompileGuardResult {
+  programsCreated: number;
+  canvasCount: number;
+  perCanvas: { frames: number; first: number; last: number; nonMonotonicSteps: number }[];
+}
+
+async function readRecompileGuardProbe(page: Page): Promise<RecompileGuardResult> {
+  return page.evaluate(() => {
+    const w = window as unknown as {
+      __avProgramsCreated: number;
+      __avSeries: Map<WebGLProgram, number[]>;
+    };
+    const perCanvas = [...w.__avSeries.values()].map((series) => {
+      let nonMonotonicSteps = 0;
+      for (let i = 1; i < series.length; i++) {
+        if (series[i]! < series[i - 1]!) nonMonotonicSteps++;
+      }
+      return {
+        frames: series.length,
+        first: series[0] ?? 0,
+        last: series[series.length - 1] ?? 0,
+        nonMonotonicSteps,
+      };
+    });
+    return { programsCreated: w.__avProgramsCreated, canvasCount: perCanvas.length, perCanvas };
+  });
+}
+
+test.describe('Check 10: shader recompile guard holds under the real dispatcher props chain', () => {
+  for (const variant of ['wave', 'aurora'] as const) {
+    test(`${variant}: compiles once per canvas, iTime climbs monotonically over a 4s window`, async ({ page }) => {
+      await installRecompileGuardProbe(page);
+      // Navigate straight to the real story (not the generic anchor +
+      // mountRow used elsewhere in this file): this is what actually drives
+      // the synthetic band cadence (`useFakeBands`, ~32ms) that exposed the
+      // leak in production. A manually-mounted element with no live audio
+      // source has no ticking `bands` signal to leak through in the first
+      // place, so it would not reproduce this regression.
+      await page.goto(`/iframe.html?id=components-elements-audiovisualizer--${variant}&viewMode=story`);
+      await page.waitForFunction(() => document.body.classList.contains('sb-show-main'), { timeout: 15_000 });
+      await page.locator('canvas').first().waitFor({ state: 'attached', timeout: 10_000 });
+
+      // Let the story settle (initial mount, first tween landings) before
+      // taking the baseline reading -- mirrors the production probe, which
+      // cleared its counters after an initial settle window rather than
+      // counting the expected one-time mount compiles as "recompiles."
+      await page.waitForTimeout(500);
+      const baseline = await readRecompileGuardProbe(page);
+      const canvasCount = await page.locator('canvas').count();
+
+      await page.waitForTimeout(4000);
+      const after = await readRecompileGuardProbe(page);
+
+      writeFileSync(
+        join(DIRS.recompile, `${variant}.json`),
+        JSON.stringify({ canvasCount, baseline, after }, null, 2),
+      );
+      await page.screenshot({ path: join(DIRS.recompile, `${variant}.png`) });
+
+      // At most one createProgram call per canvas, EVER -- no further
+      // recompiles happened during the 4s window on top of the initial
+      // mount.
+      expect(after.programsCreated, 'createProgram calls for the story lifetime').toBeLessThanOrEqual(canvasCount);
+      expect(after.programsCreated, 'no recompiles during the 4s window after settling').toBe(baseline.programsCreated);
+
+      // Every canvas's OWN iTime series is monotonic (no canvas ever
+      // wrote a smaller iTime than its own previous frame), and climbed by
+      // roughly the real elapsed wall-clock gap, not pinned near zero.
+      expect(after.perCanvas.length, 'canvases observed').toBeGreaterThan(0);
+      for (const series of after.perCanvas) {
+        expect(series.nonMonotonicSteps, `canvas iTime series: ${JSON.stringify(series)}`).toBe(0);
+        expect(series.last, `canvas iTime should have climbed near the elapsed window: ${JSON.stringify(series)}`).toBeGreaterThan(3);
+      }
+    });
+  }
 });
