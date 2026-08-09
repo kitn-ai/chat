@@ -13,6 +13,11 @@ import {
   type VisualizerSize,
 } from './sizes';
 import { VOICE_BANDS, VOICE_FRAME_MS } from './audio-visualizer.voice-fixture';
+// The SAME mirror primitives the component's live-audio path runs (see
+// `bands()` in index.tsx) -- imported, never reimplemented here, so the
+// stories' pre-computed `bands` demo the real centre-outward mapping
+// rather than a lookalike that could drift from it.
+import { mirrorBandsCenterOut, mirrorBandsAroundRing } from '../../primitives/audio-bands';
 
 const STATES = ['idle', 'connecting', 'listening', 'thinking', 'speaking'] as const;
 const VARIANTS = ['bar', 'grid', 'radial'] as const;
@@ -210,15 +215,15 @@ const SEED_STATE_MATRIX = 17.2;
 
 /**
  * Per-variant frame offsets for `useVoiceBands` below, spread a quarter of
- * the fixture's 192-frame loop apart (see audio-visualizer.voice-fixture.ts)
+ * the fixture's 196-frame loop apart (see audio-visualizer.voice-fixture.ts)
  * so bar/grid/radial/custom -- all reading the same recorded loop -- show
  * different points in it at any given wall-clock moment, the same reason
  * the SEED_* constants above exist for the synthetic generator.
  */
 const OFFSET_BAR = 0;
-const OFFSET_GRID = 48;
-const OFFSET_RADIAL = 96;
-const OFFSET_CUSTOM = 144;
+const OFFSET_GRID = 49;
+const OFFSET_RADIAL = 98;
+const OFFSET_CUSTOM = 147;
 
 /**
  * Synthetic levels so `speaking` animates without a microphone.
@@ -252,8 +257,25 @@ const OFFSET_CUSTOM = 144;
  * phase offset (see the `SEED_*` constants above) so different variants
  * never move in lockstep. Still a pure function of `t` and band position, so
  * it stays fully deterministic -- no `Math.random()` anywhere in it.
+ *
+ * `mirror` opts a call site into the component's own half-width contract:
+ * generate only `Math.ceil(count / 2)` bands -- band 0 the loudest, exactly
+ * what `bandCount()` in index.tsx requests from the analyser -- and map
+ * them out to the full `count` through the given primitive
+ * (`mirrorBandsCenterOut` for a row, `mirrorBandsAroundRing` for radial's
+ * ring), so a synthetic `speaking` tile shows the same centre-outward shape
+ * the live path produces. Spreading `pos` across the HALF width also uses
+ * `bandLevel`'s full spectral tilt regardless of how few elements render --
+ * a 3-bar tile fed a slice of a wider array only ever saw positions
+ * 0..0.18 of the tilt, a ramp too shallow to read as shaped. Omitted, the
+ * generator stays full-width and unmirrored -- right for wave/aurora, whose
+ * shaders consume only the volume scalar reduced from these bands.
  */
-function useFakeBands(count: () => number, seed = 0) {
+function useFakeBands(
+  count: () => number,
+  seed = 0,
+  mirror?: (halfBands: number[], count: number) => number[],
+) {
   const [bands, setBands] = createSignal<number[]>(new Array(Math.max(1, count())).fill(0));
   if (typeof requestAnimationFrame === 'undefined') return bands;
 
@@ -263,7 +285,11 @@ function useFakeBands(count: () => number, seed = 0) {
     if (now - last >= 32) {
       const t = now / 1000;
       const n = Math.max(1, count());
-      setBands(Array.from({ length: n }, (_, i) => bandLevel(t, n <= 1 ? 0 : i / (n - 1), seed)));
+      const w = mirror ? Math.ceil(n / 2) : n;
+      const generated = Array.from({ length: w }, (_, i) =>
+        bandLevel(t, w <= 1 ? 0 : i / (w - 1), seed),
+      );
+      setBands(mirror ? mirror(generated, n) : generated);
       last = now;
     }
     raf = requestAnimationFrame(step);
@@ -278,18 +304,22 @@ function useFakeBands(count: () => number, seed = 0) {
  * Linear interpolation across the band axis, from the fixture's native
  * width to whatever `count` the caller wants.
  *
- * The recorded fixture (audio-visualizer.voice-fixture.ts) is 5 bands wide.
- * Bar and grid want 5, and custom is pinned at 5, so those hit the
- * `count === source.length` fast path and play the real values back
- * verbatim. Radial defaults to 24 and its `barCount` control reaches 48 --
- * padding a short array by repeating its last value is what
- * `normalizeVolumeBands` does elsewhere in this component, and is exactly
- * why the OLD radial story had 19 of 24 spokes frozen on band 5's value.
- * This instead treats the 5 real samples as points spread evenly across
- * 0..1 and interpolates between the two nearest ones for every target band,
- * so a wider fan-out still reads as one continuous spectrum -- preserving
- * the spectral tilt and the envelope -- rather than a handful of real
- * values followed by a wall of duplicates.
+ * The recorded fixture (audio-visualizer.voice-fixture.ts) is 3 bands wide
+ * -- the component's own HALF width at `md` -- and `useVoiceBands` below
+ * resamples it to `Math.ceil(count / 2)` before mirroring, so the target
+ * here is always a half width, never the full element count. Bar, grid,
+ * and custom at `md` ask for exactly 3, hitting the
+ * `count === source.length` fast path and playing the real values back
+ * verbatim. Radial defaults to 24 elements (half width 12) and the
+ * `barCount` control reaches 48 (half width 24) -- padding a short array
+ * by repeating its last value is what `normalizeVolumeBands` does
+ * elsewhere in this component, and is exactly why the OLD radial story had
+ * 19 of 24 spokes frozen on one value. This instead treats the 3 real
+ * samples as points spread evenly across 0..1 and interpolates between the
+ * two nearest ones for every target band, so a wider fan-out still reads
+ * as one continuous spectrum -- preserving the spectral tilt and the
+ * envelope -- rather than a handful of real values followed by a wall of
+ * duplicates.
  */
 function resampleBands(source: readonly number[], count: number): number[] {
   const target = Math.max(1, count);
@@ -306,9 +336,21 @@ function resampleBands(source: readonly number[], count: number): number[] {
 }
 
 /**
- * Real recorded voice, looped and resampled per variant width -- see
+ * Real recorded voice, looped, resampled to the component's half width, and
+ * mirrored out to the full element count -- see
  * audio-visualizer.voice-fixture.ts for the recording, the trim, and why
  * the loop point does not jump.
+ *
+ * The fixture holds `Math.ceil(count / 2)`-shaped HALF bands (3, the `md`
+ * half width), matching what `bandCount()` in index.tsx requests from the
+ * analyser. Every tick resamples the frame to the CURRENT half width, then
+ * maps it out to the full `count` through `mirror` -- one of the two
+ * primitives the live-audio path itself runs: `mirrorBandsCenterOut` (the
+ * default; bar, grid, custom) or `mirrorBandsAroundRing` (the radial call
+ * site). The `bands` prop is a raw passthrough by contract, so doing the
+ * mirroring HERE, with the component's own imported primitives, is what
+ * keeps these tiles showing the real centre-outward behaviour instead of
+ * the analyser's raw one-directional tilt.
  *
  * Same throttled-`requestAnimationFrame` shape as `useFakeBands` above, at
  * the fixture's own `VOICE_FRAME_MS` (32ms, matching `useAudioAnalysis`'s
@@ -319,7 +361,7 @@ function resampleBands(source: readonly number[], count: number): number[] {
  * happened to mount.
  *
  * `offsetFrames` (the OFFSET_* constants above) shifts each call site into
- * a different point of the 192-frame loop, so bar/grid/radial/custom -- all
+ * a different point of the 196-frame loop, so bar/grid/radial/custom -- all
  * reading the same recording -- do not pulse in lockstep when their stories
  * sit next to each other, the same problem the SEED_* constants solve for
  * the synthetic generator.
@@ -327,13 +369,19 @@ function resampleBands(source: readonly number[], count: number): number[] {
  * `count` is an ACCESSOR, read fresh every frame, same contract as
  * `useFakeBands`: a `barCount`/`columnCount`/`size` control change is
  * picked up without remounting, and `resampleBands` (above) reshapes the
- * fixture's 5 real bands to match rather than padding.
+ * fixture's 3 real bands to the new half width rather than padding.
  */
-function useVoiceBands(count: () => number, offsetFrames = 0) {
+function useVoiceBands(
+  count: () => number,
+  offsetFrames = 0,
+  mirror: (halfBands: number[], count: number) => number[] = mirrorBandsCenterOut,
+) {
   const loopLength = VOICE_BANDS.length;
-  const [bands, setBands] = createSignal<number[]>(
-    resampleBands(VOICE_BANDS[offsetFrames % loopLength], count()),
-  );
+  const frameAt = (frameIndex: number): number[] => {
+    const n = Math.max(1, count());
+    return mirror(resampleBands(VOICE_BANDS[frameIndex], Math.ceil(n / 2)), n);
+  };
+  const [bands, setBands] = createSignal<number[]>(frameAt(offsetFrames % loopLength));
   if (typeof requestAnimationFrame === 'undefined') return bands;
 
   let raf = 0;
@@ -341,7 +389,7 @@ function useVoiceBands(count: () => number, offsetFrames = 0) {
   const step = (now: number) => {
     if (now - last >= VOICE_FRAME_MS) {
       const frameIndex = (Math.floor(now / VOICE_FRAME_MS) + offsetFrames) % loopLength;
-      setBands(resampleBands(VOICE_BANDS[frameIndex], count()));
+      setBands(frameAt(frameIndex));
       last = now;
     }
     raf = requestAnimationFrame(step);
@@ -528,15 +576,19 @@ export const Radial: Story = {
     },
   },
   render: (args: AudioVisualizerProps) => {
-    // Radial defaults to `defaultRadialBarCount` (24 at `md`), not the 5
-    // the fixture is recorded at -- `resampleBands` (above `useVoiceBands`)
-    // interpolates the 5 real bands up to whatever width is wanted instead
-    // of padding, which is exactly the bug this story used to have: 19 of
-    // the 24 spokes rendered frozen on band 5's value, since
-    // `normalizeVolumeBands` pads a short array by repeating its last
-    // entry. `barCount` still wins when set, and is re-read every frame so
-    // the width tracks the control.
-    const bands = useVoiceBands(() => args.barCount ?? defaultRadialBarCount(args.size ?? 'md'), OFFSET_RADIAL);
+    // Radial defaults to `defaultRadialBarCount` (24 at `md`):
+    // `useVoiceBands` resamples the fixture's 3 real bands to the half
+    // width (12) and mirrors them around the ring -- `mirrorBandsAroundRing`
+    // here, not the linear centre-out default, because that is exactly the
+    // primitive `bands()` in index.tsx runs for this variant: band 0 lands
+    // at the ring's bottom fixed point and fades toward the top, mirrored
+    // left-right across the vertical axis. `barCount` still wins when set,
+    // and is re-read every frame so the width tracks the control.
+    const bands = useVoiceBands(
+      () => args.barCount ?? defaultRadialBarCount(args.size ?? 'md'),
+      OFFSET_RADIAL,
+      mirrorBandsAroundRing,
+    );
     return (
       <StateRow size={args.size ?? 'md'}>
         {(s) => (
@@ -590,10 +642,12 @@ export const Wave: Story = {
   },
   render: (args: AudioVisualizerProps) => {
     // Wave has no `barCount` control -- it only reads `volume`, a scalar
-    // reduced from `bands` -- but generate at the same width `bandCount()`
-    // falls back to for a non-grid/non-radial variant (`defaultBarCount`),
-    // so a shader-load failure's bar fallback (which also has no
-    // `barCount` here) gets a matching width too.
+    // reduced from `bands` -- but generate at the element count a
+    // shader-load failure's bar fallback would render (`defaultBarCount`),
+    // so that fallback gets a matching full-width array too. No `mirror`
+    // on purpose: the shader consumes only the volume scalar, which is
+    // shape-blind, and the fallback is an error path, not the place this
+    // file demos the centre-outward mapping.
     const bands = useFakeBands(() => defaultBarCount(args.size ?? 'md'), SEED_WAVE);
     return (
       <StateRow size={args.size ?? 'md'}>
@@ -659,9 +713,9 @@ export const Custom: Story = {
     // match. Feeding a generalised, size-following count would desync the
     // two -- `uBands` is a fixed-length uniform array, and indexing it out
     // of bounds produced visible garbage earlier in this component's history.
-    // 5 also happens to be the fixture's own native width, so this hits
-    // `resampleBands`' passthrough fast path and plays the recording back
-    // verbatim, no interpolation involved.
+    // The half width of 5 is 3 -- the fixture's own native width -- so this
+    // hits `resampleBands`' passthrough fast path and mirrors the recording
+    // out to 5 verbatim, no interpolation involved.
     const bands = useVoiceBands(() => 5, OFFSET_CUSTOM);
     return (
       <StateRow size={args.size ?? 'md'}>
@@ -711,15 +765,23 @@ export const StateMatrix: Story = {
     },
   },
   render: () => {
-    // One `bands()` feeds bar, grid, AND radial tiles below, all fixed at
-    // `size="sm"`. Generate at the widest of the three's own defaults
-    // (radial's, 12 at `sm`) so every variant's internal
-    // `normalizeVolumeBands` call only ever truncates, never pads -- padding
-    // is what repeats a frozen last value across the extra slots.
-    const bands = useFakeBands(
-      () => Math.max(defaultBarCount('sm'), defaultGridCount('sm'), defaultRadialBarCount('sm')),
-      SEED_STATE_MATRIX,
-    );
+    // One feed PER VARIANT, each at that variant's own `sm` element count,
+    // generated at half width and mirrored through the same primitive the
+    // live path runs for it -- centre-out for the linear bar/grid rows,
+    // around the ring for radial (see `useFakeBands`' `mirror` parameter).
+    // The old approach fed all three rows ONE 12-wide array and leaned on
+    // each variant's internal `normalizeVolumeBands` truncation, which
+    // handed bar's 3 elements just the first quarter of the spectral tilt
+    // -- a shallow one-directional ramp, exactly the shape the
+    // centre-outward mapping exists to remove. Matching each count exactly
+    // matters here for the same reason index.tsx matches its own: the
+    // mirror makes a length mismatch look like a plausible (but wrong)
+    // shape instead of an obviously broken one.
+    const bandsByVariant = {
+      bar: useFakeBands(() => defaultBarCount('sm'), SEED_STATE_MATRIX, mirrorBandsCenterOut),
+      grid: useFakeBands(() => defaultGridCount('sm'), SEED_STATE_MATRIX, mirrorBandsCenterOut),
+      radial: useFakeBands(() => defaultRadialBarCount('sm'), SEED_STATE_MATRIX, mirrorBandsAroundRing),
+    } as const;
     const LABEL_COL = 64;
     return (
       <div style={{ display: 'flex', 'flex-direction': 'column', gap: '16px' }}>
@@ -740,7 +802,7 @@ export const StateMatrix: Story = {
               <For each={STATES}>
                 {(s) => (
                   <Tile size="sm">
-                    <AudioVisualizer variant={v} state={s} size="sm" bands={bands()} />
+                    <AudioVisualizer variant={v} state={s} size="sm" bands={bandsByVariant[v]()} />
                   </Tile>
                 )}
               </For>
