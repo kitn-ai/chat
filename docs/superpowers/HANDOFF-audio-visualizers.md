@@ -21,11 +21,27 @@ task, finding, and ruling).
 **Port 6006 belongs to the MAIN checkout, not this worktree.** Rob spent an hour looking at stale stories
 because of this. Always start this worktree's own Storybook on another port.
 
-### UNCOMMITTED work in flight
+### FIRST TASK NEXT SESSION
 
-`packages/ui/src/primitives/use-audio-analysis.ts` (+ its tests, + `audio-bands.test.ts`) has an agent
-mid-task on the **centre-outward band mapping** (section 3 below). Check whether it is coherent before
-building on it. `examples/internal/aurora-playground/` changes are from a different session; leave alone.
+The centre-outward band mapping **landed** in `3f34a45` (see section 3). Suite green at 1644, typecheck
+clean. But there is a gap that will mislead anyone who looks at Storybook:
+
+**Caller-supplied `bands` bypass the mirroring.** `index.tsx:267` is `if (props.bands) return props.bands;`.
+Every `speaking` tile in the stories is driven by the baked voice fixture through `bands`, so they all skip
+the centre-outward mapping and render the raw left-heavy ramp. Rob asked for centre-outward specifically;
+he will open the stories, still see the ramp, and reasonably conclude it was not done.
+
+The bypass itself is defensible: `bands` is documented as pre-computed per-element levels, a raw
+passthrough. **Fix the stories, not the contract** — have them supply `ceil(n/2)` bands and let the
+component mirror, so the demo shows real behaviour. Re-baking the fixture at half width is likely simplest.
+
+Verify per tile in a browser that the profile is symmetric about the centre. The expected shape on real
+voice at `size="md"` is roughly `[0.392, 0.533, 0.670, 0.533, 0.392]`.
+
+**Also note:** the unit suite is mildly flaky under concurrent CPU load. A run during heavy agent activity
+showed 4 failures across 3 files (including `pdf-preview`); a clean re-run was 1644/1644. Re-run before
+believing a red result. `examples/internal/aurora-playground/` changes are from a different session; leave
+them alone.
 
 ---
 
