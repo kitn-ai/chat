@@ -181,7 +181,15 @@ export const Variants: Story = {
 
 export const StateMatrix: Story = {
   parameters: {
-    docs: { description: { story: 'Every DOM variant against every state. The scripted sequences are most of this component\'s behavior, and each state looks different. `speaking` uses synthetic levels.' } },
+    docs: {
+      description: {
+        story:
+          'Every DOM variant against every state. The scripted sequences are most of this component\'s ' +
+          'behavior, and each state looks different. `speaking` uses synthetic levels. Shader variants are ' +
+          'deliberately excluded here -- six variants x five states x two WebGL contexts per row is heavy for ' +
+          'one story; see WaveStates, AuroraStates, and ShaderVariants for those.',
+      },
+    },
   },
   render: () => {
     const bands = useFakeBands(5);
@@ -229,7 +237,14 @@ export const Sizes: Story = {
 
 export const ShaderVariants: Story = {
   parameters: {
-    docs: { description: { story: 'Wave and aurora render through WebGL. Both load on demand and fall back to bars where WebGL is unavailable.' } },
+    docs: {
+      description: {
+        story:
+          'Wave and aurora side by side, one state, for a quick at-a-glance comparison of the two WebGL ' +
+          'looks -- both load on demand and fall back to bars where WebGL is unavailable. See WaveStates ' +
+          'and AuroraStates below for how each actually runs through every state.',
+      },
+    },
   },
   render: () => (
     <div style={{ display: 'flex', gap: '32px', 'align-items': 'center' }}>
@@ -237,6 +252,48 @@ export const ShaderVariants: Story = {
       <AudioVisualizer variant="aurora" state="listening" size="md" />
     </div>
   ),
+};
+
+/**
+ * The wave across every state. Mirrors AuroraStates below: same layout,
+ * same labelling, so the two read as a pair.
+ *
+ * `idle` flattens the line to zero amplitude and zero frequency by design
+ * (`waveTargets` in `primitives/visualizer-sequences.ts`) -- it is meant to
+ * look inert, not broken. `speaking` differs from the other four in KIND,
+ * not degree: its amplitude and frequency come straight from live volume
+ * with `{ duration: 0 }`, no easing toward a fixed target the way
+ * `listening`/`thinking`/`connecting` do -- driven here by synthetic bands
+ * so it is not static like AuroraStates' `speaking` tile.
+ */
+export const WaveStates: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          '`idle`: flat line, amplitude and frequency both zero -- by design, not a bug. `listening`: the ' +
+          'base wave with a slow mirrored opacity pulse, 750ms. `thinking`/`connecting`: quadruple the speed ' +
+          'and frequency, quarter the amplitude, pulse faster at 400ms -- a tighter, jitterier line. ' +
+          '`speaking`: doubles the base speed, holds full opacity, and reads amplitude and frequency straight ' +
+          'from live volume with no easing -- driven by synthetic bands here so it moves.',
+      },
+    },
+  },
+  render: () => {
+    const bands = useFakeBands(5);
+    return (
+      <div style={{ display: 'flex', gap: '24px', 'align-items': 'center', 'flex-wrap': 'wrap' }}>
+        <For each={STATES}>
+          {(s) => (
+            <div style={{ display: 'flex', 'flex-direction': 'column', gap: '8px', 'align-items': 'center' }}>
+              <AudioVisualizer variant="wave" state={s} size="md" bands={bands()} />
+              <code style={{ 'font-size': '11px', opacity: 0.6 }}>{s}</code>
+            </div>
+          )}
+        </For>
+      </div>
+    );
+  },
 };
 
 export const AuroraStates: Story = {
