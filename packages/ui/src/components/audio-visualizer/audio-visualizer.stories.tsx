@@ -114,6 +114,101 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 /**
+ * Smooth deterministic pseudo-noise: a short sum of sine octaves at
+ * irrational-ish frequency ratios (never small-integer multiples of one
+ * another), so the signal does not exactly repeat inside any window someone
+ * would actually sit and watch -- confirmed out to 60s of samples at 250ms
+ * resolution with zero repeated values. Every term is a plain `Math.sin`, so
+ * the whole thing stays smooth everywhere: no `Math.abs`, so no hard corner
+ * at a zero crossing anywhere in what is built from it below.
+ */
+function noise(x: number, seed: number): number {
+  return (
+    0.5 * Math.sin(x * 1.0 + seed) +
+    0.28 * Math.sin(x * 2.173 + seed * 1.61) +
+    0.14 * Math.sin(x * 4.911 + seed * 0.37) +
+    0.08 * Math.sin(x * 9.27 + seed * 2.53)
+  );
+}
+
+/**
+ * Overall utterance loudness at time `t`, roughly 0..1. Sums a sentence-scale
+ * drift (~7s between deeper dips), a word-scale burst (~1.8s), and two
+ * syllable-rate terms in the 3-8Hz band real speech modulates at, then
+ * squashes the whole sum through ONE asymmetric sigmoid (`Math.tanh` with a
+ * positive bias) -- not four separate clamps -- so the result is smooth
+ * everywhere and spends most of its time "on" with real dips between words
+ * and sentences, rather than a symmetric wobble that never gets close to
+ * silence.
+ */
+function utteranceEnvelope(t: number, seed: number): number {
+  const raw =
+    0.42 * Math.sin(2 * Math.PI * 0.14 * t + seed * 0.6) +
+    0.28 * Math.sin(2 * Math.PI * 0.55 * t + seed * 1.4) +
+    0.18 * Math.sin(2 * Math.PI * 4.3 * t + seed * 0.3) +
+    0.12 * Math.sin(2 * Math.PI * 6.8 * t + seed * 2.1);
+  return 0.5 + 0.5 * Math.tanh(2.0 * raw + 0.45);
+}
+
+/**
+ * One band's level at time `t`, clamped to 0..1 (the clamp is a rarely-hit
+ * safety net, not the shaping mechanism -- simulation shows the unclamped
+ * value staying inside roughly 0..0.97 on its own). `pos` is the band's
+ * POSITION in the row, 0 (lowest) to 1 (highest), not the raw index -- see
+ * this function's callers, which derive it from index and count together so
+ * the spatial frequencies below read the same regardless of how many bands
+ * are actually on screen.
+ *
+ * - Spectral tilt: `depth` (`1 - pos`) scales both how OFTEN a band fires
+ *   (`activity`'s exponent) and how loud it gets when it does (`peakAmp`),
+ *   so high bands read as genuinely sparser, not just a smaller version of
+ *   the same shape.
+ * - Correlated neighbours: `carrier`'s phase is a function of `pos`, so
+ *   adjacent bands move together like a formant sliding across several
+ *   bins at once, while its own noise octaves still give it texture that
+ *   changes faster than the envelope drifts.
+ * - Transients: `spike` raises a smooth 0..1 noise value to a high power,
+ *   which -- with no corner anywhere in it -- still reads as an occasional
+ *   sharp pop rather than a constant hiss: a plosive or a sudden onset.
+ */
+function bandLevel(t: number, pos: number, seed: number): number {
+  const depth = 1 - pos;
+  const env = utteranceEnvelope(t, seed);
+  const activity = Math.pow(env, 1 + 2.2 * pos);
+
+  const spatialPhase = pos * Math.PI * 2.4 + seed * 0.31;
+  const carrier =
+    0.5 +
+    0.5 *
+      (0.6 * noise(t * 1.7 + spatialPhase, seed + 5.5) +
+        0.4 * noise(t * 3.3 + spatialPhase * 1.6, seed + 12.1));
+
+  const peakAmp = 0.22 + 0.75 * depth;
+
+  const transientRaw = 0.5 + 0.5 * noise(t * 0.85 + seed * 4.3, seed * 6.1 + 21);
+  const spike = Math.pow(transientRaw, 10);
+  const transient = spike * (0.5 + 0.5 * depth) * 1.1 * activity;
+
+  const level = activity * peakAmp * (0.25 + 0.85 * carrier) + transient;
+  return Math.max(0, Math.min(1, level));
+}
+
+/**
+ * Per-variant phase offsets for `useFakeBands` below -- arbitrary distinct
+ * constants, not meaningful as values. Without these, bar/grid/radial/custom
+ * all reading the same wall-clock time would pulse in exact lockstep when
+ * their stories are browsed near each other, which was a large part of why
+ * the old data read as one looping GIF copied across every tile.
+ */
+const SEED_BAR = 0;
+const SEED_GRID = 2.7;
+const SEED_RADIAL = 5.3;
+const SEED_CUSTOM = 8.1;
+const SEED_WAVE = 11.9;
+const SEED_AURORA = 14.6;
+const SEED_STATE_MATRIX = 17.2;
+
+/**
  * Synthetic levels so `speaking` animates without a microphone.
  *
  * Matches the real analyser's cadence -- `useAudioAnalysis`'s
@@ -134,16 +229,19 @@ type Story = StoryObj<typeof meta>;
  * variant that wants more bands than that left the extras frozen on
  * whichever value happened to be last, not actually varying.
  *
- * Each band mixes a slow, spatially smooth "envelope" -- its phase drifts
- * across POSITION in the row, not per-band index, so neighbouring bands stay
- * correlated and move together instead of independently -- with a smaller,
- * faster per-band ripple layered on top for texture. Amplitude falls off
- * from low bands to high (`depth`), the shape a voice's spectrum actually
- * has. Both terms are sums of `Math.sin`, smooth everywhere -- no
- * `Math.abs`, so no sharp corner at a zero crossing -- and a pure function
- * of time, so it stays deterministic.
+ * The signal itself models speech, not a waveform demo -- `bandLevel` above
+ * layers an utterance envelope (bursts and pauses at syllable/word/sentence
+ * rates), a spectral tilt (low bands louder and busier, high bands sparser
+ * and quieter), spatially-correlated neighbours (a formant moves several
+ * bins at once, not one in isolation), and occasional transients, all built
+ * from `Math.sin`/`Math.tanh`/`Math.pow` -- never `Math.abs`, which puts a
+ * hard corner at every zero crossing and is a large part of why the previous
+ * version read as snappy and mechanical. `seed` gives each call site its own
+ * phase offset (see the `SEED_*` constants above) so different variants
+ * never move in lockstep. Still a pure function of `t` and band position, so
+ * it stays fully deterministic -- no `Math.random()` anywhere in it.
  */
-function useFakeBands(count: () => number) {
+function useFakeBands(count: () => number, seed = 0) {
   const [bands, setBands] = createSignal<number[]>(new Array(Math.max(1, count())).fill(0));
   if (typeof requestAnimationFrame === 'undefined') return bands;
 
@@ -153,28 +251,7 @@ function useFakeBands(count: () => number) {
     if (now - last >= 32) {
       const t = now / 1000;
       const n = Math.max(1, count());
-      setBands(
-        Array.from({ length: n }, (_, i) => {
-          const pos = n <= 1 ? 0 : i / (n - 1); // 0 for the lowest band, 1 for the highest
-          const depth = 1 - pos;
-          const amplitude = 0.16 + 0.26 * depth;
-
-          // Shared envelope: phase drifts across `pos`, so bands next to
-          // each other are nearly in lockstep and only diverge gradually
-          // moving from low to high, instead of moving independently.
-          const envelopePhase = pos * Math.PI * 1.2;
-          const envelope =
-            0.5 * Math.sin(2 * Math.PI * 0.8 * t + envelopePhase) +
-            0.3 * Math.sin(2 * Math.PI * 2.1 * t + envelopePhase * 1.3) +
-            0.2 * Math.sin(2 * Math.PI * 0.4 * t + envelopePhase * 0.5);
-
-          // Faster, smaller per-band ripple on top -- weighted low enough
-          // that the shared envelope above still dominates.
-          const ripple = 0.15 * Math.sin(2 * Math.PI * (2.5 + pos * 1.5) * t + i * 0.5);
-
-          return 0.5 + amplitude * (0.8 * envelope + 0.2 * ripple);
-        }),
-      );
+      setBands(Array.from({ length: n }, (_, i) => bandLevel(t, n <= 1 ? 0 : i / (n - 1), seed)));
       last = now;
     }
     raf = requestAnimationFrame(step);
@@ -291,7 +368,7 @@ export const Bar: Story = {
     // sizes.ts): `barCount` follows the control, and re-reading it every
     // frame (rather than once at mount) keeps the generated width in sync
     // if the control changes after mount.
-    const bands = useFakeBands(() => args.barCount ?? defaultBarCount(args.size ?? 'md'));
+    const bands = useFakeBands(() => args.barCount ?? defaultBarCount(args.size ?? 'md'), SEED_BAR);
     return (
       <StateRow size={args.size ?? 'md'}>
         {(s) => (
@@ -325,7 +402,7 @@ export const Grid: Story = {
     // Grid keys off `columnCount` (falling back to `defaultGridCount`), not
     // `barCount` -- the same source `AudioVisualizer`'s own `bandCount()`
     // reads for this variant.
-    const bands = useFakeBands(() => args.columnCount ?? defaultGridCount(args.size ?? 'md'));
+    const bands = useFakeBands(() => args.columnCount ?? defaultGridCount(args.size ?? 'md'), SEED_GRID);
     return (
       <StateRow size={args.size ?? 'md'}>
         {(s) => (
@@ -366,7 +443,7 @@ export const Radial: Story = {
     // spokes rendered frozen on band 5's value, since `normalizeVolumeBands`
     // pads a short array by repeating its last entry. `barCount` still wins
     // when set, and is re-read every frame so the width tracks the control.
-    const bands = useFakeBands(() => args.barCount ?? defaultRadialBarCount(args.size ?? 'md'));
+    const bands = useFakeBands(() => args.barCount ?? defaultRadialBarCount(args.size ?? 'md'), SEED_RADIAL);
     return (
       <StateRow size={args.size ?? 'md'}>
         {(s) => (
@@ -424,7 +501,7 @@ export const Wave: Story = {
     // falls back to for a non-grid/non-radial variant (`defaultBarCount`),
     // so a shader-load failure's bar fallback (which also has no
     // `barCount` here) gets a matching width too.
-    const bands = useFakeBands(() => defaultBarCount(args.size ?? 'md'));
+    const bands = useFakeBands(() => defaultBarCount(args.size ?? 'md'), SEED_WAVE);
     return (
       <StateRow size={args.size ?? 'md'}>
         {(s) => <AudioVisualizer variant="wave" state={s} size={args.size} color={args.color} bands={bands()} />}
@@ -453,7 +530,7 @@ export const Aurora: Story = {
     // Same reasoning as Wave above: no `barCount` control here either, only
     // `volume` is read, so generate at the same width the bar fallback
     // would default to.
-    const bands = useFakeBands(() => defaultBarCount(args.size ?? 'md'));
+    const bands = useFakeBands(() => defaultBarCount(args.size ?? 'md'), SEED_AURORA);
     return (
       <StateRow size={args.size ?? 'md'}>
         {(s) => (
@@ -489,7 +566,7 @@ export const Custom: Story = {
     // match. Feeding a generalised, size-following count would desync the
     // two -- `uBands` is a fixed-length uniform array, and indexing it out
     // of bounds produced visible garbage earlier in this component's history.
-    const bands = useFakeBands(() => 5);
+    const bands = useFakeBands(() => 5, SEED_CUSTOM);
     return (
       <StateRow size={args.size ?? 'md'}>
         {(s) => (
@@ -543,8 +620,9 @@ export const StateMatrix: Story = {
     // (radial's, 12 at `sm`) so every variant's internal
     // `normalizeVolumeBands` call only ever truncates, never pads -- padding
     // is what repeats a frozen last value across the extra slots.
-    const bands = useFakeBands(() =>
-      Math.max(defaultBarCount('sm'), defaultGridCount('sm'), defaultRadialBarCount('sm')),
+    const bands = useFakeBands(
+      () => Math.max(defaultBarCount('sm'), defaultGridCount('sm'), defaultRadialBarCount('sm')),
+      SEED_STATE_MATRIX,
     );
     const LABEL_COL = 64;
     return (
@@ -637,11 +715,11 @@ export const Microphone: Story = {
 
     return (
       <div style={{ display: 'flex', 'flex-direction': 'column', gap: '16px', 'align-items': 'center' }}>
-        <Tile size="md">
+        <Tile size="lg">
           <AudioVisualizer
             variant={args.variant}
             state={stream() ? 'speaking' : 'idle'}
-            size="md"
+            size="lg"
             stream={stream()}
             shader={args.variant === 'custom' ? { fragment: SPECTRUM_SHADER } : undefined}
           />
@@ -726,10 +804,20 @@ export const MicrophoneAll: Story = {
           {stream() ? 'Stop microphone' : requesting() ? 'Requesting...' : 'Enable microphone'}
         </Button>
         <Show when={error()}>{(message) => <Notice severity="error">{message()}</Notice>}</Show>
+        {/*
+          2 columns, not 3: at `lg` each `Tile` is a fixed 272px square
+          (`cellSize` = `CONTAINER_HEIGHT.lg` 224 + 48). 3 across needs
+          roughly 880px of row width before the fixed-size tiles overflow
+          their `minmax(0, 1fr)` tracks, which does not fit sensibly next to
+          Storybook's sidebar and panel at a normal window width. 2 columns
+          only needs about 576px and keeps all six tiles fully visible
+          without scrolling, at the cost of a taller (3-row) grid instead of
+          a wider one.
+        */}
         <div
           style={{
             display: 'grid',
-            'grid-template-columns': 'repeat(3, minmax(0, 1fr))',
+            'grid-template-columns': 'repeat(2, minmax(0, 1fr))',
             'column-gap': '32px',
             'row-gap': '24px',
             'justify-items': 'center',
@@ -737,17 +825,19 @@ export const MicrophoneAll: Story = {
         >
           <For each={ALL_VARIANTS}>
             {(v) => (
-              <Tile size="sm" label={v}>
+              <Tile size="lg" label={v}>
                 <AudioVisualizer
                   variant={v}
                   state={stream() ? 'speaking' : 'idle'}
-                  size="sm"
+                  size="lg"
                   stream={stream()}
-                  // SPECTRUM_SHADER is hardcoded for 5 bands. `sm` defaults
-                  // bar/custom to 3, which would declare `uBands` at length 3
-                  // while the shader body still indexes up to uBands[4] --
-                  // force 5 here so the shader's band count and the analyser's
-                  // actually match.
+                  // SPECTRUM_SHADER is hardcoded for 5 bands. `lg`'s own
+                  // default already happens to be 5 (`defaultBarCount`), but
+                  // force it explicitly rather than lean on that coincidence
+                  // -- if this story's tile size ever changes again, `custom`
+                  // must still declare `uBands` at length 5 to match what the
+                  // shader body indexes, or dropping to `sm`/`icon` (default
+                  // 3) would desync the two the way it once did.
                   barCount={v === 'custom' ? 5 : undefined}
                   shader={v === 'custom' ? { fragment: SPECTRUM_SHADER } : undefined}
                 />
