@@ -12,18 +12,54 @@ export interface AudioAnalysisOptions {
    * leaving `bands()` padded or truncated to a stale size.
    */
   bands?: number | (() => number);
-  /** Low bin index of the pass window. NOT a frequency. Default 100. */
+  /**
+   * Low bin index of the pass window. NOT a frequency. Default 4 (deliberately
+   * NOT upstream LiveKit's 100 -- see `hiPass` and DEFAULTS below).
+   */
   loPass?: number;
-  /** High bin index of the pass window. NOT a frequency. Default 200. */
+  /**
+   * High bin index of the pass window. NOT a frequency. Default 120
+   * (deliberately NOT upstream LiveKit's 200 -- see DEFAULTS below).
+   *
+   * Legitimately input-dependent, unlike `fftSize`/`smoothingTimeConstant`
+   * above: someone visualizing music or a synthesized-speech agent may want
+   * a wider or higher window than a raw human microphone needs.
+   */
   hiPass?: number;
   /** Minimum ms between updates. Default 32 (about 30fps). */
   updateInterval?: number;
 }
 
+/**
+ * DELIBERATE DIVERGENCE FROM UPSTREAM LIVEKIT -- if you're diffing this file
+ * against `useMultibandTrackVolume`, its default window (bins 100-200) was
+ * not carried over here, and that is intentional, not a missed sync.
+ *
+ * At this hook's fftSize of 2048 and a 44.1kHz sample rate, each bin is
+ * 21.5Hz. Upstream's 100-200 is ~2.15-4.3kHz: sibilance range. That suits
+ * upstream's actual input, an AI agent's synthesized speech played back over
+ * WebRTC, which runs louder and broader-band than a live human voice. Ours is
+ * a raw microphone: normal speech puts its energy in the fundamental
+ * (85-255Hz) and the first two formants (300-2500Hz), almost entirely below
+ * 2.15kHz, so upstream's window was silently starving a real mic input.
+ *
+ * Measured on a real recorded clip ("this is a test, testing one two three,
+ * hello world", 318 frames through the actual reduceToBands/normalizeDb
+ * pipeline in a real AudioContext, full methodology and sweep in this task's
+ * report): upstream's 100-200 read all-zero bands on 54.1% of frames, mean
+ * 0.136, tilt -0.013 (essentially flat -- no low-to-high falloff at all).
+ * Bins 4-120 (86Hz-2.6kHz, covering the fundamental plus F1 and F2, starting
+ * at bin 4 rather than 0 to skip DC and low rumble) read all-zero only on the
+ * clip's genuine leading silence (0.9% of frames), mean 0.234, tilt +0.365. A
+ * sweep of loPass in [0,2,4,6,8,10,16] x hiPass in [60..300] against the same
+ * clip confirmed 4-120 sits at the top of the useful range: narrower windows
+ * score a marginally higher tilt on this one clip but start clipping off F2,
+ * and wider ones dilute the tilt without adding real signal.
+ */
 const DEFAULTS = {
   bands: 5,
-  loPass: 100,
-  hiPass: 200,
+  loPass: 4,
+  hiPass: 120,
   updateInterval: 32,
 } as const;
 

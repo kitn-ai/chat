@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRoot, createSignal } from 'solid-js';
 import { useAudioAnalysis } from './use-audio-analysis';
+import * as audioBandsModule from './audio-bands';
 
 /**
  * jsdom has no Web Audio. We stand up a minimal fake that records how it was
@@ -306,6 +307,32 @@ describe('useAudioAnalysis', () => {
       expect(bands().every((b) => b > 0)).toBe(true);
       dispose();
     });
+  });
+
+  // FakeAnalyser fills its whole buffer uniformly (see above), so no test
+  // above this one can actually tell whether the DEFAULT loPass/hiPass window
+  // wired into reduceToBands is right: slicing any range out of a uniform
+  // buffer produces the same output. audio-bands.test.ts separately proves
+  // (4, 120) is the right window against real captured audio, but that test
+  // calls reduceToBands directly -- it can't catch a typo in this hook's own
+  // DEFAULTS. This closes that gap by checking what this hook actually calls
+  // reduceToBands with.
+  it('wires the default loPass/hiPass window (4, 120) into reduceToBands, not the old upstream-copied (100, 200)', async () => {
+    const spy = vi.spyOn(audioBandsModule, 'reduceToBands');
+    try {
+      await createRoot(async (dispose) => {
+        useAudioAnalysis(() => fakeStream(), { bands: 3 });
+        await Promise.resolve();
+        flushFrame();
+        expect(spy).toHaveBeenCalled();
+        const [, , loPass, hiPass] = spy.mock.calls[0]!;
+        expect(loPass).toBe(4);
+        expect(hiPass).toBe(120);
+        dispose();
+      });
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   // A `MediaStream` has no equivalent of createMediaElementSource's throw on

@@ -4,6 +4,7 @@ import {
 } from 'solid-js';
 import { cn } from '../../utils/cn';
 import { useAudioAnalysis } from '../../primitives/use-audio-analysis';
+import { mirrorBandsCenterOut, mirrorBandsAroundRing } from '../../primitives/audio-bands';
 import { normalizeState, type VisualizerState } from '../../primitives/visualizer-sequences';
 import { BarVisualizer, type VariantProps } from './variant-bar';
 import { GridVisualizer } from './variant-grid';
@@ -222,15 +223,26 @@ export function AudioVisualizer(props: AudioVisualizerProps): JSX.Element {
 
   const isShader = () => variant() in SHADER_VARIANTS;
 
-  // How many buckets the analyser should produce. Grid keys off its own
-  // column default, radial off its own bar-count default, everything else
+  // How many elements the active variant actually renders. Grid keys off its
+  // own column default (each column shares one band across every row -- see
+  // GridVisualizer), radial off its own bar-count default, everything else
   // off the bar count -- pulled from `sizes.ts` rather than re-derived here,
   // so this stays in sync with what each variant actually renders.
-  const bandCount = () => {
+  const elementCount = () => {
     if (variant() === 'grid') return props.columnCount ?? defaultGridCount(size());
     if (variant() === 'radial') return props.barCount ?? defaultRadialBarCount(size());
     return props.barCount ?? defaultBarCount(size());
   };
+
+  // Only ceil(n/2) bands are requested from the analyser, not one per
+  // element: useAudioAnalysis's output is mirrored back out to the full
+  // elementCount below (centre-out for bar/grid, across the ring's vertical
+  // axis for radial), which is what turns a real voice's natural
+  // low-to-high spectral tilt into a shape that grows from the centre
+  // outward instead of always ramping in one direction. See
+  // mirrorBandsCenterOut / mirrorBandsAroundRing in primitives/audio-bands.ts
+  // for the full rationale and the real-clip measurements behind it.
+  const bandCount = () => Math.ceil(elementCount() / 2);
 
   // A caller-supplied `bands` array short-circuits Web Audio entirely, which is
   // what keeps the headless and SSR paths free of an AudioContext.
@@ -240,7 +252,23 @@ export function AudioVisualizer(props: AudioVisualizerProps): JSX.Element {
   // analyser at the new count instead of leaving it wired to whatever the
   // count happened to be at mount.
   const analysis = useAudioAnalysis(source, { bands: bandCount });
-  const bands = () => props.bands ?? analysis.bands();
+
+  // A caller-supplied `bands` array is used exactly as given -- it already
+  // has whatever shape the caller intends, mirrored or not, and mirroring it
+  // again here would be a second, unwanted transform on data we don't own.
+  // The analyser's own output is only ceil(n/2) values (bandCount above);
+  // mirror it back out to the FULL elementCount so it lines up EXACTLY with
+  // what each variant's own `normalizeVolumeBands(props.bands, count())`
+  // expects. Matching the count exactly here, rather than leaning on that
+  // pad-by-repeating-the-last-value, matters specifically because the mirror
+  // makes a length mismatch look like a plausible (but wrong) shape instead
+  // of an obviously broken one.
+  const bands = () => {
+    if (props.bands) return props.bands;
+    return variant() === 'radial'
+      ? mirrorBandsAroundRing(analysis.bands(), elementCount())
+      : mirrorBandsCenterOut(analysis.bands(), elementCount());
+  };
 
   // The shader variants read `volume`, a scalar, not `bands`. When
   // caller-supplied `bands` short-circuits Web Audio above, `analysis.volume()`

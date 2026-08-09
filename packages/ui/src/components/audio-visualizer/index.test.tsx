@@ -402,7 +402,11 @@ describe('AudioVisualizer band count reactivity', () => {
     // regressed to calling it per-render, this would catch that too.
     expect(spy).toHaveBeenCalledTimes(1);
     const options = spy.mock.calls[0]?.[1] as { bands: () => number };
-    expect(options.bands()).toBe(3);
+    // ceil(n/2), not n: only half the elements' worth of bands is requested
+    // from the analyser -- the dispatcher mirrors them back out to the full
+    // barCount centre-out (see mirrorBandsCenterOut in audio-bands.ts).
+    // barCount 3 -> ceil(3/2) = 2.
+    expect(options.bands()).toBe(2);
 
     setBarCount(7);
     await Promise.resolve();
@@ -411,7 +415,8 @@ describe('AudioVisualizer band count reactivity', () => {
     // mount-time snapshot. Before the fix this field was a plain number (3),
     // so calling it here would have thrown "options.bands is not a function"
     // -- itself proof the old shape was broken, not just stale.
-    expect(options.bands()).toBe(7);
+    // barCount 7 -> ceil(7/2) = 4.
+    expect(options.bands()).toBe(4);
   });
 });
 
