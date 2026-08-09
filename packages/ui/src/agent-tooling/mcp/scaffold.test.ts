@@ -1299,6 +1299,43 @@ describe('scaffold', () => {
     }
   });
 
+  // ── SCAF-19: html target must be buildable by `npm create vite -- --template
+  // vanilla-ts` with zero hand edits. Its `build` script is `tsc && vite build`;
+  // once the template's src/main.ts is dropped (this scaffold replaces it with an
+  // inline <script>), src/ has no .ts files and tsc fails with TS18003 ("No
+  // inputs were found") before vite even runs. Verified against a real fresh
+  // vanilla-ts app: without the vite-env.d.ts note below, `npm run build` fails;
+  // with it, it succeeds unmodified. ──────────────────────────────────────────
+
+  it('SCAF-19: html output tells the dev to add src/vite-env.d.ts so tsc has an input', async () => {
+    const out = await scaffold.handler({
+      useCase: 'drop-in-chat',
+      integration: 'mock',
+      placement: 'full-page',
+      framework: 'html',
+    });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+    expect(text).toMatch(/src\/vite-env\.d\.ts/);
+    expect(text).toMatch(/\/\/\/ <reference types="vite\/client" \/>/);
+    expect(text).toMatch(/TS18003|No inputs were found/);
+  });
+
+  it('SCAF-19: the vite-env.d.ts note does NOT appear for backend-only frameworks that also render the html surface', async () => {
+    // fastapi/express/worker fall back to the same framework-agnostic renderHtml
+    // as `html`, but they aren't paired with `tsc && vite build`, so the Vite-only
+    // setup note would be noise there.
+    for (const framework of ['fastapi', 'express', 'worker'] as const) {
+      const out = await scaffold.handler({
+        useCase: 'drop-in-chat',
+        integration: 'mock',
+        placement: 'full-page',
+        framework,
+      });
+      const text = (out.content as { type: string; text: string }[])[0].text;
+      expect(text, `${framework}: unexpectedly emitted the vite-env.d.ts note`).not.toMatch(/vite-env\.d\.ts/);
+    }
+  });
+
   // ── message-parts migration: the scaffolder must emit `parts`, never `content` ──
 
   it('emits parts-shaped messages, never a content string', async () => {

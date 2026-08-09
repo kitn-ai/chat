@@ -497,7 +497,39 @@ function htmlWiring(ctx: RenderCtx, archetype: Archetype): string {
   ].join('\n');
 }
 
-function renderHtml(archetype: Archetype, ctx: RenderCtx): string {
+/**
+ * SCAF-19: the `html` framework's canonical getting-started path is
+ * `npm create vite@latest <name> -- --template vanilla-ts` (see recipes.md),
+ * whose build script is `tsc && vite build`. This front-end is one inline
+ * `<script type="module">` pasted into index.html — deliberately plain JS,
+ * not a real `src/*.ts` module: the wiring sets untyped properties
+ * (messages, suggestions, loading, ...) on a raw customElements reference,
+ * which only type-checks cleanly against a real element type (the
+ * `@kitn.ai/ui/react` wrappers carry that; raw DOM lookups here would need
+ * a hand-cast per property and per archetype, which is worse). Keeping it
+ * inline keeps it invisible to tsc, avoiding that entirely.
+ *
+ * The cost: the vanilla-ts template ships its wiring in `src/main.ts`, and
+ * once a dev drops that file (this scaffold makes it dead code), `src/`
+ * has zero `.ts` files, so `tsc` fails with TS18003 ("No inputs were
+ * found") before vite even runs — a first-build failure with no code to
+ * point at. One file fixes it: `src/vite-env.d.ts` with the same ambient
+ * reference the template ships by default, which gives tsc an input.
+ * Verified against a real `npm create vite@latest -- --template
+ * vanilla-ts` app: without this file `tsc` exits 2 with TS18003; with it,
+ * `npm run build` succeeds unmodified.
+ */
+const VITE_HTML_SETUP_NOTE = [
+  `  <!-- SCAF-19: scaffolded with \`npm create vite@latest -- --template vanilla-ts\`?`,
+  `       Its "build" script is \`tsc && vite build\`. This page's only code is the`,
+  `       inline <script> above — once you delete the template's src/main.ts (this`,
+  `       page replaces it), src/ has no .ts files left and tsc fails with`,
+  `       "TS18003: No inputs were found" before vite even runs. Add one file: -->`,
+  `  <!-- src/vite-env.d.ts:`,
+  `         /// <reference types="vite/client" /> -->`,
+].join('\n');
+
+function renderHtml(archetype: Archetype, ctx: RenderCtx, isViteHtmlTarget: boolean): string {
   const { p, emptyHint } = ctx;
   return [
     `<!-- ${archetype.title} — ${p.note} -->`,
@@ -509,6 +541,7 @@ function renderHtml(archetype: Archetype, ctx: RenderCtx): string {
     htmlWiring(ctx, archetype),
     ``,
     `  <!-- empty-state hint: ${emptyHint} -->`,
+    ...(isViteHtmlTarget ? ['', VITE_HTML_SETUP_NOTE] : []),
   ].join('\n');
 }
 
@@ -1449,8 +1482,10 @@ function renderFrontend(
     case 'html':
     default:
       // html, and any backend-only framework (fastapi/express/worker) gets the
-      // framework-agnostic web-components surface.
-      return renderHtml(archetype, ctx);
+      // framework-agnostic web-components surface. The Vite/tsc setup note
+      // (SCAF-19) only applies to the actual `html` target — the backend-only
+      // frameworks aren't paired with a `tsc && vite build` script.
+      return renderHtml(archetype, ctx, framework === 'html');
   }
 }
 
