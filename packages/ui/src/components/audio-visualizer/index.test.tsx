@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import { createSignal } from 'solid-js';
+import { createSignal, createEffect } from 'solid-js';
 import { render, cleanup, waitFor } from '@solidjs/testing-library';
 import { AudioVisualizer } from './index';
 import * as UseAudioAnalysisModule from '../../primitives/use-audio-analysis';
@@ -487,5 +487,62 @@ describe('AudioVisualizer children render-prop', () => {
 
     await waitFor(() => expect(captured).toBeDefined());
     expect(captured?.children).toBeUndefined();
+  });
+});
+
+// Two real bugs (use-sequencer.ts and shader-canvas.tsx) traced to the same
+// root cause: `shared()` bundled `bands` in with `state`/`size`/`frozen`/
+// `color`, and Solid's component-spread compiles to per-key getters that ALL
+// call the SAME source function -- so reading any one of those static-ish
+// keys re-invoked `shared()` in full and transitively subscribed the reader
+// to `bands()`, which updates ~31 times a second with live or synthetic
+// audio. Both prior bugs were caught by user-visible symptoms in a browser,
+// not by a unit test, because every existing test builds props by hand and
+// never reproduces the spread-getter chain a real dispatcher render does.
+describe('AudioVisualizer bands leak: state/frozen reads must not re-run an unrelated effect', () => {
+  afterEach(() => vi.doUnmock('./variant-wave'));
+
+  it('a rapidly-changing bands signal does not re-run an effect that only reads state/frozen', async () => {
+    // A faithful probe, not a synthetic stand-in: this is the EXACT shape of
+    // the effect already live in variant-wave.tsx/variant-aurora.tsx/
+    // variant-custom.tsx's own first createEffect (reads state/frozen only,
+    // calls a tween's .to(), no local memo) -- the genuinely UNPROTECTED
+    // instance this audit found. `use-sequencer.ts` and `shader-canvas.tsx`
+    // already carry their own downstream memo (kept, per instructions), so
+    // driving the test through THOSE would prove nothing: they would absorb
+    // the leak regardless of whether the fix here exists. The shader path
+    // has no such absorber, so it is what actually exercises the fix.
+    let runs = 0;
+    vi.doMock('./variant-wave', () => ({
+      // Closes over `createEffect` (imported at the top of this file) and
+      // `runs` from the outer test scope -- vi.doMock's factory is not
+      // hoisted, so, unlike vi.mock, referencing outer-scope bindings here
+      // is fine (the same pattern already used for `captured` elsewhere in
+      // this file).
+      default: (props: { state: string; frozen: boolean }) => {
+        createEffect(() => {
+          void props.state;
+          void props.frozen;
+          runs++;
+        });
+        return null;
+      },
+    }));
+
+    const [bands, setBands] = createSignal([0.1]);
+    render(() => <AudioVisualizer variant="wave" state="listening" bands={bands()} />);
+
+    await waitFor(() => expect(runs).toBeGreaterThan(0));
+    const afterMount = runs;
+
+    // 20 audio-rate updates, well faster than anything state/frozen-driven
+    // should ever fire at. Before the fix, each one would transitively read
+    // `bands()` through the state/frozen getters and rerun this effect;
+    // after it, `state`/`frozen` genuinely have not changed, so it must not
+    // rerun at all.
+    for (let i = 0; i < 20; i++) setBands([Math.random(), Math.random()]);
+    await Promise.resolve();
+
+    expect(runs).toBe(afterMount);
   });
 });

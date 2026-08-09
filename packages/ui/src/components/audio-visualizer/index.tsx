@@ -292,22 +292,47 @@ export function AudioVisualizer(props: AudioVisualizerProps): JSX.Element {
     onCleanup(() => { cancelled = true; });
   });
 
-  // Props every variant shares. Deliberately WITHOUT `children`: this is the
-  // object spread into the shader component (`<C>` below), and
-  // ShaderVariantProps has no slot for it. Do not add `children` here -- add
-  // it to `domShared` instead, or the exclusion below stops meaning anything.
-  const shared = (): VariantProps => ({
+  // Props every variant shares, MINUS `bands` -- deliberately. Solid compiles
+  // a component spread (`{...shared()}` below) into per-key getters that all
+  // call this SAME function: reading ANY one key re-invokes the whole thing,
+  // so if `bands()` lived in here, reading `state` (or `size`/`frozen`/
+  // `color`) would transitively subscribe the reader to `bands()` too, which
+  // updates ~31 times a second with live or synthetic audio. That is exactly
+  // what caused two real bugs downstream: `use-sequencer.ts`'s effect reading
+  // `frozen`/`state` re-ran at band cadence and called `setTick(0)` on every
+  // run, so the tick could never advance (every scripted animation looked
+  // dead); `shader-canvas.tsx`'s compile effect reading `precision`/`fragment`
+  // re-ran the same way and recompiled the GL program 65-70 times in 4
+  // seconds while restamping its animation clock (`iTime` pinned under 0.33s,
+  // periodically negative). Both were patched locally with memos in those
+  // files (kept -- defence in depth, cheap, and they document the hazard),
+  // but the leak was still here for the next reader: `variant-wave.tsx`,
+  // `variant-aurora.tsx`, and `variant-custom.tsx` each have their OWN
+  // state/frozen-driven tween effect with no local memo at all, so they were
+  // live instances of the identical bug (`.to()` restarts a tween's clock on
+  // every call -- see `create-tween.ts` -- so a 31Hz re-run means a tween
+  // never visibly progresses). Fixing it here, at the one place the bundling
+  // happens, closes all of those at once rather than requiring every current
+  // and future reader to remember to memoize defensively.
+  //
+  // `bands` GENUINELY must stay reactive -- this split is about not dragging
+  // it into unrelated reads, not about freezing it. It is passed explicitly,
+  // `bands={bands()}`, at every call site below, exactly like `volume`,
+  // `complexity`, etc. already are: an explicit prop gets its OWN getter,
+  // entirely independent of this one.
+  const shared = (): Omit<VariantProps, 'bands'> => ({
     state: state(),
     size: size(),
-    bands: bands(),
     frozen: reduced(),
     color: props.color,
   });
 
   // The three DOM variants (bar/grid/radial), including the bar fallback
   // shown while a shader chunk loads or fails, additionally get the
-  // caller's render-prop.
-  const domShared = (): VariantProps => ({ ...shared(), children: props.children });
+  // caller's render-prop. `children` is bundled here (unlike `bands`) because
+  // it does not churn -- it is a callback reference a caller sets once, not a
+  // signal driven by audio, so reading it cannot drag in anything that does.
+  const domShared = (): Omit<VariantProps, 'bands'> => ({ ...shared(), children: props.children });
 
   const a11y = () =>
     props.label
@@ -317,11 +342,12 @@ export function AudioVisualizer(props: AudioVisualizerProps): JSX.Element {
   return (
     <div class={cn('inline-flex', props.class)} {...a11y()}>
       <Switch
-        fallback={<BarVisualizer {...domShared()} barCount={props.barCount} />}
+        fallback={<BarVisualizer {...domShared()} bands={bands()} barCount={props.barCount} />}
       >
         <Match when={variant() === 'grid'}>
           <GridVisualizer
             {...domShared()}
+            bands={bands()}
             rowCount={props.rowCount}
             columnCount={props.columnCount}
             spread={props.spread}
@@ -329,7 +355,12 @@ export function AudioVisualizer(props: AudioVisualizerProps): JSX.Element {
           />
         </Match>
         <Match when={variant() === 'radial'}>
-          <RadialVisualizer {...domShared()} barCount={props.barCount} radius={props.radius} />
+          <RadialVisualizer
+            {...domShared()}
+            bands={bands()}
+            barCount={props.barCount}
+            radius={props.radius}
+          />
         </Match>
         <Match when={isShader()}>
           {/*
@@ -345,13 +376,14 @@ export function AudioVisualizer(props: AudioVisualizerProps): JSX.Element {
           */}
           <Show
             when={!unavailable() && Shader()}
-            fallback={<BarVisualizer {...domShared()} barCount={props.barCount} />}
+            fallback={<BarVisualizer {...domShared()} bands={bands()} barCount={props.barCount} />}
           >
             {(Comp) => {
               const C = Comp();
               return (
                 <C
                   {...shared()}
+                  bands={bands()}
                   volume={volume()}
                   complexity={props.complexity}
                   shader={props.shader}
