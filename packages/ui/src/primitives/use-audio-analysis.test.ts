@@ -15,14 +15,55 @@ const created = {
   // consumer still using it. The two-arg form removes just one tap. Track
   // which kind actually happened, since both call the same method name.
   streamFullDisconnects: 0,
+  // Every AnalyserNode this fake context ever created, in creation order.
+  // Two per consumer now (bands, then volume): lets a test inspect each
+  // one's own fftSize/smoothingTimeConstant directly, not just count them.
+  analysers: [] as FakeAnalyser[],
 };
+
+/**
+ * The instantaneous, unsmoothed signal level every fake analyser sees, on a
+ * 0 (silence) .. 1 (peak) scale. In the real graph, bands and volume read
+ * off the SAME shared source node, so both analysers see the same live
+ * signal at any given moment -- only each one's own smoothingTimeConstant
+ * makes it react to a change at a different speed. Tests that verify decay
+ * drive this directly. Defaults to 1 (loud) so every other, unrelated test
+ * -- which never touches this -- keeps seeing non-zero output after a
+ * flushed frame, same as the old fixed-data fake did.
+ */
+let rawSignalLevel = 1;
 
 class FakeAnalyser {
   fftSize = 2048;
-  smoothingTimeConstant = 0.55;
+  smoothingTimeConstant = 0.8;
   get frequencyBinCount() { return this.fftSize / 2; }
-  getFloatFrequencyData(buf: Float32Array) { buf.fill(-50); }
-  getByteFrequencyData(buf: Uint8Array) { buf.fill(128); }
+
+  /**
+   * Simulates AnalyserNode's own internal exponential smoothing:
+   * new = tau * previous + (1 - tau) * current -- the exact formula from
+   * the Web Audio spec and this task's bug report. Runs on the normalized
+   * 0..1 `rawSignalLevel`, not real dB/byte units: the point is to prove
+   * THIS hook assigns the right smoothingTimeConstant to the right
+   * analyser, through the honest mathematical consequence of that constant,
+   * not to byte-match a real AnalyserNode's internal FFT/dB conversion.
+   */
+  smoothed = 0;
+  step() {
+    const tau = this.smoothingTimeConstant;
+    this.smoothed = tau * this.smoothed + (1 - tau) * rawSignalLevel;
+  }
+
+  getFloatFrequencyData(buf: Float32Array) {
+    this.step();
+    // Maps onto normalizeDb's own [-100, -10] range in audio-bands.ts, so a
+    // higher `smoothed` reads as louder through the real reduction, not
+    // just through this fake's raw number.
+    buf.fill(-100 + this.smoothed * 90);
+  }
+  getByteFrequencyData(buf: Uint8Array) {
+    this.step();
+    buf.fill(Math.round(this.smoothed * 255));
+  }
   connect() { created.connections.push('analyser->destination'); }
   disconnect() { created.disconnects++; }
 }
@@ -30,7 +71,11 @@ class FakeAnalyser {
 class FakeAudioContext {
   state: 'running' | 'suspended' = 'running';
   destination = { kind: 'destination' };
-  createAnalyser() { return new FakeAnalyser(); }
+  createAnalyser() {
+    const a = new FakeAnalyser();
+    created.analysers.push(a);
+    return a;
+  }
   createMediaElementSource(el: unknown) {
     // The real API throws on a second call for the same element.
     if (created.elementSources.includes(el)) {
@@ -87,12 +132,34 @@ function flushFrame(t = 1000) {
   callbacks.forEach((cb) => cb(t));
 }
 
+/**
+ * Runs `n` frames, each at least `updateInterval` (32ms default) apart so
+ * the production `step` loop's own throttle (`now - last >= updateInterval`)
+ * lets every one of them actually read the analysers, instead of only the
+ * first. `fakeNow` is a module-level clock, not local to this function: the
+ * throttle compares against `step`'s own closed-over `last` from whatever
+ * came before, so a second call in the same test (e.g. priming, then decay)
+ * must keep advancing from where the previous call left off -- resetting to
+ * a fixed start each call would make every one of its timestamps LOWER than
+ * `last`, and the throttle would silently swallow every read.
+ */
+let fakeNow = 1000;
+function advanceFrames(n: number, stepMs = 40) {
+  for (let i = 0; i < n; i++) {
+    fakeNow += stepMs;
+    flushFrame(fakeNow);
+  }
+}
+
 beforeEach(() => {
   created.elementSources = [];
   created.streamSources = [];
   created.connections = [];
   created.disconnects = 0;
   created.streamFullDisconnects = 0;
+  created.analysers = [];
+  rawSignalLevel = 1;
+  fakeNow = 1000;
   rafQueue = new Map();
   nextRafId = 1;
   vi.stubGlobal('AudioContext', FakeAudioContext);
@@ -189,24 +256,26 @@ describe('useAudioAnalysis', () => {
     // not double the output.
     const toDestination = created.connections.filter((c) => c === 'element->destination');
     expect(toDestination).toHaveLength(1);
-    // Both mounts still get their own analyser tap, so a second consumer
-    // really does receive data.
+    // Both mounts still get their own analyser taps, so a second consumer
+    // really does receive data. Two analysers per mount now (bands, volume),
+    // so two mounts is 4, not 2.
     const toAnalyser = created.connections.filter((c) => c === 'element->analyser');
-    expect(toAnalyser).toHaveLength(2);
-    // The analyser must never sit in the audio path, for either mount.
+    expect(toAnalyser).toHaveLength(4);
+    // Neither analyser must ever sit in the audio path, for either mount.
     expect(created.connections).not.toContain('analyser->destination');
   });
 
-  it('disconnects the analyser on cleanup', async () => {
+  it('disconnects both analysers on cleanup', async () => {
     await createRoot(async (dispose) => {
       useAudioAnalysis(() => fakeStream(), { bands: 3 });
-      // Let the effect wire the analyser up before tearing down. Disposing
+      // Let the effect wire the analysers up before tearing down. Disposing
       // before the effect has ever run cleans up a computation that never
       // executed, and nothing disconnects.
       await Promise.resolve();
       dispose();
     });
-    expect(created.disconnects).toBeGreaterThan(0);
+    // One consumer, two analysers (bands, volume): both must disconnect.
+    expect(created.disconnects).toBe(2);
   });
 
   it('rebuilds when the source changes', async () => {
@@ -230,9 +299,10 @@ describe('useAudioAnalysis', () => {
       // zero-fill.
       expect(bands()).toEqual([0, 0, 0]);
       flushFrame();
-      // FakeAnalyser reports -50dB across the board, which normalizes to a
-      // positive value. This is the hook's entire purpose, so it gets its own
-      // assertion instead of relying on another test to exercise it by accident.
+      // rawSignalLevel defaults to loud (see FakeAnalyser above), so a
+      // flushed frame reports non-zero data. This is the hook's entire
+      // purpose, so it gets its own assertion instead of relying on another
+      // test to exercise it by accident.
       expect(bands().every((b) => b > 0)).toBe(true);
       dispose();
     });
@@ -316,6 +386,71 @@ describe('useAudioAnalysis', () => {
         expect(created.streamSources).toHaveLength(1);
         expect(created.connections).toContain('stream->analyser');
         expect(created.connections).not.toContain('analyser->destination');
+        dispose();
+      });
+    });
+  });
+
+  // A single analyser shared between both reductions was this hook's
+  // original design, as an optimization over upstream LiveKit's two
+  // separate hooks. That silently forced one smoothingTimeConstant onto
+  // both, and made bars snap back to rest instead of easing like upstream's
+  // do. The fix restores two analysers, each matching upstream's own
+  // per-reduction settings.
+  describe('two analysers, matching upstream\'s per-reduction settings', () => {
+    it('creates two analysers per consumer: 2048/0.8 for bands, 512/0.55 for volume', async () => {
+      await createRoot(async (dispose) => {
+        useAudioAnalysis(() => fakeStream(), { bands: 3 });
+        await Promise.resolve();
+        expect(created.analysers).toHaveLength(2);
+        const [bandsAnalyser, volumeAnalyser] = created.analysers;
+        expect(bandsAnalyser!.fftSize).toBe(2048);
+        expect(bandsAnalyser!.smoothingTimeConstant).toBe(0.8);
+        expect(volumeAnalyser!.fftSize).toBe(512);
+        expect(volumeAnalyser!.smoothingTimeConstant).toBe(0.55);
+        dispose();
+      });
+    });
+
+    // A test asserting two analysers exist proves the plumbing, not the fix:
+    // it would pass even if both were built with the SAME constant. This
+    // drives the fake with a loud signal to (near) peak, cuts to silence,
+    // and checks that bands (0.8) has NOT collapsed the way volume (0.55)
+    // has after the same number of silent frames -- the actual, felt
+    // consequence of the two constants differing, and the only thing that
+    // would have caught the original bug.
+    //
+    // The fake CAN model this, honestly: smoothingTimeConstant's decay is a
+    // spec-defined formula (new = tau*previous + (1-tau)*current), not an
+    // opaque browser internal, and the fake's `step()` above implements
+    // exactly that formula using whatever constant THIS hook's production
+    // code assigned to each analyser. If bands and volume were swapped, or
+    // both set to the same value, this test would fail.
+    it('decays the bands (0.8) reduction materially slower than the volume (0.55) one after the signal cuts to silence', async () => {
+      await createRoot(async (dispose) => {
+        const { bands, volume } = useAudioAnalysis(() => fakeStream(), { bands: 1 });
+        await Promise.resolve();
+
+        // Prime both analysers to (near) peak: 40 loud frames converges
+        // 1 - 0.8^40 (~0.9999) and 1 - 0.55^40 (~1) both close enough to 1
+        // that floating-point rounding is not a factor below.
+        rawSignalLevel = 1;
+        advanceFrames(40);
+        const peakBand = bands()[0]!;
+        const peakVolume = volume();
+        expect(peakBand).toBeGreaterThan(0);
+        expect(peakVolume).toBeGreaterThan(0);
+
+        // Cut to silence. tau^n from peak: at n=6, 0.55^6 ~= 0.028 (under
+        // 10% of peak, well past the ~3.9 frames the task's own math
+        // predicts for 0.55), while 0.8^6 ~= 0.262 (comfortably above 10%,
+        // well short of the ~10.3 frames 0.8 needs) -- a wide, non-brittle
+        // margin rather than pinning to the exact fractional-frame crossing.
+        rawSignalLevel = 0;
+        advanceFrames(6);
+
+        expect(volume()).toBeLessThan(peakVolume * 0.1);
+        expect(bands()[0]!).toBeGreaterThan(peakBand * 0.5);
         dispose();
       });
     });

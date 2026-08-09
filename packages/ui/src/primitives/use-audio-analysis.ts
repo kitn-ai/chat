@@ -16,10 +16,6 @@ export interface AudioAnalysisOptions {
   loPass?: number;
   /** High bin index of the pass window. NOT a frequency. Default 200. */
   hiPass?: number;
-  /** AnalyserNode fftSize. Default 2048. */
-  fftSize?: number;
-  /** AnalyserNode smoothing. Default 0.55. */
-  smoothingTimeConstant?: number;
   /** Minimum ms between updates. Default 32 (about 30fps). */
   updateInterval?: number;
 }
@@ -28,9 +24,44 @@ const DEFAULTS = {
   bands: 5,
   loPass: 100,
   hiPass: 200,
-  fftSize: 2048,
-  smoothingTimeConstant: 0.55,
   updateInterval: 32,
+} as const;
+
+/**
+ * `fftSize`/`smoothingTimeConstant` are deliberately NOT caller-configurable
+ * options, unlike everything above. They exist in two different, non-tunable
+ * shapes below instead: one AnalyserNode per reduction, each matching
+ * upstream LiveKit's own hook for that reduction. A single flat
+ * `smoothingTimeConstant` option (this hook's original design) is exactly
+ * the bug that made bars snap back to rest instead of easing like upstream's
+ * do: one value silently applied to both a fast reduction and a slow one.
+ * Hard-coding removes the only way a caller (or a future edit here) could
+ * reintroduce that.
+ */
+
+/**
+ * Matches upstream's `useMultibandTrackVolume`, which drives the DOM
+ * bar/grid/radial variants: `{ fftSize: 2048 }`, no `smoothingTimeConstant`
+ * given, so the AnalyserNode uses the Web Audio spec default of 0.8. That
+ * slow decay (roughly 330ms to fall to 10% of a peak, at this hook's 32ms
+ * sample interval) is what makes bars ease back to rest after speech stops
+ * instead of snapping.
+ */
+const BANDS_ANALYSER = {
+  fftSize: 2048,
+  smoothingTimeConstant: 0.8,
+} as const;
+
+/**
+ * Matches upstream's `useTrackVolume`, which drives the shader variants:
+ * `{ fftSize: 512, smoothingTimeConstant: 0.55 }`. Faster decay (roughly
+ * 123ms to 10% of peak) keeps the shaders' reactivity within the ~33ms lag
+ * the aurora variant was tuned against; the bands' slower 0.8 here would
+ * make the shaders visibly sluggish.
+ */
+const VOLUME_ANALYSER = {
+  fftSize: 512,
+  smoothingTimeConstant: 0.55,
 } as const;
 
 /** `bands` accepts a plain number or a live accessor; read whichever was given. */
@@ -96,9 +127,17 @@ function resumeOnGesture(ctx: AudioContext): () => void {
 /**
  * Turn a live audio source into numbers a visualizer can draw.
  *
- * Returns BOTH reductions from a single AnalyserNode: `bands` for the DOM
- * variants and a scalar `volume` for the shader ones. Upstream runs two hooks
- * with two analysers and two timers to get the same thing.
+ * Runs TWO analysers off one source node: `bands` for the DOM variants and a
+ * scalar `volume` for the shader ones, each with its own `fftSize` and
+ * `smoothingTimeConstant` matching upstream's two separate hooks (see
+ * BANDS_ANALYSER / VOLUME_ANALYSER above). An earlier version of this hook
+ * shared a single analyser between both reductions as an optimization; that
+ * silently forced one smoothing behavior onto both and made bars snap back
+ * to rest instead of easing like upstream's do. What this still saves over
+ * upstream: one shared, cached source node per element/stream (see
+ * elementSources/streamSources below) instead of a fresh one per hook
+ * instance, and one requestAnimationFrame loop reading both analysers each
+ * tick instead of two independent timers.
  *
  * Safe to call with no source: it emits zeros and never constructs a context,
  * which is what makes the state-driven (no audio) mode work.
@@ -133,10 +172,6 @@ export function useAudioAnalysis(
 
     const stopResume = resumeOnGesture(ctx);
 
-    const analyser = ctx.createAnalyser();
-    analyser.fftSize = opts.fftSize;
-    analyser.smoothingTimeConstant = opts.smoothingTimeConstant;
-
     let node: AudioNode;
     if (!isMediaElement(src)) {
       let streamNode = streamSources.get(src);
@@ -145,7 +180,6 @@ export function useAudioAnalysis(
         streamSources.set(src, streamNode);
       }
       node = streamNode;
-      node.connect(analyser);
       // Deliberately NOT connected to destination: that would echo the mic.
       // Unlike the element path below, a stream source NEVER reaches
       // destination, cached or not.
@@ -155,27 +189,39 @@ export function useAudioAnalysis(
       if (!elNode) {
         elNode = ctx.createMediaElementSource(el);
         // Connect to destination exactly once, right here at creation, so the
-        // audio path does not depend on how many visualizers attach. An
-        // AnalyserNode still receives data with nothing connected downstream
-        // of it, so every consumer's analyser below is a terminal side-tap:
-        // it never also connects to destination. If it did, N consumers on
+        // audio path does not depend on how many visualizers attach. Both
+        // analysers below are terminal side-taps: an AnalyserNode still
+        // receives data with nothing connected downstream of it, so neither
+        // one also connects to destination. If either did, N consumers on
         // one element would sum to N times the amplitude.
         elNode.connect(ctx.destination);
         elementSources.set(el, elNode);
       }
       node = elNode;
-      node.connect(analyser);
     }
 
-    const freq = new Float32Array(analyser.frequencyBinCount);
-    const bytes = new Uint8Array(analyser.frequencyBinCount);
+    // Two analysers off the same source node, not one: see BANDS_ANALYSER /
+    // VOLUME_ANALYSER above for why they cannot share a smoothingTimeConstant.
+    const bandsAnalyser = ctx.createAnalyser();
+    bandsAnalyser.fftSize = BANDS_ANALYSER.fftSize;
+    bandsAnalyser.smoothingTimeConstant = BANDS_ANALYSER.smoothingTimeConstant;
+
+    const volumeAnalyser = ctx.createAnalyser();
+    volumeAnalyser.fftSize = VOLUME_ANALYSER.fftSize;
+    volumeAnalyser.smoothingTimeConstant = VOLUME_ANALYSER.smoothingTimeConstant;
+
+    node.connect(bandsAnalyser);
+    node.connect(volumeAnalyser);
+
+    const freq = new Float32Array(bandsAnalyser.frequencyBinCount);
+    const bytes = new Uint8Array(volumeAnalyser.frequencyBinCount);
 
     let raf = 0;
     let last = 0;
     const step = (now: number) => {
       if (now - last >= opts.updateInterval) {
-        analyser.getFloatFrequencyData(freq);
-        analyser.getByteFrequencyData(bytes);
+        bandsAnalyser.getFloatFrequencyData(freq);
+        volumeAnalyser.getByteFrequencyData(bytes);
         setBands(reduceToBands(freq, bandCount, opts.loPass, opts.hiPass));
         setVolume(reduceToVolume(bytes));
         last = now;
@@ -187,14 +233,16 @@ export function useAudioAnalysis(
     onCleanup(() => {
       cancelAnimationFrame(raf);
       stopResume();
-      analyser.disconnect();
+      bandsAnalyser.disconnect();
+      volumeAnalyser.disconnect();
       // Both the element and stream source nodes above are cached and shared
       // across every consumer of the same element/stream: another consumer
       // may still be using this one, and it can never be recreated. Drop
-      // only this consumer's own tap into it (the two-argument form), never
-      // the no-argument node.disconnect() -- that would tear the source down
-      // for everyone still using it.
-      node.disconnect(analyser);
+      // only this consumer's own taps into it (the two-argument form, once
+      // per analyser), never the no-argument node.disconnect() -- that would
+      // tear the source down for everyone still using it.
+      node.disconnect(bandsAnalyser);
+      node.disconnect(volumeAnalyser);
     });
   });
 
