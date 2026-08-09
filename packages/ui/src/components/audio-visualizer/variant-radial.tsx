@@ -83,10 +83,10 @@ export function RadialVisualizer(
         keys nodes by `===` on the array VALUE, and `levels()` is an array of
         plain numbers that changes on nearly every frame while speaking. That
         would tear down and recreate every spoke each frame instead of
-        patching it in place, defeating `transition-colors` right at the
-        listening -> speaking boundary. <Index> maps by POSITION instead, so
-        each spoke's DOM node is created once and its `level` accessor
-        updates in place. See the note in variant-bar.tsx.
+        patching it in place, defeating the height/colour transition below
+        right at the listening -> speaking boundary. <Index> maps by POSITION
+        instead, so each spoke's DOM node is created once and its `level`
+        accessor updates in place. See the note in variant-bar.tsx.
       */}
       <Index each={levels()}>
         {(level, i) => {
@@ -130,7 +130,6 @@ export function RadialVisualizer(
                   data-kai-highlighted={item.highlighted()}
                   class={cn(
                     'origin-bottom rounded-full bg-current/10',
-                    'transition-colors duration-150 ease-linear',
                     'data-[kai-highlighted=true]:bg-current',
                   )}
                   style={{
@@ -138,6 +137,15 @@ export function RadialVisualizer(
                     'min-height': `${dotSize()}px`,
                     // x10 so a mid-level band reaches a readable length; upstream's factor.
                     height: `${dotSize() * 10 * level()}px`,
+                    // Deliberate, approved divergence from upstream: see the
+                    // matching comment in variant-bar.tsx. `150ms` for
+                    // colour is unchanged from upstream's constant; only the
+                    // new `100ms` height transition is our addition, and
+                    // `frozen` disables both together rather than leaving
+                    // colour still animating for a reduced-motion user.
+                    transition: props.frozen
+                      ? 'none'
+                      : 'height 100ms ease-linear, background-color 150ms ease-linear',
                   }}
                 />
               )}

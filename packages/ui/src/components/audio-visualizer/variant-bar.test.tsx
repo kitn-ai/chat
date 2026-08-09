@@ -151,6 +151,32 @@ describe('BarVisualizer', () => {
   });
 });
 
+// Deliberate, approved divergence from upstream: LiveKit only transitions
+// colour, never height, which is byte-faithful but reads as visibly stepped
+// once the demo runs at the real ~32ms analyser cadence. A short height
+// transition was added to smooth that inter-frame stepping without adding
+// perceptible lag; see the comment at the `transition` style declaration in
+// variant-bar.tsx for the full rationale and the exact durations.
+describe('BarVisualizer height transition (deliberate divergence from upstream)', () => {
+  it('transitions height alongside colour when not frozen', () => {
+    const { container } = render(() => (
+      <BarVisualizer state="speaking" size="md" bands={[0.5]} frozen={false} barCount={1} />
+    ));
+    const bar = bars(container)[0]!;
+    expect(bar.style.transition).toContain('height');
+    expect(bar.style.transition).toContain('background-color');
+    expect(bar.style.transition).not.toBe('none');
+  });
+
+  it('disables the transition entirely when frozen, so a reduced-motion user gets an instant, static picture', () => {
+    const { container } = render(() => (
+      <BarVisualizer state="speaking" size="md" bands={[0.5]} frozen={true} barCount={1} />
+    ));
+    const bar = bars(container)[0]!;
+    expect(bar.style.transition).toBe('none');
+  });
+});
+
 // `state="speaking"` above keeps `highlighted` constant true regardless of
 // tick, which is exactly why the render-prop's staleness bug (finding 2) was
 // invisible there. These exercise a SCRIPTED state, where the highlight set

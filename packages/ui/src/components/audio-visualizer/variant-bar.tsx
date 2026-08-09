@@ -74,11 +74,11 @@ export function BarVisualizer(props: VariantProps & { barCount?: number }): JSX.
         VALUE, and `levels()` is an array of plain numbers that changes on
         nearly every frame while speaking. That would tear down and recreate
         every bar node each frame instead of patching it in place, which both
-        churns the DOM on the hottest path here and defeats
-        `transition-colors duration-250` right at the listening -> speaking
-        boundary (a freshly created node has no prior value to transition
-        from). <Index> maps by POSITION instead, so each bar's DOM node is
-        created once and its `level` accessor updates in place.
+        churns the DOM on the hottest path here and defeats the height/colour
+        transition below right at the listening -> speaking boundary (a
+        freshly created node has no prior value to transition from). <Index>
+        maps by POSITION instead, so each bar's DOM node is created once and
+        its `level` accessor updates in place.
       */}
       <Index each={levels()}>
         {(level, i) => {
@@ -106,13 +106,32 @@ export function BarVisualizer(props: VariantProps & { barCount?: number }): JSX.
                 data-kai-index={item.index}
                 data-kai-highlighted={item.highlighted()}
                 class={cn(
-                  'rounded-full bg-current/10 transition-colors duration-250 ease-linear',
+                  'rounded-full bg-current/10',
                   'data-[kai-highlighted=true]:bg-current',
                 )}
                 style={{
                   width: `${BAR_WIDTH[props.size]}px`,
                   'min-height': `${BAR_WIDTH[props.size]}px`,
                   height: `${level() * 100}%`,
+                  // Deliberate, approved divergence from upstream: LiveKit's
+                  // source only transitions colour, never height. That is
+                  // byte-faithful but reads as visibly stepped once the
+                  // demo runs at the real ~32ms analyser cadence -- the
+                  // audio measurement itself stays instantaneous (bands are
+                  // applied with no smoothing upstream of this component),
+                  // so the choppiness is purely the DOM snapping straight to
+                  // each new frame's value. 100ms is short enough to stay
+                  // well inside the "feels instant" range for a live control
+                  // (it only interpolates BETWEEN frames, not behind them)
+                  // while smoothing the inter-frame step. `frozen` (prefers-
+                  // reduced-motion) disables the transition entirely rather
+                  // than just skipping it for the sequencer, so a reduced-
+                  // motion user gets an instant, static picture instead of a
+                  // smoothed one. Anyone diffing this file against upstream:
+                  // this is intentional, not a port slip.
+                  transition: props.frozen
+                    ? 'none'
+                    : 'height 100ms ease-linear, background-color 250ms ease-linear',
                 }}
               />
             )

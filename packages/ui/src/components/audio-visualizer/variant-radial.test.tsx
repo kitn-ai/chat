@@ -150,6 +150,33 @@ describe('RadialVisualizer', () => {
   });
 });
 
+// Deliberate, approved divergence from upstream: LiveKit only transitions
+// colour, never height, which is byte-faithful but reads as visibly stepped
+// once the demo runs at the real ~32ms analyser cadence. A short height
+// transition was added to smooth that inter-frame stepping without adding
+// perceptible lag; see the comment at the `transition` style declaration in
+// variant-radial.tsx for the full rationale. `150ms` for colour is the
+// carried upstream constant, unchanged by this addition.
+describe('RadialVisualizer height transition (deliberate divergence from upstream)', () => {
+  it('transitions height alongside colour when not frozen', () => {
+    const { container } = render(() => (
+      <RadialVisualizer state="speaking" size="md" bands={[0.5, 0.5, 0.5, 0.5]} frozen={false} barCount={4} />
+    ));
+    const bar = bars(container)[0]!;
+    expect(bar.style.transition).toContain('height');
+    expect(bar.style.transition).toContain('background-color');
+    expect(bar.style.transition).not.toBe('none');
+  });
+
+  it('disables the transition entirely when frozen, so a reduced-motion user gets an instant, static picture', () => {
+    const { container } = render(() => (
+      <RadialVisualizer state="speaking" size="md" bands={[0.5, 0.5, 0.5, 0.5]} frozen={true} barCount={4} />
+    ));
+    const bar = bars(container)[0]!;
+    expect(bar.style.transition).toBe('none');
+  });
+});
+
 describe('RadialVisualizer barCount divisibility warning', () => {
   afterEach(() => vi.restoreAllMocks());
 
