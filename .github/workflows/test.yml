@@ -34,6 +34,15 @@ jobs:
       - name: Typecheck
         run: pnpm exec nx typecheck ui
 
+      # Packs the built package, installs it into a throwaway app OUTSIDE the
+      # repo, and bundles it with Vite 8 (Rolldown -- what `npm create vite`
+      # gives consumers today, and the strictest `sideEffects` consumer we know
+      # of). Asserts every kai-* registration survives. The in-build guard only
+      # proves OUR bundle keeps the reference; this proves a CONSUMER's bundler
+      # keeps the side effects, which is how 0.19.0 shipped a blank page.
+      - name: Consumer packaging guard (registrations survive a real bundler)
+        run: pnpm --filter @kitn.ai/ui run verify:consumer
+
       # Run ONLY the jsdom unit project. pnpm test (= vitest run) would also
       # spin up the storybook BROWSER project; that runs in its own job now.
       - name: Unit tests (jsdom)
