@@ -1,4 +1,4 @@
-import { createSignal, For, Show } from "solid-js";
+import { createSignal, For } from "solid-js";
 import {
   ChatConfig,
   ChatContainer,
@@ -6,8 +6,7 @@ import {
   ChatContainerScrollAnchor,
   ConversationList,
   Message,
-  MessageActions,
-  MessageContent,
+  MessageBody,
   PromptInput,
   PromptInputActions,
   PromptInputTextarea,
@@ -18,9 +17,15 @@ import {
   ResizablePanel,
   ResizableHandle,
 } from "@kitn.ai/ui";
-import type { ConversationGroup, ConversationSummary, MessagePart } from "@kitn.ai/ui";
+import type {
+  ChatMessage,
+  ChatMessageAction,
+  ConversationGroup,
+  ConversationSummary,
+  FeedbackVote,
+} from "@kitn.ai/ui";
 import { appendTextPart, partsToText } from "@kitn.ai/ui/state";
-import { ArrowUp, Copy, Plus, RefreshCw, ThumbsDown, ThumbsUp } from "lucide-solid";
+import { ArrowUp, Plus } from "lucide-solid";
 
 // ─── Static seed data ────────────────────────────────────────────────────────
 
@@ -63,11 +68,12 @@ const seedConversations: ConversationSummary[] = [
 
 // ─── Seeded messages ──────────────────────────────────────────────────────────
 
-interface ChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  parts: MessagePart[];
-}
+// `ChatMessage` is the kit's own public type — same shape the elements and the
+// `@kitn.ai/ui/wire` adapter produce, so nothing here is starter-specific.
+
+/** The action bar under every assistant message. Built-in names; `<MessageBody>`
+ *  renders the buttons and reports clicks through `onAction`. */
+const ASSISTANT_ACTIONS: ChatMessageAction[] = ["copy", "like", "dislike", "regenerate"];
 
 const INITIAL_MESSAGES: ChatMessage[] = [
   {
@@ -134,6 +140,54 @@ The biggest win: **no stale closure bugs**. Because \`count()\` is a function ca
       },
     ],
   },
+  {
+    id: "u3",
+    role: "user",
+    parts: [{ type: "text", text: "What's the signature of createResource?" }],
+  },
+  // A message is an ORDERED list of parts, not a string. This one carries a
+  // reasoning block and a tool call before its answer — <MessageBody> renders
+  // each in place. Flattening the parts to text (which this starter used to do)
+  // silently drops both.
+  {
+    id: "a3",
+    role: "assistant",
+    parts: [
+      {
+        type: "reasoning",
+        text: "They want the exact signature, not a paraphrase. I should look it up in the reference rather than recall it — the fetcher's second argument changed in 1.5 and I'd rather not guess.",
+        label: "Thinking",
+      },
+      {
+        type: "tool",
+        tool: {
+          type: "search_docs",
+          kind: "search",
+          state: "output-available",
+          toolCallId: "call_docs_1",
+          input: { query: "createResource signature", version: "1.9" },
+          output: {
+            top: "solidjs.com/docs/latest/api#createresource",
+            excerpt: "createResource(source?, fetcher, options?) => [Resource, { mutate, refetch }]",
+          },
+        },
+      },
+      {
+        type: "text",
+        text: `\`createResource\` returns a resource accessor plus an actions object.
+
+\`\`\`typescript
+const [data, { mutate, refetch }] = createResource(source, fetcher);
+
+// data() — the value, or undefined while pending
+// data.loading — boolean
+// data.error — the thrown error, if any
+\`\`\`
+
+Omit \`source\` for a fetch that runs once; pass a signal to re-fetch whenever it changes.`,
+      },
+    ],
+  },
 ];
 
 // ─── Canned reply generator ───────────────────────────────────────────────────
@@ -195,26 +249,16 @@ export default function App() {
   const [messages, setMessages] = createSignal<ChatMessage[]>(INITIAL_MESSAGES);
   const [inputValue, setInputValue] = createSignal("");
   const [isLoading, setIsLoading] = createSignal(false);
+  // Action-bar state. <MessageBody> is prop-driven and holds no signals of its
+  // own, so the app owns the vote and the transient "copied" flag.
+  const [votes, setVotes] = createSignal<Record<string, FeedbackVote | undefined>>({});
+  const [copiedId, setCopiedId] = createSignal<string | null>(null);
 
-  function handleSubmit() {
-    const text = inputValue().trim();
-    if (!text || isLoading()) return;
-
-    const userMsg: ChatMessage = {
-      id: `u${Date.now()}`,
-      role: "user",
-      parts: [{ type: "text", text }],
-    };
-    setMessages((prev) => [...prev, userMsg]);
-    setInputValue("");
-    setIsLoading(true);
-
-    // Simulate a streamed reply word-by-word
-    const reply = cannedReply(text);
+  /** Stream `reply` into `assistantId` word-by-word. A NEW parts array per chunk
+   *  (`appendTextPart` returns one) is what makes the thread re-render. */
+  function streamReply(assistantId: string, reply: string) {
     const words = reply.split(" ");
-    const assistantId = `a${Date.now()}`;
-    setMessages((prev) => [...prev, { id: assistantId, role: "assistant", parts: [] }]);
-
+    setIsLoading(true);
     let i = 0;
     const timer = setInterval(() => {
       i += 1;
@@ -227,6 +271,55 @@ export default function App() {
         setIsLoading(false);
       }
     }, 35);
+  }
+
+  function handleSubmit() {
+    const text = inputValue().trim();
+    if (!text || isLoading()) return;
+
+    const userMsg: ChatMessage = {
+      id: `u${Date.now()}`,
+      role: "user",
+      parts: [{ type: "text", text }],
+    };
+    const assistantId = `a${Date.now()}`;
+    setMessages((prev) => [
+      ...prev,
+      userMsg,
+      { id: assistantId, role: "assistant", parts: [] },
+    ]);
+    setInputValue("");
+    streamReply(assistantId, cannedReply(text));
+  }
+
+  /** Regenerate: clear the message's parts and re-stream a reply to the user
+   *  turn that preceded it. */
+  function regenerate(assistantId: string) {
+    if (isLoading()) return;
+    const all = messages();
+    const at = all.findIndex((m) => m.id === assistantId);
+    const prompt = all
+      .slice(0, at)
+      .reverse()
+      .find((m) => m.role === "user");
+    if (!prompt) return;
+    setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, parts: [] } : m)));
+    streamReply(assistantId, cannedReply(partsToText(prompt.parts)));
+  }
+
+  /** One handler for the whole action bar — `id` is the built-in action name. */
+  function handleAction(msg: ChatMessage, id: string) {
+    if (id === "copy") {
+      void navigator.clipboard?.writeText(partsToText(msg.parts));
+      setCopiedId(msg.id);
+      setTimeout(() => setCopiedId((c) => (c === msg.id ? null : c)), 2000);
+      return;
+    }
+    if (id === "like" || id === "dislike") {
+      setVotes((prev) => ({ ...prev, [msg.id]: prev[msg.id] === id ? undefined : id }));
+      return;
+    }
+    if (id === "regenerate") regenerate(msg.id);
   }
 
   function handleSuggestion(text: string) {
@@ -267,47 +360,30 @@ export default function App() {
               <div class="relative flex-1 overflow-y-auto">
                 <ChatContainer class="h-full">
                   <ChatContainerContent class="space-y-0 px-5 pt-4 pb-12">
+                    {/* One <MessageBody> per message. It walks `parts` in order
+                        and renders each kind — text as markdown, reasoning as a
+                        collapsible block, tool calls as a panel, cards through
+                        the card registry — and owns the action bar. */}
                     <For each={messages()}>
                       {(msg) => (
-                        <Show
-                          when={msg.role === "user"}
-                          fallback={
-                            /* assistant */
-                            <Message class="mx-auto flex w-full max-w-3xl flex-col gap-2 px-6 items-start">
-                              <div class="group flex w-full flex-col gap-0">
-                                <MessageContent
-                                  markdown
-                                  class="text-foreground prose flex-1 rounded-lg bg-transparent p-0"
-                                >
-                                  {partsToText(msg.parts)}
-                                </MessageContent>
-                                <MessageActions class="-ml-2.5 flex gap-0 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
-                                  <Button variant="ghost" size="icon-sm" class="rounded-full">
-                                    <Copy class="size-3.5" />
-                                  </Button>
-                                  <Button variant="ghost" size="icon-sm" class="rounded-full">
-                                    <ThumbsUp class="size-3.5" />
-                                  </Button>
-                                  <Button variant="ghost" size="icon-sm" class="rounded-full">
-                                    <ThumbsDown class="size-3.5" />
-                                  </Button>
-                                  <Button variant="ghost" size="icon-sm" class="rounded-full">
-                                    <RefreshCw class="size-3.5" />
-                                  </Button>
-                                </MessageActions>
-                              </div>
-                            </Message>
-                          }
+                        <Message
+                          class={`mx-auto flex w-full max-w-3xl flex-col gap-2 px-6 ${
+                            msg.role === "user" ? "items-end" : "items-start"
+                          }`}
                         >
-                          {/* user */}
-                          <Message class="mx-auto flex w-full max-w-3xl flex-col gap-2 px-6 items-end">
-                            <div class="group flex flex-col items-end gap-1">
-                              <MessageContent class="bg-muted text-primary max-w-[85%] rounded-3xl px-5 py-2.5">
-                                {partsToText(msg.parts)}
-                              </MessageContent>
-                            </div>
-                          </Message>
-                        </Show>
+                          <div class="group flex w-full flex-col gap-0">
+                            <MessageBody
+                              parts={msg.parts}
+                              isUser={msg.role === "user"}
+                              markdown={msg.role !== "user"}
+                              actions={msg.role === "user" ? undefined : ASSISTANT_ACTIONS}
+                              actionsReveal="hover"
+                              activeFeedback={votes()[msg.id]}
+                              copied={copiedId() === msg.id}
+                              onAction={(id) => handleAction(msg, id)}
+                            />
+                          </div>
+                        </Message>
                       )}
                     </For>
 
