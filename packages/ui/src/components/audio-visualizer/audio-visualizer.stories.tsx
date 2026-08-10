@@ -400,30 +400,64 @@ function useVoiceBands(
   return bands;
 }
 
+// The Custom story's demo shader: a smooth spectrum ridge, written
+// clean-room for this story (deliberately NOT a port -- custom is the one
+// variant that is ours). Shows what the custom seam is FOR: consumer GLSL
+// driven per band by uBands, breathing with uVolume, moving on iTime, and
+// state-shaded by uIntensity. Design notes live inline; the earlier
+// revision drew hard per-band boxes sliced into LED segments by default,
+// which read as odd horizontal lines -- segmentation is now opt-in through
+// the complexity control (0, the default, is solid) and the boxes became
+// one interpolated ridge with a vertical gradient and a soft crest glow.
 const SPECTRUM_SHADER = `
 void mainImage(out vec4 fragColor, in vec2 fragCoord) {
   vec2 uv = fragCoord / iResolution.xy;
-  int idx = int(uv.x * float(BAND_COUNT));
-  float level = 0.0;
+
+  // Sample the two nearest bands and ease between them: the spectrum reads
+  // as one continuous ridge instead of five hard boxes. (WebGL1 GLSL can
+  // only index a uniform array by a loop constant, hence the select loop.)
+  float x = clamp(uv.x * float(BAND_COUNT) - 0.5, 0.0, float(BAND_COUNT - 1));
+  float lo = floor(x);
+  float hi = min(lo + 1.0, float(BAND_COUNT - 1));
+  float levLo = 0.0;
+  float levHi = 0.0;
   for (int i = 0; i < BAND_COUNT; i++) {
-    if (i == idx) level = uBands[i];
+    if (float(i) == lo) levLo = uBands[i];
+    if (float(i) == hi) levHi = uBands[i];
   }
-  // uComplexity slices each lit bar into horizontal segments -- one solid
-  // block at 0, up to eight thin LED-style segments at 1 -- so the density
-  // control in the Custom story actually shows something on a shader this
-  // simple, instead of being declared and ignored.
-  float segments = mix(1.0, 8.0, uComplexity);
-  float lit = step(uv.y, level) * step(0.15, fract(uv.y * segments));
-  // uIntensity is CustomVisualizer's own state-driven tween (shaderTargets in
-  // primitives/visualizer-sequences.ts): a steady 0.3 at idle, a pulse
-  // between two targets for listening/connecting/thinking, and live volume
-  // at speaking. Scaling brightness by it is what gives the five state tiles
-  // in the Custom story any visual difference at all -- previously this
-  // shader read only uBands/uComplexity, so five tiles fed the SAME shared
-  // synthetic bands rendered pixel-identical regardless of state, with
-  // uIntensity computed correctly but never consumed.
-  float shown = lit * uIntensity;
-  fragColor = vec4(uColor * shown, shown);
+  float level = mix(levLo, levHi, smoothstep(0.0, 1.0, x - lo));
+
+  // A faint travelling shimmer keeps the crest alive between band updates.
+  // Written the conventional iTime * uSpeed way on purpose: reduced motion
+  // pins uSpeed at 0 (see variant-custom.tsx), which genuinely stills it.
+  level += 0.02 * sin(uv.x * 18.0 + iTime * uSpeed * 1.5) * smoothstep(0.03, 0.1, level);
+
+  // Inside the ridge: a vertical gradient, dimmest at the base, saturating
+  // toward full opacity right at the crest.
+  float inside = step(uv.y, level);
+  float grad = mix(0.35, 1.0, uv.y / max(level, 0.001));
+  float crest = smoothstep(level - 0.05, level, uv.y) * 0.6;
+
+  // uComplexity keeps the LED-segment look reachable from Controls: 0 (the
+  // story default) is solid; raising it slices the fill into up to eight
+  // segments. The glow below stays unsliced either way.
+  float sliced = step(0.15, fract(uv.y * mix(1.0, 8.0, uComplexity)));
+  float slice = mix(1.0, sliced, step(0.001, uComplexity));
+
+  // Soft glow rising off the crest, breathing gently with the overall
+  // volume scalar, so quiet bands still read on light AND dark backgrounds.
+  float glow = 0.35 * (0.7 + 0.6 * uVolume) * exp(-max(uv.y - level, 0.0) * 16.0)
+    * smoothstep(0.02, 0.15, level) * (1.0 - inside);
+
+  // uIntensity is CustomVisualizer's state tween (shaderTargets in
+  // primitives/visualizer-sequences.ts): steady at idle, pulsing for
+  // listening/connecting/thinking, volume-driven while speaking -- what
+  // keeps the five state tiles visually distinct.
+  float lum = (inside * grad * slice * (1.0 + crest) + glow) * uIntensity;
+
+  // Premultiplied alpha, per the ShaderCanvas contract.
+  float alpha = clamp(lum, 0.0, 1.0);
+  fragColor = vec4(uColor * alpha, alpha);
 }`.replace(/BAND_COUNT/g, '5');
 
 // ---------------------------------------------------------------- layout
@@ -689,7 +723,10 @@ export const Aurora: Story = {
 };
 
 export const Custom: Story = {
-  args: { size: 'md', complexity: 0.5 },
+  // complexity 0: the demo defaults to SOLID gradient bars. The LED-segment
+  // slicing stays wired to the control -- raise it and the fill slices into
+  // segments -- it is a capability to discover, not the default look.
+  args: { size: 'md', complexity: 0 },
   // See Wave's `!autodocs` comment above -- same reason, same measurement.
   tags: ['!autodocs'],
   parameters: {
@@ -699,11 +736,13 @@ export const Custom: Story = {
         story:
           'Set `variant="custom"` and a `shader` to render your own GLSL. It receives the ShaderToy built-ins ' +
           'plus `uColor`, `uIntensity`, `uSpeed`, `uComplexity`, `uVolume`, and `uBands[]` -- never declare ' +
-          'those yourself, the canvas declares them for you. This story\'s shader is hardcoded for 5 bands, so ' +
-          'every tile forces `barCount={5}` to match, and slices each lit bar by `complexity` to give that ' +
-          'control something to show, and scales overall brightness by `uIntensity` so the five states read as ' +
-          'more than a relabelled copy of each other: a steady dim idle, a pulsing listening/connecting/thinking, ' +
-          'and a bright, volume-driven speaking. `theme` is not listed: this shader does not read it yet either.',
+          'those yourself, the canvas declares them for you. This story\'s shader draws the five `uBands` as ' +
+          'one smoothly interpolated ridge with a vertical gradient and a soft crest glow that breathes with ' +
+          '`uVolume`; it is hardcoded for 5 bands, so every tile forces `barCount={5}` to match. `complexity` ' +
+          'slices the fill into LED-style segments when raised (solid at its 0 default), and `uIntensity` ' +
+          'scales overall brightness so the five states read as more than a relabelled copy of each other: a ' +
+          'steady dim idle, a pulsing listening/connecting/thinking, and a bright, volume-driven speaking. ' +
+          '`theme` is not listed: this shader does not read it yet either.',
       },
     },
   },
@@ -815,6 +854,26 @@ export const StateMatrix: Story = {
 };
 
 /**
+ * Upstream LiveKit's local-track capture defaults (livekit-client
+ * src/room/defaults.ts:27-30), requested explicitly instead of bare
+ * `{ audio: true }`. The default analysis window (bins 100-200, see
+ * use-audio-analysis.ts DEFAULTS) expects processed, gain-controlled
+ * speech -- autoGainControl is what lifts quiet natural speech into the
+ * window's sensitivity, and noiseSuppression/voiceIsolation keep the idle
+ * floor clean. Browsers default the first three ON for bare `audio: true`
+ * anyway; `voiceIsolation` is the one upstream adds on top, and it is not
+ * in TS's MediaTrackConstraintSet yet -- hence the cast.
+ */
+const MIC_CONSTRAINTS: MediaStreamConstraints = {
+  audio: {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+    ...({ voiceIsolation: true } as MediaTrackConstraints),
+  },
+};
+
+/**
  * A real microphone, click-to-enable.
  *
  * Nothing here calls `getUserMedia` on mount -- it renders an idle
@@ -859,7 +918,7 @@ export const Microphone: Story = {
       setError(null);
       setRequesting(true);
       try {
-        setStream(await navigator.mediaDevices.getUserMedia({ audio: true }));
+        setStream(await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS));
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Microphone access failed.');
       } finally {
@@ -943,7 +1002,7 @@ export const MicrophoneAll: Story = {
       setError(null);
       setRequesting(true);
       try {
-        setStream(await navigator.mediaDevices.getUserMedia({ audio: true }));
+        setStream(await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS));
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Microphone access failed.');
       } finally {
