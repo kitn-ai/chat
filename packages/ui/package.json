@@ -30,6 +30,7 @@
   "sideEffects": [
     "**/*.css",
     "./dist/kai.es.js",
+    "./dist/register-impl-*.js",
     "./dist/elements/*.js"
   ],
   "description": "Framework-agnostic, Shadow-DOM web components for building AI chat interfaces — works in React, Vue, Angular, Svelte, or plain HTML. Authored in SolidJS.",
@@ -129,6 +130,7 @@
     "build:theme": "node scripts/build-theme-tokens.mjs",
     "build:api": "node scripts/gen-element-api.mjs",
     "build:schemas": "node scripts/copy-card-schemas.mjs",
+    "verify:consumer": "node scripts/verify-consumer-sideeffects.mjs",
     "test": "vitest run",
     "test:react": "vitest run --config vitest.react.config.ts",
     "test:storybook": "vitest run --project=storybook",
