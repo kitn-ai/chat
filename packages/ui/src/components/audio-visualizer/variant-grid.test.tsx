@@ -49,23 +49,109 @@ describe('GridVisualizer', () => {
         rowCount={5} columnCount={3} bands={[1, 0, 0]}
       />
     ));
-    // Column 0 clears every row threshold; columns 1 and 2 clear only the middle row.
-    const litIdx = lit(container).map((e) => Number(e.dataset.kaiIndex));
-    expect(litIdx).toContain(0);   // row 0, col 0
-    expect(litIdx).toContain(6);   // row 2, col 0
-    expect(litIdx).toContain(12);  // row 4, col 0
-    expect(litIdx).not.toContain(1); // row 0, col 1 needs a loud band
+    // Column 0 clears every row threshold; columns 1 and 2 are silent, which
+    // sits under the silence floor, so they light nothing at all (see the
+    // divergence note in variant-grid.tsx).
+    const litIdx = lit(container)
+      .map((e) => Number(e.dataset.kaiIndex))
+      .sort((a, b) => a - b);
+    expect(litIdx).toEqual([0, 3, 6, 9, 12]); // all of column 0, nothing else
   });
 
-  it('lights only the middle row of a silent column', () => {
-    const { container } = render(() => (
+  // This test used to pin upstream's resting pattern: the middle row's
+  // threshold was 0, so a silent column still lit it. That is exactly what
+  // the divergence note in variant-grid.tsx removes — while speaking, a
+  // silent mic now shows an EMPTY grid.
+  it('shows an empty grid while speaking on a silent mic (levels 0 and 0.01)', () => {
+    const silent = render(() => (
       <GridVisualizer
         state="speaking" size="md" frozen={false}
         rowCount={5} columnCount={1} bands={[0]}
       />
     ));
-    // threshold at the middle row is 0, so a zero band still clears it.
+    expect(lit(silent.container)).toHaveLength(0);
+    cleanup();
+    const nearSilent = render(() => (
+      <GridVisualizer
+        state="speaking" size="md" frozen={false}
+        rowCount={5} columnCount={1} bands={[0.01]}
+      />
+    ));
+    expect(lit(nearSilent.container)).toHaveLength(0);
+  });
+
+  it('lights exactly the middle row just past the silence floor (level 0.03)', () => {
+    // The control bounding the floor from above: any real speech (bands sit
+    // at ~0.1 and up) must light the centre instantly.
+    const { container } = render(() => (
+      <GridVisualizer
+        state="speaking" size="md" frozen={false}
+        rowCount={5} columnCount={1} bands={[0.03]}
+      />
+    ));
     expect(lit(container).map((e) => e.dataset.kaiIndex)).toEqual(['2']);
+  });
+
+  it('reaches the outer rows of a 5-row grid at a realistic speech peak (0.5)', () => {
+    // Real speech through the aligned pipeline peaks at 0.51-0.54; upstream's
+    // unscaled ramp put the outer rows at 2/3, which real speech never reached
+    // (0 times in 139 measured samples). The scaled ramp tops out at ~0.433.
+    const { container } = render(() => (
+      <GridVisualizer
+        state="speaking" size="md" frozen={false}
+        rowCount={5} columnCount={1} bands={[0.5]}
+      />
+    ));
+    expect(lit(container).map((e) => e.dataset.kaiIndex)).toEqual(['0', '1', '2', '3', '4']);
+  });
+
+  it('pins the scaled threshold table on 5 rows: 0.02, ~0.217, ~0.433', () => {
+    const rowsLitAt = (rowCount: number, level: number) => {
+      cleanup();
+      const { container } = render(() => (
+        <GridVisualizer
+          state="speaking" size="md" frozen={false}
+          rowCount={rowCount} columnCount={1} bands={[level]}
+        />
+      ));
+      return lit(container).map((e) => e.dataset.kaiIndex);
+    };
+    expect(rowsLitAt(5, 0.21)).toEqual(['2']);                     // under 0.65/3
+    expect(rowsLitAt(5, 0.22)).toEqual(['1', '2', '3']);           // over 0.65/3
+    expect(rowsLitAt(5, 0.43)).toEqual(['1', '2', '3']);           // under 1.3/3
+    expect(rowsLitAt(5, 0.44)).toEqual(['0', '1', '2', '3', '4']); // over 1.3/3
+  });
+
+  it('generalizes the remap across row counts, including the degenerate shapes', () => {
+    const rowsLitAt = (rowCount: number, level: number) => {
+      cleanup();
+      const { container } = render(() => (
+        <GridVisualizer
+          state="speaking" size="md" frozen={false}
+          rowCount={rowCount} columnCount={1} bands={[level]}
+        />
+      ));
+      return lit(container).map((e) => e.dataset.kaiIndex);
+    };
+    // 3 rows: mid=1 -> thresholds 0.02, 0.325.
+    expect(rowsLitAt(3, 0.32)).toEqual(['1']);
+    expect(rowsLitAt(3, 0.33)).toEqual(['0', '1', '2']);
+    // 7 rows: mid=3 -> thresholds 0.02, 0.1625, 0.325, 0.4875. A realistic
+    // peak (0.5) clears even the outermost ring.
+    expect(rowsLitAt(7, 0.2)).toEqual(['2', '3', '4']);
+    expect(rowsLitAt(7, 0.5)).toEqual(['0', '1', '2', '3', '4', '5', '6']);
+    // Degenerate shapes stay sane -- mid+1 >= 1 always, so no division blows up.
+    // 1 row: mid=0, the only row is distance 0 -> just the silence floor.
+    expect(rowsLitAt(1, 0)).toEqual([]);
+    expect(rowsLitAt(1, 0.03)).toEqual(['0']);
+    // 2 rows: mid=1 -> row 0 at 0.325, row 1 (the "middle") at 0.02. The
+    // same floor(rows/2) asymmetry upstream had (theirs was 0.5 / 0).
+    expect(rowsLitAt(2, 0.03)).toEqual(['1']);
+    expect(rowsLitAt(2, 0.33)).toEqual(['0', '1']);
+    // 4 rows (even): mid=2 -> 0.433, 0.217, 0.02, 0.217, centre-weighted on
+    // row 2; silence still shows nothing.
+    expect(rowsLitAt(4, 0)).toEqual([]);
+    expect(rowsLitAt(4, 0.44)).toEqual(['0', '1', '2', '3']);
   });
 
   it('lights exactly one cell in a scripted state', () => {
@@ -75,11 +161,16 @@ describe('GridVisualizer', () => {
     expect(lit(container)).toHaveLength(1);
   });
 
-  it('rests on the center cell when idle', () => {
+  // This test used to pin the idle resting pattern: one stationary centre
+  // cell (index 12 of 5x5), upstream's default frame. Divergence (3) in
+  // variant-grid.tsx (Rob, 2026-08-09) makes idle fully dark instead — which
+  // also matches bar and radial, whose idle sequences were already empty.
+  it('renders zero highlighted cells at idle', () => {
     const { container } = render(() => (
       <GridVisualizer state="idle" size="md" bands={[]} frozen={false} rowCount={5} columnCount={5} />
     ));
-    expect(lit(container).map((e) => e.dataset.kaiIndex)).toEqual(['12']);
+    expect(cells(container)).toHaveLength(25); // the cells themselves stay
+    expect(lit(container)).toHaveLength(0);
   });
 
   it('indexes every cell in row-major order', () => {
@@ -109,11 +200,11 @@ describe('GridVisualizer', () => {
         {(item) => { seen.push(item); return <span />; }}
       </GridVisualizer>
     ));
-    // Column 0 is silent (band 0), column 1 is full (band 1); the middle row
-    // (threshold 0) lights regardless, the outer rows only light column 1.
+    // Column 0 is silent (band 0), so nothing in it clears the silence floor;
+    // column 1 is full (band 1) and lights every row.
     expect(seen.map((s) => s.index)).toEqual([0, 1, 2, 3, 4, 5]);
     expect(seen.map((s) => s.value())).toEqual([0, 1, 0, 1, 0, 1]);
-    expect(seen.map((s) => s.highlighted())).toEqual([false, true, true, true, false, true]);
+    expect(seen.map((s) => s.highlighted())).toEqual([false, true, false, true, false, true]);
   });
 
   it('zeroes the render-prop value in every state except speaking, even with stale bands', () => {
@@ -142,7 +233,7 @@ describe('GridVisualizer', () => {
       </GridVisualizer>
     ));
     expect(seen.map((s) => s.value())).toEqual([0, 1, 0, 1, 0, 1]);
-    expect(seen.map((s) => s.highlighted())).toEqual([false, true, true, true, false, true]);
+    expect(seen.map((s) => s.highlighted())).toEqual([false, true, false, true, false, true]);
 
     setBands([1, 0]);
     await flush();
@@ -152,9 +243,10 @@ describe('GridVisualizer', () => {
     // captured on first render (not reading fresh items from a rerender,
     // which would pass even against a resolved-value implementation) is what
     // proves `value()`/`highlighted()` track `bands` live rather than
-    // freezing them at mount. Column roles are now the mirror of above.
+    // freezing them at mount. Column roles are now the exact mirror of above
+    // (the silence floor keeps the now-silent column 1 fully dark).
     expect(seen.map((s) => s.value())).toEqual([1, 0, 1, 0, 1, 0]);
-    expect(seen.map((s) => s.highlighted())).toEqual([true, false, true, true, true, false]);
+    expect(seen.map((s) => s.highlighted())).toEqual([true, false, true, false, true, false]);
   });
 });
 
