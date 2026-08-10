@@ -806,6 +806,23 @@ function generatedCompanions(files) {
           ``,
         ].join('\n'),
       });
+      extra.push({
+        path: 'svelte-env.d.ts',
+        code: [
+          `// Reproduces the \`$env/dynamic/private\` block \`svelte-kit sync\` writes into`,
+          `// .svelte-kit/ambient.d.ts, copied from a real \`sv create\` app. The machine's`,
+          `// own variable names are omitted — they are not part of the contract — but the`,
+          `// index signatures are verbatim, so \`env.OPENROUTER_API_KEY\` types as`,
+          `// \`string | undefined\` here exactly as it does in a consumer's app.`,
+          `declare module '$env/dynamic/private' {`,
+          `  export const env: {`,
+          '    [key: `PUBLIC_${string}`]: undefined;',
+          '    [key: `${string}`]: string | undefined;',
+          `  };`,
+          `}`,
+          ``,
+        ].join('\n'),
+      });
     }
   }
   if (files.some((f) => /createFileRoute\(/.test(f.code))) {

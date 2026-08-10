@@ -1641,19 +1641,27 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
   const runnerLines = emitToolLoop ? toolRunnerLines('  ', true) : [];
 
   // SCAF-9: no fabricated seed — see SAMPLE_AGENTIC_MESSAGE.
+  //
+  // `$state.raw`, not `$state`: the kit's contract is a NEW array reference per
+  // chunk (mutating in place does not re-render), which is exactly what raw state
+  // tracks. Deep state would also proxy every message object on its way into a
+  // Solid-backed custom element, for reactivity this code never relies on.
   const sampleMessagesInit = [
     ...(hasEmbedded
       ? sampleSeedComment(isMock, '  ', (literal) => [
-          `let messages: ChatMessage[] = [${literal}];`,
+          `let messages = $state.raw<ChatMessage[]>([${literal}]);`,
         ])
       : []),
-    `  let messages: ChatMessage[] = [];`,
+    `  let messages = $state.raw<ChatMessage[]>([]);`,
   ];
 
   // SCAF-9: sources element ref + sample data. Typed as the kit's own element
   // interface (not HTMLElement) so the `.sources =` assignment below typechecks
   // honestly under `tsc --strict`: HTMLElement has no `sources` property.
-  const sourcesEl = hasSourcesCompanion ? [`  let sourcesEl: KaiSourcesElement | undefined;`] : [];
+  // `bind:this` writes to this binding, so in runes mode it has to be $state.
+  const sourcesEl = hasSourcesCompanion
+    ? [`  let sourcesEl = $state<KaiSourcesElement | undefined>(undefined);`]
+    : [];
   const sourcesReactive = standaloneCompanionTags.includes('kai-sources')
     ? [
         `  // Replace sampleSources with your real source data.`,
@@ -1661,7 +1669,7 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
         `    { href: 'https://example.com/doc1', title: 'Getting started', description: 'Overview of the product.' },`,
         `    { href: 'https://example.com/doc2', title: 'API reference', description: 'Full API documentation.' },`,
         `  ];`,
-        `  $: if (sourcesEl) { sourcesEl.sources = sampleSources; }`,
+        `  $effect(() => { if (sourcesEl) { sourcesEl.sources = sampleSources; } });`,
       ]
     : [];
 
@@ -1672,7 +1680,7 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
         `  <!-- kai-resizable needs kai-resizable-item children to render panels. -->`,
         `  <kai-resizable orientation="horizontal" style="display:block;width:100%;height:100%">`,
         `    <kai-resizable-item size="40%" min="240px">`,
-        `      <kai-chat bind:this={chatEl} suggestion-mode="submit" style="${p.chatFill}" on:kai-submit={onSubmit}></kai-chat>`,
+        `      <kai-chat bind:this={chatEl} suggestion-mode="submit" style="${p.chatFill}" onkai-submit={onSubmit}></kai-chat>`,
         `    </kai-resizable-item>`,
         `    <kai-resizable-item min="280px">`,
         `      <!-- Replace src with your artifact URL or set .files for multi-file preview. -->`,
@@ -1681,15 +1689,17 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
         `  </kai-resizable>`,
       ]
     : [
-        `  <kai-chat bind:this={chatEl} suggestion-mode="submit" style="${p.chatFill}" on:kai-submit={onSubmit}></kai-chat>`,
+        `  <kai-chat bind:this={chatEl} suggestion-mode="submit" style="${p.chatFill}" onkai-submit={onSubmit}></kai-chat>`,
         companionLines,
       ];
 
   return [
     `<!-- svelte — ${archetype.title} — ${p.note}. empty-state hint: ${emptyHint} -->`,
     ...(p.altNote ?? []).map((l) => `<!-- ${l} -->`),
-    `<!-- SCAF-5: This uses Svelte-4 syntax ($:, on:event). Works in Svelte 5 via legacy mode;`,
-    `     runes-mode users should adapt to $state/$effect and onkai-submit event handlers. -->`,
+    `<!-- SCAF-5: Svelte 5 RUNES ($state / $effect, onkai-submit). \`sv create\` forces`,
+    `     runes mode project-wide (see the compilerOptions in its vite.config.ts), so the`,
+    `     Svelte-4 forms this used to emit are hard errors there, not deprecations:`,
+    `     "\`$:\` is not allowed in runes mode" fails svelte-check AND vite build. -->`,
     `<script lang="ts">`,
     `  import '@kitn.ai/ui/elements';  // registers <kai-*> — required, must come first`,
     // KaiSourcesElement is only imported when a kai-sources companion is actually
@@ -1700,21 +1710,24 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
     `  import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
     `  import { onMount } from 'svelte';`,
     ...chatMessageType,
-    `  let chatEl: KaiChatElement | undefined;`,
+    `  // \`bind:this\` writes to this binding, so under runes it must be $state.`,
+    `  let chatEl = $state<KaiChatElement | undefined>(undefined);`,
     `  // SCAF-15: kai-* register via an async dynamic import (SSR-safety). Gate the`,
-    `  // reactive property block on the upgrade so the first application isn't dropped`,
+    `  // property $effect on the upgrade so the first application isn't dropped`,
     `  // (props set on a not-yet-upgraded element are lost on upgrade).`,
-    `  let defined = false;`,
+    `  let defined = $state(false);`,
     `  onMount(async () => { await customElements.whenDefined('kai-chat'); defined = true; });`,
     ...sourcesEl,
     ...sampleMessagesInit,
-    `  let loading: boolean = false;`,
+    `  let loading = $state(false);`,
     `  const suggestions: string[] = ${jsArray(suggestions)};`,
     ...modelInit,
     ...toolsLines,
     ...runnerLines,
     `  // suggestions/messages are JS PROPERTIES (arrays/objects can't be attributes)`,
-    `  $: if (chatEl && defined) { chatEl.messages = messages; chatEl.loading = loading; chatEl.suggestions = suggestions; }`,
+    `  $effect(() => {`,
+    `    if (chatEl && defined) { chatEl.messages = messages; chatEl.loading = loading; chatEl.suggestions = suggestions; }`,
+    `  });`,
     ...sourcesReactive,
     ``,
     `  async function onSubmit(e: CustomEvent<{ value: string }>) {`,
@@ -2646,6 +2659,40 @@ interface WebRouteAdapter {
   file: string;
   before?: string[];
   after: string[];
+  /**
+   * Rewrite the integration's portable handler into this framework's own idioms,
+   * returning the new fragment plus any imports the rewrite needs.
+   *
+   * The portable fragments are written for a Node-shaped host, and one of them
+   * does not port: `process.env`. Only SvelteKit uses this so far — see
+   * `svelteEnvAccess`.
+   */
+  adaptFragment?: (fragment: string) => { fragment: string; imports: string[] };
+}
+
+/**
+ * `process.env.X` -> SvelteKit's own `env.X`.
+ *
+ * A fresh `sv create` app installs no `@types/node`, so `process` is not a name
+ * that exists: every emitted route reading a key failed `svelte-check` with
+ * TS2580 on the first run. `$env/dynamic/private` is Kit's own accessor, is
+ * typed by the `.svelte-kit/ambient.d.ts` its own `sync` step generates, and is
+ * the form its docs prescribe — so this is the idiomatic fix, not a workaround
+ * for a missing dependency. It also keeps the key off the client by
+ * construction: importing `$env/dynamic/private` from client code is an error
+ * Kit raises for you.
+ */
+function svelteEnvAccess(fragment: string): { fragment: string; imports: string[] } {
+  if (!/\bprocess\.env\./.test(fragment)) return { fragment, imports: [] };
+  return {
+    fragment: fragment.replace(/\bprocess\.env\.([A-Za-z_$][\w$]*)/g, 'env.$1'),
+    imports: [
+      `// SvelteKit's own env accessor. \`process.env\` would need @types/node, which`,
+      `// a fresh \`sv create\` app does not install — and this is the idiomatic form:`,
+      `// it is typed by .svelte-kit/ambient.d.ts and cannot be imported client-side.`,
+      `import { env } from '$env/dynamic/private';`,
+    ],
+  };
 }
 
 /**
@@ -2732,6 +2779,7 @@ const WEB_ROUTE_ADAPTERS: Record<string, WebRouteAdapter> = {
     runtime: 'SvelteKit +server.ts endpoint',
     file: 'src/routes/api/chat/+server.ts',
     before: [`import type { RequestHandler } from './$types';`],
+    adaptFragment: svelteEnvAccess,
     after: [
       ``,
       `// SvelteKit calls POST(event), NOT POST(request): \`request\` is a FIELD on the`,
@@ -2995,6 +3043,10 @@ function webRouteFor(integration: Integration, framework: string): RouteChoice |
   const fragment = integration.webRoute;
   const adapter = WEB_ROUTE_ADAPTERS[framework];
   if (!fragment || !adapter) return undefined;
+  // A framework may have to rewrite the portable handler into its own idioms and
+  // pull in an import to do it (SvelteKit's $env accessor). Both land at the top
+  // of the file, beside the adapter's own `before` lines.
+  const adapted = adapter.adaptFragment?.(fragment) ?? { fragment, imports: [] };
   return {
     framework,
     runtime: adapter.runtime,
@@ -3003,8 +3055,9 @@ function webRouteFor(integration: Integration, framework: string): RouteChoice |
       `// ${adapter.file}`,
       CHAT_REQUEST_BODY_IMPORT,
       ...(adapter.before ?? []),
+      ...adapted.imports,
       ``,
-      withChatRequestBody(fragment),
+      withChatRequestBody(adapted.fragment),
       ...adapter.after,
     ].join('\n'),
   };

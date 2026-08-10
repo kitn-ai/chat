@@ -158,6 +158,98 @@ describe('scaffold', () => {
     }
   });
 
+  /**
+   * Svelte 5 RUNES, not Svelte 4.
+   *
+   * The scaffold used to emit `$:` and `on:kai-submit` and claim in a comment that
+   * it "works in Svelte 5 via legacy mode". That claim expired: `sv create` writes
+   * `runes: true` project-wide into its vite.config.ts, where `$:` is a hard error
+   * in BOTH svelte-check and vite build — measured on a fresh app:
+   *   "`$:` is not allowed in runes mode, use `$derived` or `$effect` instead".
+   *
+   * Every archetype, because the sources companion carried its own `$:` block.
+   */
+  it('svelte emits Svelte 5 runes, never Svelte 4 syntax (sv create forces runes mode)', async () => {
+    for (const useCase of ['drop-in-chat', 'knowledge-base', 'agentic', 'workspace'] as const) {
+      for (const integration of ['mock', 'openrouter'] as const) {
+        const out = await scaffold.handler({ useCase, integration, placement: 'full-page', framework: 'svelte' });
+        const text = (out.content as { type: string; text: string }[])[0].text;
+        const front = text.split('=== (2) BACKEND ROUTE ===')[0];
+        const label = `${useCase}/${integration}`;
+
+        // No legacy reactive statement anywhere, including the sources block.
+        expect(front, `${label}: \`$:\` is a hard error in runes mode`).not.toMatch(/^\s*\$:/m);
+        // No legacy event directive: `on:` is deprecated in runes mode and warns.
+        expect(front, `${label}: on: directive is deprecated in runes mode`).not.toMatch(/\son:[a-z-]+=\{/);
+        expect(front, `${label}: the submit listener must be an on* attribute`).toContain(
+          'onkai-submit={onSubmit}',
+        );
+        // Runes for every binding that is written to.
+        expect(front, `${label}: reactivity must be $effect`).toMatch(/\$effect\(\(\) => \{/);
+        expect(front, `${label}: messages must be raw state (new array per chunk)`).toContain(
+          'let messages = $state.raw<ChatMessage[]>(',
+        );
+        expect(front, `${label}: bind:this target must be $state under runes`).toContain(
+          'let chatEl = $state<KaiChatElement | undefined>(undefined)',
+        );
+        expect(front, `${label}: loading is reassigned, so it must be $state`).toContain(
+          'let loading = $state(false)',
+        );
+        // And the stale claim must be gone.
+        expect(front, `${label}: still claims legacy mode works`).not.toMatch(/legacy mode/i);
+      }
+    }
+  });
+
+  /**
+   * SvelteKit reads secrets through `$env/dynamic/private`, not `process.env`.
+   *
+   * A fresh `sv create` app installs no `@types/node`, so `process` is not a name
+   * that exists. Measured on that app: `svelte-check` reports
+   * "Cannot find name 'process'. Do you need to install type definitions for
+   * node?" — 1 error before, 0 after.
+   *
+   * (That reproduction needs care: a `node_modules` symlink anywhere ABOVE the app
+   * puts @types/node back in scope, because TypeScript walks up for @types, and
+   * the error silently disappears.)
+   */
+  it('the svelte route reads env through $env/dynamic/private, not process.env', async () => {
+    // Every integration whose portable handler reads an env var.
+    for (const integration of ['openrouter', 'cloudflare', 'mastra'] as const) {
+      const out = await scaffold.handler({
+        useCase: 'drop-in-chat', integration, placement: 'full-page', framework: 'svelte',
+      });
+      const text = (out.content as { type: string; text: string }[])[0].text;
+      const route = text.split('=== (2) BACKEND ROUTE ===')[1].split('=== (3)')[0];
+      const code = route.split('\n').filter((l) => !l.startsWith('#')).join('\n');
+
+      expect(code, `${integration}: missing the $env import`).toContain(
+        "import { env } from '$env/dynamic/private';",
+      );
+      expect(code, `${integration}: still reads process.env — TS2580 without @types/node`).not.toMatch(
+        /\bprocess\.env\./,
+      );
+    }
+  });
+
+  /**
+   * ...and ONLY svelte. `process.env` is correct for every other host: Next, the
+   * Vite middleware and Express all run on Node with @types/node installed, and
+   * the Worker route's own comment prescribes nodejs_compat. Rewriting those would
+   * be a regression, so the rewrite has to be scoped to the framework that needs it.
+   */
+  it('the $env rewrite does not leak into the other hosts', async () => {
+    for (const framework of ['next', 'react', 'express', 'worker'] as const) {
+      const out = await scaffold.handler({
+        useCase: 'drop-in-chat', integration: 'openrouter', placement: 'full-page', framework,
+      });
+      const text = (out.content as { type: string; text: string }[])[0].text;
+      const route = text.split('=== (2) BACKEND ROUTE ===')[1].split('=== (3)')[0];
+      expect(route, `${framework}: got SvelteKit's $env import`).not.toContain('$env/dynamic/private');
+      expect(route, `${framework}: lost its process.env access`).toMatch(/\bprocess\.env\./);
+    }
+  });
+
   it('falls back to a usable route when the framework has no exact template', async () => {
     // pydantic-ai only ships a fastapi template; asking for `next` (ts) should
     // still emit its python fastapi route rather than failing.
@@ -457,8 +549,11 @@ describe('scaffold', () => {
     // Must import the typed element interface from the library
     expect(text).toContain("import type { KaiChatElement } from '@kitn.ai/ui/elements'");
     // Must use KaiChatElement, not bare HTMLElement, so property access is typed
-    expect(text).toContain('let chatEl: KaiChatElement | undefined');
-    expect(text).not.toContain('let chatEl: HTMLElement | undefined');
+    // Runes: `bind:this` writes to the binding, so it must be $state — but it still
+    // has to be the kit's ELEMENT type, not a bare HTMLElement, or `chatEl.messages`
+    // is TS2339 under svelte-check.
+    expect(text).toContain('let chatEl = $state<KaiChatElement | undefined>(undefined)');
+    expect(text).not.toContain('$state<HTMLElement | undefined>');
   });
 
   /**
@@ -712,7 +807,7 @@ describe('scaffold', () => {
     // Must emit a ChatMessage type
     expect(text).toContain('type ChatMessage');
     // Must declare messages with explicit type
-    expect(text).toContain('let messages: ChatMessage[]');
+    expect(text).toContain('let messages = $state.raw<ChatMessage[]>([])');
     // Must type the onSubmit handler
     expect(text).toContain('onSubmit(e: CustomEvent<{ value: string }>)');
   });
@@ -854,8 +949,8 @@ describe('scaffold', () => {
     });
     const text = (out.content as { type: string; text: string }[])[0].text;
     expect(text).toContain("import type { KaiChatElement, KaiSourcesElement } from '@kitn.ai/ui/elements'");
-    expect(text).toContain('let sourcesEl: KaiSourcesElement | undefined');
-    expect(text).not.toContain('let sourcesEl: HTMLElement | undefined');
+    expect(text).toContain('let sourcesEl = $state<KaiSourcesElement | undefined>(undefined)');
+    expect(text).not.toContain('$state<HTMLElement | undefined>');
   });
 
   // The KaiSourcesElement import must be conditional: an archetype with no
@@ -1191,7 +1286,11 @@ describe('scaffold', () => {
     expect(text).toContain("customElements.whenDefined('kai-chat')");
     expect(text).toContain("import { onMount } from 'svelte'");
     // the reactive property block must be gated on `defined` so it re-applies post-upgrade
-    expect(text).toMatch(/\$:\s*if\s*\(chatEl\s*&&\s*defined\)/);
+    // `$effect`, not `$:` — `sv create` forces runes mode project-wide, where `$:`
+    // is a hard error in svelte-check AND vite build.
+    expect(text).toMatch(/\$effect\(\(\) => \{/);
+    expect(text).toMatch(/if\s*\(chatEl\s*&&\s*defined\)/);
+    expect(text, 'legacy reactive statement is a runes-mode error').not.toMatch(/^\s*\$:/m);
   });
 
   it('SCAF-15: vue output re-applies props in onMounted after the element upgrade', async () => {
@@ -2030,7 +2129,7 @@ describe('scaffolds import the wire adapter for real backends', () => {
         next: /const \[messages, setMessages\] = useState<ChatMessage\[\]>\(\[\]\);/,
         'tanstack-start': /const \[messages, setMessages\] = useState<ChatMessage\[\]>\(\[\]\);/,
         vue: /const messages = ref<ChatMessage\[\]>\(\[\]\);/,
-        svelte: /let messages: ChatMessage\[\] = \[\];/,
+        svelte: /let messages = \$state\.raw<ChatMessage\[\]>\(\[\]\);/,
         // html never assigns chat.messages at startup at all; the first submit
         // reads it through `?? []` because an un-upgraded element has none.
         html: /chat\.messages = \[\.\.\.chat\.messages \?\? \[\], /,
