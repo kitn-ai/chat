@@ -13,10 +13,29 @@
  * Bare specifiers (`react`, `@kitn.ai/ui/state`) are a consumer-resolution concern,
  * not a path-escape, and are checked separately below for self-references that
  * are not declared in the exports map.
+ *
+ * RESOLVABILITY, NOT JUST BOUNDARIES
+ * ----------------------------------
+ * This guard used to answer "does SOMETHING plausible exist at that path?" by
+ * stat-ing a candidate list by hand. That is weaker than it looks, and it passed
+ * green for months over a real bug: `dist/primitives/create-kai-chat.d.ts` imports
+ * '../state', the hand-rolled list found `dist/state/index.d.ts`, and the check
+ * was satisfied — but TypeScript does not resolve it that way. `dist/state.js`
+ * exists as a sibling, and under `bundler`/`node16` resolution a matching FILE
+ * beats a directory index, so tsc lands on the .js, finds no declarations beside
+ * it, and a consumer with `skipLibCheck: false` gets:
+ *
+ *     error TS7016: Could not find a declaration file for module '../state'
+ *
+ * So resolution is now delegated to the TypeScript compiler itself
+ * (`ts.resolveModuleName`) and the check asserts the specifier resolves to actual
+ * DECLARATIONS — not merely that a file exists somewhere near the path. A guard
+ * that re-implements tsc's resolution is a guard that disagrees with tsc.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, dirname, resolve, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 
 const pkgRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const distRoot = join(pkgRoot, 'dist');
@@ -71,11 +90,42 @@ if (!statSync(distRoot, { throwIfNoEntry: false })?.isDirectory()) {
   process.exit(1);
 }
 
-/** Extensionless .d.ts resolution, the way tsc would do it. */
-function resolvesInDist(target) {
-  const candidates = [`${target}.d.ts`, join(target, 'index.d.ts'), target];
-  if (target.endsWith('.js')) candidates.unshift(`${target.slice(0, -3)}.d.ts`);
-  return candidates.some((c) => statSync(c, { throwIfNoEntry: false })?.isFile());
+/**
+ * Ask TYPESCRIPT to resolve the specifier, exactly as a consumer's tsc would.
+ *
+ * `bundler` is the mode this package's own tsconfig uses and the one Vite / Next /
+ * Astro / TanStack consumers get by default. It is deliberately the only mode
+ * checked: under `node16`/`nodenext` an extensionless relative import is illegal
+ * outright, and vite-plugin-dts emits extensionless specifiers throughout, so
+ * asserting that mode would fail every file for a reason this guard cannot fix.
+ * `bundler` is where the interesting, fixable failures live — TS7016 included.
+ *
+ * allowJs:true so a specifier that lands on a .js is REPORTED as "resolved, but
+ * to JavaScript with no declarations" instead of silently reading as unresolved.
+ * That distinction is the whole bug class.
+ *
+ * @returns {{ok: true} | {ok: false, reason: string}}
+ */
+const RESOLVE_OPTS = {
+  moduleResolution: ts.ModuleResolutionKind.Bundler,
+  module: ts.ModuleKind.ESNext,
+  target: ts.ScriptTarget.ESNext,
+  allowJs: true,
+};
+const TYPED_EXTENSIONS = new Set([ts.Extension.Dts, ts.Extension.Ts, ts.Extension.Tsx]);
+
+function resolvesToDeclarations(spec, containingFile) {
+  const { resolvedModule } = ts.resolveModuleName(spec, containingFile, RESOLVE_OPTS, ts.sys);
+  if (!resolvedModule) return { ok: false, reason: 'resolves to nothing (TS2307)' };
+  if (!TYPED_EXTENSIONS.has(resolvedModule.extension)) {
+    return {
+      ok: false,
+      reason:
+        `resolves to ${relative(pkgRoot, resolvedModule.resolvedFileName)} ` +
+        `(${resolvedModule.extension}) — JavaScript with no declaration file beside it (TS7016)`,
+    };
+  }
+  return { ok: true };
 }
 
 const escapes = [];
@@ -91,9 +141,12 @@ for (const file of files) {
       const rel = relative(distRoot, target);
       if (rel.startsWith('..') || rel.startsWith(`..${sep}`)) {
         escapes.push({ file: relative(pkgRoot, file), spec, target: relative(pkgRoot, target) });
-      } else if (!resolvesInDist(target)) {
-        // Inside dist/ but pointing at nothing — a rewritten specifier that missed.
-        dangling.push({ file: relative(pkgRoot, file), spec, target: relative(pkgRoot, target) });
+      } else {
+        // Inside dist/ — but does a consumer's tsc actually get TYPES from it?
+        const verdict = resolvesToDeclarations(spec, file);
+        if (!verdict.ok) {
+          dangling.push({ file: relative(pkgRoot, file), spec, reason: verdict.reason });
+        }
       }
     } else if (spec === selfName || spec.startsWith(`${selfName}/`)) {
       if (!matchesExport(spec)) {
@@ -105,7 +158,8 @@ for (const file of files) {
 
 if (escapes.length === 0 && dangling.length === 0 && badSelfRefs.length === 0) {
   console.log(
-    `✓ dts boundaries: ${files.length} emitted .d.ts files reference nothing outside dist/.`,
+    `✓ dts boundaries: ${files.length} emitted .d.ts files reference nothing outside dist/,\n` +
+      '  and every relative specifier in them resolves to declarations under `bundler` resolution.',
   );
   process.exit(0);
 }
@@ -122,12 +176,18 @@ if (escapes.length > 0) {
 }
 
 if (dangling.length > 0) {
-  console.error(`✗ ${dangling.length} declaration reference(s) point inside dist/ but resolve to nothing:\n`);
+  console.error(
+    `✗ ${dangling.length} declaration reference(s) point inside dist/ but do NOT resolve to declarations:\n`,
+  );
   for (const e of dangling) {
     console.error(`  ${e.file}`);
-    console.error(`      imports '${e.spec}'  ->  ${e.target} (no .d.ts)`);
+    console.error(`      imports '${e.spec}'  ->  ${e.reason}`);
   }
-  console.error('');
+  console.error(
+    '\n  A consumer compiling with `skipLibCheck: false` sees these as hard errors.\n' +
+      '  Fix by emitting a declaration where tsc actually looks — for a bundled subpath\n' +
+      '  entry `dist/x.js`, that means a SIBLING `dist/x.d.ts`, not `dist/x/index.d.ts`.\n',
+  );
 }
 
 if (badSelfRefs.length > 0) {
