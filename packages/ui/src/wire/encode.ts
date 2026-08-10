@@ -51,7 +51,6 @@ export class WireEncodeError extends Error {
 }
 
 type TextPart = Extract<MessagePart, { type: 'text' }>;
-type ToolMessagePart = Extract<MessagePart, { type: 'tool' }>;
 
 /** A tool that can be echoed back: it has the provider's own call id AND a
  *  result. Narrowing `toolCallId` to `string` here is what removes every
@@ -59,15 +58,12 @@ type ToolMessagePart = Extract<MessagePart, { type: 'tool' }>;
 type SettledTool = ToolPart & { toolCallId: string };
 
 const isTextPart = (p: MessagePart): p is TextPart => p.type === 'text';
-const isToolPart = (p: MessagePart): p is ToolMessagePart => p.type === 'tool';
 
 const textOf = (parts: MessagePart[]): string =>
   parts
     .filter(isTextPart)
     .map((p) => p.text)
     .join('');
-
-const toolsOf = (parts: MessagePart[]): ToolPart[] => parts.filter(isToolPart).map((p) => p.tool);
 
 /** A tool is encodable only once it has a RESULT. Both APIs require every echoed
  *  tool call to have exactly one matching result, so a call with no answer yet is
@@ -92,47 +88,89 @@ function argumentsOf(tool: ToolPart): string {
   return tool.input !== undefined ? JSON.stringify(tool.input) : '{}';
 }
 
+const toolCallOf = (tool: SettledTool): OpenAIToolCall => ({
+  id: tool.toolCallId,
+  type: 'function',
+  function: { name: tool.type, arguments: argumentsOf(tool) },
+});
+
+/** `errorText` WINS over `output` when a part somehow carries both, on both
+ *  wires. A host that reported a failure after a partial result meant the
+ *  failure, and echoing a half-written success back to the model is the version
+ *  of this that produces confidently wrong follow-up work. */
+const toolResultOf = (tool: SettledTool): OpenAIWireMessage => ({
+  role: 'tool',
+  tool_call_id: tool.toolCallId,
+  name: tool.type,
+  content: tool.errorText ?? JSON.stringify(tool.output),
+});
+
 /**
  * ChatMessage[] to an OpenAI chat-completions `messages` array.
  *
+ * ONE ChatMessage CAN BECOME SEVERAL WIRE MESSAGES. The kit streams a whole
+ * assistant turn into a single message, so text, a tool call and the model's
+ * answer to that call all live in one `parts` array. The OpenAI wire has no such
+ * shape: a `role:'tool'` result must sit between the assistant message that
+ * announced the call and whatever the model said afterwards. So the turn is
+ * SPLIT at each tool boundary, into
+ *
+ *   assistant(pre-tool text + tool_calls) -> tool(result)... -> assistant(answer)
+ *
+ * Flattening instead would put the model's answer BEFORE the result it was based
+ * on. No endpoint rejects that, which is exactly why it is worth spelling out:
+ * it quietly degrades every later round of a tool loop.
+ *
+ * Consecutive tool parts stay in ONE assistant message, because parallel calls
+ * are announced together and their results follow together.
+ *
+ * A turn that encodes to nothing is SKIPPED, never sent as `{ content: null }`
+ * with no `tool_calls`: OpenAI treats `content` as required unless `tool_calls`
+ * is present, and strict-compatible endpoints reject it.
+ *
  * `reasoning`, `card`, `source` and `file` parts are not encoded. OpenAI chat
  * completions has no reasoning channel on the way back in, and the other three
- * are kit-side. File attachments are a documented v1 limitation.
+ * are kit-side. File attachments are a documented v1 limitation, which is why a
+ * user turn carrying only an attachment encodes to nothing and is skipped.
  */
 export function toOpenAIMessages(messages: ChatMessage[]): OpenAIWireMessage[] {
   const out: OpenAIWireMessage[] = [];
 
   for (const message of messages) {
-    const content = textOf(message.parts);
-
     if (message.role === 'user') {
-      out.push({ role: 'user', content });
+      const content = textOf(message.parts);
+      if (content !== '') out.push({ role: 'user', content });
       continue;
     }
 
-    const settled = toolsOf(message.parts).filter(isSettled);
-    const calls = settled.map<OpenAIToolCall>((tool) => ({
-      id: tool.toolCallId,
-      type: 'function',
-      function: { name: tool.type, arguments: argumentsOf(tool) },
-    }));
+    let text = '';
+    let pending: SettledTool[] = [];
 
-    out.push({
-      role: 'assistant',
-      content: content || null,
-      ...(calls.length > 0 ? { tool_calls: calls } : {}),
-    });
-
-    // One result message per call, immediately after the assistant message that
-    // announced them, in the same order.
-    for (const tool of settled) {
+    /** Emit the assistant message for everything buffered so far, then the
+     *  result message for each call it announced, in the same order. */
+    const flush = (): void => {
+      if (text === '' && pending.length === 0) return;
       out.push({
-        role: 'tool',
-        tool_call_id: tool.toolCallId,
-        name: tool.type,
-        content: tool.output !== undefined ? JSON.stringify(tool.output) : (tool.errorText ?? ''),
+        role: 'assistant',
+        content: text === '' ? null : text,
+        ...(pending.length > 0 ? { tool_calls: pending.map(toolCallOf) } : {}),
       });
+      for (const tool of pending) out.push(toolResultOf(tool));
+      text = '';
+      pending = [];
+    };
+
+    for (const part of message.parts) {
+      if (part.type === 'text') {
+        // Text that arrives AFTER a call is the model's answer to it, so the
+        // call and its result have to be on the wire before this text is.
+        if (pending.length > 0) flush();
+        text += part.text;
+        continue;
+      }
+      if (part.type === 'tool' && isSettled(part.tool)) pending.push(part.tool);
     }
+    flush();
   }
 
   return out;

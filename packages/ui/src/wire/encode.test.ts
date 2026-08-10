@@ -21,7 +21,9 @@ describe('toOpenAIMessages', () => {
     ]);
   });
 
-  it('joins multiple text parts into one flat content string', () => {
+  it('SPLITS one assistant turn at the tool boundary, so the answer follows the result', () => {
+    // The kit streams a whole turn into ONE message. Flattening it would put the
+    // model's answer before the tool result it was based on.
     expect(
       toOpenAIMessages([
         {
@@ -43,14 +45,63 @@ describe('toOpenAIMessages', () => {
             { type: 'text', text: 'It is 18C.' },
           ],
         },
-      ])[0],
-    ).toEqual({
-      role: 'assistant',
-      content: 'Checking. It is 18C.',
-      tool_calls: [
-        { id: 'c1', type: 'function', function: { name: 'get_weather', arguments: '{"city":"Paris"}' } },
-      ],
+      ]),
+    ).toEqual([
+      {
+        role: 'assistant',
+        content: 'Checking. ',
+        tool_calls: [
+          { id: 'c1', type: 'function', function: { name: 'get_weather', arguments: '{"city":"Paris"}' } },
+        ],
+      },
+      { role: 'tool', tool_call_id: 'c1', name: 'get_weather', content: '{"c":18}' },
+      { role: 'assistant', content: 'It is 18C.' },
+    ]);
+  });
+
+  it('joins text parts that sit on the SAME side of a tool boundary', () => {
+    expect(
+      toOpenAIMessages([
+        {
+          id: 'a1',
+          role: 'assistant',
+          parts: [
+            { type: 'text', text: 'Hello, ' },
+            { type: 'text', text: 'world.' },
+          ],
+        },
+      ]),
+    ).toEqual([{ role: 'assistant', content: 'Hello, world.' }]);
+  });
+
+  it('splits again at every later tool boundary', () => {
+    const tool = (id: string): Extract<ChatMessage['parts'][number], { type: 'tool' }> => ({
+      type: 'tool',
+      tool: { type: 't', state: 'output-available', toolCallId: id, rawInput: '{}', output: { id } },
     });
+    const out = toOpenAIMessages([
+      {
+        id: 'a1',
+        role: 'assistant',
+        parts: [
+          { type: 'text', text: 'one' },
+          tool('c1'),
+          { type: 'text', text: 'two' },
+          tool('c2'),
+          { type: 'text', text: 'three' },
+        ],
+      },
+    ]);
+    expect(out.map((m) => `${m.role}:${m.content ?? ''}`)).toEqual([
+      'assistant:one',
+      'tool:{"id":"c1"}',
+      'assistant:two',
+      'tool:{"id":"c2"}',
+      'assistant:three',
+    ]);
+    expect(out[0].tool_calls?.map((c) => c.id)).toEqual(['c1']);
+    expect(out[2].tool_calls?.map((c) => c.id)).toEqual(['c2']);
+    expect(out[4].tool_calls).toBeUndefined();
   });
 
   it('emits one role:tool message per executed call, right after the assistant', () => {
@@ -149,10 +200,90 @@ describe('toOpenAIMessages', () => {
       {
         id: 'a1',
         role: 'assistant',
-        parts: [{ type: 'tool', tool: { type: 't', state: 'output-available', output: {} } }],
+        parts: [
+          { type: 'text', text: 'answer' },
+          { type: 'tool', tool: { type: 't', state: 'output-available', output: {} } },
+        ],
       },
     ]);
+    expect(out).toEqual([{ role: 'assistant', content: 'answer' }]);
     expect(out[0].tool_calls).toBeUndefined();
+  });
+
+  it('prefers errorText over output when a tool carries BOTH', () => {
+    const out = toOpenAIMessages([
+      {
+        id: 'a1',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'tool',
+            tool: {
+              type: 't',
+              state: 'output-error',
+              toolCallId: 'c1',
+              rawInput: '{}',
+              output: { partial: true },
+              errorText: 'boom',
+            },
+          },
+        ],
+      },
+    ]);
+    expect(out[1].content).toBe('boom');
+    // The Anthropic encoder makes the same call, so the two agree.
+    expect(
+      toAnthropicMessages([
+        {
+          id: 'a1',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'tool',
+              tool: {
+                type: 't',
+                state: 'output-error',
+                toolCallId: 'toolu_1',
+                input: {},
+                output: { partial: true },
+                errorText: 'boom',
+              },
+            },
+          ],
+        },
+      ])[1].content,
+    ).toEqual([{ type: 'tool_result', tool_use_id: 'toolu_1', is_error: true, content: 'boom' }]);
+  });
+
+  it('emits NO message for a turn that encodes to nothing', () => {
+    // The mirror of the Anthropic case. `{ role: 'assistant', content: null }`
+    // with no tool_calls is rejected by strict-compatible endpoints.
+    expect(
+      toOpenAIMessages([
+        {
+          id: 'a1',
+          role: 'assistant',
+          parts: [
+            { type: 'reasoning', text: 'thought about it', index: 0 },
+            { type: 'tool', tool: { type: 'pending', state: 'input-available', toolCallId: 'c1', input: {} } },
+          ],
+        },
+      ]),
+    ).toEqual([]);
+  });
+
+  it('emits NO user message for a turn with no text', () => {
+    // An attachment-only turn. Sending `content: ''` carries nothing and is
+    // rejected by some endpoints; the Anthropic encoder drops it too.
+    expect(
+      toOpenAIMessages([
+        {
+          id: 'u1',
+          role: 'user',
+          parts: [{ type: 'file', attachment: { id: 'f1', type: 'file', filename: 'a.pdf' } }],
+        },
+      ]),
+    ).toEqual([]);
   });
 
   it('drops kit-side parts', () => {
