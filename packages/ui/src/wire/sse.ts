@@ -25,7 +25,11 @@ export type ByteSource = AsyncIterable<Uint8Array | string> | ReadableStream<Uin
  *  leaks the socket. The adapter stops reading mid-stream on a real and
  *  not-rare path (an in-band provider error after a 200), and every consumer
  *  `break`/`throw` inside `for await` lands here too, so this is where the
- *  connection has to be closed. */
+ *  connection has to be closed.
+ *
+ *  What must NOT land here is normal completion. `drained` is only honest if
+ *  every layer above reads to EOF rather than returning on a sentinel — see
+ *  `sseJson` and `[DONE]`. */
 export async function* readableToAsyncIterable(
   stream: ReadableStream<Uint8Array>,
 ): AsyncGenerator<Uint8Array> {
@@ -107,10 +111,26 @@ export async function* sseDataFrames(source: ByteSource): AsyncGenerator<string>
 
 /** Decode an SSE byte stream into JSON payloads, stopping at `[DONE]` and
  *  skipping frames that are not JSON. A provider that emits a stray non-JSON
- *  line should not take the turn down. */
+ *  line should not take the turn down.
+ *
+ *  `[DONE]` stops the YIELDING, not the READING. Returning at the sentinel
+ *  unwinds the generator chain while the reader has not yet seen `done: true`,
+ *  so `readableToAsyncIterable` treats normal completion as an early exit and
+ *  CANCELS the body — and since every OpenAI-format stream ends in `[DONE]`,
+ *  that aborts the response on the normal path, one `net::ERR_ABORTED` per
+ *  turn. Reading on to EOF instead lets the producer's own close end the
+ *  iteration, which is the only thing that makes `drained` mean what it says.
+ *  In practice that costs exactly one more `read()`: a server that has sent
+ *  `[DONE]` has finished the response body. Frames after the sentinel are
+ *  dropped, so what a caller sees is unchanged. */
 export async function* sseJson<T>(source: ByteSource): AsyncGenerator<T> {
+  let done = false;
   for await (const payload of sseDataFrames(source)) {
-    if (payload === '[DONE]') return;
+    if (done) continue; // drain the rest of the body; yield nothing more
+    if (payload === '[DONE]') {
+      done = true;
+      continue;
+    }
     try {
       yield JSON.parse(payload) as T;
     } catch {

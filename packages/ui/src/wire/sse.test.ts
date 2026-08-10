@@ -103,3 +103,88 @@ describe('readableToAsyncIterable', () => {
     expect(new TextDecoder().decode(new Uint8Array(chunks.flatMap((c) => [...c])))).toBe('abcdef');
   });
 });
+
+/** A ReadableStream that behaves like a real network body: nothing is produced
+ *  until somebody reads, and the close arrives on the read AFTER the last byte.
+ *
+ *  `highWaterMark: 0` is the whole point. With the default strategy the source
+ *  is pre-pulled, so a short fixture is fully enqueued AND closed before the
+ *  consumer has finished parsing it — and `reader.cancel()` on an
+ *  already-closed stream is a spec no-op that never reaches the underlying
+ *  `cancel()`. A test built on the default strategy therefore reports
+ *  "not cancelled" no matter what the adapter does. This one cannot. */
+function networkStream(text: string, size = 8) {
+  const buf = new TextEncoder().encode(text);
+  let i = 0;
+  const state = { cancelled: false, closed: false };
+  const stream = new ReadableStream<Uint8Array>(
+    {
+      pull(controller) {
+        if (i >= buf.length) {
+          state.closed = true;
+          controller.close();
+          return;
+        }
+        controller.enqueue(buf.subarray(i, Math.min(i + size, buf.length)));
+        i += size;
+      },
+      cancel() {
+        state.cancelled = true;
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  return { stream, state };
+}
+
+// `data: [DONE]` is how EVERY OpenAI-format stream ends, so cancelling there
+// aborts the response body on the normal completion path — one
+// `net::ERR_ABORTED` in the console per turn. Cancelling on a genuine early
+// exit is still required: `releaseLock()` alone leaves the body open.
+describe('cancellation: clean drain vs early exit', () => {
+  const DONE_SSE = 'data: {"a":1}\n\ndata: {"a":2}\n\ndata: [DONE]\n\n';
+
+  it('does NOT cancel a [DONE]-terminated stream', async () => {
+    const { stream, state } = networkStream(DONE_SSE);
+
+    expect(await collect(sseJson<{ a: number }>(stream))).toEqual([{ a: 1 }, { a: 2 }]);
+    expect(state.cancelled).toBe(false);
+    // The producer's own close is what ended it — proof the source was read to
+    // EOF rather than merely abandoned at the sentinel.
+    expect(state.closed).toBe(true);
+  });
+
+  it('DOES cancel when the consumer breaks mid-stream', async () => {
+    const { stream, state } = networkStream(DONE_SSE);
+
+    for await (const frame of sseJson<{ a: number }>(stream)) {
+      expect(frame).toEqual({ a: 1 });
+      break;
+    }
+
+    expect(state.cancelled).toBe(true);
+    expect(state.closed).toBe(false); // abandoned mid-stream, not drained
+  });
+
+  it('DOES cancel when the consumer throws mid-stream', async () => {
+    const { stream, state } = networkStream(DONE_SSE);
+
+    await expect(
+      (async () => {
+        for await (const _frame of sseJson(stream)) throw new Error('consumer exploded');
+      })(),
+    ).rejects.toThrow('consumer exploded');
+
+    expect(state.cancelled).toBe(true);
+  });
+
+  it('DOES cancel a stream the producer never finishes', async () => {
+    // No [DONE], no close: the frames just stop. Breaking out has to close the
+    // connection or the socket leaks.
+    const { stream, state } = networkStream('data: {"a":1}\n\ndata: {"a":2}\n\n');
+
+    for await (const _frame of sseDataFrames(stream)) break;
+
+    expect(state.cancelled).toBe(true);
+  });
+});

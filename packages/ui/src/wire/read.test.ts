@@ -224,25 +224,62 @@ describe('early exit cancels the underlying stream', () => {
   });
 
   it('does NOT cancel a stream that finished on its own', async () => {
-    // A stream the producer closed is already done. Cancelling it would be a
-    // no-op, but asserting the normal path stays clean keeps the two cases
-    // distinguishable if the guard is ever removed.
-    const state = { cancelled: false };
+    // DEMAND-DRIVEN, like a real response body: `highWaterMark: 0` means no
+    // byte and no close is produced until someone reads. The earlier version of
+    // this test used the default strategy, which pre-pulls: the whole fixture
+    // was enqueued and CLOSED before the adapter finished parsing it, and
+    // `reader.cancel()` on a closed stream is a spec no-op that never reaches
+    // the underlying `cancel()`. It reported "not cancelled" while the adapter
+    // was in fact aborting every real body at `data: [DONE]`.
+    const state = { cancelled: false, closed: false };
     const buf = new TextEncoder().encode(OPENAI_SSE);
     let i = 0;
-    const stream = new ReadableStream<Uint8Array>({
-      pull(controller) {
-        if (i >= buf.length) return controller.close();
-        controller.enqueue(buf.subarray(i, Math.min(i + 17, buf.length)));
-        i += 17;
+    const stream = new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          if (i >= buf.length) {
+            state.closed = true;
+            return controller.close();
+          }
+          controller.enqueue(buf.subarray(i, Math.min(i + 17, buf.length)));
+          i += 17;
+        },
+        cancel() {
+          state.cancelled = true;
+        },
       },
-      cancel() {
-        state.cancelled = true;
-      },
-    });
+      { highWaterMark: 0 },
+    );
 
     const turn = await readOpenAIStream(stream, nullSink());
     expect(turn.text).toBe('Hello world');
+    // `data: [DONE]` ends every OpenAI-format turn. Aborting the body there is
+    // a cancelled fetch (`net::ERR_ABORTED` in the console) on the NORMAL path.
+    expect(state.cancelled).toBe(false);
+    expect(state.closed).toBe(true); // read to EOF, not abandoned at the sentinel
+  });
+
+  it('does NOT cancel an Anthropic stream that finished on its own', async () => {
+    // Anthropic has no [DONE] sentinel: the frames simply stop and the producer
+    // closes. Guards the other terminator against the same regression.
+    const state = { cancelled: false };
+    const buf = new TextEncoder().encode(ANTHROPIC_SSE);
+    let i = 0;
+    const stream = new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          if (i >= buf.length) return controller.close();
+          controller.enqueue(buf.subarray(i, Math.min(i + 17, buf.length)));
+          i += 17;
+        },
+        cancel() {
+          state.cancelled = true;
+        },
+      },
+      { highWaterMark: 0 },
+    );
+
+    await readAnthropicStream(stream, nullSink());
     expect(state.cancelled).toBe(false);
   });
 });
