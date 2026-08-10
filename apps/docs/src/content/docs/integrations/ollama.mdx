@@ -39,31 +39,31 @@ export async function POST(req: Request) {
 }
 ```
 
-The browser side is the same reader loop you use for any backend: append the user turn and an empty assistant message, then reassign `messages` as `data:` lines arrive. See the [Streaming recipe](/guides/recipes/streaming/) for the exact loop.
+The browser side is the same reader loop you use for any backend. `toOpenAIMessages` encodes the thread's `parts` into the `{ role, content, tool_calls }` shape Ollama's OpenAI-compatible endpoint expects, and `readOpenAIStream` folds the reply back onto the in-flight message. See the [wire adapter](/guides/recipes/wire-adapter/) for what it handles.
 
 ```html
 <kai-chat id="chat"></kai-chat>
 
 <script type="module">
   import '@kitn.ai/ui/elements';
+  import { createAssistantStream } from '@kitn.ai/ui/state';
+  import { readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';
   const chat = document.getElementById('chat');
 
   chat.addEventListener('kai-submit', async (e) => {
     const history = [...chat.messages, { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: e.detail.value }] }];
-    chat.messages = [...history, { id: crypto.randomUUID(), role: 'assistant', parts: [] }];
-    await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      // The route (and Ollama's OpenAI-compatible endpoint) speak flat
-      // { role, content } pairs, so reduce each message's parts to text.
-      body: JSON.stringify({
-        messages: history.map((m) => ({
-          role: m.role,
-          content: m.parts.map((p) => (p.type === 'text' ? p.text : '')).join(''),
-        })),
-      }),
-    });
-    // stream the reply into the last message — see the Streaming recipe
+    chat.messages = history;
+    const stream = createAssistantStream((fn) => { chat.messages = fn(chat.messages); });
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: toOpenAIMessages(history) }),
+      });
+      await readOpenAIStream(res, stream);
+    } finally {
+      stream.done();
+    }
   });
 </script>
 ```
