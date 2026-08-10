@@ -5,9 +5,8 @@ interface KaiVisualizerProps {
   state: string;
   size?: string;
   color?: string;
-  /** Grid only: row/column overrides (kebab attributes on the element). */
-  rowCount?: number;
-  columnCount?: number;
+  /** Grid only: square density override (`count` attribute on the element). */
+  count?: number;
   /** Live audio. JS property on the element, never an attribute. */
   stream?: MediaStream;
   /** Pre-computed 0..1 levels. JS property; new array reference per update. */
@@ -25,8 +24,7 @@ export function KaiVisualizer({
   state,
   size = 'md',
   color,
-  rowCount,
-  columnCount,
+  count,
   stream,
   bands,
 }: KaiVisualizerProps) {
@@ -49,7 +47,6 @@ export function KaiVisualizer({
     size,
     theme: 'dark',
     ...(color ? { color } : {}),
-    ...(rowCount ? { 'row-count': rowCount } : {}),
-    ...(columnCount ? { 'column-count': columnCount } : {}),
+    ...(count ? { count } : {}),
   });
 }

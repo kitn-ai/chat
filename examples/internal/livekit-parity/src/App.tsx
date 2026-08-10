@@ -399,8 +399,7 @@ export default function App() {
             <KaiVisualizer
               variant="grid"
               state={agentState}
-              rowCount={gridCount ?? undefined}
-              columnCount={gridCount ?? undefined}
+              count={gridCount ?? undefined}
               stream={stream}
               bands={isFixture ? gridBands : undefined}
               color="#f4f4f5"
