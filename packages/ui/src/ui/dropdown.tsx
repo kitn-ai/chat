@@ -41,7 +41,7 @@ const ITEM_SELECTOR = '[role="menuitem"]:not([aria-disabled="true"]), [role="men
  *  `controllerRef` so it can drive/observe the Dropdown's open state. */
 export interface DropdownController { open: Accessor<boolean>; setOpen: (v: boolean) => void; }
 
-export function Dropdown(props: {
+export interface DropdownProps {
   children: JSX.Element;
   /** Initial open state (uncontrolled seed). */
   defaultOpen?: boolean;
@@ -49,7 +49,41 @@ export function Dropdown(props: {
   disabled?: boolean;
   /** Receive the open controller (open accessor + setOpen) once mounted. */
   controllerRef?: (api: DropdownController) => void;
-}) {
+}
+
+export interface DropdownTriggerProps {
+  /** Render as a different tag/component; defaults to a button. */
+  as?: AsTag;
+  children?: JSX.Element;
+  class?: string;
+  /** Remaining attributes are spread onto the rendered trigger. */
+  [k: string]: unknown;
+}
+
+export interface DropdownContentProps { children: JSX.Element; class?: string }
+
+export interface DropdownItemProps {
+  children: JSX.Element;
+  class?: string;
+  onSelect?: () => void;
+  disabled?: boolean;
+}
+
+export interface DropdownSeparatorProps { class?: string }
+
+export interface DropdownLabelProps { children: JSX.Element; class?: string }
+
+export interface DropdownCheckboxItemProps extends DropdownItemProps { checked?: boolean }
+
+export interface DropdownRadioItemProps extends DropdownItemProps { checked?: boolean }
+
+export interface DropdownSubProps { children: JSX.Element }
+
+export interface DropdownSubTriggerProps { children: JSX.Element; class?: string }
+
+export interface DropdownSubContentProps { children: JSX.Element; class?: string }
+
+export function Dropdown(props: DropdownProps) {
   const [open, setOpenSig] = createSignal(props.defaultOpen ?? false);
   const [viaKb, setViaKb] = createSignal(false);
   const [trigger, setTrigger] = createSignal<HTMLElement>();
@@ -95,7 +129,7 @@ export function Dropdown(props: {
   );
 }
 
-export function DropdownTrigger(props: { as?: AsTag; children?: JSX.Element; class?: string; [k: string]: any }) {
+export function DropdownTrigger(props: DropdownTriggerProps) {
   const ctx = useDropdown();
   // Forward extra attributes (e.g. aria-label for an icon-only trigger). The
   // controlled wiring below (id/aria-*/onClick/onKeyDown/class/type) is applied
@@ -126,7 +160,7 @@ export function DropdownTrigger(props: { as?: AsTag; children?: JSX.Element; cla
   );
 }
 
-export function DropdownContent(props: { children: JSX.Element; class?: string }) {
+export function DropdownContent(props: DropdownContentProps) {
   const ctx = useDropdown();
   const config = useChatConfig();
   const presence = createPresence(ctx.open);
@@ -221,7 +255,7 @@ export function DropdownContent(props: { children: JSX.Element; class?: string }
   );
 }
 
-export function DropdownItem(props: { children: JSX.Element; class?: string; onSelect?: () => void; disabled?: boolean }) {
+export function DropdownItem(props: DropdownItemProps) {
   const ctx = useDropdown();
   const activate = () => {
     if (props.disabled) return;
@@ -253,7 +287,7 @@ export function DropdownItem(props: { children: JSX.Element; class?: string; onS
  * a11y: `role="separator"` — exposed to AT as a group boundary; not in the
  * roving-focus tab order (the `[role="menuitem"]` query skips it).
  */
-export function DropdownSeparator(props: { class?: string }) {
+export function DropdownSeparator(props: DropdownSeparatorProps) {
   return <div role="separator" class={cn('-mx-1 my-1 h-px bg-border', props.class)} />;
 }
 
@@ -262,7 +296,7 @@ export function DropdownSeparator(props: { class?: string }) {
  * a11y: a plain muted label — NOT a menuitem and NOT focusable, so roving focus
  * skips it; it labels the items that follow visually only (`select-none`).
  */
-export function DropdownLabel(props: { children: JSX.Element; class?: string }) {
+export function DropdownLabel(props: DropdownLabelProps) {
   return (
     <div class={cn('select-none px-2 py-1.5 text-xs font-medium text-muted-foreground', props.class)}>
       {props.children}
@@ -278,7 +312,7 @@ export function DropdownLabel(props: { children: JSX.Element; class?: string }) 
  * present — aligns with the plain items above it instead of being pushed in by a
  * reserved leading check column.
  */
-export function DropdownCheckboxItem(props: { children: JSX.Element; class?: string; checked?: boolean; onSelect?: () => void; disabled?: boolean }) {
+export function DropdownCheckboxItem(props: DropdownCheckboxItemProps) {
   const activate = () => {
     if (props.disabled) return;
     props.onSelect?.(); /* stay open — consumer owns `checked` */
@@ -315,7 +349,7 @@ export function DropdownCheckboxItem(props: { children: JSX.Element; class?: str
  * content aligns with plain items. Group membership is the consumer's concern;
  * this primitive just renders the selected state and reports the click.
  */
-export function DropdownRadioItem(props: { children: JSX.Element; class?: string; checked?: boolean; onSelect?: () => void; disabled?: boolean }) {
+export function DropdownRadioItem(props: DropdownRadioItemProps) {
   const activate = () => {
     if (props.disabled) return;
     props.onSelect?.(); /* stay open — consumer owns the group selection */
@@ -377,7 +411,7 @@ const useDropdownSub = () => {
  * (Escape/outside-click/select), `useDismiss` on the parent unmounts the whole
  * content tree, which tears this provider down and drops the sub with it.
  */
-export function DropdownSub(props: { children: JSX.Element }) {
+export function DropdownSub(props: DropdownSubProps) {
   const [open, setOpenSig] = createSignal(false);
   const [viaKb, setViaKb] = createSignal(false);
   const [trigger, setTrigger] = createSignal<HTMLElement>();
@@ -422,7 +456,7 @@ export function DropdownSub(props: { children: JSX.Element }) {
  * keyboard-open also moves focus into the sub's first item. ArrowRight/Enter are
  * swallowed so the parent menu doesn't also act on them.
  */
-export function DropdownSubTrigger(props: { children: JSX.Element; class?: string }) {
+export function DropdownSubTrigger(props: DropdownSubTriggerProps) {
   const sub = useDropdownSub();
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'ArrowRight' || e.key === 'Enter' || e.key === ' ') {
@@ -465,7 +499,7 @@ export function DropdownSubTrigger(props: { children: JSX.Element; class?: strin
  * ArrowUp/Down/Home/End rove within; typeahead included (matches DropdownContent).
  * Keyboard-open focuses the first item.
  */
-export function DropdownSubContent(props: { children: JSX.Element; class?: string }) {
+export function DropdownSubContent(props: DropdownSubContentProps) {
   const sub = useDropdownSub();
   const parent = useDropdown();
   const config = useChatConfig();

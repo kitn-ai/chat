@@ -122,7 +122,9 @@ function SourceContent(props: SourceContentProps) {
 
 // --- SourceList (convenience) ---
 
-function SourceList(props: { children: JSX.Element; class?: string }) {
+export interface SourceListProps { children: JSX.Element; class?: string }
+
+function SourceList(props: SourceListProps) {
   return <div class={cn('flex flex-wrap gap-1.5 mt-3', props.class)}>{props.children}</div>;
 }
 

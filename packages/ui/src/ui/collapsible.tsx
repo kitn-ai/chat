@@ -39,7 +39,7 @@ const useCollapsible = () => {
  *  (no `open` prop); in controlled mode the parent already owns the state. */
 export interface CollapsibleController { open: Accessor<boolean>; setOpen: (v: boolean) => void; }
 
-export function Collapsible(props: {
+export interface CollapsibleProps {
   open?: boolean;
   defaultOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -51,7 +51,9 @@ export function Collapsible(props: {
   controllerRef?: (api: CollapsibleController) => void;
   children: JSX.Element;
   class?: string;
-}) {
+}
+
+export function Collapsible(props: CollapsibleProps) {
   const [local, rest] = splitProps(props, ['open', 'defaultOpen', 'onOpenChange', 'disabled', 'controllerRef', 'children', 'class']);
   const [uncontrolled, setUncontrolled] = createSignal(local.defaultOpen ?? false);
   const isControlled = () => local.open !== undefined;
@@ -88,13 +90,16 @@ export function Collapsible(props: {
   );
 }
 
-export function CollapsibleTrigger(props: {
+export interface CollapsibleTriggerProps {
   children?: JSX.Element;
   class?: string;
   as?: (props: Record<string, any>) => JSX.Element;
   onClick?: JSX.EventHandlerUnion<HTMLButtonElement, MouseEvent>;
+  /** Remaining attributes are spread onto the rendered trigger. */
   [k: string]: any;
-}) {
+}
+
+export function CollapsibleTrigger(props: CollapsibleTriggerProps) {
   const ctx = useCollapsible();
   const [local, rest] = splitProps(props, ['children', 'class', 'as', 'onClick']);
 
@@ -130,7 +135,14 @@ export function CollapsibleTrigger(props: {
   );
 }
 
-export function CollapsibleContent(props: { children?: JSX.Element; class?: string; [k: string]: any }) {
+export interface CollapsibleContentProps {
+  children?: JSX.Element;
+  class?: string;
+  /** Remaining attributes are spread onto the rendered panel. */
+  [k: string]: any;
+}
+
+export function CollapsibleContent(props: CollapsibleContentProps) {
   const ctx = useCollapsible();
   const [local, rest] = splitProps(props, ['children', 'class']);
   return (

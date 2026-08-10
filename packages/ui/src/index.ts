@@ -27,7 +27,7 @@ export type {
 } from './primitives/toast-store';
 export { Toast, ToastRegion } from './components/toast';
 export type {
-  ToastRegionProps, ToastDismissReason, ToastPosition,
+  ToastProps, ToastRegionProps, ToastDismissReason, ToastPosition,
 } from './components/toast';
 
 // Card Contract (generative-UI foundation)
@@ -160,26 +160,37 @@ export type { ButtonProps } from './ui/button';
 export { Avatar } from './ui/avatar';
 export type { AvatarProps } from './ui/avatar';
 export { Tooltip } from './ui/tooltip';
+export type { TooltipProps, TooltipController } from './ui/tooltip';
 export { HoverCard, HoverCardRoot, HoverCardTrigger, HoverCardContent } from './ui/hover-card';
 export type {
-  HoverCardRootProps, HoverCardTriggerProps, HoverCardContentProps, HoverCardController,
+  HoverCardProps, HoverCardRootProps, HoverCardTriggerProps, HoverCardContentProps, HoverCardController,
 } from './ui/hover-card';
 export { Collapsible, CollapsibleTrigger, CollapsibleContent } from './ui/collapsible';
+export type {
+  CollapsibleProps, CollapsibleTriggerProps, CollapsibleContentProps, CollapsibleController,
+} from './ui/collapsible';
 export { ScrollArea } from './ui/scroll-area';
+export type { ScrollAreaProps, ScrollOrientation } from './ui/scroll-area';
 export {
   Dropdown, DropdownTrigger, DropdownContent, DropdownItem,
   DropdownSeparator, DropdownLabel, DropdownCheckboxItem, DropdownRadioItem,
   DropdownSub, DropdownSubTrigger, DropdownSubContent,
 } from './ui/dropdown';
-export type { DropdownController } from './ui/dropdown';
+export type {
+  DropdownProps, DropdownTriggerProps, DropdownContentProps, DropdownItemProps,
+  DropdownSeparatorProps, DropdownLabelProps, DropdownCheckboxItemProps, DropdownRadioItemProps,
+  DropdownSubProps, DropdownSubTriggerProps, DropdownSubContentProps, DropdownController,
+} from './ui/dropdown';
 export { Textarea } from './ui/textarea';
 export type { TextareaProps } from './ui/textarea';
 export { Badge } from './ui/badge';
 export type { BadgeProps } from './ui/badge';
 export { Separator } from './ui/separator';
+export type { SeparatorProps } from './ui/separator';
 export { ResizablePanelGroup, ResizablePanel, ResizableHandle, Resizable, normalizeSize, resolveToPx, clampBasis } from './ui/resizable';
 export type { ResizablePanelGroupProps, ResizablePanelProps, ResizableHandleProps, ResizableProps, SizeValue } from './ui/resizable';
 export { Skeleton } from './ui/skeleton';
+export type { SkeletonProps, SkeletonVariant } from './ui/skeleton';
 export { Input } from './ui/input';
 export type { InputProps } from './ui/input';
 export { Kbd } from './ui/kbd';
@@ -231,8 +242,14 @@ export {
   ChatContainer, ChatContainerRoot, ChatContainerContent, ChatContainerScrollAnchor,
   useChatContainer,
 } from './components/chat-container';
+export type {
+  ChatContainerProps, ChatContainerRootProps, ChatContainerContentProps, ChatContainerScrollAnchorProps,
+} from './components/chat-container';
 export { Message, MessageAvatar, MessageContent, MessageActions, MessageAction, MessageCopyButton, MessageBody } from './components/message';
-export type { MessageCopyButtonProps, MessageBodyProps } from './components/message';
+export type {
+  MessageProps, MessageAvatarProps, MessageContentProps, MessageActionsProps,
+  MessageActionProps, MessageCopyButtonProps, MessageBodyProps,
+} from './components/message';
 export { ResponseCompare, useResolved } from './components/response-compare';
 export type { ResponseCompareProps, CompareLayout, ResolvedController } from './components/response-compare';
 export {
@@ -248,14 +265,20 @@ export type {
   CompareSelection,
 } from './components/response-compare';
 export { MessageSkills } from './components/message-skills';
-export type { Skill as MessageSkill } from './components/message-skills';
+export type { MessageSkillsProps, Skill as MessageSkill } from './components/message-skills';
 export {
   PromptInput, PromptInputTextarea, PromptInputActions, PromptInputAction,
   usePromptInput,
 } from './components/prompt-input';
+export type {
+  PromptInputProps, PromptInputTextareaProps, PromptInputActionsProps, PromptInputActionProps,
+} from './components/prompt-input';
 export { ResponseStream } from './components/response-stream';
+export type { ResponseStreamProps } from './components/response-stream';
 export { Markdown } from './components/markdown';
+export type { MarkdownProps } from './components/markdown';
 export { CodeBlock, CodeBlockCode, CodeBlockGroup } from './components/code-block';
+export type { CodeBlockProps, CodeBlockCodeProps, CodeBlockGroupProps } from './components/code-block';
 export { Loader } from './components/loader';
 export type { LoaderVariant, LoaderSize, LoaderProps } from './components/loader';
 export {
@@ -263,16 +286,26 @@ export {
   DotsLoader, TypingLoader, WaveLoader, BarsLoader,
   TerminalLoader, TextBlinkLoader, TextShimmerLoader, TextDotsLoader,
 } from './components/loader';
-export { FeedbackBar, type FeedbackValue, type FeedbackDetail } from './components/feedback-bar';
+export type {
+  LoaderShapeProps, LoaderTextProps,
+  CircularLoaderProps, ClassicLoaderProps, PulseLoaderProps, PulseDotLoaderProps,
+  DotsLoaderProps, TypingLoaderProps, WaveLoaderProps, BarsLoaderProps,
+  TerminalLoaderProps, TextBlinkLoaderProps, TextShimmerLoaderProps, TextDotsLoaderProps,
+} from './components/loader';
+export { FeedbackBar, type FeedbackValue, type FeedbackDetail, type FeedbackBarProps } from './components/feedback-bar';
 export {
   ChainOfThought, ChainOfThoughtStep, ChainOfThoughtTrigger,
   ChainOfThoughtContent, ChainOfThoughtItem, ChainOfThoughtAccordion,
 } from './components/chain-of-thought';
 export type {
+  ChainOfThoughtProps, ChainOfThoughtStepProps, ChainOfThoughtTriggerProps,
+  ChainOfThoughtContentProps, ChainOfThoughtItemProps, ChainOfThoughtAccordionProps,
   ChainOfThoughtType, ChainOfThoughtStepData, ChainOfThoughtController,
 } from './components/chain-of-thought';
 export { Source, SourceTrigger, SourceContent, SourceList } from './components/source';
+export type { SourceProps, SourceTriggerProps, SourceContentProps, SourceListProps } from './components/source';
 export { PromptSuggestion } from './components/prompt-suggestion';
+export type { PromptSuggestionProps } from './components/prompt-suggestion';
 export {
   Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent, emptyMediaVariants,
 } from './components/empty';
@@ -280,7 +313,9 @@ export type {
   EmptyProps, EmptyHeaderProps, EmptyMediaProps, EmptyTitleProps, EmptyDescriptionProps, EmptyContentProps,
 } from './components/empty';
 export { ScrollButton } from './components/scroll-button';
+export type { ScrollButtonProps } from './components/scroll-button';
 export { TextShimmer } from './components/text-shimmer';
+export type { TextShimmerProps } from './components/text-shimmer';
 export { Checkpoint, CheckpointIcon, CheckpointTrigger } from './components/checkpoint';
 export type { CheckpointProps, CheckpointIconProps, CheckpointTriggerProps } from './components/checkpoint';
 export {
@@ -303,14 +338,25 @@ export type {
   ContextContentBodyProps,
   ContextContentFooterProps,
   ContextUsageRowProps,
+  ContextInputUsageProps,
+  ContextOutputUsageProps,
+  ContextReasoningUsageProps,
+  ContextCacheUsageProps,
 } from './components/context';
 export { VoiceInput } from './components/voice-input';
+export type { VoiceInputProps, VoiceInputController } from './components/voice-input';
 export { VoiceOutput } from './components/voice-output';
 export type { VoiceOutputProps, VoiceOutputController } from './components/voice-output';
 export { ConversationList, CollapsedRail } from './components/conversation-list';
+export type {
+  ConversationListProps, ConversationListController, CollapsedRailProps,
+} from './components/conversation-list';
 export { ConversationItem } from './components/conversation-item';
+export type { ConversationItemProps } from './components/conversation-item';
 export { ModelSwitcher } from './components/model-switcher';
+export type { ModelSwitcherProps } from './components/model-switcher';
 export { ChatScopePicker } from './components/chat-scope-picker';
+export type { ChatScopePickerProps } from './components/chat-scope-picker';
 export { Tool } from './components/tool';
 export type { ToolPart, ToolProps } from './components/tool';
 // ToolPart.kind's doc comment says "Derive with `classifyTool(type)`", so the

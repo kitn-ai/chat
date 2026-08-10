@@ -16,7 +16,9 @@ import type { ConversationSummary, ConversationGroup } from '../types';
  * surrounding region (the workspace puts the thread beside it, the standalone
  * element stands alone). `onExpand` reopens the rail.
  */
-export function CollapsedRail(props: { onExpand: () => void; class?: string }) {
+export interface CollapsedRailProps { onExpand: () => void; class?: string }
+
+export function CollapsedRail(props: CollapsedRailProps) {
   return (
     <Button
       variant="ghost" size="icon-sm" aria-label="Open sidebar"
