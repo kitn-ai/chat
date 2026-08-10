@@ -86,15 +86,29 @@ launchctl setenv OLLAMA_ORIGINS "https://your-site.com"
 OLLAMA_ORIGINS="https://your-site.com" ollama serve
 ```
 
-`OLLAMA_ORIGINS` is comma-separated and accepts a `*` wildcard. Now fetch from the page exactly as you would any OpenAI endpoint:
+`OLLAMA_ORIGINS` is comma-separated and accepts a `*` wildcard. Now fetch from the page exactly as you would any OpenAI endpoint. Same handler as the proxied path; only the URL moves:
 
 ```js
-const upstream = await fetch('http://localhost:11434/v1/chat/completions', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ model: 'llama3.2', messages: chat.messages, stream: true }),
+import { createAssistantStream } from '@kitn.ai/ui/state';
+import { readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';
+
+chat.addEventListener('kai-submit', async (e) => {
+  const history = [...chat.messages, { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: e.detail.value }] }];
+  chat.messages = history;
+  const stream = createAssistantStream((fn) => { chat.messages = fn(chat.messages); });
+  try {
+    const upstream = await fetch('http://localhost:11434/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      // Same encoder as the proxied path. chat.messages carries the kit's parts;
+      // posting those raw is a 400 from any OpenAI-compatible endpoint, Ollama included.
+      body: JSON.stringify({ model: 'llama3.2', messages: toOpenAIMessages(history), stream: true }),
+    });
+    await readOpenAIStream(upstream, stream);
+  } finally {
+    stream.done();
+  }
 });
-// then read upstream.body with the Streaming recipe's loop
 ```
 
 <Aside type="caution">Browser-direct only reaches the user's own machine. Ollama must be running locally and the origin must be in `OLLAMA_ORIGINS` — there's no fallback for visitors who don't run it. Use the server proxy for anything you deploy; keep browser-direct for local dev and self-hosted tools.</Aside>

@@ -178,7 +178,9 @@ The components are deliberately **transport-agnostic**: `<kai-chat>` just render
       // codepoints split across a socket boundary, tool calls, reasoning.
       await readOpenAIStream(res, stream);
     } catch (err) {
-      stream.appendText('⚠️ ' + err.message);
+      // A non-ok response throws WireError before a single chunk is read, so put
+      // the reason in the bubble rather than leaving an empty one.
+      stream.appendText('Request failed: ' + err.message);
     } finally {
       stream.done();
       chat.loading = false;
@@ -270,7 +272,6 @@ You can trigger either option from the streaming completion (auto-read replies) 
 
 ```tsx
 import { Chat, useKaiChat } from '@kitn.ai/ui/react';
-import { createAssistantStream } from '@kitn.ai/ui/state';
 
 function App() {
   const chat = useKaiChat({

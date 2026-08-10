@@ -137,7 +137,7 @@ el.text = 'The assistant response rendered with the typewriter effect.';
 
 ## Without the adapter
 
-If you would rather not add the import, here is the whole thing by hand. It handles text and nothing else: no tool calls, no reasoning, no citations. It also treats every `data:` line as a complete frame, which is wrong for a frame carrying several `data:` lines, and it splits on `\n` before decoding, so a multi-byte codepoint landing on a socket boundary comes out mangled. `readOpenAIStream` gets all three right, which is why the rest of this page uses it.
+If you would rather not add the import, here is the whole thing by hand. It handles text and nothing else: no tool calls, no reasoning, no citations. It also treats every `data:` line as a complete frame, and the SSE spec joins the several `data:` lines of one frame into a single payload, so parsing them separately drops that frame entirely. And it replaces the message's `parts` wholesale, which deletes any reasoning or tool panel already on the message it is streaming into. `readOpenAIStream` gets all three right, which is why the rest of this page uses it.
 
 ```js
 // Seed the assistant placeholder yourself, since nothing else will.

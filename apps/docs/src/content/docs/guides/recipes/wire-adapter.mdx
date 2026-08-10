@@ -111,21 +111,42 @@ await readModelStream(res, stream, { format: acmeEvents });
 
 ## Tool loop
 
-The kit never calls your function. `readOpenAIStream` returns the turn, you run the tools, and `applyToolOutput` completes the panel:
+The kit never calls your function. `readOpenAIStream` returns the turn, you run the tools, and `applyToolOutput` completes the panel. Every round folds onto the same assistant message, so one stream spans the whole loop:
 
 ```ts
+import { createAssistantStream } from '@kitn.ai/ui/state';
 import { applyToolOutput, readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';
 
-const turn = await readOpenAIStream(res, stream);
-for (const call of turn.toolCalls) {
-  if (call.error || call.providerExecuted) continue;
-  const output = await runYourTool(call.name, call.input ?? {});
-  applyToolOutput(stream, call.id, output);
+const stream = createAssistantStream((update) => {
+  chat.messages = update(chat.messages);
+});
+
+try {
+  // Cap the rounds: a runaway model is a runaway bill.
+  for (let round = 0; round < 4; round++) {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      // Re-encoded every round, so the results applyToolOutput just wrote travel
+      // back with the next request. That is what lets the model answer with them.
+      body: JSON.stringify({ messages: toOpenAIMessages(chat.messages), tools }),
+    });
+
+    const turn = await readOpenAIStream(res, stream);
+    const pending = turn.toolCalls.filter((call) => !call.error && !call.providerExecuted);
+    if (pending.length === 0) break;
+
+    for (const call of pending) {
+      const output = await runYourTool(call.name, call.input ?? {});
+      applyToolOutput(stream, call.id, output);
+    }
+  }
+} finally {
+  stream.done();
 }
-// then POST again with toOpenAIMessages(latestMessages) to let the
-// model answer with the results. Cap the rounds: a runaway model is
-// a runaway bill.
 ```
+
+The loop runs *inside* the `try`. `stream.done()` settles the message and every sink call after it is dropped, so an `applyToolOutput` placed after a `try`/`finally` that already called `done()` leaves the panel stuck on `input-available` forever, with no error to point at.
 
 `call.providerExecuted` marks a tool the provider already ran, with the result in the stream. Running it again bills you twice for the same answer. `call.error` marks arguments that never parsed, usually because the model was cut off at `max_tokens`.
 
