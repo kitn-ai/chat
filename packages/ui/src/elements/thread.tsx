@@ -9,7 +9,7 @@ import type { ProseSize } from '../primitives/chat-config';
 
 interface Props extends Record<string, unknown> {
   /** The full message thread to render, newest last. Each entry carries its role,
-   *  content, and optional reasoning/tools/attachments/actions/avatar. Set as a JS
+   *  ordered `parts`, and optional actions/avatar/feedback. Set as a JS
    *  property (`el.messages = [...]`); a NEW array reference per streaming chunk
    *  re-renders (mutating in place does not). */
   messages?: ChatMessage[];

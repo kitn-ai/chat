@@ -69,8 +69,8 @@
     customElements.whenDefined('kai-chat').then(() => {
       const chat = document.getElementById('chat');
       chat.messages = [
-        { id: '1', role: 'user', content: 'Why did this page load so little?' },
-        { id: '2', role: 'assistant', content: "The autoloader fetched only kai-chat's module — watch the panel when you add another element." },
+        { id: '1', role: 'user', parts: [{ type: 'text', text: 'Why did this page load so little?' }] },
+        { id: '2', role: 'assistant', parts: [{ type: 'text', text: "The autoloader fetched only kai-chat's module — watch the panel when you add another element." }] },
       ];
       chat.placeholder = 'The other ~40 elements never downloaded';
     });
