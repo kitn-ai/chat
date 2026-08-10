@@ -13,11 +13,16 @@ import { Aside } from '@astrojs/starlight/components';
 npm install @kitn.ai/ui
 ```
 
-Register every `kai-*` element once, near your app entry point:
+Register every `kai-*` element once, near your app entry point. Registration is async, and Svelte assigns object properties as it mounts, so mount behind `elementsReady`. A property written before the element upgrades is discarded.
 
 ```js
-// src/main.js  or inside a <script> block in your root component
-import '@kitn.ai/ui/elements';
+// src/main.js
+import { mount } from 'svelte';
+import { elementsReady } from '@kitn.ai/ui/elements';
+import App from './App.svelte';
+
+// Resolves once every kai-* element is defined.
+elementsReady.then(() => mount(App, { target: document.getElementById('app') }));
 ```
 
 One import covers your entire app. No CSS import is needed — each element is styled inside its own Shadow DOM. Add `@kitn.ai/ui/theme.css` only if you want to override design tokens (see [Theming](/guides/theming/)).

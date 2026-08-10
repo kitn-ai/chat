@@ -15,15 +15,16 @@ npm install @kitn.ai/ui
 
 ## Register elements
 
-Import the element bundle **once**, before `createApp().mount()`. Vue stamps tags at mount time — if elements register after mount, array and object props passed by Vue get clobbered and the UI renders blank.
+Register the elements **before** `createApp().mount()`. Vue stamps tags at mount time, and registration is async, so an import alone is not enough: a `.prop` binding written before the element upgrades is discarded and the UI renders blank. Mount behind `elementsReady`, the promise the entry exports.
 
 ```ts
 // src/main.ts
-import '@kitn.ai/ui/elements'; // must come before createApp
+import { elementsReady } from '@kitn.ai/ui/elements';
 import { createApp } from 'vue';
 import App from './App.vue';
 
-createApp(App).mount('#app');
+// Resolves once every kai-* element is defined.
+elementsReady.then(() => createApp(App).mount('#app'));
 ```
 
 ## Configure Vite

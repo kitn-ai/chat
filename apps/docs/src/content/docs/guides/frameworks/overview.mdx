@@ -23,6 +23,14 @@ Import `@kitn.ai/ui/elements` once for its side effect. It registers every `kai-
 import '@kitn.ai/ui/elements';
 ```
 
+Registration is **async**. If your framework sets array or object properties as it mounts (Vue, Angular, Svelte all do), mount behind the `elementsReady` promise the same entry exports. A property written before the element upgrades is lost.
+
+```ts
+import { elementsReady } from '@kitn.ai/ui/elements';
+
+elementsReady.then(() => mountYourApp());
+```
+
 Then use them in your templates:
 
 <Tabs>
@@ -71,8 +79,15 @@ Then use them in your templates:
   </TabItem>
   <TabItem label="Angular">
     ```ts
-    // app.module.ts
-    import '@kitn.ai/ui/elements';
+    // main.ts
+    import { elementsReady } from '@kitn.ai/ui/elements';
+    elementsReady.then(() => bootstrapApplication(AppComponent, appConfig));
+    ```
+
+    ```ts
+    // the component using kai-* tags
+    @Component({ /* … */ schemas: [CUSTOM_ELEMENTS_SCHEMA] })
+    export class AppComponent {}
     ```
 
     ```html
@@ -152,7 +167,6 @@ import {
   PromptInputTextarea,
   PromptInputActions,
 } from '@kitn.ai/ui';
-import '@kitn.ai/ui/theme.css';
 
 export function App() {
   const [input, setInput] = createSignal('');
@@ -187,6 +201,8 @@ Solid usage also needs `solid-js` as a peer dependency:
 ```bash
 npm install solid-js
 ```
+
+Unlike the elements, the native components are Tailwind v4 classes, so this path also needs Tailwind in the app plus an `@source` line pointing at the package. Rendering a real thread means `MessageBody` over each message's ordered `parts`, or `Thread` for the whole list at once. Both are covered in the [SolidJS guide](/guides/frameworks/solid/).
 
 ## Per-framework guides
 

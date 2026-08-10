@@ -15,16 +15,18 @@ npm install @kitn.ai/ui
 
 ## Register the elements
 
-Import the element bundle once as a side-effect in `main.ts`, **before** `bootstrapApplication`. This registers every `kai-*` web component globally.
+The elements register **asynchronously**: `@kitn.ai/ui/elements` defers the actual `customElements.define` calls behind a browser check, so an import alone does not guarantee the tags exist yet. Angular writes array and object DOM properties the moment it stamps a `<kai-*>` tag; a write that lands before the element upgrades is discarded when the element applies its own empty defaults. Gate `bootstrapApplication` on the `elementsReady` promise the entry exports:
 
 ```ts
 // main.ts
-import '@kitn.ai/ui/elements';
+import { elementsReady } from '@kitn.ai/ui/elements';
 import { bootstrapApplication } from '@angular/platform-browser';
 import { AppComponent } from './app/app.component';
 import { appConfig } from './app/app.config';
 
-bootstrapApplication(AppComponent, appConfig);
+// Resolves once every kai-* element is defined. Angular then binds against
+// upgraded elements, so [messages] / [conversations] survive.
+elementsReady.then(() => bootstrapApplication(AppComponent, appConfig));
 ```
 
 Then add **`CUSTOM_ELEMENTS_SCHEMA`** to every standalone component whose template uses `kai-*` tags. Without it, the Angular compiler rejects the unknown element names at build time.
@@ -42,9 +44,21 @@ import { Component, CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 export class AppComponent {}
 ```
 
-<Aside type="tip" title="No CSS import needed">
-Each element styles itself inside Shadow DOM. Import `@kitn.ai/ui/theme.css` only if you want to override design tokens.
-</Aside>
+## Theme tokens
+
+Each element styles itself inside Shadow DOM, so nothing is required to make the elements look right. Add the token sheet when you want to override the design tokens, or reuse the kit's `--color-*` values for your own chrome around the chat.
+
+Angular loads global CSS from the build config, **not** from a TS `import './x.css'`, which `@angular/build` ignores. Add the sheet to `architect.build.options.styles`:
+
+```jsonc
+// angular.json
+"styles": [
+  "node_modules/@kitn.ai/ui/dist/theme.tokens.css",
+  "src/styles.css"
+]
+```
+
+`theme.tokens.css` is the plain custom-property sheet. `@kitn.ai/ui/theme.css` is the Tailwind source layer, meant for apps that already compile Tailwind.
 
 ## Quick start — the all-in-one shell
 
@@ -221,7 +235,53 @@ You can drop individual display elements anywhere in your UI without adopting a 
 
 Each fills its container and is controlled entirely through `[prop]` bindings and `(event)` listeners — no Shadow DOM piercing, no CSS manipulation.
 
+## The backend route
+
+`streamFromYourAPI` above is your `POST /api/chat`. **Hosting it inside the Angular app requires SSR.** `@angular/build:dev-server` exposes no middleware hook and takes no Vite plugins, so a browser-only Angular app cannot serve an endpoint at all. Its only options are proxying to a separate server or running the handler elsewhere.
+
+With SSR enabled, the server is a plain Express app:
+
+```bash
+ng add @angular/ssr
+```
+
+That generates `src/server.ts`. The Angular CLI loads it through the `reqHandler` export at the bottom for **both** `ng serve` and `ng build`, so one registration covers development and production.
+
+```ts
+// src/server.ts
+const app = express();
+const angularApp = new AngularNodeAppEngine();
+
+// ORDER MATTERS: register the endpoint BEFORE the catch-all below. After it,
+// Angular renders an HTML page for /api/chat and the browser tries to parse
+// that as SSE.
+app.post('/api/chat', express.json(), async (req, res) => {
+  // call your model, pipe the SSE body through to res
+});
+
+app.use(express.static(browserDistFolder, { maxAge: '1y', index: false, redirect: false }));
+
+// Everything else renders the Angular application.
+app.use((req, res, next) => {
+  angularApp
+    .handle(req)
+    .then((response) => (response ? writeResponseToNodeResponse(response, res) : next()))
+    .catch(next);
+});
+
+export const reqHandler = createNodeRequestHandler(app);
+```
+
+Two things that bite when piping a provider stream through Express: forward `response.status` (a 401 that reaches the browser as a 200 is a blank bubble and no error), and write each chunk as it lands rather than buffering the body.
+
+The route's contract, the SSE shape, and the parser that folds it back onto `messages` are the same in every framework: see [Connect any backend](/integrations/connect-any-backend/) and the [wire adapter](/guides/recipes/wire-adapter/).
+
+<Aside type="tip" title="Let the MCP write it">
+The `kai` MCP server scaffolds the Angular front end and this `src/server.ts` together, wired to whichever provider you name. See [For AI Agents](/guides/for-ai-agents/).
+</Aside>
+
 ## Next steps
 
 - [Installation](/guides/installation/) — package exports and theme tokens
 - [Components](/components/attachments/) — full prop and event reference for every `kai-*` element
+- [Connect any backend](/integrations/connect-any-backend/) — the contract your `/api/chat` route fills
