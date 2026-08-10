@@ -22,7 +22,8 @@ describe('scaffold', () => {
     // React branch now uses the @kitn.ai/ui/react wrapper (<Chat />) — no raw kai-chat tag.
     expect(text).toMatch(/<Chat\b|<kai-chat/);
     expect(text).toMatch(/openrouter\.ai\/api\/v1\/chat\/completions/);
-    expect(text).toMatch(/Streaming recipe/);
+    // The stream note points at the adapter that actually reads it.
+    expect(text).toMatch(/readOpenAIStream/);
   });
 
   it('pydantic-ai emits a Python (FastAPI) route', async () => {
@@ -660,11 +661,16 @@ describe('scaffold', () => {
   });
 
   // ── SCAF-11: emitted ChatMessage type must use the library's strict state union ──
+  //
+  // The LOCAL type is emitted by the `mock` scaffold only — a real backend now
+  // imports the kit's own ChatMessage (it hands messages to toOpenAIMessages, and
+  // the local subset would reject a message the kit produced). These three keep
+  // the local declaration honest; the sibling test below covers the real path.
 
-  it('SCAF-11: agentic (react) ChatMessage type uses strict state union, not bare string', async () => {
+  it('SCAF-11: agentic (react, mock) ChatMessage type uses strict state union, not bare string', async () => {
     const out = await scaffold.handler({
       useCase: 'agentic',
-      integration: 'openrouter',
+      integration: 'mock',
       placement: 'side',
       framework: 'react',
     });
@@ -680,7 +686,7 @@ describe('scaffold', () => {
   it('SCAF-11: agentic sample message state value is a valid union member (output-available)', async () => {
     const out = await scaffold.handler({
       useCase: 'agentic',
-      integration: 'openrouter',
+      integration: 'mock',
       placement: 'side',
       framework: 'react',
     });
@@ -689,16 +695,38 @@ describe('scaffold', () => {
     expect(text).toContain("'output-available'");
   });
 
-  it('SCAF-11: knowledge-base (react) ChatMessage type also uses strict state union', async () => {
+  it('SCAF-11: knowledge-base (react, mock) ChatMessage type also uses strict state union', async () => {
     const out = await scaffold.handler({
       useCase: 'knowledge-base',
-      integration: 'openrouter',
+      integration: 'mock',
       placement: 'full-page',
       framework: 'react',
     });
     const text = (out.content as { type: string; text: string }[])[0].text;
     expect(text).toContain("'input-streaming' | 'input-available' | 'output-available' | 'output-error'");
     expect(text).not.toMatch(/state:\s*string/);
+  });
+
+  it('SCAF-11: a real backend imports the kit ChatMessage instead of re-declaring a subset', async () => {
+    for (const framework of ['react', 'next', 'vue', 'svelte', 'tanstack-start'] as const) {
+      const out = await scaffold.handler({
+        useCase: 'agentic',
+        integration: 'openrouter',
+        placement: 'full-page',
+        framework,
+      });
+      const text = (out.content as { type: string; text: string }[])[0].text;
+      expect(text, `${framework}: missing the kit ChatMessage import`).toContain(
+        "import { createAssistantStream, type ChatMessage } from '@kitn.ai/ui/state';",
+      );
+      // The local subset type is gone: it has no rawInput/raw/signature/index on a
+      // tool and no source/file part variants, so it would reject a message the
+      // kit itself produced on the way into toOpenAIMessages.
+      expect(text, `${framework}: still re-declares a local ChatMessage`).not.toContain(
+        'type ChatMessage = { id: string;',
+      );
+      expect(text, `${framework}: loose state: string`).not.toMatch(/state:\s*string/);
+    }
   });
 
   it('SCAF-9: knowledge-base (react) emits <Sources> with real sample sources data', async () => {
@@ -1414,32 +1442,34 @@ describe('scaffold', () => {
   // parts clothing: harmless into a fresh `parts: []`, but it deletes the
   // reasoning + tool parts SAMPLE_AGENTIC_MESSAGE seeds, so the first consumer
   // to stream into a seeded message loses them silently.
-  it('every streaming path folds onto the trailing text part, never replacing parts wholesale', async () => {
+  //
+  // The `mock` path still inlines the fold (it must add no imports). A real
+  // backend gets the same guarantee from createAssistantStream, which folds
+  // through appendTextPart — the function this inline copy was copied FROM.
+  it('every mock streaming path folds onto the trailing text part, never replacing parts wholesale', async () => {
     for (const framework of ['react', 'vue', 'svelte', 'html', 'next', 'tanstack-start'] as const) {
-      for (const integration of ['mock', 'openrouter'] as const) {
-        const out = await scaffold.handler({
-          framework, useCase: 'drop-in-chat', integration, placement: 'full-page',
-        });
-        const ownCode = JSON.stringify(out).split('=== INTERACTION PATTERNS ===')[0];
-        const label = `${framework}/${integration}`;
+      const out = await scaffold.handler({
+        framework, useCase: 'drop-in-chat', integration: 'mock', placement: 'full-page',
+      });
+      const ownCode = JSON.stringify(out).split('=== INTERACTION PATTERNS ===')[0];
+      const label = `${framework}/mock`;
 
-        // The wholesale replacement, in any of its per-framework spellings.
-        expect(ownCode, `${label}: streams by replacing parts wholesale`).not.toMatch(
-          /\.\.\.m, parts: \[\{ type: .text., text: (answer|accumulated)/,
-        );
-        // The fold itself, plus the helper it calls.
-        expect(ownCode, `${label}: missing the appendText fold`).toMatch(
-          /\.\.\.m, parts: appendText\(m\.parts, (tok|delta)\)/,
-        );
-        expect(ownCode, `${label}: missing the appendText helper definition`).toContain(
-          'const appendText =',
-        );
-        // The helper must open a NEW text part when the last part is not text,
-        // which is what keeps a post-tool answer out of the pre-tool text.
-        expect(ownCode, `${label}: fold does not open a new trailing text part`).toContain(
-          "[...parts, { type: 'text', text: delta }]",
-        );
-      }
+      // The wholesale replacement, in any of its per-framework spellings.
+      expect(ownCode, `${label}: streams by replacing parts wholesale`).not.toMatch(
+        /\.\.\.m, parts: \[\{ type: .text., text: (answer|accumulated)/,
+      );
+      // The fold itself, plus the helper it calls.
+      expect(ownCode, `${label}: missing the appendText fold`).toMatch(
+        /\.\.\.m, parts: appendText\(m\.parts, (tok|delta)\)/,
+      );
+      expect(ownCode, `${label}: missing the appendText helper definition`).toContain(
+        'const appendText =',
+      );
+      // The helper must open a NEW text part when the last part is not text,
+      // which is what keeps a post-tool answer out of the pre-tool text.
+      expect(ownCode, `${label}: fold does not open a new trailing text part`).toContain(
+        "[...parts, { type: 'text', text: delta }]",
+      );
     }
   });
 
@@ -1469,5 +1499,133 @@ describe('scaffold', () => {
     });
     const emitted = JSON.stringify(out);
     expect(emitted).toMatch(/const history: ChatMessage\[\] = \[/);
+  });
+});
+
+// ── the wire adapter replaces the hand-rolled reader ─────────────────────────
+//
+// scaffold.ts used to inline ~25 lines of SSE reader per framework so the output
+// stayed copy-paste readable. That policy is reversed for real backends: the
+// inline reader split on '\n' and treated each `data:` line as a whole frame
+// (wrong for a multi-line frame), and it could only ever produce text — which is
+// why a scaffold with kai-tool in its archetype rendered a panel no code path
+// could fill. `mock` keeps the inline form: a zero-backend preview adds zero
+// imports.
+
+const REAL_FRAMEWORKS = ['react', 'vue', 'svelte', 'html', 'next', 'tanstack-start'] as const;
+
+/** Blocks 1 + the header — the scaffolder's OWN front-end code, excluding the
+ *  backend route template (a route may legitimately hand-roll a re-framing
+ *  reader; the cloudflare worker template does) and the reference snippets. */
+function frontEnd(out: unknown): string {
+  const text = ((out as { content: { type: string; text: string }[] }).content)[0].text;
+  return text.split('=== (2) BACKEND ROUTE ===')[0];
+}
+
+describe('scaffolds import the wire adapter for real backends', () => {
+  it.each(REAL_FRAMEWORKS)('%s uses readOpenAIStream instead of a hand-rolled reader', async (framework) => {
+    const out = await scaffold.handler({
+      framework,
+      useCase: 'drop-in-chat',
+      integration: 'openrouter',
+      placement: 'full-page',
+    });
+    const emitted = JSON.stringify(out);
+    expect(emitted).toContain('@kitn.ai/ui/wire');
+    expect(emitted).toContain('readOpenAIStream(res, stream)');
+    expect(emitted).toContain('createAssistantStream');
+    expect(emitted).toContain('toOpenAIMessages(history)');
+    // The hand-rolled reader is GONE.
+    expect(emitted).not.toContain('getReader()');
+    expect(emitted).not.toContain("startsWith('data:')");
+    expect(emitted).not.toContain('[DONE]');
+  });
+
+  it.each(REAL_FRAMEWORKS)('%s no longer flattens history to a content string', async (framework) => {
+    const out = await scaffold.handler({
+      framework,
+      useCase: 'drop-in-chat',
+      integration: 'openrouter',
+      placement: 'full-page',
+    });
+    const emitted = JSON.stringify(out);
+    // PARTS_TO_CONTENT threw away every tool call and result on the way back,
+    // which made a multi-round loop impossible.
+    expect(emitted).not.toContain("p.type === 'text' ? p.text");
+  });
+
+  it.each(REAL_FRAMEWORKS)('%s mock scaffolds stay import-free and inline', async (framework) => {
+    const out = await scaffold.handler({
+      framework,
+      useCase: 'drop-in-chat',
+      integration: 'mock',
+      placement: 'full-page',
+    });
+    const emitted = JSON.stringify(out);
+    expect(emitted).not.toContain('@kitn.ai/ui/wire');
+    expect(emitted).not.toContain('readOpenAIStream');
+    // The inlined appendTextPart is still what folds the canned reply.
+    expect(emitted).toContain('const appendText =');
+    expect(emitted).toContain('parts:');
+  });
+
+  it('emits the multi-round tool loop as a COMMENTED block for tool archetypes', async () => {
+    const out = await scaffold.handler({
+      framework: 'react',
+      useCase: 'agentic',
+      integration: 'openrouter',
+      placement: 'full-page',
+    });
+    const emitted = JSON.stringify(out);
+    expect(emitted).toContain('turn.toolCalls');
+    expect(emitted).toContain('applyToolOutput');
+    // Commented, not live: the kit never calls a consumer's function, and a live
+    // loop against tools that do not exist yet would fail on first run. `\\n` is
+    // the JSON-escaped newline in the stringified payload, so this anchors the
+    // `const turn =` form to the START of an emitted line.
+    expect(emitted).not.toMatch(/\\n\s*const turn = await readOpenAIStream/);
+    expect(emitted).toMatch(/\/\/\s+for \(const call of turn\.toolCalls\)/);
+    // The scaffolder must never write a tool executor.
+    expect(emitted).not.toMatch(/\\n\s*async function runYourTool/);
+  });
+
+  it('a non-tool archetype gets no tool-loop block and no applyToolOutput import', async () => {
+    const out = await scaffold.handler({
+      framework: 'react',
+      useCase: 'drop-in-chat',
+      integration: 'openrouter',
+      placement: 'full-page',
+    });
+    const emitted = JSON.stringify(out);
+    expect(emitted).not.toContain('turn.toolCalls');
+    expect(emitted).not.toContain('applyToolOutput');
+  });
+
+  // Same systemic gap the parts sweep closed: every integration's front end is a
+  // static string, so one stale template is a silent permanent bug. Scoped to the
+  // front-end block because a BACKEND route may legitimately hand-roll a reader
+  // to re-frame a native stream (cloudflare's worker template does exactly that).
+  it('every real integration, on every framework, emits an adapter-based front end', async () => {
+    for (const integration of listIntegrations()) {
+      if (integration.id === 'mock') continue;
+      for (const framework of REAL_FRAMEWORKS) {
+        const code = frontEnd(
+          await scaffold.handler({
+            framework, useCase: 'agentic', integration: integration.id, placement: 'full-page',
+          }),
+        );
+        const label = `${integration.id}/${framework}`;
+        expect(code, `${label}: missing readOpenAIStream`).toContain('await readOpenAIStream(res, stream);');
+        expect(code, `${label}: missing toOpenAIMessages`).toContain('toOpenAIMessages(history)');
+        expect(code, `${label}: hand-rolled reader survived`).not.toContain('getReader()');
+        expect(code, `${label}: hand-rolled frame split survived`).not.toContain("startsWith('data:')");
+        expect(code, `${label}: hand-rolled delta walk survived`).not.toContain('choices?.[0]?.delta');
+        expect(code, `${label}: flattens parts to a content string`).not.toContain("p.type === 'text' ? p.text");
+        // Stale @kitn.ai/ui/state API removed earlier in this migration.
+        expect(code, `${label}: stale addTool`).not.toContain('addTool');
+        expect(code, `${label}: stale updateTool`).not.toContain('updateTool');
+        expect(code, `${label}: stale appendContent`).not.toContain('appendContent');
+      }
+    }
   });
 });

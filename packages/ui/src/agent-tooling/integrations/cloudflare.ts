@@ -34,7 +34,7 @@ export async function POST(req: Request) {
     worker: `// Worker handler — env.AI is bound in wrangler.toml
 // env.AI.run emits Cloudflare-native SSE (data: {"response":"<token>"}).
 // The TransformStream below re-frames each chunk to OpenAI-format SSE so
-// kai-chat's reader works without any client-side changes.
+// readOpenAIStream reads it without any client-side changes.
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const { messages } = await req.json();
@@ -80,7 +80,7 @@ export default {
   },
 };`,
   },
-  streamMapping: "Workers AI via the OpenAI-compatible HTTP endpoint returns OpenAI-format SSE — pipe upstream.body straight to the browser; kai-chat's reader handles it. The native env.AI binding streams Cloudflare's own format (data: {\"response\":\"...token...\"}); the worker route template re-frames these chunks to OpenAI-format SSE via a TransformStream before returning.",
+  streamMapping: "Workers AI via the OpenAI-compatible HTTP endpoint returns OpenAI-format SSE — pipe upstream.body straight to the browser and read it with readOpenAIStream from '@kitn.ai/ui/wire'. The native env.AI binding streams Cloudflare's own format (data: {\"response\":\"...token...\"}); the worker route template re-frames these chunks to OpenAI-format SSE via a TransformStream before returning.",
   runNote: 'Set CF_ACCOUNT_ID and CF_API_TOKEN. Model ids are prefixed with @cf/, e.g. @cf/meta/llama-3.1-8b-instruct. For the AI binding (worker key), add an [ai] block with binding = "AI" in wrangler.toml.',
   docsSlug: 'integrations/cloudflare-ai',
 };

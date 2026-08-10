@@ -18,7 +18,8 @@ const openrouter: Integration = {
   return new Response(upstream.body, { headers: { 'Content-Type': 'text/event-stream' } });
 }`,
   },
-  streamMapping: 'OpenRouter returns OpenAI-format SSE — pipe upstream.body straight to the browser; the Streaming-recipe reader handles it.',
+  streamMapping:
+    "OpenRouter returns OpenAI-format SSE — pipe upstream.body straight to the browser and read it with readOpenAIStream from '@kitn.ai/ui/wire'.",
   runNote: 'Set OPENROUTER_API_KEY. Model ids are vendor/model, e.g. openai/gpt-4o.',
   docsSlug: 'integrations/connect-any-model',
 };

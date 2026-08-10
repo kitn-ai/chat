@@ -52,7 +52,7 @@ export async function POST(req: Request) {
   return new Response(body, { headers: { 'Content-Type': 'text/event-stream' } });
 }`,
   },
-  streamMapping: "Use graph.stream(input, { streamMode: 'messages' }) to get [messageChunk, metadata] tuples. Extract chunk.content (string) and forward as OpenAI-format SSE frames: data: {choices:[{delta:{content}}]}. Close with data: [DONE]. The kai-chat reader handles it.",
+  streamMapping: "Use graph.stream(input, { streamMode: 'messages' }) to get [messageChunk, metadata] tuples. Extract chunk.content (string) and forward as OpenAI-format SSE frames: data: {choices:[{delta:{content}}]}. Close with data: [DONE]. Read it on the client with readOpenAIStream from '@kitn.ai/ui/wire'.",
   runNote: 'Set OPENAI_API_KEY (or the key for your chosen model provider). Install @langchain/langgraph, @langchain/openai, @langchain/core.',
   docsSlug: 'integrations/langgraph',
 };

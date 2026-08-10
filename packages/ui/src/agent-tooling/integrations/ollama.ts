@@ -25,28 +25,30 @@ export async function POST(req: Request) {
 
 <script type="module">
   import '@kitn.ai/ui/elements';
+  import { createAssistantStream } from '@kitn.ai/ui/state';
+  import { readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';
   const chat = document.getElementById('chat');
 
   chat.addEventListener('kai-submit', async (e) => {
     const history = [...chat.messages, { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: e.detail.value }] }];
-    chat.messages = [...history, { id: crypto.randomUUID(), role: 'assistant', parts: [] }];
-    await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      // The route (and Ollama's OpenAI-compatible endpoint) speak flat
-      // { role, content } pairs, so reduce each message's parts to text.
-      body: JSON.stringify({
-        messages: history.map((m) => ({
-          role: m.role,
-          content: m.parts.map((p) => (p.type === 'text' ? p.text : '')).join(''),
-        })),
-      }),
-    });
-    // stream the reply into the last message — see the Streaming recipe
+    chat.messages = history;
+    // toOpenAIMessages encodes parts into the { role, content, tool_calls } shape
+    // Ollama's OpenAI-compatible endpoint expects, keeping tool calls and results.
+    const stream = createAssistantStream((fn) => { chat.messages = fn(chat.messages); });
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: toOpenAIMessages(history) }),
+      });
+      await readOpenAIStream(res, stream);
+    } finally {
+      stream.done();
+    }
   });
 </script>`,
   },
-  streamMapping: "Ollama's OpenAI-compatible endpoint (http://localhost:11434/v1/chat/completions) returns OpenAI-format SSE — pipe upstream.body straight to the browser; kai-chat's reader handles it. No API key needed; pass any string if a client requires one (Ollama ignores it).",
+  streamMapping: "Ollama's OpenAI-compatible endpoint (http://localhost:11434/v1/chat/completions) returns OpenAI-format SSE — pipe upstream.body straight to the browser and read it with readOpenAIStream from '@kitn.ai/ui/wire'. No API key needed; pass any string if a client requires one (Ollama ignores it).",
   runNote: 'No API key required. Run: ollama serve (starts on 127.0.0.1:11434), then ollama pull <model>. For browser-direct access, set OLLAMA_ORIGINS to allow the page origin; restart Ollama after any env change.',
   docsSlug: 'integrations/ollama',
 };

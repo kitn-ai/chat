@@ -36,7 +36,7 @@ export async function POST(req: Request) {
   return new Response(sse, { headers: { 'Content-Type': 'text/event-stream' } });
 }`,
   },
-  streamMapping: "The Vercel AI SDK's toUIMessageStreamResponse() and toTextStreamResponse() don't emit OpenAI-format SSE. Wrap result.textStream manually: iterate text deltas and emit data: {choices:[{delta:{content}}]} frames, closing with data: [DONE]. The kai-chat SSE reader handles it.",
+  streamMapping: "The Vercel AI SDK's toUIMessageStreamResponse() and toTextStreamResponse() don't emit OpenAI-format SSE. Wrap result.textStream manually: iterate text deltas and emit data: {choices:[{delta:{content}}]} frames, closing with data: [DONE]. Read it on the client with readOpenAIStream from '@kitn.ai/ui/wire'.",
   runNote: 'Set AI_GATEWAY_API_KEY for the AI Gateway (string model id form: creator/model-name). For direct provider access, import its provider package (e.g. @ai-sdk/openai) and set the corresponding key (e.g. OPENAI_API_KEY).',
   docsSlug: 'integrations/vercel-ai-sdk',
 };

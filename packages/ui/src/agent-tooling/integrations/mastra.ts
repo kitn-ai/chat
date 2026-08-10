@@ -19,7 +19,7 @@ for await (const delta of stream.textStream) {
 }
 res.write('data: [DONE]\\n\\n');`,
   },
-  streamMapping: "Mastra agents speak Vercel AI SDK v5 and expose stream.textStream (async iterable of string deltas). Iterate textStream and emit data: {choices:[{delta:{content}}]} frames; close with data: [DONE]. kai-chat's SSE reader handles it. For tool calls and reasoning, convert the agent to a UI message stream with @mastra/ai-sdk.",
+  streamMapping: "Mastra agents speak Vercel AI SDK v5 and expose stream.textStream (async iterable of string deltas). Iterate textStream and emit data: {choices:[{delta:{content}}]} frames; close with data: [DONE]. Read it on the client with readOpenAIStream from '@kitn.ai/ui/wire'. For tool calls and reasoning, convert the agent to a UI message stream with @mastra/ai-sdk.",
   runNote: 'Set MASTRA_URL to your Mastra server base URL (mastra dev exposes POST /api/agents/:agentId/stream on port 4111). Install @mastra/client-js.',
   docsSlug: 'integrations/harnesses',
 };
