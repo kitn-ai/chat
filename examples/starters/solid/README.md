@@ -56,8 +56,13 @@ and strips every kit utility class as unused, leaving components unstyled.
 
 ```bash
 npm install
-npm run dev     # http://localhost:5173
-npm run build   # production build → dist/
+npm run dev        # http://localhost:5173
+npm run typecheck  # tsc against the kit's shipped types
+npm run build      # typecheck, then production build → dist/
 ```
+
+`build` runs `tsc` first. This starter imports the SolidJS components directly
+rather than the `kai-*` elements, so that pass is the only thing checking those
+imports against the shipped types — Vite strips types without looking at them.
 
 Requires Node 18+.

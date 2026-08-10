@@ -248,7 +248,7 @@ export default function App() {
             />
           </ResizablePanel>
 
-          <ResizableHandle withHandle />
+          <ResizableHandle handle="grip" />
 
           {/* ── Main chat area ── */}
           <ResizablePanel>
