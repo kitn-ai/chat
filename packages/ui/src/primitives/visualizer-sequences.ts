@@ -260,6 +260,15 @@ export function waveTargets(state: VisualizerState): {
         pulseDuration: 0.4,
       };
     case 'speaking':
+    // Upstream's wave switch has NO 'idle' arm: idle falls through to this
+    // same speaking/default arm (speed 10, amplitude 0.025, frequency 10,
+    // opacity 1), a gentle undulation (~1.05px centreline waviness, ~1.5px/s
+    // phase drift, measured on the md tile). Upstream's explicitly FLAT
+    // state is 'disconnected'. We had flattened idle instead; Rob wants
+    // upstream's look (2026-08-09). `default` below KEEPS the flat targets:
+    // out-of-union states stay conservative, and flat remains reachable
+    // should a disconnected-like state ever join the public union.
+    case 'idle':
       return {
         speed: WAVE_SPEED * 2,
         amplitude: WAVE_AMPLITUDE,
@@ -267,7 +276,6 @@ export function waveTargets(state: VisualizerState): {
         opacity: 1.0,
         pulseDuration: 0,
       };
-    case 'idle':
     default:
       return {
         speed: WAVE_SPEED,

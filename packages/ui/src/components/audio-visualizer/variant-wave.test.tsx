@@ -89,12 +89,27 @@ describe('WaveVisualizer: state -> uniform mapping', () => {
     expect(c.fragment).toBe(waveShader);
   });
 
-  it('flattens the line at idle: zero amplitude and frequency, full opacity', async () => {
+  // This test used to pin a FLAT idle (amplitude/frequency 0). Upstream's
+  // idle falls through to their speaking arm and gently undulates; flat is
+  // their 'disconnected'. See the wave section note in
+  // visualizer-sequences.ts (Rob, 2026-08-09). uSpeed is pinned literally
+  // (not via waveTargets('idle').speed) so the assertion cannot follow the
+  // table by accident.
+  it('gently undulates at idle: uSpeed 10 at full opacity', async () => {
     const c = await renderWave({ state: 'idle' });
-    expect(c.uniforms.uAmplitude?.value).toBe(0);
-    expect(c.uniforms.uFrequency?.value).toBe(0);
+    expect(c.uniforms.uSpeed?.value).toBe(10);
     expect(c.uniforms.uMix?.value).toBe(1);
-    expect(c.uniforms.uSpeed?.value).toBe(waveTargets('idle').speed);
+  });
+
+  it('frozen + idle: amplitude and frequency land on the gentle-wave targets while uSpeed zeroes -- a still wave, not a flat line', async () => {
+    // The frozen check on uSpeed is state-independent, but every other
+    // frozen test uses `listening`; this covers the idle path explicitly so
+    // reduced motion provably freezes the new idle undulation too.
+    const c = await renderWave({ state: 'idle', frozen: true });
+    expect(c.uniforms.uAmplitude?.value).toBeCloseTo(0.025, 6);
+    expect(c.uniforms.uFrequency?.value).toBe(10);
+    expect(c.uniforms.uSpeed?.value).toBe(0);
+    expect(c.uniforms.uMix?.value).toBe(1);
   });
 
   it('uses mediump precision at icon and sm, highp otherwise -- shaders are expensive on phones', async () => {
@@ -140,11 +155,15 @@ describe('WaveVisualizer: state -> uniform mapping', () => {
   });
 
   it('does not let live volume leak into a non-speaking state', async () => {
-    const c = await renderWave({ state: 'idle', volume: 0.9 });
-    // If the volume effect's `state !== 'speaking'` guard were missing, this
-    // would read close to 0.015 + 0.4 * 0.9 instead of idle's flat 0.
-    expect(c.uniforms.uAmplitude?.value).toBe(0);
-    expect(c.uniforms.uFrequency?.value).toBe(0);
+    // frozen lands idle's own targets instantly, so a missing
+    // `state === 'speaking'` guard is unmistakable: amplitude would read
+    // 0.015 + 0.4 * 0.9 = 0.375 instead of idle's 0.025, and frequency
+    // 20 + 60 * 0.9 = 74 instead of 10. (Un-frozen, both tweens start at 0
+    // regardless of target, which is what this test used to lean on when
+    // idle's targets were flat.)
+    const c = await renderWave({ state: 'idle', frozen: true, volume: 0.9 });
+    expect(c.uniforms.uAmplitude?.value).toBeCloseTo(0.025, 6);
+    expect(c.uniforms.uFrequency?.value).toBe(10);
   });
 
   it('frozen lands listening\'s amplitude and frequency on target immediately, skipping the tween', async () => {

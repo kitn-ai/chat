@@ -8,6 +8,7 @@ import {
   radialInterval,
   shaderTargets,
   waveTargets,
+  type VisualizerState,
 } from './visualizer-sequences';
 
 describe('normalizeState', () => {
@@ -187,9 +188,31 @@ describe('shaderTargets', () => {
 });
 
 describe('waveTargets', () => {
-  it('flattens the line when idle', () => {
-    expect(waveTargets('idle').amplitude).toBe(0);
-    expect(waveTargets('idle').frequency).toBe(0);
+  // This test used to pin a flat idle line. Upstream's wave switch has no
+  // 'idle' arm at all -- idle falls through to the speaking/default arm and
+  // gently undulates; their explicitly flat state is 'disconnected'. See the
+  // wave section note in visualizer-sequences.ts (Rob, 2026-08-09).
+  it('gently undulates when idle, sharing the speaking arm like upstream', () => {
+    expect(waveTargets('idle')).toEqual({
+      speed: 10,
+      amplitude: 0.025,
+      frequency: 10,
+      opacity: 1.0,
+      pulseDuration: 0,
+    });
+    // Structural parity: upstream serves idle and speaking from ONE arm.
+    expect(waveTargets('idle')).toEqual(waveTargets('speaking'));
+  });
+  it('keeps the flat line for out-of-union states (the default arm stays conservative)', () => {
+    // Flat pinning moved here from the idle test above: the default arm keeps
+    // it reachable should a disconnected-like state ever join the union.
+    expect(waveTargets('bogus' as VisualizerState)).toEqual({
+      speed: 5,
+      amplitude: 0,
+      frequency: 0,
+      opacity: 1.0,
+      pulseDuration: 0,
+    });
   });
   it('uses the base wave while listening and mirrors opacity', () => {
     const t = waveTargets('listening');
