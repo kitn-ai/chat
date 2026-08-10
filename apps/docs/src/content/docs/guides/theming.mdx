@@ -5,10 +5,12 @@ description: Override CSS custom properties to rebrand every kai-* component —
 
 import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
 
-Override design tokens on `:root` to rebrand every `kai-*` web component at once. Because inherited CSS pierces the Shadow DOM boundary, a single CSS rule propagates into all components automatically.
+Set the **`--kai-color-*`** tokens on `:root` to rebrand every `kai-*` web component at once. Inherited custom properties pierce the Shadow DOM boundary, so a single CSS rule propagates into all of them with no stylesheet import.
 
-<Aside type="tip" title="Quickest path: the namespaced --kai-color-* tokens">
-To rebrand, set the **`--kai-color-*`** tokens on `:root` — **no stylesheet import**, and the `--kai-` prefix won't collide with your app's own CSS variables. See [Namespaced overrides](#namespaced-overrides---kai-color-) below for the one-block version. The `--color-*` walkthrough that follows is the fuller, shadcn-compatible path (it needs `theme.css` imported, and those names are unprefixed).
+<Aside type="caution" title="`--kai-color-*` is the token that reaches the elements">
+Each element adopts the kit's compiled CSS into its own shadow root, and that sheet declares every `--color-*` on `:host` as `var(--kai-color-<name>, <default>)`. A declaration on the host beats a value inherited from the page, so overriding **`--color-primary` on `:root` does not retheme a `kai-*` element** — importing `theme.css` doesn't change that. `--kai-color-*` is the layer the elements read.
+
+The unprefixed `--color-*` names still matter: they are what `theme.css` / `theme.tokens.css` define for **your own host-page chrome and the light-DOM SolidJS components**, which have no shadow root. Both walkthroughs are below.
 </Aside>
 
 ## How tokens work
@@ -33,7 +35,7 @@ Border radii are controlled by `--radius` (default `0.6rem`); `--radius-sm`, `--
 
 ## Import the stylesheet
 
-The kit injects its own scoped CSS into each component's Shadow DOM automatically — no import required to get started. Import `theme.css` only to override tokens:
+The kit injects its own scoped CSS into each component's Shadow DOM automatically — the `kai-*` elements need no import at all. Import `theme.css` when you want the same `--color-*` tokens for your own markup or for the light-DOM SolidJS components:
 
 ```js
 import '@kitn.ai/ui/theme.css';
@@ -51,7 +53,7 @@ The components need no CSS import - they are shadow-isolated. Import `theme.css`
 
 ## Override tokens
 
-Set your overrides on `:root` **after** importing `theme.css`:
+Set your overrides on `:root` **after** importing `theme.css`. This is the host-page layer — your own markup and the light-DOM Solid components. To retheme the `kai-*` elements, use the [`--kai-color-*` form](#namespaced-overrides---kai-color-) instead; every token below has one.
 
 ```css
 :root {
@@ -81,7 +83,14 @@ Assign tokens to a container element instead of `:root` to theme only that secti
 
 ## Dark mode
 
-The kit ships both light and dark token sets. Switch modes by toggling the `dark` class on `<html>` (or any ancestor):
+Every `kai-*` element carries a `theme` attribute — `'light' | 'dark' | 'auto'`, defaulting to **`auto`**. On `auto` the element watches `prefers-color-scheme` itself and applies the kit's dark tokens inside its own shadow root, so OS dark mode works with no wiring:
+
+```html
+<kai-chat></kai-chat>                <!-- follows the OS -->
+<kai-chat theme="dark"></kai-chat>   <!-- pinned dark -->
+```
+
+For your own markup and the light-DOM Solid components, toggle the `dark` class on `<html>` (or any ancestor):
 
 ```js
 document.documentElement.classList.toggle('dark');
@@ -100,7 +109,7 @@ The `.dark` selector in `theme.css` redefines every `--color-*` token for dark s
 ```
 
 <Aside type="note" title="prefers-color-scheme">
-The kit does not automatically apply `.dark` based on `prefers-color-scheme` — that decision belongs to the host app. Add the class in response to the media query if you want OS-level sync:
+The kit never adds `.dark` to your `<html>` — your page's chrome is yours. It only syncs the elements, each of which follows `prefers-color-scheme` on its own while `theme` is `auto`. Pin an element with `theme="light"` / `theme="dark"` when your app owns the choice, and mirror the media query onto your own markup:
 
 ```js
 const mq = window.matchMedia('(prefers-color-scheme: dark)');
