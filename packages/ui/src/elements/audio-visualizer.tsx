@@ -42,6 +42,11 @@ interface Props extends Record<string, unknown> {
   bands?: number[];
   /** Custom fragment shader for `variant="custom"`. JS property only. */
   shader?: ShaderSpec;
+  /** Shader variants only: keep animating while scrolled off screen. Off by default,
+   *  which stops drawing and releases the WebGL context until the element comes back
+   *  (browsers ration contexts to roughly 16 a page). Does not override
+   *  `prefers-reduced-motion`. Attribute: `animate-when-not-visible`. */
+  animateWhenNotVisible?: boolean;
 }
 
 /**
@@ -71,7 +76,7 @@ export function num(value: unknown): number | undefined {
  */
 export function AudioVisualizerFacade(
   props: Props,
-  ctx?: Pick<WebComponentContext, 'dark'>,
+  ctx?: Partial<Pick<WebComponentContext, 'dark' | 'flag'>>,
 ): JSX.Element {
   // Every element already resolves `theme='light'|'dark'|'auto'` against a
   // live `prefers-color-scheme` listener in `defineWebComponent` (see
@@ -84,6 +89,18 @@ export function AudioVisualizerFacade(
   // place (`createDarkMode`); this is a plain relay, not a second
   // implementation of that rule.
   const dark = ctx?.dark?.() ?? false;
+
+  // `flag` is what makes a BARE attribute
+  // (`<kai-audio-visualizer animate-when-not-visible>`) mean true:
+  // component-register parses a valueless boolean attribute to `undefined`, so
+  // the prop alone cannot tell it apart from an absent one. Same helper every
+  // other boolean-attribute element uses, so the coercion rule lives in one
+  // place. The `props` fallback only covers the ctx-less direct-call path the
+  // declarative test uses, where there is no host element carrying an
+  // attribute at all.
+  const animateWhenNotVisible = ctx?.flag
+    ? ctx.flag('animateWhenNotVisible')
+    : props.animateWhenNotVisible === true;
 
   return (
     <AudioVisualizer
@@ -102,6 +119,7 @@ export function AudioVisualizerFacade(
       audioElement={props.audioElement as HTMLMediaElement | undefined}
       bands={props.bands as number[] | undefined}
       shader={props.shader as ShaderSpec | undefined}
+      animateWhenNotVisible={animateWhenNotVisible}
       theme={dark ? 'dark' : 'light'}
     />
   );
@@ -126,6 +144,16 @@ export function AudioVisualizerFacade(
  * el.shader = { fragment: glsl }   // variant="custom" only
  * ```
  *
+ * The `wave`, `aurora`, and `custom` variants render through WebGL, and a
+ * browser only allows about 16 live WebGL contexts per page. So a shader
+ * variant scrolled off screen stops drawing and hands its context back,
+ * picking up where it left off when it returns. Opt out per element when a
+ * visualizer must keep running unseen:
+ *
+ * ```html
+ * <kai-audio-visualizer variant="wave" animate-when-not-visible></kai-audio-visualizer>
+ * ```
+ *
  * This is a display element: no methods, no events.
  *
  * Restyle from outside via `::part(bar)` / `::part(cell)` / `::part(canvas)`,
@@ -147,4 +175,9 @@ defineWebComponent<Props>('kai-audio-visualizer', {
   audioElement: undefined,
   bands: undefined,
   shader: undefined,
+  // `undefined`, not `false`: `resolveFlag` short-circuits on an explicit
+  // `false` prop value, so a `false` default would beat a bare
+  // `animate-when-not-visible` attribute if component-register ever left the
+  // default in place instead of writing `undefined` for a valueless attribute.
+  animateWhenNotVisible: undefined,
 }, AudioVisualizerFacade);

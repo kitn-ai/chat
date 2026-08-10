@@ -86,6 +86,14 @@ export interface AudioVisualizerProps {
    * translucent edges get dark fringes on light backgrounds.
    */
   shader?: ShaderSpec;
+  /**
+   * Shader variants only (`wave`/`aurora`/`custom`): keep animating while the
+   * element is scrolled off screen. Default `false`, which stops the draw loop
+   * and releases the WebGL context until it comes back -- see `ShaderCanvas`'s
+   * `animateWhenNotVisible` for the context-budget reasoning and the cost of
+   * opting out. Does not override `prefers-reduced-motion`.
+   */
+  animateWhenNotVisible?: boolean;
   class?: string;
   /**
    * Render each DOM variant's items yourself -- the same render-prop the
@@ -185,6 +193,12 @@ export interface ShaderVariantProps extends Omit<VariantProps, 'children'> {
    * media query itself.
    */
   dark?: boolean;
+  /**
+   * Keep animating while off screen instead of releasing the WebGL context.
+   * Relayed straight through to `ShaderCanvas`, which owns the behaviour and
+   * documents the trade-off; the variants are pure conduits for it.
+   */
+  animateWhenNotVisible?: boolean;
   /**
    * Call this if the shader cannot render at all -- most commonly
    * `canvas.getContext('webgl')` returning null. Permanent for this mount:
@@ -415,6 +429,7 @@ export function AudioVisualizer(props: AudioVisualizerProps): JSX.Element {
                   complexity={props.complexity}
                   shader={props.shader}
                   dark={resolvedDark()}
+                  animateWhenNotVisible={props.animateWhenNotVisible}
                   onUnavailable={() => setUnavailable(true)}
                 />
               );

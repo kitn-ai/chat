@@ -275,6 +275,7 @@ export default function AuroraVisualizer(props: ShaderVariantProps & { dark?: bo
           uTheme: { type: '1f', value: uThemeValue() },
           uRotation: { type: '1f', value: rotationValue() },
         }}
+        animateWhenNotVisible={props.animateWhenNotVisible}
         onError={(message) => {
           // "not available" is ShaderCanvas's literal wording for a missing
           // WebGL context (see its own doc) -- an expected environment

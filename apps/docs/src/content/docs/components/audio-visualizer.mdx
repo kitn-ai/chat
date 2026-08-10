@@ -199,7 +199,14 @@ Your fragment must define `mainImage(out vec4 fragColor, in vec2 fragCoord)`. Th
 ## Notes
 
 - `wave`, `aurora`, and `custom` load behind a dynamic import and fall back to `bar` if the chunk fails or WebGL is not available. A `kai-chat`-only page never pays for the shader runtime.
-- `prefers-reduced-motion` freezes the scripted animation on all six variants (`bar`, `grid`, `radial`, `wave`, `aurora`, and `custom`): no easing, no pulsing, no drift.
+- Scrolled off screen, a shader variant stops drawing and hands its WebGL context back to the browser, taking it again on the way in. Browsers only allow around 16 live contexts per page and silently kill the oldest past that, so without this a page with a dozen shader tiles ends up with dead canvases. The animation resumes where you left it rather than jumping forward.
+- `animate-when-not-visible` opts a single element out of that, for a visualizer that has to keep running unseen. It holds its context for as long as it is mounted, so use it on one or two elements, not on a page full of them.
+
+  ```html
+  <kai-audio-visualizer variant="wave" animate-when-not-visible></kai-audio-visualizer>
+  ```
+
+- `prefers-reduced-motion` freezes the scripted animation on all six variants (`bar`, `grid`, `radial`, `wave`, `aurora`, and `custom`): no easing, no pulsing, no drift. It wins over `animate-when-not-visible`, which only decides whether frames keep being drawn, never what they show.
 - `aura` is accepted as an alias for `aurora`, for markup ported from LiveKit.
 
 ## Composed from

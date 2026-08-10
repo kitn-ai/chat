@@ -111,6 +111,7 @@ export default function WaveVisualizer(props: ShaderVariantProps): JSX.Element {
           uColor: { type: '3fv', value: hexToRgb(props.color ?? DEFAULT_SHADER_COLOR) },
           uColorShift: { type: '1f', value: COLOR_SHIFT },
         }}
+        animateWhenNotVisible={props.animateWhenNotVisible}
         onError={(message) => {
           console.warn('<kai-audio-visualizer variant="wave">: shader error', message);
           // A missing WebGL context and a compile/link failure both mean

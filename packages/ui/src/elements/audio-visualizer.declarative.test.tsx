@@ -182,6 +182,57 @@ describe('kai-audio-visualizer declarative API', () => {
   });
 });
 
+/**
+ * `animate-when-not-visible` is a BARE boolean attribute, which
+ * component-register parses to `undefined` rather than `true` -- so the facade
+ * cannot read the prop alone and must go through the shared `flag()` helper.
+ * These pin that it does, in both directions, plus the default.
+ */
+describe('AudioVisualizerFacade: the animate-when-not-visible boolean attribute', () => {
+  const renderFacade = (
+    props: Record<string, unknown>,
+    flag?: (name: string) => boolean,
+  ) => {
+    let captured: { animateWhenNotVisible?: boolean } | undefined;
+    vi.doMock('../components/audio-visualizer/variant-custom', () => ({
+      default: (p: { animateWhenNotVisible?: boolean }) => {
+        captured = p;
+        return null;
+      },
+    }));
+    render(() =>
+      AudioVisualizerFacade(
+        { variant: 'custom', ...props } as unknown as Parameters<typeof AudioVisualizerFacade>[0],
+        { dark: () => false, ...(flag ? { flag } : {}) },
+      ),
+    );
+    return () => captured;
+  };
+
+  it('resolves a bare attribute to true, the way flag() reads a present valueless attribute', async () => {
+    // What `<kai-audio-visualizer animate-when-not-visible>` actually delivers:
+    // an undefined PROP plus a present attribute, which only `flag` can read.
+    const captured = renderFacade(
+      { animateWhenNotVisible: undefined },
+      (name) => name === 'animateWhenNotVisible',
+    );
+    await waitFor(() => expect(captured()).toBeDefined());
+    expect(captured()!.animateWhenNotVisible).toBe(true);
+  });
+
+  it('is false when the attribute is absent', async () => {
+    const captured = renderFacade({}, () => false);
+    await waitFor(() => expect(captured()).toBeDefined());
+    expect(captured()!.animateWhenNotVisible).toBe(false);
+  });
+
+  it('defaults to false with no ctx at all, rather than leaking undefined downstream', async () => {
+    const captured = renderFacade({});
+    await waitFor(() => expect(captured()).toBeDefined());
+    expect(captured()!.animateWhenNotVisible).toBe(false);
+  });
+});
+
 describe('normalizeVariant(): the aura -> aurora LiveKit-markup alias contract', () => {
   // The facade passes `variant` straight through untouched and relies on
   // normalizeVariant (../components/audio-visualizer) to resolve LiveKit's

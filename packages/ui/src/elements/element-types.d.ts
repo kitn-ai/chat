@@ -197,6 +197,8 @@ export interface KaiAudioVisualizerElement extends HTMLElement {
   bands?: number[];
   /** Custom fragment shader for `variant="custom"`. JS property only. */
   shader?: { fragment: string; uniforms?: Record<string, { type: "1f" | "1i" | "1fv" | "2f" | "3f" | "3fv" | "4f" | "4fv" | "Matrix2fv" | "Matrix3fv" | "Matrix4fv"; value: number | number[] }> };
+  /** Shader variants only: keep animating while scrolled off screen. Off by default, which stops drawing and releases the WebGL context until the element comes back (browsers ration contexts to roughly 16 a page). Does not override `prefers-reduced-motion`. Attribute: `animate-when-not-visible`. */
+  animateWhenNotVisible?: boolean;
 }
 
 export interface KaiAvatarElement extends HTMLElement {

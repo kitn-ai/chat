@@ -100,6 +100,12 @@ const meta = {
       control: { type: 'number', min: 0, max: 1, step: 0.05 },
       description: 'Custom only here: pattern density, 0..1. Aurora accepts the prop but does not read it yet -- see the Aurora story note.',
     },
+    animateWhenNotVisible: {
+      control: 'boolean',
+      description:
+        'Shader variants only. Off by default: a canvas scrolled out of view stops drawing and releases its WebGL context, taking it back on the way in. Turn it on to keep a visualizer running unseen, at the cost of holding a context for as long as it is mounted. Never overrides `prefers-reduced-motion`. Scroll a tile off screen with this on and off to feel the difference.',
+      table: { defaultValue: { summary: 'false' } },
+    },
     label: {
       control: 'text',
       description: 'Announces the element as `role="img"` with this text. Omit it and the element stays `aria-hidden`.',
@@ -696,7 +702,7 @@ export const Radial: Story = {
 export const Wave: Story = {
   args: { size: 'md' },
   parameters: {
-    controls: { include: ['size', 'color'] },
+    controls: { include: ['size', 'color', 'animateWhenNotVisible'] },
     docs: {
       description: {
         story:
@@ -721,7 +727,9 @@ export const Wave: Story = {
     const bands = useFakeBands(() => defaultBarCount(args.size ?? 'md'), SEED_WAVE);
     return (
       <StateRow size={args.size ?? 'md'}>
-        {(s) => <AudioVisualizer variant="wave" state={s} size={args.size} color={args.color} bands={bands()} />}
+        {(s) => (
+          <AudioVisualizer variant="wave" state={s} size={args.size} color={args.color} bands={bands()} animateWhenNotVisible={args.animateWhenNotVisible} />
+        )}
       </StateRow>
     );
   },
@@ -732,7 +740,7 @@ export const Aurora: Story = {
   // On the Docs page like every other story -- see the WebGL context note
   // above Wave for why that is safe now.
   parameters: {
-    controls: { include: ['size', 'color', 'theme'] },
+    controls: { include: ['size', 'color', 'theme', 'animateWhenNotVisible'] },
     docs: {
       description: {
         story:
@@ -751,7 +759,7 @@ export const Aurora: Story = {
     return (
       <StateRow size={args.size ?? 'md'}>
         {(s) => (
-          <AudioVisualizer variant="aurora" state={s} size={args.size} color={args.color} theme={args.theme} bands={bands()} />
+          <AudioVisualizer variant="aurora" state={s} size={args.size} color={args.color} theme={args.theme} bands={bands()} animateWhenNotVisible={args.animateWhenNotVisible} />
         )}
       </StateRow>
     );
@@ -766,7 +774,7 @@ export const Custom: Story = {
   // On the Docs page like every other story -- see the WebGL context note
   // above Wave for why that is safe now.
   parameters: {
-    controls: { include: ['size', 'color', 'complexity'] },
+    controls: { include: ['size', 'color', 'complexity', 'animateWhenNotVisible'] },
     docs: {
       description: {
         story:
@@ -815,6 +823,7 @@ export const Custom: Story = {
             barCount={5}
             bands={s === 'speaking' ? bands() : SILENT_BANDS}
             shader={{ fragment: SPECTRUM_SHADER }}
+            animateWhenNotVisible={args.animateWhenNotVisible}
           />
         )}
       </StateRow>

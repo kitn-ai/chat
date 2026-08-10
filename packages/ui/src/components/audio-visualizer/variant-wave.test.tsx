@@ -55,6 +55,7 @@ describe('WaveVisualizer: state -> uniform mapping', () => {
     fragment: string;
     precision?: string;
     uniforms: Record<string, { type: string; value: number | number[] }>;
+    animateWhenNotVisible?: boolean;
   };
 
   let captured: CapturedProps | undefined;
@@ -87,6 +88,22 @@ describe('WaveVisualizer: state -> uniform mapping', () => {
     const { default: waveShader } = await import('./wave.glsl');
     const c = await renderWave();
     expect(c.fragment).toBe(waveShader);
+  });
+
+  it('relays animateWhenNotVisible to the canvas, which owns the behaviour', async () => {
+    expect((await renderWave({ animateWhenNotVisible: true })).animateWhenNotVisible).toBe(true);
+  });
+
+  it('reduced motion still wins over animateWhenNotVisible: a still wave, not a moving one', async () => {
+    // The two settings answer different questions -- `frozen` decides what a
+    // frame CONTAINS, `animateWhenNotVisible` only decides whether frames keep
+    // being drawn while off screen -- so opting out of the visibility pause
+    // must not smuggle motion back in for a reduced-motion user. uSpeed is the
+    // uniform that actually moves this shader (it drives the GLSL phase
+    // directly, not through a tween), so zero here IS the still image.
+    const c = await renderWave({ state: 'listening', frozen: true, animateWhenNotVisible: true });
+    expect(c.uniforms.uSpeed?.value).toBe(0);
+    expect(c.animateWhenNotVisible).toBe(true);
   });
 
   // This test used to pin a FLAT idle (amplitude/frequency 0). Upstream's

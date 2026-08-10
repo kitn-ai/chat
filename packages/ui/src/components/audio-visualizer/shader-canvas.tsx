@@ -47,6 +47,28 @@ export interface ShaderCanvasProps {
    * the shader itself is rebuilt and that rebuild fails.
    */
   onError?: (message: string) => void;
+  /**
+   * Keep animating while the canvas is off screen. Default `false`.
+   *
+   * By default an off-screen canvas stops drawing AND hands its WebGL context
+   * back to the browser (see `ShaderCanvas`'s doc), because contexts are
+   * rationed at roughly 16 per renderer process and a page of visualizers
+   * blows through that. Set this when a canvas must keep running unseen --
+   * capturing frames, or a shader whose state must not visibly jump when it
+   * scrolls back in. The cost is one permanently-held context per canvas, so
+   * it does not scale: a page that sets this on more than a handful of
+   * visualizers is back to the eviction problem the default exists to avoid.
+   *
+   * Named to match upstream's prop of the same name, though ours opts out of
+   * something stronger: theirs only pauses the draw loop, ours also releases
+   * the context.
+   *
+   * This does NOT override `prefers-reduced-motion`. Reduced motion is applied
+   * a layer up, by the variants zeroing their own speed uniforms, so a frozen
+   * shader stays a still image whether or not this is set -- this only decides
+   * whether frames keep being drawn, never what they contain.
+   */
+  animateWhenNotVisible?: boolean;
   class?: string;
 }
 
@@ -380,6 +402,15 @@ export function ShaderCanvas(props: ShaderCanvasProps): JSX.Element {
    * compile on mount, draw forever.
    */
   let onScreen = true;
+  /**
+   * The resolved `animateWhenNotVisible`, cached rather than read from props
+   * inside `sync`. `sync` runs inside the compile effect, and a props read
+   * there would subscribe that effect to this flag -- rebuilding the entire GL
+   * program every time a caller toggled it, the exact leak the fragment /
+   * precision / shapeKey memos above exist to prevent. Its own effect below is
+   * the single writer.
+   */
+  let alwaysAnimate = false;
 
   /**
    * The shader clock, deliberately outliving both a release and a recompile.
@@ -463,7 +494,12 @@ export function ShaderCanvas(props: ShaderCanvasProps): JSX.Element {
    */
   const sync = () => {
     if (disposed || noWebGL || hardLost) return;
-    if (onScreen) {
+    // The ONE place visibility policy is decided. `animateWhenNotVisible`
+    // overrides the observer's verdict here rather than anywhere upstream of
+    // it, so there is still exactly one writer deciding whether this canvas
+    // should be drawing -- a runtime flip of the flag is just another call
+    // into this same reconciler, like a scroll or a context event.
+    if (onScreen || alwaysAnimate) {
       // Mid-flight: the `webglcontextlost`/`webglcontextrestored` handler
       // re-enters here once the browser answers.
       if (contextState === 'losing' || contextState === 'restoring') return;
@@ -526,12 +562,23 @@ export function ShaderCanvas(props: ShaderCanvasProps): JSX.Element {
 
     if (typeof IntersectionObserver === 'undefined') return;
 
+    // The observer is installed even when `animateWhenNotVisible` is set, and
+    // its verdict is ignored in `sync` instead. Skipping the observer in that
+    // mode would be marginally cheaper, but it would leave `onScreen` frozen
+    // at a stale default, so flipping the flag OFF at runtime would need the
+    // observer wired up right then and would keep drawing until its first
+    // callback landed -- a second control path, and a wrong answer in the
+    // meantime. Keeping it always-on means `onScreen` is continuously
+    // accurate and a flip in either direction is a single `sync()` call.
+    // An IntersectionObserver that never fires costs essentially nothing.
+    //
     // With an observer, NOTHING is built until it reports the canvas on
-    // screen. That is the load-bearing half of the fix: a page mounting 18
-    // visualizers otherwise creates 18 contexts in the mount task and has 2
-    // evicted by the browser before the first observer callback could
-    // possibly run -- and an evicted context is a permanent failure, not a
-    // recoverable one.
+    // screen -- unless `animateWhenNotVisible` says otherwise, which `sync`
+    // resolves below. That is the load-bearing half of the fix: a page
+    // mounting 18 visualizers otherwise creates 18 contexts in the mount task
+    // and has 2 evicted by the browser before the first observer callback
+    // could possibly run -- and an evicted context is a permanent failure,
+    // not a recoverable one.
     onScreen = false;
     visibility = new IntersectionObserver((entries) => {
       const entry = entries[entries.length - 1];
@@ -736,6 +783,29 @@ export function ShaderCanvas(props: ShaderCanvasProps): JSX.Element {
     // be collected: switching variants, or navigating a page full of tiles,
     // otherwise leaves dead contexts holding slots for a while.
     if (loseExtension && contextState === 'live') loseExtension.loseContext();
+  });
+
+  // Registered before the compile effect so `alwaysAnimate` already holds the
+  // caller's policy the first time `sync()` runs, avoiding one reconcile pass
+  // that could only ever decide to do nothing. Measured, not assumed: putting
+  // this effect AFTER the compile effect passes every test in this file
+  // unchanged, because both run in the same synchronous flush either way and
+  // the canvas is built before anything can observe it. So this is tidiness,
+  // NOT a correctness requirement -- what actually guarantees an opted-out
+  // canvas builds without waiting on an observer callback is `sync`'s
+  // `onScreen || alwaysAnimate`, which is the thing under test.
+  //
+  // Wrapped in its own memo for the same reason `fragment`/`precision` are:
+  // a variant's props arrive through a dispatcher spread that bundles
+  // fast-changing signals, so an unmemoized read would re-run this effect at
+  // band cadence even though the resolved boolean never changed.
+  const animateWhenNotVisibleMemo = createMemo(() => props.animateWhenNotVisible ?? false);
+  createEffect(() => {
+    alwaysAnimate = animateWhenNotVisibleMemo();
+    // Route the change through the reconciler rather than acting on it here:
+    // whether this means "build now", "release now", or "nothing changes"
+    // depends on state `sync` already owns.
+    sync();
   });
 
   createEffect(() => {

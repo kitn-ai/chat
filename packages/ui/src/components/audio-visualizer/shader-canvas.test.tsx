@@ -860,6 +860,128 @@ describe('ShaderCanvas: releases its WebGL context while off screen', () => {
 });
 
 /**
+ * `animateWhenNotVisible`: the escape hatch from the release-on-hidden
+ * default above. Named to match upstream's prop on the same components, though
+ * ours opts out of something more aggressive -- they only pause draws, we hand
+ * the context back entirely.
+ */
+describe('ShaderCanvas: animateWhenNotVisible', () => {
+  const { advance, isFramePending } = installFakeClock();
+
+  it('builds immediately instead of waiting for an observer verdict it will never act on', () => {
+    installFakeIntersectionObserver();
+    const { gl, calls } = createFakeGL();
+    stubGetContext(gl);
+
+    render(() => <ShaderCanvas fragment={MAIN} animateWhenNotVisible />);
+
+    // NOTHING has been reported by the observer at this point. The default
+    // path deliberately waits for that first callback; this one must not, or
+    // an opted-out canvas that never intersects -- a background tab, a
+    // zero-size ancestor, a detached-then-reattached subtree -- would sit
+    // there never having drawn a single frame.
+    expect(calls.filter((c) => c === 'createProgram')).toHaveLength(1);
+    expect(isFramePending()).toBe(true);
+  });
+
+  it('keeps drawing and never releases the context when the canvas goes off screen', () => {
+    const io = installFakeIntersectionObserver();
+    const { gl, calls } = createFakeGL();
+    stubGetContext(gl);
+
+    render(() => <ShaderCanvas fragment={MAIN} animateWhenNotVisible />);
+    io.setOnScreen(true);
+    calls.length = 0;
+
+    io.setOnScreen(false);
+
+    expect(calls).not.toContain('loseContext');
+    expect(calls).not.toContain('deleteProgram');
+    expect(isFramePending()).toBe(true);
+    advance(16);
+    expect(calls.filter((c) => c === 'drawArrays')).toHaveLength(1);
+  });
+
+  it('keeps iTime accumulating off screen, because the loop never stopped', () => {
+    const io = installFakeIntersectionObserver();
+    const { gl, uniformWrites } = createFakeGL();
+    stubGetContext(gl);
+
+    render(() => <ShaderCanvas fragment={MAIN} animateWhenNotVisible />);
+    io.setOnScreen(true);
+    advance(1000);
+    io.setOnScreen(false);
+    advance(5000);
+
+    // The mirror image of the default path's frozen clock: nothing paused, so
+    // the five off-screen seconds are real elapsed shader time.
+    expect(uniformWrites.iTime?.at(-1)).toBeCloseTo(6, 5);
+  });
+
+  it('releases once it is flipped off at runtime while the canvas is hidden', () => {
+    installFakeIntersectionObserver();
+    const { gl, calls } = createFakeGL();
+    stubGetContext(gl);
+    const [always, setAlways] = createSignal(true);
+
+    render(() => <ShaderCanvas fragment={MAIN} animateWhenNotVisible={always()} />);
+    // Drawing despite the observer never having reported it visible.
+    expect(isFramePending()).toBe(true);
+    calls.length = 0;
+
+    setAlways(false);
+
+    // The observer's standing verdict applies the moment the opt-out drops,
+    // with no re-wiring and no waiting for another callback.
+    expect(isFramePending()).toBe(false);
+    expect(calls).toContain('loseContext');
+    expect(calls.indexOf('deleteProgram')).toBeLessThan(calls.indexOf('loseContext'));
+  });
+
+  it('takes the context back when it is flipped on at runtime while the canvas is hidden', () => {
+    const io = installFakeIntersectionObserver();
+    const { gl, calls, flushGLEvents } = createFakeGL();
+    stubGetContext(gl);
+    const [always, setAlways] = createSignal(false);
+
+    render(() => <ShaderCanvas fragment={MAIN} animateWhenNotVisible={always()} />);
+    io.setOnScreen(true);
+    io.setOnScreen(false);
+    flushGLEvents(); // the release completes
+    calls.length = 0;
+
+    setAlways(true);
+
+    expect(calls).toContain('restoreContext');
+    flushGLEvents();
+    expect(calls.filter((c) => c === 'createProgram')).toHaveLength(1);
+    expect(isFramePending()).toBe(true);
+  });
+
+  it('does not recompile the shader when the flag flips -- it is a visibility policy, not a source change', () => {
+    const io = installFakeIntersectionObserver();
+    const { gl, calls } = createFakeGL();
+    stubGetContext(gl);
+    const [always, setAlways] = createSignal(true);
+
+    render(() => <ShaderCanvas fragment={MAIN} animateWhenNotVisible={always()} />);
+    io.setOnScreen(true); // genuinely visible, so neither flip below changes
+    expect(calls.filter((c) => c === 'createProgram')).toHaveLength(1);
+
+    // While on screen the flag decides nothing, so both flips must be inert.
+    // Reading the prop inside the compile effect would subscribe that effect
+    // to this flag and rebuild the whole GL program on a toggle -- the same
+    // leak class the fragment/precision memos above exist to prevent.
+    setAlways(false);
+    setAlways(true);
+
+    expect(calls.filter((c) => c === 'createProgram')).toHaveLength(1);
+    expect(calls).not.toContain('loseContext');
+    expect(isFramePending()).toBe(true);
+  });
+});
+
+/**
  * The fallback path, and the one the ENTIRE rest of the unit suite runs on:
  * jsdom has no `IntersectionObserver`, and neither does an SSR render. This
  * cannot go red by deleting the visibility feature -- that is the point of it.

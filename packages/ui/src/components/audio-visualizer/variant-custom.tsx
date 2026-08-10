@@ -313,6 +313,7 @@ export default function CustomVisualizer(props: ShaderVariantProps): JSX.Element
                 fragment={fragment()}
                 precision={props.size === 'icon' || props.size === 'sm' ? 'mediump' : 'highp'}
                 uniforms={u()}
+                animateWhenNotVisible={props.animateWhenNotVisible}
                 onError={(message) => {
                   // "not available" is ShaderCanvas's literal wording for a
                   // missing WebGL context (see its own doc) -- an expected
