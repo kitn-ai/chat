@@ -293,6 +293,15 @@ export function renderReport({ findings, flags, coverage, surface, docs, units, 
   p('pnpm --filter @kitn.ai/docs run verify:docs:report  # regenerate this file');
   p('```');
   p();
+  p('### CI status: NOT wired in yet');
+  p();
+  p('Deliberately. Cost is not the reason — the whole run is about 10s and needs no network, which is well inside what the required job already spends on `verify:scaffold`. Two things have to be true first:');
+  p();
+  p('1. **The tree has to be green.** A gate added while it reports findings is a gate that is red on arrival, and a red-on-arrival gate gets bypassed rather than fixed. Fix the `Fix first` table, then wire it.');
+  p('2. **It needs one more adversarial pass.** The first full run reported 73 high-confidence findings and 64 were the harness\'s own bugs. That ratio came down by hand-checking findings against the source. It is now 11, all of which were verified by reading the page — but the harness has not yet survived anyone deliberately trying to make it lie.');
+  p();
+  p('Suggested sequencing: land it as a non-blocking job that posts the report, watch it for a few PRs, then promote it to required once the high count has stayed at zero on its own.');
+  p();
   p('The self-test runs first, every time. It compiles five snippets that MUST produce a kit finding (unknown entry point, unknown export, bogus prop on a kit component, wrong argument type, removed wire API), seven structural probes that MUST report (unknown element, unknown prop, non-scalar-as-attribute, unknown event, unknown part, stale `<Example tag>`, stale `<Example config>` key), a shadow probe that must go from clean to broken when the real type is substituted, and five probes that MUST stay silent (reader-owned undeclared names, omitted imports, uninstalled third-party imports, valid markup, non-scalar props bound as JSX expressions). If any probe misbehaves the run aborts before touching the docs, because a green result would be meaningless.');
   p();
 
