@@ -20,6 +20,22 @@ const OUT_DIR = join(ROOT, 'src/wire/fixtures');
 
 const OPENAI_MODEL = process.env.CAPTURE_OPENAI_MODEL ?? 'gpt-4o-mini';
 const ANTHROPIC_MODEL = process.env.CAPTURE_ANTHROPIC_MODEL ?? 'claude-sonnet-4-5';
+const OPENROUTER_MODEL = process.env.CAPTURE_OPENROUTER_MODEL ?? '~deepseek/deepseek-v4-flash-latest';
+// The model to use when an openai-format scenario runs through OpenRouter. Kept
+// separate from OPENROUTER_MODEL because the tool scenarios want a model with
+// dependable function calling, not the cheapest one on the list.
+const OPENROUTER_OPENAI_MODEL = process.env.CAPTURE_OPENROUTER_OPENAI_MODEL ?? 'openai/gpt-4o-mini';
+
+/**
+ * Where the plain openai-format scenarios go. The wire format is identical
+ * either way, so whichever key is present wins and the provenance header records
+ * which endpoint actually answered. Set CAPTURE_OPENAI_PROVIDER to force one.
+ */
+const OPENAI_COMPATIBLE =
+  (process.env.CAPTURE_OPENAI_PROVIDER ?? (process.env.OPENAI_API_KEY ? 'openai' : 'openrouter')) ===
+  'openai'
+    ? { provider: 'openai', model: OPENAI_MODEL }
+    : { provider: 'openrouter', model: OPENROUTER_OPENAI_MODEL };
 
 const WEATHER_TOOL_OPENAI = {
   type: 'function',
@@ -49,13 +65,11 @@ const ask = (content) => [{ role: 'user', content }];
 /** Every capture this repo keeps. The name is the fixture path. */
 const SCENARIOS = {
   'openai/text-only': {
-    provider: 'openai',
-    model: OPENAI_MODEL,
+    ...OPENAI_COMPATIBLE,
     body: { stream: true, messages: ask('Say hi in five words.') },
   },
   'openai/tool-fragmented-args': {
-    provider: 'openai',
-    model: OPENAI_MODEL,
+    ...OPENAI_COMPATIBLE,
     body: {
       stream: true,
       tools: [WEATHER_TOOL_OPENAI],
@@ -63,8 +77,7 @@ const SCENARIOS = {
     },
   },
   'openai/parallel-tools': {
-    provider: 'openai',
-    model: OPENAI_MODEL,
+    ...OPENAI_COMPATIBLE,
     body: {
       stream: true,
       tools: [WEATHER_TOOL_OPENAI],
@@ -72,8 +85,49 @@ const SCENARIOS = {
     },
   },
   'openai/length-mid-arguments': {
-    provider: 'openai',
-    model: OPENAI_MODEL,
+    // Model PINNED. Truncating a tool call mid-arguments is easy; getting
+    // `finish_reason: "length"` out of it is not, because OpenRouter normalizes
+    // the reason and reports `tool_calls` whenever tool_calls are present for an
+    // OpenAI-family model (see openai/length-normalized-to-tool-calls). Several
+    // models that DO report `length` buffer the whole call and stream no partial
+    // arguments at all, which loses the shape from the other side. This one
+    // reports `length` AND streams the arguments incrementally.
+    provider: 'openrouter',
+    model: process.env.CAPTURE_TRUNCATION_MODEL ?? '~anthropic/claude-haiku-latest',
+    body: {
+      stream: true,
+      max_tokens: 24,
+      tools: [WEATHER_TOOL_OPENAI],
+      tool_choice: 'required',
+      messages: ask(
+        'Call get_weather for San Francisco. The units argument must be a very long descriptive sentence.',
+      ),
+    },
+  },
+  'openai/length-normalized-to-tool-calls': {
+    // The same truncation through an OpenAI-family model, where OpenRouter
+    // rewrites the reason: `finish_reason: "tool_calls"` with
+    // `native_finish_reason: "max_output_tokens"`. The adapter therefore cannot
+    // blame the token limit and reports plain malformed arguments instead.
+    provider: 'openrouter',
+    model: process.env.CAPTURE_OPENROUTER_OPENAI_MODEL ?? 'openai/gpt-4.1-mini',
+    body: {
+      stream: true,
+      max_tokens: 12,
+      tools: [WEATHER_TOOL_OPENAI],
+      tool_choice: 'required',
+      messages: ask(
+        'Call get_weather for San Francisco. The units argument must be a very long descriptive sentence.',
+      ),
+    },
+  },
+  'openai/finish-error-no-message': {
+    // A provider failure reported ONLY as `finish_reason: "error"`, with no
+    // `error` object anywhere in the stream. Gemini does this when it cannot
+    // produce a well-formed function call. `stopReason` is 'error' while
+    // `turn.error` stays undefined, which is a real hole a UI has to handle.
+    provider: 'openrouter',
+    model: process.env.CAPTURE_GEMINI_MODEL ?? 'google/gemini-2.5-flash',
     body: {
       stream: true,
       max_tokens: 12,
@@ -85,12 +139,12 @@ const SCENARIOS = {
     // The doubling trap: the same text in `reasoning` AND `reasoning_details`.
     // Needs an OpenRouter key and a reasoning model.
     provider: 'openrouter',
-    model: process.env.CAPTURE_OPENROUTER_MODEL ?? '~deepseek/deepseek-v4-flash-latest',
+    model: OPENROUTER_MODEL,
     body: { stream: true, reasoning: { effort: 'medium' }, messages: ask('Think, then answer: 17 * 23.') },
   },
   'openai/usage-only-final-chunk': {
     provider: 'openrouter',
-    model: process.env.CAPTURE_OPENROUTER_MODEL ?? '~deepseek/deepseek-v4-flash-latest',
+    model: OPENROUTER_MODEL,
     body: { stream: true, stream_options: { include_usage: true }, messages: ask('Reply with the word ok.') },
   },
   'anthropic/thinking-tool': {

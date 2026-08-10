@@ -1,0 +1,17 @@
+: fixture: openai/in-band-error
+: capture: synthetic
+: provider: openrouter
+: model: openai/gpt-4o-mini
+: captured: 2026-08-10
+: request: {"model":"openai/gpt-4o-mini","stream":true,"messages":[{"role":"user","content":"Check the weather in Paris."}]}
+: source: https://openrouter.ai/docs/api-reference/errors, "Mid-stream errors are sent as Server-Sent Events (SSE) with a unified structure that includes both the error details and a completion choice". Frame shape copied from the documented schema: error.code (number), error.message, error.metadata.error_type/provider_code, and choices[0].finish_reason "error".
+: note: SYNTHETIC because this cannot be provoked on demand. Three attempts against the live API (max_tokens past the context limit, a prompt past a small context window, and routing to a provider that cannot serve the model) all returned a NON-200 before a single byte streamed, which is the WireError path, not this one. The docs are explicit that once the first token is written "the HTTP 200 OK status and headers are already committed", which is exactly the case modelled here.
+
+data: {"id":"gen-inband-1","object":"chat.completion.chunk","created":1786337900,"model":"openai/gpt-4o-mini","provider":"OpenAI","choices":[{"index":0,"delta":{"content":"Checking","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-inband-1","object":"chat.completion.chunk","created":1786337900,"model":"openai/gpt-4o-mini","provider":"OpenAI","choices":[{"index":0,"delta":{"content":" Paris","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-inband-1","object":"chat.completion.chunk","error":{"code":502,"message":"Provider returned error","metadata":{"error_type":"provider_error","provider_code":"upstream_disconnected"}},"choices":[{"index":0,"delta":{},"finish_reason":"error","native_finish_reason":"error"}]}
+
+data: [DONE]
+
