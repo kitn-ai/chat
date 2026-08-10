@@ -1,0 +1,24 @@
+@import 'tailwindcss';
+
+/* Tailwind v4 skips gitignored files during automatic source detection, and
+   src/vendor/ is gitignored by design (Polyform aura file). Scan it
+   explicitly so the vendored components' cva classes get generated. */
+@source './vendor';
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background: #0b0d10;
+  color: #e6e8ea;
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+.readout {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: #9aa3ab;
+  white-space: pre;
+}

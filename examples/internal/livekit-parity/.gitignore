@@ -1,0 +1,13 @@
+# deps / build
+node_modules/
+dist/
+*.log
+scripts/out/
+
+# Vendored upstream LiveKit agents-ui sources. NEVER commit these:
+# agent-audio-visualizer-aura.tsx is Polyform Non-Resale (c) UNCRN LLC and
+# must not enter this Apache-2.0 repo's history. Repopulate: pnpm setup
+src/vendor/
+
+# Local audio fixture (Rob's recorded voice) copied in by scripts/setup.sh.
+public/voice.wav

@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "types": ["vite/client"],
+    "baseUrl": ".",
+    "paths": {
+      "@/components/agents-ui/*": ["src/vendor/components/agents-ui/*"],
+      "@/hooks/agents-ui/*": ["src/vendor/hooks/agents-ui/*"],
+      "@/lib/*": ["src/lib/*"],
+      "@kit-src/*": ["../../../packages/ui/src/*"],
+      "@kit-dist/*": ["../../../packages/ui/dist/*"]
+    }
+  },
+  "include": ["src"]
+}
