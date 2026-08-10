@@ -20,7 +20,6 @@ import { VOICE_BANDS, VOICE_FRAME_MS } from './audio-visualizer.voice-fixture';
 import { mirrorBandsCenterOut, mirrorBandsAroundRing } from '../../primitives/audio-bands';
 
 const STATES = ['idle', 'connecting', 'listening', 'thinking', 'speaking', 'disconnected'] as const;
-const VARIANTS = ['bar', 'grid', 'radial'] as const;
 /** Every look, including the WebGL ones, for the `variant` control. */
 const ALL_VARIANTS = ['bar', 'grid', 'radial', 'wave', 'aurora', 'custom'] as const;
 
@@ -37,7 +36,7 @@ const meta = {
       description: componentDescription([
         'Renders live audio as bars, a grid, a ring, a wave, or a glowing aurora. Set `stream` or `audioElement` to tap real audio, or `bands` to drive it yourself.',
         'With no audio source at all it animates from `state` alone: idle, connecting, listening, thinking, speaking, disconnected (connection down -- the dead, flat look, matching LiveKit\'s). That is what drives it when the audio cannot be tapped, like browser speech synthesis, which exposes no audio node.',
-        '`wave`, `aurora`, and `custom` render through WebGL behind a dynamic import, and fall back to bars if that fails or WebGL is unavailable. Each look gets its own story, across all six states -- see Wave, Aurora, and Custom in the sidebar. They are not embedded on this page: six live WebGL canvases each is already close to a browser\'s concurrent context limit, so stacking three of them (plus MicrophoneAll) into one autodocs page reliably exceeds it. See StateMatrix for the three DOM variants side by side, Microphone for the real thing -- click-to-enable, since Storybook cannot answer a permission prompt -- and MicrophoneAll (sidebar too) for all six looks on the same live voice at once.',
+        '`wave`, `aurora`, and `custom` render through WebGL behind a dynamic import, and fall back to bars if that fails or WebGL is unavailable. Each look gets its own story across all six states, embedded below and in the sidebar: a shader canvas acquires its GL context when it scrolls into view and releases it when it leaves, so a page full of them stays well under the browser\'s concurrent context limit however far you scroll. Expect a frame or two of blank canvas as one scrolls in. The Bar, Grid, and Radial stories each cover every state for that DOM variant; Microphone is the real thing -- click-to-enable, since Storybook cannot answer a permission prompt -- and MicrophoneAll (sidebar only) drives all six looks from the same live voice at once.',
       ]),
     },
   },
@@ -198,17 +197,16 @@ function bandLevel(t: number, pos: number, seed: number): number {
 
 /**
  * Per-variant phase offsets for `useFakeBands` below -- arbitrary distinct
- * constants, not meaningful as values. Without these, wave/aurora/
- * state-matrix all reading the same wall-clock time would pulse in exact
- * lockstep when their stories are browsed near each other, which was a
- * large part of why the old data read as one looping GIF copied across
- * every tile. Bar, grid, radial, and custom read real recorded voice
- * instead (`useVoiceBands` below) and use the OFFSET_* frame offsets
- * further down for the same reason.
+ * constants, not meaningful as values. Without these, wave and aurora both
+ * reading the same wall-clock time would pulse in exact lockstep when their
+ * stories are browsed near each other, which was a large part of why the
+ * old data read as one looping GIF copied across every tile. Bar, grid,
+ * radial, and custom read real recorded voice instead (`useVoiceBands`
+ * below) and use the OFFSET_* frame offsets further down for the same
+ * reason.
  */
 const SEED_WAVE = 11.9;
 const SEED_AURORA = 14.6;
-const SEED_STATE_MATRIX = 17.2;
 
 /**
  * Per-variant frame offsets for `useVoiceBands` below, spread a quarter of
@@ -255,24 +253,15 @@ const OFFSET_CUSTOM = 147;
  * never move in lockstep. Still a pure function of `t` and band position, so
  * it stays fully deterministic -- no `Math.random()` anywhere in it.
  *
- * `mirror` opts a call site into the component's own half-width contract:
- * generate only `Math.ceil(count / 2)` bands -- band 0 the loudest, exactly
- * what `bandCount()` in index.tsx requests from the analyser -- and map
- * them out to the full `count` through the given primitive
- * (`mirrorBandsCenterOut` for a row, `mirrorBandsAroundRing` for radial's
- * ring), so a synthetic `speaking` tile shows the same centre-outward shape
- * the live path produces. Spreading `pos` across the HALF width also uses
- * `bandLevel`'s full spectral tilt regardless of how few elements render --
- * a 3-bar tile fed a slice of a wider array only ever saw positions
- * 0..0.18 of the tilt, a ramp too shallow to read as shaped. Omitted, the
- * generator stays full-width and unmirrored -- right for wave/aurora, whose
- * shaders consume only the volume scalar reduced from these bands.
+ * Full width and unmirrored, unlike `useVoiceBands` below: its only two
+ * callers are wave and aurora, whose shaders consume just the volume
+ * scalar the dispatcher reduces from these bands, so band-to-element
+ * shape does not apply. (This generator briefly carried an optional
+ * `mirror` argument for the DOM-variant overview story that has since
+ * been removed; every DOM variant's own story feeds real recorded voice
+ * through `useVoiceBands`, which does the half-width-then-mirror properly.)
  */
-function useFakeBands(
-  count: () => number,
-  seed = 0,
-  mirror?: (halfBands: number[], count: number) => number[],
-) {
+function useFakeBands(count: () => number, seed = 0) {
   const [bands, setBands] = createSignal<number[]>(new Array(Math.max(1, count())).fill(0));
   if (typeof requestAnimationFrame === 'undefined') return bands;
 
@@ -282,11 +271,7 @@ function useFakeBands(
     if (now - last >= 32) {
       const t = now / 1000;
       const n = Math.max(1, count());
-      const w = mirror ? Math.ceil(n / 2) : n;
-      const generated = Array.from({ length: w }, (_, i) =>
-        bandLevel(t, w <= 1 ? 0 : i / (w - 1), seed),
-      );
-      setBands(mirror ? mirror(generated, n) : generated);
+      setBands(Array.from({ length: n }, (_, i) => bandLevel(t, n <= 1 ? 0 : i / (n - 1), seed)));
       last = now;
     }
     raf = requestAnimationFrame(step);
@@ -513,8 +498,8 @@ const TILE_GAP = 24;
 /** Fixed cell side length for a size preset -- the variant's own container
  *  height plus breathing room, so every tile in a row is the same size no
  *  matter how wide (bar) or square (radial) that variant's actual content
- *  is. Used by every per-variant story and by StateMatrix and
- *  MicrophoneAll, so the whole file reads as one grid. */
+ *  is. Used by every per-variant story and by MicrophoneAll, so the whole
+ *  file reads as one grid. */
 function cellSize(size: VisualizerSize): number {
   return CONTAINER_HEIGHT[size] + 48;
 }
@@ -686,24 +671,30 @@ export const Radial: Story = {
   },
 };
 
+// ON THE DOCS PAGE, AND THE WEBGL CONTEXT CAP -- the canonical note; the
+// other shader stories point here rather than repeat it.
+//
+// The Docs page (tags: ['autodocs'] on `meta`) renders every story in this
+// file inline at once. Wave, Aurora, and Custom are six live canvases each,
+// plus MicrophoneAll's six: far past Chrome's ~16 concurrent WebGL context
+// cap, where surplus contexts do not throw -- they silently fail to
+// compile, so tiles render blank while everything looks fine. All three
+// stories used to carry `tags: ['!autodocs']` to stay off this page for
+// exactly that reason. (`docs.story.inline: false`, which renders a story
+// in its own iframe, was measured and does NOT help: same-origin iframes
+// share the renderer process, so they share the cap too.)
+//
+// ShaderCanvas now manages contexts by visibility: it defers building
+// until an IntersectionObserver reports the canvas on screen, and releases
+// the context (WEBGL_lose_context) when it scrolls away, rebuilding
+// through the same setup path on return -- iTime freezes off screen rather
+// than resetting. A page therefore holds one context per canvas actually
+// in the viewport plus at most one in flight, no matter how many stories
+// it hosts, so the cap is no longer reachable by scrolling this page and
+// the tags are gone. Expect a one-frame deferred first compile and a two
+// to three frame blank on scroll-in; that is the design, not a fault.
 export const Wave: Story = {
   args: { size: 'md' },
-  // `!autodocs`: keep this OFF the generated Docs page while it stays fully
-  // navigable as its own story. The Docs page (tags: ['autodocs'] on `meta`)
-  // renders every story in this file inline at once, and this story alone is
-  // 5 live WebGL contexts. Tried `docs.story.inline: false` first (renders a
-  // story in its own iframe on the Docs page instead of mounting it inline)
-  // and measured no improvement: same-origin iframes share Chrome's renderer
-  // process, so the ~16-context cap is shared across them too -- confirmed
-  // in-browser, still 16 live / 2 silently failing to compile with all four
-  // shader stories split into their own iframes. Wave, Aurora, Custom (5
-  // each) plus MicrophoneAll's 3 is 18 wanted at once either way, so this
-  // story is excluded from the Docs page outright instead, leaving real
-  // headroom under the cap rather than sitting right at its edge. Its
-  // description below, the sidebar entry, and Controls all stay fully
-  // intact -- only the Docs page's inline embed is skipped. See
-  // MicrophoneAll below for the other contributor to the same page.
-  tags: ['!autodocs'],
   parameters: {
     controls: { include: ['size', 'color'] },
     docs: {
@@ -738,8 +729,8 @@ export const Wave: Story = {
 
 export const Aurora: Story = {
   args: { size: 'md' },
-  // See Wave's `!autodocs` comment above -- same reason, same measurement.
-  tags: ['!autodocs'],
+  // On the Docs page like every other story -- see the WebGL context note
+  // above Wave for why that is safe now.
   parameters: {
     controls: { include: ['size', 'color', 'theme'] },
     docs: {
@@ -772,8 +763,8 @@ export const Custom: Story = {
   // slicing stays wired to the control -- raise it and the fill slices into
   // segments -- it is a capability to discover, not the default look.
   args: { size: 'md', complexity: 0 },
-  // See Wave's `!autodocs` comment above -- same reason, same measurement.
-  tags: ['!autodocs'],
+  // On the Docs page like every other story -- see the WebGL context note
+  // above Wave for why that is safe now.
   parameters: {
     controls: { include: ['size', 'color', 'complexity'] },
     docs: {
@@ -827,84 +818,6 @@ export const Custom: Story = {
           />
         )}
       </StateRow>
-    );
-  },
-};
-
-// ---------------------------------------------------------------- overview
-
-/**
- * Every DOM variant against every state, one overview. States are column
- * headers ONCE across the top rather than repeated under every tile, and
- * each row is labelled with its variant on the left -- the same
- * information as thirty individual labels, without repeating any of them.
- *
- * Shader variants are deliberately excluded: six variants x six states x
- * two WebGL contexts per row is heavy for one story; see the Wave, Aurora,
- * and Custom stories above for those.
- */
-export const StateMatrix: Story = {
-  parameters: {
-    // `include: []` does NOT hide the panel in this Storybook version -- it
-    // falls back to showing every arg, which is exactly the "control that
-    // does nothing" problem this file is fixing everywhere else. `disable`
-    // is the mechanism that actually removes the Controls tab's content.
-    controls: { disable: true },
-    docs: {
-      description: {
-        story:
-          'Every DOM variant against every state. The scripted sequences are most of this component\'s ' +
-          'behavior, and each state looks different. `speaking` uses synthetic levels. Shader variants are ' +
-          'excluded here -- see the Wave, Aurora, and Custom stories above for those, each across every state.',
-      },
-    },
-  },
-  render: () => {
-    // One feed PER VARIANT, each at that variant's own `sm` element count,
-    // generated at half width and mirrored through the same primitive the
-    // live path runs for it -- centre-out for the linear bar/grid rows,
-    // around the ring for radial (see `useFakeBands`' `mirror` parameter).
-    // The old approach fed all three rows ONE 12-wide array and leaned on
-    // each variant's internal `normalizeVolumeBands` truncation, which
-    // handed bar's 3 elements just the first quarter of the spectral tilt
-    // -- a shallow one-directional ramp, exactly the shape the
-    // centre-outward mapping exists to remove. Matching each count exactly
-    // matters here for the same reason index.tsx matches its own: the
-    // mirror makes a length mismatch look like a plausible (but wrong)
-    // shape instead of an obviously broken one.
-    const bandsByVariant = {
-      bar: useFakeBands(() => defaultBarCount('sm'), SEED_STATE_MATRIX, mirrorBandsCenterOut),
-      grid: useFakeBands(() => defaultGridCount('sm'), SEED_STATE_MATRIX, mirrorBandsCenterOut),
-      radial: useFakeBands(() => defaultRadialBarCount('sm'), SEED_STATE_MATRIX, mirrorBandsAroundRing),
-    } as const;
-    const LABEL_COL = 64;
-    return (
-      <div style={{ display: 'flex', 'flex-direction': 'column', gap: '16px' }}>
-        <div style={{ display: 'flex', gap: '16px', 'align-items': 'center' }}>
-          <div style={{ width: `${LABEL_COL}px`, 'flex-shrink': 0 }} />
-          <For each={STATES}>
-            {(s) => (
-              <code style={{ width: `${cellSize('sm')}px`, 'text-align': 'center', 'font-size': '11px', opacity: 0.6 }}>
-                {s}
-              </code>
-            )}
-          </For>
-        </div>
-        <For each={VARIANTS}>
-          {(v) => (
-            <div style={{ display: 'flex', gap: '16px', 'align-items': 'center' }}>
-              <code style={{ width: `${LABEL_COL}px`, 'flex-shrink': 0, 'font-size': '11px', opacity: 0.6 }}>{v}</code>
-              <For each={STATES}>
-                {(s) => (
-                  <Tile size="sm">
-                    <AudioVisualizer variant={v} state={s} size="sm" bands={bandsByVariant[v]()} />
-                  </Tile>
-                )}
-              </For>
-            </div>
-          )}
-        </For>
-      </div>
     );
   },
 };
@@ -1021,10 +934,13 @@ export const Microphone: Story = {
  * stream, not just the first.
  */
 export const MicrophoneAll: Story = {
-  // See Wave's `!autodocs` comment above -- same reason, same measurement.
-  // This story is the OTHER contributor to the Docs page's WebGL context
-  // count (3 more: its wave/aurora/custom tiles), on top of Wave/Aurora/
-  // Custom's 5 each.
+  // Still off the Docs page, but NOT for the WebGL context reason any more
+  // (see the note above Wave -- contexts are managed by visibility now).
+  // What keeps it off: it is the heaviest story in the file, six live
+  // visualizers on one microphone, and it is permission-gated -- the Docs
+  // page is a scroll-through reference, not the place to meet a mic
+  // prompt. `Microphone` above is the click-to-enable story that does
+  // appear there.
   tags: ['!autodocs'],
   parameters: {
     docs: {
@@ -1033,8 +949,10 @@ export const MicrophoneAll: Story = {
           'One microphone, all six looks at once, so they can be compared on the same live voice instead of one at a time through a control. `custom` reuses the spectrum shader from the Custom story above so it visibly responds to `uBands` too.',
       },
     },
-    // See StateMatrix's comment: `include: []` does not hide the panel in
-    // this Storybook version, `disable` does.
+    // `include: []` does NOT hide the panel in this Storybook version -- it
+    // falls back to showing every arg, which is exactly the "control that
+    // does nothing" problem this file is fixing everywhere else. `disable`
+    // is the mechanism that actually removes the Controls tab's content.
     controls: { disable: true },
   },
   render: () => {
