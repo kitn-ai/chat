@@ -3,6 +3,9 @@ import { appendReasoningPart, appendTextPart, fingerprint, upsertToolPart } from
 import type { MessagePart } from '../elements/chat-types';
 import type { ToolPart } from '../components/tool-types';
 
+const reasoningAt = (parts: MessagePart[], i: number) =>
+  parts[i] as Extract<MessagePart, { type: 'reasoning' }>;
+
 describe('fingerprint', () => {
   it('is stable across key order', () => {
     expect(fingerprint({ a: 1, b: 2 })).toBe(fingerprint({ b: 2, a: 1 }));
@@ -69,6 +72,55 @@ describe('appendReasoningPart', () => {
     const raw = { source: 'anthropic.content_block', payload: { sig: 'abc' } };
     const parts = appendReasoningPart([], 'x', { index: 0, signature: 'sig', raw });
     expect(parts[0]).toMatchObject({ signature: 'sig', raw });
+  });
+
+  /** This is what actually guarantees "a later delta never blanks an established
+   *  raw", not any guard at a call site: the builder resolves with `??`, so an
+   *  EXPLICIT `raw: undefined` is indistinguishable from an omitted one. A plain
+   *  spread here would blank the payload Anthropic requires echoed back verbatim. */
+  it('carries an established raw and signature forward when a later delta omits them', () => {
+    const raw = { source: 'anthropic.content_block', payload: { type: 'thinking' } };
+    let parts = appendReasoningPart([], 'x', { index: 0, signature: 'sig', raw });
+    parts = appendReasoningPart(parts, 'y', { index: 0, raw: undefined, signature: undefined });
+    expect(reasoningAt(parts, 0).raw).toBe(raw);
+    expect(reasoningAt(parts, 0).signature).toBe('sig');
+    expect(reasoningAt(parts, 0).text).toBe('xy');
+  });
+
+  it('returns a NEW array when text actually arrives', () => {
+    const parts = appendReasoningPart([], 'x', { index: 0, label: 'Thinking' });
+    expect(appendReasoningPart(parts, 'y', { index: 0, label: 'Thinking' })).not.toBe(parts);
+  });
+
+  /** The empty-delta frame that rework 1 deliberately stopped dropping. It must
+   *  reach the builder (so a redacted block or an assembled signature is never
+   *  lost) WITHOUT costing a re-render when it carries nothing new. */
+  it('returns the SAME array when an empty delta changes nothing', () => {
+    const raw = { source: 'anthropic.content_block', payload: { type: 'thinking' } };
+    const parts = appendReasoningPart([], 'x', { index: 0, label: 'Thinking', raw });
+    expect(appendReasoningPart(parts, '', { index: 0, label: 'Thinking' })).toBe(parts);
+  });
+
+  it('returns a NEW array when an empty delta carries a raw payload', () => {
+    const parts = appendReasoningPart([], '', { index: 0, label: 'Thinking' });
+    const raw = { source: 'anthropic.content_block', payload: { type: 'redacted_thinking' } };
+    const next = appendReasoningPart(parts, '', { index: 0, label: 'Thinking', raw });
+    expect(next).not.toBe(parts);
+    expect(reasoningAt(next, 0).raw).toBe(raw);
+  });
+
+  it('returns a NEW array when an empty delta carries a signature', () => {
+    const parts = appendReasoningPart([], 'x', { index: 0, label: 'Thinking' });
+    const next = appendReasoningPart(parts, '', { index: 0, label: 'Thinking', signature: 'sig' });
+    expect(next).not.toBe(parts);
+    expect(reasoningAt(next, 0).signature).toBe('sig');
+  });
+
+  it('returns a NEW array when an empty delta OPENS a block', () => {
+    const parts = appendReasoningPart([], 'x', { index: 0 });
+    const next = appendReasoningPart(parts, '', { index: 1 });
+    expect(next).not.toBe(parts);
+    expect(next).toHaveLength(2);
   });
 });
 

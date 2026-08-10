@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { consumeModelStream } from './consume';
 import { normalizeStopReason, type AssistantStreamSink, type ModelStreamChunk } from './chunk';
 import type { MessagePart } from '../elements/chat-types';
+import { appendReasoningPart, appendTextPart, upsertToolPart } from '../state/parts';
 import {
   FINAL_TURN,
   HIDDEN_REASONING,
@@ -96,6 +97,10 @@ describe('consumeModelStream: reasoning (rework 1)', () => {
     const blocks = reasoningParts(turn.parts);
     expect(blocks).toHaveLength(2);
     expect(blocks[0].text).toBe('');
+    // BY REFERENCE, not toEqual: `raw.payload` is the round-trip channel and a
+    // defensive clone would preserve the bytes while breaking identity, which is
+    // exactly the change this assertion has to catch.
+    expect(blocks[0].raw).toBe(REDACTED_THINKING_TURN[0].reasoningRaw);
     expect(blocks[0].raw?.payload).toEqual({ type: 'redacted_thinking', data: 'EroBCkYIARgCIkDx1VzGxQ==' });
   });
 
@@ -104,6 +109,7 @@ describe('consumeModelStream: reasoning (rework 1)', () => {
     const block = reasoningParts(turn.parts)[1];
     expect(block.text).toBe('Let me work through this.');
     expect(block.signature).toBe('ErUBCkYIARgCIkAd8xVzGx');
+    expect(block.raw).toBe(REDACTED_THINKING_TURN[5].reasoningRaw);
     expect(block.raw?.payload).toEqual({
       type: 'thinking',
       thinking: 'Let me work through this.',
@@ -122,6 +128,14 @@ describe('consumeModelStream: reasoning (rework 1)', () => {
     expect(turn.reasoning).toBe('Let me work through this.');
   });
 
+  /** End-to-end cover for the behaviour. NOTE: what enforces it is
+   *  `appendReasoningPart`'s `raw: opts.raw ?? cur.raw`, NOT the
+   *  `...(chunk.reasoningRaw ? … : {})` spread guards in `consume.ts` -- removing
+   *  those guards leaves this green, because an explicit `raw: undefined` and an
+   *  omitted one resolve identically. The guards are belt-and-braces. The test
+   *  that genuinely fails if the builder regresses to a plain spread lives in
+   *  `state/parts.test.ts` ("carries an established raw and signature forward
+   *  when a later delta omits them"). */
   it('never blanks an established raw when a later delta omits it', async () => {
     const raw = { source: 'anthropic.content_block', payload: { type: 'thinking', thinking: 'x' } };
     const turn = await consumeModelStream(
@@ -131,13 +145,40 @@ describe('consumeModelStream: reasoning (rework 1)', () => {
       ]),
       nullSink(),
     );
-    expect(reasoningParts(turn.parts)[0].raw?.payload).toEqual(raw.payload);
+    expect(reasoningParts(turn.parts)[0].raw).toBe(raw);
   });
 
   it('reports hidden reasoning as zero streamed chunks with non-zero tokens', async () => {
     const turn = await consumeModelStream(replayChunks(HIDDEN_REASONING), nullSink());
     expect(turn.reasoningChunks).toBe(0);
     expect(reasoningParts(turn.parts)).toHaveLength(0);
+    expect(turn.usage?.reasoningTokens).toBe(512);
+  });
+
+  /** The sharp version of the case above, and the one that actually constrains
+   *  where the counter sits: reasoning frames DO arrive and DO produce a part,
+   *  but every delta is empty. `reasoningChunks` must still be 0, because the
+   *  "billed but hidden" signal is text streamed, not frames seen. A counter on
+   *  the branch rather than inside `delta !== ''` reports 2 here. */
+  it('counts no streamed chunks when every reasoning frame is empty but billed', async () => {
+    const turn = await consumeModelStream(
+      replayChunks([
+        {
+          reasoning: '',
+          reasoningIndex: 0,
+          reasoningRaw: { source: 'anthropic.content_block', payload: { type: 'redacted_thinking' } },
+        },
+        { reasoning: '', reasoningIndex: 0, reasoningSignature: 'sig' },
+        { text: 'The answer is 42.' },
+        { finishReason: 'end_turn' },
+        { usage: { inputTokens: 20, outputTokens: 8, reasoningTokens: 512 } },
+      ]),
+      nullSink(),
+    );
+    expect(turn.reasoningChunks).toBe(0);
+    expect(turn.reasoning).toBe('');
+    // The part still exists: the payload has to round-trip even with no text.
+    expect(reasoningParts(turn.parts)).toHaveLength(1);
     expect(turn.usage?.reasoningTokens).toBe(512);
   });
 });
@@ -230,7 +271,7 @@ describe('consumeModelStream: provider-executed tools and sources', () => {
   });
 });
 
-describe('consumeModelStream: reference stability', () => {
+describe('consumeModelStream: determinism', () => {
   it('produces identical parts when the same chunks are replayed twice', async () => {
     const a = await consumeModelStream(replayChunks(TOOL_TURN), nullSink());
     const b = await consumeModelStream(replayChunks(TOOL_TURN), nullSink());
@@ -243,5 +284,110 @@ describe('consumeModelStream: reference stability', () => {
     expect(turn.parts).toEqual([{ type: 'text', text: 'ab' }]);
     expect(turn.text).toBe('ab');
     expect(turn.chunks).toBe(3);
+  });
+});
+
+/**
+ * IDENTITY, not deep equality. A new `parts` array reference is the kit's
+ * re-render signal, so these assert `toBe` / `not.toBe` -- a `toEqual` here
+ * would pass against an implementation that rebuilds the array on every frame,
+ * which is precisely the defect the checks in `state/parts.ts` exist to stop.
+ */
+describe('consumeModelStream: reference stability', () => {
+  /** Mirrors what the kit's `AssistantStream` does: hold a `parts` array, rebuild
+   *  it with the kit's own builders on every sink call, and snapshot the array
+   *  reference each time. Consecutive snapshots being the SAME object is exactly
+   *  "this frame caused no re-render". */
+  function refTrackingSink(): AssistantStreamSink & { snapshots: MessagePart[][] } {
+    let parts: MessagePart[] = [];
+    const snapshots: MessagePart[][] = [];
+    return {
+      snapshots,
+      appendText(delta) {
+        parts = appendTextPart(parts, delta);
+        snapshots.push(parts);
+      },
+      appendReasoning(delta, opts) {
+        parts = appendReasoningPart(parts, delta, opts);
+        snapshots.push(parts);
+      },
+      upsertTool(toolCallId, patch) {
+        parts = upsertToolPart(parts, toolCallId, patch);
+        snapshots.push(parts);
+      },
+    };
+  }
+
+  it('yields a NEW parts array for a reasoning chunk that changes something', async () => {
+    const sink = refTrackingSink();
+    await consumeModelStream(
+      replayChunks([
+        { reasoning: 'a', reasoningIndex: 0 },
+        { reasoning: 'b', reasoningIndex: 0 },
+        { finishReason: 'stop' },
+      ]),
+      sink,
+    );
+    expect(sink.snapshots).toHaveLength(2);
+    expect(sink.snapshots[1]).not.toBe(sink.snapshots[0]);
+  });
+
+  /** The frame rework 1 started letting through. It MUST reach the sink, and it
+   *  must NOT cost a render when it carries nothing new. Anthropic is the format
+   *  that emits these, so this has to hold before task 7 lands. */
+  it('yields the SAME parts array for an empty reasoning chunk that changes nothing', async () => {
+    const sink = refTrackingSink();
+    await consumeModelStream(
+      replayChunks([
+        { reasoning: 'a', reasoningIndex: 0 },
+        { reasoning: '', reasoningIndex: 0 },
+        { reasoning: '', reasoningIndex: 0 },
+        { finishReason: 'stop' },
+      ]),
+      sink,
+    );
+    expect(sink.snapshots).toHaveLength(3);
+    expect(sink.snapshots[1]).toBe(sink.snapshots[0]);
+    expect(sink.snapshots[2]).toBe(sink.snapshots[0]);
+  });
+
+  it('yields a NEW parts array when an empty reasoning chunk carries a payload', async () => {
+    const sink = refTrackingSink();
+    await consumeModelStream(
+      replayChunks([
+        { reasoning: 'a', reasoningIndex: 0 },
+        { reasoning: '', reasoningIndex: 0, reasoningSignature: 'sig' },
+        {
+          reasoning: '',
+          reasoningIndex: 0,
+          reasoningRaw: { source: 'anthropic.content_block', payload: { type: 'thinking' } },
+        },
+        { finishReason: 'stop' },
+      ]),
+      sink,
+    );
+    expect(sink.snapshots).toHaveLength(3);
+    expect(sink.snapshots[1]).not.toBe(sink.snapshots[0]);
+    expect(sink.snapshots[2]).not.toBe(sink.snapshots[1]);
+  });
+
+  it('yields a NEW parts array per tool argument fragment, and the SAME one for a repeated patch', async () => {
+    const sink = refTrackingSink();
+    await consumeModelStream(
+      replayChunks([
+        { toolCalls: [{ index: 0, id: 'c1', name: 'get_weather', arguments: '{"city"' }] },
+        { toolCalls: [{ index: 0, arguments: ':"Paris"}' }] },
+        { finishReason: 'tool_calls' },
+      ]),
+      sink,
+    );
+    // announce, fragment 1, fragment 2, settle
+    expect(sink.snapshots).toHaveLength(4);
+    expect(sink.snapshots[1]).not.toBe(sink.snapshots[0]); // rawInput grew
+    expect(sink.snapshots[2]).not.toBe(sink.snapshots[1]); // rawInput grew again
+    // A patch that re-sends what is already there must not rebuild.
+    const before = sink.snapshots[3];
+    sink.upsertTool('c1', { state: 'input-available', rawInput: '{"city":"Paris"}' });
+    expect(sink.snapshots[4]).toBe(before);
   });
 });

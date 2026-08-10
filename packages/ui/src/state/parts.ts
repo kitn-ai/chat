@@ -37,7 +37,25 @@ export interface ReasoningOpts {
   raw?: RawOrigin;
 }
 
-/** Keyed by block index so parallel reasoning blocks stay distinct. */
+type ReasoningPart = Extract<MessagePart, { type: 'reasoning' }>;
+
+/** Keyed by block index so parallel reasoning blocks stay distinct.
+ *
+ *  Returns the SAME array reference when the merge produces an identical part,
+ *  for the same reason `upsertToolPart` does: a new `parts` array is the
+ *  re-render signal, so handing one back for a delta that changed nothing is a
+ *  spurious render.
+ *
+ *  An EMPTY delta is not a no-op and must still reach here: it is how a redacted
+ *  reasoning block, a `signature_delta` and an assembled `content_block_stop`
+ *  block arrive, and how a format opens a block at the right position so block
+ *  ORDER survives into `parts`. Those carry a new `raw`/`signature`/index and so
+ *  compare unequal and DO rebuild. What the check absorbs is the other empty
+ *  frame: one carrying nothing new, which a provider is free to send repeatedly.
+ *
+ *  `signature` and `raw` resolve with `??`, so an explicit `undefined` from a
+ *  later delta never blanks a value an earlier one established. Pass a DEFINED
+ *  value to replace either; there is no way to clear them. */
 export function appendReasoningPart(
   parts: MessagePart[],
   delta: string,
@@ -48,15 +66,59 @@ export function appendReasoningPart(
   if (i < 0) {
     return [...parts, { type: 'reasoning', text: delta, index, label: opts.label, signature: opts.signature, raw: opts.raw }];
   }
-  const cur = parts[i] as Extract<MessagePart, { type: 'reasoning' }>;
-  const next: MessagePart = {
+  const cur = parts[i] as ReasoningPart;
+  const next: ReasoningPart = {
     ...cur,
     text: cur.text + delta,
     label: opts.label ?? cur.label,
     signature: opts.signature ?? cur.signature,
     raw: opts.raw ?? cur.raw,
   };
+  if (reasoningEqual(cur, next)) return parts;
   return [...parts.slice(0, i), next, ...parts.slice(i + 1)];
+}
+
+/** Every `ReasoningPart` key, in the order `reasoningEqual` checks them. Same
+ *  exhaustive-by-construction contract as `TOOL_KEYS` below: adding a field to
+ *  the `reasoning` variant of `MessagePart` fails the build until it is listed
+ *  here AND given a comparator, so a new field can never be silently ignored by
+ *  the dedupe check and strand a stale array reference. */
+const REASONING_KEYS = [
+  'type', 'text', 'index', 'label', 'signature', 'raw',
+] as const satisfies readonly (keyof ReasoningPart)[];
+
+type _ReasoningKeysExhaustive = Exclude<
+  keyof ReasoningPart,
+  (typeof REASONING_KEYS)[number]
+> extends never
+  ? true
+  : ['MessagePart reasoning variant has a key missing from REASONING_KEYS', Exclude<keyof ReasoningPart, (typeof REASONING_KEYS)[number]>];
+const _reasoningKeysExhaustive: _ReasoningKeysExhaustive = true;
+void _reasoningKeysExhaustive;
+
+/** One comparator per key in `REASONING_KEYS`. The mapped type means a key added
+ *  to that list with no comparator here is ALSO a compile error.
+ *
+ *  `raw` compares by REFERENCE, exactly as `TOOL_COMPARATORS.raw` does: it is the
+ *  untranslated provider payload, a producer attaches it once, and
+ *  `appendReasoningPart` itself carries it forward when a delta omits it, so
+ *  reference equality holds on every real path. Hashing it would walk the whole
+ *  payload on every empty keep-alive frame, which is the cost this check exists
+ *  to avoid. Worst case is a producer handing over a fresh-but-equal `raw`: one
+ *  extra re-render, never a wrong render. */
+const REASONING_COMPARATORS: {
+  [K in (typeof REASONING_KEYS)[number]]: (a: ReasoningPart, b: ReasoningPart) => boolean;
+} = {
+  type: (a, b) => a.type === b.type,
+  text: (a, b) => a.text === b.text,
+  index: (a, b) => a.index === b.index,
+  label: (a, b) => a.label === b.label,
+  signature: (a, b) => a.signature === b.signature,
+  raw: (a, b) => a.raw === b.raw,
+};
+
+function reasoningEqual(a: ReasoningPart, b: ReasoningPart): boolean {
+  return REASONING_KEYS.every((key) => REASONING_COMPARATORS[key](a, b));
 }
 
 /** Creates or merges a tool part. Returns the SAME array reference when the merge
