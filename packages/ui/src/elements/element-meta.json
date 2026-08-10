@@ -923,6 +923,7 @@
         "typeName": "ChainOfThoughtStepData[]",
         "typeShape": "{ label: string; content?: undefined | string; id?: undefined | string }[]",
         "default": "[]",
+        "typeImport": "ChainOfThoughtStepData",
         "displayType": "{ label: string; content?: undefined | string; id?: undefined | string }[]"
       },
       {

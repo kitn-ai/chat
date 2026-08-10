@@ -160,18 +160,65 @@ export type { ButtonProps } from './ui/button';
 export { Avatar } from './ui/avatar';
 export type { AvatarProps } from './ui/avatar';
 export { Tooltip } from './ui/tooltip';
-export { HoverCard } from './ui/hover-card';
+export { HoverCard, HoverCardRoot, HoverCardTrigger, HoverCardContent } from './ui/hover-card';
+export type {
+  HoverCardRootProps, HoverCardTriggerProps, HoverCardContentProps, HoverCardController,
+} from './ui/hover-card';
 export { Collapsible, CollapsibleTrigger, CollapsibleContent } from './ui/collapsible';
 export { ScrollArea } from './ui/scroll-area';
-export { Dropdown, DropdownTrigger, DropdownContent, DropdownItem } from './ui/dropdown';
+export {
+  Dropdown, DropdownTrigger, DropdownContent, DropdownItem,
+  DropdownSeparator, DropdownLabel, DropdownCheckboxItem, DropdownRadioItem,
+  DropdownSub, DropdownSubTrigger, DropdownSubContent,
+} from './ui/dropdown';
+export type { DropdownController } from './ui/dropdown';
 export { Textarea } from './ui/textarea';
 export type { TextareaProps } from './ui/textarea';
 export { Badge } from './ui/badge';
 export type { BadgeProps } from './ui/badge';
 export { Separator } from './ui/separator';
-export { ResizablePanelGroup, ResizablePanel, ResizableHandle, Resizable, normalizeSize, resolveToPx } from './ui/resizable';
+export { ResizablePanelGroup, ResizablePanel, ResizableHandle, Resizable, normalizeSize, resolveToPx, clampBasis } from './ui/resizable';
 export type { ResizablePanelGroupProps, ResizablePanelProps, ResizableHandleProps, ResizableProps, SizeValue } from './ui/resizable';
 export { Skeleton } from './ui/skeleton';
+export { Input } from './ui/input';
+export type { InputProps } from './ui/input';
+export { Kbd } from './ui/kbd';
+export type { KbdProps, KbdPlatform } from './ui/kbd';
+export { Switch } from './ui/switch';
+export type { SwitchProps } from './ui/switch';
+export { Tabs } from './ui/tabs';
+export type { TabsProps, TabsVariant, KaiTabItem } from './ui/tabs';
+export { Segmented } from './ui/segmented';
+export type { SegmentedProps, SegmentedOption } from './ui/segmented';
+export { Status } from './ui/status';
+export type { StatusProps, StatusKind } from './ui/status';
+export { ProgressBar } from './ui/progress-bar';
+export type { ProgressBarProps, ProgressTone } from './ui/progress-bar';
+export { Notice } from './ui/notice';
+export type { NoticeProps, NoticeSeverity } from './ui/notice';
+export { EditableLabel } from './ui/editable-label';
+export type { EditableLabelProps } from './ui/editable-label';
+export { Dialog } from './ui/dialog';
+export type { DialogProps, DialogController } from './ui/dialog';
+export { Popover } from './ui/popover';
+export type { PopoverProps, PopoverController } from './ui/popover';
+export { Nav } from './ui/nav';
+export type { NavProps, KaiNavItem, NavItemStatus, NavStatusTone } from './ui/nav';
+export { CommandList } from './ui/command';
+export type { CommandListProps, CommandRow, CommandGroup } from './ui/command';
+export { AgentCard } from './ui/agent-card';
+export type { AgentCardProps, AgentStatus, AgentStatusTone } from './ui/agent-card';
+export { Pane } from './ui/pane';
+export type { PaneProps, PaneStatus, PaneStatusTone } from './ui/pane';
+export { PaneGroup } from './ui/pane-group';
+export type { PaneGroupProps, PaneTab, PaneTabStatus } from './ui/pane-group';
+export { PromptDock } from './ui/prompt-dock';
+export type { PromptDockProps, PromptDockFrame, PromptDockAppearance } from './ui/prompt-dock';
+export { SettingsGroup, SettingItem } from './ui/settings-group';
+export type { SettingsGroupProps, SettingItemProps } from './ui/settings-group';
+// `kai-icon` renders no kit component — it calls this. Solid consumers resolving
+// the same `icon` strings (named icon | URL | text fallback) need it too.
+export { renderIcon } from './ui/icon';
 export { FileTree, buildFileTree } from './components/file-tree';
 export type {
   FileTreeProps, FileTreeFile, FileTreeNode, FileTreeFolderNode, FileTreeFileNode,
@@ -219,7 +266,10 @@ export {
 export { FeedbackBar, type FeedbackValue, type FeedbackDetail } from './components/feedback-bar';
 export {
   ChainOfThought, ChainOfThoughtStep, ChainOfThoughtTrigger,
-  ChainOfThoughtContent, ChainOfThoughtItem,
+  ChainOfThoughtContent, ChainOfThoughtItem, ChainOfThoughtAccordion,
+} from './components/chain-of-thought';
+export type {
+  ChainOfThoughtType, ChainOfThoughtStepData, ChainOfThoughtController,
 } from './components/chain-of-thought';
 export { Source, SourceTrigger, SourceContent, SourceList } from './components/source';
 export { PromptSuggestion } from './components/prompt-suggestion';
@@ -255,7 +305,9 @@ export type {
   ContextUsageRowProps,
 } from './components/context';
 export { VoiceInput } from './components/voice-input';
-export { ConversationList } from './components/conversation-list';
+export { VoiceOutput } from './components/voice-output';
+export type { VoiceOutputProps, VoiceOutputController } from './components/voice-output';
+export { ConversationList, CollapsedRail } from './components/conversation-list';
 export { ConversationItem } from './components/conversation-item';
 export { ModelSwitcher } from './components/model-switcher';
 export { ChatScopePicker } from './components/chat-scope-picker';
@@ -287,6 +339,23 @@ export type {
   AttachmentInfoProps, AttachmentRemoveProps, AttachmentEmptyProps,
   AttachmentHoverCardProps, AttachmentHoverCardTriggerProps, AttachmentHoverCardContentProps,
 } from './components/attachments';
+
+// Layer 3b: the composed thread/shell components the coarse elements wrap.
+// These are what `<kai-thread>`, `<kai-chat>`, `<kai-screen>`, `<kai-coachmark>` and
+// `<kai-composer>` render, so a Solid consumer writes one component for one element
+// instead of re-deriving the scroll/feedback/staging behaviour by hand.
+export { Thread } from './components/thread';
+export type { ThreadProps, ThreadController } from './components/thread';
+export { ChatThread } from './components/chat-thread';
+export type { ChatThreadProps, ChatThreadController, ChatThreadContextUsage } from './components/chat-thread';
+export { Screen } from './components/screen';
+export type { ScreenProps, ScreenController } from './components/screen';
+export { Coachmark } from './components/coachmark';
+export type { CoachmarkProps, CoachmarkController } from './components/coachmark';
+export { Composer } from './components/composer';
+export type {
+  ComposerProps, ComposerController, ComposerChange, TriggerDef, TriggerItem, HighlightRule,
+} from './components/composer';
 
 // Chat message types — public API for consumers who need to type their own message arrays.
 // NOTE: chat-types.ts also exports an unrelated `Source` interface (a citation), and
