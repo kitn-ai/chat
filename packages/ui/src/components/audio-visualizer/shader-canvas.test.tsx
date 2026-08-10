@@ -155,12 +155,46 @@ interface FakeGLFailures {
   failProgramCreation?: boolean;
   /** Program LINK_STATUS is false. */
   failLink?: boolean;
+  /**
+   * `WEBGL_lose_context` is not exposed, so the context cannot be handed back
+   * at all -- the degraded path where visibility management can only pause.
+   */
+  noLoseContextExtension?: boolean;
 }
 
 function createFakeGL(failures: FakeGLFailures = {}) {
   const calls: string[] = [];
   const record = (name: string) => calls.push(name);
   const locations = new Map<string, object>();
+  // Reverse of `locations`, so a recorded uniform write can be attributed to
+  // the uniform NAME it was pushed to (`getUniformLocation` hands out opaque
+  // objects). Only `uniform1f` is captured -- `iTime` is the one built-in
+  // whose exact value a test needs to reason about.
+  const locationNames = new Map<object, string>();
+  const uniformWrites: Record<string, number[]> = {};
+  // Simulated context loss/restore, driven through the real
+  // `WEBGL_lose_context` extension the component uses in production.
+  //
+  // Both events are QUEUED, not dispatched inline: a browser fires
+  // `webglcontextlost`/`webglcontextrestored` on a later task, never
+  // synchronously inside `loseContext()`/`restoreContext()`. Tests call
+  // `flushGLEvents()` to deliver them, which is what makes it possible to
+  // exercise the window where a release or a restore is still IN FLIGHT (see
+  // the rapid-toggle test).
+  let contextLost = false;
+  const queuedEvents: string[] = [];
+  const loseContextExtension = {
+    loseContext: () => {
+      record('loseContext');
+      contextLost = true;
+      queuedEvents.push('webglcontextlost');
+    },
+    restoreContext: () => {
+      record('restoreContext');
+      contextLost = false;
+      queuedEvents.push('webglcontextrestored');
+    },
+  };
   // Every fragment-shader source string ShaderCanvas has ever handed to
   // shaderSource(), in call order -- one entry per (re)compile. Lets a test
   // assert not just THAT a rebuild happened, but that the rebuilt
@@ -202,16 +236,98 @@ function createFakeGL(failures: FakeGLFailures = {}) {
     enable: () => {},
     blendFunc: () => {},
     getUniformLocation: (_program: unknown, name: string) => {
-      if (!locations.has(name)) locations.set(name, {});
+      if (!locations.has(name)) {
+        const location = {};
+        locations.set(name, location);
+        locationNames.set(location, name);
+      }
       return locations.get(name)!;
     },
-    uniform1f: () => {}, uniform1i: () => {}, uniform1fv: () => {}, uniform2fv: () => {},
+    uniform1f: (location: object, value: number) => {
+      const name = locationNames.get(location);
+      if (name) (uniformWrites[name] ??= []).push(value);
+    },
+    uniform1i: () => {}, uniform1fv: () => {}, uniform2fv: () => {},
     uniform3fv: () => {}, uniform4fv: () => {},
     uniformMatrix2fv: () => {}, uniformMatrix3fv: () => {}, uniformMatrix4fv: () => {},
-    clearColor: () => {}, clear: () => {}, drawArrays: () => {}, viewport: () => {},
-    isContextLost: () => false,
+    clearColor: () => {},
+    // `clear` and `drawArrays` are RECORDED, not silent no-ops: they are the
+    // only observable proof that the draw loop is (or is not) actually
+    // running. Before this, the context-loss test's
+    // `calls.filter(c => c === 'clear')).toHaveLength(0)` was vacuously true
+    // -- `clear` was never recorded by anything, so the assertion could not
+    // have failed even with the loop running flat out.
+    clear: () => { record('clear'); },
+    drawArrays: () => { record('drawArrays'); },
+    viewport: () => {},
+    // A lost context answers `getExtension` with null (Chromium bails out of
+    // `getExtension` on `isContextLost()`), which is exactly why the
+    // component has to cache the extension object WHILE THE CONTEXT IS ALIVE:
+    // that cached handle is the only thing that can call `restoreContext()`
+    // afterwards. Modelling the null here is what keeps that from silently
+    // regressing into "re-`getExtension` on the way back and never restore".
+    getExtension: (name: string) =>
+      name === 'WEBGL_lose_context' && !contextLost && !failures.noLoseContextExtension
+        ? loseContextExtension
+        : null,
+    isContextLost: () => contextLost,
   };
-  return { gl: gl as unknown as WebGLRenderingContext, calls, fragmentSources };
+
+  /**
+   * Deliver the context events `loseContext()`/`restoreContext()` queued, in
+   * order, the way a browser's later task would. Tests that never call this
+   * are deliberately sitting in the in-flight window.
+   */
+  const flushGLEvents = () => {
+    const target = document.querySelector('canvas');
+    for (const type of queuedEvents.splice(0)) {
+      target?.dispatchEvent(new Event(type, { cancelable: true }));
+    }
+  };
+
+  return { gl: gl as unknown as WebGLRenderingContext, calls, fragmentSources, uniformWrites, flushGLEvents };
+}
+
+/**
+ * A controllable `IntersectionObserver`. jsdom does not implement one at all
+ * (proven by the "no IntersectionObserver" block at the bottom of this file),
+ * so every OTHER test in this file -- and the whole rest of the unit suite --
+ * runs the component's no-observer path. Tests that want to drive visibility
+ * install this first, then push entries with `setOnScreen`.
+ */
+function installFakeIntersectionObserver() {
+  const observers: { callback: IntersectionObserverCallback; targets: Element[] }[] = [];
+
+  class FakeIntersectionObserver {
+    #entry: { callback: IntersectionObserverCallback; targets: Element[] };
+    constructor(callback: IntersectionObserverCallback) {
+      this.#entry = { callback, targets: [] };
+      observers.push(this.#entry);
+    }
+    observe(target: Element) { this.#entry.targets.push(target); }
+    unobserve(target: Element) {
+      const i = this.#entry.targets.indexOf(target);
+      if (i >= 0) this.#entry.targets.splice(i, 1);
+    }
+    disconnect() { this.#entry.targets.length = 0; }
+    takeRecords() { return []; }
+  }
+
+  vi.stubGlobal('IntersectionObserver', FakeIntersectionObserver);
+
+  return {
+    /** Report every observed element as on/off screen, as a browser would. */
+    setOnScreen(isIntersecting: boolean) {
+      for (const observer of observers) {
+        for (const target of observer.targets) {
+          observer.callback(
+            [{ target, isIntersecting } as IntersectionObserverEntry],
+            undefined as unknown as IntersectionObserver,
+          );
+        }
+      }
+    },
+  };
 }
 
 function stubGetContext(gl: WebGLRenderingContext) {
@@ -526,5 +642,246 @@ describe('ShaderCanvas: immune to a spread-prop leak from an unrelated fast-chan
     }
 
     expect(calls.filter((c) => c === 'createProgram')).toHaveLength(1);
+  });
+});
+
+/**
+ * Off-screen context management, the fix for the measured docs-page failure:
+ * Chrome caps live WebGL contexts at ~16 PER RENDERER PROCESS (shared even
+ * across same-origin iframes -- a prior session proved `docs.story.inline:
+ * false` does not buy any headroom: 18 wanted, 16 live, 2 silently failing to
+ * compile). Holding a context for a component's whole life meant the docs
+ * page could not host the Wave, Aurora, and Custom stories at all, so they
+ * carried `tags: ['!autodocs']`.
+ *
+ * Pausing the draw loop -- which is all upstream's runner does
+ * (`react-shader-toy.tsx:917-935`) -- does NOT help: an idle context still
+ * occupies a slot. The context has to actually go back, via
+ * `WEBGL_lose_context`'s `loseContext()`, and come back via
+ * `restoreContext()`.
+ */
+describe('ShaderCanvas: releases its WebGL context while off screen', () => {
+  const { advance, isFramePending } = installFakeClock();
+
+  it('builds nothing until the observer reports the canvas on screen', () => {
+    const io = installFakeIntersectionObserver();
+    const { gl, calls } = createFakeGL();
+    stubGetContext(gl);
+
+    render(() => <ShaderCanvas fragment={MAIN} />);
+
+    // The load-bearing half of the fix. Deferring to the observer is what
+    // keeps a page that mounts 18 visualizers from creating 18 contexts in
+    // the mount task and getting 2 of them evicted by the browser before any
+    // observer callback could possibly have run.
+    expect(calls.filter((c) => c === 'createProgram')).toHaveLength(0);
+    expect(isFramePending()).toBe(false);
+
+    io.setOnScreen(true);
+
+    expect(calls.filter((c) => c === 'createProgram')).toHaveLength(1);
+    expect(isFramePending()).toBe(true);
+  });
+
+  it('stops the draw loop AND hands the context back when the canvas leaves the viewport', () => {
+    const io = installFakeIntersectionObserver();
+    const { gl, calls } = createFakeGL();
+    stubGetContext(gl);
+
+    render(() => <ShaderCanvas fragment={MAIN} />);
+    io.setOnScreen(true);
+    // The control: there IS a live loop and a built program to tear down, so
+    // the assertions below distinguish "released" from "never started".
+    expect(isFramePending()).toBe(true);
+    expect(calls.filter((c) => c === 'createProgram')).toHaveLength(1);
+    calls.length = 0;
+
+    io.setOnScreen(false);
+
+    expect(isFramePending()).toBe(false);
+    expect(calls).toContain('loseContext');
+    // Every GPU object goes back BEFORE the context does. Deleting them after
+    // the context is lost is a spec no-op -- i.e. a leak for as long as the
+    // driver keeps the dead context around -- which is the same discipline
+    // the partial-compile failure paths above already follow.
+    expect(calls.filter((c) => c === 'deleteShader')).toHaveLength(2);
+    expect(calls).toContain('deleteBuffer');
+    expect(calls.indexOf('deleteProgram')).toBeLessThan(calls.indexOf('loseContext'));
+    expect(calls.indexOf('deleteBuffer')).toBeLessThan(calls.indexOf('loseContext'));
+
+    // ...and it stays stopped: no frames are burned off screen.
+    calls.length = 0;
+    advance(1000);
+    expect(calls.filter((c) => c === 'drawArrays')).toHaveLength(0);
+  });
+
+  it('re-initialises and resumes drawing when the canvas comes back on screen', () => {
+    const io = installFakeIntersectionObserver();
+    const { gl, calls, flushGLEvents } = createFakeGL();
+    stubGetContext(gl);
+
+    render(() => <ShaderCanvas fragment={MAIN} />);
+    io.setOnScreen(true);
+    io.setOnScreen(false);
+    flushGLEvents(); // the browser delivers `webglcontextlost`
+    calls.length = 0;
+
+    io.setOnScreen(true);
+
+    // `restoreContext()` is asynchronous in practice: nothing can be rebuilt
+    // until `webglcontextrestored` says the context is actually back. A
+    // version that assumed synchronous availability would compile here,
+    // against a still-lost context, and get null shaders.
+    expect(calls).toContain('restoreContext');
+    expect(calls.filter((c) => c === 'createProgram')).toHaveLength(0);
+    expect(isFramePending()).toBe(false);
+
+    flushGLEvents(); // `webglcontextrestored`
+
+    expect(calls.filter((c) => c === 'createProgram')).toHaveLength(1);
+    expect(calls.filter((c) => c === 'createBuffer')).toHaveLength(1);
+    expect(isFramePending()).toBe(true);
+
+    calls.length = 0;
+    advance(16);
+    expect(calls.filter((c) => c === 'drawArrays')).toHaveLength(1);
+  });
+
+  it('resumes the iTime clock where it left off instead of restarting the shader', () => {
+    const io = installFakeIntersectionObserver();
+    const { gl, uniformWrites, flushGLEvents } = createFakeGL();
+    stubGetContext(gl);
+
+    render(() => <ShaderCanvas fragment={MAIN} />);
+    io.setOnScreen(true);
+    advance(1000);
+    expect(uniformWrites.iTime?.at(-1)).toBeCloseTo(1, 5);
+
+    io.setOnScreen(false);
+    flushGLEvents();
+    advance(5000); // five seconds off screen, nothing drawn
+    io.setOnScreen(true);
+    flushGLEvents();
+    advance(16);
+
+    // Time is FROZEN while off screen (see the clock comment in
+    // shader-canvas.tsx): the timeline continues from the 1.0s it reached, so
+    // this is neither ~0.016 (the clock restarting -- the defect that made
+    // shaders loop a third of a second forever) nor ~6.016 (wall-clock time,
+    // which would jump the shader five seconds forward on scroll-in).
+    expect(uniformWrites.iTime?.at(-1)).toBeCloseTo(1.016, 5);
+  });
+
+  it('cannot end up with two draw loops after rapid off/on toggling mid-release', () => {
+    const io = installFakeIntersectionObserver();
+    const { gl, calls, flushGLEvents } = createFakeGL();
+    stubGetContext(gl);
+
+    render(() => <ShaderCanvas fragment={MAIN} />);
+    io.setOnScreen(true);
+
+    // Every one of these lands while the PREVIOUS transition is still in
+    // flight (no `flushGLEvents` between them), which is the window where a
+    // naive implementation either starts a second loop or compiles against a
+    // context that is still lost.
+    io.setOnScreen(false);
+    io.setOnScreen(true);
+    io.setOnScreen(false);
+    io.setOnScreen(true);
+
+    flushGLEvents(); // `webglcontextlost` -> a restore gets requested
+    flushGLEvents(); // `webglcontextrestored` -> rebuild
+
+    // Exactly one rebuild, not one per toggle.
+    expect(calls.filter((c) => c === 'createProgram')).toHaveLength(2);
+
+    calls.length = 0;
+    advance(16);
+    // ONE draw per frame. Two live loops would double both of these.
+    expect(calls.filter((c) => c === 'drawArrays')).toHaveLength(1);
+    expect(calls.filter((c) => c === 'clear')).toHaveLength(1);
+  });
+
+  it('does not start a second draw loop when a webglcontextrestored arrives while already drawing', () => {
+    const io = installFakeIntersectionObserver();
+    const { gl, calls } = createFakeGL();
+    stubGetContext(gl);
+
+    render(() => <ShaderCanvas fragment={MAIN} />);
+    io.setOnScreen(true);
+    calls.length = 0;
+    advance(16);
+    expect(calls.filter((c) => c === 'drawArrays')).toHaveLength(1); // the control
+
+    // A restore event this component never asked for. A browser can auto-
+    // restore, and the event is dispatchable by anything on the page -- and
+    // the handler's job is to reconcile, which routes into the setup path
+    // while a loop is ALREADY armed. Nothing else in this file reaches
+    // `startLoop` in that state, so without this the "exactly one loop"
+    // guard is unverified: removing it leaves every other test green.
+    document.querySelector('canvas')!
+      .dispatchEvent(new Event('webglcontextrestored', { cancelable: true }));
+
+    calls.length = 0;
+    advance(16);
+    expect(calls.filter((c) => c === 'drawArrays')).toHaveLength(1);
+    // ...and it did not silently rebuild the program either.
+    expect(calls.filter((c) => c === 'createProgram')).toHaveLength(0);
+  });
+
+  it('degrades to pausing the loop when WEBGL_lose_context is unavailable, and resumes without recompiling', () => {
+    const io = installFakeIntersectionObserver();
+    const { gl, calls } = createFakeGL({ noLoseContextExtension: true });
+    stubGetContext(gl);
+
+    render(() => <ShaderCanvas fragment={MAIN} />);
+    io.setOnScreen(true);
+    expect(calls.filter((c) => c === 'createProgram')).toHaveLength(1);
+
+    calls.length = 0;
+    io.setOnScreen(false);
+
+    // Nothing to hand the context back WITH, so it stays -- keeping the
+    // compiled program with it rather than throwing away work that cannot buy
+    // a context slot back. The frames still stop, which is upstream's
+    // behaviour: the floor here, not the ceiling.
+    expect(calls).not.toContain('loseContext');
+    expect(calls).not.toContain('deleteProgram');
+    advance(1000);
+    expect(calls.filter((c) => c === 'drawArrays')).toHaveLength(0);
+
+    io.setOnScreen(true);
+    advance(16);
+
+    expect(calls.filter((c) => c === 'drawArrays')).toHaveLength(1);
+    // Coming back is a re-arm of the existing program, not a rebuild.
+    expect(calls.filter((c) => c === 'createProgram')).toHaveLength(0);
+  });
+});
+
+/**
+ * The fallback path, and the one the ENTIRE rest of the unit suite runs on:
+ * jsdom has no `IntersectionObserver`, and neither does an SSR render. This
+ * cannot go red by deleting the visibility feature -- that is the point of it.
+ * It is a regression guard that adding the observer did not quietly change
+ * behaviour for every environment that has no observer to consult.
+ */
+describe('ShaderCanvas: no IntersectionObserver (SSR, jsdom, older browsers)', () => {
+  const { advance, isFramePending } = installFakeClock();
+
+  it('compiles immediately and never releases the context -- exactly the pre-observer behaviour', () => {
+    expect(typeof IntersectionObserver).toBe('undefined'); // the precondition
+    const { gl, calls } = createFakeGL();
+    stubGetContext(gl);
+
+    render(() => <ShaderCanvas fragment={MAIN} />);
+
+    expect(calls.filter((c) => c === 'createProgram')).toHaveLength(1);
+    expect(isFramePending()).toBe(true);
+
+    calls.length = 0;
+    advance(16);
+    expect(calls.filter((c) => c === 'drawArrays')).toHaveLength(1);
+    expect(calls).not.toContain('loseContext');
   });
 });

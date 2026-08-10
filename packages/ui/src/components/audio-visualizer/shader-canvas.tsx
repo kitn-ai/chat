@@ -270,6 +270,12 @@ function setUniform(
  * read can mark this effect stale on every one of those, even though
  * `precision`'s resolved value never changes. See the comment above
  * `fragmentMemo`/`precisionMemo` below for the measured failure this caused.
+ *
+ * Visibility: while the canvas is off screen this canvas RELEASES its WebGL
+ * context outright, and takes it back when the canvas returns -- see the
+ * `ContextState` block inside the component for the whole mechanism and the
+ * context-budget measurement that forced it. There is no prop for this; it is
+ * always on.
  */
 export function ShaderCanvas(props: ShaderCanvasProps): JSX.Element {
   let canvas!: HTMLCanvasElement;
@@ -300,35 +306,275 @@ export function ShaderCanvas(props: ShaderCanvasProps): JSX.Element {
   const fragmentMemo = createMemo(() => props.fragment);
   const precisionMemo = createMemo(() => props.precision ?? 'highp');
 
-  createEffect(() => {
-    // Reads ONLY the three memos below -- never `props.fragment` /
-    // `props.precision` / `props.uniforms` directly -- so this effect's
-    // dependency set is exactly {fragmentMemo, precisionMemo, shapeKey}, and
-    // nothing a caller's props chain does elsewhere (spread-derived or not)
-    // can mark it stale without one of those three RESOLVED values actually
-    // changing.
-    const fragment = fragmentMemo();
-    const precision = precisionMemo();
-    shapeKey();
-    const uniforms = untrack(() => props.uniforms ?? {});
-    const source = buildFragmentSource(fragment, uniforms, precision);
+  // ------------------------------------------------------------------------
+  // Context lifecycle.
+  //
+  // Chrome caps LIVE WebGL contexts at about 16 per renderer process and
+  // silently evicts the oldest past that -- a budget shared across
+  // same-origin iframes too, so splitting the page up buys nothing (measured:
+  // the AudioVisualizer docs page wanted 18, got 16, and 2 canvases failed to
+  // compile with no error anywhere). Holding a context for the component's
+  // whole life is what made that page unable to host the shader stories at
+  // all.
+  //
+  // Merely pausing the draw loop off screen -- which is all upstream's
+  // runner does -- does NOT return a slot: an idle context still occupies
+  // one. So an off-screen canvas gives the context BACK, via
+  // `WEBGL_lose_context`'s `loseContext()`, and asks for it again with
+  // `restoreContext()` on the way in. Consequence worth stating plainly: N
+  // off-screen visualizers now hold ZERO contexts between them, and a page
+  // holds one per canvas actually in the viewport.
+  //
+  // All of this state is COMPONENT-scoped rather than living inside the
+  // compile effect, because a context belongs to the CANVAS, which outlives
+  // any one run of that effect. A shader released while off screen must still
+  // be restorable after a recompile (a `size`/band-count change genuinely
+  // rebuilds the shader while a tile is scrolled away).
+  // ------------------------------------------------------------------------
 
-    const gl = (canvas.getContext('webgl') ??
+  /**
+   * Where the canvas's context is, independent of whether a program is
+   * currently compiled against it (that is `teardown`).
+   *
+   * `losing` and `restoring` are the IN-FLIGHT states, and they are the whole
+   * reason this is a state machine rather than a boolean:
+   * `loseContext()`/`restoreContext()` do not take effect synchronously --
+   * the browser answers later with `webglcontextlost`/`webglcontextrestored`.
+   * A canvas that scrolls out and back in before the answer arrives must sit
+   * in the in-flight state and re-decide when the event lands, never start a
+   * second draw loop or compile against a context that is still gone.
+   */
+  type ContextState = 'none' | 'live' | 'losing' | 'lost' | 'restoring';
+  let contextState: ContextState = 'none';
+  let context: WebGLRenderingContext | null = null;
+  /**
+   * Cached WHILE THE CONTEXT IS ALIVE, deliberately: a lost context answers
+   * `getExtension` with null, so re-fetching it on the way back in is a dead
+   * end. This handle is the only thing that can restore what we released.
+   */
+  let loseExtension: WEBGL_lose_context | null = null;
+
+  /** Undoes everything the current activation built. Null when nothing is built. */
+  let teardown: (() => void) | null = null;
+  /** The current frame callback. Null when nothing is built. */
+  let drawFrame: ((now: number) => void) | null = null;
+  /** The pending animation frame id, or 0 when the loop is stopped. */
+  let raf = 0;
+
+  /** The assembled source and the uniform snapshot it was assembled from. */
+  let build: { source: string; uniforms: Record<string, UniformSpec> } | null = null;
+  /** THIS build cannot compile; reset whenever the effect produces a new one. */
+  let buildFailed = false;
+  /** No WebGL at all. Permanent for this mount, matching `onError`'s contract. */
+  let noWebGL = false;
+  /** The BROWSER took the context away (not us). Permanent for this mount. */
+  let hardLost = false;
+  let disposed = false;
+
+  let visibility: IntersectionObserver | undefined;
+  let wired = false;
+  /**
+   * Whether the canvas is on screen. Starts true and STAYS true when there is
+   * no `IntersectionObserver` to consult (SSR, jsdom, older browsers), which
+   * is what keeps that environment on exactly the pre-observer behaviour:
+   * compile on mount, draw forever.
+   */
+  let onScreen = true;
+
+  /**
+   * The shader clock, deliberately outliving both a release and a recompile.
+   *
+   * `iTime` is ON-SCREEN time: it accumulates only while the loop runs, so a
+   * canvas that comes back after a minute off screen picks up exactly where
+   * the viewer last saw it rather than jumping a minute forward. Freezing
+   * rather than tracking wall-clock is a choice -- nothing here is
+   * synchronised to real time, so the only observable difference is a
+   * discontinuity on scroll-in, and there is no reason to have one.
+   *
+   * What it must never do is RESTART. A previous round shipped a defect where
+   * a spuriously re-running compile effect re-stamped the clock's origin every
+   * few frames, pinning `iTime` under 0.33s forever (shaders looked like they
+   * were looping a third of a second). The memos above are the fix for that
+   * cause; keeping the clock out here means even a legitimate recompile -- a
+   * band-count change, say -- no longer snaps the animation back to zero, so
+   * the whole class of "the shader restarted" bugs has one fewer door.
+   * `frame` (`iFrame`) is kept monotonic for the same reason.
+   */
+  let elapsedMs = 0;
+  let runStartedAt = 0;
+  let frame = 0;
+
+  const acquireContext = (): WebGLRenderingContext | null => {
+    if (context) return context;
+    context = (canvas.getContext('webgl') ??
       canvas.getContext('experimental-webgl')) as WebGLRenderingContext | null;
+    if (context) {
+      contextState = 'live';
+      // Optional call: every real context implements `getExtension`, but a
+      // context stub that does not should degrade to "cannot release" rather
+      // than throwing out of the compile path.
+      loseExtension = context.getExtension?.('WEBGL_lose_context') ?? null;
+    }
+    return context;
+  };
 
+  const startLoop = () => {
+    // The one gate that makes a second concurrent loop impossible, however
+    // fast visibility toggles: a loop is running iff `raf !== 0` (a real
+    // animation-frame id is never 0).
+    if (raf !== 0 || !drawFrame || disposed) return;
+    runStartedAt = performance.now();
+    raf = requestAnimationFrame(drawFrame);
+  };
+
+  const stopLoop = () => {
+    if (raf === 0) return;
+    cancelAnimationFrame(raf);
+    raf = 0;
+    // Bank what was drawn so `iTime` resumes from here, not from zero.
+    elapsedMs += Math.max(0, performance.now() - runStartedAt);
+  };
+
+  /** Drop the compiled program/shaders/buffer, leaving the context itself alone. */
+  const release = () => {
+    stopLoop();
+    const run = teardown;
+    teardown = null;
+    run?.();
+  };
+
+  const requestLoss = () => {
+    if (!loseExtension || contextState !== 'live') return;
+    contextState = 'losing';
+    loseExtension.loseContext();
+  };
+
+  const requestRestore = () => {
+    if (!loseExtension) return;
+    contextState = 'restoring';
+    loseExtension.restoreContext();
+  };
+
+  /**
+   * Reconcile what is built against where the canvas is. Every input --
+   * a visibility change, a context event, a new compiled source -- routes
+   * through here rather than acting directly, which is what keeps the
+   * in-flight windows from producing two loops or a half-initialised context.
+   */
+  const sync = () => {
+    if (disposed || noWebGL || hardLost) return;
+    if (onScreen) {
+      // Mid-flight: the `webglcontextlost`/`webglcontextrestored` handler
+      // re-enters here once the browser answers.
+      if (contextState === 'losing' || contextState === 'restoring') return;
+      if (contextState === 'lost') { requestRestore(); return; }
+      activate();
+    } else if (loseExtension && contextState === 'live') {
+      // Resources first, THEN the context: deleting GPU objects after the
+      // context is gone is a spec no-op, which leaks them for as long as the
+      // driver keeps the dead context around.
+      release();
+      requestLoss();
+    } else {
+      // No way to hand the context back (no extension), or it is already
+      // gone. Stop burning frames either way -- upstream's pause, as the
+      // floor rather than the ceiling.
+      stopLoop();
+    }
+  };
+
+  const setOnScreen = (next: boolean) => {
+    if (next === onScreen || disposed) return;
+    onScreen = next;
+    sync();
+  };
+
+  const onContextLost = (e: Event) => {
+    // Required by spec to even ALLOW a later `webglcontextrestored` --
+    // including for the losses this component asks for itself.
+    e.preventDefault();
+    const deliberate = contextState === 'losing';
+    contextState = 'lost';
+    release();
+    if (deliberate) {
+      // Ours, to free the budget while off screen. If the canvas scrolled
+      // back in while the event was in flight, this is where it gets restored.
+      sync();
+      return;
+    }
+    // The browser evicted us -- most commonly because the page blew past the
+    // context cap. Permanent for this mount: `onError` is what lets the
+    // dispatcher fall back to bars. Without this the draw loop would keep
+    // issuing GL calls that are all silent no-ops on a lost context, leaving a
+    // shader frozen mid-frame with nothing reported anywhere.
+    hardLost = true;
+    props.onError?.('WebGL context was lost.');
+  };
+
+  const onContextRestored = () => {
+    contextState = 'live';
+    // Rebuild if the canvas is still on screen, or hand the context straight
+    // back if it scrolled away again while the restore was in flight.
+    sync();
+  };
+
+  const wireCanvas = () => {
+    if (wired) return;
+    wired = true;
+    canvas.addEventListener('webglcontextlost', onContextLost, false);
+    canvas.addEventListener('webglcontextrestored', onContextRestored, false);
+
+    if (typeof IntersectionObserver === 'undefined') return;
+
+    // With an observer, NOTHING is built until it reports the canvas on
+    // screen. That is the load-bearing half of the fix: a page mounting 18
+    // visualizers otherwise creates 18 contexts in the mount task and has 2
+    // evicted by the browser before the first observer callback could
+    // possibly run -- and an evicted context is a permanent failure, not a
+    // recoverable one.
+    onScreen = false;
+    visibility = new IntersectionObserver((entries) => {
+      const entry = entries[entries.length - 1];
+      if (entry) setOnScreen(entry.isIntersecting);
+    }, { threshold: 0 });
+    visibility.observe(canvas);
+  };
+
+  const activate = () => {
+    if (disposed || noWebGL || hardLost || buildFailed) return;
+    const current = build;
+    if (!current) return;
+
+    // Already built and only the loop was stopped (the no-extension path
+    // above): re-arm it rather than recompiling.
+    if (teardown) { startLoop(); return; }
+
+    const gl = acquireContext();
     if (!gl) {
+      noWebGL = true;
       props.onError?.('WebGL is not available in this browser.');
       return;
     }
+    if (gl.isContextLost()) {
+      // Released earlier -- possibly by a PREVIOUS run of the compile effect,
+      // which is why `loseExtension` is cached at component scope. Ask for it
+      // back and let `webglcontextrestored` re-enter here.
+      requestRestore();
+      return;
+    }
+
+    const { source, uniforms } = current;
 
     const vs = compile(gl, gl.VERTEX_SHADER, VERTEX_SOURCE);
     if (typeof vs === 'string') {
+      buildFailed = true;
       props.onError?.(vs);
       return;
     }
     const fs = compile(gl, gl.FRAGMENT_SHADER, source);
     if (typeof fs === 'string') {
       gl.deleteShader(vs);
+      buildFailed = true;
       props.onError?.(fs);
       return;
     }
@@ -337,6 +583,7 @@ export function ShaderCanvas(props: ShaderCanvasProps): JSX.Element {
     if (!program) {
       gl.deleteShader(vs);
       gl.deleteShader(fs);
+      buildFailed = true;
       props.onError?.('Could not create a WebGL program.');
       return;
     }
@@ -348,6 +595,7 @@ export function ShaderCanvas(props: ShaderCanvasProps): JSX.Element {
       gl.deleteProgram(program);
       gl.deleteShader(vs);
       gl.deleteShader(fs);
+      buildFailed = true;
       props.onError?.(log);
       return;
     }
@@ -417,50 +665,23 @@ export function ShaderCanvas(props: ShaderCanvasProps): JSX.Element {
     ro?.observe(canvas);
     resize();
 
-    const start = performance.now();
-    let frame = 0;
-    let raf = 0;
-
-    // A context can be lost AFTER a successful compile -- most commonly the
-    // browser evicting this canvas because too many WebGL contexts are alive
-    // on the page at once (Chrome caps concurrent contexts around 16 and
-    // silently kills the oldest). Without this listener, `draw` below would
-    // keep calling `gl.clear`/`gl.drawArrays` every frame forever -- all
-    // no-ops on a lost context per the WebGL spec -- so the canvas would just
-    // keep showing whatever was on screen the instant it died: a
-    // live-looking shader that permanently freezes with no error and no
-    // `onUnavailable`, since nothing here would ever learn it happened.
-    // `preventDefault()` is required by spec to even ALLOW a future
-    // `webglcontextrestored`; this component does not attempt to recover on
-    // one, matching the "permanent for this mount" contract `onUnavailable`
-    // already documents in index.tsx for every other failure path -- a
-    // restored context still needs its program/shaders recompiled from
-    // scratch, and the dispatcher's bar fallback is a fine landing spot.
-    let lost = false;
-    const onContextLost = (e: Event) => {
-      e.preventDefault();
-      lost = true;
-      cancelAnimationFrame(raf);
-      props.onError?.('WebGL context was lost.');
-    };
-    canvas.addEventListener('webglcontextlost', onContextLost, false);
-
     const draw = (now: number) => {
-      // Belt-and-braces alongside the listener above: if a context is lost
-      // by some path that does not fire `webglcontextlost` synchronously
-      // before the next frame, this still stops issuing GL calls against it.
-      if (lost || gl.isContextLost()) return;
+      // Belt-and-braces alongside the `webglcontextlost` listener: if a
+      // context goes away by some path that does not fire the event
+      // synchronously before the next frame, this still stops issuing GL
+      // calls against it.
+      if (hardLost || gl.isContextLost()) return;
       resize();
       // Clamped at 0: a browser's rAF callback receives the timestamp for
       // when the current frame BEGAN, captured before this component's
-      // synchronous setup finishes and stamps `start` -- so the very first
-      // frame or two can compute a few milliseconds negative even with
+      // synchronous setup finishes and stamps `runStartedAt` -- so the very
+      // first frame or two can compute a few milliseconds negative even with
       // nothing wrong. Harmless and self-correcting either way (confirmed:
       // the pathological, CONTINUOUSLY-recurring negative values reported in
-      // production were `start` being re-stamped by a spuriously re-running
-      // effect, not this), but there is no reason `iTime` should ever go
-      // negative for a caller, so it does not.
-      const seconds = Math.max(0, (now - start) / 1000);
+      // production were the clock origin being re-stamped by a spuriously
+      // re-running effect, not this), but there is no reason `iTime` should
+      // ever go negative for a caller, so it does not.
+      const seconds = Math.max(0, (elapsedMs + (now - runStartedAt)) / 1000);
 
       if (uTime) gl.uniform1f(uTime, seconds);
       if (uResolution) gl.uniform2fv(uResolution, [canvas.width, canvas.height]);
@@ -489,18 +710,66 @@ export function ShaderCanvas(props: ShaderCanvasProps): JSX.Element {
       frame++;
       raf = requestAnimationFrame(draw);
     };
-    raf = requestAnimationFrame(draw);
 
-    onCleanup(() => {
-      cancelAnimationFrame(raf);
+    teardown = () => {
+      drawFrame = null;
       ro?.disconnect();
       canvas.removeEventListener('pointermove', onMove);
-      canvas.removeEventListener('webglcontextlost', onContextLost);
       gl.deleteProgram(program);
       gl.deleteShader(vs);
       gl.deleteShader(fs);
       gl.deleteBuffer(buffer);
-    });
+    };
+    drawFrame = draw;
+    startLoop();
+  };
+
+  onCleanup(() => {
+    disposed = true;
+    visibility?.disconnect();
+    if (wired) {
+      canvas.removeEventListener('webglcontextlost', onContextLost);
+      canvas.removeEventListener('webglcontextrestored', onContextRestored);
+    }
+    release();
+    // Hand the budget back NOW rather than waiting for the detached canvas to
+    // be collected: switching variants, or navigating a page full of tiles,
+    // otherwise leaves dead contexts holding slots for a while.
+    if (loseExtension && contextState === 'live') loseExtension.loseContext();
+  });
+
+  createEffect(() => {
+    // Reads ONLY the three memos below -- never `props.fragment` /
+    // `props.precision` / `props.uniforms` directly -- so this effect's
+    // dependency set is exactly {fragmentMemo, precisionMemo, shapeKey}, and
+    // nothing a caller's props chain does elsewhere (spread-derived or not)
+    // can mark it stale without one of those three RESOLVED values actually
+    // changing.
+    //
+    // Note what this effect does NOT do any more: touch the GPU. It resolves
+    // the source and hands it to `sync`, which owns every decision about
+    // whether a context should exist right now. That split is what lets the
+    // SAME setup path serve a first mount, a recompile, and a scroll-back-in
+    // restore, instead of one path per trigger.
+    const fragment = fragmentMemo();
+    const precision = precisionMemo();
+    shapeKey();
+    const uniforms = untrack(() => props.uniforms ?? {});
+
+    build = { source: buildFragmentSource(fragment, uniforms, precision), uniforms };
+    // A new source gets a fresh attempt: a shader that failed to compile must
+    // not poison the next one the caller supplies.
+    buildFailed = false;
+
+    wireCanvas();
+    sync();
+
+    // Runs before the NEXT execution of this effect as well as on unmount, so
+    // a source change always drops the program compiled from the old source
+    // before `sync` builds the new one. The context itself deliberately
+    // survives -- it is the expensive, rationed thing, and the new source
+    // needs it immediately.
+    onCleanup(release);
   });
 
   return <canvas ref={canvas} part="canvas" class={cn('block h-full w-full', props.class)} />;
