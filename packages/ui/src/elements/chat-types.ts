@@ -64,6 +64,12 @@ export type MessagePart =
       label?: string;
       /** Provider block index. Keeps parallel reasoning blocks distinct. */
       index?: number;
+      /** Which provider RESPONSE STREAM `index` was counted in. Anthropic restarts
+       *  content-block indices at 0 for every message, and a multi-round tool loop
+       *  folds several of those messages into ONE assistant turn, so `index` alone
+       *  is not unique within `parts`. Set by the wire adapter, one value per
+       *  `consumeModelStream` call. See `appendReasoningPart`. */
+      streamId?: string;
       /** Informational only. `raw` is the round-trip channel, not this. */
       signature?: string;
       raw?: RawOrigin;

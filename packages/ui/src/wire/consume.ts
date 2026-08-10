@@ -252,7 +252,14 @@ function createPartsRecorder(): AssistantStreamSink & { parts(): MessagePart[] }
       parts = appendTextPart(parts, delta);
     },
     appendReasoning(delta, opts) {
-      parts = appendReasoningPart(parts, delta, opts);
+      // `streamId` is DROPPED here on purpose. It namespaces block indices for a
+      // sink that outlives one stream; this recorder starts a fresh array per
+      // call, so within `ModelTurn.parts` there is nothing to disambiguate. Worse,
+      // it is a new value on every call, so keeping it would make `parts`
+      // non-reproducible for identical input and break the determinism the
+      // adapter guarantees (same chunks in, same parts out, whatever the byte
+      // boundaries). The host's own sink still receives it.
+      parts = appendReasoningPart(parts, delta, { ...opts, streamId: undefined });
     },
     upsertTool(toolCallId, patch) {
       parts = upsertToolPart(parts, toolCallId, patch);
@@ -289,6 +296,19 @@ function teeSink(a: AssistantStreamSink, b: AssistantStreamSink): AssistantStrea
 
 // ── The main loop ────────────────────────────────────────────────────────────
 
+/** One id per `consumeModelStream` call, i.e. per provider response stream.
+ *
+ *  It namespaces reasoning block indices. Anthropic restarts content-block
+ *  indices at 0 on every message, and a tool loop reads several messages into ONE
+ *  assistant turn, so without this round 2's block 0 merges into round 1's part
+ *  and overwrites its verbatim `raw`. See `appendReasoningPart`.
+ *
+ *  A monotonic counter, not a UUID: this never leaves the process, is compared
+ *  only for equality against parts built in the same process, and a counter keeps
+ *  the value short and reproducible in test output. */
+let streamSeq = 0;
+const nextStreamId = (): string => `wire-${++streamSeq}`;
+
 /**
  * Read one turn's worth of `ModelStreamChunk`s and drive `sink` with them.
  *
@@ -306,6 +326,7 @@ export async function consumeModelStream(
   opts: ConsumeOptions = {},
 ): Promise<ModelTurn> {
   const label = opts.reasoningLabel ?? 'Thinking';
+  const streamId = nextStreamId();
   const recorder = createPartsRecorder();
   const out = teeSink(sink, recorder);
   const tools = createToolCallAccumulator(out, opts);
@@ -354,6 +375,9 @@ export async function consumeModelStream(
       // would blank a value an earlier delta already established.
       out.appendReasoning(delta, {
         index: chunk.reasoningIndex ?? 0,
+        // Namespaces the index to THIS stream, so a later round reading into the
+        // same sink opens its own part instead of overwriting this one's `raw`.
+        streamId,
         label,
         ...(chunk.reasoningRaw ? { raw: chunk.reasoningRaw } : {}),
         ...(chunk.reasoningSignature ? { signature: chunk.reasoningSignature } : {}),

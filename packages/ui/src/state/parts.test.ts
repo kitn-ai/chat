@@ -122,6 +122,49 @@ describe('appendReasoningPart', () => {
     expect(next).not.toBe(parts);
     expect(next).toHaveLength(2);
   });
+
+  /** THE MULTI-ROUND REGRESSION. Anthropic numbers content blocks per MESSAGE and
+   *  restarts at 0, while a tool loop reads every round into ONE assistant turn.
+   *  Keyed on index alone, round 2's block 0 merges into round 1's part: the text
+   *  concatenates to "R1 thinking.R2 thinking." and `raw: opts.raw ?? cur.raw`
+   *  replaces round 1's verbatim payload with round 2's. Round 1's provider block
+   *  is then gone, which is the 400 this whole channel exists to avoid. */
+  it('keeps two rounds APART when the provider restarts block indices at 0', () => {
+    const round1 = { source: 'anthropic.content_block', payload: { type: 'thinking', thinking: 'R1 thinking.', signature: 'SIG-ROUND-1' } };
+    const round2 = { source: 'anthropic.content_block', payload: { type: 'thinking', thinking: 'R2 thinking.', signature: 'SIG-ROUND-2' } };
+
+    let parts: MessagePart[] = [];
+    parts = appendReasoningPart(parts, 'R1 thinking.', { index: 0, streamId: 'wire-1' });
+    parts = appendReasoningPart(parts, '', { index: 0, streamId: 'wire-1', raw: round1 });
+    // Round 2: a NEW provider stream, and its block indices start over at 0.
+    parts = appendReasoningPart(parts, 'R2 thinking.', { index: 0, streamId: 'wire-2' });
+    parts = appendReasoningPart(parts, '', { index: 0, streamId: 'wire-2', raw: round2 });
+
+    expect(parts).toHaveLength(2);
+    expect(reasoningAt(parts, 0).text).toBe('R1 thinking.');
+    expect(reasoningAt(parts, 0).raw).toBe(round1);
+    expect(reasoningAt(parts, 1).text).toBe('R2 thinking.');
+    expect(reasoningAt(parts, 1).raw).toBe(round2);
+  });
+
+  it('still merges the SAME index within one stream', () => {
+    let parts = appendReasoningPart([], 'a', { index: 0, streamId: 'wire-1' });
+    parts = appendReasoningPart(parts, 'b', { index: 0, streamId: 'wire-1' });
+    expect(parts).toHaveLength(1);
+    expect(reasoningAt(parts, 0).text).toBe('ab');
+  });
+
+  /** An absent `streamId` is its own namespace, so a producer that drives one sink
+   *  from one stream keeps the pre-existing behaviour with no changes. */
+  it('treats an absent streamId as a namespace of its own', () => {
+    let parts = appendReasoningPart([], 'a', { index: 0 });
+    parts = appendReasoningPart(parts, 'b', { index: 0 });
+    expect(parts).toHaveLength(1);
+    parts = appendReasoningPart(parts, 'c', { index: 0, streamId: 'wire-1' });
+    expect(parts).toHaveLength(2);
+    expect(reasoningAt(parts, 0).text).toBe('ab');
+    expect(reasoningAt(parts, 1).text).toBe('c');
+  });
 });
 
 describe('upsertToolPart', () => {

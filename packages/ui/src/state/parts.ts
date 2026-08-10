@@ -32,6 +32,9 @@ export function appendTextPart(parts: MessagePart[], delta: string): MessagePart
 
 export interface ReasoningOpts {
   index?: number;
+  /** Namespaces `index` to one provider response stream. Producers that read more
+   *  than one stream into the SAME message must set it. See `appendReasoningPart`. */
+  streamId?: string;
   label?: string;
   signature?: string;
   raw?: RawOrigin;
@@ -39,7 +42,22 @@ export interface ReasoningOpts {
 
 type ReasoningPart = Extract<MessagePart, { type: 'reasoning' }>;
 
-/** Keyed by block index so parallel reasoning blocks stay distinct.
+/** Keyed by `(streamId, index)` so parallel reasoning blocks stay distinct.
+ *
+ *  WHY THE KEY IS A PAIR. A block index alone is NOT unique inside one `parts`
+ *  array. Anthropic numbers content blocks per MESSAGE and restarts at 0 on the
+ *  next one, while a tool loop folds every round into a single assistant turn.
+ *  Keyed on index alone, round 2's thinking block (index 0) merges into round 1's
+ *  part: the text concatenates and `raw: opts.raw ?? cur.raw` OVERWRITES round 1's
+ *  verbatim provider payload with round 2's. `toAnthropicMessages` then emits one
+ *  thinking block where two belong, carrying round 2's signature in round 1's
+ *  position -- a modified-and-filtered thinking block, which is exactly the 400
+ *  the verbatim `raw` channel exists to prevent.
+ *
+ *  `streamId` is the namespace: one value per provider response stream, attached
+ *  by `consumeModelStream`. Two rounds are two streams, so their index 0s are two
+ *  parts. Producers that drive a sink from a single stream can omit it; `undefined`
+ *  is its own namespace and behaves exactly as before.
  *
  *  Returns the SAME array reference when the merge produces an identical part,
  *  for the same reason `upsertToolPart` does: a new `parts` array is the
@@ -62,9 +80,12 @@ export function appendReasoningPart(
   opts: ReasoningOpts = {},
 ): MessagePart[] {
   const index = opts.index ?? 0;
-  const i = parts.findIndex((p) => p.type === 'reasoning' && (p.index ?? 0) === index);
+  const streamId = opts.streamId;
+  const i = parts.findIndex(
+    (p) => p.type === 'reasoning' && (p.index ?? 0) === index && p.streamId === streamId,
+  );
   if (i < 0) {
-    return [...parts, { type: 'reasoning', text: delta, index, label: opts.label, signature: opts.signature, raw: opts.raw }];
+    return [...parts, { type: 'reasoning', text: delta, index, streamId, label: opts.label, signature: opts.signature, raw: opts.raw }];
   }
   const cur = parts[i] as ReasoningPart;
   const next: ReasoningPart = {
@@ -84,7 +105,7 @@ export function appendReasoningPart(
  *  here AND given a comparator, so a new field can never be silently ignored by
  *  the dedupe check and strand a stale array reference. */
 const REASONING_KEYS = [
-  'type', 'text', 'index', 'label', 'signature', 'raw',
+  'type', 'text', 'index', 'streamId', 'label', 'signature', 'raw',
 ] as const satisfies readonly (keyof ReasoningPart)[];
 
 type _ReasoningKeysExhaustive = Exclude<
@@ -112,6 +133,7 @@ const REASONING_COMPARATORS: {
   type: (a, b) => a.type === b.type,
   text: (a, b) => a.text === b.text,
   index: (a, b) => a.index === b.index,
+  streamId: (a, b) => a.streamId === b.streamId,
   label: (a, b) => a.label === b.label,
   signature: (a, b) => a.signature === b.signature,
   raw: (a, b) => a.raw === b.raw,
