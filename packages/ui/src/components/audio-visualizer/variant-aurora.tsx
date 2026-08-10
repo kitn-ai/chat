@@ -12,6 +12,19 @@ import auroraShader from './aurora.glsl';
  * aura-prototype/lk-aura-factsheet.md`) and reconciled against `aurora.glsl.ts`'s
  * own module doc / the Task 14 report's "Uniform list for Task 15" table.
  *
+ * ATTRIBUTION: these same values are upstream's, and upstream's copy is
+ * Apache-2.0. They live in `packages/shadcn/hooks/agents-ui/
+ * use-agent-audio-visualizer-aura.ts` -- the aura DRIVING hook, which carries
+ * no Polyform header and is ordinary Apache-2.0 code, unlike the aura
+ * COMPONENT and its inline shader. Every row below matches that hook: the
+ * four state rows, the listening spring (1.0s, bounce 0.35), the tween and
+ * pulse cadences, and the analyser settings the visualizer feeds from
+ * (fftSize 512, smoothingTimeConstant 0.55). Recorded in `packages/ui/NOTICE`
+ * as an attribution rather than a port, since no code was copied. This is
+ * the BEHAVIOUR layer only -- `aurora.glsl.ts` (the rendering) is original
+ * work and owes the hook nothing. See `docs/provenance/aurora-clean-room.md`
+ * section 7 for the license map that separates the two upstream files.
+ *
  * Deliberately NOT `shaderTargets()` (primitives/visualizer-sequences.ts):
  * that helper only carries two axes -- a 0..1 "energy" intensity and a 1..4
  * speed -- built for the OLD custom/aura convention. This shader's real table

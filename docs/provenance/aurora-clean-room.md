@@ -266,6 +266,10 @@ radial, and wave variants, and `wave.glsl.ts` (verbatim). The ledger records tha
 a reviewer byte-diffed the extracted wave GLSL against upstream via the GitHub
 API and found zero differences. None of these is an aurora input.
 
+A ninth entry, `variant-aurora.tsx`, is listed separately: it borrows animation
+values from the Apache-2.0 aura driving hook without porting any code. The two
+subsections below explain why that file is a different case.
+
 ### The aura is two files under two different licenses
 
 This distinction is the single most important fact in this section, and it is
@@ -346,16 +350,36 @@ not read on a local machine. The claim rests on the contemporaneous written
 record plus the affirmative derivation evidence in section 5. A reader should
 weigh it as such.
 
-### One wording gap left open
+### The driving hook is attributed in NOTICE (resolved 2026-08-10)
 
-`NOTICE` enumerates the bar, grid, radial, and wave hooks as the upstream
-sources behind `visualizer-sequences.ts`, and does not mention the aura driving
-hook at all. That is accurate as far as it goes -- no code from the aura hook was
-ported into `visualizer-sequences.ts` -- but the hook did inform
-`variant-aurora.tsx`'s state targets, and `NOTICE` currently gives a reader no
-way to see that. Whether to add it is a judgement call about how far
-attribution should reach for behaviour studied rather than code copied. Flagged
-in section 9, not decided here.
+An earlier draft of this document left open whether `NOTICE` should mention the
+Apache-2.0 aura driving hook. It now does. `variant-aurora.tsx` is listed with
+`use-agent-audio-visualizer-aura.ts` as its source, in a block separate from the
+ports list and explicitly described as taking values rather than code.
+
+The reasoning, recorded because the decision is the kind a reader may want to
+audit:
+
+- The values are upstream's. Verified line by line for this document: all four
+  state rows in `auroraTargets` (speed, scale, amplitude, frequency, brightness),
+  the listening spring at 1.0 s and bounce 0.35, the tween and pulse cadences,
+  and the analyser settings (fftSize 512, smoothingTimeConstant 0.55) match the
+  hook exactly. Only the per-state `rotation` trims are ours, and those came
+  from measurement (section 6).
+- Apache-2.0 section 4 asks that attribution travel with derivative works.
+  Whether a table of animation constants is a "derivative work" is arguable;
+  attributing it costs nothing and resolves the argument in the direction of
+  more disclosure.
+- `NOTICE` already enumerates the bar, grid, radial, and wave hooks for exactly
+  this reason. Omitting the aura hook would have left the one file whose
+  provenance is most scrutinised looking less carefully handled than its
+  siblings, which is the opposite of what this record is for.
+
+The entry is deliberately worded as an attribution, not a port. No code was
+copied from the hook, and `NOTICE`'s existing "ports or verbatim copies" list is
+left untouched so that its precision is not blunted. `NOTICE` also now states
+that this attribution does not extend to `aurora.glsl.ts`: the shader interior
+remains original work and owes the hook nothing.
 
 ## 8. The open question, stated plainly
 
@@ -375,10 +399,12 @@ narrows the exposure but does not remove it.) So:
   the fact sheet. The project has treated those as unconditionally shippable and
   the aurora as a decision requiring sign-off. That distinction is deliberate and
   was surfaced rather than resolved by the implementing agents.
-- `packages/ui/NOTICE` records the aurora's provenance as an unresolved decision
-  in the shipped package itself: "Its own provenance ... is a separate, pending
-  decision and is not resolved by this NOTICE." That wording is accurate and
-  should not be quietly upgraded to a cleaner claim.
+- `packages/ui/NOTICE` records the shader's provenance as an unresolved decision
+  in the shipped package itself: "This file's own provenance ... is a separate,
+  pending decision and is not resolved by this NOTICE." That wording is accurate
+  and should not be quietly upgraded to a cleaner claim. The `variant-aurora.tsx`
+  attribution added on 2026-08-10 covers the behaviour layer only and leaves this
+  question exactly where it was.
 - There is a factual overlap that has to be acknowledged rather than argued
   away: our shader reproduces specific numeric constants from a commercial
   product. The clean-room position is that those are facts about how a program
@@ -441,9 +467,11 @@ produced in three years proves nothing about what was actually read in 2026.
    wrong instinct. Section 4 of this document records the discrepancy instead.
    The same overclaim in `aurora.glsl.ts` -- a live source file, not evidence --
    **was corrected** on 2026-08-10.
-2. **`NOTICE` does not mention the Apache-2.0 aura driving hook** (section 7).
-   No code from it was ported, but it informed `variant-aurora.tsx`'s state
-   targets. Whether attribution should reach that far is the owner's call.
+2. ~~`NOTICE` does not mention the Apache-2.0 aura driving hook.~~ **Resolved
+   2026-08-10:** it now does. `variant-aurora.tsx` is attributed to
+   `use-agent-audio-visualizer-aura.ts` as a values-not-code borrowing, in a
+   block separate from the ports list, with an explicit statement that the
+   attribution does not reach `aurora.glsl.ts`. Reasoning in section 7.
 
 ## 10. Evidence index
 

@@ -20,6 +20,18 @@ The following files are ports or verbatim copies of LiveKit work:
   src/components/audio-visualizer/wave.glsl.ts
       verbatim, from agent-audio-visualizer-wave.tsx
 
+The following file contains no ported code, but takes animation values from
+LiveKit work:
+
+  src/components/audio-visualizer/variant-aurora.tsx
+      from packages/shadcn/hooks/agents-ui/use-agent-audio-visualizer-aura.ts
+      (Apache-2.0). Its per-state animation targets -- speed, scale,
+      amplitude, frequency and brightness per agent state, the listening
+      spring (1.0s, bounce 0.35), and the tween and pulse cadences -- match
+      that hook, as do the analyser settings (fftSize 512,
+      smoothingTimeConstant 0.55). The implementation is our own; the
+      values are attributed here.
+
 You may obtain a copy of the Apache License 2.0 at
 http://www.apache.org/licenses/LICENSE-2.0
 
@@ -28,9 +40,14 @@ third party:
 
   src/components/audio-visualizer/aurora.glsl.ts
 
-Its own provenance (whether it may itself later be attributed, relicensed,
-or otherwise handled) is a separate, pending decision and is not resolved
-by this NOTICE.
+The variant-aurora.tsx attribution above does not extend to this file. That
+attribution covers per-state animation values only; none of it reaches the
+rendering. LiveKit's own aura shader is separately licensed, was never read,
+and contributed nothing here.
+
+This file's own provenance (whether it may itself later be attributed,
+relicensed, or otherwise handled) is a separate, pending decision and is not
+resolved by this NOTICE.
 
 The full clean-room derivation record for that file, including its evidence
 index, is at docs/provenance/aurora-clean-room.md in the source repository
