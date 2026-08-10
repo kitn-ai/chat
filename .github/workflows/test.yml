@@ -52,6 +52,17 @@ jobs:
       - name: Server-import guard (every entry imports under `node`)
         run: pnpm --filter @kitn.ai/ui run verify:ssr
 
+      # Diffs the 79-element registry against the public SolidJS surface, derived
+      # from the TS checker and cross-checked against the BUILT entry's runtime
+      # keys. Solid is the authored layer, and the framework docs promise the same
+      # catalog everywhere -- but src/index.ts was grown by hand and nobody ever
+      # diffed it against the registry, so 33 of 79 elements had no writable Solid
+      # equivalent (kai-chat, kai-thread and kai-workspace among them). Also
+      # asserts every public component ships a <Name>Props type. Needs the build
+      # above; a missing build fails the check rather than skipping it.
+      - name: Solid coverage guard (every element writable in SolidJS)
+        run: pnpm --filter @kitn.ai/ui run verify:solid-coverage
+
       # Compiles the `kai` MCP scaffolder's EMITTED code (60 archetype x
       # integration x framework combinations) with real `tsc --strict
       # --noUnusedLocals`, resolving @kitn.ai/ui through the shipped exports map

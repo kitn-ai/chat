@@ -1,9 +1,18 @@
-// PROPOSED TOOLING — NOT WIRED INTO THE BUILD, NOT REFERENCED BY package.json.
+// GUARD — `npm run verify:solid-coverage`, run in the required CI `test` job.
+//
+// Fails the build when a registered element has no writable SolidJS equivalent,
+// or when a public component ships no public `<Name>Props` type. Both are the
+// same defect: a capability documented for one framework that a Solid consumer
+// cannot express. Solid is the source of truth for this kit, so an element whose
+// Solid surface is unreachable is a hole in the authored layer, not a Solid-only
+// inconvenience.
 //
 // Derives the "one row per registered element -> what a SolidJS consumer writes"
 // coverage map FROM THE REGISTRY AND THE COMPILER, so it cannot drift. There is
 // no hand-written mapping table anywhere in this file; the only literals are the
-// kit's own layer directory names.
+// kit's own layer directory names. That is deliberate: this repo has been bitten
+// repeatedly by hand-written content inside gen-*.mjs scripts that no compiler
+// or drift check can see.
 //
 //   catalog  = src/elements/element-meta.json            (the registered kai-* elements)
 //   surface  = the public root entry: `src/index.ts` module exports resolved by
@@ -24,7 +33,10 @@
 // Each GAP row carries its own proof: the missing symbol, its declaring module,
 // and every public export that module does or does not provide.
 //
-// Usage:  node scripts/proposed-solid-coverage.mjs [--json out.json]
+// Usage:  node scripts/verify-solid-coverage.mjs [--json out.json]
+//         Needs `nx build ui` first — the surface is cross-checked against the
+//         runtime keys of the BUILT dist/index.server.js, and a missing build is
+//         a hard error, not a silently-skipped check.
 
 import ts from 'typescript';
 import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
@@ -83,13 +95,21 @@ for (const s of entrySym ? checker.getExportsOfModule(entrySym) : []) {
   else publicTypes.add(s.name);
 }
 
-// Runtime cross-check against the BUILT entry.
-let runtimeExports = null;
+// Runtime cross-check against the BUILT entry. A source export that does not
+// survive the build is not public, so this is load-bearing: without it the guard
+// would pass on an export that a consumer cannot actually reach. Missing build
+// is therefore a FAILURE, not a skipped check — a guard that silently degrades
+// to a weaker guard is how this repo has shipped green-but-empty checks before.
 const builtEntry = resolve(pkgRoot, 'dist/index.server.js');
-if (existsSync(builtEntry)) {
-  runtimeExports = new Set(Object.keys(await import(pathToFileURL(builtEntry).href)).filter((k) => k !== 'default'));
+if (!existsSync(builtEntry)) {
+  console.error('verify-solid-coverage: dist/index.server.js is missing — run `nx build ui` first.');
+  console.error('  (the public surface is cross-checked against the BUILT entry; without it this check proves nothing)');
+  process.exit(1);
 }
-const isPublic = (name) => publicValues.has(name) && (!runtimeExports || runtimeExports.has(name));
+const runtimeExports = new Set(
+  Object.keys(await import(pathToFileURL(builtEntry).href)).filter((k) => k !== 'default'),
+);
+const isPublic = (name) => publicValues.has(name) && runtimeExports.has(name);
 
 // ---- 4. resolution helpers --------------------------------------------------
 const LAYER = (file) =>
@@ -303,11 +323,38 @@ const unreachable = [...publicValues]
   .sort((a, b) => a.name.localeCompare(b.name));
 
 // ---- 7b. can a consumer TYPE what they compose? -----------------------------
-// A documented entry needs the prop type next to the component; derive which
-// public components ship a matching `<Name>Props` type export.
-const composableNames = new Set();
-for (const r of rows) { for (const n of r.solidSurface) composableNames.add(n); for (const n of r.publicPieces) composableNames.add(n); }
-const propTypes = [...composableNames].filter((n) => /^[A-Z]/.test(n)).sort().map((name) => ({
+// A documented entry needs the prop type next to the component. Scope: EVERY
+// component-shaped public export — PascalCase, declared as a function whose
+// first parameter is named `props`.
+//
+// Deliberately NOT scoped to the elements' composable set: `expandToPublic`
+// stops walking at a public boundary, so the moment a coarse component (Thread,
+// ChatThread) becomes public the pieces below it drop out of that set. Scoping
+// the type check to it would mean improving coverage silently *shrinks* what
+// gets checked. This rule only grows.
+const declOf = (name, file) => {
+  const sf = file && program.getSourceFile(file);
+  if (!sf) return null;
+  let found = null;
+  const visit = (n) => {
+    if (found) return;
+    if (ts.isFunctionDeclaration(n) && n.name?.text === name) found = n;
+    else if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.name.text === name && n.initializer) found = n.initializer;
+    else ts.forEachChild(n, visit);
+  };
+  visit(sf);
+  return found;
+};
+const componentish = [];
+for (const [file, names] of publicByModule) {
+  for (const name of names) {
+    if (!/^[A-Z]/.test(name) || !isPublic(name)) continue;
+    const p0 = declOf(name, file)?.parameters?.[0];
+    if (p0 && ts.isIdentifier(p0.name) && /^props?$/.test(p0.name.text)) componentish.push(name);
+  }
+}
+componentish.sort();
+const propTypes = componentish.map((name) => ({
   name, propsType: publicTypes.has(`${name}Props`) ? `${name}Props` : null,
 }));
 const propTypesMissing = propTypes.filter((p) => !p.propsType).map((p) => p.name);
@@ -333,13 +380,54 @@ const result = {
 const jsonIdx = process.argv.indexOf('--json');
 if (jsonIdx > -1) writeFileSync(process.argv[jsonIdx + 1], JSON.stringify(result, null, 2));
 
-console.log(`elements ${catalog.length} | public values ${publicValues.size} | public types ${publicTypes.size} | runtime keys ${runtimeExports?.size ?? 'n/a'}`);
+const verbose = process.argv.includes('--verbose');
+
+console.log(`elements ${catalog.length} | public values ${publicValues.size} | public types ${publicTypes.size} | runtime keys ${runtimeExports.size}`);
 console.log(`DIRECT ${result.totals.DIRECT}  COMPOSITION ${result.totals.COMPOSITION}  GAP ${result.totals.GAP} (total ${result.totals.gapTotal} / partial ${result.totals.gapPartial})\n`);
-for (const r of rows) {
-  const tail = r.missing.length ? `  MISSING=[${r.missing.join(', ')}]` : '';
-  console.log(`${(r.verdict + (r.grade ? `/${r.grade}` : '')).padEnd(13)} ${r.tag.padEnd(22)} pieces=${String(r.publicPiecesNeeded).padStart(2)} solid=[${r.solidSurface.join(', ')}]${tail}${r.irreducible.length ? `  IRREDUCIBLE=[${r.irreducible.join(', ')}]` : ''}`);
+
+if (verbose) {
+  for (const r of rows) {
+    const tail = r.missing.length ? `  MISSING=[${r.missing.join(', ')}]` : '';
+    console.log(`${(r.verdict + (r.grade ? `/${r.grade}` : '')).padEnd(13)} ${r.tag.padEnd(22)} pieces=${String(r.publicPiecesNeeded).padStart(2)} solid=[${r.solidSurface.join(', ')}]${tail}${r.irreducible.length ? `  IRREDUCIBLE=[${r.irreducible.join(', ')}]` : ''}`);
+  }
+  console.log('\n--- public exports no element reaches ---');
+  for (const u of unreachable) console.log(`${u.name.padEnd(28)} ${u.module}`);
+  console.log('');
 }
-console.log('\n--- public exports no element reaches ---');
-for (const u of unreachable) console.log(`${u.name.padEnd(28)} ${u.module}`);
-console.log(`\n--- composable components with NO public <Name>Props type (${propTypesMissing.length}/${propTypes.length}) ---`);
-console.log(propTypesMissing.join(', '));
+
+// ---- 9. verdict -------------------------------------------------------------
+const gapRows = rows.filter((r) => r.verdict === 'GAP');
+let failed = false;
+
+if (gapRows.length) {
+  failed = true;
+  console.error(`✗ ${gapRows.length}/${catalog.length} element(s) have no writable SolidJS equivalent:\n`);
+  for (const r of gapRows) {
+    console.error(`  ${r.tag} (${r.grade})`);
+    if (r.solidSurface.length) console.error(`    public today : ${r.solidSurface.join(', ')}`);
+    for (const p of r.proof) {
+      const fix = p.exportedFromOwnModule
+        ? `already exported by ${p.module} — re-export it from src/index.ts`
+        : `NOT exported by ${p.module} — export it there first, then from src/index.ts`;
+      console.error(`    unreachable  : ${p.symbol}  (${fix})`);
+    }
+  }
+  console.error('');
+} else {
+  console.log(`✓ solid coverage: ${catalog.length}/${catalog.length} elements have a writable SolidJS equivalent.`);
+}
+
+if (propTypesMissing.length) {
+  failed = true;
+  console.error(`✗ ${propTypesMissing.length}/${propTypes.length} public component(s) ship no public <Name>Props type:\n`);
+  for (const n of propTypesMissing) console.error(`    ${n}  -> export a \`${n}Props\` type`);
+  console.error('');
+} else {
+  console.log(`✓ prop types: all ${propTypes.length} public components export a <Name>Props type.`);
+}
+
+if (failed) {
+  console.error('A registered element must be writable in SolidJS — Solid is the authored layer, and the');
+  console.error('framework docs promise the same catalog everywhere. Re-run with --verbose for the full map.');
+  process.exit(1);
+}

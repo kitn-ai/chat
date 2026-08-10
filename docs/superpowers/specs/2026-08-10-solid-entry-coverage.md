@@ -1,7 +1,12 @@
 # Solid entry coverage: what `@kitn.ai/ui/solid` would actually contain
 
-Status: analysis, no code shipped. Nothing was added to the exports map, no entry was created,
-and the generator described in §8 is not wired into the build.
+Status: **superseded in part.** Steps 1 and 2 of §10 have shipped — the 33 gaps are closed by
+re-export (coverage 79/79) and every public component now exports a `<Name>Props` type — and the
+generator has been promoted to `scripts/verify-solid-coverage.mjs`, wired into the required CI
+`test` job as `verify:solid-coverage`. Steps 3 and 4 (creating `./solid`, and the granularity
+decision) are still open. Nothing was added to the exports map and no entry was created.
+
+The counts below are the **pre-fix** measurement, kept as the record of what was found.
 
 ## 0. The question
 
@@ -38,7 +43,7 @@ Three rows need a human footnote on top of the derived verdict (§6.3); correcti
 
 ## 2. How the numbers were derived (not typed)
 
-`packages/ui/scripts/proposed-solid-coverage.mjs` (committed, PROPOSED, not wired into the build):
+`packages/ui/scripts/verify-solid-coverage.mjs` (committed, now wired into the build as `verify:solid-coverage`):
 
 - **catalog** — `src/elements/element-meta.json`, the 79 registered elements.
 - **surface** — the exports of `src/index.ts` resolved through the TypeScript checker, intersected
@@ -56,7 +61,7 @@ Nothing in the file is a hand-written mapping; the only literals are the kit's o
 names. This matters because the repo has been bitten repeatedly by hand-written content inside
 `gen-*.mjs` scripts that no compiler or drift check can see.
 
-Run it with `cd packages/ui && node scripts/proposed-solid-coverage.mjs --json out.json` (needs a
+Run it with `cd packages/ui && node scripts/verify-solid-coverage.mjs --json out.json` (needs a
 build first, for the runtime cross-check).
 
 **The generator was watched failing before it was trusted.** Commenting out
@@ -481,7 +486,7 @@ time, and nobody ever diffed it against the element registry.
 Suggested sequence:
 
 1. **Close the 33 gaps by re-export**, plus the 42 missing `<Name>Props` types. Mechanical.
-2. **Add the drift guard.** Promote `scripts/proposed-solid-coverage.mjs` into a
+2. **Add the drift guard.** Promote `scripts/verify-solid-coverage.mjs` into a
    `verify:solid-coverage` check that fails when any element's Solid surface is unreachable. Derived
    from the registry, so a new element cannot ship Solid-uncovered. Watch it fail before trusting
    it: delete one export from `src/index.ts` and confirm the check goes red.

@@ -141,6 +141,7 @@
     "verify:consumer": "node scripts/verify-consumer-sideeffects.mjs",
     "verify:dts": "node scripts/verify-dts-boundaries.mjs",
     "verify:scaffold": "node scripts/verify-scaffold-compiles.mjs",
+    "verify:solid-coverage": "node scripts/verify-solid-coverage.mjs",
     "verify:ssr": "node scripts/verify-ssr-imports.mjs",
     "test": "vitest run",
     "test:react": "vitest run --config vitest.react.config.ts",
