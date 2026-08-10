@@ -111,11 +111,26 @@
 //
 // COST AND WHERE IT RUNS
 // ----------------------
-// ~2s wall clock for all 270 cases (esbuild bundle + one `tsc` pass with
-// skipLibCheck over symlinked node_modules). No network. That is cheap enough
-// for the REQUIRED CI job, and it runs there, in `.github/workflows/test.yml`
-// after the build (it reads the SHIPPED dist/*.d.ts). It is deliberately NOT in
-// `npm test`: it needs `dist/`, and vitest does not build.
+// ~16s wall clock for the 378 front-end cells plus the 99 routes: one esbuild
+// bundle, then six `tsc` passes with skipLibCheck over symlinked node_modules.
+// Routes are most of the added time, and about a third of it is the
+// archetype-independence re-check (495 extra generations, no compiles).
+//
+// NO NETWORK, which is the property that keeps this in the REQUIRED CI job. The
+// route typings are devDependencies rather than a throwaway `npm install`
+// precisely for that: the required job already runs `pnpm install
+// --frozen-lockfile` behind a pnpm cache, so the packages are amortised to
+// nothing, whereas an uncached install inside a blocking check is a flake
+// waiting to happen (measuring this, `npm install ai` failed outright with
+// ETARGET on a transitive @ai-sdk/provider pin).
+//
+// If routes ever push this past ~60s, do NOT quietly narrow the matrix: subset
+// it deterministically and PRINT the subset, so a shrinking gate is visible in
+// the log instead of being discovered later.
+//
+// It runs in `.github/workflows/test.yml` after the build (it reads the SHIPPED
+// dist/*.d.ts). It is deliberately NOT in `npm test`: it needs `dist/`, and
+// vitest does not build.
 //
 //   npm run verify:scaffold                  # from packages/ui
 //   node scripts/verify-scaffold-compiles.mjs [--keep] [--filter <substring>]

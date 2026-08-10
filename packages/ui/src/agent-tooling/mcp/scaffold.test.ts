@@ -1468,10 +1468,17 @@ describe('scaffold', () => {
       const label = integration.id;
 
       // The old removed shape: a role literal directly followed by `content:`.
-      expect(emitted, `${label}: emits role:'user', content: (removed ChatMessage shape)`).not.toMatch(
+      //
+      // Scoped to the FRONT END. `role`/`content` is the kit's removed
+      // ChatMessage shape only in block (1); in block (2) it is the PROVIDER's
+      // wire format, and every provider on earth spells a message that way — the
+      // AI SDK's own ModelMessage does. Scanning the whole response made this
+      // assertion fire on correct backend code, which is a test that punishes the
+      // right answer.
+      expect(frontEnd(out), `${label}: emits role:'user', content: (removed ChatMessage shape)`).not.toMatch(
         /role:\s*'user'(?:\s+as\s+const)?,\s*content:/,
       );
-      expect(emitted, `${label}: emits role:'assistant', content: (removed ChatMessage shape)`).not.toMatch(
+      expect(frontEnd(out), `${label}: emits role:'assistant', content: (removed ChatMessage shape)`).not.toMatch(
         /role:\s*'assistant'(?:\s+as\s+const)?,\s*content:/,
       );
       expect(emitted, `${label}: missing parts:`).toContain('parts:');
@@ -1492,10 +1499,12 @@ describe('scaffold', () => {
       });
       const emitted = JSON.stringify(out);
       const label = integration.id;
-      expect(emitted, `${label}: emits role:'user', content:`).not.toMatch(
+      // Front-end only, for the reason given on the sweep above: in block (2)
+      // `role`/`content` is the provider's wire format, not the kit's old shape.
+      expect(frontEnd(out), `${label}: emits role:'user', content:`).not.toMatch(
         /role:\s*'user'(?:\s+as\s+const)?,\s*content:/,
       );
-      expect(emitted, `${label}: emits role:'assistant', content:`).not.toMatch(
+      expect(frontEnd(out), `${label}: emits role:'assistant', content:`).not.toMatch(
         /role:\s*'assistant'(?:\s+as\s+const)?,\s*content:/,
       );
       expect(emitted, `${label}: missing parts:`).toContain('parts:');
@@ -2009,13 +2018,48 @@ describe('real-backend scaffolds send what the panel needs and survive a failure
       const route = (out.content as { type: string; text: string }[])[0].text.split(
         '=== (2) BACKEND ROUTE ===',
       )[1];
-      // `request` in the portable handler, `req` in a framework-specific one.
+      // Read through the shared `readChatRequest` preamble, not an inline
+      // `request.json()`: `json()` hands back `unknown`, so destructuring it
+      // directly is TS2339 on every field under a server tsconfig.
       expect(route, `${integration}: route never reads tools`).toMatch(
-        /const \{[^}]*\btools\b[^}]*\} = await (req|request)\.json\(\);/,
+        /const \{[^}]*\btools\b[^}]*\} = await readChatRequest\(request\);/,
       );
       expect(route, `${integration}: route never sends tools`).toMatch(
         /JSON\.stringify\(\{[^}]*\btools\b[^}]*\}\)/,
       );
+    },
+  );
+
+  /**
+   * No emitted route destructures a raw `.json()`.
+   *
+   * `Request.json()` returns `Promise<unknown>` under undici's typings and
+   * `Promise<any>` under the DOM lib, so `const { messages } = await
+   * request.json()` compiles in Next and is a hard TS2339 in a stock Vite app,
+   * whose `tsc -b` walks vite.config.ts -> vite-chat-api.ts -> src/server/chat.ts
+   * with no DOM. Every route narrows the body once through the injected
+   * `ChatRequestBody` instead.
+   *
+   * verify:scaffold proves this properly by COMPILING the routes; this is the
+   * cheap version that runs in `npm test`, where there is no tsc.
+   */
+  it.each(listIntegrations().filter((i) => i.language === 'ts' && i.id !== 'mock').map((i) => i.id))(
+    '%s route never destructures an untyped .json()',
+    async (integration) => {
+      for (const framework of ['next', 'react', 'svelte', 'worker', 'express'] as const) {
+        const out = await scaffold.handler({
+          framework,
+          useCase: 'agentic',
+          integration,
+          placement: 'full-page',
+        });
+        const route = (out.content as { type: string; text: string }[])[0].text.split(
+          '=== (2) BACKEND ROUTE ===',
+        )[1];
+        expect(route, `${integration}/${framework}: destructures an unknown body`).not.toMatch(
+          /const \{[^}]*\} = await (?:req|request)\.json\(\);/,
+        );
+      }
     },
   );
 

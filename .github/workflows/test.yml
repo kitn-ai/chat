@@ -52,12 +52,20 @@ jobs:
       - name: Server-import guard (every entry imports under `node`)
         run: pnpm --filter @kitn.ai/ui run verify:ssr
 
-      # Compiles the `kai` MCP scaffolder's EMITTED code (60 archetype x
-      # integration x framework combinations) with real `tsc --strict
+      # Compiles the `kai` MCP scaffolder's EMITTED code with real `tsc --strict
       # --noUnusedLocals`, resolving @kitn.ai/ui through the shipped exports map
       # and .d.ts. Emitted code lives in string literals, so scaffold.test.ts can
       # assert its wording but never its types; this caught an unused import that
-      # failed `npm run build` in a stock create-vite app. ~1.5s, no network.
+      # failed `npm run build` in a stock create-vite app.
+      #
+      # Two matrices: the FRONT END (378 archetype x integration x framework
+      # cells) and, since the routes stopped being sliced off and discarded, the
+      # BACKEND ROUTE (9 x 11) under three more tsc projects that model the real
+      # host -- node/no-DOM for express + Vite middleware, DOM for Next/SvelteKit/
+      # TanStack, workers-types for Cloudflare. That split is the point: the first
+      # run found TS2339 on `await request.json()` in all seven TS integrations,
+      # green on a Next tsconfig and a hard `npm run build` failure on a Vite app's.
+      # ~16s, still no network.
       - name: Scaffolder output compiles (tsc --strict over emitted code)
         run: pnpm --filter @kitn.ai/ui run verify:scaffold
 

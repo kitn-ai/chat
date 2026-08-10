@@ -2832,6 +2832,60 @@ const WEB_ROUTE_ADAPTERS: Record<string, WebRouteAdapter> = {
   },
 };
 
+/**
+ * The request body, declared once per route file.
+ *
+ * `await request.json()` is `unknown` — it is whatever the client sent — so
+ * destructuring it directly is TS2339 on EVERY field. That is not pedantry: it
+ * is a hard `npm run build` failure the moment a Node-typed project compiles the
+ * route, where `Request` comes from undici (`json(): Promise<unknown>`) rather
+ * than from the DOM lib (`json(): Promise<any>`). A stock Vite app does exactly
+ * that — `tsc -b` walks vite.config.ts → vite-chat-api.ts → src/server/chat.ts
+ * with `lib` and no DOM — so the route ran fine and the build did not.
+ *
+ * `messages` is typed as the kit's OWN encoder output rather than restated
+ * structurally, which keeps the two halves of the scaffold pinned to one type:
+ * the front end sends `toOpenAIMessages(thread)`, and this is what that returns.
+ * The import is type-only and erases at build time, so the route ships no
+ * runtime dependency on the kit.
+ */
+const CHAT_REQUEST_BODY_IMPORT = `import type { OpenAIWireMessage } from '@kitn.ai/ui/wire';`;
+const CHAT_REQUEST_BODY_DECL = [
+  `/**`,
+  ` * What the front end POSTs. \`request.json()\` is \`unknown\` (it is whatever the`,
+  ` * client sent), so the body is narrowed once here instead of at every use —`,
+  ` * without it this route does not compile under a server tsconfig. Widen it as`,
+  ` * you add fields of your own.`,
+  ` */`,
+  `type ChatRequestBody = {`,
+  `  messages: OpenAIWireMessage[];`,
+  `  model?: string;`,
+  `  tools?: unknown[];`,
+  `};`,
+  ``,
+  `/** Narrow the JSON body once, at the edge. */`,
+  `async function readChatRequest(request: Request): Promise<ChatRequestBody> {`,
+  `  return (await request.json()) as ChatRequestBody;`,
+  `}`,
+];
+
+/**
+ * Slot the body type in just above `chatHandler`.
+ *
+ * Not at the very top: a fragment may open with its own imports (langgraph,
+ * mastra, vercel-ai-sdk all do), and a type declaration wedged above them reads
+ * like a mistake. Anchoring on the handler — and stepping back over the comment
+ * block that documents it — puts the declaration where a person would have
+ * written it.
+ */
+function withChatRequestBody(fragment: string): string {
+  const lines = fragment.split('\n');
+  let at = lines.findIndex((l) => /^(?:export\s+)?async function chatHandler\b/.test(l));
+  if (at < 0) return [...CHAT_REQUEST_BODY_DECL, ``, ...lines].join('\n');
+  while (at > 0 && /^\s*(?:\/\/|\/\*|\*)/.test(lines[at - 1])) at -= 1;
+  return [...lines.slice(0, at), ...CHAT_REQUEST_BODY_DECL, ``, ...lines.slice(at)].join('\n');
+}
+
 /** Wrap an integration's portable handler in the target framework's declaration. */
 function webRouteFor(integration: Integration, framework: string): RouteChoice | undefined {
   const fragment = integration.webRoute;
@@ -2841,7 +2895,14 @@ function webRouteFor(integration: Integration, framework: string): RouteChoice |
     framework,
     runtime: adapter.runtime,
     exact: true,
-    template: [`// ${adapter.file}`, ...(adapter.before ?? []), ``, fragment, ...adapter.after].join('\n'),
+    template: [
+      `// ${adapter.file}`,
+      CHAT_REQUEST_BODY_IMPORT,
+      ...(adapter.before ?? []),
+      ``,
+      withChatRequestBody(fragment),
+      ...adapter.after,
+    ].join('\n'),
   };
 }
 
