@@ -87,9 +87,6 @@ importers:
         specifier: ^19.0.0
         version: 19.2.7(react@19.2.7)
     devDependencies:
-      '@openrouter/sdk':
-        specifier: ^1.2.11
-        version: 1.2.11
       '@types/node':
         specifier: ^22.19.21
         version: 22.20.0
@@ -2005,9 +2002,6 @@ packages:
     resolution: {integrity: sha512-TE/wvBa2cpkVXmk/AXUQAneong4JReS2hyNpAUONKG1yXU7TDKe0wvn1xQXxAbyspudT9NuCnVtpVuEkRz8S+Q==}
     cpu: [x64]
     os: [win32]
-
-  '@openrouter/sdk@1.2.11':
-    resolution: {integrity: sha512-JyQkkluPk/NwtbIzLD9crc9clf2Zkqnc2Zo/juCLgyxC7sxuZaG4k6mjiMN+NI9X3BCVuVvcZzLQlL+FweboKQ==}
 
   '@oslojs/encoding@1.1.0':
     resolution: {integrity: sha512-70wQhgYmndg4GCPxPPxPGevRKqTIJ2Nh4OkiMWmDAVYsTQ+Ta7Sq+rPevXyXGdzr30/qZBnyOalCszoMxlyldQ==}
@@ -8518,10 +8512,6 @@ snapshots:
 
   '@nx/nx-win32-x64-msvc@23.0.1':
     optional: true
-
-  '@openrouter/sdk@1.2.11':
-    dependencies:
-      zod: 4.4.3
 
   '@oslojs/encoding@1.1.0': {}
 

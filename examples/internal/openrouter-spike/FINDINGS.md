@@ -267,3 +267,64 @@ consumer needs to use it against real providers.
   only.
 - Any model other than `~deepseek/deepseek-v4-flash-latest`. The tool-suppression
   result in particular may differ on other providers.
+
+## What sub-project C closed
+
+Written after the fact, in 2026-08. The measured findings above are the record
+and are unchanged; this section only says which of them are now fixed.
+
+`src/model-stream.ts` and `src/sse-frames.ts` are gone from this directory. They
+are `packages/ui/src/wire/` now and ship as **`@kitn.ai/ui/wire`**, with both
+formats (OpenAI chat completions and Anthropic Messages), both encoders, the
+`WireFormat` seam, and roughly 130 more tests than the 24 that lived here. This
+app consumes the published entry point through the workspace link, like a
+consumer would.
+
+The four items under *Moving the adapter into the kit*:
+
+1. **Ordered message parts: done.** `ChatMessage.parts` is the only content
+   channel now, so text, reasoning, tools, sources and cards keep their stream
+   order. `content` as a flat string is gone.
+2. **`rawInput` on `ToolPart`: done.** The raw accumulated argument fragments
+   live on the part while the call is `input-streaming`, so `<kai-tool>` shows
+   `{"city":"Par` filling in and the app renders nothing itself. The
+   partial-arguments strip in `ThreadView` is deleted.
+3. **A reasoning shape that survives signed blocks and round-tripping: done.**
+   A reasoning part carries `index`, `signature` and `raw`, and
+   `toAnthropicMessages` echoes `raw.payload` verbatim rather than rebuilding a
+   thinking block from text plus signature, which is the documented 400. A part
+   with no `raw` throws at encode time instead.
+4. **`./schemas/*` in the exports map: NOT done, still open.** The card JSON
+   Schemas at `packages/ui/src/primitives/card-schemas/*.json` are still
+   unreachable through the package `exports` map, so `src/card-schema.ts` still
+   hand-derives the confirm schema. That finding stands.
+
+`server/sdk-bridge.ts` is deleted. The proxy calls the HTTP endpoint directly
+and forwards the upstream SSE bytes untouched, so **the repo no longer depends on
+`@openrouter/sdk`** at all. One consequence to know about: `REPLY_WITH_CARD_FORMAT`
+used the SDK's camelCased `jsonSchema` key, and the raw API reads `json_schema`.
+The SDK was serialising that rename, and nothing in the type system would have
+caught its removal.
+
+### Still open after C
+
+- **Citation chips do not render.** `search_docs` results now land on the message
+  as `source` parts, in order, which is the right place for them. But
+  `message.tsx` matches a `source` part to `null` on purpose: the citation row is
+  a later sub-project. So the tray came out and nothing visible replaced it yet.
+  Cards do render inside the message.
+- **Card resolution is no longer tracked by the app.** The `resolveCard` handler
+  went with the tray; a resolved envelope is not written back into the message
+  part.
+
+### Anthropic is not live-verified through this spike
+
+The Anthropic format is validated by captured fixtures. Five of the seven were
+captured live through OpenRouter's Anthropic passthrough, not against the
+Anthropic API directly, and two (`error-mid-stream`, `redacted-thinking`) are
+`capture: synthetic` because neither is reproducible on demand. The first live
+run against the Anthropic API is expected to force one revision.
+
+The *What was not tested* list above stands unchanged. C closed none of it:
+long-running streams, rate limits, retries, non-Chromium browsers, and any model
+other than `~deepseek/deepseek-v4-flash-latest` are all still untested.

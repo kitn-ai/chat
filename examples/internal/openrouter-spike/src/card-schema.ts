@@ -80,9 +80,17 @@ export const REPLY_WITH_CARD_SCHEMA = {
   additionalProperties: false,
 } as const;
 
+/**
+ * The `response_format` value, in the HTTP wire shape.
+ *
+ * `json_schema` is SNAKE_CASE. It used to be `jsonSchema` because
+ * `@openrouter/sdk` camelCased its inputs and serialised them on the way out;
+ * the SDK is gone and the proxy now JSON.stringifies this object straight into
+ * the request body, so the field name is the one the API reads.
+ */
 export const REPLY_WITH_CARD_FORMAT = {
   type: 'json_schema' as const,
-  jsonSchema: {
+  json_schema: {
     name: 'kai_reply_with_card',
     description: 'A chat reply plus an optional @kitn.ai/ui confirm CardEnvelope.',
     strict: true,

@@ -4,8 +4,8 @@
 //
 // Each tool is picked to land in a DIFFERENT kit component:
 //   get_weather    → structured JSON        → <kai-tool> panel
-//   search_docs    → a list of sources      → <kai-sources> citation row
-//   propose_action → a confirm card         → <kai-cards> dispatcher
+//   search_docs    → a list of sources      → `source` parts on the message
+//   propose_action → a confirm card         → a `card` part on the message
 import type { CardEnvelope } from '@kitn.ai/ui';
 
 // ── Tool schemas sent to the model ───────────────────────────────────────────
@@ -126,9 +126,9 @@ export interface SourceItem {
  *  panel shows AND what goes back to the model on the next turn. */
 export interface ToolRun {
   output: Record<string, unknown>;
-  /** Citation chips to surface (search_docs only). */
+  /** Citations to add as `source` parts (search_docs only). */
   sources?: SourceItem[];
-  /** A card envelope to hand to <kai-cards> (propose_action only). */
+  /** A card envelope to add as a `card` part (propose_action only). */
   card?: CardEnvelope;
 }
 

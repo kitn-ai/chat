@@ -19,13 +19,13 @@ export type Theme = 'light' | 'dark';
  * are driven by actual model output instead of hand-written fixtures.
  *
  * Shape:
- *   src/model-stream.ts   the portable adapter (chunks → kit message parts)
- *   src/sse-frames.ts     SSE decoding
- *   src/transport.ts      browser → /api/chat
- *   server/               the dev proxy + the ONLY @openrouter/sdk import
+ *   src/transport.ts      browser → /api/chat, and nothing else
+ *   server/               the dev proxy: adds the key, forwards raw upstream SSE
  *
- * `useKaiChat` still owns the message array; `useSpikeChat` owns the multi-turn
- * tool loop and everything the kit's data model cannot hold.
+ * The adapter it used to carry (src/model-stream.ts, src/sse-frames.ts) now ships
+ * as `@kitn.ai/ui/wire`, and the proxy no longer needs a provider SDK. What is
+ * left is the reason to keep the spike: `useKaiChat` owns the message array and
+ * `useSpikeChat` owns the multi-round tool loop, driven by a real model.
  */
 export default function App() {
   const [theme, setTheme] = useState<Theme>('dark');
@@ -120,21 +120,9 @@ export default function App() {
               </div>
             </header>
 
-            <ThreadView
-              theme={theme}
-              messages={chat.messages}
-              loading={chat.loading}
-              partialArgs={spike.partialArgs}
-            />
+            <ThreadView theme={theme} messages={chat.messages} loading={chat.loading} />
 
-            <ModelPanel
-              theme={theme}
-              sources={spike.sources}
-              cards={spike.cards}
-              onCardResolved={spike.resolveCard}
-              error={spike.error}
-              stats={spike.stats}
-            />
+            <ModelPanel theme={theme} error={spike.error} stats={spike.stats} />
 
             <Composer
               theme={theme}

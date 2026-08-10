@@ -43,12 +43,15 @@ about **$0.0003**.
 | Env var | `OPENROUTER_API_KEY` (**unprefixed**). Vite only inlines `VITE_`-prefixed vars into client code. There is no `VITE_OPENROUTER_API_KEY` and there must never be one. |
 | Where it is read | `server/openrouter-proxy.ts`, via `loadEnv(mode, root, '')`. The empty prefix is what makes an unprefixed var readable. |
 | Where it is used | One `Authorization` header, server-side. Never logged, never echoed in an error body, never returned by `/api/config` (which reports `hasKey: boolean`). |
-| Where the SDK lives | `server/` only. Nothing under `src/` imports `@openrouter/sdk`. |
+| Where the provider lives | `server/` only. Nothing under `src/` names the provider at all, and `src/transport.test.ts` reads `transport.ts` back to assert it. |
 | Gitignore | `.env`, `.env.local`, `.env.*.local` are all ignored by this directory's `.gitignore`. |
 
+There is no provider SDK. The proxy calls the HTTP endpoint directly and forwards
+the upstream SSE bytes untouched, which is what every integration template in the
+kit's catalog tells a consumer to do.
+
 Verified by grepping the production bundle: the key's value, the string
-`OPENROUTER_API_KEY`, the host `openrouter.ai`, and `@openrouter/sdk` are all
-absent from `dist/`.
+`OPENROUTER_API_KEY` and the host `openrouter.ai` are all absent from `dist/`.
 
 **Not production.** The proxy is `apply: 'serve'`: it does not exist in a
 build. `vite build` produces a static site with no `/api/chat` at all. A real
@@ -57,26 +60,23 @@ deployment needs its own server route or serverless proxy.
 ## Layout
 
 ```
-src/model-stream.ts     ★ THE ADAPTER: provider-neutral chunks → kit message parts.
-                          No React, no SDK, no SSE. This is the file that is a
-                          candidate to move into @kitn.ai/ui/state.
-src/sse-frames.ts       SSE decoding (framing, keep-alive comments, chunk splits).
-src/transport.ts        Browser → POST /api/chat. Knows nothing about OpenRouter.
+src/transport.ts        Browser → POST /api/chat, and nothing else. Returns the
+                          Response; the kit parses it.
 src/tools.ts            The 3 tools + their local, deterministic implementations.
 src/card-schema.ts      Path B: the response_format schema + its validator.
-src/hooks/useSpikeChat  The multi-turn tool loop.
+src/hooks/useSpikeChat  The multi-round tool loop. The reason to keep the spike.
 
-server/openrouter-proxy.ts  The dev proxy. The only place the key is used.
-server/sdk-bridge.ts        ★ THE THIN PROVIDER LAYER: @openrouter/sdk shapes
-                              ⇄ our neutral shapes. The only file that imports
-                              the SDK's types.
+server/openrouter-proxy.ts  The dev proxy. Adds the key, forwards raw upstream
+                              SSE. The only place the key is used.
 
-src/fixtures/model-chunks.ts  Handcrafted chunk + SSE fixtures.
-src/*.test.ts, server/*.test.ts  Replay tests: no key, no network.
+src/transport.test.ts   Four tests: no key, no network.
 ```
 
-The split exists so the adapter stays mergeable into the kit: `@kitn.ai/ui` must
-never depend on a provider SDK.
+The adapter this spike was built to prototype has SHIPPED. `src/model-stream.ts`
+and `src/sse-frames.ts` are now `packages/ui/src/wire/`, published as
+`@kitn.ai/ui/wire`, and `server/sdk-bridge.ts` is gone with the SDK it wrapped.
+What is left is a thin app over the shipped adapter, which is exactly what makes
+it a useful smoke test against a real model.
 
 ## Tests
 
@@ -84,23 +84,21 @@ never depend on a provider SDK.
 pnpm --filter @kitn.ai/ui-example-openrouter-spike test
 ```
 
-Replays handcrafted fixtures (interleaved text, reasoning, a multi-chunk tool
-call whose `arguments` arrive as invalid JSON fragments, two parallel calls with
-a late `id`, a truncated call, an in-band error, and a structured-output turn)
-through the real `createAssistantStream` from `@kitn.ai/ui/state`, and asserts
-the resulting `ChatMessage` parts. **No API key and no network required.**
+Four tests over `openChatStream`: it hands back the Response unwrapped, a proxy
+failure reaches the caller as a `WireError` carrying the provider's own error
+body, `transport.ts` never names the provider host, and the POST body carries the
+fields the proxy reads. **No API key and no network required.**
 
-`server/sdk-bridge.test.ts` types its fixtures as the installed SDK's
-`ChatStreamChunk`, so a field rename in `@openrouter/sdk` breaks the build
-rather than the runtime.
+The 40 tests that used to live here moved into `packages/ui/src/wire/`, where
+they run against captured provider fixtures instead of handcrafted ones.
 
 ## The three tools
 
 | Tool | Result | Lands in |
 |---|---|---|
 | `get_weather(city)` | structured JSON | `<kai-tool>` panel |
-| `search_docs(query)` | ranked sources + snippets | `<kai-sources>` citation row |
-| `propose_action(title, body, confirmLabel)` | a `CardEnvelope` | `<kai-cards>` → `<kai-confirm>` |
+| `search_docs(query)` | ranked sources + snippets | `source` parts on the message (not rendered yet: see FINDINGS) |
+| `propose_action(title, body, confirmLabel)` | a `CardEnvelope` | a `card` part, rendered inside the message |
 
 All three execute locally with canned data. Results are fed back to the model in
 a second turn, so the assistant writes a real final answer; this is a genuine

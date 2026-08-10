@@ -87,45 +87,7 @@ body {
   min-height: 0;
 }
 
-/* Live partial tool-call arguments: the kit's ToolPart cannot hold these. */
-.partial-args {
-  border-top: 1px dashed var(--color-border);
-  padding: 0.5rem 1rem;
-  font-size: 0.75rem;
-  background: color-mix(in oklab, var(--color-muted) 60%, transparent);
-}
-
-.partial-args-row {
-  display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
-  overflow: hidden;
-}
-
-.partial-args-id {
-  color: var(--color-muted-foreground);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  flex: none;
-}
-
-.partial-args-row code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  white-space: pre;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.partial-args-caret {
-  animation: blink 1s steps(2, start) infinite;
-}
-
-@keyframes blink {
-  to {
-    visibility: hidden;
-  }
-}
-
-/* The tray for everything ChatMessage cannot carry. */
+/* The debug panel. The trays it used to hold are message parts now. */
 .panel {
   border-top: 1px solid var(--color-border);
   padding: 0.75rem 1rem;
@@ -149,13 +111,6 @@ body {
   letter-spacing: 0.06em;
   color: var(--color-muted-foreground);
   margin: 0;
-}
-
-.panel-note {
-  text-transform: none;
-  letter-spacing: 0;
-  font-weight: 400;
-  opacity: 0.75;
 }
 
 .stats {

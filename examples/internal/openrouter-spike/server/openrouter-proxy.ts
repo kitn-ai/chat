@@ -5,21 +5,25 @@
 //     is what makes an UNPREFIXED var readable. Vite only inlines `VITE_`-
 //     prefixed vars into client code, so an unprefixed name can never reach the
 //     bundle. There is no VITE_OPENROUTER_API_KEY and there must never be one.
-//   · `@openrouter/sdk` is imported HERE and nowhere under `src/`. The browser
+//   · the provider is reached from HERE and nowhere under `src/`. The browser
 //     only ever talks to `POST /api/chat`.
 //   · the key is never logged, never echoed in an error body, never sent to the
 //     browser. `/api/config` reports a boolean.
 //   · `apply: 'serve'`: this plugin does not exist in a production build. A
 //     `vite build` of this app is a static site with NO server; a real
 //     deployment needs its own route. Said again in the README.
+//
+// There is no provider SDK any more. The upstream is plain HTTP and its SSE
+// bytes are forwarded UNTOUCHED, which is what every integration template in the
+// kit's catalog tells a consumer to do. `readOpenAIStream` in the browser is
+// what parses them.
 import { loadEnv, type Plugin } from 'vite';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { OpenRouter } from '@openrouter/sdk';
-import type { ChatFunctionTool, ChatStreamChunk } from '@openrouter/sdk/models';
-import { toModelChunk, toSdkMessages } from './sdk-bridge';
-import type { ModelStreamChunk, WireMessage } from '../src/model-stream';
+import type { OpenAIWireMessage } from '@kitn.ai/ui/wire';
+import type { ToolSpec } from '../src/tools';
 import { REPLY_WITH_CARD_FORMAT } from '../src/card-schema';
 
+const UPSTREAM_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const DEFAULT_MODEL = '~deepseek/deepseek-v4-flash-latest';
 /** Cost discipline: the spike never needs long answers. */
 const DEFAULT_MAX_TOKENS = 900;
@@ -84,8 +88,7 @@ export function openrouterProxy(): Plugin {
         });
       });
 
-      // POST /api/chat: run one turn through the SDK, re-emit our neutral
-      // chunk shape as SSE.
+      // POST /api/chat: add the key, forward the upstream SSE byte for byte.
       server.middlewares.use('/api/chat', (req, res) => {
         void handleChat(req, res, readEnv(root, mode));
       });
@@ -94,8 +97,10 @@ export function openrouterProxy(): Plugin {
 }
 
 interface ChatBody {
-  messages?: WireMessage[];
-  tools?: ChatFunctionTool[];
+  /** Already OpenAI-shaped: the client builds it with `toOpenAIMessages`, so
+   *  there is no mapping left to do here. */
+  messages?: OpenAIWireMessage[];
+  tools?: ToolSpec[];
   /** `structured` swaps the tool-driven card for a response_format schema. */
   cardMode?: 'tool' | 'structured';
 }
@@ -129,74 +134,79 @@ async function handleChat(req: IncomingMessage, res: ServerResponse, env: ProxyE
 
   // The client never picks the model or the token cap: the server does, from
   // env. One less thing a public bundle can influence.
-  const client = new OpenRouter({ apiKey: env.key });
   const structured = body.cardMode === 'structured';
 
-  let stream: AsyncIterable<ChatStreamChunk>;
+  let upstream: Response;
   try {
-    // VERIFIED against @openrouter/sdk 1.2.11: the payload nests under
-    // `chatRequest`. The README's flat `{ messages, model, stream }` does NOT
-    // typecheck against the installed version.
-    const result = await client.chat.send(
-      {
-        httpReferer: 'http://localhost:5177',
-        appTitle: '@kitn.ai/ui OpenRouter spike',
-        chatRequest: {
-          model: env.model,
-          messages: toSdkMessages(body.messages),
-          stream: true,
-          maxTokens: env.maxTokens,
-          // Tools go out in BOTH card modes on purpose: whether a provider
-          // accepts `tools` and `responseFormat` together is one of the things
-          // the Path A / Path B comparison is trying to find out. A 4xx here is
-          // itself the answer, and it surfaces in the UI banner.
-          ...(body.tools?.length ? { tools: body.tools, toolChoice: 'auto' as const } : {}),
-          ...(structured ? { responseFormat: REPLY_WITH_CARD_FORMAT } : {}),
-          ...(env.reasoningEffort !== 'off' && env.reasoningEffort !== 'none'
-            ? { reasoning: { effort: env.reasoningEffort as 'medium' } }
-            : {}),
-        },
+    upstream = await fetch(UPSTREAM_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${env.key}`,
+        'HTTP-Referer': 'http://localhost:5177',
+        'X-Title': '@kitn.ai/ui OpenRouter spike',
       },
-      { fetchOptions: { signal: abort.signal } },
-    );
-
-    // The streaming overload resolves to EventStream<ChatStreamChunk>, which is
-    // a ReadableStream subclass. A non-streaming ChatResult has `choices` as a
-    // plain array, so this narrows safely.
-    if (!isAsyncIterable(result)) {
-      return json(res, 500, { error: { message: 'Expected a streaming response but got a completed one.' } });
-    }
-    stream = result;
+      body: JSON.stringify({
+        model: env.model,
+        stream: true,
+        messages: body.messages,
+        // Tools go out in BOTH card modes on purpose: whether a provider
+        // accepts `tools` and `response_format` together is one of the things
+        // the Path A / Path B comparison is trying to find out. A 4xx here is
+        // itself the answer, and it now reaches the UI as a WireError carrying
+        // the provider's own error body.
+        ...(body.tools?.length ? { tools: body.tools, tool_choice: 'auto' } : {}),
+        ...(structured ? { response_format: REPLY_WITH_CARD_FORMAT } : {}),
+        ...(env.reasoningEffort !== 'off' && env.reasoningEffort !== 'none'
+          ? { reasoning: { effort: env.reasoningEffort } }
+          : {}),
+        max_tokens: env.maxTokens,
+      }),
+      signal: abort.signal,
+    });
   } catch (e) {
     // Deliberately does not echo the request: it carries the Authorization header.
     return json(res, 502, { error: { message: `OpenRouter call failed: ${errorText(e)}` } });
   }
 
+  if (!upstream.ok || !upstream.body) {
+    // The upstream error body passes through unchanged so WireError can carry it.
+    res.statusCode = upstream.status;
+    res.setHeader('Content-Type', upstream.headers.get('content-type') ?? 'application/json');
+    res.setHeader('Cache-Control', 'no-store');
+    res.end(await upstream.text().catch(() => ''));
+    return;
+  }
+
+  // Forward the bytes UNTOUCHED. Every integration template in the catalog does
+  // exactly this, so the spike now exercises the same path a consumer takes.
   res.statusCode = 200;
-  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Content-Type', upstream.headers.get('content-type') ?? 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no'); // don't let a proxy buffer the stream
   res.flushHeaders?.();
 
-  const send = (chunk: ModelStreamChunk) => res.write(`data: ${JSON.stringify(chunk)}\n\n`);
-
+  const reader = upstream.body.getReader();
   try {
-    for await (const raw of stream) {
-      const mapped = toModelChunk(raw);
-      if (mapped) send(mapped);
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (value) res.write(value);
     }
   } catch (e) {
     // Headers are already out, so report in-band the way OpenRouter itself does.
-    send({ error: { code: 'proxy_stream_error', message: errorText(e) }, finishReason: 'error' });
+    // readOpenAIStream surfaces this as ModelTurn.error, not as a WireError.
+    res.write(
+      `data: ${JSON.stringify({
+        error: { code: 'proxy_stream_error', message: errorText(e) },
+        choices: [{ delta: {}, finish_reason: 'error' }],
+      })}\n\n`,
+    );
   } finally {
-    res.write('data: [DONE]\n\n');
+    await reader.cancel().catch(() => undefined);
     res.end();
   }
-}
-
-function isAsyncIterable(v: unknown): v is AsyncIterable<ChatStreamChunk> {
-  return typeof (v as AsyncIterable<unknown>)?.[Symbol.asyncIterator] === 'function';
 }
 
 /** Error text with no chance of leaking the request (and therefore the key). */

@@ -1,32 +1,23 @@
-import { Cards, Notice, Sources } from '@kitn.ai/ui/react';
-import type { CardEnvelope, CardResolution } from '@kitn.ai/ui';
+import { Notice } from '@kitn.ai/ui/react';
 import type { Theme } from '../App';
-import type { SourceItem } from '../tools';
 import type { TurnStats } from '../hooks';
 
 interface ModelPanelProps {
   theme: Theme;
-  sources: SourceItem[];
-  cards: CardEnvelope[];
-  onCardResolved: (cardId: string, resolution: CardResolution) => void;
   error: string | null;
   stats: TurnStats | null;
 }
 
 /**
- * ★ THE FINDING, MADE VISIBLE.
+ * The debug panel. Instrumentation only.
  *
- * Everything in this panel belongs INSIDE the assistant turn and cannot get
- * there. `ChatMessage` has `content`, `reasoning`, `tools`, `attachments`,
- * `actions`, `avatar` and `feedback`: no `sources`, no `cards`. `<kai-thread>`
- * exposes no per-message slot either (`Message` has an `inject` slot, but the
- * thread element does not forward one). So a model-produced citation row and a
- * model-produced card have to be rendered in a tray under the thread, detached
- * from the message that caused them.
+ * This used to carry two trays, for citations and for cards, because
+ * `ChatMessage` had a flat `content` string and nowhere to put either. It has
+ * ordered `parts` now, including `source` and `card`, so both render inside the
+ * assistant turn that produced them and the trays are gone.
  */
-export function ModelPanel({ theme, sources, cards, onCardResolved, error, stats }: ModelPanelProps) {
-  const nothing = !error && sources.length === 0 && cards.length === 0 && !stats;
-  if (nothing) return null;
+export function ModelPanel({ theme, error, stats }: ModelPanelProps) {
+  if (!error && !stats) return null;
 
   return (
     <div className="panel">
@@ -34,28 +25,6 @@ export function ModelPanel({ theme, sources, cards, onCardResolved, error, stats
         <Notice theme={theme} severity="error">
           {error}
         </Notice>
-      )}
-
-      {sources.length > 0 && (
-        <section className="panel-block">
-          <h2 className="panel-title">
-            Sources <span className="panel-note">rendered outside the message: ChatMessage has no `sources`</span>
-          </h2>
-          <Sources theme={theme} sources={sources} numbered showFavicon />
-        </section>
-      )}
-
-      {cards.length > 0 && (
-        <section className="panel-block">
-          <h2 className="panel-title">
-            Cards <span className="panel-note">rendered outside the message: ChatMessage has no `cards`</span>
-          </h2>
-          <Cards
-            theme={theme}
-            cards={cards}
-            onCardResolved={(e) => onCardResolved(e.detail.cardId, e.detail.resolution as CardResolution)}
-          />
-        </section>
       )}
 
       {stats && <StatsRow stats={stats} />}
@@ -82,6 +51,7 @@ function StatsRow({ stats }: { stats: TurnStats }) {
         <Stat label="reasoning" value={reasoningVerdict} />
         <Stat label="tool calls" value={`${stats.toolCallsSeen} (${stats.toolCallsMalformed} malformed)`} />
         <Stat label="finish" value={stats.finishReason ?? '—'} />
+        <Stat label="stop" value={stats.stopReason ?? '—'} />
         <Stat
           label="tokens"
           value={`${stats.promptTokens ?? '—'} in / ${stats.completionTokens ?? '—'} out`}
