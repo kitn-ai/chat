@@ -154,6 +154,18 @@ describe('WaveVisualizer: state -> uniform mapping', () => {
     expect(loud.uniforms.uFrequency?.value).toBeCloseTo(20 + 60 * 0.7, 6);
   });
 
+  it('disconnected is the flat line: zero amplitude and frequency landed frozen, base uSpeed 5 un-frozen', async () => {
+    // Upstream's explicit flat state, first-class here since 2026-08-10
+    // (Rob) -- the look idle had before it adopted the gentle wave.
+    const frozen = await renderWave({ state: 'disconnected', frozen: true });
+    expect(frozen.uniforms.uAmplitude?.value).toBe(0);
+    expect(frozen.uniforms.uFrequency?.value).toBe(0);
+    cleanup();
+    const live = await renderWave({ state: 'disconnected' });
+    expect(live.uniforms.uSpeed?.value).toBe(5);
+    expect(live.uniforms.uMix?.value).toBe(1);
+  });
+
   it('does not let live volume leak into a non-speaking state', async () => {
     // frozen lands idle's own targets instantly, so a missing
     // `state === 'speaking'` guard is unmistakable: amplitude would read

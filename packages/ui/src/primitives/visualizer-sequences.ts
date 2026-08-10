@@ -10,22 +10,40 @@
  * `sequence[tick % sequence.length]` without a guard.
  */
 
-export type VisualizerState = 'idle' | 'connecting' | 'listening' | 'thinking' | 'speaking';
+export type VisualizerState =
+  | 'idle'
+  | 'connecting'
+  | 'listening'
+  | 'thinking'
+  | 'speaking'
+  | 'disconnected';
 
 export interface Coordinate {
   x: number;
   y: number;
 }
 
-const KNOWN: readonly VisualizerState[] = ['idle', 'connecting', 'listening', 'thinking', 'speaking'];
+const KNOWN: readonly VisualizerState[] = [
+  'idle',
+  'connecting',
+  'listening',
+  'thinking',
+  'speaking',
+  // First-class since 2026-08-10 (Rob): the dead-connection look (flat wave,
+  // nothing lit) upstream renders for its 'disconnected' state. It was an
+  // alias for 'idle' until idle adopted upstream's gentle wave, which left
+  // the flat line unreachable.
+  'disconnected',
+];
 
 /**
  * LiveKit's AgentState carries room-lifecycle values that mean nothing here.
  * Accept them so markup ported from LiveKit works unchanged.
  */
 const ALIASES: Record<string, VisualizerState> = {
-  disconnected: 'idle',
-  failed: 'idle',
+  // Both are dead-connection looks upstream, so 'failed' rides with
+  // 'disconnected' rather than 'idle'.
+  failed: 'disconnected',
   initializing: 'connecting',
   'pre-connect-buffering': 'connecting',
 };
@@ -53,6 +71,11 @@ export function barSequence(state: VisualizerState, barCount: number): number[][
     }
     case 'speaking':
       return [Array.from({ length: barCount }, (_, i) => i)];
+    // Dead-connection look: mirrors idle (nothing lit) for now. A dedicated
+    // arm so the pending LiveKit disconnected-state measurement can adjust
+    // it in one line.
+    case 'disconnected':
+      return [[]];
     case 'idle':
     default:
       return [[]];
@@ -80,8 +103,10 @@ export function barInterval(state: VisualizerState, barCount: number): number {
  *
  * NOTE: This diverges from upstream use-agent-audio-visualizer-grid.ts in two ways:
  * (1) We use separate centerX and centerY (upstream uses row-center for both axes).
- *     Upstream never ships non-square grids, so the bug never manifested. We expose
- *     row-count and column-count independently, so we need to handle arbitrary shapes.
+ *     Upstream never ships non-square grids, so the bug never manifested. Our public
+ *     API is square-only too now (the grid's single `count` prop, 2026-08-09), but
+ *     this function keeps taking rows/columns as plain params, so the correct
+ *     arbitrary-shape handling stays -- it costs nothing and guards any future caller.
  * (2) We distinguish spread === 0 from spread === undefined (upstream treats 0 as falsy).
  *     Again, upstream never ships spread=0 explicitly; we do for API completeness.
  */
@@ -131,6 +156,12 @@ export function gridSequence(
       for (let x = columns - 1; x >= 0; x--) seq.push({ x, y });
       return seq.length ? seq : [center];
     }
+    // Dead-connection look: the same centre resting frame as idle
+    // (variant-grid suppresses the highlight for both, so nothing lights).
+    // A dedicated arm so the pending LiveKit measurement can adjust it in
+    // one line.
+    case 'disconnected':
+      return [center];
     default:
       return [center];
   }
@@ -185,6 +216,10 @@ export function radialSequence(state: VisualizerState, barCount: number): number
     }
     case 'speaking':
       return [Array.from({ length: barCount }, (_, i) => i)];
+    // Dead-connection look: mirrors idle (nothing lit) for now, one-line
+    // adjustable once the LiveKit measurement lands.
+    case 'disconnected':
+      return [[]];
     case 'idle':
     default:
       return [[]];
@@ -223,6 +258,10 @@ export function shaderTargets(
       return { intensity: [0.25, 0.5], speed: 4.0 };
     case 'speaking':
       return { intensity: 0.3, speed: 2.5 };
+    // Dead-connection look: mirrors idle's dim resting value for now,
+    // one-line adjustable once the LiveKit measurement lands.
+    case 'disconnected':
+      return { intensity: 0.3, speed: 1 };
     case 'idle':
     default:
       return { intensity: 0.3, speed: 1 };
@@ -264,15 +303,26 @@ export function waveTargets(state: VisualizerState): {
     // same speaking/default arm (speed 10, amplitude 0.025, frequency 10,
     // opacity 1), a gentle undulation (~1.05px centreline waviness, ~1.5px/s
     // phase drift, measured on the md tile). Upstream's explicitly FLAT
-    // state is 'disconnected'. We had flattened idle instead; Rob wants
-    // upstream's look (2026-08-09). `default` below KEEPS the flat targets:
-    // out-of-union states stay conservative, and flat remains reachable
-    // should a disconnected-like state ever join the public union.
+    // state is 'disconnected' -- the dedicated arm below. We had flattened
+    // idle instead; Rob wants upstream's look (2026-08-09).
     case 'idle':
       return {
         speed: WAVE_SPEED * 2,
         amplitude: WAVE_AMPLITUDE,
         frequency: WAVE_FREQUENCY,
+        opacity: 1.0,
+        pulseDuration: 0,
+      };
+    // Upstream's EXPLICIT flat state, measured: 'disconnected' is the one
+    // arm of their wave switch that zeroes the line. First-class here since
+    // 2026-08-10 (Rob: 'the disconnected wave needs to be that kind of flat
+    // line'). `default` keeps the same flat targets for out-of-union
+    // strings, which normalizeState prevents real callers from reaching.
+    case 'disconnected':
+      return {
+        speed: WAVE_SPEED,
+        amplitude: 0,
+        frequency: 0,
         opacity: 1.0,
         pulseDuration: 0,
       };

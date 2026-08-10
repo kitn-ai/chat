@@ -117,16 +117,14 @@ export const Attachments = /*#__PURE__*/ createWebComponent<AttachmentsProps>(
 export interface AudioVisualizerProps extends WebComponentProps {
   /** Look to render: `bar` (default), `grid`, `radial`, `wave`, `aurora`, `custom`. `aura` is accepted as a LiveKit-markup alias for `aurora`. Attribute: `variant`. */
   variant?: string;
-  /** `idle` (default), `connecting`, `listening`, `thinking`, `speaking`. LiveKit's room-lifecycle state names are accepted as aliases. Attribute: `state`. */
+  /** `idle` (default), `connecting`, `listening`, `thinking`, `speaking`, `disconnected` (connection down: the dead, flat look). LiveKit's room-lifecycle state names are accepted as aliases. Attribute: `state`. */
   state?: string;
   /** `icon` | `sm` | `md` (default) | `lg` | `xl`. Attribute: `size`. */
   size?: string;
   /** Bars to draw. Bar and radial only. Attribute: `bar-count`. */
   barCount?: number;
-  /** Grid rows. Attribute: `row-count`. */
-  rowCount?: number;
-  /** Grid columns. Attribute: `column-count`. */
-  columnCount?: number;
+  /** Grid only: rows and columns of the (always square) grid. Attribute: `count`. */
+  count?: number;
   /** Radial only: ring distance from center, in px. Attribute: `radius`. */
   radius?: number;
   /** Grid only: ring distance for the connecting animation, in cells. Attribute: `spread`. */
@@ -151,7 +149,7 @@ export interface AudioVisualizerProps extends WebComponentProps {
 
 export const AudioVisualizer = /*#__PURE__*/ createWebComponent<AudioVisualizerProps>(
   'kai-audio-visualizer',
-  ["theme","variant","state","size","barCount","rowCount","columnCount","radius","spread","interval","color","complexity","label","stream","audioElement","bands","shader"],
+  ["theme","variant","state","size","barCount","count","radius","spread","interval","color","complexity","label","stream","audioElement","bands","shader"],
   {  },
   () => import('@kitn.ai/ui/elements/audio-visualizer'),
 );

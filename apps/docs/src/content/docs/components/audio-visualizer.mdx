@@ -28,7 +28,7 @@ Pair `<kai-audio-visualizer>` with `<kai-voice-input>` while recording, or `<kai
 
 ## Usage
 
-`variant`, `state`, `size`, and the rest of the shape props (`bar-count`, `row-count`, `column-count`, `radius`, `spread`, `interval`, `color`, `complexity`, `label`) are plain scalars: set them as HTML attributes. Live audio is not a scalar. Assign `stream`, `audioElement`, and `bands` in JavaScript, never as attributes. `shader` (for `variant="custom"`) works the same way.
+`variant`, `state`, `size`, and the rest of the shape props (`bar-count`, `count`, `radius`, `spread`, `interval`, `color`, `complexity`, `label`) are plain scalars: set them as HTML attributes. Live audio is not a scalar. Assign `stream`, `audioElement`, and `bands` in JavaScript, never as attributes. `shader` (for `variant="custom"`) works the same way.
 
 ```html
 <kai-audio-visualizer variant="grid" state="listening" size="lg"></kai-audio-visualizer>
@@ -45,7 +45,7 @@ Only one source wins. Setting `bands` short-circuits Web Audio entirely, so `str
 
 ## State without audio
 
-`state` alone drives a full scripted animation with no audio source at all. `idle`, `connecting`, `listening`, `thinking`, and `speaking` each get their own timing and pattern per variant (LiveKit's room-lifecycle names are accepted as aliases). This is what backs `<kai-voice-output>`: the browser's `speechSynthesis` exposes no audio node to analyze, so there is nothing to tap. Set `state="speaking"` while it talks and skip the audio props entirely.
+`state` alone drives a full scripted animation with no audio source at all. `idle`, `connecting`, `listening`, `thinking`, `speaking`, and `disconnected` (connection down: the dead, flat look, matching LiveKit's disconnected) each get their own timing and pattern per variant (LiveKit's room-lifecycle names are accepted as aliases). This is what backs `<kai-voice-output>`: the browser's `speechSynthesis` exposes no audio node to analyze, so there is nothing to tap. Set `state="speaking"` while it talks and skip the audio props entirely.
 
 ## Examples
 

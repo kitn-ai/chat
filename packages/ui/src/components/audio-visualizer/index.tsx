@@ -62,8 +62,8 @@ export interface AudioVisualizerProps {
   state?: string;
   size?: VisualizerSize;
   barCount?: number;
-  rowCount?: number;
-  columnCount?: number;
+  /** Grid only: rows and columns of the square grid. */
+  count?: number;
   /** Radial only: distance from center, in px. */
   radius?: number;
   /** Grid only: ring distance for the connecting animation, in cells. */
@@ -229,7 +229,7 @@ export function AudioVisualizer(props: AudioVisualizerProps): JSX.Element {
   // off the bar count -- pulled from `sizes.ts` rather than re-derived here,
   // so this stays in sync with what each variant actually renders.
   const elementCount = () => {
-    if (variant() === 'grid') return props.columnCount ?? defaultGridCount(size());
+    if (variant() === 'grid') return props.count ?? defaultGridCount(size());
     if (variant() === 'radial') return props.barCount ?? defaultRadialBarCount(size());
     return props.barCount ?? defaultBarCount(size());
   };
@@ -376,8 +376,7 @@ export function AudioVisualizer(props: AudioVisualizerProps): JSX.Element {
           <GridVisualizer
             {...domShared()}
             bands={bands()}
-            rowCount={props.rowCount}
-            columnCount={props.columnCount}
+            count={props.count}
             spread={props.spread}
             interval={props.interval}
           />

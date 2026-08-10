@@ -70,6 +70,14 @@ function auroraTargets(state: VisualizerState): {
         intensity: 1.5, speed: 3.5, complexity: 1.25, amplitude: 0.75, scale: 0.3,
         rotation: -3.5,
       };
+    // Dead-connection look: mirrors idle's resting targets for now. A
+    // dedicated arm so the pending LiveKit measurement (their aura may dim
+    // differently at disconnected) can adjust it in one line.
+    case 'disconnected':
+      return {
+        intensity: 1.0, speed: 0.5, complexity: 0.4, amplitude: 1.2, scale: 0.2,
+        rotation: 0,
+      };
     case 'idle':
     default:
       return {

@@ -475,7 +475,7 @@
         "type": "undefined | string",
         "optional": true,
         "scalar": true,
-        "description": "`idle` (default), `connecting`, `listening`, `thinking`, `speaking`. LiveKit's room-lifecycle state names are accepted as aliases. Attribute: `state`.",
+        "description": "`idle` (default), `connecting`, `listening`, `thinking`, `speaking`, `disconnected` (connection down: the dead, flat look). LiveKit's room-lifecycle state names are accepted as aliases. Attribute: `state`.",
         "default": "'idle'",
         "displayType": "undefined | string"
       },
@@ -497,19 +497,11 @@
         "displayType": "undefined | number"
       },
       {
-        "name": "rowCount",
+        "name": "count",
         "type": "undefined | number",
         "optional": true,
         "scalar": true,
-        "description": "Grid rows. Attribute: `row-count`.",
-        "displayType": "undefined | number"
-      },
-      {
-        "name": "columnCount",
-        "type": "undefined | number",
-        "optional": true,
-        "scalar": true,
-        "description": "Grid columns. Attribute: `column-count`.",
+        "description": "Grid only: rows and columns of the (always square) grid. Attribute: `count`.",
         "displayType": "undefined | number"
       },
       {

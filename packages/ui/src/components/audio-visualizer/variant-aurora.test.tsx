@@ -195,6 +195,15 @@ describe('AuroraVisualizer: state -> uniform mapping', () => {
     expect(c.uniforms.uTheme?.value).toBe(1);
   });
 
+  it('disconnected mirrors idle\'s targets for now (LiveKit measurement pending; their aura may dim differently)', async () => {
+    const c = await renderAurora({ state: 'disconnected' });
+    expect(c.uniforms.uIntensity?.value).toBe(1.0);
+    expect(c.uniforms.uSpeed?.value).toBe(0.5);
+    expect(c.uniforms.uComplexity?.value).toBe(0.4);
+    expect(c.uniforms.uAmplitude?.value).toBe(1.2);
+    expect(c.uniforms.uScale?.value).toBe(0.2);
+  });
+
   it('uses mediump precision at icon and sm, highp otherwise -- shaders are expensive on phones', async () => {
     expect((await renderAurora({ size: 'icon' })).precision).toBe('mediump');
     cleanup();

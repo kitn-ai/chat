@@ -274,11 +274,10 @@ Every element also accepts the `theme` attribute. Array/object properties are ma
 | Property | Attribute | Type | Description |
 |---|---|---|---|
 | `variant` | `variant` | `undefined \| string` | Look to render: `bar` (default), `grid`, `radial`, `wave`, `aurora`, `custom`. `aura` is accepted as a LiveKit-markup alias for `aurora`. Attribute: `variant`. |
-| `state` | `state` | `undefined \| string` | `idle` (default), `connecting`, `listening`, `thinking`, `speaking`. LiveKit's room-lifecycle state names are accepted as aliases. Attribute: `state`. |
+| `state` | `state` | `undefined \| string` | `idle` (default), `connecting`, `listening`, `thinking`, `speaking`, `disconnected` (connection down: the dead, flat look). LiveKit's room-lifecycle state names are accepted as aliases. Attribute: `state`. |
 | `size` | `size` | `undefined \| string` | `icon` \| `sm` \| `md` (default) \| `lg` \| `xl`. Attribute: `size`. |
 | `barCount` | `bar-count` | `undefined \| number` | Bars to draw. Bar and radial only. Attribute: `bar-count`. |
-| `rowCount` | `row-count` | `undefined \| number` | Grid rows. Attribute: `row-count`. |
-| `columnCount` | `column-count` | `undefined \| number` | Grid columns. Attribute: `column-count`. |
+| `count` | `count` | `undefined \| number` | Grid only: rows and columns of the (always square) grid. Attribute: `count`. |
 | `radius` | `radius` | `undefined \| number` | Radial only: ring distance from center, in px. Attribute: `radius`. |
 | `spread` | `spread` | `undefined \| number` | Grid only: ring distance for the connecting animation, in cells. Attribute: `spread`. |
 | `interval` | `interval` | `undefined \| number` | Grid only: ms between scripted frames. Attribute: `interval`. |

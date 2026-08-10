@@ -47,16 +47,20 @@ const SILENCE_FLOOR = 0.02;
  */
 export function GridVisualizer(
   props: VariantProps & {
-    rowCount?: number;
-    columnCount?: number;
+    /** Rows AND columns of the (always square) grid. Default from the size
+     *  preset. Replaced the former independent rowCount/columnCount pre-1.0:
+     *  columns alone carry the audio signal, so a non-square grid only ever
+     *  changed threshold-ring resolution — never expression (Rob, 2026-08-09;
+     *  upstream is square-by-default via `rowCount ?? columnCount` too). */
+    count?: number;
     /** Ring distance from center for the connecting animation, in cells. */
     spread?: number;
     /** Ms between scripted frames. Default 100. */
     interval?: number;
   },
 ): JSX.Element {
-  const rows = () => props.rowCount ?? defaultGridCount(props.size);
-  const cols = () => props.columnCount ?? defaultGridCount(props.size);
+  const rows = () => props.count ?? defaultGridCount(props.size);
+  const cols = () => rows();
   const interval = () => props.interval ?? 100;
   const items = () => Array.from({ length: rows() * cols() }, (_, i) => i);
 
@@ -93,8 +97,10 @@ export function GridVisualizer(
       return (levels()[index % cols()] ?? 0) >= threshold;
     }
     // Idle shows a fully dark grid (Rob, 2026-08-09) — divergence (3) above;
-    // upstream rests one stationary centre cell here.
-    if (props.state === 'idle') return false;
+    // upstream rests one stationary centre cell here. 'disconnected' (first-
+    // class 2026-08-10) mirrors idle's dark grid for now, pending the LiveKit
+    // disconnected-state measurement.
+    if (props.state === 'idle' || props.state === 'disconnected') return false;
     return active().x === index % cols() && active().y === Math.floor(index / cols());
   }
 

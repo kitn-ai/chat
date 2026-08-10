@@ -19,7 +19,7 @@ import { VOICE_BANDS, VOICE_FRAME_MS } from './audio-visualizer.voice-fixture';
 // rather than a lookalike that could drift from it.
 import { mirrorBandsCenterOut, mirrorBandsAroundRing } from '../../primitives/audio-bands';
 
-const STATES = ['idle', 'connecting', 'listening', 'thinking', 'speaking'] as const;
+const STATES = ['idle', 'connecting', 'listening', 'thinking', 'speaking', 'disconnected'] as const;
 const VARIANTS = ['bar', 'grid', 'radial'] as const;
 /** Every look, including the WebGL ones, for the `variant` control. */
 const ALL_VARIANTS = ['bar', 'grid', 'radial', 'wave', 'aurora', 'custom'] as const;
@@ -36,8 +36,8 @@ const meta = {
       },
       description: componentDescription([
         'Renders live audio as bars, a grid, a ring, a wave, or a glowing aurora. Set `stream` or `audioElement` to tap real audio, or `bands` to drive it yourself.',
-        'With no audio source at all it animates from `state` alone: idle, connecting, listening, thinking, speaking. That is what drives it when the audio cannot be tapped, like browser speech synthesis, which exposes no audio node.',
-        '`wave`, `aurora`, and `custom` render through WebGL behind a dynamic import, and fall back to bars if that fails or WebGL is unavailable. Each look gets its own story, across all five states -- see Wave, Aurora, and Custom in the sidebar. They are not embedded on this page: five live WebGL canvases each is already close to a browser\'s concurrent context limit, so stacking three of them (plus MicrophoneAll) into one autodocs page reliably exceeds it. See StateMatrix for the three DOM variants side by side, Microphone for the real thing -- click-to-enable, since Storybook cannot answer a permission prompt -- and MicrophoneAll (sidebar too) for all six looks on the same live voice at once.',
+        'With no audio source at all it animates from `state` alone: idle, connecting, listening, thinking, speaking, disconnected (connection down -- the dead, flat look, matching LiveKit\'s). That is what drives it when the audio cannot be tapped, like browser speech synthesis, which exposes no audio node.',
+        '`wave`, `aurora`, and `custom` render through WebGL behind a dynamic import, and fall back to bars if that fails or WebGL is unavailable. Each look gets its own story, across all six states -- see Wave, Aurora, and Custom in the sidebar. They are not embedded on this page: six live WebGL canvases each is already close to a browser\'s concurrent context limit, so stacking three of them (plus MicrophoneAll) into one autodocs page reliably exceeds it. See StateMatrix for the three DOM variants side by side, Microphone for the real thing -- click-to-enable, since Storybook cannot answer a permission prompt -- and MicrophoneAll (sidebar too) for all six looks on the same live voice at once.',
       ]),
     },
   },
@@ -51,7 +51,8 @@ const meta = {
     state: {
       control: 'select',
       options: [...STATES],
-      description: 'Drives the scripted animation. `speaking` reads `bands` instead.',
+      description:
+        'Drives the scripted animation. `speaking` reads `bands` instead; `disconnected` is the dead-connection look (flat wave, nothing lit).',
       table: { defaultValue: { summary: 'idle' } },
     },
     size: {
@@ -76,13 +77,9 @@ const meta = {
       control: { type: 'number', min: 1, max: 48 },
       description: 'Bar and radial only.',
     },
-    rowCount: {
-      control: { type: 'number', min: 1, max: 12 },
-      description: 'Grid only.',
-    },
-    columnCount: {
-      control: { type: 'number', min: 1, max: 12 },
-      description: 'Grid only.',
+    count: {
+      control: { type: 'number', min: 1, max: 15 },
+      description: 'Grid only: rows and columns of the square grid.',
     },
     spread: {
       control: { type: 'number', min: 0, max: 10 },
@@ -240,7 +237,7 @@ const OFFSET_CUSTOM = 147;
  * `bandCount()`, backed by `defaultBarCount`/`defaultGridCount`/
  * `defaultRadialBarCount` in `sizes.ts`), so the generated array always
  * matches what the mounted tile actually wants -- including after a
- * `barCount`/`columnCount`/`size` control changes. Generating the wrong
+ * `barCount`/`count`/`size` control changes. Generating the wrong
  * width is exactly the bug this fixes: `normalizeVolumeBands` pads a short
  * array by repeating its LAST value, so a fixed-width generator feeding a
  * variant that wants more bands than that left the extras frozen on
@@ -367,7 +364,7 @@ function resampleBands(source: readonly number[], count: number): number[] {
  * the synthetic generator.
  *
  * `count` is an ACCESSOR, read fresh every frame, same contract as
- * `useFakeBands`: a `barCount`/`columnCount`/`size` control change is
+ * `useFakeBands`: a `barCount`/`count`/`size` control change is
  * picked up without remounting, and `resampleBands` (above) reshapes the
  * fixture's 3 real bands to the new half width rather than padding.
  */
@@ -562,20 +559,20 @@ export const Bar: Story = {
 export const Grid: Story = {
   args: { size: 'md' },
   parameters: {
-    controls: { include: ['size', 'color', 'rowCount', 'columnCount', 'spread', 'interval'] },
+    controls: { include: ['size', 'color', 'count', 'spread', 'interval'] },
     docs: {
       description: {
         story:
-          'A grid of dots that pulses with the audio. `rowCount`/`columnCount` default to the size preset; ' +
+          'A grid of dots that pulses with the audio. The square `count` defaults to the size preset; ' +
           '`spread` and `interval` only shape the scripted `connecting` sequence, not `speaking`.',
       },
     },
   },
   render: (args: AudioVisualizerProps) => {
-    // Grid keys off `columnCount` (falling back to `defaultGridCount`), not
+    // Grid keys off `count` (falling back to `defaultGridCount`), not
     // `barCount` -- the same source `AudioVisualizer`'s own `bandCount()`
     // reads for this variant.
-    const bands = useVoiceBands(() => args.columnCount ?? defaultGridCount(args.size ?? 'md'), OFFSET_GRID);
+    const bands = useVoiceBands(() => args.count ?? defaultGridCount(args.size ?? 'md'), OFFSET_GRID);
     return (
       <StateRow size={args.size ?? 'md'}>
         {(s) => (
@@ -584,8 +581,7 @@ export const Grid: Story = {
             state={s}
             size={args.size}
             color={args.color}
-            rowCount={args.rowCount}
-            columnCount={args.columnCount}
+            count={args.count}
             spread={args.spread}
             interval={args.interval}
             bands={bands()}
@@ -783,7 +779,7 @@ export const Custom: Story = {
  * each row is labelled with its variant on the left -- the same
  * information as thirty individual labels, without repeating any of them.
  *
- * Shader variants are deliberately excluded: six variants x five states x
+ * Shader variants are deliberately excluded: six variants x six states x
  * two WebGL contexts per row is heavy for one story; see the Wave, Aurora,
  * and Custom stories above for those.
  */

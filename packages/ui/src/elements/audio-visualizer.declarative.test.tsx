@@ -77,11 +77,11 @@ describe('kai-audio-visualizer declarative API', () => {
     expect(container.querySelectorAll('[part~="bar"]')).toHaveLength(7);
   });
 
-  it('coerces string row-count and column-count', () => {
+  it('coerces a string count attribute to a square grid', () => {
     const { container } = render(() => (
-      <AudioVisualizer variant="grid" rowCount={num('3')} columnCount={num('4')} />
+      <AudioVisualizer variant="grid" count={num('4')} />
     ));
-    expect(container.querySelectorAll('[part~="cell"]')).toHaveLength(12);
+    expect(container.querySelectorAll('[part~="cell"]')).toHaveLength(16);
   });
 
   it('a blank bar-count attribute falls back to the size default, not NaN bars', () => {
@@ -132,16 +132,16 @@ describe('kai-audio-visualizer declarative API', () => {
     // Everything above renders AudioVisualizer directly with values the test
     // computed itself, so the wiring inside AudioVisualizerFacade (which prop
     // gets num()'d into which AudioVisualizer prop) is never actually
-    // exercised -- a copy-paste swap, e.g. num(props.rowCount) landing in the
-    // columnCount slot, would go uncaught. Call the real facade function with
+    // exercised -- a copy-paste swap, e.g. num(props.count) landing in the
+    // barCount slot, would go uncaught. Call the real facade function with
     // STRING values, the way component-register hands it attributes, and
-    // assert on a shape a rows/columns swap could produce identically by
-    // total cell count (3*4 === 4*3) but NOT by grid-template-columns.
-    const attrProps = { variant: 'grid', rowCount: '3', columnCount: '4' } as unknown as Parameters<
+    // assert both the cell total AND the column template so a `count`
+    // mis-wire cannot slip through as a coincidentally-right cell count.
+    const attrProps = { variant: 'grid', count: '4' } as unknown as Parameters<
       typeof AudioVisualizerFacade
     >[0];
     const { container } = render(() => AudioVisualizerFacade(attrProps));
-    expect(container.querySelectorAll('[part~="cell"]')).toHaveLength(12);
+    expect(container.querySelectorAll('[part~="cell"]')).toHaveLength(16);
     const grid = container.querySelector('.grid') as HTMLElement;
     expect(grid.style.gridTemplateColumns).toBe('repeat(4, 1fr)');
   });

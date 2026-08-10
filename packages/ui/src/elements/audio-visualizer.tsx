@@ -7,17 +7,16 @@ interface Props extends Record<string, unknown> {
   /** Look to render: `bar` (default), `grid`, `radial`, `wave`, `aurora`, `custom`.
    *  `aura` is accepted as a LiveKit-markup alias for `aurora`. Attribute: `variant`. */
   variant?: string;
-  /** `idle` (default), `connecting`, `listening`, `thinking`, `speaking`. LiveKit's
+  /** `idle` (default), `connecting`, `listening`, `thinking`, `speaking`,
+   *  `disconnected` (connection down: the dead, flat look). LiveKit's
    *  room-lifecycle state names are accepted as aliases. Attribute: `state`. */
   state?: string;
   /** `icon` | `sm` | `md` (default) | `lg` | `xl`. Attribute: `size`. */
   size?: string;
   /** Bars to draw. Bar and radial only. Attribute: `bar-count`. */
   barCount?: number;
-  /** Grid rows. Attribute: `row-count`. */
-  rowCount?: number;
-  /** Grid columns. Attribute: `column-count`. */
-  columnCount?: number;
+  /** Grid only: rows and columns of the (always square) grid. Attribute: `count`. */
+  count?: number;
   /** Radial only: ring distance from center, in px. Attribute: `radius`. */
   radius?: number;
   /** Grid only: ring distance for the connecting animation, in cells. Attribute: `spread`. */
@@ -92,8 +91,7 @@ export function AudioVisualizerFacade(
       state={props.state as string | undefined}
       size={props.size as VisualizerSize | undefined}
       barCount={num(props.barCount)}
-      rowCount={num(props.rowCount)}
-      columnCount={num(props.columnCount)}
+      count={num(props.count)}
       radius={num(props.radius)}
       spread={num(props.spread)}
       interval={num(props.interval)}
@@ -138,8 +136,7 @@ defineWebComponent<Props>('kai-audio-visualizer', {
   state: 'idle',
   size: 'md',
   barCount: undefined,
-  rowCount: undefined,
-  columnCount: undefined,
+  count: undefined,
   radius: undefined,
   spread: undefined,
   interval: undefined,

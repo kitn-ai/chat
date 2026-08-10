@@ -15,10 +15,15 @@ describe('normalizeState', () => {
   it('passes through known states', () => {
     expect(normalizeState('speaking')).toBe('speaking');
     expect(normalizeState('thinking')).toBe('thinking');
+    // First-class since 2026-08-10 (Rob): disconnected renders the
+    // dead-connection look (flat wave, dark grid) instead of aliasing to
+    // idle, which now gently undulates on the wave.
+    expect(normalizeState('disconnected')).toBe('disconnected');
   });
   it('maps LiveKit room-lifecycle aliases', () => {
-    expect(normalizeState('disconnected')).toBe('idle');
-    expect(normalizeState('failed')).toBe('idle');
+    // 'failed' rides with 'disconnected', not 'idle': both are
+    // dead-connection looks upstream.
+    expect(normalizeState('failed')).toBe('disconnected');
     expect(normalizeState('initializing')).toBe('connecting');
     expect(normalizeState('pre-connect-buffering')).toBe('connecting');
   });
@@ -46,8 +51,11 @@ describe('barSequence', () => {
   it('idle lights nothing', () => {
     expect(barSequence('idle', 5)).toEqual([[]]);
   });
+  it('disconnected lights nothing, mirroring idle for now (LiveKit measurement pending)', () => {
+    expect(barSequence('disconnected', 5)).toEqual([[]]);
+  });
   it('never returns an empty sequence, so `tick % length` is always safe', () => {
-    const states = ['idle', 'connecting', 'listening', 'thinking', 'speaking'] as const;
+    const states = ['idle', 'connecting', 'listening', 'thinking', 'speaking', 'disconnected'] as const;
     for (const s of states) {
       for (const n of [1, 2, 3, 5, 12]) {
         expect(barSequence(s, n).length).toBeGreaterThan(0);
@@ -98,6 +106,9 @@ describe('gridSequence', () => {
     expect(seq[5]).toEqual({ x: 4, y: 2 });
     expect(seq[9]).toEqual({ x: 0, y: 2 });
   });
+  it('disconnected rests on the same center frame as idle (variant-grid suppresses the highlight for both)', () => {
+    expect(gridSequence('disconnected', 5, 5)).toEqual([{ x: 2, y: 2 }]);
+  });
   it('idle and speaking rest on the center', () => {
     expect(gridSequence('idle', 5, 5)).toEqual([{ x: 2, y: 2 }]);
     expect(gridSequence('speaking', 5, 5)).toEqual([{ x: 2, y: 2 }]);
@@ -121,7 +132,7 @@ describe('gridSequence', () => {
     expect(withSpreadZero.length).toBeLessThan(withoutSpread.length);
   });
   it('never returns an empty sequence', () => {
-    const states = ['idle', 'connecting', 'listening', 'thinking', 'speaking'] as const;
+    const states = ['idle', 'connecting', 'listening', 'thinking', 'speaking', 'disconnected'] as const;
     for (const s of states) {
       expect(gridSequence(s, 3, 3).length).toBeGreaterThan(0);
     }
@@ -148,8 +159,11 @@ describe('radialSequence', () => {
   it('idle lights nothing', () => {
     expect(radialSequence('idle', 8)).toEqual([[]]);
   });
+  it('disconnected lights nothing, mirroring idle for now (LiveKit measurement pending)', () => {
+    expect(radialSequence('disconnected', 8)).toEqual([[]]);
+  });
   it('never returns an empty sequence', () => {
-    const states = ['idle', 'connecting', 'listening', 'thinking', 'speaking'] as const;
+    const states = ['idle', 'connecting', 'listening', 'thinking', 'speaking', 'disconnected'] as const;
     for (const s of states) {
       for (const n of [4, 8, 12, 24]) {
         expect(radialSequence(s, n).length).toBeGreaterThan(0);
@@ -178,6 +192,9 @@ describe('shaderTargets', () => {
   it('settles on a single dim value when idle', () => {
     expect(shaderTargets('idle')).toEqual({ intensity: 0.3, speed: 1 });
   });
+  it('disconnected settles on the idle dim value for now (LiveKit measurement pending)', () => {
+    expect(shaderTargets('disconnected')).toEqual({ intensity: 0.3, speed: 1 });
+  });
   it('speeds up while thinking and connecting', () => {
     expect(shaderTargets('thinking').speed).toBe(4.0);
     expect(shaderTargets('connecting').speed).toBe(4.0);
@@ -202,6 +219,14 @@ describe('waveTargets', () => {
     });
     // Structural parity: upstream serves idle and speaking from ONE arm.
     expect(waveTargets('idle')).toEqual(waveTargets('speaking'));
+  });
+  it('renders the flat line for disconnected, upstream\'s explicit flat state, including through normalizeState', () => {
+    const flat = { speed: 5, amplitude: 0, frequency: 0, opacity: 1.0, pulseDuration: 0 };
+    expect(waveTargets('disconnected')).toEqual(flat);
+    // The chain the element takes: raw markup state -> normalizeState ->
+    // table. Until 'disconnected' became first-class (Rob, 2026-08-10) the
+    // alias sent this through 'idle', which now means the gentle wave.
+    expect(waveTargets(normalizeState('disconnected'))).toEqual(flat);
   });
   it('keeps the flat line for out-of-union states (the default arm stays conservative)', () => {
     // Flat pinning moved here from the idle test above: the default arm keeps
