@@ -261,6 +261,12 @@ export { ModelSwitcher } from './components/model-switcher';
 export { ChatScopePicker } from './components/chat-scope-picker';
 export { Tool } from './components/tool';
 export type { ToolPart, ToolProps } from './components/tool';
+// ToolPart.kind's doc comment says "Derive with `classifyTool(type)`", so the
+// function has to be reachable from every entry that surfaces ToolPart. It is
+// total, deterministic and terminates in 'generic', so it is safe public API and
+// genuinely useful to anyone rendering tool calls themselves.
+export { classifyTool } from './components/tool-classify';
+export type { ToolKind } from './components/tool-classify';
 export { ThinkingBar } from './components/thinking-bar';
 export type { ThinkingBarProps } from './components/thinking-bar';
 export { Reasoning, ReasoningTrigger, ReasoningContent } from './components/reasoning';

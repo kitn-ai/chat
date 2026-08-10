@@ -127,4 +127,37 @@ describe('gen-element-types.mjs inline type block', () => {
       );
     }
   });
+
+  it('declares classifyTool with the real implementation signature', async () => {
+    // ToolPart.kind's doc comment says "Derive with `classifyTool(type)`", and the
+    // function is now genuinely exported from the `./elements` runtime entry
+    // (src/elements/register.ts). The inline block DECLARES its signature by hand,
+    // which is the same invisible-to-the-compiler hazard as ChatMessage above: a
+    // regeneration reproduces a wrong signature byte-for-byte. Compile the declared
+    // signature against the real function so drift fails here.
+    const inline = await loadInlineBlock();
+    expect(inline, 'no classifyTool declaration in the inline block').toMatch(
+      /export declare function classifyTool\(/,
+    );
+
+    const probe = [
+      `import { classifyTool as sourceClassifyTool } from '../components/tool-classify';`,
+      ``,
+      inline,
+      ``,
+      `type Assert<T extends true> = T;`,
+      `type MutuallyAssignable<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;`,
+      ``,
+      // Same parameter list AND same return type as the real implementation.
+      `export type _ClassifyToolInSync = Assert<`,
+      `  MutuallyAssignable<typeof classifyTool, typeof sourceClassifyTool>`,
+      `>;`,
+      // And the return type is the ToolKind the block itself declares.
+      `export type _ToolKindInSync = Assert<`,
+      `  MutuallyAssignable<ReturnType<typeof sourceClassifyTool>, ToolKind>`,
+      `>;`,
+    ].join('\n');
+
+    expect(typecheckVirtualModule(probe)).toEqual([]);
+  });
 });

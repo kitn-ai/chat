@@ -29,6 +29,15 @@ export type { ChatMessage, ChatMessageAction } from './chat-types';
 export { configureCodeHighlighting, isCodeHighlightingEnabled } from '../primitives/highlighter';
 export type { CodeHighlightingOptions } from '../primitives/highlighter';
 
+// ToolPart.kind's doc comment in the shipped dist/elements.d.ts says "Derive with
+// `classifyTool(type)`", but the function was exported from NO public entry, so a
+// consumer following our own docs hit an unresolvable import. Total, deterministic
+// and always terminating in 'generic' — safe to expose, and needed by anyone
+// rendering tool calls themselves. tool-classify.ts imports nothing, so this stays
+// SSR-safe and adds no weight to the register-all bundle.
+export { classifyTool } from '../components/tool-classify';
+export type { ToolKind } from '../components/tool-classify';
+
 // Imperative toast API — usable directly from the elements entry so consumers
 // who only import the web-components bundle still get `toast()`. The store is
 // SSR-safe (no DOM touched until the first toast is raised on the client).

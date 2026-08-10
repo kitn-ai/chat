@@ -25,6 +25,11 @@ export type { CodeHighlightingOptions } from '../primitives/highlighter';
 export declare function configureCodeHighlighting(options: CodeHighlightingOptions): void;
 export declare function isCodeHighlightingEnabled(): boolean;
 
+/** Classify a tool call by its provider-chosen NAME. Total, deterministic and
+ *  side-effect free; ALWAYS terminates in `'generic'`. Named by ToolPart.kind's
+ *  doc comment, so it must stay reachable from this entry. */
+export declare function classifyTool(name: string): ToolKind;
+
 /** Resolves once the kai-* elements are registered (browser); inert on the server. */
 export declare const elementsReady: Promise<unknown>;
 
