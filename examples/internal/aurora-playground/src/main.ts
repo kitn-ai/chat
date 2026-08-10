@@ -12,6 +12,7 @@ interface Params {
   bloomMul: number; bloomGain: number; delta: number; off: number;
   wWidth: number; wMin: number; fillGain: number; edgeGain: number;
   flut: number; twistSpd: number; warpAmp: number; theme: number;
+  lens: number; spec: number; tint: number; vSpeed: number;
 }
 
 const canvas = document.getElementById('c') as HTMLCanvasElement;
@@ -59,7 +60,7 @@ gl.clearColor(0, 0, 0, 0);
 const UNIFORM_NAMES = ['uRes','uTime','uLevel','uColor','uMode','uBaseR','uAmpIdle','uAmpVoice',
   'uRadVoice','uSigma','uGain','uF1','uF2','uS1','uS2','uEnvSpd','uSepSpd','uWhiteLo','uWhiteHi',
   'uBloomMul','uBloomGain','uDelta','uOff','uWWidth','uWMin','uFillGain','uEdgeGain','uFlut','uTwistSpd',
-  'uWarpAmp','uTheme'] as const;
+  'uWarpAmp','uTheme','uLens','uSpec','uTint'] as const;
 const U: Record<string, WebGLUniformLocation | null> = {};
 for (const name of UNIFORM_NAMES) U[name] = gl.getUniformLocation(prog, name);
 
@@ -71,7 +72,7 @@ const BASE: Omit<Params, 'color'> = {
   envSpd: 0.21, sepSpd: 0.38, whiteLo: 1.35, whiteHi: 2.30,
   bloomMul: 2.6, bloomGain: 0.18, delta: 0.35, off: 0.024,
   wWidth: 0.045, wMin: 0.006, fillGain: 0.38, edgeGain: 0.7, flut: 0.010, twistSpd: 0.55,
-  warpAmp: 0.75, theme: 0,
+  warpAmp: 0.75, theme: 0, lens: 0.85, spec: 0.35, tint: 0.25, vSpeed: 2.2,
 };
 export const PRESET_SOFT = { ...BASE };
 export const PRESET_BOLD = { ...BASE, sigma: 0.026, gain: 0.48, s1: 1.15, s2: 1.8, envSpd: 0.5, sepSpd: 0.85, bloomMul: 2.2, bloomGain: 0.14 };
@@ -96,6 +97,18 @@ export const PRESET_VEIL = { ...BASE, mode: 3,
 // veil in the speaking state: faster phase rate, finer warp, voice-driven radius
 export const PRESET_VEIL_TALK = { ...BASE, mode: 3,
   baseR: 0.2, radVoice: 0.2, gain: 1.5, f2: 18.25, twistSpd: 3.5, warpAmp: 0.75,
+};
+// stormy planet: the dense churning-surface look (a keeper in its own right)
+export const PRESET_STORMY = { ...BASE, mode: 4,
+  baseR: 0.33, radVoice: 0, gain: 1.0, fillGain: 0.75, edgeGain: 0.5,
+  f2: 12, s1: 1.0, s2: 1.0, twistSpd: 1.0, warpAmp: 0.9,
+  whiteLo: 1.2, whiteHi: 2.6, lens: 0.85, spec: 0.35,
+};
+// crystal orb: wispy luminous smoke sealed in a stationary glass sphere
+export const PRESET_SMOKE = { ...BASE, mode: 5,
+  baseR: 0.33, radVoice: 0, gain: 1.1, fillGain: 0.65, edgeGain: 0.45,
+  f2: 10, s1: 1.0, s2: 1.0, twistSpd: 1.2, warpAmp: 1.0,
+  lens: 0.8, spec: 0.3, tint: 0.25, vSpeed: 3.0,
 };
 
 const P: Params = { color: [0x1f / 255, 0xd5 / 255, 0xf9 / 255], ...PRESET_VEIL };
@@ -142,6 +155,9 @@ function renderAt(t: number, level: number): void {
   g.uniform1f(U.uTwistSpd, P.twistSpd);
   g.uniform1f(U.uWarpAmp, P.warpAmp);
   g.uniform1f(U.uTheme, P.theme);
+  g.uniform1f(U.uLens, P.lens);
+  g.uniform1f(U.uSpec, P.spec);
+  g.uniform1f(U.uTint, P.tint);
   g.drawArrays(g.TRIANGLES, 0, 3);
   g.finish();
 }
@@ -165,11 +181,13 @@ type SliderRow = [string] | [string, string, number, number, number];
 const SLIDERS: SliderRow[] = [
   ['motion speed'],
   ['twistSpd', 'main speed',   0.0, 8.0, 0.05],
+  ['vSpeed',   'voice speed',  0.0, 4.0, 0.05],
   ['shape (all modes)'],
   ['baseR',    'ring size',    0.02, 0.50, 0.005],
   ['sigma',    'stroke width', 0.006, 0.060, 0.001],
   ['gain',     'brightness',   0.10, 2.50, 0.01],
   ['radVoice', 'voice growth', 0.00, 0.40, 0.005],
+  ['fillGain', 'fill amount',  0.0, 1.0, 0.01],
   ['ampIdle',  'idle wobble',  0.00, 0.05, 0.001],
   ['ampVoice', 'voice wobble', 0.00, 0.12, 0.001],
   ['f1',       'wave freq A',  2, 10, 1],
@@ -180,9 +198,12 @@ const SLIDERS: SliderRow[] = [
   ['ribbon wind (mode 2)'],
   ['wWidth',   'fold width',   0.010, 0.090, 0.001],
   ['wMin',     'pinch width',  0.001, 0.020, 0.001],
+  ['orb (modes 4 + 5)'],
+  ['lens',     'lens amount',  0.0, 1.0, 0.01],
+  ['spec',     'highlight',    0.0, 1.0, 0.01],
+  ['tint',     'smoke tint',   0.0, 1.0, 0.01],
   ['veil (mode 3)'],
   ['warpAmp',  'warp amp',     0.0, 2.0, 0.05],
-  ['fillGain', 'fill sheer',   0.0, 1.0, 0.01],
   ['edgeGain', 'edge strength',0.0, 1.5, 0.01],
   ['flut',     'wind flutter', 0.0, 0.03, 0.001],
   ['braid (mode 1)'],
@@ -202,6 +223,8 @@ function buildPanel(): void {
   panel.classList.add('on');
   let html = '<h3>mode</h3><div id="modes">'
     + '<button data-mode="3">veil (LK spec)</button>'
+    + '<button data-mode="5">smoke orb</button>'
+    + '<button data-mode="4">stormy planet</button>'
     + '<button data-mode="2">single ribbon (wind)</button>'
     + '<button data-mode="1">3-strand braid</button></div>'
     + '<h3>drive</h3><div id="drive">'
@@ -224,6 +247,8 @@ function buildPanel(): void {
     + '<h3>presets</h3>'
     + '<button id="pveil">veil (LK)</button>'
     + '<button id="pveilt">veil speaking</button>'
+    + '<button id="psmoke">smoke orb</button>'
+    + '<button id="porb">stormy planet</button>'
     + '<button id="pwind">wind</button>'
     + '<button id="prob">braid (Rob)</button>'
     + '<button id="pbold">braid bold</button>'
@@ -270,6 +295,8 @@ function buildPanel(): void {
   });
   document.getElementById('pveil')!.addEventListener('click', () => setParams(PRESET_VEIL));
   document.getElementById('pveilt')!.addEventListener('click', () => setParams(PRESET_VEIL_TALK));
+  document.getElementById('psmoke')!.addEventListener('click', () => setParams(PRESET_SMOKE));
+  document.getElementById('porb')!.addEventListener('click', () => setParams(PRESET_STORMY));
   document.getElementById('pwind')!.addEventListener('click', () => setParams(PRESET_WIND));
   document.getElementById('prob')!.addEventListener('click', () => setParams(PRESET_ROB));
   document.getElementById('pbold')!.addEventListener('click', () => setParams(PRESET_BOLD));
@@ -350,13 +377,23 @@ function rawLevel(elapsed: number): number {
 if (PLAY) {
   buildPanel();
   const t0 = performance.now();
+  let last = t0;
   let smooth = 0;
+  let tAnim = 0;
   const loop = (): void => {
-    const el = (performance.now() - t0) / 1000;
+    const now = performance.now();
+    const el = (now - t0) / 1000;
+    const dt = Math.min((now - last) / 1000, 0.1);
+    last = now;
     const raw = rawLevel(el);
     const k = raw > smooth ? 0.25 : 0.06;  // fast attack, slow release
     smooth += (raw - smooth) * k;
-    renderAt(el, smooth);
+    // ALL modes run on a warped activity clock: voice accelerates the motion
+    // itself (no phase jumps). Aurora modes idle at their normal pace and
+    // speed up with voice; orb modes idle slow and serene.
+    const idleRate = P.mode >= 4 ? 0.35 : 1.0;
+    tAnim += dt * (idleRate + P.vSpeed * smooth);
+    renderAt(tAnim, smooth);
     requestAnimationFrame(loop);
   };
   loop();
