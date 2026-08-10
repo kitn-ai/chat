@@ -30,11 +30,30 @@ export interface WebComponentProps {
 // touch `window` at module-eval (Solid's runtime), so the thunk must never run on
 // the server — it is only ever called from a client effect, browser-gated here too.
 const registered = new Set<string>();
+
+/** The in-flight (or settled) register-all import, once a consumer has opted in.
+ *  Memoized so repeated registerAll() calls share one bundle load. */
+let registerAllLoad: Promise<unknown> | undefined;
+
 function ensureRegistered(tagName: string, register?: () => Promise<unknown>): void {
   if (!register || registered.has(tagName)) return;
   if (typeof window === 'undefined' || typeof customElements === 'undefined') return;
   registered.add(tagName);
   if (customElements.get(tagName)) return; // already defined (e.g. via registerAll)
+  // registerAll() is loading the coarse bundle, which defines EVERY kai-* tag —
+  // including this one. Checking only customElements.get() is not enough: a dynamic
+  // import settles no earlier than a microtask, while this runs synchronously in
+  // useLayoutEffect during render(), so the tag is reliably still undefined here and
+  // we would fetch a SECOND copy of an implementation already on the wire. Measured
+  // at +553 kB for a single <Chat/> in a real Vite consumer build.
+  //
+  // Nothing is lost by waiting: the prop-assign effect above already re-applies props
+  // via customElements.whenDefined() once the definition lands. If the coarse bundle
+  // fails to load, fall back to this element's own chunk rather than never upgrading.
+  if (registerAllLoad) {
+    void registerAllLoad.catch(() => register());
+    return;
+  }
   void register();
 }
 
@@ -43,7 +62,8 @@ function ensureRegistered(tagName: string, register?: () => Promise<unknown>): v
  *  a no-op on the server. */
 export function registerAll(): Promise<unknown> | undefined {
   if (typeof window === 'undefined' || typeof customElements === 'undefined') return undefined;
-  return import('@kitn.ai/ui/elements');
+  registerAllLoad ??= import('@kitn.ai/ui/elements');
+  return registerAllLoad;
 }
 
 export function createWebComponent<P extends WebComponentProps>(
