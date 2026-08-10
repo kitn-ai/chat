@@ -8,29 +8,9 @@ const cloudflare: Integration = {
   streamFormat: 'openai-sse',
   envVars: ['CF_ACCOUNT_ID', 'CF_API_TOKEN'],
   routeTemplates: {
-    next: `// app/api/chat/route.ts: proxy Workers AI, keep the token server-side
-export async function POST(req: Request) {
-  const { messages } = await req.json();
-
-  const upstream = await fetch(
-    \`https://api.cloudflare.com/client/v4/accounts/\${process.env.CF_ACCOUNT_ID}/ai/v1/chat/completions\`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: \`Bearer \${process.env.CF_API_TOKEN}\`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: '@cf/meta/llama-3.1-8b-instruct',
-        messages,
-        stream: true,
-      }),
-    },
-  );
-
-  // Workers AI returns OpenAI-format SSE. Pass it straight through.
-  return new Response(upstream.body, { headers: { 'Content-Type': 'text/event-stream' } });
-}`,
+    // Kept as a framework-specific template because it cannot be expressed as a
+    // portable handler: `env.AI` is a Worker binding, and only a Worker has one.
+    // Everything else uses `webRoute` below.
     worker: `// Worker handler: env.AI is bound in wrangler.toml
 // env.AI.run emits Cloudflare-native SSE (data: {"response":"<token>"}).
 // The TransformStream below re-frames each chunk to OpenAI-format SSE so
@@ -80,6 +60,29 @@ export default {
   },
 };`,
   },
+  webRoute: `async function chatHandler(request: Request): Promise<Response> {
+  // Proxy Workers AI over its OpenAI-compatible HTTP endpoint, token server-side.
+  const { messages } = await request.json();
+
+  const upstream = await fetch(
+    \`https://api.cloudflare.com/client/v4/accounts/\${process.env.CF_ACCOUNT_ID}/ai/v1/chat/completions\`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: \`Bearer \${process.env.CF_API_TOKEN}\`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: '@cf/meta/llama-3.1-8b-instruct',
+        messages,
+        stream: true,
+      }),
+    },
+  );
+
+  // Workers AI returns OpenAI-format SSE. Pass it straight through.
+  return new Response(upstream.body, { headers: { 'Content-Type': 'text/event-stream' } });
+}`,
   streamMapping:
     "Workers AI via the OpenAI-compatible HTTP endpoint returns OpenAI-format SSE. Pipe upstream.body straight to the browser; readOpenAIStream from @kitn.ai/ui/wire parses it, including tool calls and reasoning. The native env.AI binding streams Cloudflare's own format (data: {\"response\":\"...token...\"}); the worker route template re-frames these chunks to OpenAI-format SSE via a TransformStream before returning.",
   runNote: 'Set CF_ACCOUNT_ID and CF_API_TOKEN. Model ids are prefixed with @cf/, e.g. @cf/meta/llama-3.1-8b-instruct. For the AI binding (worker key), add an [ai] block with binding = "AI" in wrangler.toml.',

@@ -2009,8 +2009,9 @@ describe('real-backend scaffolds send what the panel needs and survive a failure
       const route = (out.content as { type: string; text: string }[])[0].text.split(
         '=== (2) BACKEND ROUTE ===',
       )[1];
+      // `request` in the portable handler, `req` in a framework-specific one.
       expect(route, `${integration}: route never reads tools`).toMatch(
-        /const \{[^}]*\btools\b[^}]*\} = await req\.json\(\);/,
+        /const \{[^}]*\btools\b[^}]*\} = await (req|request)\.json\(\);/,
       );
       expect(route, `${integration}: route never sends tools`).toMatch(
         /JSON\.stringify\(\{[^}]*\btools\b[^}]*\}\)/,
@@ -2130,5 +2131,72 @@ describe('framework: html gets a server route, never a second front end', () => 
     for (const integration of listIntegrations()) {
       expect(Object.keys(integration.routeTemplates), `${integration.id}`).not.toContain('html');
     }
+  });
+});
+
+/**
+ * DEFECT (1): every non-next framework used to be handed the Next.js route.
+ *
+ * It compiled — `export async function POST(req: Request)` is valid TypeScript
+ * anywhere — and then failed at runtime, differently per framework: SvelteKit
+ * calls POST(event) and threw `req.json is not a function` on the first submit;
+ * TanStack Start never routes a bare POST export; a Vite SPA has no server to
+ * paste it into at all. Compiling was never the property that mattered, which is
+ * why these assert the framework's own DECLARATION, not the handler body.
+ */
+describe('the backend route matches the framework that asked for it', () => {
+  const routeOf = async (framework: string, integration = 'openrouter') => {
+    const out = await scaffold.handler({ framework, useCase: 'drop-in-chat', integration, placement: 'full-page' });
+    return (out.content as { type: string; text: string }[])[0].text.split('=== (2) BACKEND ROUTE ===')[1];
+  };
+
+  it.each([
+    ['next', 'app/api/chat/route.ts', /export async function POST\(req: Request\)/],
+    ['svelte', 'src/routes/api/chat/+server.ts', /export const POST: RequestHandler = \(\{ request \}\) => chatHandler\(request\)/],
+    ['tanstack-start', 'src/routes/api/chat.ts', /createFileRoute\('\/api\/chat'\)\(\{\n\s*server: \{ handlers: \{ POST/],
+    ['vue', 'src/server/chat.ts', /server\.middlewares\.use\('\/api\/chat'/],
+    ['react', 'src/server/chat.ts', /server\.middlewares\.use\('\/api\/chat'/],
+    ['worker', 'src/index.ts', /export default \{\n\s*fetch\(request: Request\)/],
+    ['express', 'server.ts', /app\.post\('\/api\/chat'/],
+  ])('%s declares its own route in %s', async (framework, file, declaration) => {
+    const route = await routeOf(framework);
+    expect(route, `${framework}: no file path`).toContain(file);
+    expect(route, `${framework}: not declared the way ${framework} routes`).toMatch(declaration);
+    // The portable handler is shared; the DECLARATION is what differs.
+    expect(route).toContain('async function chatHandler(request: Request)');
+  });
+
+  it('svelte does not get a bare Next-shaped POST(req)', async () => {
+    // CODE only: the emitted svelte route explains the difference in a comment,
+    // and that comment quotes the very line it is warning about.
+    const code = (await routeOf('svelte'))
+      .split('\n')
+      .filter((l) => !l.trim().startsWith('//') && !l.trim().startsWith('#'))
+      .join('\n');
+    // This exact declaration is what threw `req.json is not a function`.
+    expect(code).not.toMatch(/export async function POST\(req: Request\)/);
+  });
+
+  it('tanstack-start imports @tanstack/react-start so `server` typechecks', async () => {
+    // The augmentation that adds `server` to the route options ships with
+    // @tanstack/react-start. Nothing else in a scaffolded src/ imports it, so
+    // without this line the emitted block fails with TS2353 then TS7031.
+    expect(await routeOf('tanstack-start')).toContain("import '@tanstack/react-start'");
+  });
+
+  it('warns for EVERY framework that cannot host the route, not just react', async () => {
+    // pi ships an Express-only bridge (a Node child_process), so every other
+    // framework has to be told. The warning used to be gated on react.
+    for (const framework of ['html', 'react', 'vue', 'svelte', 'tanstack-start', 'next']) {
+      const route = await routeOf(framework, 'pi');
+      expect(route, `${framework}: no warning`).toContain('WARNING');
+      expect(route, `${framework}: warning does not name the target`).toMatch(/will NOT run/);
+    }
+  });
+
+  it('html says there is no server, and still shows the handler to deploy', async () => {
+    const route = await routeOf('html');
+    expect(route).toMatch(/static page has no server/);
+    expect(route).toContain('async function chatHandler(request: Request)');
   });
 });

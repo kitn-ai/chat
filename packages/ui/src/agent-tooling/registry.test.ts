@@ -29,9 +29,26 @@ it('every integration validates against IntegrationSchema', () => {
   }
 });
 
-it('every real (non-mock) integration ships at least one route template', () => {
+it('every real (non-mock) integration ships a route some framework can host', () => {
   for (const i of integrations.filter((i) => i.id !== 'mock')) {
-    expect(Object.keys(i.routeTemplates).length, `${i.id}: no route template`).toBeGreaterThan(0);
+    const routes = Object.keys(i.routeTemplates).length + (i.webRoute ? 1 : 0);
+    expect(routes, `${i.id}: no route template and no webRoute`).toBeGreaterThan(0);
+  }
+});
+
+/**
+ * The portable handler is what stops a framework being handed another
+ * framework's route. It has to BE portable: a `chatHandler(request)` the
+ * scaffolder can wrap, with no framework's own export in it.
+ */
+it('every webRoute declares a chatHandler and nothing framework-specific', () => {
+  for (const i of integrations.filter((i) => i.webRoute)) {
+    expect(i.webRoute, `${i.id}`).toMatch(/async function chatHandler\(request: Request\): Promise<Response>/);
+    // `export async function POST` / `export default {` belong to a framework's
+    // route declaration, which the scaffolder appends per framework.
+    expect(i.webRoute, `${i.id}: exports a framework's route from the portable body`).not.toMatch(
+      /export (async function (POST|GET)|default)/,
+    );
   }
 });
 

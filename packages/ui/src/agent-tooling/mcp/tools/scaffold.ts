@@ -1598,11 +1598,13 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
  * Build: `npm run build`; preview: `npm run preview` (or `node dist/server/server.js`).
  * Note: `npm start` does NOT exist in TanStack Start projects — use `npm run dev` / `npm run preview`.
  *
- * Backend: TanStack Start supports server-side routes via `createServerFn` in
- * `src/server/`. For a chat API, place the route in `src/server/chat.ts` and call
- * it from your route component. The emitted scaffold uses `fetch('/api/chat')` as a
- * placeholder pointing at a standard route — swap for your TanStack server function
- * or an external endpoint.
+ * Backend: the emitted front end fetches `/api/chat`, so it needs a SERVER ROUTE,
+ * not a server function. In TanStack Start that is a file route carrying a
+ * `server.handlers` block — `src/routes/api/chat.ts` with
+ * `createFileRoute('/api/chat')({ server: { handlers: { POST } } })`. Block (2)
+ * emits exactly that. This comment used to name `createServerFn` and
+ * `src/server/chat.ts`, which can never answer a `fetch('/api/chat')`: the two
+ * halves of the same scaffold contradicted each other.
  */
 function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
   const { p, emptyHint, suggestions, isMock, defaultModel, emitTools, emitToolLoop } = ctx;
@@ -1710,7 +1712,8 @@ function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
     `// Then: npm install @kitn.ai/ui`,
     `// Dev: npm run dev (port 3000)  Build: npm run build  Preview: npm run preview`,
     `// Note: there is no 'npm start' script — use 'npm run dev' or 'npm run preview'.`,
-    `// Backend: place TanStack server functions in src/server/chat.ts (createServerFn).`,
+    `// Backend: the fetch below hits /api/chat, so it needs a SERVER ROUTE, not a`,
+    `// server function: src/routes/api/chat.ts with server.handlers.POST — block (2).`,
     ``,
   ];
 
@@ -1862,8 +1865,243 @@ const RUNTIME_LABEL: Record<string, string> = {
   worker: 'Cloudflare Worker',
   fastapi: 'FastAPI (Python)',
   html: 'browser-direct (no server route)',
-  'tanstack-start': 'TanStack Start server function (Node)',
+  'tanstack-start': 'TanStack Start server route',
 };
+
+/** How the emitted framework reads in a warning: "will NOT run in ___". */
+const FRAMEWORK_LABEL: Record<string, string> = {
+  html: 'a static HTML page',
+  react: 'a Vite React SPA',
+  next: 'a Next.js app',
+  vue: 'a Vite Vue SPA',
+  svelte: 'a SvelteKit app',
+  'tanstack-start': 'a TanStack Start app',
+  express: 'an Express server',
+  worker: 'a Cloudflare Worker',
+  fastapi: 'a FastAPI service',
+};
+
+/**
+ * Why the emitted route cannot be dropped into THIS framework, one line each.
+ *
+ * The warning used to be gated on `framework === 'react'`, so the two targets
+ * with the worst failure modes got nothing: svelte compiled a Next.js handler
+ * and threw `req.json is not a function` on the first submit, and html was
+ * handed a server snippet with no server anywhere to put it in.
+ */
+const CANNOT_HOST_NOTE: Record<string, string> = {
+  html: 'a static page has no server at all — run this route on a separate server (framework: "express" | "worker" | "next") and either proxy /api/chat to it or point the fetch at its absolute URL (CORS applies).',
+  react: 'a Vite React SPA has no /api routes — add a dev-server middleware (Vite: server.middlewares in a plugin), proxy /api/chat to a separate server, or use framework: "next" | "tanstack-start".',
+  vue: 'a Vite Vue SPA has no /api routes — add a dev-server middleware (Vite: server.middlewares in a plugin), proxy /api/chat to a separate server, or use framework: "next".',
+  svelte: 'SvelteKit routes live at src/routes/api/chat/+server.ts and are called as POST(event) — `request` is a FIELD on that event, so a handler written to take a bare Request typechecks here and then throws "req.json is not a function" on the first submit.',
+  'tanstack-start': "TanStack Start routes the FILE: it needs createFileRoute('/api/chat')({ server: { handlers: { POST } } }) in src/routes/api/chat.ts. A bare `export async function POST` is never called.",
+  next: 'Next.js needs the handler exported as POST from app/api/chat/route.ts.',
+  express: 'Express hands the handler (req, res) — it does not take a Request or return a Response, so the code needs bridging.',
+  worker: 'a Worker exports `default { fetch(request) }` and reads secrets off `env`, not process.env.',
+  fastapi: 'FastAPI is Python — this route is TypeScript.',
+};
+
+// ── the portable route: one web-standard handler, wrapped per framework ───────
+
+/**
+ * How a framework DECLARES a route around the portable `chatHandler`.
+ *
+ * The body of a chat route is the same everywhere: read the request JSON, call
+ * the provider, stream the response back. Only the declaration differs. That is
+ * the whole reason every non-next framework used to be handed a Next.js
+ * handler — the catalogs only ever filled in `next` and the rest fell through
+ * to it.
+ *
+ * `before` is emitted above the integration's fragment (framework imports),
+ * `after` below it (the declaration that calls `chatHandler`). The fragment
+ * itself may open with its own imports; they all land at the top of the file.
+ */
+interface WebRouteAdapter {
+  runtime: string;
+  /** Path comment that opens the block, so the code has somewhere to go. */
+  file: string;
+  before?: string[];
+  after: string[];
+}
+
+/**
+ * The Vite dev-server middleware, which is what a plain SPA (react/vue) can
+ * actually host. Dev-only on purpose, and it says so: a Vite SPA has no
+ * production server to deploy a route to.
+ */
+function viteMiddlewareAdapter(plugin: string): WebRouteAdapter {
+  return {
+    runtime: 'Vite dev-server middleware (Node)',
+    file: 'src/server/chat.ts',
+    after: [
+      ``,
+      `// vite.config.ts imports it from here.`,
+      `export { chatHandler };`,
+      ``,
+      `// ── vite-chat-api.ts ─────────────────────────────────────────────────────────`,
+      `// A Vite SPA has no server routes, so fetch('/api/chat') has nothing to answer`,
+      `// it. This plugin mounts the SAME handler on the dev server. DEV ONLY: for`,
+      `// production, deploy the handler to a real server (Next, SvelteKit, a Worker,`,
+      `// Express) or point the fetch at one.`,
+      `import type { Plugin } from 'vite';`,
+      `import { chatHandler } from './src/server/chat';`,
+      ``,
+      `export function chatApiPlugin(): Plugin {`,
+      `  return {`,
+      `    name: 'chat-api',`,
+      `    configureServer(server) {`,
+      `      server.middlewares.use('/api/chat', async (req, res) => {`,
+      `        let body = '';`,
+      `        req.setEncoding('utf8');`,
+      `        for await (const chunk of req) body += chunk;`,
+      ``,
+      `        const response = await chatHandler(`,
+      `          new Request('http://localhost/api/chat', {`,
+      `            method: 'POST',`,
+      `            headers: { 'Content-Type': 'application/json' },`,
+      `            body,`,
+      `          }),`,
+      `        );`,
+      ``,
+      `        response.headers.forEach((value, key) => res.setHeader(key, value));`,
+      `        if (!response.body) { res.end(); return; }`,
+      ``,
+      `        // Write each chunk as it lands — buffering here defeats streaming.`,
+      `        const reader = response.body.getReader();`,
+      `        for (;;) {`,
+      `          const { value, done } = await reader.read();`,
+      `          if (done) break;`,
+      `          res.write(value);`,
+      `        }`,
+      `        res.end();`,
+      `      });`,
+      `    },`,
+      `  };`,
+      `}`,
+      ``,
+      `// ── vite.config.ts ───────────────────────────────────────────────────────────`,
+      `// import { chatApiPlugin } from './vite-chat-api';`,
+      `// export default defineConfig({ plugins: [${plugin}, chatApiPlugin()] });`,
+    ],
+  };
+}
+
+const WEB_ROUTE_ADAPTERS: Record<string, WebRouteAdapter> = {
+  next: {
+    runtime: 'Next.js route handler (Node/Edge)',
+    file: 'app/api/chat/route.ts',
+    after: [
+      ``,
+      `// Next.js App Router: the file exports the HTTP method.`,
+      `export async function POST(req: Request): Promise<Response> {`,
+      `  return chatHandler(req);`,
+      `}`,
+    ],
+  },
+  svelte: {
+    runtime: 'SvelteKit +server.ts endpoint',
+    file: 'src/routes/api/chat/+server.ts',
+    before: [`import type { RequestHandler } from './$types';`],
+    after: [
+      ``,
+      `// SvelteKit calls POST(event), NOT POST(request): \`request\` is a FIELD on the`,
+      `// event. That one line is the whole difference from the Next.js route — a`,
+      `// Next-shaped \`export async function POST(req: Request)\` typechecks here and`,
+      `// then throws "req.json is not a function" on the first submit.`,
+      `export const POST: RequestHandler = ({ request }) => chatHandler(request);`,
+    ],
+  },
+  'tanstack-start': {
+    runtime: 'TanStack Start server route',
+    file: 'src/routes/api/chat.ts',
+    before: [
+      `import { createFileRoute } from '@tanstack/react-router';`,
+      `// Side-effect import, REQUIRED: it loads the server-route type augmentation`,
+      `// (@tanstack/start-client-core) that adds \`server\` to the route options. With`,
+      `// nothing under src/ importing @tanstack/react-start the augmentation never`,
+      `// loads and the block below fails to typecheck: TS2353 on \`server\`, then`,
+      `// TS7031 on \`request\`.`,
+      `import '@tanstack/react-start';`,
+    ],
+    after: [
+      ``,
+      `// TanStack Start routes the FILE. A bare \`export async function POST\` is never`,
+      `// called — the handler has to hang off the route's \`server.handlers\`.`,
+      `export const Route = createFileRoute('/api/chat')({`,
+      `  server: { handlers: { POST: ({ request }) => chatHandler(request) } },`,
+      `});`,
+    ],
+  },
+  react: viteMiddlewareAdapter('react()'),
+  vue: viteMiddlewareAdapter('vue()'),
+  worker: {
+    runtime: 'Cloudflare Worker',
+    file: 'src/index.ts',
+    after: [
+      ``,
+      `// A Worker IS the web standard: fetch(Request) -> Response.`,
+      `export default {`,
+      `  fetch(request: Request): Promise<Response> {`,
+      `    return chatHandler(request);`,
+      `  },`,
+      `};`,
+      `// Secrets live on \`env\`, not process.env: either thread \`env\` through to the`,
+      `// handler, or set compatibility_date "2025-04-01" (or later) with nodejs_compat,`,
+      `// which populates process.env from your bindings.`,
+    ],
+  },
+  express: {
+    runtime: 'Express handler (Node)',
+    file: 'server.ts',
+    before: [`import express from 'express';`],
+    after: [
+      ``,
+      `const app = express();`,
+      `app.use(express.json());`,
+      ``,
+      `// Express is (req, res) — it neither takes a Request nor returns a Response, so`,
+      `// the web handler is bridged here. Node 18+ has Request/Response as globals.`,
+      `app.post('/api/chat', async (req, res) => {`,
+      `  const response = await chatHandler(`,
+      `    new Request('http://localhost/api/chat', {`,
+      `      method: 'POST',`,
+      `      headers: { 'Content-Type': 'application/json' },`,
+      `      body: JSON.stringify(req.body),`,
+      `    }),`,
+      `  );`,
+      ``,
+      `  response.headers.forEach((value, key) => res.setHeader(key, value));`,
+      `  if (!response.body) { res.end(); return; }`,
+      ``,
+      `  // Write each chunk as it lands — buffering here defeats streaming.`,
+      `  const reader = response.body.getReader();`,
+      `  for (;;) {`,
+      `    const { value, done } = await reader.read();`,
+      `    if (done) break;`,
+      `    res.write(value);`,
+      `  }`,
+      `  res.end();`,
+      `});`,
+      ``,
+      `app.listen(3001, () => console.log('chat api: http://localhost:3001/api/chat'));`,
+      `// The front end fetches a RELATIVE /api/chat, so proxy that path to this port`,
+      `// from your dev server, or serve both from one origin.`,
+    ],
+  },
+};
+
+/** Wrap an integration's portable handler in the target framework's declaration. */
+function webRouteFor(integration: Integration, framework: string): RouteChoice | undefined {
+  const fragment = integration.webRoute;
+  const adapter = WEB_ROUTE_ADAPTERS[framework];
+  if (!fragment || !adapter) return undefined;
+  return {
+    framework,
+    runtime: adapter.runtime,
+    exact: true,
+    template: [`// ${adapter.file}`, ...(adapter.before ?? []), ``, fragment, ...adapter.after].join('\n'),
+  };
+}
 
 /** Prefer the language's canonical server framework when there's no exact match. */
 function preferredKeyFor(integration: Integration): string[] {
@@ -1879,26 +2117,71 @@ function chooseRoute(integration: Integration, framework: string): RouteChoice |
   //    and block (1) already emits the whole browser side. Selecting one here
   //    printed a SECOND <kai-chat id="chat"> under a "BACKEND ROUTE" heading,
   //    with its own kai-submit listener, so pasting both blocks gave a duplicate
-  //    element id and two fetches per submit. Step 3 below has always skipped
+  //    element id and two fetches per submit. Step 4 below has always skipped
   //    'html' for the same reason; step 1 did not.
+  //
+  //    This is where a route that CANNOT be portable wins: a Worker on an `env`
+  //    binding, an Express bridge, a FastAPI service.
   if (framework !== 'html' && templates[framework]) {
     return { framework, template: templates[framework], runtime: RUNTIME_LABEL[framework] ?? framework, exact: true };
   }
 
-  // 2. language-canonical fallback (python → fastapi; ts → next/express/worker)
+  // 2. the portable handler, wrapped in this framework's own route declaration.
+  const portable = webRouteFor(integration, framework);
+  if (portable) return portable;
+
+  // 3. no adapter for this framework at all (html, fastapi): the framework
+  //    cannot host ANY route, so emit the portable handler under a host that can
+  //    run it standalone — with the warning from step 5. Emitting nothing here
+  //    would leave `html` with no backend code whatsoever, which is worse than a
+  //    route it has to run elsewhere: the handler is still the thing to deploy.
+  if (!WEB_ROUTE_ADAPTERS[framework] && integration.webRoute) {
+    const host = webRouteFor(integration, 'express');
+    if (host) return { ...host, exact: false };
+  }
+
+  // 4. language-canonical fallback (python → fastapi; ts → next/express/worker)
   for (const key of preferredKeyFor(integration)) {
     if (templates[key]) {
       return { framework: key, template: templates[key], runtime: RUNTIME_LABEL[key] ?? key, exact: false };
     }
   }
 
-  // 3. anything usable that isn't a pure front-end snippet
+  // 5. anything usable that isn't a pure front-end snippet
   for (const [key, template] of Object.entries(templates)) {
     if (key === 'html') continue;
     return { framework: key, template, runtime: RUNTIME_LABEL[key] ?? key, exact: false };
   }
 
   return undefined;
+}
+
+/**
+ * The honest warning for a route the target framework cannot host.
+ *
+ * Emitted for EVERY such framework. It used to be gated on
+ * `framework === 'react'`, which left the two worst cases silent: svelte, whose
+ * Next-shaped handler compiles and then throws at runtime, and html, which has
+ * no server to paste anything into.
+ */
+function cannotHostWarning(integration: Integration, route: RouteChoice, framework: string): string[] {
+  const target = FRAMEWORK_LABEL[framework] ?? `a ${framework} app`;
+  const options = [
+    `#   • ${CANNOT_HOST_NOTE[framework] ?? "port it to this framework's route convention."}`,
+    ...(integration.language === 'python'
+      ? [
+          `#   • it is a separate SERVICE either way: run it (uvicorn main:app) and proxy`,
+          `#     /api/chat to it, or point the fetch at http://localhost:8000/api/chat.`,
+        ]
+      : [`#   • or run it where it belongs: framework: "${route.framework}".`]),
+    `#   • or use integration: "mock" for a zero-config local stream (no backend, no key).`,
+  ];
+  return [
+    `#`,
+    `# WARNING: the route below is written for ${route.runtime} and will NOT run`,
+    `# as-is in ${target}.`,
+    ...options,
+  ];
 }
 
 // ── compose ───────────────────────────────────────────────────────────────────
@@ -1960,21 +2243,11 @@ function compose(
   } else if (route) {
     if (!route.exact) {
       block2Parts.push(
-        `# Note: ${integration.title} has no template for "${framework}". Emitting its native`,
+        `# Note: ${integration.title} has no route for "${framework}". Emitting its native`,
         `# ${route.runtime} route instead (matches the integration's ${integration.language} language).`,
+        // For EVERY framework that cannot host it, not just react.
+        ...cannotHostWarning(integration, route, framework),
       );
-      // Honest warning: a Next.js/server route will NOT run inside a Vite SPA.
-      if (framework === 'react') {
-        block2Parts.push(
-          `#`,
-          `# WARNING: this is a Next.js route handler — it will NOT run in a Vite SPA`,
-          `# (a Vite \`react\` app has no /api routes). To make the front-end above work, either:`,
-          `#   • use Next.js (framework: "next"), or`,
-          `#   • add a Vite dev-server middleware/proxy to a server, or`,
-          `#   • run a separate server (framework: "express" | "worker"), or`,
-          `#   • use integration: "mock" for a zero-config local stream (no backend, no key).`,
-        );
-      }
       block2Parts.push(``);
     } else {
       block2Parts.push(`# Runtime: ${route.runtime}`, ``);

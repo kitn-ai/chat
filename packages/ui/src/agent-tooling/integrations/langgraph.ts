@@ -7,9 +7,10 @@ const langgraph: Integration = {
   language: 'ts',
   streamFormat: 'openai-sse',
   envVars: ['OPENAI_API_KEY'],
-  routeTemplates: {
-    next: `// POST /api/chat: stream a compiled LangGraph agent to the browser
-import { createReactAgent } from '@langchain/langgraph/prebuilt';
+  // No per-framework templates: the handler below is web-standard, so the
+  // scaffolder wraps it in the target framework's own route declaration.
+  routeTemplates: {},
+  webRoute: `import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import { ChatOpenAI } from '@langchain/openai';
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
@@ -28,8 +29,9 @@ const agent = createReactAgent({
   tools: [getWeather],
 });
 
-export async function POST(req: Request) {
-  const { messages } = await req.json();
+// Stream a compiled LangGraph agent to the browser as OpenAI-format SSE.
+async function chatHandler(request: Request): Promise<Response> {
+  const { messages } = await request.json();
 
   const stream = await agent.stream({ messages }, { streamMode: 'messages' });
 
@@ -51,7 +53,6 @@ export async function POST(req: Request) {
 
   return new Response(body, { headers: { 'Content-Type': 'text/event-stream' } });
 }`,
-  },
   streamMapping: "Use graph.stream(input, { streamMode: 'messages' }) to get [messageChunk, metadata] tuples. Extract chunk.content (string) and forward as OpenAI-format SSE frames: data: {choices:[{delta:{content}}]}. Close with data: [DONE]. readOpenAIStream from @kitn.ai/ui/wire parses tool calls and reasoning too, but the route template forwards chunk.content only, which is text: the same message chunks carry the tool-call fragments on chunk.tool_call_chunks, so re-frame those onto delta.tool_calls to fill kai-tool.",
   runNote: 'Set OPENAI_API_KEY (or the key for your chosen model provider). Install @langchain/langgraph, @langchain/openai, @langchain/core.',
   docsSlug: 'integrations/langgraph',

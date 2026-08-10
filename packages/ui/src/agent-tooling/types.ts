@@ -14,6 +14,27 @@ export const IntegrationSchema = z.object({
   streamFormat: StreamFormat,
   envVars: z.array(z.string()).default([]),
   routeTemplates: z.record(z.string(), z.string()), // keyed by Framework value → code string
+  /**
+   * The backend as ONE web-standard handler, `(Request) => Response`, written as
+   * a complete `async function chatHandler(request: Request)` declaration.
+   *
+   * WHY THIS EXISTS. `routeTemplates` is keyed by framework, and in practice
+   * every TS integration only ever filled in `next`. Everything else fell
+   * through to it, so a svelte scaffold emitted a Next.js `export async function
+   * POST(req)` — which TYPECHECKS under SvelteKit and then throws
+   * `req.json is not a function` on the first submit, because SvelteKit calls
+   * `POST(event)`. vue and html got the same snippet with nowhere to put it.
+   *
+   * The handler BODY is portable; only the few lines that declare the route
+   * differ per framework. So integrations write the body once here and the
+   * scaffolder wraps it (see `WEB_ROUTE_ADAPTERS` in mcp/tools/scaffold.ts).
+   * `routeTemplates` stays for routes that genuinely cannot be expressed this
+   * way: a Worker using an `env` binding, an Express `(req, res)` bridge, a
+   * FastAPI service.
+   *
+   * An exact `routeTemplates[framework]` still wins over this.
+   */
+  webRoute: z.string().optional(),
   streamMapping: z.string(),                        // prose: how the stream maps to messages
   runNote: z.string(),
   docsSlug: z.string(),
