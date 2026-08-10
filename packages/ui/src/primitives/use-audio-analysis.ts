@@ -13,17 +13,20 @@ export interface AudioAnalysisOptions {
    */
   bands?: number | (() => number);
   /**
-   * Low bin index of the pass window. NOT a frequency. Default 4 (deliberately
-   * NOT upstream LiveKit's 100 -- see `hiPass` and DEFAULTS below).
+   * Low bin index of the pass window. NOT a frequency. Default 100 --
+   * upstream LiveKit's component value (see DEFAULTS below).
    */
   loPass?: number;
   /**
-   * High bin index of the pass window. NOT a frequency. Default 120
-   * (deliberately NOT upstream LiveKit's 200 -- see DEFAULTS below).
+   * High bin index of the pass window. NOT a frequency. Default 200 --
+   * upstream LiveKit's component value (see DEFAULTS below).
    *
-   * Legitimately input-dependent, unlike `fftSize`/`smoothingTimeConstant`
-   * above: someone visualizing music or a synthesized-speech agent may want
-   * a wider or higher window than a raw human microphone needs.
+   * Legitimately input-dependent, unlike `fftSize`/`smoothingTimeConstant`:
+   * the default window expects PROCESSED speech (an agent's TTS track, or a
+   * mic captured with AGC/noise suppression on). For raw, unprocessed input
+   * -- an un-gained recording, music, ambience -- a wide low window such as
+   * `loPass: 4, hiPass: 120` reads energy the default deliberately gates
+   * out; see DEFAULTS below for the trade both ways.
    */
   hiPass?: number;
   /** Minimum ms between updates. Default 32 (about 30fps). */
@@ -31,35 +34,42 @@ export interface AudioAnalysisOptions {
 }
 
 /**
- * DELIBERATE DIVERGENCE FROM UPSTREAM LIVEKIT -- if you're diffing this file
- * against `useMultibandTrackVolume`, its default window (bins 100-200) was
- * not carried over here, and that is intentional, not a missed sync.
+ * The default window is upstream LiveKit's COMPONENT window, bins 100-200:
+ * every shipped agents-ui visualizer passes `{ loPass: 100, hiPass: 200 }`
+ * (agent-audio-visualizer-bar.tsx:181-183, grid.tsx:279-281,
+ * radial.tsx:142-144 -- radial's loPass was 80 until their PR #1265). Their
+ * HOOK's own default is 100-600 (useTrackVolume.ts:95-101), but no shipped
+ * component uses it, so parity means matching the components.
  *
- * At this hook's fftSize of 2048 and a 44.1kHz sample rate, each bin is
- * 21.5Hz. Upstream's 100-200 is ~2.15-4.3kHz: sibilance range. That suits
- * upstream's actual input, an AI agent's synthesized speech played back over
- * WebRTC, which runs louder and broader-band than a live human voice. Ours is
- * a raw microphone: normal speech puts its energy in the fundamental
- * (85-255Hz) and the first two formants (300-2500Hz), almost entirely below
- * 2.15kHz, so upstream's window was silently starving a real mic input.
+ * At fftSize 2048 that is ~2.34-4.69kHz at 48kHz (2.15-4.31kHz at 44.1kHz):
+ * the sibilance band, ABOVE where a room's noise floor lives. Everything at
+ * or below -100dB normalizes to exactly 0 (see normalizeDb), and a real
+ * room's tone measures ~17dB BELOW that floor across this window while
+ * sitting ~27dB ABOVE it across 86-258Hz (noise-floor diagnosis, table A).
+ * The narrow high window plus the hard -100dB floor IS upstream's noise
+ * gate -- there is no explicit gate anywhere in their pipeline -- and it is
+ * what keeps their idle bars perfectly still where a wide window shows the
+ * room breathing.
  *
- * Measured on a real recorded clip ("this is a test, testing one two three,
- * hello world", 318 frames through the actual reduceToBands/normalizeDb
- * pipeline in a real AudioContext, full methodology and sweep in this task's
- * report): upstream's 100-200 read all-zero bands on 54.1% of frames, mean
- * 0.136, tilt -0.013 (essentially flat -- no low-to-high falloff at all).
- * Bins 4-120 (86Hz-2.6kHz, covering the fundamental plus F1 and F2, starting
- * at bin 4 rather than 0 to skip DC and low rumble) read all-zero only on the
- * clip's genuine leading silence (0.9% of frames), mean 0.234, tilt +0.365. A
- * sweep of loPass in [0,2,4,6,8,10,16] x hiPass in [60..300] against the same
- * clip confirmed 4-120 sits at the top of the useful range: narrower windows
- * score a marginally higher tilt on this one clip but start clipping off F2,
- * and wider ones dilute the tilt without adding real signal.
+ * The trade, measured on a real un-processed recording ("this is a test,
+ * testing one two three, hello world"): through 100-200, quiet
+ * natural-volume speech frames read all-zero (54% of that clip's frames;
+ * consonants and sibilance still register on the louder ones). Upstream
+ * lives with that because their input is conditioned before analysis -- an
+ * agent's loud TTS track, or a local mic captured with autoGainControl +
+ * noiseSuppression + echoCancellation + voiceIsolation (livekit-client
+ * defaults.ts:27-30) that lifts speech toward target level. Ours follows:
+ * the mic stories request the same constraint set. For RAW input where that
+ * trade reads wrong (un-gained recordings, music), `loPass: 4, hiPass: 120`
+ * (86Hz-2.6kHz: fundamental + first two formants) remains the measured
+ * opt-in -- it read those same quiet frames at mean 0.234 with only true
+ * silence at zero -- at the documented cost of visualizing the room's noise
+ * floor on the centre elements (the defect that reverted this default).
  */
-const DEFAULTS = {
+export const DEFAULTS = {
   bands: 5,
-  loPass: 4,
-  hiPass: 120,
+  loPass: 100,
+  hiPass: 200,
   updateInterval: 32,
 } as const;
 
@@ -73,6 +83,11 @@ const DEFAULTS = {
  * do: one value silently applied to both a fast reduction and a slow one.
  * Hard-coding removes the only way a caller (or a future edit here) could
  * reintroduce that.
+ *
+ * These analyser shapes (and DEFAULTS above) are EXPORTED as the kit's
+ * analysis-settings contract: external instrumentation -- the
+ * examples/internal/livekit-parity probe -- imports them instead of
+ * restating the numbers, so a change here propagates instead of drifting.
  */
 
 /**
@@ -83,21 +98,38 @@ const DEFAULTS = {
  * sample interval) is what makes bars ease back to rest after speech stops
  * instead of snapping.
  */
-const BANDS_ANALYSER = {
+export const BANDS_ANALYSER = {
   fftSize: 2048,
   smoothingTimeConstant: 0.8,
 } as const;
 
 /**
- * Matches upstream's `useTrackVolume`, which drives the shader variants:
- * `{ fftSize: 512, smoothingTimeConstant: 0.55 }`. Faster decay (roughly
- * 123ms to 10% of peak) keeps the shaders' reactivity within the ~33ms lag
- * the aurora variant was tuned against; the bands' slower 0.8 here would
- * make the shaders visibly sluggish.
+ * Matches upstream's `useTrackVolume` as the wave/aura hooks call it:
+ * `{ fftSize: 512, smoothingTimeConstant: 0.55 }`
+ * (use-agent-audio-visualizer-wave.ts:55-56, aura.ts:62-63). Faster decay
+ * (roughly 123ms to 10% of peak) keeps the shaders' reactivity within the
+ * ~33ms lag the aurora variant was tuned against; the bands' slower 0.8
+ * here would make the shaders visibly sluggish. Upstream reaches the same
+ * two-analyser structure differently -- two hooks, each with its own
+ * analyser (and its own AudioContext) -- but the constants match ours
+ * exactly.
+ *
+ * `minDecibels`/`maxDecibels` are upstream's `createAudioAnalyser` defaults
+ * (livekit-client src/room/utils.ts:548-553), NOT the Web Audio spec's
+ * -100/-30. They only rescale getByteFrequencyData -- this analyser's whole
+ * output -- mapping the byte range over a 20dB window that saturates at
+ * -80dB. That is what makes upstream's volume scalar run hot (speech
+ * ~0.5-0.9) and their wave/aura feel alive; on the spec scale the same
+ * speech read ~3x colder here (0.31 vs 0.80, noise-floor diagnosis,
+ * addendum 1), leaving our shaders under-reacting. The BANDS analyser gets
+ * no such pair: it is read with getFloatFrequencyData, where these two
+ * properties have no effect at all.
  */
-const VOLUME_ANALYSER = {
+export const VOLUME_ANALYSER = {
   fftSize: 512,
   smoothingTimeConstant: 0.55,
+  minDecibels: -100,
+  maxDecibels: -80,
 } as const;
 
 /** `bands` accepts a plain number or a live accessor; read whichever was given. */
@@ -245,6 +277,9 @@ export function useAudioAnalysis(
     const volumeAnalyser = ctx.createAnalyser();
     volumeAnalyser.fftSize = VOLUME_ANALYSER.fftSize;
     volumeAnalyser.smoothingTimeConstant = VOLUME_ANALYSER.smoothingTimeConstant;
+    // Byte-scale rescale, volume analyser ONLY -- see VOLUME_ANALYSER above.
+    volumeAnalyser.minDecibels = VOLUME_ANALYSER.minDecibels;
+    volumeAnalyser.maxDecibels = VOLUME_ANALYSER.maxDecibels;
 
     node.connect(bandsAnalyser);
     node.connect(volumeAnalyser);

@@ -44,21 +44,35 @@ describe('reduceToBands', () => {
     const freq = new Float32Array(1024).fill(-Infinity);
     expect(reduceToBands(freq, 3, 100, 200)).toEqual([0, 0, 0]);
   });
-  it('splits geometrically, not linearly, so each band sees its own slice', () => {
-    // Geometric boundaries for 2 bands over [100, 400]:
-    // 100 * (400/100)^(i/2) for i=0,1,2 -> 100, 200, 400. A linear split of
-    // the same 300-bin window would instead put the boundary at 250
-    // (100 + 300/2): loading exactly bins 100..199 loud and leaving the rest
-    // silent lands entirely inside band 0 under the geometric split, but
-    // would spill 50 quiet bins into band 0 under a linear one -- this is
-    // the behavior the "splits proportionally" version of this test (before
-    // the log-spacing change) could not have distinguished.
+  it('splits linear-proportionally -- upstream LiveKit\'s distribution, not the former geometric spacing', () => {
+    // Upstream's useMultibandTrackVolume (useTrackVolume.ts:141-153, the
+    // proportional chunking from their PR #1265): every band gets
+    // floor(total/bands)-ish CONSECUTIVE bins of equal width. For 2 bands
+    // over [100, 400] the boundary sits at bin 250 (100 + 300/2). Loading
+    // exactly bins 100..199 loud leaves band 0 with 100 loud + 50 silent
+    // bins -> two thirds of normalizeDb(-10) -- while the former GEOMETRIC
+    // split (boundary at 100 * (400/100)^(1/2) = 200) put all 100 loud bins
+    // alone in band 0, reading the full normalizeDb(-10). The exact
+    // two-thirds value is what tells the two apart.
     const freq = new Float32Array(1024).fill(-Infinity);
     for (let i = 100; i < 200; i++) freq[i] = -10;
     const [lo, hi] = reduceToBands(freq, 2, 100, 400);
-    expect(lo).toBeGreaterThan(hi as number);
-    expect(lo).toBeCloseTo(normalizeDb(-10), 6);
+    expect(lo).toBeCloseTo((100 * normalizeDb(-10)) / 150, 6);
     expect(hi).toBeCloseTo(0, 6);
+  });
+
+  it('gives every band an equal consecutive slice over the default window: 100 bins / 5 bands = 20 bins each', () => {
+    // Fill only the FIRST 20-bin slice (bins 100-119) loud. Linear
+    // proportional: band 0 reads full normalizeDb(-10), bands 1-4 exactly 0.
+    // The former geometric split would have put its band-0/1 edge at bin
+    // 115 (100 * 2^(1/5)), bleeding bins 115-119 into band 1 -- band 1
+    // reading ~0.28, not 0. That non-zero bleed is what this test fails on
+    // against the geometric implementation.
+    const freq = new Float32Array(1024).fill(-Infinity);
+    for (let i = 100; i < 120; i++) freq[i] = -10;
+    const bands = reduceToBands(freq, 5, 100, 200);
+    expect(bands[0]).toBeCloseTo(normalizeDb(-10), 6);
+    expect(bands.slice(1)).toEqual([0, 0, 0, 0]);
   });
   it('yields zeros when the pass window is empty', () => {
     const freq = new Float32Array(1024).fill(-50);
@@ -87,13 +101,13 @@ describe('reduceToBands against a real recorded voice clip', () => {
   // smoothingTimeConstant 0.8, matching useAudioAnalysis's bands analyser)
   // decoding a real recorded clip: "this is a test, testing one two three,
   // hello world". Values are unmodified except rounded to 1 decimal and
-  // trimmed to bins 0-199 (past both the old default hiPass of 200 and the
-  // new one of 120, so the same frame can be checked against both windows
-  // below). Full capture and sweep methodology, and the numbers that picked
-  // the (4, 120) default, are in this task's report
-  // (.superpowers/sdd/2026-08-07-audio-visualizers/task-3-report.md). This
-  // is the first test in this epic backed by real audio, not a synthetic
-  // stub.
+  // trimmed to bins 0-199 -- exactly covering the default window's hiPass
+  // of 200 AND the raw-input opt-in's 120, so the same frame is checked
+  // against both windows below. The capture methodology is in
+  // .superpowers/sdd/2026-08-07-audio-visualizers/task-3-report.md; the
+  // window default's history (wide 4-120 for raw mics, reverted to
+  // upstream's 100-200 after the noise-floor diagnosis) lives in
+  // use-audio-analysis.ts's DEFAULTS docstring.
 
   // t=0.04s: before the clip's audio had reached the analyser. Every bin
   // reads -Infinity in the raw capture -- confirmed, not assumed.
@@ -155,26 +169,41 @@ describe('reduceToBands against a real recorded voice clip', () => {
     -123.5, -124, -125, -124.1, -123.9,
   ]);
 
-  it('reads genuine silence as all-zero bands, with the current default window', () => {
-    expect(reduceToBands(SILENT_FRAME, 5, 4, 120)).toEqual([0, 0, 0, 0, 0]);
+  it('reads genuine silence as all-zero bands, with the default window (100, 200)', () => {
+    expect(reduceToBands(SILENT_FRAME, 5, 100, 200)).toEqual([0, 0, 0, 0, 0]);
   });
 
-  it('produces non-zero, tilted bands from a loud real speech frame, with the current default window (4, 120)', () => {
-    const bands = reduceToBands(SPEECH_LOUD_FRAME, 5, 4, 120);
+  it('produces non-zero bands on every band from a loud real speech frame, with the default window (100, 200)', () => {
+    // Consonants and sibilance put real energy across 2-4kHz on a loud
+    // frame: every 20-bin chunk of this one sits well above the -100dB
+    // floor. NO tilt assertion here on purpose: through the sibilance
+    // window the loudest band varies frame to frame (this frame peaks
+    // around bins 160-180, band 3) -- the low-to-high falloff that made
+    // band 0 reliably loudest was a property of the wide 4-120 window, not
+    // of speech through this one.
+    const bands = reduceToBands(SPEECH_LOUD_FRAME, 5, 100, 200);
     bands.forEach((v) => expect(v).toBeGreaterThan(0));
-    // Speech energy falls off with frequency: the lowest band should read
-    // louder than the highest -- a visible spectral tilt, not a flat or
-    // inverted profile.
-    expect(bands[0]).toBeGreaterThan(bands[bands.length - 1] as number);
   });
 
-  it('produces non-zero bands from a real, ordinarily-voiced speech frame, with the current default window (4, 120)', () => {
-    // Not every band lights up at a natural, unshouted volume -- these
-    // frames' higher bands genuinely have no energy above the noise floor
-    // (they normalize to exactly 0, verified). The bug this test guards is
-    // "no all-zero FRAME", not "no zero band": a frame with some bands at 0
-    // and others carrying real signal is a normal, correctly-behaving
-    // reading, not a regression.
+  it('reads quiet natural-volume speech as total silence through the default window: the noise gate, and its cost, pinned exactly', () => {
+    // These two frames are him actually talking, unshouted. Through bins
+    // 100-200 every bin sits at or below the -100dB floor, so the DEFAULT
+    // window reads them as all-zero -- the same mechanism that keeps idle
+    // room tone perfectly still (the -100dB floor + the high narrow window
+    // IS upstream's noise gate; there is no explicit gate in the pipeline).
+    // This is the documented trade of matching upstream: raw, un-gained
+    // input needs either processed capture (AGC and friends -- what the mic
+    // stories request) or the wide opt-in window below.
+    for (const frame of [SPEECH_QUIET_FRAME_A, SPEECH_QUIET_FRAME_B]) {
+      expect(reduceToBands(frame, 5, 100, 200)).toEqual([0, 0, 0, 0, 0]);
+    }
+  });
+
+  it('still reads those same quiet frames through the documented raw-input opt-in window (4, 120)', () => {
+    // The opt-in's whole justification: the fundamental + first two
+    // formants carry real energy at natural volume even when 2-4kHz has
+    // none. Some higher bands legitimately read 0 here -- the guard is "no
+    // all-zero FRAME through the opt-in", not "no zero band".
     for (const frame of [SPEECH_QUIET_FRAME_A, SPEECH_QUIET_FRAME_B]) {
       const bands = reduceToBands(frame, 5, 4, 120);
       expect(bands.some((v) => v > 0)).toBe(true);
@@ -182,41 +211,21 @@ describe('reduceToBands against a real recorded voice clip', () => {
     }
   });
 
-  it('demonstrates the regression directly: the OLD default window (100, 200) reads these exact same real speech frames as total silence', () => {
-    for (const frame of [SPEECH_QUIET_FRAME_A, SPEECH_QUIET_FRAME_B]) {
-      expect(reduceToBands(frame, 5, 100, 200)).toEqual([0, 0, 0, 0, 0]);
-    }
-  });
-
   // The full pipeline a variant actually sees: request ceil(n/2) bands, then
-  // mirror them centre-out to n visual elements. Proves what the task
-  // report's real-clip measurements describe in prose: the centre-out shape
-  // is genuinely symmetric on real speech, and the outermost elements move
-  // (log spacing's whole purpose) rather than sitting pinned at 0 like they
-  // did under the old linear split -- verified on the exact same quiet,
-  // natural-volume frames that used to read some bands as literal zero.
-  it('combined with mirrorBandsCenterOut: real speech maps to a symmetric, centre-out shape whose outer elements genuinely move', () => {
+  // mirror them centre-out to n visual elements. Symmetry is the mirror's
+  // contract and survives any window; which band lands loudest does NOT --
+  // through the sibilance window the per-frame peak moves around, so this
+  // asserts shape symmetry and liveness, not a centre-max ordering (that
+  // ordering is a time-averaged property of real speech, checked against
+  // the baked fixture and the e2e band-shape spec, not per frame).
+  it('combined with mirrorBandsCenterOut: a loud real speech frame maps to a symmetric, fully lit centre-out shape', () => {
     // n=8 visual elements -> ceil(8/2)=4 half-bands.
-    const shapes = [SPEECH_LOUD_FRAME, SPEECH_QUIET_FRAME_A, SPEECH_QUIET_FRAME_B].map((frame) => {
-      const half = reduceToBands(frame, 4, 4, 120);
-      return mirrorBandsCenterOut(half, 8);
-    });
-
-    for (const shape of shapes) {
-      // Symmetric about the centre: the whole point of the mirror.
-      for (let i = 0; i < 4; i++) expect(shape[i]).toBe(shape[7 - i]);
-      // Not a flat line: the centre reads louder than the edges, real
-      // spectral tilt surviving the mirror, not erased by it.
-      expect(shape[3] as number).toBeGreaterThan(shape[0] as number);
-    }
-
-    // The outermost element actually varies frame to frame, in both
-    // directions -- not frozen at one value, and specifically not pinned at
-    // 0 through real, ordinarily-voiced speech the way the pre-log-spacing
-    // pipeline was.
-    const outerValues = shapes.map((s) => s[0] as number);
-    outerValues.forEach((v) => expect(v).toBeGreaterThan(0));
-    expect(new Set(outerValues).size).toBe(outerValues.length);
+    const half = reduceToBands(SPEECH_LOUD_FRAME, 4, 100, 200);
+    const shape = mirrorBandsCenterOut(half, 8);
+    for (let i = 0; i < 4; i++) expect(shape[i]).toBe(shape[7 - i]);
+    shape.forEach((v) => expect(v).toBeGreaterThan(0));
+    // Not a flat line either: the mirror preserves real per-band contrast.
+    expect(new Set(shape.map((v) => v.toFixed(6))).size).toBeGreaterThan(1);
   });
 });
 

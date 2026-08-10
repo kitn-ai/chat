@@ -99,7 +99,19 @@ Only one source wins. Setting `bands` short-circuits Web Audio entirely, so `str
   mic.addEventListener('kai-recording-change', async (e) => {
     viz.state = e.detail.recording ? 'speaking' : 'idle';
     if (e.detail.recording) {
-      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Request processed capture, not bare `audio: true`. The default
+      // analysis window expects gain-controlled speech (it reads the
+      // 2-4kHz band and gates the room's noise floor out); these are the
+      // same capture constraints LiveKit's own client applies to local
+      // mic tracks.
+      micStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          voiceIsolation: true,
+        },
+      });
       viz.stream = micStream;
     } else {
       viz.stream = undefined;

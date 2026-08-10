@@ -2,10 +2,12 @@
  * Pure reductions from AnalyserNode output to the numbers a visualizer draws.
  *
  * Ported from livekit/components-js `packages/react/src/hooks/useTrackVolume.ts`
- * (Apache License 2.0). The dB normalization curve is carried over verbatim
- * so our output matches theirs frame for frame. The band split is NOT: see
- * `reduceToBands` below for why it is deliberately geometric, not upstream's
- * proportional/linear split.
+ * (Apache License 2.0). Both the dB normalization curve AND the band split
+ * are carried over so our output matches theirs frame for frame: the split
+ * is upstream's linear-proportional chunking (their PR #1265). An interim
+ * revision here spaced the buckets geometrically to serve a wide raw-mic
+ * window; both reverted together -- see `reduceToBands` below and the
+ * DEFAULTS docstring in use-audio-analysis.ts for the full story.
  */
 
 /** dB floor of the normalization curve. Below this reads as silence. */
@@ -31,20 +33,25 @@ export function normalizeDb(value: number): number {
  * `loPass` / `hiPass` are BIN INDICES relative to `fftSize`, not frequencies.
  * Upstream's naming is misleading; the behavior is a plain array slice.
  *
- * DELIBERATE DIVERGENCE FROM UPSTREAM: bucket edges are spaced
- * GEOMETRICALLY across `[loPass, hiPass]`, not linearly (upstream's plain
- * proportional split, `loPass + i * width / bands`). A real voice's energy
- * falls off sharply with frequency (see the loPass/hiPass docs in
- * use-audio-analysis.ts), so equal-WIDTH linear buckets leave the higher,
- * already-quiet buckets almost no bins to average -- often reading a flat 0
- * through ordinary speech, verified on a real recorded clip (see this
- * primitive's task report). Geometric spacing gives band 0 a narrow slice
- * near `loPass` and widens every bucket after it, so the outer buckets have
- * enough real bins to move instead of sitting dead. This does NOT flatten
- * the tilt -- band 0 is still, correctly, usually the loudest -- it only
- * keeps the quieter bands alive instead of pinned at zero. Combine with
- * `mirrorBandsCenterOut`/`mirrorBandsAroundRing` below to turn that tilt
- * into a centre-out shape instead of a one-directional ramp.
+ * Bucket edges are LINEAR-PROPORTIONAL across `[loPass, hiPass]` -- upstream
+ * LiveKit's own distribution (`useMultibandTrackVolume`, useTrackVolume.ts
+ * lines 141-153, rewritten to proportional chunking by their PR #1265): each
+ * band averages an equal consecutive run of bins, `floor(i * total / bands)`
+ * to `floor((i + 1) * total / bands)`, and a run that comes out empty reads
+ * 0 (their `chunkLength === 0` branch). With the default window's 100 bins
+ * and 5 bands, that is 20 bins averaged per band -- the averaging itself is
+ * part of upstream's idle stillness, diluting any single flickering bin
+ * 20:1 (noise-floor diagnosis, table B).
+ *
+ * An interim revision spaced these buckets geometrically so that a wide
+ * raw-microphone window (bins 4-120) kept its upper buckets alive. That
+ * concentrated the noisiest few low bins into band 0 undiluted, which the
+ * centre-out mirror below then promoted to the CENTRE element -- the
+ * measured core of the "white noise when the mic is on" defect (diagnosis
+ * table B: geometric band 0 idled at 0.52 on real room tone where this
+ * split reads 0.32 over the same wide window, and exactly 0 over the
+ * default one). Reverted to upstream's split when the default window
+ * reverted; the mirror stays, it is orthogonal.
  */
 export function reduceToBands(
   freq: Float32Array,
@@ -52,28 +59,22 @@ export function reduceToBands(
   loPass: number,
   hiPass: number,
 ): number[] {
-  const lo = Math.max(0, loPass);
-  const hi = Math.max(0, hiPass);
-  if (hi <= lo) return new Array(bands).fill(0);
-
-  // A geometric series needs a positive base: bin 0 (DC) cannot anchor a
-  // ratio. loPass 0 is still a legal public option (the default is 4, not
-  // 0), so this clamps the SERIES' base up to bin 1 rather than producing
-  // NaN -- the bucket boundaries start one bin later than asked, nothing
-  // else changes.
-  const base = Math.max(1, lo);
+  // `slice` clamps both ends into the buffer and yields an empty window when
+  // hiPass <= loPass -- every bucket then reads 0 below, no special case.
+  const window = freq.slice(Math.max(0, loPass), Math.max(0, hiPass));
+  const total = window.length;
   const out: number[] = [];
 
   for (let i = 0; i < bands; i++) {
-    const start = Math.round(base * Math.pow(hi / base, i / bands));
-    const end = Math.round(base * Math.pow(hi / base, (i + 1) / bands));
-    // Clamp into the buffer and force at least one bin per bucket (a bucket
-    // that rounds to zero width would otherwise divide by zero).
-    const a = Math.min(start, freq.length - 1);
-    const z = Math.max(a + 1, Math.min(end, freq.length));
+    const start = Math.floor((i * total) / bands);
+    const end = Math.floor(((i + 1) * total) / bands);
+    if (end <= start) {
+      out.push(0);
+      continue;
+    }
     let sum = 0;
-    for (let j = a; j < z; j++) sum += normalizeDb(freq[j] as number);
-    out.push(sum / (z - a));
+    for (let j = start; j < end; j++) sum += normalizeDb(window[j] as number);
+    out.push(sum / (end - start));
   }
 
   return out;

@@ -37,6 +37,11 @@ let rawSignalLevel = 1;
 class FakeAnalyser {
   fftSize = 2048;
   smoothingTimeConstant = 0.8;
+  // Web Audio spec defaults. They only affect getByteFrequencyData scaling
+  // on a real AnalyserNode; declared here so a test can assert which
+  // analyser the hook re-scales (the volume one) and which it leaves alone.
+  minDecibels = -100;
+  maxDecibels = -30;
   get frequencyBinCount() { return this.fftSize / 2; }
 
   /**
@@ -312,12 +317,18 @@ describe('useAudioAnalysis', () => {
   // FakeAnalyser fills its whole buffer uniformly (see above), so no test
   // above this one can actually tell whether the DEFAULT loPass/hiPass window
   // wired into reduceToBands is right: slicing any range out of a uniform
-  // buffer produces the same output. audio-bands.test.ts separately proves
-  // (4, 120) is the right window against real captured audio, but that test
-  // calls reduceToBands directly -- it can't catch a typo in this hook's own
+  // buffer produces the same output. audio-bands.test.ts separately covers
+  // what each window reads on real captured audio, but that test calls
+  // reduceToBands directly -- it can't catch a typo in this hook's own
   // DEFAULTS. This closes that gap by checking what this hook actually calls
-  // reduceToBands with.
-  it('wires the default loPass/hiPass window (4, 120) into reduceToBands, not the old upstream-copied (100, 200)', async () => {
+  // reduceToBands with: upstream LiveKit's component window, bins 100-200
+  // (agent-audio-visualizer-bar.tsx:181-183 and its grid/radial siblings all
+  // pass { loPass: 100, hiPass: 200 }; the hook-level 100-600 default in
+  // useTrackVolume.ts:95-101 is deliberately NOT what we match, since no
+  // shipped component uses it). The former wide default (4, 120) remains a
+  // documented opt-in for raw, unprocessed input -- see DEFAULTS in
+  // use-audio-analysis.ts.
+  it('wires the default loPass/hiPass window (100, 200) into reduceToBands -- upstream LiveKit component parity', async () => {
     const spy = vi.spyOn(audioBandsModule, 'reduceToBands');
     try {
       await createRoot(async (dispose) => {
@@ -326,13 +337,38 @@ describe('useAudioAnalysis', () => {
         flushFrame();
         expect(spy).toHaveBeenCalled();
         const [, , loPass, hiPass] = spy.mock.calls[0]!;
-        expect(loPass).toBe(4);
-        expect(hiPass).toBe(120);
+        expect(loPass).toBe(100);
+        expect(hiPass).toBe(200);
         dispose();
       });
     } finally {
       spy.mockRestore();
     }
+  });
+
+  // Upstream's createAudioAnalyser (livekit-client src/room/utils.ts:548-553)
+  // defaults every analyser to minDecibels -100 / maxDecibels -80, and the
+  // wave/aura volume hooks inherit that (they only override fftSize 512 /
+  // smoothing 0.55 -- use-agent-audio-visualizer-wave.ts:55-56, aura.ts:62-63).
+  // Those two properties only rescale getByteFrequencyData -- the VOLUME
+  // path. On the spec-default -100..-30 scale the same speech reads ~3x
+  // colder (measured in the noise-floor diagnosis: speech 0.31 vs 0.80),
+  // which is what left our wave/aurora under-reacting. The bands analyser
+  // reads floats, where min/maxDecibels have no effect -- assert it stays at
+  // spec defaults so nobody "helpfully" mirrors the setting onto it and
+  // implies it does something there.
+  it('re-scales the VOLUME analyser to upstream\'s byte range (minDecibels -100, maxDecibels -80) and leaves the bands analyser at spec defaults', async () => {
+    await createRoot(async (dispose) => {
+      useAudioAnalysis(() => fakeStream(), { bands: 3 });
+      await Promise.resolve();
+      // Creation order in the hook: bands first, then volume.
+      const [bandsAnalyser, volumeAnalyser] = created.analysers;
+      expect(volumeAnalyser!.minDecibels).toBe(-100);
+      expect(volumeAnalyser!.maxDecibels).toBe(-80);
+      expect(bandsAnalyser!.minDecibels).toBe(-100);
+      expect(bandsAnalyser!.maxDecibels).toBe(-30);
+      dispose();
+    });
   });
 
   // A `MediaStream` has no equivalent of createMediaElementSource's throw on
