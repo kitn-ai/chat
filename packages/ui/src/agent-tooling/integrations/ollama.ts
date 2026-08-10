@@ -28,8 +28,35 @@ const ollama: Integration = {
     body: JSON.stringify({ model: 'llama3.2', messages, tools, stream: true }),
   });
 
+  // FORWARD THE STATUS. Returning 200 for a failed upstream is how "ollama is
+  // not running" or "that model was never pulled" turns into silence: the error
+  // body is JSON, it goes out labelled text/event-stream, the SSE reader finds
+  // no frame, and the turn resolves empty with nothing logged and no bubble.
+  if (!upstream.ok) {
+    return new Response(await upstream.text(), {
+      status: upstream.status,
+      headers: {
+        'Content-Type': upstream.headers.get('content-type') ?? 'application/json',
+      },
+    });
+  }
+  if (!upstream.body) {
+    return new Response(JSON.stringify({ error: { message: 'Ollama returned no body to stream.' } }), {
+      status: 502,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   // Ollama returns OpenAI-format SSE. Stream it straight to the browser.
-  return new Response(upstream.body, { headers: { 'Content-Type': 'text/event-stream' } });
+  return new Response(upstream.body, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      // no-transform stops a proxy buffering the stream into one blob.
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+    },
+  });
 }`,
   streamMapping:
     "Ollama's OpenAI-compatible endpoint (http://localhost:11434/v1/chat/completions) returns OpenAI-format SSE. Pipe upstream.body straight to the browser; readOpenAIStream from @kitn.ai/ui/wire parses it, including tool calls and reasoning. No API key needed; pass any string if a client requires one (Ollama ignores it).",

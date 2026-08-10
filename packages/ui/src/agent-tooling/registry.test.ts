@@ -52,6 +52,26 @@ it('every webRoute declares a chatHandler and nothing framework-specific', () =>
   }
 });
 
+/**
+ * DEFECT (2): a route that drops the upstream status turns a 401 — the no-key
+ * first run — into a 200 carrying a JSON error body labelled text/event-stream.
+ * The browser then sees an empty stream: no bubble, no console output. Every
+ * route that proxies an upstream Response must forward its status.
+ */
+it('every route that proxies an upstream forwards its status', () => {
+  const bodies = integrations.flatMap((i) =>
+    [...Object.entries(i.routeTemplates), ...(i.webRoute ? [['webRoute', i.webRoute] as const] : [])].map(
+      ([key, code]) => ({ label: `${i.id}.${key}`, code }),
+    ),
+  );
+  for (const { label, code } of bodies) {
+    if (!/upstream\.ok/.test(code)) continue;
+    expect(code, `${label}: checks upstream.ok but never forwards upstream.status`).toMatch(
+      /status: upstream\.status/,
+    );
+  }
+});
+
 it('getIntegration looks up by id', () => {
   expect(getIntegration('ollama')?.language).toBe('ts');
 });

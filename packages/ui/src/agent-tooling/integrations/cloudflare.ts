@@ -19,10 +19,21 @@ export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const { messages } = await req.json();
 
-    const nativeStream = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
-      messages,
-      stream: true,
-    });
+    let nativeStream: ReadableStream<Uint8Array>;
+    try {
+      nativeStream = (await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+        messages,
+        stream: true,
+      })) as ReadableStream<Uint8Array>;
+    } catch (err) {
+      // A REAL status, before a byte is streamed. Returning 200 here would send
+      // a JSON error labelled text/event-stream: the reader finds no frame and
+      // the turn resolves empty, with nothing logged and no bubble.
+      return new Response(
+        JSON.stringify({ error: { message: err instanceof Error ? err.message : 'Workers AI call failed' } }),
+        { status: 502, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
 
     // Re-frame Cloudflare-native SSE → OpenAI-format SSE
     const { readable, writable } = new TransformStream();
@@ -31,32 +42,48 @@ export default {
     const decoder = new TextDecoder();
 
     (async () => {
-      const reader = (nativeStream as ReadableStream<Uint8Array>).getReader();
+      const reader = nativeStream.getReader();
       let buffer = '';
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\\n');
-        buffer = lines.pop() ?? '';
-        for (const line of lines) {
-          const s = line.trim();
-          if (!s.startsWith('data:')) continue;
-          const payload = s.slice(5).trim();
-          if (payload === '[DONE]') continue;
-          try {
-            const { response } = JSON.parse(payload) as { response?: string };
-            if (response == null) continue;
-            const openaiChunk = JSON.stringify({ choices: [{ delta: { content: response } }] });
-            await writer.write(encoder.encode(\`data: \${openaiChunk}\\n\\n\`));
-          } catch { /* skip malformed lines */ }
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\\n');
+          buffer = lines.pop() ?? '';
+          for (const line of lines) {
+            const s = line.trim();
+            if (!s.startsWith('data:')) continue;
+            const payload = s.slice(5).trim();
+            if (payload === '[DONE]') continue;
+            try {
+              const { response } = JSON.parse(payload) as { response?: string };
+              if (response == null) continue;
+              const openaiChunk = JSON.stringify({ choices: [{ delta: { content: response } }] });
+              await writer.write(encoder.encode(\`data: \${openaiChunk}\\n\\n\`));
+            } catch { /* skip malformed lines */ }
+          }
         }
+      } catch (err) {
+        // The response is already streaming, so the status is spent: report the
+        // failure IN BAND. readOpenAIStream lands this on turn.error and keeps
+        // whatever already streamed.
+        const message = err instanceof Error ? err.message : 'Workers AI stream failed';
+        await writer.write(encoder.encode(\`data: \${JSON.stringify({ error: { message } })}\\n\\n\`));
+      } finally {
+        // Always: an unclosed writer leaves the browser waiting forever.
+        await writer.write(encoder.encode('data: [DONE]\\n\\n'));
+        await writer.close();
       }
-      await writer.write(encoder.encode('data: [DONE]\\n\\n'));
-      await writer.close();
     })();
 
-    return new Response(readable, { headers: { 'Content-Type': 'text/event-stream' } });
+    return new Response(readable, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+      },
+    });
   },
 };`,
   },
@@ -80,8 +107,33 @@ export default {
     },
   );
 
+  // FORWARD THE STATUS. A wrong CF_API_TOKEN is a 401/403: returning 200 sends
+  // its JSON body out labelled text/event-stream, the SSE reader finds no frame,
+  // and the turn resolves empty with nothing logged and no bubble.
+  if (!upstream.ok) {
+    return new Response(await upstream.text(), {
+      status: upstream.status,
+      headers: {
+        'Content-Type': upstream.headers.get('content-type') ?? 'application/json',
+      },
+    });
+  }
+  if (!upstream.body) {
+    return new Response(JSON.stringify({ error: { message: 'Workers AI returned no body to stream.' } }), {
+      status: 502,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   // Workers AI returns OpenAI-format SSE. Pass it straight through.
-  return new Response(upstream.body, { headers: { 'Content-Type': 'text/event-stream' } });
+  return new Response(upstream.body, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+    },
+  });
 }`,
   streamMapping:
     "Workers AI via the OpenAI-compatible HTTP endpoint returns OpenAI-format SSE. Pipe upstream.body straight to the browser; readOpenAIStream from @kitn.ai/ui/wire parses it, including tool calls and reasoning. The native env.AI binding streams Cloudflare's own format (data: {\"response\":\"...token...\"}); the worker route template re-frames these chunks to OpenAI-format SSE via a TransformStream before returning.",

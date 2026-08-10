@@ -27,16 +27,33 @@ async function chatHandler(request: Request): Promise<Response> {
   const encoder = new TextEncoder();
   const sse = new ReadableStream({
     async start(controller) {
-      for await (const delta of result.textStream) {
-        const chunk = { choices: [{ delta: { content: delta } }] };
-        controller.enqueue(encoder.encode(\`data: \${JSON.stringify(chunk)}\\n\\n\`));
+      try {
+        for await (const delta of result.textStream) {
+          const chunk = { choices: [{ delta: { content: delta } }] };
+          controller.enqueue(encoder.encode(\`data: \${JSON.stringify(chunk)}\\n\\n\`));
+        }
+      } catch (err) {
+        // The status is spent by the time the SDK fails — the headers went out
+        // with the first byte — so report it IN BAND. readOpenAIStream lands
+        // this on turn.error and keeps whatever streamed before it. Without it a
+        // failed key is an empty bubble and nothing in the console.
+        const message = err instanceof Error ? err.message : 'Model stream failed';
+        controller.enqueue(encoder.encode(\`data: \${JSON.stringify({ error: { message } })}\\n\\n\`));
       }
       controller.enqueue(encoder.encode('data: [DONE]\\n\\n'));
       controller.close();
     },
   });
 
-  return new Response(sse, { headers: { 'Content-Type': 'text/event-stream' } });
+  return new Response(sse, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      // no-transform stops a proxy buffering the stream into one blob.
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+    },
+  });
 }`,
   streamMapping: "The Vercel AI SDK's toUIMessageStreamResponse() and toTextStreamResponse() don't emit OpenAI-format SSE. Wrap result.textStream manually: iterate text deltas and emit data: {choices:[{delta:{content}}]} frames, closing with data: [DONE]. readOpenAIStream from @kitn.ai/ui/wire parses tool calls and reasoning too, but textStream carries neither: it is text deltas only. Switch to result.fullStream, which yields typed parts, and re-frame its tool-call and reasoning parts onto delta.tool_calls and delta.reasoning to get them.",
   runNote: 'Set AI_GATEWAY_API_KEY for the AI Gateway (string model id form: creator/model-name). For direct provider access, import its provider package (e.g. @ai-sdk/openai) and set the corresponding key (e.g. OPENAI_API_KEY).',

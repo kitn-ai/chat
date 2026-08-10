@@ -2200,3 +2200,44 @@ describe('the backend route matches the framework that asked for it', () => {
     expect(route).toContain('async function chatHandler(request: Request)');
   });
 });
+
+/**
+ * DEFECT (2): the emitted route dropped the upstream status, so a 401 — the
+ * no-key first run — reached the browser as a 200 whose body was a JSON error
+ * labelled text/event-stream. Nothing rendered and nothing logged.
+ */
+describe('the backend route forwards the upstream status', () => {
+  it.each(['next', 'svelte', 'tanstack-start', 'vue', 'react', 'worker', 'express', 'html'])(
+    '%s forwards it',
+    async (framework) => {
+      const out = await scaffold.handler({
+        framework,
+        useCase: 'drop-in-chat',
+        integration: 'openrouter',
+        placement: 'full-page',
+      });
+      const route = (out.content as { type: string; text: string }[])[0].text.split('=== (2) BACKEND ROUTE ===')[1];
+      expect(route, `${framework}: never checks upstream.ok`).toMatch(/if \(!upstream\.ok\)/);
+      expect(route, `${framework}: drops the upstream status`).toMatch(/status: upstream\.status/);
+      // and does not relabel the error body as a stream
+      expect(route).toMatch(/'Content-Type': upstream\.headers\.get\('content-type'\)/);
+    },
+  );
+
+  it('the bridging routes carry the status across the bridge', async () => {
+    for (const [framework, expected] of [
+      ['vue', /res\.statusCode = response\.status/],
+      ['react', /res\.statusCode = response\.status/],
+      ['express', /res\.status\(response\.status\)/],
+    ] as const) {
+      const out = await scaffold.handler({
+        framework,
+        useCase: 'drop-in-chat',
+        integration: 'openrouter',
+        placement: 'full-page',
+      });
+      const route = (out.content as { type: string; text: string }[])[0].text.split('=== (2) BACKEND ROUTE ===')[1];
+      expect(route, `${framework}: the bridge drops the status`).toMatch(expected);
+    }
+  });
+});

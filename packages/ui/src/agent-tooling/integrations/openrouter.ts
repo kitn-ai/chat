@@ -25,7 +25,35 @@ const openrouter: Integration = {
     body: JSON.stringify({ model, messages, tools, stream: true }),
   });
 
-  return new Response(upstream.body, { headers: { 'Content-Type': 'text/event-stream' } });
+  // FORWARD THE STATUS. Returning 200 here is how a missing key turns into
+  // silence: the 401 body is JSON, it goes out labelled text/event-stream, the
+  // SSE reader finds no frame, and the turn resolves empty with nothing logged
+  // and no bubble. With the status intact readOpenAIStream throws a WireError
+  // carrying the provider's own message.
+  if (!upstream.ok) {
+    return new Response(await upstream.text(), {
+      status: upstream.status,
+      headers: {
+        'Content-Type': upstream.headers.get('content-type') ?? 'application/json',
+      },
+    });
+  }
+  if (!upstream.body) {
+    return new Response(JSON.stringify({ error: { message: 'The provider returned no body to stream.' } }), {
+      status: 502,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  return new Response(upstream.body, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      // no-transform stops a proxy buffering the stream into one blob.
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+    },
+  });
 }`,
   streamMapping:
     'OpenRouter returns OpenAI-format SSE. Pipe upstream.body straight to the browser; readOpenAIStream from @kitn.ai/ui/wire parses it, including tool calls and reasoning.',
