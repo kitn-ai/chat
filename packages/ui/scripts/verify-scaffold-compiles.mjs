@@ -29,7 +29,7 @@
 //
 // SCOPE
 // -----
-// FRONT END: 6 archetypes × 9 integrations × 7 TS frameworks = 378 compiled
+// FRONT END: 6 archetypes × 9 integrations × 8 TS frameworks = 432 compiled
 // cells, at one placement. `placement` is the fourth axis and is left at
 // 'full-page' on purpose: it only ever changes an inline CSS string, so the
 // extra 3x compiles the same types again.
@@ -52,11 +52,17 @@
 // Each project gets its own copy of the anti-theatre self-test, so a green
 // angular/solid run is as trustworthy as the default one.
 //
-// The `html` target cannot be compiled: SCAF-19 keeps it plain JS inside an
-// inline `<script>`, which is invisible to `tsc` by design. It gets a structural
-// pass instead (`htmlStructureCheck`) that parses the emitted script and counts
-// the chat elements and submit listeners in the whole scaffold, which is what
-// caught ollama emitting a second front end under the BACKEND ROUTE heading.
+// The `html` target IS compiled now, and that is a change worth stating: it used
+// to be excluded because SCAF-19 kept its logic as plain JS in an inline
+// `<script>`. That exclusion mirrored the consumer's own blind spot — a stock
+// `vanilla-ts` app builds with `tsc && vite build` and scopes its tsconfig to
+// `"include": ["src"]`, so an inline script is type-checked by nothing, and a
+// call to a function that does not exist still left `npm run build` exiting 0.
+// The scaffolder emits `src/main.ts` instead, so those 54 cells join the matrix.
+// `htmlStructureCheck` keeps only what tsc cannot judge: one chat element and one
+// submit listener in the whole scaffold (which caught ollama emitting a second
+// front end under the BACKEND ROUTE heading), and that index.html LOADS the
+// module rather than carrying the logic inline again.
 //
 // The `angular` target is only PARTLY visible to tsc: the component's TEMPLATE
 // lives in a string literal that tsc never parses (Angular's own ngtsc does).
@@ -111,7 +117,7 @@
 //
 // COST AND WHERE IT RUNS
 // ----------------------
-// ~16s wall clock for the 378 front-end cells plus the 99 routes: one esbuild
+// ~16s wall clock for the 432 front-end cells plus the 99 routes: one esbuild
 // bundle, then six `tsc` passes with skipLibCheck over symlinked node_modules.
 // Routes are most of the added time, and about a third of it is the
 // archetype-independence re-check (495 extra generations, no compiles).
@@ -192,17 +198,23 @@ const INTEGRATIONS = [
   'pydantic-ai',
   'mock',
 ];
-/** TS-visible frameworks only. `html` is plain JS by design (SCAF-19), and is
- *  covered structurally instead: see `htmlStructureCheck`. */
-const FRAMEWORKS = ['react', 'next', 'tanstack-start', 'vue', 'svelte', 'angular', 'solid'];
+/**
+ * TS-visible frameworks. `html` is one of them now.
+ *
+ * It used to be excluded because SCAF-19 kept its logic inline in index.html as
+ * plain JS. That is exactly what made it invisible to the CONSUMER's build too,
+ * so the scaffolder emits `src/main.ts` instead and this matrix compiles it like
+ * any other cell — `htmlStructureCheck` keeps only the checks tsc cannot make.
+ */
+const FRAMEWORKS = ['react', 'next', 'tanstack-start', 'vue', 'svelte', 'angular', 'solid', 'html'];
 const EXT = {
   react: 'tsx', next: 'tsx', 'tanstack-start': 'tsx', vue: 'ts', svelte: 'ts',
-  angular: 'ts', solid: 'tsx',
+  angular: 'ts', solid: 'tsx', html: 'ts',
 };
 /** Which tsc project each framework compiles under — see the header. */
 const PROJECT = {
   react: 'default', next: 'default', 'tanstack-start': 'default', vue: 'default', svelte: 'default',
-  angular: 'angular', solid: 'solid',
+  angular: 'angular', solid: 'solid', html: 'default',
 };
 
 const fail = (msg) => {
@@ -587,21 +599,41 @@ function liftScript(block) {
 }
 
 /**
- * The `html` target, which tsc cannot see.
+ * The `html` target, which tsc CAN now see.
  *
- * SCAF-19 keeps it plain JS inside an inline `<script type="module">`, so there
- * is no file for the matrix above to compile. Two things are still checkable
- * cheaply, and one of them shipped broken: ollama carried a `routeTemplates.html`
- * entry, so `framework: 'html'` printed a SECOND `<kai-chat id="chat">` with its
- * own kai-submit listener under the BACKEND ROUTE heading. Pasting both blocks
- * gave a duplicate element id and two fetches per submit, and nothing in this
- * repo parsed or compiled that output.
+ * It could not for most of this file's life: SCAF-19 kept the logic as plain JS
+ * inside an inline `<script type="module">`, so there was no file to compile and
+ * this function did a parse-only structural pass instead. That was the same blind
+ * spot the consumer had — a stock `vanilla-ts` app builds with `tsc && vite build`
+ * and scopes its tsconfig to `"include": ["src"]`, so an inline script is checked
+ * by nothing. (Measured: a call to a function that does not exist anywhere still
+ * left `npm run build` exiting 0.)
+ *
+ * The scaffolder now emits `src/main.ts` as a real module, so the html cells join
+ * the compiled matrix and this function keeps only the checks tsc cannot make:
  *
  *   1. the whole scaffold declares exactly one chat element and one submit
- *      listener;
- *   2. the emitted `<script>` body actually PARSES as an ES module.
+ *      listener — ollama once carried a `routeTemplates.html` entry, so
+ *      `framework: 'html'` printed a SECOND `<kai-chat id="chat">` with its own
+ *      listener under the BACKEND ROUTE heading;
+ *   2. index.html actually LOADS the module, and does not carry the logic inline
+ *      again — the whole point of the split.
+ *
+ * Returns the extracted `src/main.ts` bodies so `main()` can compile them.
  */
-async function htmlStructureCheck(scaffold, esbuild) {
+function htmlModuleOf(text) {
+  const front = frontEnd(text);
+  const at = front.indexOf(HTML_MODULE_SEPARATOR);
+  if (at < 0) return null;
+  // Cut at the end of the separator LINE, not the end of the matched prefix: the
+  // heading is padded out with box-drawing dashes, and leaving those on line 1 is
+  // 80 x TS1127 "Invalid character" that reads like a scaffolder defect.
+  const eol = front.indexOf('\n', at);
+  return eol < 0 ? '' : front.slice(eol + 1);
+}
+const HTML_MODULE_SEPARATOR = '// ── src/main.ts ──';
+
+async function htmlStructureCheck(scaffold) {
   const failures = [];
   let checked = 0;
   for (const useCase of ARCHETYPES) {
@@ -617,16 +649,24 @@ async function htmlStructureCheck(scaffold, esbuild) {
       const submits = (text.match(/addEventListener\('kai-submit'/g) ?? []).length;
       if (submits !== 1) failures.push(`${label}: ${submits} kai-submit listeners, expected 1`);
 
-      const script = text.match(/<script type="module">\n([\s\S]*?)\n\s*<\/script>/);
-      if (!script) {
-        failures.push(`${label}: no <script type="module"> block`);
-        continue;
-      }
-      try {
-        await esbuild.transform(script[1], { loader: 'js', format: 'esm' });
-      } catch (e) {
-        failures.push(`${label}: the emitted script does not parse: ${e.message.split('\n')[0]}`);
-      }
+      // Scoped to the index.html HALF of block (1), which is the only place an
+      // inline script would be a defect. Two other places legitimately write the
+      // characters `<script type="module">`: the LOADING OPTIONS block describing
+      // the CDN autoloader, and a comment inside src/main.ts explaining why a
+      // module script is deferred. Checking the whole scaffold — or even the whole
+      // of block (1) — reads that prose as the bug.
+      const front = frontEnd(text);
+      const sep = front.indexOf(HTML_MODULE_SEPARATOR);
+      const markup = sep < 0 ? front : front.slice(0, sep);
+      // The markup has to LOAD the module...
+      if (!/<script type="module" src="\/src\/main\.ts"><\/script>/.test(markup))
+        failures.push(`${label}: index.html does not load /src/main.ts, so the emitted module is dead code`);
+      // ...and must not have quietly gone back to carrying the logic inline,
+      // where the consumer's tsconfig cannot reach it.
+      if (/<script type="module">/.test(markup))
+        failures.push(`${label}: the logic is inline again — a stock vanilla-ts tsconfig ("include": ["src"]) type-checks none of it`);
+      if (sep < 0)
+        failures.push(`${label}: no "${HTML_MODULE_SEPARATOR}…" section — there is no module to compile`);
     }
   }
   if (failures.length) {
@@ -634,7 +674,7 @@ async function htmlStructureCheck(scaffold, esbuild) {
     cleanup();
     fail(`${failures.length} html scaffold problem(s).`);
   }
-  console.log(`  ✓ ${checked} html scaffolds: one chat element, one submit listener, script parses`);
+  console.log(`  ✓ ${checked} html scaffolds: one chat element, one submit listener, logic loaded from /src/main.ts`);
 }
 
 // ── 3b. The BACKEND ROUTE, block (2) ────────────────────────────────────────
@@ -647,7 +687,7 @@ async function htmlStructureCheck(scaffold, esbuild) {
  * `express` / `worker` are backend-only targets a consumer can ask for directly.
  * All four produce code, and all four were unchecked.
  */
-const ROUTE_FRAMEWORKS = [...FRAMEWORKS, 'html', 'express', 'worker', 'fastapi'];
+const ROUTE_FRAMEWORKS = [...new Set([...FRAMEWORKS, 'html', 'express', 'worker', 'fastapi'])];
 
 /**
  * Runtime label → the tsc project whose globals that runtime really has.
@@ -1039,7 +1079,7 @@ async function main() {
   const { scaffold } = await import(pathToFileURL(bundle).href);
 
   for (const project of Object.keys(PROJECTS)) selfTest(project);
-  await htmlStructureCheck(scaffold, esbuild);
+  await htmlStructureCheck(scaffold);
   await angularStructureCheck(scaffold);
 
   const cases = [];
@@ -1061,14 +1101,20 @@ async function main() {
       framework: c.framework,
     });
     const block = frontEnd(out.content[0].text);
-    const code = c.framework === 'vue' || c.framework === 'svelte' ? liftScript(block) : block;
+    // html emits index.html + src/main.ts; only the module is TypeScript.
+    const code =
+      c.framework === 'html'
+        ? htmlModuleOf(out.content[0].text)
+        : c.framework === 'vue' || c.framework === 'svelte'
+          ? liftScript(block)
+          : block;
     if (code === null) {
       skipped.push(c.label);
       continue;
     }
     writeFileSync(join(PROJECTS[PROJECT[c.framework]].dir, `${c.label}.${EXT[c.framework]}`), code);
   }
-  if (skipped.length) fail(`no <script> block found in: ${skipped.join(', ')}`);
+  if (skipped.length) fail(`no compilable code block found in: ${skipped.join(', ')}`);
 
   // One tsc pass per project. Their diagnostics are merged: every file name is
   // the case label, so the report reads the same as it did with one project.

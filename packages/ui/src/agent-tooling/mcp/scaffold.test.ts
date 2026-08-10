@@ -461,8 +461,15 @@ describe('scaffold', () => {
     expect(text).not.toContain('let chatEl: HTMLElement | undefined');
   });
 
-  // SCAF-7: html mock output must NOT emit `as const` (TS syntax invalid in plain JS)
-  it('html mock scaffold does NOT emit as const on role literals (plain JS, SCAF-7)', async () => {
+  /**
+   * SCAF-7 inverted. The html target used to be plain JS in an inline script, so
+   * `as const` was a syntax error and this test asserted its absence. The logic is
+   * a real `src/main.ts` now — the whole point being that the consumer's own
+   * `tsc && vite build` checks it — so the strict-TS narrowing is REQUIRED, and
+   * its absence is the defect: without it `role: 'user'` widens to `string` and
+   * the assignment to `chat.messages` fails TS2322.
+   */
+  it('html mock scaffold emits `as const` on role literals — src/main.ts is TypeScript (SCAF-7)', async () => {
     const out = await scaffold.handler({
       useCase: 'drop-in-chat',
       integration: 'mock',
@@ -470,7 +477,8 @@ describe('scaffold', () => {
       framework: 'html',
     });
     const text = (out.content as { type: string; text: string }[])[0].text;
-    expect(text).not.toContain('as const');
+    expect(text).toContain("role: 'user' as const");
+    expect(text).toContain("role: 'assistant' as const");
   });
 
   // Issue 4 — mock integration streams client-side with zero config.
@@ -709,33 +717,38 @@ describe('scaffold', () => {
     expect(text).toContain('onSubmit(e: CustomEvent<{ value: string }>)');
   });
 
-  it('SCAF-10: html output wraps element access in DOMContentLoaded/readyState guard', async () => {
-    const out = await scaffold.handler({
-      useCase: 'drop-in-chat',
-      integration: 'mock',
-      placement: 'full-page',
-      framework: 'html',
+  /**
+   * SCAF-10 restated for a module.
+   *
+   * The DOMContentLoaded / readyState dance existed because an inline
+   * `<script type="module">` could be pasted into `<head>` and run before the
+   * body was parsed. An EXTERNAL `<script type="module" src=…>` is deferred by
+   * spec, so the DOM is always parsed by the time it runs and that guard is dead
+   * code with a comment that is no longer true. What still has to hold is the
+   * thing the guard was protecting: the element lookup happens inside a function,
+   * after the custom-element upgrade, and the listener is wired.
+   */
+  for (const integration of ['mock', 'openrouter'] as const) {
+    it(`SCAF-10: html (${integration}) defers element access into init(), loaded as a deferred module`, async () => {
+      const out = await scaffold.handler({
+        useCase: 'drop-in-chat',
+        integration,
+        placement: 'full-page',
+        framework: 'html',
+      });
+      const text = (out.content as { type: string; text: string }[])[0].text;
+      expect(text).toContain('async function init()');
+      // The upgrade wait is the real protection — a property set on a
+      // not-yet-upgraded element is dropped.
+      expect(text).toContain("await customElements.whenDefined('kai-chat')");
+      expect(text).toContain("addEventListener('kai-submit'");
+      // The dead guard must be gone, not kept "just in case": its comment claimed
+      // module scripts can run before the DOM is ready, which is false for a
+      // deferred external module.
+      expect(text).not.toMatch(/document\.readyState/);
+      expect(text).not.toMatch(/addEventListener\('DOMContentLoaded'/);
     });
-    const text = (out.content as { type: string; text: string }[])[0].text;
-    // Must use a readyState guard so element access is safe from <head>
-    expect(text).toMatch(/document\.readyState|DOMContentLoaded/);
-    // The element lookup must be inside a function, not at module top-level
-    expect(text).toContain('function init()');
-    // Must still wire the event listener
-    expect(text).toContain("addEventListener('kai-submit'");
-  });
-
-  it('SCAF-10: html real-backend output also has DOMContentLoaded guard', async () => {
-    const out = await scaffold.handler({
-      useCase: 'drop-in-chat',
-      integration: 'openrouter',
-      placement: 'full-page',
-      framework: 'html',
-    });
-    const text = (out.content as { type: string; text: string }[])[0].text;
-    expect(text).toMatch(/document\.readyState|DOMContentLoaded/);
-    expect(text).toContain('function init()');
-  });
+  }
 
   // ── SCAF-11: emitted ChatMessage type must use the library's strict state union ──
   //
@@ -1467,15 +1480,25 @@ describe('scaffold', () => {
     }
   });
 
-  // ── SCAF-19: html target must be buildable by `npm create vite -- --template
-  // vanilla-ts` with zero hand edits. Its `build` script is `tsc && vite build`;
-  // once the template's src/main.ts is dropped (this scaffold replaces it with an
-  // inline <script>), src/ has no .ts files and tsc fails with TS18003 ("No
-  // inputs were found") before vite even runs. Verified against a real fresh
-  // vanilla-ts app: without the vite-env.d.ts note below, `npm run build` fails;
-  // with it, it succeeds unmodified. ──────────────────────────────────────────
-
-  it('SCAF-19: html output tells the dev to add src/vite-env.d.ts so tsc has an input', async () => {
+  /**
+   * SCAF-19, reversed: the html target's logic is a module the consumer's build
+   * can SEE.
+   *
+   * It used to be an inline `<script type="module">` in index.html, and being
+   * invisible to tsc was written up as the benefit. It was the defect. A stock
+   * `npm create vite -- --template vanilla-ts` app builds with `tsc && vite build`
+   * and scopes its tsconfig to `"include": ["src"]`, so none of the scaffold's
+   * code was checked by anything: measured in a real app, injecting a call to a
+   * function that exists nowhere still left `npm run build` exiting 0. With the
+   * logic in `src/main.ts` the same injection fails with TS2304 and exit 2.
+   *
+   * This also retires the vite-env.d.ts workaround that used to be emitted here.
+   * TS18003 ("No inputs were found") could only happen because deleting the
+   * template's `src/main.ts` left `src/` with no `.ts` files at all — and this
+   * scaffold now IS `src/main.ts`. Verified: the clean build succeeds with no
+   * vite-env.d.ts present.
+   */
+  it('SCAF-19: html emits its logic as src/main.ts, loaded from index.html', async () => {
     const out = await scaffold.handler({
       useCase: 'drop-in-chat',
       integration: 'mock',
@@ -1483,15 +1506,35 @@ describe('scaffold', () => {
       framework: 'html',
     });
     const text = (out.content as { type: string; text: string }[])[0].text;
-    expect(text).toMatch(/src\/vite-env\.d\.ts/);
-    expect(text).toMatch(/\/\/\/ <reference types="vite\/client" \/>/);
-    expect(text).toMatch(/TS18003|No inputs were found/);
+    const front = text.split('=== (2) BACKEND ROUTE ===')[0];
+    const [markup, mod] = front.split('// ── src/main.ts ──');
+    expect(mod, 'no src/main.ts section emitted').toBeDefined();
+
+    // index.html LOADS the module and does not carry the logic itself.
+    expect(markup).toContain('<script type="module" src="/src/main.ts"></script>');
+    expect(markup, 'the logic is inline again, where the tsconfig cannot reach it').not.toMatch(
+      /<script type="module">/,
+    );
+    expect(markup, 'the element lookup belongs in the module, not the markup').not.toContain(
+      'getElementById',
+    );
+
+    // The module is the TypeScript half: typed element handle, typed message type.
+    expect(mod).toContain("import type { KaiChatElement } from '@kitn.ai/ui/elements'");
+    expect(mod).toContain("document.getElementById('chat') as KaiChatElement");
+    expect(mod).toContain("type ChatMessage = KaiChatElement['messages'][number]");
+
+    // The TS18003 workaround is obsolete — src/main.ts is itself the tsc input.
+    expect(text, 'vite-env.d.ts is no longer needed').not.toMatch(/vite-env\.d\.ts/);
+    expect(text, 'TS18003 cannot happen once the scaffold IS a src/*.ts file').not.toMatch(
+      /TS18003|No inputs were found/,
+    );
   });
 
-  it('SCAF-19: the vite-env.d.ts note does NOT appear for backend-only frameworks that also render the html surface', async () => {
+  it('the backend-only frameworks get the same module split, without the vanilla-ts note', async () => {
     // fastapi/express/worker fall back to the same framework-agnostic renderHtml
-    // as `html`, but they aren't paired with `tsc && vite build`, so the Vite-only
-    // setup note would be noise there.
+    // as `html` for their browser side. A module their build can see is right for
+    // them too; only the "delete the template's src/main.ts" line is Vite-specific.
     for (const framework of ['fastapi', 'express', 'worker'] as const) {
       const out = await scaffold.handler({
         useCase: 'drop-in-chat',
@@ -1500,6 +1543,10 @@ describe('scaffold', () => {
         framework,
       });
       const text = (out.content as { type: string; text: string }[])[0].text;
+      expect(text, `${framework}: should still split out src/main.ts`).toContain('// ── src/main.ts ──');
+      expect(text, `${framework}: emitted the Vite-template-specific note`).not.toMatch(
+        /template's src\/main\.ts/,
+      );
       expect(text, `${framework}: unexpectedly emitted the vite-env.d.ts note`).not.toMatch(/vite-env\.d\.ts/);
     }
   });
@@ -1704,9 +1751,14 @@ function frontEnd(out: unknown): string {
  * appears in the header's streamMapping prose and in the reference snippets, so
  * that assertion stays green with every import line deleted. These do not.
  *
- * html is the odd one: it wires plain JS inside `<script type="module">` at a
- * four-space indent and must NOT carry the type import, because
- * `type ChatMessage` in a plain-JS module is a syntax error.
+ * html used to be the odd one — plain JS inside `<script type="module">` at a
+ * four-space indent, with no type import, because `type ChatMessage` is a syntax
+ * error in plain JS. Its logic is a real `src/main.ts` now, so it sits at column
+ * zero like the rest AND carries the type import: this drop-in-chat cell is the
+ * single-round shape, whose `const history: ChatMessage[]` references it. The
+ * TOOL-LOOP shape does not (its thread is `chat.messages`, already typed by
+ * KaiChatElement), and importing the type there is a TS6133 that fails a stock
+ * `npm run build` — covered by its own case below.
  */
 const WIRE_IMPORT_LINES: Record<(typeof REAL_FRAMEWORKS)[number], string[]> = {
   react: [
@@ -1730,8 +1782,8 @@ const WIRE_IMPORT_LINES: Record<(typeof REAL_FRAMEWORKS)[number], string[]> = {
     "\n  import { readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';\n",
   ],
   html: [
-    "\n    import { createAssistantStream } from '@kitn.ai/ui/state';\n",
-    "\n    import { readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';\n",
+    "\nimport { createAssistantStream, type ChatMessage } from '@kitn.ai/ui/state';\n",
+    "\nimport { readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';\n",
   ],
 };
 
@@ -1750,6 +1802,38 @@ describe('scaffolds import the wire adapter for real backends', () => {
     for (const line of WIRE_IMPORT_LINES[framework]) {
       expect(code, `${framework}: missing emitted import line ${JSON.stringify(line)}`).toContain(line);
     }
+  });
+
+  /**
+   * `type ChatMessage` must only be imported where the emitted code annotates
+   * something with it. A stock vanilla-ts / create-vite tsconfig sets
+   * `noUnusedLocals`, so an unreferenced type import is TS6133 and a failed
+   * `npm run build` on the consumer's first try — the same class of defect that
+   * once shipped `applyToolOutput` beside a commented-out tool loop.
+   *
+   * html is the only framework where this bites: vue and svelte always declare
+   * `ref<ChatMessage[]>` / `let messages: ChatMessage[]`, but html keeps the
+   * thread on the element, so the name is used only by the single-round shape's
+   * `const history: ChatMessage[]`. Caught by verify:scaffold on all 8 agentic
+   * html cells.
+   */
+  it('html tool-loop scaffolds do NOT import the unused ChatMessage type (TS6133)', async () => {
+    const code = frontEnd(
+      await scaffold.handler({
+        framework: 'html',
+        useCase: 'agentic', // the archetype that renders kai-tool → tool loop
+        integration: 'openrouter',
+        placement: 'full-page',
+      }),
+    );
+    // The loop's thread IS chat.messages, typed by KaiChatElement — nothing
+    // annotates with the kit's ChatMessage, so importing it is dead weight.
+    expect(code).toContain("import { createAssistantStream } from '@kitn.ai/ui/state';");
+    expect(code, 'unused type import — TS6133 under a stock noUnusedLocals build').not.toContain(
+      "createAssistantStream, type ChatMessage",
+    );
+    // And the loop's own names ARE imported, because it does call them.
+    expect(code).toContain('applyToolOutput');
   });
 
   it.each(REAL_FRAMEWORKS)('%s mock emits NONE of those import lines', async (framework) => {

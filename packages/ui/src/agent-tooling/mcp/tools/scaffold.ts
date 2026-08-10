@@ -634,6 +634,24 @@ function chatMessageDecl(isMock: boolean, pad = ''): string[] {
   return isMock ? [`${pad}${LOCAL_CHAT_MESSAGE_TYPE}`] : [];
 }
 
+/**
+ * The `html` target's mock message type, DERIVED from the element rather than
+ * restated.
+ *
+ * Every other mock target hand-writes `LOCAL_CHAT_MESSAGE_TYPE` because it has
+ * nothing to derive from. This one does: the code assigns straight to
+ * `chat.messages`, and the kit ships `KaiChatElement`, so indexing that property
+ * gives the exact message type the assignment target accepts. A hand-written
+ * subset would be assignable INTO the element and then fail on the way back out —
+ * `chat.messages.map((m) => …appendText(m.parts)…)` reads the element's wider
+ * part union, which a narrow local type cannot accept.
+ */
+const HTML_CHAT_MESSAGE_TYPE = [
+  `// The message type, taken from the element it is assigned to rather than`,
+  `// restated — so it cannot drift out of step with what <kai-chat> accepts.`,
+  `type ChatMessage = KaiChatElement['messages'][number];`,
+];
+
 // ── SCAF-8: per-integration default model ids ─────────────────────────────────
 
 /** Default model id per integration that forwards one. Anything else falls back
@@ -880,114 +898,165 @@ function componentTags(archetype: Archetype, chatFill: string): string {
   return lines.join('\n');
 }
 
-/** The HTML <script> wiring — mock streams client-side; everything else fetches /api/chat. */
-function htmlWiring(ctx: RenderCtx, archetype: Archetype): string {
+/**
+ * The `html` target's logic, as a REAL `src/main.ts` module.
+ *
+ * SCAF-19 used to inline this as plain JS inside `<script type="module">` in
+ * index.html, on the reasoning that the wiring sets untyped properties on a raw
+ * `customElements` reference and would need a hand-cast per property. Being
+ * invisible to tsc was described as the benefit.
+ *
+ * It was the defect. The canonical getting-started path
+ * (`npm create vite -- --template vanilla-ts`) builds with `tsc && vite build`
+ * and its tsconfig is `"include": ["src"]`, so the consumer's own build
+ * type-checked NONE of the scaffold's logic. Proven rather than argued: an
+ * injected call to a function that does not exist anywhere left `npm run build`
+ * exiting 0 in a stock app.
+ *
+ * The hand-cast worry does not survive contact either — the kit SHIPS the element
+ * interfaces, so one `as KaiChatElement` at the lookup types every property that
+ * follows, which is what the svelte and angular targets already do. And the
+ * message type comes from the element itself
+ * (`KaiChatElement['messages'][number]`) instead of the hand-written local subset
+ * the other mock targets declare: derived from the property it is assigned to, it
+ * cannot drift out of step with it.
+ *
+ * Moving the logic into `src/` also retires the TS18003 workaround the old note
+ * carried. That error existed only because deleting the template's `src/main.ts`
+ * left `src/` with no `.ts` files at all; this scaffold now IS `src/main.ts`.
+ */
+function htmlModule(ctx: RenderCtx, archetype: Archetype): string {
   const hasEmbedded = archetype.components.some((t) => MESSAGE_EMBEDDED_TAGS.has(t));
   const hasSources = archetype.components.includes('kai-sources');
 
   // SCAF-9: the agentic archetype explains where tool + reasoning parts come
   // from. It no longer SEEDS a fabricated turn — see `SAMPLE_AGENTIC_MESSAGE`.
   const seedLines = hasEmbedded
-    ? [
-        ...sampleSeedComment(ctx.isMock, `    `, (literal) => [`chat.messages = [${literal}];`]),
-        ``,
-      ]
+    ? [...sampleSeedComment(ctx.isMock, `  `, (literal) => [`chat.messages = [${literal}];`]), ``]
     : [];
 
   const sourcesSetupLines = hasSources
     ? [
-        `    const sourcesEl = document.getElementById('sources');`,
-        `    // Replace with your real source data (set as a JS property — it's an array).`,
-        `    const sampleSources = [`,
-        `      { href: 'https://example.com/doc1', title: 'Getting started', description: 'Overview of the product.' },`,
-        `      { href: 'https://example.com/doc2', title: 'API reference', description: 'Full API documentation.' },`,
-        `    ];`,
-        `    sourcesEl.sources = sampleSources;`,
+        `  const sourcesEl = document.getElementById('sources') as KaiSourcesElement;`,
+        `  // Replace with your real source data (set as a JS property — it's an array).`,
+        `  const sampleSources = [`,
+        `    { href: 'https://example.com/doc1', title: 'Getting started', description: 'Overview of the product.' },`,
+        `    { href: 'https://example.com/doc2', title: 'API reference', description: 'Full API documentation.' },`,
+        `  ];`,
+        `  sourcesEl.sources = sampleSources;`,
         ``,
       ]
     : [];
 
-  // SCAF-8: the model id lives in init() scope so the submit handler closes over it.
+  // Module scope, like vue/angular: the handler below closes over all three, and
+  // `runTool` is a function declaration rather than something wedged into init().
   const modelLines = ctx.defaultModel
     ? [
-        `      // SCAF-8: change this model id to any provider/model string you want to use.`,
-        `      const model = '${ctx.defaultModel}';`,
+        `// SCAF-8: change this model id to any provider/model string you want to use.`,
+        `const model = '${ctx.defaultModel}';`,
         ``,
       ]
     : [];
+  const toolsLines = ctx.emitTools ? [...toolSchemaLines(''), ``] : [];
+  const runnerLines = ctx.emitToolLoop ? [...toolRunnerLines('', true), ``] : [];
 
-  // Same scope, same reason: onSubmit puts `tools` in the request body.
-  const toolsLines = ctx.emitTools ? [...toolSchemaLines('      '), ``] : [];
-  // Same scope again: the loop in onSubmit calls runTool.
-  const runnerLines = ctx.emitToolLoop ? [...toolRunnerLines('      ', false), ``] : [];
+  // KaiSourcesElement only when a kai-sources companion is really declared: a
+  // stock vanilla-ts tsconfig sets noUnusedLocals, so an always-on import is a
+  // build error on every other archetype.
+  const elementTypes = hasSources ? 'KaiChatElement, KaiSourcesElement' : 'KaiChatElement';
+
+  /**
+   * Same rule, applied to the kit's own `ChatMessage`.
+   *
+   * Unlike vue and svelte — which declare `ref<ChatMessage[]>` / `let messages:
+   * ChatMessage[]` and therefore always reference it — this target keeps the
+   * thread on the element. So the name is only used by the SINGLE-ROUND shape's
+   * `const history: ChatMessage[]`; the tool-loop shape's thread IS
+   * `chat.messages`, already typed by `KaiChatElement`, and importing the type
+   * there is a TS6133 that fails `npm run build` in a stock app.
+   */
+  const annotatesChatMessage = !ctx.emitToolLoop;
 
   const head = [
-    `  <script type="module">`,
-    `    import '@kitn.ai/ui/elements';  // registers <kai-*> — required, must come first`,
-    ...(ctx.isMock ? [] : wireImportLines({ pad: '    ', typed: false, toolLoop: ctx.emitToolLoop })),
-    `    import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
+    `// src/main.ts — the page's logic, in a module YOUR build type-checks.`,
+    `//`,
+    `// It lives here rather than inline in index.html on purpose: the canonical`,
+    `// getting-started path (\`npm create vite -- --template vanilla-ts\`) builds with`,
+    `// \`tsc && vite build\` and scopes its tsconfig to "include": ["src"], so an`,
+    `// inline <script> is checked by nothing at all. Delete the template's own`,
+    `// src/main.ts and save this in its place; index.html already points at it.`,
+    `import '@kitn.ai/ui/elements';  // registers <kai-*> — required, must come first`,
+    `// The kit ships the element interfaces, so one cast at the lookup below types`,
+    `// every property assignment that follows.`,
+    `import type { ${elementTypes} } from '@kitn.ai/ui/elements';`,
+    ...(ctx.isMock
+      ? []
+      : wireImportLines({ typed: annotatesChatMessage, toolLoop: ctx.emitToolLoop })),
+    `import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
     ``,
-    `    // Guard: module scripts run before the DOM is ready when inlined in <head>.`,
-    `    // DOMContentLoaded fires synchronously when already loaded; otherwise waits.`,
-    `    async function init() {`,
-    `      const chat = document.getElementById('chat');`,
-    `      // SCAF-15: kai-* register via an async dynamic import (SSR-safety), so the`,
-    `      // element may not be upgraded yet. Wait for the upgrade before setting any`,
-    `      // array/object property — values set pre-upgrade are dropped on upgrade.`,
-    `      await customElements.whenDefined('kai-chat');`,
-    `      // suggestions is a JS PROPERTY (arrays can't be HTML attributes)`,
-    `      chat.suggestions = ${jsArray(ctx.suggestions)};`,
-    `      chat.suggestionMode = 'submit';`,
-    ``,
+    ...(ctx.isMock ? [...HTML_CHAT_MESSAGE_TYPE, ``] : []),
     ...modelLines,
     ...toolsLines,
     ...runnerLines,
-    ...seedLines.map((l) => (l.trim() === '' ? l : `  ${l}`)),
-    ...sourcesSetupLines.map((l) => (l.trim() === '' ? l : `  ${l}`)),
+    `async function init() {`,
+    `  const chat = document.getElementById('chat') as KaiChatElement;`,
+    `  // SCAF-15: kai-* register via an async dynamic import (SSR-safety), so the`,
+    `  // element may not be upgraded yet. Wait for the upgrade before setting any`,
+    `  // array/object property — values set pre-upgrade are dropped on upgrade.`,
+    `  await customElements.whenDefined('kai-chat');`,
+    `  // suggestions is a JS PROPERTY (arrays can't be HTML attributes)`,
+    `  chat.suggestions = ${jsArray(ctx.suggestions)};`,
+    `  chat.suggestionMode = 'submit';`,
+    ``,
+    ...seedLines,
+    ...sourcesSetupLines,
   ];
 
-  // DOMContentLoaded footer — closes init() and wires it safely.
-  const domReadyFooter = [
-    `    }`,
-    `    if (document.readyState === 'loading') {`,
-    `      document.addEventListener('DOMContentLoaded', init);`,
-    `    } else {`,
-    `      init();`,
-    `    }`,
+  // `Event`, not `CustomEvent`: addEventListener with a custom event name hands
+  // the listener a plain Event, so the narrowing happens in the body — the same
+  // shape renderAngular emits, for the same reason.
+  const listenerOpen = [
+    `  chat.addEventListener('kai-submit', async (event: Event) => {`,
+    `    const e = event as CustomEvent<{ value: string }>;`,
+  ];
+  const footer = [
+    `  });`,
+    `}`,
+    ``,
+    `// A <script type="module"> is deferred, so the DOM is already parsed here.`,
+    `void init();`,
   ];
 
   if (ctx.isMock) {
-    const body = mockStreamBody({
-      pad: '        ',
-      read: 'chat.messages',
-      commitInitial: (expr) => `chat.messages = ${expr};`,
-      // chat.messages is live (no React snapshot) — map over it directly
-      commitMap: (mapBody) => `chat.messages = chat.messages.map((m) => ${mapBody});`,
-      setLoading: (v) => `chat.loading = ${v};`,
-    });
     return [
       ...head,
-      `      // No backend: stream a canned reply client-side (no fetch, no API key).`,
-      `      chat.addEventListener('kai-submit', async (e) => {`,
-      body,
-      `      });`,
-      ...domReadyFooter,
-      `  </script>`,
+      `  // No backend: stream a canned reply client-side (no fetch, no API key).`,
+      ...listenerOpen,
+      mockStreamBody({
+        pad: '    ',
+        read: 'chat.messages',
+        commitInitial: (expr) => `chat.messages = ${expr};`,
+        // chat.messages is live (no React snapshot) — map over it directly
+        commitMap: (mapBody) => `chat.messages = chat.messages.map((m) => ${mapBody});`,
+        setLoading: (v) => `chat.loading = ${v};`,
+        strictRoles: true,
+      }),
+      ...footer,
     ].join('\n');
   }
 
   return [
     ...head,
-    `      // messages is a JS PROPERTY (objects can't be HTML attributes)`,
-    `      chat.addEventListener('kai-submit', async (e) => {`,
+    `  // messages is a JS PROPERTY (objects can't be HTML attributes)`,
+    ...listenerOpen,
     realStreamBody({
-      pad: '        ',
+      pad: '    ',
       read: 'chat.messages',
       commitSet: (expr) => `chat.messages = ${expr};`,
       setterAdapter: '(fn) => { chat.messages = fn(chat.messages); }',
       setLoading: (v) => `chat.loading = ${v};`,
       bodyPayload: realBodyPayload({ defaultModel: ctx.defaultModel, tools: ctx.emitTools }),
-      strictRoles: false,
+      strictRoles: true,
       toolLoop: ctx.emitToolLoop,
       thread: liveThreadBinding(
         'chat.messages',
@@ -995,57 +1064,50 @@ function htmlWiring(ctx: RenderCtx, archetype: Archetype): string {
         'chat.messages ?? []',
       ),
     }),
-    `      });`,
-    ...domReadyFooter,
-    `  </script>`,
+    ...footer,
   ].join('\n');
 }
 
 /**
- * SCAF-19: the `html` framework's canonical getting-started path is
- * `npm create vite@latest <name> -- --template vanilla-ts` (see recipes.md),
- * whose build script is `tsc && vite build`. This front-end is one inline
- * `<script type="module">` pasted into index.html — deliberately plain JS,
- * not a real `src/*.ts` module: the wiring sets untyped properties
- * (messages, suggestions, loading, ...) on a raw customElements reference,
- * which only type-checks cleanly against a real element type (the
- * `@kitn.ai/ui/react` wrappers carry that; raw DOM lookups here would need
- * a hand-cast per property and per archetype, which is worse). Keeping it
- * inline keeps it invisible to tsc, avoiding that entirely.
+ * The `html` target: TWO files, split on the same `// ── path ──` separator the
+ * backend routes already use.
  *
- * The cost: the vanilla-ts template ships its wiring in `src/main.ts`, and
- * once a dev drops that file (this scaffold makes it dead code), `src/`
- * has zero `.ts` files, so `tsc` fails with TS18003 ("No inputs were
- * found") before vite even runs — a first-build failure with no code to
- * point at. One file fixes it: `src/vite-env.d.ts` with the same ambient
- * reference the template ships by default, which gives tsc an input.
- * Verified against a real `npm create vite@latest -- --template
- * vanilla-ts` app: without this file `tsc` exits 2 with TS18003; with it,
- * `npm run build` succeeds unmodified.
+ *   index.html   the markup, plus a <script type="module" src="/src/main.ts">
+ *   src/main.ts  the logic — see `htmlModule` for why it is not inline any more
+ *
+ * Both files are emitted for every target that lands here — the backend-only
+ * frameworks (express/worker/fastapi) get the same browser side, since a module
+ * their bundler can see beats an inline script for them too. Only the note about
+ * replacing the vanilla-ts template's own entry is specific to `html`, so only
+ * that is gated on `isViteHtmlTarget`.
  */
-const VITE_HTML_SETUP_NOTE = [
-  `  <!-- SCAF-19: scaffolded with \`npm create vite@latest -- --template vanilla-ts\`?`,
-  `       Its "build" script is \`tsc && vite build\`. This page's only code is the`,
-  `       inline <script> above — once you delete the template's src/main.ts (this`,
-  `       page replaces it), src/ has no .ts files left and tsc fails with`,
-  `       "TS18003: No inputs were found" before vite even runs. Add one file: -->`,
-  `  <!-- src/vite-env.d.ts:`,
-  `         /// <reference types="vite/client" /> -->`,
-].join('\n');
-
 function renderHtml(archetype: Archetype, ctx: RenderCtx, isViteHtmlTarget: boolean): string {
   const { p, emptyHint } = ctx;
+  const scriptNote = isViteHtmlTarget
+    ? [
+        `<!-- The logic is a real module, NOT an inline script: a stock vanilla-ts`,
+        `     tsconfig is "include": ["src"], so anything inline is type-checked by`,
+        `     nothing at all. Delete the template's src/main.ts and save the file`,
+        `     below in its place — this tag is the one the template already ships. -->`,
+      ]
+    : [
+        `<!-- The logic is a real module, not an inline script, so your own build`,
+        `     type-checks it. Save the file below as src/main.ts. -->`,
+      ];
   return [
+    `<!-- index.html — paste this into <body>. -->`,
     `<!-- ${archetype.title} — ${p.note} -->`,
     ...(p.altNote ?? []).map((l) => `<!-- ${l} -->`),
     `<div style="${p.style}">`,
     componentTags(archetype, p.chatFill),
     `</div>`,
+    ...scriptNote,
+    `<script type="module" src="/src/main.ts"></script>`,
     ``,
-    htmlWiring(ctx, archetype),
+    `<!-- empty-state hint: ${emptyHint} -->`,
     ``,
-    `  <!-- empty-state hint: ${emptyHint} -->`,
-    ...(isViteHtmlTarget ? ['', VITE_HTML_SETUP_NOTE] : []),
+    `// ── src/main.ts ──────────────────────────────────────────────────────────────`,
+    htmlModule(ctx, archetype),
   ].join('\n');
 }
 
