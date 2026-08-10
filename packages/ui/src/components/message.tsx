@@ -1,4 +1,4 @@
-import { type JSX, For, Switch, Match, createSignal, splitProps, Show } from "solid-js";
+import { type JSX, For, Index, Switch, Match, createMemo, createSignal, splitProps, Show } from "solid-js";
 import { Tooltip } from "../ui/tooltip";
 import { Copy, Check } from "lucide-solid";
 import { cn } from "../utils/cn";
@@ -319,6 +319,30 @@ export function groupMessageParts(parts: MessagePart[]): MessagePartGroup[] {
   return groups;
 }
 
+/** Narrow a group to one variant IN A SINGLE READ.
+ *
+ *  The render body below reads its group/part through accessors (see the
+ *  `<Index>` note in `MessageBody`), and TypeScript cannot narrow a
+ *  discriminated union across two separate accessor CALLS —
+ *  `g().kind === 'files' && g()` leaves the second call widened, because as far
+ *  as the compiler knows the two calls could return different values. So the
+ *  test and the cast happen together, on one already-read value. Returns
+ *  `false` rather than `undefined` so it reads as a plain falsy `<Match when>`. */
+function groupAs<T extends MessagePartGroup['kind']>(
+  group: MessagePartGroup,
+  kind: T,
+): Extract<MessagePartGroup, { kind: T }> | false {
+  return group.kind === kind ? (group as Extract<MessagePartGroup, { kind: T }>) : false;
+}
+
+/** The same single-read narrowing for `MessagePart`. */
+function partAs<T extends MessagePart['type']>(
+  part: MessagePart,
+  type: T,
+): Extract<MessagePart, { type: T }> | false {
+  return part.type === type ? (part as Extract<MessagePart, { type: T }>) : false;
+}
+
 /**
  * The shared message body: the message's `parts` rendered in a single ordered
  * pass (text, reasoning, tool calls, generative-UI cards, and file attachments
@@ -329,16 +353,51 @@ export function groupMessageParts(parts: MessagePart[]): MessagePartGroup[] {
  * state (copied, feedback vote) is owned above and passed in.
  */
 function MessageBody(props: MessageBodyProps) {
+  const groups = createMemo(() => groupMessageParts(props.parts));
   return (
     <>
       {/* before-body (inject): a per-message header above everything else. */}
       <Show when={props.beforeBody}>{props.beforeBody}</Show>
-      <For each={groupMessageParts(props.parts)}>
+      {/* <Index>, NOT <For>, on purpose — this is load-bearing.
+       *
+       *  A streaming message re-renders once per delta with a brand-new `parts`
+       *  array (a new reference IS the re-render signal), and
+       *  `groupMessageParts` allocates fresh wrapper objects on top of that. A
+       *  <For> is REFERENCE-keyed, so every chunk looks like an entirely new
+       *  list and every row is torn down and rebuilt. Everything the user has
+       *  done inside a row dies with it: expanding a tool panel or a reasoning
+       *  block mid-stream silently did nothing, because the disclosure opened
+       *  and was discarded microseconds later by the next token (a live probe
+       *  caught the collapsibles' `createUniqueId()` walking cl-9 -> cl-11 ->
+       *  cl-15 across three deltas).
+       *
+       *  <Index> keys by POSITION and hands each row its value as a SIGNAL, so
+       *  a row stays mounted while its content keeps updating. That is exactly
+       *  the shape of a stream: the folds behind `parts`
+       *  (appendTextPart/appendReasoningPart/upsertToolPart) only ever append
+       *  to the end or replace one part IN PLACE with the same variant — never
+       *  reorder, never change a part's type — so a part's position is a stable
+       *  identity, and a growing text/reasoning block or a tool patched from
+       *  `input-streaming` to `output-available` reaches the DOM through the
+       *  accessor instead of through a remount.
+       *
+       *  The trade-off of position-keying: splicing a part out of the MIDDLE of
+       *  a message shifts the rows after it, so their local state (an open
+       *  disclosure) stays with the position rather than following the part.
+       *  <For> got that right for a STATIC array and got streaming wrong every
+       *  single time — no consumer splices mid-message, every consumer streams.
+       *
+       *  This only works while the children read through the accessors below:
+       *  capturing `g().part` once re-freezes the row at its first delta. */}
+      <Index each={groups()}>
         {(group) => (
           <Switch fallback={null}>
-            <Match when={group.kind === 'files' && group}>
+            <Match when={groupAs(group(), 'files')}>
               {(g) => (
                 <Attachments variant="inline" class={props.isUser ? 'mb-2 justify-end' : 'mb-2'}>
+                  {/* Reference-keyed <For> is right HERE: the run's part objects
+                      are carried over untouched by the folds, and an attachment
+                      holds no state worth preserving. */}
                   <For each={g().parts}>
                     {(fp) => (
                       <Attachment data={fp.attachment}>
@@ -350,16 +409,26 @@ function MessageBody(props: MessageBodyProps) {
                 </Attachments>
               )}
             </Match>
-            <Match when={group.kind === 'single' && group}>
+            <Match when={groupAs(group(), 'single')}>
               {(g) => {
-                // Captured once so each `<Match when>` below narrows the SAME
-                // reference: calling the `g()` accessor repeatedly defeats
-                // TypeScript's discriminated-union narrowing even though the
-                // underlying value is identical each call.
-                const part = g().part;
+                // An ACCESSOR, never a captured value: the row outlives the
+                // delta that rebuilt this part, so every read below has to go
+                // through here for the new content to land. `partAs` does the
+                // type test and the narrowing cast in one read (see its note).
+                const part = () => g().part;
+                const reasoning = () => partAs(part(), 'reasoning');
+                // A reasoning part with NO text is a round-trip carrier, not
+                // something to show. Anthropic's redacted_thinking blocks carry
+                // an opaque blob with no readable text, and the block assembled
+                // at content_block_stop carries the verbatim payload the encoder
+                // must echo back. Both are empty-text parts that MUST stay in
+                // `parts` (the encoder needs them, in order) and must not render
+                // a blank disclosure.
+                const carrierOnly = () => { const r = reasoning(); return r !== false && r.text === ''; };
+                const shownReasoning = () => { const r = reasoning(); return r !== false && r.text !== '' && r; };
                 return (
                   <Switch fallback={null}>
-                    <Match when={part.type === 'text' && part}>
+                    <Match when={partAs(part(), 'text')}>
                       {(p) => (
                         <MessageContent
                           part="bubble content"
@@ -372,17 +441,8 @@ function MessageBody(props: MessageBodyProps) {
                         </MessageContent>
                       )}
                     </Match>
-                    {/* A reasoning part with NO text is a round-trip carrier,
-                        not something to show. Anthropic's redacted_thinking
-                        blocks carry an opaque blob with no readable text, and
-                        the block assembled at content_block_stop carries the
-                        verbatim payload the encoder must echo back. Both are
-                        empty-text parts that MUST stay in `parts` (the encoder
-                        needs them, in order) and must not render a blank
-                        disclosure. This Match sits above the real one because
-                        <Switch> takes the FIRST match. */}
-                    <Match when={part.type === 'reasoning' && part.text === ''}>{null}</Match>
-                    <Match when={part.type === 'reasoning' && part}>
+                    <Match when={carrierOnly()}>{null}</Match>
+                    <Match when={shownReasoning()}>
                       {(p) => (
                         <Reasoning class="mb-2 w-full">
                           <ReasoningTrigger>{p().label ?? 'Reasoning'}</ReasoningTrigger>
@@ -390,10 +450,10 @@ function MessageBody(props: MessageBodyProps) {
                         </Reasoning>
                       )}
                     </Match>
-                    <Match when={part.type === 'tool' && part}>
+                    <Match when={partAs(part(), 'tool')}>
                       {(p) => <Tool toolPart={p().tool} class="mb-2 w-full" />}
                     </Match>
-                    <Match when={part.type === 'card' && part}>
+                    <Match when={partAs(part(), 'card')}>
                       {(p) => <CardRenderer envelope={p().envelope} types={props.cardTypes} />}
                     </Match>
                     {/* `source` parts get an explicit no-op match: the citation
@@ -401,14 +461,14 @@ function MessageBody(props: MessageBodyProps) {
                         when it ships. This keeps `fallback` meaning "genuinely
                         unknown variant" rather than doing double duty for
                         source too. */}
-                    <Match when={part.type === 'source'}>{null}</Match>
+                    <Match when={partAs(part(), 'source')}>{null}</Match>
                   </Switch>
                 );
               }}
             </Match>
           </Switch>
         )}
-      </For>
+      </Index>
       <Show when={(props.actions?.length ?? 0) > 0}>
         <MessageActionBar
           actions={props.actions!}
