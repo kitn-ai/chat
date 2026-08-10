@@ -37,6 +37,20 @@ const OPENAI_COMPATIBLE =
     ? { provider: 'openai', model: OPENAI_MODEL }
     : { provider: 'openrouter', model: OPENROUTER_OPENAI_MODEL };
 
+/**
+ * Where the anthropic-format scenarios go. OpenRouter's /v1/messages speaks the
+ * REAL Anthropic Messages event stream (message_start, content_block_delta,
+ * signature_delta, ...), so a capture through it is a genuine capture of this
+ * format; only the routing differs, which the header's provider line records.
+ * A direct ANTHROPIC_API_KEY still wins when one is present.
+ */
+const ANTHROPIC_COMPATIBLE = process.env.ANTHROPIC_API_KEY
+  ? { provider: 'anthropic', model: ANTHROPIC_MODEL }
+  : {
+      provider: 'openrouter-anthropic',
+      model: process.env.CAPTURE_OPENROUTER_ANTHROPIC_MODEL ?? 'anthropic/claude-haiku-4.5',
+    };
+
 const WEATHER_TOOL_OPENAI = {
   type: 'function',
   function: {
@@ -148,8 +162,7 @@ const SCENARIOS = {
     body: { stream: true, stream_options: { include_usage: true }, messages: ask('Reply with the word ok.') },
   },
   'anthropic/thinking-tool': {
-    provider: 'anthropic',
-    model: ANTHROPIC_MODEL,
+    ...ANTHROPIC_COMPATIBLE,
     body: {
       stream: true,
       max_tokens: 2048,
@@ -159,14 +172,25 @@ const SCENARIOS = {
     },
   },
   'anthropic/text-only': {
-    provider: 'anthropic',
-    model: ANTHROPIC_MODEL,
+    ...ANTHROPIC_COMPATIBLE,
     body: { stream: true, max_tokens: 256, messages: ask('Say hi in five words.') },
   },
   'anthropic/max-tokens': {
-    provider: 'anthropic',
-    model: ANTHROPIC_MODEL,
+    ...ANTHROPIC_COMPATIBLE,
     body: { stream: true, max_tokens: 8, messages: ask('Write a long paragraph about SSE.') },
+  },
+  'anthropic/empty-thinking': {
+    // `display: "omitted"` is the documented, reproducible way to get a thinking
+    // block with NO thinking_delta at all: the block opens, one signature_delta
+    // arrives, the block closes. The reasoning part must survive with empty text
+    // because the signature is what round-trips.
+    ...ANTHROPIC_COMPATIBLE,
+    body: {
+      stream: true,
+      max_tokens: 2048,
+      thinking: { type: 'enabled', budget_tokens: 1024, display: 'omitted' },
+      messages: ask('Think about it, then answer: what is 17 * 23?'),
+    },
   },
 };
 
@@ -187,6 +211,17 @@ const ENDPOINTS = {
     headers: (key) => ({
       'Content-Type': 'application/json',
       'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+    }),
+  },
+  // Anthropic Messages events, routed through OpenRouter. Same event stream,
+  // different door, for a machine that has an OpenRouter key and no Anthropic one.
+  'openrouter-anthropic': {
+    url: 'https://openrouter.ai/api/v1/messages',
+    keyEnv: 'OPENROUTER_API_KEY',
+    headers: (key) => ({
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${key}`,
       'anthropic-version': '2023-06-01',
     }),
   },
