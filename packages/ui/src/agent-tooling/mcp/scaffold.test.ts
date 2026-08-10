@@ -662,7 +662,7 @@ describe('scaffold', () => {
 
   // ── SCAF-11: emitted ChatMessage type must use the library's strict state union ──
   //
-  // The LOCAL type is emitted by the `mock` scaffold only — a real backend now
+  // The LOCAL type is emitted by the `mock` scaffold only. A real backend now
   // imports the kit's own ChatMessage (it hands messages to toOpenAIMessages, and
   // the local subset would reject a message the kit produced). These three keep
   // the local declaration honest; the sibling test below covers the real path.
@@ -1445,7 +1445,7 @@ describe('scaffold', () => {
   //
   // The `mock` path still inlines the fold (it must add no imports). A real
   // backend gets the same guarantee from createAssistantStream, which folds
-  // through appendTextPart — the function this inline copy was copied FROM.
+  // through appendTextPart, the function this inline copy was copied FROM.
   it('every mock streaming path folds onto the trailing text part, never replacing parts wholesale', async () => {
     for (const framework of ['react', 'vue', 'svelte', 'html', 'next', 'tanstack-start'] as const) {
       const out = await scaffold.handler({
@@ -1507,7 +1507,7 @@ describe('scaffold', () => {
 // scaffold.ts used to inline ~25 lines of SSE reader per framework so the output
 // stayed copy-paste readable. That policy is reversed for real backends: the
 // inline reader split on '\n' and treated each `data:` line as a whole frame
-// (wrong for a multi-line frame), and it could only ever produce text — which is
+// (wrong for a multi-line frame), and it could only ever produce text, which is
 // why a scaffold with kai-tool in its archetype rendered a panel no code path
 // could fill. `mock` keeps the inline form: a zero-backend preview adds zero
 // imports.
@@ -1528,7 +1528,77 @@ function frontEnd(out: unknown): string {
   return start < 0 ? body : body.slice(start);
 }
 
+/**
+ * The EXACT import STATEMENTS each framework must emit.
+ *
+ * Every entry is wrapped in newlines so it can only be satisfied by a whole
+ * emitted line at that framework's own indentation. A bare
+ * `toContain('@kitn.ai/ui/wire')` is not a test of this: the specifier also
+ * appears in the header's streamMapping prose and in the reference snippets, so
+ * that assertion stays green with every import line deleted. These do not.
+ *
+ * html is the odd one: it wires plain JS inside `<script type="module">` at a
+ * four-space indent and must NOT carry the type import, because
+ * `type ChatMessage` in a plain-JS module is a syntax error.
+ */
+const WIRE_IMPORT_LINES: Record<(typeof REAL_FRAMEWORKS)[number], string[]> = {
+  react: [
+    "\nimport { createAssistantStream, type ChatMessage } from '@kitn.ai/ui/state';\n",
+    "\nimport { readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';\n",
+  ],
+  next: [
+    "\nimport { createAssistantStream, type ChatMessage } from '@kitn.ai/ui/state';\n",
+    "\nimport { readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';\n",
+  ],
+  'tanstack-start': [
+    "\nimport { createAssistantStream, type ChatMessage } from '@kitn.ai/ui/state';\n",
+    "\nimport { readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';\n",
+  ],
+  vue: [
+    "\nimport { createAssistantStream, type ChatMessage } from '@kitn.ai/ui/state';\n",
+    "\nimport { readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';\n",
+  ],
+  svelte: [
+    "\n  import { createAssistantStream, type ChatMessage } from '@kitn.ai/ui/state';\n",
+    "\n  import { readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';\n",
+  ],
+  html: [
+    "\n    import { createAssistantStream } from '@kitn.ai/ui/state';\n",
+    "\n    import { readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';\n",
+  ],
+};
+
 describe('scaffolds import the wire adapter for real backends', () => {
+  // Pins the import STATEMENT, not a mention of the specifier. Proved by
+  // deleting the emitted line from wireImportLines and watching all six fail.
+  it.each(REAL_FRAMEWORKS)('%s emits the state + wire import lines themselves', async (framework) => {
+    const code = frontEnd(
+      await scaffold.handler({
+        framework,
+        useCase: 'drop-in-chat',
+        integration: 'openrouter',
+        placement: 'full-page',
+      }),
+    );
+    for (const line of WIRE_IMPORT_LINES[framework]) {
+      expect(code, `${framework}: missing emitted import line ${JSON.stringify(line)}`).toContain(line);
+    }
+  });
+
+  it.each(REAL_FRAMEWORKS)('%s mock emits NONE of those import lines', async (framework) => {
+    const code = frontEnd(
+      await scaffold.handler({
+        framework,
+        useCase: 'drop-in-chat',
+        integration: 'mock',
+        placement: 'full-page',
+      }),
+    );
+    for (const line of WIRE_IMPORT_LINES[framework]) {
+      expect(code, `${framework}: mock emitted ${JSON.stringify(line)}`).not.toContain(line);
+    }
+  });
+
   it.each(REAL_FRAMEWORKS)('%s uses readOpenAIStream instead of a hand-rolled reader', async (framework) => {
     const out = await scaffold.handler({
       framework,
@@ -1536,15 +1606,17 @@ describe('scaffolds import the wire adapter for real backends', () => {
       integration: 'openrouter',
       placement: 'full-page',
     });
-    const emitted = JSON.stringify(out);
-    expect(emitted).toContain('@kitn.ai/ui/wire');
-    expect(emitted).toContain('readOpenAIStream(res, stream)');
-    expect(emitted).toContain('createAssistantStream');
-    expect(emitted).toContain('toOpenAIMessages(history)');
+    // Scoped to block 1: the header's streamMapping prose names the adapter for
+    // every integration, and the reference snippets mention createAssistantStream,
+    // so asserting over the whole response would pass with no emitted call sites.
+    const code = frontEnd(out);
+    expect(code).toContain('await readOpenAIStream(res, stream);');
+    expect(code).toContain('const stream = createAssistantStream(');
+    expect(code).toContain('toOpenAIMessages(history)');
     // The hand-rolled reader is GONE.
-    expect(emitted).not.toContain('getReader()');
-    expect(emitted).not.toContain("startsWith('data:')");
-    expect(emitted).not.toContain('[DONE]');
+    expect(code).not.toContain('getReader()');
+    expect(code).not.toContain("startsWith('data:')");
+    expect(code).not.toContain('[DONE]');
   });
 
   it.each(REAL_FRAMEWORKS)('%s no longer flattens history to a content string', async (framework) => {
@@ -1597,6 +1669,37 @@ describe('scaffolds import the wire adapter for real backends', () => {
     // The scaffolder must never write a tool executor.
     expect(emitted).not.toMatch(/\\n\s*async function runYourTool/);
   });
+
+  // Regression guard for a defect this suite shipped once: applyToolOutput was
+  // added to the LIVE wire import for every tool archetype while being called
+  // only from the commented block. Every starter in this repo, and create-vite's
+  // own TypeScript template, sets noUnusedLocals, so `npm run build` failed with
+  // TS6133 in a stock app. An import may only name what live code references.
+  it.each(REAL_FRAMEWORKS)(
+    '%s tool archetype keeps applyToolOutput OUT of the live import (noUnusedLocals)',
+    async (framework) => {
+      const code = frontEnd(
+        await scaffold.handler({
+          framework,
+          useCase: 'agentic',
+          integration: 'openrouter',
+          placement: 'full-page',
+        }),
+      );
+      // No live import statement may name it, at any indentation.
+      expect(code, `${framework}: applyToolOutput in a live import`).not.toMatch(
+        /^\s*import \{[^}]*applyToolOutput/m,
+      );
+      // It is still shown, as the commented import beside the loop that calls it.
+      expect(code, `${framework}: missing the commented applyToolOutput import`).toContain(
+        "//   import { applyToolOutput } from '@kitn.ai/ui/wire';",
+      );
+      // And the live wire import is still exactly the two names live code uses.
+      expect(code, `${framework}: live wire import changed shape`).toMatch(
+        /^\s*import \{ readOpenAIStream, toOpenAIMessages \} from '@kitn\.ai\/ui\/wire';$/m,
+      );
+    },
+  );
 
   it('a non-tool archetype gets no tool-loop block and no applyToolOutput import', async () => {
     const out = await scaffold.handler({

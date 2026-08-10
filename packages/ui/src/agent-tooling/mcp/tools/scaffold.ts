@@ -290,6 +290,9 @@ function toolLoopComment(pad: string): string[] {
     ``,
     `${pad}// Multi-round tool loop. readOpenAIStream RETURNS the turn, so:`,
     `${pad}//`,
+    `${pad}//   // add to the imports at the top of the file:`,
+    `${pad}//   import { applyToolOutput } from '@kitn.ai/ui/wire';`,
+    `${pad}//`,
     `${pad}//   const turn = await readOpenAIStream(res, stream);`,
     `${pad}//   for (const call of turn.toolCalls) {`,
     `${pad}//     if (call.error || call.providerExecuted) continue;`,
@@ -299,8 +302,6 @@ function toolLoopComment(pad: string): string[] {
     `${pad}//   // then POST again with toOpenAIMessages(latestMessages) to let the`,
     `${pad}//   // model answer with the results. Cap the rounds: a runaway model is`,
     `${pad}//   // a runaway bill.`,
-    `${pad}//`,
-    `${pad}// applyToolOutput and toOpenAIMessages come from '@kitn.ai/ui/wire'.`,
   ];
 }
 
@@ -311,21 +312,23 @@ function hasToolPanel(archetype: Archetype): boolean {
 
 /**
  * The import lines a real-backend scaffold needs on top of the ones it already
- * emits. `applyToolOutput` joins the wire import only for a tool archetype — it
- * is what the commented loop calls.
+ * emits.
+ *
+ * Every name here MUST be referenced by live emitted code. `applyToolOutput` is
+ * deliberately absent: it is called only from the commented-out tool loop, and
+ * every starter in this repo (and create-vite's own TypeScript template) sets
+ * `noUnusedLocals`, so importing it would fail `npm run build` with TS6133 in a
+ * stock app. `toolLoopComment` shows its import line beside the loop instead.
  *
  * `typed` pulls in the kit's own `ChatMessage` for the strict-TS frameworks (see
  * `chatMessageDecl`); the plain-JS html target must not emit a type import.
  */
-function wireImportLines(archetype: Archetype, opts: { pad?: string; typed: boolean }): string[] {
+function wireImportLines(opts: { pad?: string; typed: boolean }): string[] {
   const { pad = '', typed } = opts;
   const stateNames = typed ? 'createAssistantStream, type ChatMessage' : 'createAssistantStream';
-  const wireNames = hasToolPanel(archetype)
-    ? 'applyToolOutput, readOpenAIStream, toOpenAIMessages'
-    : 'readOpenAIStream, toOpenAIMessages';
   return [
     `${pad}import { ${stateNames} } from '@kitn.ai/ui/state';`,
-    `${pad}import { ${wireNames} } from '@kitn.ai/ui/wire';`,
+    `${pad}import { readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';`,
   ];
 }
 
@@ -534,7 +537,7 @@ function htmlWiring(ctx: RenderCtx, archetype: Archetype): string {
   const head = [
     `  <script type="module">`,
     `    import '@kitn.ai/ui/elements';  // registers <kai-*> — required, must come first`,
-    ...(ctx.isMock ? [] : wireImportLines(archetype, { pad: '    ', typed: false })),
+    ...(ctx.isMock ? [] : wireImportLines({ pad: '    ', typed: false })),
     `    import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
     ``,
     `    // Guard: module scripts run before the DOM is ready when inlined in <head>.`,
@@ -785,7 +788,7 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
       `import dynamic from 'next/dynamic';`,
       // The adapter is pure parsing + pure state; both entries are SSR-import-safe,
       // so they stay static imports even though the ELEMENTS have to be dynamic.
-      ...(isMock ? [] : wireImportLines(archetype, { typed: true })),
+      ...(isMock ? [] : wireImportLines({ typed: true })),
       `import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
       `// <kai-*> are client-only custom elements (the server has no customElements`,
       `// registry) → load client-only so hydration doesn't mismatch. The package itself`,
@@ -861,7 +864,7 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
     `import '@kitn.ai/ui/elements';  // registers <kai-*> — required, must come first`,
     `import { useState } from 'react';`,
     `import { ${importList} } from '@kitn.ai/ui/react';`,
-    ...(isMock ? [] : wireImportLines(archetype, { typed: true })),
+    ...(isMock ? [] : wireImportLines({ typed: true })),
     `import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
     ``,
     ...nextConfigNote,
@@ -1054,7 +1057,7 @@ function renderVue(archetype: Archetype, ctx: RenderCtx): string {
     `     export default { plugins: [vue({ template: { compilerOptions: { isCustomElement: (tag) => tag.startsWith('kai-') } } })] }; -->`,
     `<script setup lang="ts">`,
     `import '@kitn.ai/ui/elements';  // registers <kai-*> — required, must come first`,
-    ...(isMock ? [] : wireImportLines(archetype, { typed: true })),
+    ...(isMock ? [] : wireImportLines({ typed: true })),
     `import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
     vueImports,
     ``,
@@ -1203,7 +1206,7 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
     `<script lang="ts">`,
     `  import '@kitn.ai/ui/elements';  // registers <kai-*> — required, must come first`,
     `  import type { KaiChatElement } from '@kitn.ai/ui/elements';`,
-    ...(isMock ? [] : wireImportLines(archetype, { pad: '  ', typed: true })),
+    ...(isMock ? [] : wireImportLines({ pad: '  ', typed: true })),
     `  import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
     `  import { onMount } from 'svelte';`,
     ...chatMessageType,
@@ -1370,7 +1373,7 @@ function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
     // Elements registration: the library is SSR-import-safe; top-level import is safe here
     `import '@kitn.ai/ui/elements';  // registers <kai-*> — required, must come first`,
     `import { ${importList} } from '@kitn.ai/ui/react'`,
-    ...(isMock ? [] : wireImportLines(archetype, { typed: true })),
+    ...(isMock ? [] : wireImportLines({ typed: true })),
     `import '@kitn.ai/ui/theme.tokens.css'  // compiled token defaults`,
     ``,
     `// ${archetype.title} — ${p.note}. empty-state hint: ${emptyHint}`,
