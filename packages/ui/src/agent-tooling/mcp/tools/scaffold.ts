@@ -829,8 +829,8 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
             `          />`,
             `        </ResizableItem>`,
             `        <ResizableItem min="280px">`,
-            `          {/* Replace src with your artifact URL or set files for multi-file preview. */}`,
-            `          <Artifact src="https://example.com" style={{ width: '100%', height: '100%' }} />`,
+            `          {/* Replace src + files with your real artifact data (files is required: array/object props are never optional attributes on a kai-* element). */}`,
+            `          <Artifact src="https://example.com" files={[{ path: 'index.html', url: 'https://example.com' }]} style={{ width: '100%', height: '100%' }} />`,
             `        </ResizableItem>`,
             `      </Resizable>`,
           ]
@@ -901,8 +901,8 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
           `          />`,
           `        </ResizableItem>`,
           `        <ResizableItem min="280px">`,
-          `          {/* Replace src with your artifact URL or set files for multi-file preview. */}`,
-          `          <Artifact src="https://example.com" style={{ width: '100%', height: '100%' }} />`,
+          `          {/* Replace src + files with your real artifact data (files is required: array/object props are never optional attributes on a kai-* element). */}`,
+          `          <Artifact src="https://example.com" files={[{ path: 'index.html', url: 'https://example.com' }]} style={{ width: '100%', height: '100%' }} />`,
           `        </ResizableItem>`,
           `      </Resizable>`,
         ]
@@ -1104,6 +1104,7 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
     (t) => t !== 'kai-chat' && !MESSAGE_EMBEDDED_TAGS.has(t) && !WORKSPACE_STRUCTURAL_TAGS.has(t),
   );
   const hasEmbedded = archetype.components.some((t) => MESSAGE_EMBEDDED_TAGS.has(t));
+  const hasSourcesCompanion = standaloneCompanionTags.includes('kai-sources');
 
   const companionLinesList: string[] = [];
   if (hasEmbedded) {
@@ -1163,10 +1164,10 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
       ]
     : [`  let messages: ChatMessage[] = [];`];
 
-  // SCAF-9: sources element ref + sample data.
-  const sourcesEl = standaloneCompanionTags.includes('kai-sources')
-    ? [`  let sourcesEl: HTMLElement | undefined;`]
-    : [];
+  // SCAF-9: sources element ref + sample data. Typed as the kit's own element
+  // interface (not HTMLElement) so the `.sources =` assignment below typechecks
+  // honestly under `tsc --strict`: HTMLElement has no `sources` property.
+  const sourcesEl = hasSourcesCompanion ? [`  let sourcesEl: KaiSourcesElement | undefined;`] : [];
   const sourcesReactive = standaloneCompanionTags.includes('kai-sources')
     ? [
         `  // Replace sampleSources with your real source data.`,
@@ -1205,7 +1206,10 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
     `     runes-mode users should adapt to $state/$effect and onkai-submit event handlers. -->`,
     `<script lang="ts">`,
     `  import '@kitn.ai/ui/elements';  // registers <kai-*> — required, must come first`,
-    `  import type { KaiChatElement } from '@kitn.ai/ui/elements';`,
+    // KaiSourcesElement is only imported when a kai-sources companion is actually
+    // declared below: an always-on import would be unused (and fail noUnusedLocals)
+    // on every archetype without kai-sources.
+    `  import type { ${hasSourcesCompanion ? 'KaiChatElement, KaiSourcesElement' : 'KaiChatElement'} } from '@kitn.ai/ui/elements';`,
     ...(isMock ? [] : wireImportLines({ pad: '  ', typed: true })),
     `  import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
     `  import { onMount } from 'svelte';`,
@@ -1416,8 +1420,8 @@ function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
           `          />`,
           `        </ResizableItem>`,
           `        <ResizableItem min="280px">`,
-          `          {/* Replace src with your artifact URL or set files for multi-file preview. */}`,
-          `          <Artifact src="https://example.com" style={{ width: '100%', height: '100%' }} />`,
+          `          {/* Replace src + files with your real artifact data (files is required: array/object props are never optional attributes on a kai-* element). */}`,
+          `          <Artifact src="https://example.com" files={[{ path: 'index.html', url: 'https://example.com' }]} style={{ width: '100%', height: '100%' }} />`,
           `        </ResizableItem>`,
           `      </Resizable>`,
         ]

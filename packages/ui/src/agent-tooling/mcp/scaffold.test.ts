@@ -745,6 +745,41 @@ describe('scaffold', () => {
     expect(text).not.toMatch(/<Sources\s*\/>/);
   });
 
+  // Regression guard for a pre-existing tsc --strict failure (TS2339): the svelte
+  // sources ref used to be typed as bare HTMLElement, which has no `sources`
+  // property, so the `.sources = sampleSources` assignment below it failed to
+  // compile. Typed through the kit's own KaiSourcesElement interface instead
+  // (the same fix chatEl already got under SCAF-13B), so the assignment
+  // typechecks honestly. Confirmed against a real tsc --strict compile of the
+  // emitted output, not just this string assertion.
+  it('SCAF-9: knowledge-base (svelte) types sourcesEl as KaiSourcesElement, not bare HTMLElement (tsc --strict TS2339 guard)', async () => {
+    const out = await scaffold.handler({
+      useCase: 'knowledge-base',
+      integration: 'openrouter',
+      placement: 'full-page',
+      framework: 'svelte',
+    });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+    expect(text).toContain("import type { KaiChatElement, KaiSourcesElement } from '@kitn.ai/ui/elements'");
+    expect(text).toContain('let sourcesEl: KaiSourcesElement | undefined');
+    expect(text).not.toContain('let sourcesEl: HTMLElement | undefined');
+  });
+
+  // The KaiSourcesElement import must be conditional: an archetype with no
+  // kai-sources companion must not carry an unused import, or it fails
+  // noUnusedLocals instead (a different tsc error, same broken build).
+  it('SCAF-9: an archetype without kai-sources does not import KaiSourcesElement (svelte, noUnusedLocals guard)', async () => {
+    const out = await scaffold.handler({
+      useCase: 'agentic',
+      integration: 'openrouter',
+      placement: 'full-page',
+      framework: 'svelte',
+    });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+    expect(text).toContain("import type { KaiChatElement } from '@kitn.ai/ui/elements'");
+    expect(text).not.toContain('KaiSourcesElement');
+  });
+
   // ── SCAF-14: workspace archetype must emit a runnable resizable split layout ──
 
   it('SCAF-14: workspace (react) emits Resizable with ResizableItem children and Artifact with src', async () => {
@@ -792,6 +827,31 @@ describe('scaffold', () => {
     expect(text).toContain("m.ResizableItem");
     expect(text).toContain("m.Artifact");
   });
+
+  // Regression guard for a pre-existing tsc --strict failure (TS2741): `files`
+  // is a required prop on the React Artifact wrapper (array/object props are
+  // never optional attributes on a kai-* element, even though the underlying
+  // Solid component defaults it to []), so a bare `<Artifact src="..." />`
+  // failed to compile with "Property 'files' is missing". Confirmed against a
+  // real tsc --strict compile of the emitted output, not just this string
+  // assertion. Covers all three JSX emit sites (react, next, tanstack-start).
+  it.each(['react', 'next', 'tanstack-start'] as const)(
+    'SCAF-14: workspace (%s) emits Artifact with a files prop (tsc --strict TS2741 guard)',
+    async (framework) => {
+      const out = await scaffold.handler({
+        useCase: 'workspace',
+        integration: 'openrouter',
+        placement: 'full-page',
+        framework,
+      });
+      const text = (out.content as { type: string; text: string }[])[0].text;
+      // A real, non-empty array literal, not a bare `files={[]}` that would
+      // dodge the type error without giving the scaffold user anything useful.
+      expect(text).toMatch(/<Artifact\s[^>]*files=\{\[\{[^}]*path:/);
+      // Still carries src, tied to the same demo url the file entry mirrors.
+      expect(text).toMatch(/<Artifact\s[^>]*src="https:\/\/example\.com"/);
+    },
+  );
 
   // ── tanstack-start scaffold ───────────────────────────────────────────────
 
