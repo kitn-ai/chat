@@ -14,9 +14,16 @@ import type { ProseSize } from '../primitives/chat-config';
 import type { ModelOption, ConversationGroup, ConversationSummary } from '../types';
 
 interface Props extends Record<string, unknown> {
-  /** Pre-bucketed conversation groups for the sidebar. Set as a JS property. */
+  /** The sidebar's section headers, rendered in array order. A group carries no
+   *  conversations of its own; it is matched against `conversations` by id, so
+   *  the two props are complementary rather than alternatives. Omit for an
+   *  ungrouped sidebar. Set as a JS property. */
   groups: ConversationGroup[];
-  /** Flat conversation list (auto-bucketed if `groups` is empty). Set as a JS property. */
+  /** Every conversation in the sidebar, flat. Each one is filed under the group
+   *  whose `id` equals its `groupId`; one with no `groupId` falls into a trailing
+   *  ungrouped section (headerless when `compact`). There is no recency bucketing,
+   *  and a `groupId` matching no entry in `groups` is not rendered. Set as a JS
+   *  property. */
   conversations: ConversationSummary[];
   /** Id of the open conversation, highlighted in the sidebar. */
   activeId?: string;

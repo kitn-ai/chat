@@ -6,12 +6,15 @@ import { ConversationList, CollapsedRail, type ConversationListController } from
 import type { ConversationGroup, ConversationSummary, ConversationScope } from '../types';
 
 interface Props extends Record<string, unknown> {
-  /** Pre-bucketed conversation groups (e.g. "Today", "Yesterday"), each with its
-   *  own conversations. Use this when you want to control the grouping/headers
-   *  yourself; otherwise pass a flat `conversations` array. Set as a JS property. */
+  /** The list's section headers (`{ id, name, sortOrder, createdAt }`), rendered
+   *  in array order. A group carries no conversations of its own; it is matched
+   *  against `conversations` by id, so the two props are complementary rather
+   *  than alternatives. Omit for an ungrouped list. Set as a JS property. */
   groups: ConversationGroup[];
-  /** A flat list of conversation summaries; the component buckets them by recency
-   *  for you. Ignored when `groups` is provided. Set as a JS property. */
+  /** Every conversation the list renders, flat. Each one is filed under the group
+   *  whose `id` equals its `groupId`; one with no `groupId` falls into a trailing
+   *  "Ungrouped" section. There is no recency bucketing, and a `groupId` matching
+   *  no entry in `groups` is not rendered. Set as a JS property. */
   conversations: ConversationSummary[];
   /** The id of the currently-open conversation, highlighted in the list. */
   activeId?: string;
