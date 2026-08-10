@@ -31,3 +31,7 @@ third party:
 Its own provenance (whether it may itself later be attributed, relicensed,
 or otherwise handled) is a separate, pending decision and is not resolved
 by this NOTICE.
+
+The full clean-room derivation record for that file, including its evidence
+index, is at docs/provenance/aurora-clean-room.md in the source repository
+(https://github.com/kitn-ai/ui).

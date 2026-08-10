@@ -6,18 +6,27 @@
  * only:
  *   1. .superpowers/sdd/2026-08-07-audio-visualizers/reference/aura-prototype/
  *      lk-aura-factsheet.md -- a two-team clean-room functional spec (facts
- *      and mathematics, no code, no identifiers) covering LiveKit's public
- *      "aura" visualizer look.
+ *      and mathematics; no code and no expression, and no identifiers
+ *      beyond the public prop names and the uniform inventory, both
+ *      disclosed in that document's own preamble) covering LiveKit's
+ *      public "aura" visualizer look. What was checked, and how, is in
+ *      `docs/provenance/aurora-clean-room.md` section 4.
  *   2. The adopted prototype's own `aura-proto.html` (mode 3, "veil"), which
  *      was itself implemented from that fact sheet by an author who never
  *      saw LiveKit's source.
  *
  * This file is NOT derived from, and was not written with reference to,
- * LiveKit's `agent-audio-visualizer-aura.tsx` or
- * `use-agent-audio-visualizer-aura.ts` -- neither was opened at any point.
- * Those are under a restrictive license incompatible with publishing this
- * package; the fact sheet's numbers and formulas (independently re-derived
- * and checked by hand below, not copied) are what stand in for them.
+ * LiveKit's `agent-audio-visualizer-aura.tsx` or the aura GLSL inlined in
+ * it. That component is Polyform Non-Resale 1.0.0, (c) UNCRN LLC -- a
+ * license incompatible with publishing this package -- and was never
+ * opened. The fact sheet's numbers and formulas (independently re-derived
+ * and checked by hand below, not copied) are what stand in for it.
+ *
+ * Its sibling `use-agent-audio-visualizer-aura.ts`, the DRIVING hook, is a
+ * separate matter: that file is Apache-2.0 (repo license, no Polyform
+ * header) and carries only the per-state behaviour, not the shader. It
+ * contributes nothing to this file; the state targets it describes live in
+ * `variant-aurora.tsx`.
  *
  * The construction: 36 phase-offset copies of one ring, each pushed through
  * the same 4-octave directional-sine warp cascade, fused into soft veils by
