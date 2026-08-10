@@ -39,6 +39,13 @@ uniform float uTheme;      // veil: 0 = dark pipeline, 1 = light pipeline
 uniform float uLens;       // orb: spherical lens distortion amount
 uniform float uSpec;       // orb: window-highlight strength
 uniform float uTint;       // smoke: how much accent color bleeds into the smoke body
+uniform float uPresence;   // orb states: 0 = empty vessel, 1 = fully inhabited
+uniform float uGather;     // orb states: -1 = settled at the bottom, +1 = gathered center
+uniform float uCore;       // orb states: central ember/heartbeat glow
+uniform float uNeural;     // orb states: neural firing intensity (thinking)
+uniform float uBoltJag;    // bolts: jaggedness multiplier
+uniform float uBoltWidth;  // bolts: width/blur multiplier
+uniform float uBoltRate;   // bolts: firing-frequency multiplier
 
 float strandGlow(float d, float sigma) {
   // super-gaussian: flat solid core, fast but feathered falloff
@@ -218,6 +225,72 @@ float fbm4(vec2 q) {
   return sum;
 }
 
+float segDist(vec2 q, vec2 a, vec2 b) {
+  vec2 ab = b - a;
+  float h = clamp(dot(q - a, ab) / max(dot(ab, ab), 1.0e-6), 0.0, 1.0);
+  return length(q - a - ab * h);
+}
+vec2 sparkPos(float k, float i, float R) {
+  float h1 = hash21(vec2(k * 7.31 + 1.13, i * 3.71 + 0.17));
+  float h2 = hash21(vec2(i * 9.13 + 2.29, k * 5.77 + 0.53));
+  float av = 6.2831853 * h1;
+  float rad = R * 0.85 * sqrt(h2);
+  return vec2(cos(av), sin(av)) * rad;
+}
+// a fractal lightning arc from A to B: the path is displaced by two octaves
+// of noise perpendicular to the segment (re-seeded per firing, so every bolt
+// is a fresh jagged shape), plus a fainter fork that shares the endpoints
+float boltGlow(vec2 q, vec2 A, vec2 B, float seed, float R, float life) {
+  vec2 ab = B - A;
+  float len = max(length(ab), 1.0e-4);
+  vec2 dir = ab / len;
+  vec2 nrm = vec2(-dir.y, dir.x);
+  vec2 w = q - A;
+  float u = dot(w, dir) / len;
+  float v = dot(w, nrm);
+  if (u < -0.05 || u > 1.05 || abs(v) > R * 0.30) return 0.0;
+  float uu = clamp(u, 0.0, 1.0);
+  float taper = sin(uu * 3.14159265);
+  float off1 = (fbm4(vec2(uu * 9.0 + seed * 13.1, seed * 7.7)) - 0.5) * 0.55 * uBoltJag;
+  float off2 = (fbm4(vec2(uu * 23.0 + seed * 5.3, seed * 3.9 + 4.2)) - 0.5) * 0.22 * uBoltJag;
+  float mainArc = abs(v - (off1 + off2) * len * taper);
+  float forkArc = abs(v - (off1 * 0.6 - off2 * 1.8) * len * taper);
+  float wdt = R * (0.006 + 0.010 * life) * uBoltWidth;
+  // sharp core + wide soft halo: discharge glow, not a drawn line
+  float bolt = exp(-pow(mainArc / wdt, 2.0))
+             + 0.45 * exp(-pow(mainArc / (wdt * 3.0), 2.0))
+             + 0.5 * exp(-pow(forkArc / (wdt * 0.8), 2.0))
+             + 0.25 * exp(-pow(forkArc / (wdt * 2.5), 2.0));
+  return bolt * taper;
+}
+
+// neurons: five sites firing on independent rhythms; each firing strikes a
+// fractal arc from its previous site to its new one
+float neuralGlow(vec2 q, float t, float R) {
+  if (uNeural < 0.01) return 0.0;
+  float acc = 0.0;
+  for (int k = 0; k < 5; k++) {
+    float fk = float(k);
+    float period = (1.1 + 1.3 * hash21(vec2(fk, 3.3))) / max(uBoltRate, 0.05);
+    float cyc = t / period + hash21(vec2(fk, 7.7)) * 7.0;
+    float i = floor(cyc);
+    float life = fract(cyc);
+    float env = smoothstep(0.0, 0.04, life) * exp(-5.0 * life);
+    if (env >= 0.004) {
+      vec2 pos = sparkPos(fk, i, R);
+      vec2 prev = sparkPos(fk, i - 1.0, R);
+      float seed = hash21(vec2(fk * 3.1, i * 1.7));
+      float bolt = boltGlow(q, prev, pos, seed, R, life) * env;
+      vec2 dp = q - pos;
+      vec2 dq = q - prev;
+      float tips = (exp(-dot(dp, dp) / (2.0 * R * R * 0.0016))
+                  + 0.6 * exp(-dot(dq, dq) / (2.0 * R * R * 0.0012))) * env;
+      acc += bolt * 1.2 + tips * 0.8;
+    }
+  }
+  return acc * uNeural;
+}
+
 float orbGlow(vec2 p, float t) {
   // the orb is a stationary vessel: voice never changes its size, only what
   // happens inside it
@@ -246,7 +319,9 @@ float orbGlow(vec2 p, float t) {
     float n = fbm4(pk * sc + turb * 2.0 * (q - 0.5) + o + vec2(tt * 0.28, tt * 0.18));
     dens += (0.45 - fk * 0.1) * n;
   }
-  dens = smoothstep(0.30, 0.78, dens);         // carve wisps out of the fog
+  // presence raises the carve floor: at 0 the vessel is empty glass
+  dens = smoothstep(0.30 + (1.0 - uPresence) * 0.40, 0.78, dens);
+  dens *= 0.12 + 0.88 * uPresence;
 
   // a light wanders inside the ball; wisps near it glow from within
   vec2 lp = vec2(cos(tt * 0.23), sin(tt * 0.31)) * R * 0.35;
@@ -260,7 +335,9 @@ float orbGlow(vec2 p, float t) {
   vec2 hp = p - vec2(-0.38, 0.42) * R;
   float spec = exp(-dot(hp, hp) / (2.0 * R * R * 0.004)) * uSpec;
 
-  return uGain * mask * (uFillGain * 1.6 * smoke + uEdgeGain * 0.8 * rim + spec);
+  float core = uCore * exp(-(d * d) / (2.0 * R * R * 0.026));
+  float nrl = neuralGlow(p, tt * 0.6, R);
+  return uGain * mask * (uFillGain * 1.6 * smoke + uEdgeGain * 0.8 * rim + spec + core * 1.3 + nrl * 1.2);
 }
 
 // ---- smoke orb: luminous smoke sealed in a glass sphere. Desaturated smoke
@@ -306,9 +383,14 @@ vec4 smokeOrb(vec2 p, float t) {
     // bounded orbit, not a straight scroll: the coverage pattern wanders
     // around home instead of migrating off one side of the vessel
     float cn = fbm4(pk * 0.9 + vec2(sin(tt * 0.041), -cos(tt * 0.033)) * 0.8);
-    float covLo = 0.62 - 0.30 * uFillGain + 0.03 * uLevel;
-    // center bias: the heart of the ball always holds some smoke
-    float cov = smoothstep(covLo, covLo + 0.28, cn + 0.16 * inner);
+    float covLo = 0.62 - 0.30 * uFillGain + 0.03 * uLevel
+                + (1.0 - uPresence) * 0.45;   // presence 0 = smoke gone
+    // gather: settled floor mist when negative, drawn to the center when positive
+    float bottomness = clamp(-p.y / max(R, 1.0e-4) * 1.3 - 0.1, 0.0, 1.0);
+    float gBias = 0.16 * inner * uPresence
+                + max(uGather, 0.0) * 0.30 * inner
+                + max(-uGather, 0.0) * 0.38 * bottomness;
+    float cov = smoothstep(covLo, covLo + 0.28, cn + gBias);
 
     // swirl + rise transport; dual-phase reprojection with spatial phase
     // jitter (cn) so drift is continuous and resets never pulse globally
@@ -342,6 +424,7 @@ vec4 smokeOrb(vec2 p, float t) {
   dens *= 1.0 - smoothstep(0.72, 0.97, d / max(R, 1.0e-4));
   // fill amount scales the smoke mass; activity concentrates it, not deletes it
   dens *= (0.45 + 1.25 * uFillGain) * (1.0 + 0.25 * uLevel);
+  dens *= 0.08 + 0.92 * uPresence;
   float dEff = clamp(dens, 0.0, 1.5) * (0.5 + 0.5 * zn);
   float aSmoke = 1.0 - exp(-2.6 * dEff);   // fake Beer-Lambert buildup
 
@@ -361,10 +444,14 @@ vec4 smokeOrb(vec2 p, float t) {
   float rim = pow(smoothstep(R * 0.66, R, d), 3.0);
   vec2 hp = p - vec2(-0.38, 0.42) * R;
   float spec = exp(-dot(hp, hp) / (2.0 * R * R * 0.004)) * uSpec;
-  col += accent * rim * uEdgeGain * 0.7 + vec3(spec);
+  // the ember: a small central heart that beats in near-empty states
+  float core = uCore * exp(-(d * d) / (2.0 * R * R * 0.022));
+  float nrl = neuralGlow(p, tt * 0.6, R);
+  col += accent * rim * uEdgeGain * 0.7 + vec3(spec) + accent * core * 1.5
+       + accent * nrl * (0.7 + 0.6 * aSmoke);
 
   col *= uGain * mask;
-  float alpha = clamp((aSmoke * 0.9 + G * act * 0.15 * zn
+  float alpha = clamp((aSmoke * 0.9 + G * act * 0.15 * zn + core + nrl * 0.55
                      + rim * uEdgeGain * 0.5 + spec + 0.03 * zn) * uGain, 0.0, 1.0) * mask;
   float nz = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
   alpha = clamp(alpha + (nz - 0.5) / 255.0, 0.0, 1.0);
@@ -396,6 +483,9 @@ void main() {
   float glow = uMode < 1.5
     ? braidGlow(r, th, t, amp, baseR, env)
     : (uMode < 2.5 ? ribbonGlow(r, th, t, amp, baseR, env) : orbGlow(p, t));
+  // braid: soft-compress pileups; three overlapping strands can otherwise sum
+  // past every threshold and read as one solid white tube
+  if (uMode < 1.5) glow = glow / (1.0 + 0.35 * glow);
 
   // braid keeps its darker floor so strand structure reads; the wind sheet
   // needs the lifted floor to stay sheer (raising the floor for ALL modes was
