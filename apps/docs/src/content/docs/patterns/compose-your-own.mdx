@@ -98,9 +98,9 @@ Three real `kai-*` web components inside a `<kai-resizable>` layout:
 **Key points:**
 
 - `kai-resizable` lays out panels horizontally (or vertically with `orientation="vertical"`). Each `kai-resizable-item` takes a `size`, `min`, and `max` — all as HTML attributes (scalar values).
-- `kai-conversations` accepts a `conversations` property (flat array; the element groups by recency automatically). Listen for `kai-conversation-select` to update `activeId`.
+- `kai-conversations` accepts a `conversations` property (the rows) and an optional `groups` property (the section headers, matched against each row's `groupId`). With no `groups`, the whole list renders in one Ungrouped section. Listen for `kai-conversation-select` to update `activeId`.
 - Create one `<kai-message>` per turn and set its `message` property to the full `ChatMessage` object — `{ id, role, parts, actions?, avatar?, feedback? }`, where `parts` is an ordered array of `text` / `reasoning` / `tool` / `card` / `source` / `file` parts.
-- `kai-prompt-input` fires `kai-submit` with `{ value, attachments }`. Set `loading` to `true` while streaming; the send button disables automatically.
+- `kai-prompt-input` fires `kai-submit` with `{ value, doc, entities, attachments }` — `value` is the flattened text, `doc` and `entities` the structured pills. Set `loading` to `true` while streaming and the send button disables; add `stoppable` to swap it for a Stop button that fires `kai-stop`.
 
 ## Adding a third panel
 

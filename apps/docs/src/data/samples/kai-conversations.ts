@@ -100,7 +100,7 @@ const GROUPED_CONVERSATIONS = [
 ];
 
 export default {
-  // Default: flat conversations — the element auto-buckets by recency.
+  // Default: flat conversations, no groups — everything renders as one Ungrouped section.
   sample: {
     conversations: FLAT_CONVERSATIONS,
   },

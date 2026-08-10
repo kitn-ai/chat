@@ -5,13 +5,13 @@ description: A ChatGPT-style layout — collapsible conversation sidebar beside 
 
 import WorkspaceDemo from '../../../components/WorkspaceDemo.tsx';
 
-<p class="kai-lede">One element gives you the full workspace: a resizable, collapsible sidebar listing past conversations grouped by recency, plus a streaming chat thread. Select a conversation, start a new one, or send a message below.</p>
+<p class="kai-lede">One element gives you the full workspace: a resizable, collapsible sidebar listing past conversations, plus a streaming chat thread. Select a conversation, start a new one, or send a message below.</p>
 
 <WorkspaceDemo client:only="solid" />
 
 ## How it works
 
-`<kai-workspace>` wraps `<kai-conversations>` and `<kai-chat>` inside a resizable split. You pass a flat `conversations` array (the component auto-buckets by recency) and the active thread's `messages`. Three events drive all the interactivity:
+`<kai-workspace>` wraps `<kai-conversations>` and `<kai-chat>` inside a resizable split. You pass a flat `conversations` array (add `groups` when you want section headers) and the active thread's `messages`. Three events drive all the interactivity:
 
 ```html
 <kai-workspace id="ws"></kai-workspace>

@@ -30,7 +30,7 @@ Two properties hold the state: `conversations` (the sidebar list) and `messages`
 
   const ws = document.getElementById('ws');
 
-  // The sidebar list. The component buckets rows by recency using the timestamps.
+  // The sidebar list. With no `groups`, every row renders in one Ungrouped section.
   ws.conversations = [
     {
       id: 'c1',
