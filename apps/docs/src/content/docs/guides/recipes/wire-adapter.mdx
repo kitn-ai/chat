@@ -111,38 +111,94 @@ await readModelStream(res, stream, { format: acmeEvents });
 
 ## Tool loop
 
-The kit never calls your function. `readOpenAIStream` returns the turn, you run the tools, and `applyToolOutput` completes the panel. Every round folds onto the same assistant message, so one stream spans the whole loop:
+The kit never calls your function. `readOpenAIStream` returns the turn, you run the tools, `applyToolOutput` completes the panel and `applyToolFailure` fails it. Every round folds onto the same assistant message, so one stream spans the whole loop.
 
-```ts
-import { createAssistantStream } from '@kitn.ai/ui/state';
-import { applyToolOutput, readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';
+<Aside type="caution" title="React state can't be read back mid-turn">
+`chat.messages` (or any `useState`) is off-limits inside the loop below. `dispatchSetState` only computes the next value eagerly when the fiber has no pending lanes, and that's never true while a turn is streaming, so the closure would keep reading the pre-submit snapshot every round and miss the tool call and result the turn just wrote. Declare a turn-scoped `thread` instead and route every write through it, as below. A store that already reads back synchronously (a Vue `ref`, a Svelte `let`, a Solid-backed store) doesn't need this: reassign it directly each round, it already is the thread.
+</Aside>
 
-const stream = createAssistantStream((update) => {
-  chat.messages = update(chat.messages);
-});
+```tsx
+import { Chat, useKaiChat } from '@kitn.ai/ui/react';
+import type { ChatMessage } from '@kitn.ai/ui/react';
+import { createAssistantStream, type SetMessages } from '@kitn.ai/ui/state';
+import { applyToolFailure, applyToolOutput, readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';
 
-try {
-  // Cap the rounds: a runaway model is a runaway bill.
-  for (let round = 0; round < 4; round++) {
-    const res = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      // Re-encoded every round, so the results applyToolOutput just wrote travel
-      // back with the next request. That is what lets the model answer with them.
-      body: JSON.stringify({ messages: toOpenAIMessages(chat.messages), tools }),
-    });
+// The tools the model may call. The request body carries this array; without it
+// the model never emits a tool call and <kai-tool> stays empty.
+const tools = [
+  {
+    type: 'function' as const,
+    function: {
+      name: 'search',
+      description: 'Search the web for up-to-date information.',
+      parameters: {
+        type: 'object',
+        properties: { query: { type: 'string', description: 'What to search for.' } },
+        required: ['query'],
+      },
+    },
+  },
+];
 
-    const turn = await readOpenAIStream(res, stream);
-    const pending = turn.toolCalls.filter((call) => !call.error && !call.providerExecuted);
-    if (pending.length === 0) break;
+// YOUR tool runs here. The kit never calls it: the model asks, you execute, and
+// applyToolOutput reports the result back into the panel and the next round.
+async function runTool(name: string, input: Record<string, unknown>) {
+  if (name === 'search') return { results: [`Searched for: ${String(input.query ?? '')}`] };
+  return { error: `Unknown tool: ${name}` };
+}
 
-    for (const call of pending) {
-      const output = await runYourTool(call.name, call.input ?? {});
-      applyToolOutput(stream, call.id, output);
-    }
-  }
-} finally {
-  stream.done();
+export function App() {
+  const chat = useKaiChat({
+    onSubmit: async ({ value }) => {
+      const userMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: 'user',
+        parts: [{ type: 'text', text: value }],
+      };
+
+      // `thread` is this turn's source of truth. `set` mutates it and projects
+      // the result through chat.setMessages, so every round below re-encodes the
+      // live thread instead of the stale `chat.messages` this closure captured
+      // at submit time.
+      let thread: ChatMessage[] = [...chat.messages, userMsg];
+      const set: SetMessages = (fn) => {
+        thread = fn(thread);
+        chat.setMessages(thread);
+      };
+      chat.setMessages(thread);
+
+      const stream = createAssistantStream(set);
+      try {
+        // Cap the rounds: a runaway model is a runaway bill.
+        for (let round = 0; round < 4; round++) {
+          const res = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            // Re-encoded every round, so the results applyToolOutput just wrote
+            // travel back with the next request. That is what lets the model
+            // answer with them.
+            body: JSON.stringify({ messages: toOpenAIMessages(thread), tools }),
+          });
+
+          const turn = await readOpenAIStream(res, stream);
+          const pending = turn.toolCalls.filter((call) => !call.error && !call.providerExecuted);
+          if (pending.length === 0) break;
+
+          for (const call of pending) {
+            try {
+              applyToolOutput(stream, call.id, await runTool(call.name, call.input ?? {}));
+            } catch (err) {
+              applyToolFailure(stream, call.id, err instanceof Error ? err.message : 'Tool failed');
+            }
+          }
+        }
+      } finally {
+        stream.done();
+      }
+    },
+  });
+
+  return <Chat {...chat.bind} style={{ display: 'block', height: '100dvh' }} />;
 }
 ```
 
