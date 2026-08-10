@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { scaffold } from './tools/scaffold';
 import { getIntegration, listIntegrations } from '../registry';
+// The real encoders, used to prove WHY the fabricated sample seed had to go:
+// one of them throws on it, the other quietly sends it.
+import { toAnthropicMessages, toOpenAIMessages, WireEncodeError } from '../../wire/encode';
+import type { ChatMessage } from '../../elements/chat-types';
 
 /**
  * scaffold composes a working chat surface from four axes:
@@ -561,7 +565,7 @@ describe('scaffold', () => {
     expect(text).not.toMatch(/<kai-tool\s*>/);
   });
 
-  it('SCAF-9: agentic (react) seeds a sample assistant message with tool + reasoning embedded', async () => {
+  it('SCAF-9: agentic (react) explains where tool + reasoning parts come from', async () => {
     const out = await scaffold.handler({
       useCase: 'agentic',
       integration: 'openrouter',
@@ -569,10 +573,8 @@ describe('scaffold', () => {
       framework: 'react',
     });
     const text = (out.content as { type: string; text: string }[])[0].text;
-    // Must embed tool+reasoning in the sample message — not as siblings
+    // Must say tool/reasoning are PARTS on a message, not sibling elements
     expect(text).toMatch(/tools|reasoning/i);
-    // The sample message must be seeded (not an empty array)
-    expect(text).toMatch(/sampleMessages|SCAF-9/);
     // Must still render kai-chat (the root component)
     expect(text).toMatch(/<Chat\b/);
   });
@@ -716,8 +718,11 @@ describe('scaffold', () => {
         framework,
       });
       const text = (out.content as { type: string; text: string }[])[0].text;
-      expect(text, `${framework}: missing the kit ChatMessage import`).toContain(
-        "import { createAssistantStream, type ChatMessage } from '@kitn.ai/ui/state';",
+      // React-family scaffolds also import `type SetMessages` — the tool loop's
+      // thread setter is annotated with it — so this pins the two names that must
+      // always be there rather than the whole line.
+      expect(text, `${framework}: missing the kit ChatMessage import`).toMatch(
+        /^\s*import \{ createAssistantStream, type ChatMessage(?:, type SetMessages)? \} from '@kitn\.ai\/ui\/state';$/m,
       );
       // The local subset type is gone: it has no rawInput/raw/signature/index on a
       // tool and no source/file part variants, so it would reject a message the
@@ -1574,6 +1579,24 @@ describe('scaffold', () => {
 
 const REAL_FRAMEWORKS = ['react', 'vue', 'svelte', 'html', 'next', 'tanstack-start'] as const;
 
+/**
+ * The expression a TOOL-LOOP scaffold re-encodes every round.
+ *
+ * A single-round scaffold posts a `history` const built once. A loop has to read
+ * the thread BACK between rounds, including the assistant message the stream
+ * appended, so each framework names whatever it can read synchronously: the live
+ * element property, the live ref/local, or — for React, whose state cannot be
+ * read back inside the async turn writing it — a turn-owned `thread`.
+ */
+const THREAD_EXPR: Record<(typeof REAL_FRAMEWORKS)[number], string> = {
+  react: 'thread',
+  next: 'thread',
+  'tanstack-start': 'thread',
+  vue: 'messages.value',
+  svelte: 'messages',
+  html: 'chat.messages',
+};
+
 /** Block 1 ONLY: the scaffolder's own front-end CODE. Excludes the backend route
  *  template (a route may legitimately hand-roll a re-framing reader; the
  *  cloudflare worker template does), the reference snippets, and the header,
@@ -1710,7 +1733,7 @@ describe('scaffolds import the wire adapter for real backends', () => {
     expect(code).toContain('parts:');
   });
 
-  it('captures the turn LIVE and emits the multi-round tool loop COMMENTED', async () => {
+  it('emits the multi-round tool loop LIVE, with a runner it actually defines', async () => {
     const code = frontEnd(
       await scaffold.handler({
         framework: 'react',
@@ -1719,32 +1742,41 @@ describe('scaffolds import the wire adapter for real backends', () => {
         placement: 'full-page',
       }),
     );
-    // The turn is bound live, and the commented loop reads THAT binding. The
-    // version this replaces opened the comment with its own
-    // `const turn = await readOpenAIStream(res, stream)`, which uncommented into a
-    // second read of an already-consumed Response: no throw, an empty ModelTurn,
-    // no tool calls, nothing to point at. Commented code still has to be correct,
-    // because being uncommented is the entire point of it.
+    // The turn is read into the same stream every round.
     expect(code).toContain('const turn = await readOpenAIStream(res, stream);');
     expect(code.match(/readOpenAIStream\(res, stream\)/g)).toHaveLength(1);
     // The in-band error channel is not silently dropped either.
     expect(code).toContain('if (turn.error)');
-    // The LOOP itself stays commented: the kit never calls a consumer's function,
-    // and a live loop against tools that do not exist yet fails on the first run.
-    expect(code).toMatch(/\/\/\s+for \(const call of turn\.toolCalls\)/);
-    expect(code).not.toMatch(/^\s*for \(const call of turn\.toolCalls\)/m);
-    expect(code).not.toMatch(/^\s*applyToolOutput\(/m);
-    // The scaffolder must never write a tool executor.
-    expect(code).not.toMatch(/^\s*async function runYourTool/m);
+    // The loop is LIVE, at column > 0, not inside a comment. The version this
+    // replaces emitted it commented out, named an undefined `runYourTool`, and
+    // described round two in prose over a thread the consumer had no way to
+    // obtain — so the archetype's headline capability could not be completed by
+    // uncommenting or by any amount of local editing.
+    expect(code).toMatch(/^\s*for \(let round = 0; round < MAX_TOOL_ROUNDS; round\+\+\) \{$/m);
+    expect(code).toMatch(/^\s*const pending = turn\.toolCalls\.filter\(/m);
+    expect(code).toMatch(/^\s*applyToolOutput\(stream, call\.id, await runTool\(/m);
+    expect(code).toMatch(/^\s*applyToolFailure\(stream, call\.id, /m);
+    // Every function the loop calls is DEFINED in the same emitted file.
+    expect(code).toMatch(/^\s*async function runTool\(/m);
+    expect(code).not.toContain('runYourTool');
+    // Round two is code, not prose: the fetch is INSIDE the loop body.
+    const loopAt = code.indexOf('for (let round = 0;');
+    const fetchAt = code.indexOf("await fetch('/api/chat'");
+    expect(loopAt, 'the loop opens before the request it repeats').toBeGreaterThan(-1);
+    expect(fetchAt, 'the request is not inside the loop').toBeGreaterThan(loopAt);
+    // And the whole loop runs BEFORE done(): done() settles the message, so a
+    // tool result reported after it is dropped and the panel spins forever.
+    expect(code.indexOf('stream.done();')).toBeGreaterThan(fetchAt);
   });
 
-  // Regression guard for a defect this suite shipped once: applyToolOutput was
-  // added to the LIVE wire import for every tool archetype while being called
-  // only from the commented block. Every starter in this repo, and create-vite's
-  // own TypeScript template, sets noUnusedLocals, so `npm run build` failed with
-  // TS6133 in a stock app. An import may only name what live code references.
+  // The mirror of the guard this replaces. applyToolOutput/applyToolFailure used
+  // to be BANNED from the live import because only a commented block called
+  // them, and every starter here (plus create-vite's own TS template) sets
+  // noUnusedLocals, so importing an unreferenced name fails `npm run build` with
+  // TS6133. The loop is live now, so the rule is unchanged and the expectation
+  // flips: an import may name exactly what live code references.
   it.each(REAL_FRAMEWORKS)(
-    '%s tool archetype keeps applyToolOutput OUT of the live import (noUnusedLocals)',
+    '%s tool archetype imports applyToolOutput/applyToolFailure because the live loop calls them',
     async (framework) => {
       const code = frontEnd(
         await scaffold.handler({
@@ -1754,20 +1786,148 @@ describe('scaffolds import the wire adapter for real backends', () => {
           placement: 'full-page',
         }),
       );
-      // No live import statement may name it, at any indentation.
-      expect(code, `${framework}: applyToolOutput in a live import`).not.toMatch(
-        /^\s*import \{[^}]*applyToolOutput/m,
-      );
-      // It is still shown, as the commented import beside the loop that calls it.
-      expect(code, `${framework}: missing the commented applyToolOutput import`).toContain(
-        "//   import { applyToolOutput } from '@kitn.ai/ui/wire';",
-      );
-      // And the live wire import is still exactly the two names live code uses.
       expect(code, `${framework}: live wire import changed shape`).toMatch(
-        /^\s*import \{ readOpenAIStream, toOpenAIMessages \} from '@kitn\.ai\/ui\/wire';$/m,
+        /^\s*import \{ readOpenAIStream, toOpenAIMessages, applyToolOutput, applyToolFailure \} from '@kitn\.ai\/ui\/wire';$/m,
+      );
+      // Both names are referenced by live code, which is what makes the import legal.
+      expect(code, `${framework}: applyToolOutput imported but never called`).toMatch(
+        /^\s*applyToolOutput\(stream, /m,
+      );
+      expect(code, `${framework}: applyToolFailure imported but never called`).toMatch(
+        /^\s*applyToolFailure\(stream, /m,
       );
     },
   );
+
+  // A NON-tool archetype must not pay for any of it: no loop, no runner, and an
+  // import naming only the two functions its single-round body calls.
+  it.each(REAL_FRAMEWORKS)(
+    '%s non-tool archetype keeps the loop imports out (noUnusedLocals)',
+    async (framework) => {
+      const code = frontEnd(
+        await scaffold.handler({
+          framework,
+          useCase: 'drop-in-chat',
+          integration: 'openrouter',
+          placement: 'full-page',
+        }),
+      );
+      expect(code, `${framework}: live wire import changed shape`).toMatch(
+        /^\s*import \{ readOpenAIStream, toOpenAIMessages \} from '@kitn\.ai\/ui\/wire';$/m,
+      );
+      expect(code, `${framework}: applyToolOutput on a non-tool archetype`).not.toContain(
+        'applyToolOutput',
+      );
+      expect(code, `${framework}: runTool on a non-tool archetype`).not.toContain('runTool');
+    },
+  );
+
+  // ── the fabricated sample seed ────────────────────────────────────────────
+  //
+  // The agentic archetype used to seed `sampleMessages` with an assistant turn
+  // that announced tool call `tc_001` and answered it. Three consequences, all
+  // real, none visible in a screenshot:
+  //   1. turn one POSTs it, so the very first request claims the model made a
+  //      call it never made;
+  //   2. `toAnthropicMessages` THROWS on it (a reasoning part with no verbatim
+  //      `raw` cannot be echoed back as a thinking block) — asserted below
+  //      against the encoder itself, not against a string;
+  //   3. a non-empty thread has no empty state, so the `suggestions` argument
+  //      this very tool takes never rendered.
+
+  it.each(REAL_FRAMEWORKS)(
+    '%s agentic scaffold seeds NO fabricated assistant turn',
+    async (framework) => {
+      const code = frontEnd(
+        await scaffold.handler({
+          framework,
+          useCase: 'agentic',
+          integration: 'openrouter',
+          placement: 'full-page',
+          suggestions: ['Find the current pricing'],
+        }),
+      );
+      expect(code, `${framework}: fabricated tool call id still seeded`).not.toContain('tc_001');
+      expect(code, `${framework}: fabricated assistant message still seeded`).not.toContain(
+        'sample-assistant',
+      );
+      // Not even commented: on a real backend the fixture is unsafe at any level
+      // of commenting-out, because uncommenting it is what sends it.
+      expect(code, `${framework}: fixture offered on a real backend`).not.toContain(
+        'sampleMessages',
+      );
+      // The thread starts EMPTY, in this framework's own spelling.
+      const emptyInit: Record<(typeof REAL_FRAMEWORKS)[number], RegExp> = {
+        react: /const \[messages, setMessages\] = useState<ChatMessage\[\]>\(\[\]\);/,
+        next: /const \[messages, setMessages\] = useState<ChatMessage\[\]>\(\[\]\);/,
+        'tanstack-start': /const \[messages, setMessages\] = useState<ChatMessage\[\]>\(\[\]\);/,
+        vue: /const messages = ref<ChatMessage\[\]>\(\[\]\);/,
+        svelte: /let messages: ChatMessage\[\] = \[\];/,
+        // html never assigns chat.messages at startup at all; the first submit
+        // reads it through `?? []` because an un-upgraded element has none.
+        html: /chat\.messages = \[\.\.\.chat\.messages \?\? \[\], /,
+      };
+      expect(code, `${framework}: thread does not start empty`).toMatch(emptyInit[framework]);
+      // And the suggestions the caller passed are still wired, which is the
+      // thing an empty state is needed for.
+      expect(code, `${framework}: caller suggestions dropped`).toContain('Find the current pricing');
+    },
+  );
+
+  it('the seed that was removed is exactly what toAnthropicMessages refuses', () => {
+    // The historical seed, verbatim. This is the WHY behind the test above: not
+    // a style preference, an encoder that throws before the request is built.
+    const historicalSeed: ChatMessage[] = [
+      {
+        id: 'sample-assistant',
+        role: 'assistant',
+        parts: [
+          { type: 'reasoning', text: 'I should call the search tool to get up-to-date data.' },
+          {
+            type: 'tool',
+            tool: {
+              type: 'search',
+              state: 'output-available',
+              input: { query: 'current pricing' },
+              output: { results: ['Result A', 'Result B'] },
+              toolCallId: 'tc_001',
+            },
+          },
+          { type: 'text', text: 'Searched the web for current pricing.' },
+        ],
+      },
+    ];
+    expect(() => toAnthropicMessages(historicalSeed)).toThrow(WireEncodeError);
+    // And on the OpenAI wire it does not throw — it lies, which is worse: turn
+    // one carries an assistant tool_call plus its result as conversation history.
+    const wire = toOpenAIMessages(historicalSeed);
+    expect(wire.some((m) => m.role === 'tool' && m.tool_call_id === 'tc_001')).toBe(true);
+  });
+
+  it('only the mock preview offers the fixture, and only commented out', async () => {
+    const code = frontEnd(
+      await scaffold.handler({
+        framework: 'react',
+        useCase: 'agentic',
+        integration: 'mock',
+        placement: 'full-page',
+      }),
+    );
+    // Offered...
+    expect(code).toContain('tc_001');
+    // ...but every line mentioning it is a comment, and the live initializer is empty.
+    for (const line of code.split('\n')) {
+      if (line.includes('tc_001') || line.includes('sampleMessages')) {
+        expect(line.trim().startsWith('//'), `live fixture line: ${line}`).toBe(true);
+      }
+    }
+    expect(code).toContain('const [messages, setMessages] = useState<ChatMessage[]>([]);');
+    // The commented block must uncomment COMPLETELY: a fixture const with no
+    // consumer is TS6133 the moment someone takes the offer.
+    expect(code).toContain(
+      '// const [messages, setMessages] = useState<ChatMessage[]>(sampleMessages);',
+    );
+  });
 
   it('a non-tool archetype gets no tool-loop block and no applyToolOutput import', async () => {
     const out = await scaffold.handler({
@@ -1796,7 +1956,10 @@ describe('scaffolds import the wire adapter for real backends', () => {
         );
         const label = `${integration.id}/${framework}`;
         expect(code, `${label}: missing readOpenAIStream`).toContain('await readOpenAIStream(res, stream);');
-        expect(code, `${label}: missing toOpenAIMessages`).toContain('toOpenAIMessages(history)');
+        // agentic is a tool archetype, so the request re-encodes the LIVE thread.
+        expect(code, `${label}: missing toOpenAIMessages`).toContain(
+          `toOpenAIMessages(${THREAD_EXPR[framework]})`,
+        );
         expect(code, `${label}: hand-rolled reader survived`).not.toContain('getReader()');
         expect(code, `${label}: hand-rolled frame split survived`).not.toContain("startsWith('data:')");
         expect(code, `${label}: hand-rolled delta walk survived`).not.toContain('choices?.[0]?.delta');
@@ -1827,7 +1990,7 @@ describe('real-backend scaffolds send what the panel needs and survive a failure
     );
     expect(code, `${framework}: no tools declaration`).toMatch(/^\s*const tools = \[$/m);
     expect(code, `${framework}: tools missing from the POST body`).toContain(
-      'toOpenAIMessages(history), tools }',
+      `toOpenAIMessages(${THREAD_EXPR[framework]}), tools }`,
     );
   });
 
@@ -1897,9 +2060,10 @@ describe('real-backend scaffolds send what the panel needs and survive a failure
       expect(code.includes('{ model, messages:'), `${integration}: model in body`).toBe(
         forwards.includes('model'),
       );
-      expect(code.includes('toOpenAIMessages(history), tools }'), `${integration}: tools in body`).toBe(
-        forwards.includes('tools'),
-      );
+      expect(
+        code.includes(`toOpenAIMessages(${THREAD_EXPR.react}), tools }`),
+        `${integration}: tools in body`,
+      ).toBe(forwards.includes('tools'));
     },
   );
 

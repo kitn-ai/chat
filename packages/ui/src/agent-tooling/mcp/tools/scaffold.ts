@@ -212,6 +212,77 @@ function mockStreamBody(opts: {
 // ── real-backend streaming: import the adapter, do not re-hand-roll it ─────────
 
 /**
+ * How one framework exposes the turn's thread — the array every round of the
+ * tool loop re-encodes.
+ *
+ * THE WHOLE PROBLEM IN ONE INTERFACE. Round 2's request is
+ * `toOpenAIMessages(<the thread INCLUDING the assistant turn so far>)`, and the
+ * assistant message is appended by `createAssistantStream` through the setter,
+ * so the submit handler never holds it. Three of the four surfaces already keep
+ * their messages somewhere a closure can read back synchronously
+ * (`chat.messages`, `messages.value`, a Svelte `let`), so for those the thread
+ * IS that live value and there is nothing to add. React is the odd one:
+ * `useState` cannot be read back inside the async turn that is writing it, so
+ * the turn declares its own `thread` and `setMessages` becomes the projection of
+ * it. See `REACT_THREAD` for why that is a single source of truth and not a
+ * mirror.
+ */
+interface ThreadBinding {
+  /** Lines that open the turn: append the user message and commit it. */
+  open(ctx: { pad: string; userMessage: string; typed: boolean }): string[];
+  /** Expression that reads the CURRENT thread, valid at any point in the turn. */
+  live: string;
+  /** The `SetMessages` updater handed to `createAssistantStream`. */
+  setter: string;
+}
+
+/**
+ * React (and next / tanstack-start, which are React).
+ *
+ * `thread` is the turn's single source of truth; `setMessages(thread)` is a
+ * projection of it for rendering, never read back. That ordering matters: the
+ * inverse (holding a copy and folding FROM it while React holds the truth) is
+ * the mirror bug this kit already shipped once — `createAssistantStream` used to
+ * fold from a local `currentParts` and silently clobbered any edit made through
+ * the store. Here nothing folds from the store, so nothing can be clobbered by a
+ * stale copy; the one rule, stated in the emitted comment, is that a turn's
+ * writes all go through `set`.
+ */
+const REACT_THREAD: ThreadBinding = {
+  open: ({ pad, userMessage }) => [
+    `${pad}// THE TURN OWNS THE THREAD. Every round of the loop below re-encodes the`,
+    `${pad}// whole thread, and React state cannot be read back to get it: setMessages`,
+    `${pad}// is async and this closure captured the pre-submit \`messages\`. So \`thread\``,
+    `${pad}// is the source of truth for this turn and setMessages just projects it for`,
+    `${pad}// rendering. Route any other messages write you make mid-turn through set().`,
+    `${pad}let thread: ChatMessage[] = [...messages, ${userMessage}];`,
+    `${pad}const set: SetMessages = (fn) => { thread = fn(thread); setMessages(thread); };`,
+    `${pad}setMessages(thread);`,
+  ],
+  live: 'thread',
+  setter: 'set',
+};
+
+/** A framework whose messages live in a variable/property the turn can read back
+ *  (html's `chat.messages`, Vue's `messages.value`, Svelte's `messages`). The
+ *  live value IS the thread: no local copy, nothing to keep in sync.
+ *
+ *  `firstRead` differs from `expr` only where the first read can precede any
+ *  write: an un-upgraded `<kai-chat>` has no `messages` yet, and spreading
+ *  `undefined` throws. Every later read is of a value this code assigned. */
+function liveThreadBinding(expr: string, setter: string, firstRead = expr): ThreadBinding {
+  return {
+    open: ({ pad, userMessage }) => [
+      `${pad}// ${expr} IS the thread: the stream writes the assistant message back`,
+      `${pad}// through it, so every round below re-encodes the live, current value.`,
+      `${pad}${expr} = [...${firstRead}, ${userMessage}];`,
+    ],
+    live: expr,
+    setter,
+  };
+}
+
+/**
  * The real-backend submit body. Four lines of adapter, the rest is fetch.
  *
  * This deliberately reverses the inline-everything policy that governs the mock
@@ -229,6 +300,8 @@ function mockStreamBody(opts: {
  *
  * `commitSet(expr)` is how each framework writes a whole new messages array, and
  * `setterAdapter` is the `SetMessages` updater createAssistantStream drives.
+ * Both are used by the single-round shape only; the tool-loop shape takes its
+ * thread and its setter from `thread` (see `ThreadBinding`).
  */
 function realStreamBody(opts: {
   pad: string;
@@ -240,42 +313,59 @@ function realStreamBody(opts: {
   setterAdapter: string;
   /** set loading true/false */
   setLoading: (v: 'true' | 'false') => string;
-  /** the JSON.stringify argument for the POST body */
-  bodyPayload: string;
+  /** the JSON.stringify argument for the POST body, given the thread expression */
+  bodyPayload: (thread: string) => string;
   /** emit `as const` + the ChatMessage[] annotation (strict-TS frameworks) */
   strictRoles?: boolean;
-  /** archetype renders kai-tool → append the commented multi-round loop */
+  /** archetype renders kai-tool → emit the LIVE multi-round loop */
   toolLoop: boolean;
+  /** how this framework exposes the turn's thread (tool-loop shape only) */
+  thread: ThreadBinding;
 }): string {
-  const { pad, read, commitSet, setterAdapter, setLoading, bodyPayload, strictRoles = false, toolLoop } = opts;
+  const { pad, read, commitSet, setterAdapter, setLoading, bodyPayload, strictRoles = false, toolLoop, thread } = opts;
   const asConst = strictRoles ? ' as const' : '';
   // Under strict TS an un-annotated array literal widens the part's `type` to
   // `string`, so the later commit fails TS2322. Plain-JS contexts (html) have no
   // type to annotate with.
   const historyType = strictRoles ? ': ChatMessage[]' : '';
+  const userMessage = `{ id: crypto.randomUUID(), role: 'user'${asConst}, parts: [{ type: 'text', text: value }] }`;
+
+  const open = toolLoop
+    ? thread.open({ pad, userMessage, typed: strictRoles })
+    : [
+        `${pad}const history${historyType} = [...${read}, ${userMessage}];`,
+        `${pad}${commitSet('history')}`,
+      ];
+  const threadExpr = toolLoop ? thread.live : 'history';
+  const setter = toolLoop ? thread.setter : setterAdapter;
+
+  const request = (indent: string): string[] => [
+    `${indent}const res = await fetch('/api/chat', {`,
+    `${indent}  method: 'POST',`,
+    `${indent}  headers: { 'Content-Type': 'application/json' },`,
+    `${indent}  body: JSON.stringify(${bodyPayload(threadExpr)}),`,
+    `${indent}});`,
+    `${indent}// The finished turn: text, reasoning, tool calls, stop reason, usage. An`,
+    `${indent}// error FRAME inside a 200 stream lands on turn.error, and whatever`,
+    `${indent}// streamed before it is already on the message. A non-ok RESPONSE throws`,
+    `${indent}// instead, which is the catch below.`,
+    `${indent}const turn = await readOpenAIStream(res, stream);`,
+  ];
+
   return [
     `${pad}const value = e.detail.value.trim();`,
     `${pad}if (!value) return;`,
-    `${pad}const history${historyType} = [...${read}, { id: crypto.randomUUID(), role: 'user'${asConst}, parts: [{ type: 'text', text: value }] }];`,
-    `${pad}${commitSet('history')}`,
+    ...open,
     `${pad}${setLoading('true')}`,
     `${pad}// createAssistantStream appends the in-flight assistant message and folds`,
     `${pad}// every delta onto its parts. readOpenAIStream parses the SSE: keep-alive`,
     `${pad}// comments, multi-line frames, split codepoints, tool calls, reasoning.`,
-    `${pad}const stream = createAssistantStream(${setterAdapter});`,
-    `${pad}try {`,
-    `${pad}  const res = await fetch('/api/chat', {`,
-    `${pad}    method: 'POST',`,
-    `${pad}    headers: { 'Content-Type': 'application/json' },`,
-    `${pad}    body: JSON.stringify(${bodyPayload}),`,
-    `${pad}  });`,
-    `${pad}  // The finished turn: text, reasoning, tool calls, stop reason, usage. An`,
-    `${pad}  // error FRAME inside a 200 stream lands on turn.error, and whatever`,
-    `${pad}  // streamed before it is already on the message. A non-ok RESPONSE throws`,
-    `${pad}  // instead, which is the catch below.`,
-    `${pad}  const turn = await readOpenAIStream(res, stream);`,
-    `${pad}  if (turn.error) console.error('Model error:', turn.error.message);`,
-    ...(toolLoop ? toolLoopComment(`${pad}  `) : []),
+    `${pad}const stream = createAssistantStream(${setter});`,
+    ...(toolLoop ? toolLoopBody({ pad, request, threadExpr }) : [
+      `${pad}try {`,
+      ...request(`${pad}  `),
+      `${pad}  if (turn.error) console.error('Model error:', turn.error.message);`,
+    ]),
     `${pad}} catch (err) {`,
     `${pad}  // Without this a bad key is a permanently blank assistant bubble plus an`,
     `${pad}  // unhandled rejection. abort() settles the message and flips any tool`,
@@ -284,6 +374,8 @@ function realStreamBody(opts: {
     `${pad}  stream.abort(err instanceof Error ? err.message : 'Request failed');`,
     `${pad}  console.error(err);  // swap in your own error surface (a toast, a banner)`,
     `${pad}} finally {`,
+    `${pad}  // done() SETTLES the message: every sink call after it is dropped, which`,
+    `${pad}  // is why the whole loop runs above it and not after.`,
     `${pad}  stream.done();`,
     `${pad}  ${setLoading('false')}`,
     `${pad}}`,
@@ -291,40 +383,86 @@ function realStreamBody(opts: {
 }
 
 /**
- * The multi-round tool loop, emitted COMMENTED OUT.
+ * The multi-round tool loop, LIVE.
  *
- * The kit never calls a consumer's function, and a live loop against tools that
- * do not exist yet would fail on the first run. Commented is the honest default:
- * the shape is there to uncomment, and nothing pretends to work that does not.
+ * It used to be emitted commented out, on the reasoning that a loop calling
+ * tools that do not exist yet would fail on the first run. That reasoning was
+ * wrong in the way that matters: the commented block named an undefined
+ * `runYourTool`, and its second round was prose ("then POST again with
+ * toOpenAIMessages() over the updated thread") describing a value the consumer
+ * had no way to obtain — `history` never contains the assistant message, the
+ * `messages` closure is stale by construction, and `AssistantStream` is
+ * write-only. So the archetype's headline capability could not be completed by
+ * uncommenting, or by any amount of local editing.
  *
- * It is emitted directly under the LIVE `const turn = await readOpenAIStream(...)`
- * and reads that binding. It used to open with a second
- * `const turn = await readOpenAIStream(res, stream)`, which uncommented to a
- * re-read of an already-consumed Response: no throw, an empty ModelTurn, no tool
- * calls, and nothing to point at. Commented code still has to be correct, because
- * the whole point of it is that someone uncomments it.
+ * Live, with a `runTool` stub that answers the one tool the scaffold declares,
+ * it runs end to end on the first submit: the panel reaches `output-available`
+ * and the model's answer streams into the same message, after the tool part, as
+ * a new text part.
+ *
+ * Both rounds drive the SAME `AssistantStream`, so the whole exchange folds into
+ * one assistant message with its parts in stream order — which is what
+ * `toOpenAIMessages` splits back into `assistant(tool_calls) → tool → assistant`
+ * on the way out.
  */
-function toolLoopComment(pad: string): string[] {
+function toolLoopBody(opts: {
+  pad: string;
+  request: (indent: string) => string[];
+  threadExpr: string;
+}): string[] {
+  const { pad, request, threadExpr } = opts;
   return [
-    ``,
-    `${pad}// Multi-round tool loop. 'turn' above already holds this round's calls, so`,
-    `${pad}// this block uncomments as-is. Do NOT read 'res' again: its body is spent,`,
-    `${pad}// and a second readOpenAIStream(res, ...) resolves an EMPTY turn silently.`,
-    `${pad}//`,
-    `${pad}//   // add to the imports at the top of the file:`,
-    `${pad}//   import { applyToolOutput } from '@kitn.ai/ui/wire';`,
-    `${pad}//`,
-    `${pad}//   for (const call of turn.toolCalls) {`,
-    `${pad}//     if (call.error || call.providerExecuted) continue;`,
-    `${pad}//     const output = await runYourTool(call.name, call.input ?? {});`,
-    `${pad}//     applyToolOutput(stream, call.id, output);`,
-    `${pad}//   }`,
-    `${pad}//   // Then POST again from INSIDE this try, with toOpenAIMessages() over the`,
-    `${pad}//   // updated thread, and read the answer into this same stream. It has to`,
-    `${pad}//   // finish before the finally: stream.done() settles the message and every`,
-    `${pad}//   // sink call after it is dropped, so an applyToolOutput that runs later`,
-    `${pad}//   // leaves the panel on input-available forever. Cap the rounds: a runaway`,
-    `${pad}//   // model is a runaway bill.`,
+    `${pad}// Cap the rounds: a runaway model is a runaway bill.`,
+    `${pad}const MAX_TOOL_ROUNDS = 4;`,
+    `${pad}try {`,
+    `${pad}  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {`,
+    ...request(`${pad}    `),
+    `${pad}    if (turn.error) { console.error('Model error:', turn.error.message); break; }`,
+    `${pad}    // The kit never RUNS a tool. Calls the provider executed itself already`,
+    `${pad}    // carry their output, and a malformed one has nothing to run.`,
+    `${pad}    const pending = turn.toolCalls.filter((c) => !c.error && !c.providerExecuted);`,
+    `${pad}    if (pending.length === 0) break;  // the model answered — the turn is done`,
+    `${pad}    for (const call of pending) {`,
+    `${pad}      try {`,
+    `${pad}        applyToolOutput(stream, call.id, await runTool(call.name, call.input ?? {}));`,
+    `${pad}      } catch (err) {`,
+    `${pad}        // The panel must not spin forever because your tool threw; the model`,
+    `${pad}        // is told about the failure and can react to it next round.`,
+    `${pad}        applyToolFailure(stream, call.id, err instanceof Error ? err.message : 'Tool failed');`,
+    `${pad}      }`,
+    `${pad}    }`,
+    `${pad}    // Next round re-encodes ${threadExpr}, which now carries this round's calls`,
+    `${pad}    // AND their results: toOpenAIMessages splits the turn at the tool boundary`,
+    `${pad}    // into assistant(tool_calls) -> tool(result) -> assistant(answer).`,
+    `${pad}  }`,
+  ];
+}
+
+/**
+ * The tool runner the loop calls, emitted as a working stub.
+ *
+ * The kit never calls a consumer's function — this is the seam where the host
+ * does. It answers the `search` tool the scaffold declares in `tools` so the
+ * loop completes a round on the first run against a real model, and says so
+ * loudly enough that nobody ships the canned answer.
+ *
+ * No template literals: the emitted code is itself inside one.
+ */
+function toolRunnerLines(pad: string, typed: boolean): string[] {
+  const sig = typed
+    ? `async function runTool(name: string, input: Record<string, unknown>): Promise<Record<string, unknown>> {`
+    : `async function runTool(name, input) {`;
+  return [
+    `${pad}// YOUR tools run here. The kit never calls one: the model asks, you execute,`,
+    `${pad}// and applyToolOutput reports the result back into the panel and into the`,
+    `${pad}// next round's request. Whatever you return is JSON-encoded as the result.`,
+    `${pad}${sig}`,
+    `${pad}  if (name === 'search') {`,
+    `${pad}    // STUB — replace with a real search call.`,
+    `${pad}    return { results: ['No search backend wired up yet. Query: ' + String(input.query ?? '')] };`,
+    `${pad}  }`,
+    `${pad}  return { error: 'Unknown tool: ' + name };`,
+    `${pad}}`,
   ];
 }
 
@@ -337,35 +475,61 @@ function hasToolPanel(archetype: Archetype): boolean {
  * The import lines a real-backend scaffold needs on top of the ones it already
  * emits.
  *
- * Every name here MUST be referenced by live emitted code. `applyToolOutput` is
- * deliberately absent: it is called only from the commented-out tool loop, and
- * every starter in this repo (and create-vite's own TypeScript template) sets
- * `noUnusedLocals`, so importing it would fail `npm run build` with TS6133 in a
- * stock app. `toolLoopComment` shows its import line beside the loop instead.
+ * Every name here MUST be referenced by live emitted code: every starter in this
+ * repo (and create-vite's own TypeScript template) sets `noUnusedLocals`, so one
+ * unreferenced name fails `npm run build` with TS6133 in a stock app.
+ * `applyToolOutput`/`applyToolFailure` used to be excluded for exactly that
+ * reason — the tool loop that called them was commented out. The loop is live
+ * now, so they are imported, and only when it is emitted.
+ *
+ * `type SetMessages` is React-only for the same reason: it annotates the `set`
+ * adapter in `REACT_THREAD`, which no other framework needs.
  *
  * `typed` pulls in the kit's own `ChatMessage` for the strict-TS frameworks (see
  * `chatMessageDecl`); the plain-JS html target must not emit a type import.
  */
-function wireImportLines(opts: { pad?: string; typed: boolean }): string[] {
-  const { pad = '', typed } = opts;
-  const stateNames = typed ? 'createAssistantStream, type ChatMessage' : 'createAssistantStream';
+function wireImportLines(opts: {
+  pad?: string;
+  typed: boolean;
+  /** the live tool loop is emitted → it calls applyToolOutput/applyToolFailure */
+  toolLoop?: boolean;
+  /** the framework's thread binding declares `const set: SetMessages` */
+  setMessagesType?: boolean;
+}): string[] {
+  const { pad = '', typed, toolLoop = false, setMessagesType = false } = opts;
+  const stateNames = [
+    'createAssistantStream',
+    ...(typed ? ['type ChatMessage'] : []),
+    ...(typed && setMessagesType ? ['type SetMessages'] : []),
+  ].join(', ');
+  const wireNames = [
+    'readOpenAIStream',
+    'toOpenAIMessages',
+    ...(toolLoop ? ['applyToolOutput', 'applyToolFailure'] : []),
+  ].join(', ');
   return [
     `${pad}import { ${stateNames} } from '@kitn.ai/ui/state';`,
-    `${pad}import { readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';`,
+    `${pad}import { ${wireNames} } from '@kitn.ai/ui/wire';`,
   ];
 }
 
 /** The POST body for a real backend. `toOpenAIMessages` keeps tool calls and
  *  tool results on the way back, which is what makes a second round possible;
  *  `tools` is what makes a FIRST tool call possible at all. Each field appears
- *  only when the emitted code declares the const it names. */
-function realBodyPayload(opts: { defaultModel?: string; tools: boolean }): string {
-  const fields = [
-    ...(opts.defaultModel ? ['model'] : []),
-    'messages: toOpenAIMessages(history)',
-    ...(opts.tools ? ['tools'] : []),
-  ];
-  return `{ ${fields.join(', ')} }`;
+ *  only when the emitted code declares the const it names.
+ *
+ *  `thread` is the expression holding the messages to encode — a const built
+ *  once for a single-round scaffold, the LIVE thread for a tool loop that
+ *  re-encodes it every round. */
+function realBodyPayload(opts: { defaultModel?: string; tools: boolean }): (thread: string) => string {
+  return (thread: string) => {
+    const fields = [
+      ...(opts.defaultModel ? ['model'] : []),
+      `messages: toOpenAIMessages(${thread})`,
+      ...(opts.tools ? ['tools'] : []),
+    ];
+    return `{ ${fields.join(', ')} }`;
+  };
 }
 
 /**
@@ -476,8 +640,25 @@ function isWorkspace(archetype: Archetype): boolean {
 }
 
 /**
- * A sample assistant message that demonstrates embedded tool + reasoning so the
- * agentic archetype renders correctly out of the box.
+ * A sample assistant message showing embedded tool + reasoning.
+ *
+ * IT IS NOT SEEDED INTO A REAL SCAFFOLD'S THREAD, and used not to be optional.
+ * A fabricated assistant turn in the initial state is conversation history the
+ * user never had, and it does three things:
+ *
+ *   1. it is SENT TO THE MODEL on turn one, as `assistant(tool_calls tc_001)` +
+ *      `tool(result)`, so the very first request claims the model made a call it
+ *      never made and that a tool it may not have answered;
+ *   2. it THROWS in `toAnthropicMessages` — a reasoning part with no verbatim
+ *      `raw` cannot be echoed back as a thinking block, which is a
+ *      `WireEncodeError` before the request is even built;
+ *   3. it kills the thread's empty state, so the `suggestions` the caller passed
+ *      to `scaffold` never render at all.
+ *
+ * The live tool loop fills the panel for real on the first submit, so nothing is
+ * lost by starting empty. The `mock` preview has no provider to lie to and no
+ * encoder to throw, so it gets this as a COMMENTED fixture (see
+ * `sampleSeedComment`): the one place uncommenting it is safe.
  */
 const SAMPLE_AGENTIC_MESSAGE = {
   id: 'sample-assistant',
@@ -498,6 +679,39 @@ const SAMPLE_AGENTIC_MESSAGE = {
   ],
 };
 
+/**
+ * What the agentic archetype emits where the seed used to be.
+ *
+ * `mock` gets the fixture commented out beside an empty thread; a real backend
+ * gets the explanation only, because there the fixture is unsafe at any level of
+ * commenting-out (see `SAMPLE_AGENTIC_MESSAGE`).
+ *
+ * `decl` is the framework's own line(s) for the fixture, so what an editor's
+ * uncomment produces is complete: the declaration AND whatever hands it to the
+ * thread. A commented block that leaves an unused `sampleMessages` behind fails
+ * `noUnusedLocals` the moment someone takes it up on the offer.
+ */
+function sampleSeedComment(
+  isMock: boolean,
+  pad: string,
+  decl: (literal: string) => string[],
+): string[] {
+  const shared = [
+    `${pad}// Tool calls and reasoning render INSIDE the thread, as parts on the`,
+    `${pad}// assistant message — the stream in onSubmit builds them as the model works.`,
+    `${pad}// The thread starts EMPTY so the suggestions show and turn one carries no`,
+    `${pad}// conversation the user never had.`,
+  ];
+  if (!isMock) return shared;
+  return [
+    ...shared,
+    `${pad}// This local preview has no provider to send it to, so here — and only`,
+    `${pad}// here — you can uncomment a fixture to see a filled panel with no backend`,
+    `${pad}// (replace the empty initializer below with it):`,
+    ...decl(JSON.stringify(SAMPLE_AGENTIC_MESSAGE)).map((line) => `${pad}// ${line}`),
+  ];
+}
+
 // ── front-end rendering ───────────────────────────────────────────────────────
 
 interface RenderCtx {
@@ -511,6 +725,9 @@ interface RenderCtx {
   /** the archetype renders kai-tool AND the route forwards a tools array, so the
    *  scaffold declares the schemas that make a tool call possible */
   emitTools: boolean;
+  /** the archetype renders kai-tool and there is a backend to call, so the live
+   *  multi-round loop (and the `runTool` stub it calls) is emitted */
+  emitToolLoop: boolean;
 }
 
 /** The kai-* tags for the archetype, in order, as opening/closing markup.
@@ -551,8 +768,9 @@ function componentTags(archetype: Archetype, chatFill: string): string {
 
   if (hasEmbedded) {
     lines.push(
-      `  <!-- kai-tool / kai-reasoning render INSIDE the thread, not as siblings.`,
-      `       Seed messages with parts: [{ type: 'reasoning', text: '...' }, { type: 'tool', tool: {...} }, ...] — see the sample in the script below. -->`,
+      `  <!-- kai-tool / kai-reasoning render INSIDE the thread, not as siblings: they are`,
+      `       parts on a message — parts: [{ type: 'reasoning', … }, { type: 'tool', tool: {…} }, …]`,
+      `       — and the stream in the script below builds them as the model works. -->`,
     );
   }
 
@@ -580,12 +798,11 @@ function htmlWiring(ctx: RenderCtx, archetype: Archetype): string {
   const hasEmbedded = archetype.components.some((t) => MESSAGE_EMBEDDED_TAGS.has(t));
   const hasSources = archetype.components.includes('kai-sources');
 
-  // SCAF-9: seed the sample agentic message so tool+reasoning render immediately.
+  // SCAF-9: the agentic archetype explains where tool + reasoning parts come
+  // from. It no longer SEEDS a fabricated turn — see `SAMPLE_AGENTIC_MESSAGE`.
   const seedLines = hasEmbedded
     ? [
-        `    // SCAF-9: tool calls + reasoning render INSIDE the thread — set them on the message object.`,
-        `    // Replace this sample with real messages from your backend.`,
-        `    chat.messages = [${JSON.stringify(SAMPLE_AGENTIC_MESSAGE, null, 0)}];`,
+        ...sampleSeedComment(ctx.isMock, `    `, (literal) => [`chat.messages = [${literal}];`]),
         ``,
       ]
     : [];
@@ -614,11 +831,13 @@ function htmlWiring(ctx: RenderCtx, archetype: Archetype): string {
 
   // Same scope, same reason: onSubmit puts `tools` in the request body.
   const toolsLines = ctx.emitTools ? [...toolSchemaLines('      '), ``] : [];
+  // Same scope again: the loop in onSubmit calls runTool.
+  const runnerLines = ctx.emitToolLoop ? [...toolRunnerLines('      ', false), ``] : [];
 
   const head = [
     `  <script type="module">`,
     `    import '@kitn.ai/ui/elements';  // registers <kai-*> — required, must come first`,
-    ...(ctx.isMock ? [] : wireImportLines({ pad: '    ', typed: false })),
+    ...(ctx.isMock ? [] : wireImportLines({ pad: '    ', typed: false, toolLoop: ctx.emitToolLoop })),
     `    import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
     ``,
     `    // Guard: module scripts run before the DOM is ready when inlined in <head>.`,
@@ -635,6 +854,7 @@ function htmlWiring(ctx: RenderCtx, archetype: Archetype): string {
     ``,
     ...modelLines,
     ...toolsLines,
+    ...runnerLines,
     ...seedLines.map((l) => (l.trim() === '' ? l : `  ${l}`)),
     ...sourcesSetupLines.map((l) => (l.trim() === '' ? l : `  ${l}`)),
   ];
@@ -681,7 +901,12 @@ function htmlWiring(ctx: RenderCtx, archetype: Archetype): string {
       setLoading: (v) => `chat.loading = ${v};`,
       bodyPayload: realBodyPayload({ defaultModel: ctx.defaultModel, tools: ctx.emitTools }),
       strictRoles: false,
-      toolLoop: hasToolPanel(archetype),
+      toolLoop: ctx.emitToolLoop,
+      thread: liveThreadBinding(
+        'chat.messages',
+        '(fn) => { chat.messages = fn(chat.messages); }',
+        'chat.messages ?? []',
+      ),
     }),
     `      });`,
     ...domReadyFooter,
@@ -749,7 +974,7 @@ function toPascalCase(tag: string): string {
 
 /** JSX usage for react/next: uses the official @kitn.ai/ui/react wrappers. */
 function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): string {
-  const { p, emptyHint, suggestions, isMock, defaultModel, emitTools } = ctx;
+  const { p, emptyHint, suggestions, isMock, defaultModel, emitTools, emitToolLoop } = ctx;
 
   const hasEmbedded = archetype.components.some((t) => MESSAGE_EMBEDDED_TAGS.has(t));
   const workspace = isWorkspace(archetype);
@@ -774,8 +999,8 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
   const companionJsxLines: string[] = [];
   if (hasEmbedded) {
     companionJsxLines.push(
-      `      {/* kai-tool / kai-reasoning render inside the thread. Tool calls + reasoning`,
-      `          are set on each message object — see the sampleMessages initializer above. */}`,
+      `      {/* kai-tool / kai-reasoning render inside the thread, as parts on the`,
+      `          assistant message the stream in onSubmit builds. */}`,
     );
   }
   for (const t of standaloneCompanionTags) {
@@ -793,15 +1018,17 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
 
   const chatMessageType = chatMessageDecl(isMock);
 
-  // SCAF-9: seed sample messages for agentic archetype so tool+reasoning render immediately.
-  const sampleMessagesInit = hasEmbedded
-    ? [
-        `  // SCAF-9: tool calls and reasoning render inside the thread — set them on the message object.`,
-        `  // Replace with real messages streamed from your backend.`,
-        `  const sampleMessages: ChatMessage[] = [${JSON.stringify(SAMPLE_AGENTIC_MESSAGE)}];`,
-        `  const [messages, setMessages] = useState<ChatMessage[]>(sampleMessages);`,
-      ].join('\n')
-    : `  const [messages, setMessages] = useState<ChatMessage[]>([]);`;
+  // SCAF-9: no fabricated seed — see SAMPLE_AGENTIC_MESSAGE for the three ways
+  // one broke a real app.
+  const sampleMessagesInit = [
+    ...(hasEmbedded
+      ? sampleSeedComment(isMock, '  ', (literal) => [
+          `const sampleMessages: ChatMessage[] = [${literal}];`,
+          `const [messages, setMessages] = useState<ChatMessage[]>(sampleMessages);`,
+        ])
+      : []),
+    `  const [messages, setMessages] = useState<ChatMessage[]>([]);`,
+  ].join('\n');
 
   // SCAF-9: sample sources data for knowledge-base archetype.
   const sampleSourcesInit =
@@ -821,6 +1048,7 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
     : '';
 
   const toolsInit = emitTools ? toolSchemaLines('  ').join('\n') : '';
+  const toolRunner = emitToolLoop ? toolRunnerLines('  ', true).join('\n') : '';
 
   // onSubmit body: mock streams a canned reply client-side; otherwise fetch /api/chat.
   const onSubmitBody = isMock
@@ -842,7 +1070,8 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
         setLoading: (v) => `setLoading(${v});`,
         bodyPayload: realBodyPayload({ defaultModel, tools: emitTools }),
         strictRoles: true,
-        toolLoop: hasToolPanel(archetype),
+        toolLoop: emitToolLoop,
+        thread: REACT_THREAD,
       });
 
   // SCAF-2: Next.js App Router requires 'use client' for components that use hooks/interactivity.
@@ -872,7 +1101,9 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
       `import dynamic from 'next/dynamic';`,
       // The adapter is pure parsing + pure state; both entries are SSR-import-safe,
       // so they stay static imports even though the ELEMENTS have to be dynamic.
-      ...(isMock ? [] : wireImportLines({ typed: true })),
+      ...(isMock
+        ? []
+        : wireImportLines({ typed: true, toolLoop: emitToolLoop, setMessagesType: emitToolLoop })),
       `import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
       `// <kai-*> are client-only custom elements (the server has no customElements`,
       `// registry) → load client-only so hydration doesn't mismatch. The package itself`,
@@ -891,6 +1122,7 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
       ...(sampleSourcesInit ? [sampleSourcesInit] : []),
       ...(modelInit ? [modelInit] : []),
       ...(toolsInit ? [toolsInit] : []),
+      ...(toolRunner ? [toolRunner] : []),
       ``,
       `  async function onSubmit(e: CustomEvent<{ value: string }>) {`,
       onSubmitBody,
@@ -949,7 +1181,9 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
     `import '@kitn.ai/ui/elements';  // registers <kai-*> — required, must come first`,
     `import { useState } from 'react';`,
     `import { ${importList} } from '@kitn.ai/ui/react';`,
-    ...(isMock ? [] : wireImportLines({ typed: true })),
+    ...(isMock
+      ? []
+      : wireImportLines({ typed: true, toolLoop: emitToolLoop, setMessagesType: emitToolLoop })),
     `import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
     ``,
     ...nextConfigNote,
@@ -964,6 +1198,7 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
     ...(sampleSourcesInit ? [sampleSourcesInit] : []),
     ...(modelInit ? [modelInit] : []),
     ...(toolsInit ? [toolsInit] : []),
+    ...(toolRunner ? [toolRunner] : []),
     ``,
     `  async function onSubmit(e: CustomEvent<{ value: string }>) {`,
     onSubmitBody,
@@ -1013,7 +1248,7 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
 
 /** Vue: bind messages/suggestions as properties, listen for kai-submit with @. */
 function renderVue(archetype: Archetype, ctx: RenderCtx): string {
-  const { p, emptyHint, suggestions, isMock, defaultModel, emitTools } = ctx;
+  const { p, emptyHint, suggestions, isMock, defaultModel, emitTools, emitToolLoop } = ctx;
 
   // SCAF-9: exclude message-embedded tags from companion rendering.
   // SCAF-14: also exclude workspace structural tags (handled by the workspace block below).
@@ -1026,7 +1261,7 @@ function renderVue(archetype: Archetype, ctx: RenderCtx): string {
   const companionLines: string[] = [];
   if (hasEmbedded) {
     companionLines.push(
-      `    <!-- kai-tool / kai-reasoning render INSIDE the thread — set them as parts on each message object. -->`,
+      `    <!-- kai-tool / kai-reasoning render INSIDE the thread, as parts on the assistant message the stream builds. -->`,
     );
   }
   for (const t of standaloneCompanionTags) {
@@ -1058,7 +1293,8 @@ function renderVue(archetype: Archetype, ctx: RenderCtx): string {
         setLoading: (v) => `loading.value = ${v};`,
         bodyPayload: realBodyPayload({ defaultModel, tools: emitTools }),
         strictRoles: true,
-        toolLoop: hasToolPanel(archetype),
+        toolLoop: emitToolLoop,
+        thread: liveThreadBinding('messages.value', '(fn) => { messages.value = fn(messages.value); }'),
       });
 
   // SCAF-10: ChatMessage declaration for strict-TS Vue consumers.
@@ -1074,15 +1310,18 @@ function renderVue(archetype: Archetype, ctx: RenderCtx): string {
 
   // Same scope, same reason: onSubmit puts `tools` in the request body.
   const toolsLines = emitTools ? toolSchemaLines('') : [];
+  // Same scope again: the loop in onSubmit calls runTool.
+  const runnerLines = emitToolLoop ? toolRunnerLines('', true) : [];
 
-  // SCAF-9: sample seeding for agentic archetype.
-  const sampleSeed = hasEmbedded
-    ? [
-        `// SCAF-9: tool calls + reasoning render inside the thread — set them on the message object.`,
-        `// Replace with real messages streamed from your backend.`,
-        `const messages = ref<ChatMessage[]>([${JSON.stringify(SAMPLE_AGENTIC_MESSAGE)}]);`,
-      ]
-    : [`const messages = ref<ChatMessage[]>([]);`];
+  // SCAF-9: no fabricated seed — see SAMPLE_AGENTIC_MESSAGE.
+  const sampleSeed = [
+    ...(hasEmbedded
+      ? sampleSeedComment(isMock, '', (literal) => [
+          `const messages = ref<ChatMessage[]>([${literal}]);`,
+        ])
+      : []),
+    `const messages = ref<ChatMessage[]>([]);`,
+  ];
 
   // SCAF-9: sample sources setup.
   const sourcesSeed = standaloneCompanionTags.includes('kai-sources')
@@ -1146,7 +1385,7 @@ function renderVue(archetype: Archetype, ctx: RenderCtx): string {
     `     export default { plugins: [vue({ template: { compilerOptions: { isCustomElement: (tag) => tag.startsWith('kai-') } } })] }; -->`,
     `<script setup lang="ts">`,
     `import '@kitn.ai/ui/elements';  // registers <kai-*> — required, must come first`,
-    ...(isMock ? [] : wireImportLines({ typed: true })),
+    ...(isMock ? [] : wireImportLines({ typed: true, toolLoop: emitToolLoop })),
     `import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
     vueImports,
     ``,
@@ -1157,6 +1396,7 @@ function renderVue(archetype: Archetype, ctx: RenderCtx): string {
     `const suggestions = ${jsArray(suggestions)};`,
     ...modelInit,
     ...toolsLines,
+    ...runnerLines,
     ...sourcesSeed,
     ``,
     `// SCAF-15: kai-* register via an async dynamic import (SSR-safety). The .prop`,
@@ -1185,7 +1425,7 @@ function renderVue(archetype: Archetype, ctx: RenderCtx): string {
 
 /** Svelte: use bind:this to set array/object properties reactively; on:kai-submit for the event. */
 function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
-  const { p, emptyHint, suggestions, isMock, defaultModel, emitTools } = ctx;
+  const { p, emptyHint, suggestions, isMock, defaultModel, emitTools, emitToolLoop } = ctx;
 
   // SCAF-9: exclude message-embedded tags from companion rendering.
   // SCAF-14: also exclude workspace structural tags (handled by the workspace block below).
@@ -1199,7 +1439,7 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
   const companionLinesList: string[] = [];
   if (hasEmbedded) {
     companionLinesList.push(
-      `  <!-- kai-tool / kai-reasoning render INSIDE the thread — set them as parts on each message object. -->`,
+      `  <!-- kai-tool / kai-reasoning render INSIDE the thread, as parts on the assistant message the stream builds. -->`,
     );
   }
   for (const t of standaloneCompanionTags) {
@@ -1231,7 +1471,8 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
         setLoading: (v) => `loading = ${v};`,
         bodyPayload: realBodyPayload({ defaultModel, tools: emitTools }),
         strictRoles: true,
-        toolLoop: hasToolPanel(archetype),
+        toolLoop: emitToolLoop,
+        thread: liveThreadBinding('messages', '(fn) => { messages = fn(messages); }'),
       });
 
   // SCAF-10: ChatMessage declaration for strict-TS Svelte consumers.
@@ -1247,15 +1488,18 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
 
   // Same scope, same reason: onSubmit puts `tools` in the request body.
   const toolsLines = emitTools ? toolSchemaLines('  ') : [];
+  // Same scope again: the loop in onSubmit calls runTool.
+  const runnerLines = emitToolLoop ? toolRunnerLines('  ', true) : [];
 
-  // SCAF-9: seed sample messages for agentic archetype.
-  const sampleMessagesInit = hasEmbedded
-    ? [
-        `  // SCAF-9: tool calls + reasoning render INSIDE the thread — set them on the message object.`,
-        `  // Replace with real messages streamed from your backend.`,
-        `  let messages: ChatMessage[] = [${JSON.stringify(SAMPLE_AGENTIC_MESSAGE)}];`,
-      ]
-    : [`  let messages: ChatMessage[] = [];`];
+  // SCAF-9: no fabricated seed — see SAMPLE_AGENTIC_MESSAGE.
+  const sampleMessagesInit = [
+    ...(hasEmbedded
+      ? sampleSeedComment(isMock, '  ', (literal) => [
+          `let messages: ChatMessage[] = [${literal}];`,
+        ])
+      : []),
+    `  let messages: ChatMessage[] = [];`,
+  ];
 
   // SCAF-9: sources element ref + sample data. Typed as the kit's own element
   // interface (not HTMLElement) so the `.sources =` assignment below typechecks
@@ -1303,7 +1547,7 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
     // declared below: an always-on import would be unused (and fail noUnusedLocals)
     // on every archetype without kai-sources.
     `  import type { ${hasSourcesCompanion ? 'KaiChatElement, KaiSourcesElement' : 'KaiChatElement'} } from '@kitn.ai/ui/elements';`,
-    ...(isMock ? [] : wireImportLines({ pad: '  ', typed: true })),
+    ...(isMock ? [] : wireImportLines({ pad: '  ', typed: true, toolLoop: emitToolLoop })),
     `  import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
     `  import { onMount } from 'svelte';`,
     ...chatMessageType,
@@ -1319,6 +1563,7 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
     `  const suggestions: string[] = ${jsArray(suggestions)};`,
     ...modelInit,
     ...toolsLines,
+    ...runnerLines,
     `  // suggestions/messages are JS PROPERTIES (arrays/objects can't be attributes)`,
     `  $: if (chatEl && defined) { chatEl.messages = messages; chatEl.loading = loading; chatEl.suggestions = suggestions; }`,
     ...sourcesReactive,
@@ -1360,7 +1605,7 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
  * or an external endpoint.
  */
 function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
-  const { p, emptyHint, suggestions, isMock, defaultModel, emitTools } = ctx;
+  const { p, emptyHint, suggestions, isMock, defaultModel, emitTools, emitToolLoop } = ctx;
 
   // TanStack Start is React — reuse all the React composition logic:
   // same ChatMessage type, same state/loading/suggestions, same mock stream body,
@@ -1388,8 +1633,8 @@ function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
   const companionJsxLines: string[] = [];
   if (hasEmbedded) {
     companionJsxLines.push(
-      `      {/* kai-tool / kai-reasoning render inside the thread. Tool calls + reasoning`,
-      `          are set on each message object — see the sampleMessages initializer above. */}`,
+      `      {/* kai-tool / kai-reasoning render inside the thread, as parts on the`,
+      `          assistant message the stream in onSubmit builds. */}`,
     );
   }
   for (const t of standaloneCompanionTags) {
@@ -1407,14 +1652,16 @@ function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
 
   const chatMessageType = chatMessageDecl(isMock);
 
-  const sampleMessagesInit = hasEmbedded
-    ? [
-        `  // SCAF-9: tool calls and reasoning render inside the thread — set them on the message object.`,
-        `  // Replace with real messages streamed from your backend.`,
-        `  const sampleMessages: ChatMessage[] = [${JSON.stringify(SAMPLE_AGENTIC_MESSAGE)}];`,
-        `  const [messages, setMessages] = useState<ChatMessage[]>(sampleMessages);`,
-      ].join('\n')
-    : `  const [messages, setMessages] = useState<ChatMessage[]>([]);`;
+  // SCAF-9: no fabricated seed — see SAMPLE_AGENTIC_MESSAGE.
+  const sampleMessagesInit = [
+    ...(hasEmbedded
+      ? sampleSeedComment(isMock, '  ', (literal) => [
+          `const sampleMessages: ChatMessage[] = [${literal}];`,
+          `const [messages, setMessages] = useState<ChatMessage[]>(sampleMessages);`,
+        ])
+      : []),
+    `  const [messages, setMessages] = useState<ChatMessage[]>([]);`,
+  ].join('\n');
 
   const sampleSourcesInit =
     standaloneCompanionTags.includes('kai-sources')
@@ -1432,6 +1679,7 @@ function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
     : '';
 
   const toolsInit = emitTools ? toolSchemaLines('  ').join('\n') : '';
+  const toolRunner = emitToolLoop ? toolRunnerLines('  ', true).join('\n') : '';
 
   const onSubmitBody = isMock
     ? mockStreamBody({
@@ -1451,7 +1699,8 @@ function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
         setLoading: (v) => `setLoading(${v});`,
         bodyPayload: realBodyPayload({ defaultModel, tools: emitTools }),
         strictRoles: true,
-        toolLoop: hasToolPanel(archetype),
+        toolLoop: emitToolLoop,
+        thread: REACT_THREAD,
       });
 
   // File path guidance for TanStack Start (file-based routing)
@@ -1473,7 +1722,9 @@ function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
     // Elements registration: the library is SSR-import-safe; top-level import is safe here
     `import '@kitn.ai/ui/elements';  // registers <kai-*> — required, must come first`,
     `import { ${importList} } from '@kitn.ai/ui/react'`,
-    ...(isMock ? [] : wireImportLines({ typed: true })),
+    ...(isMock
+      ? []
+      : wireImportLines({ typed: true, toolLoop: emitToolLoop, setMessagesType: emitToolLoop })),
     `import '@kitn.ai/ui/theme.tokens.css'  // compiled token defaults`,
     ``,
     `// ${archetype.title} — ${p.note}. empty-state hint: ${emptyHint}`,
@@ -1494,6 +1745,7 @@ function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
     ...(sampleSourcesInit ? [sampleSourcesInit] : []),
     ...(modelInit ? [modelInit] : []),
     ...(toolsInit ? [toolsInit] : []),
+    ...(toolRunner ? [toolRunner] : []),
     ``,
     `  async function onSubmit(e: CustomEvent<{ value: string }>) {`,
     onSubmitBody,
@@ -1564,6 +1816,7 @@ function renderFrontend(
   isMock: boolean,
   defaultModel: string | undefined,
   emitTools: boolean,
+  emitToolLoop: boolean,
 ): string {
   const ctx: RenderCtx = {
     p: placementStyle(placement),
@@ -1572,6 +1825,7 @@ function renderFrontend(
     isMock,
     defaultModel,
     emitTools,
+    emitToolLoop,
   };
   switch (framework) {
     case 'react':
@@ -1665,6 +1919,11 @@ function compose(
   // SCAF-8: compute the default model only for non-mock integrations that forward model.
   const defaultModel = isMock ? undefined : defaultModelFor(integration);
   const emitTools = !isMock && emitsToolSchemas(archetype, integration);
+  // The loop needs a backend to POST the second round to; `mock` has none.
+  // It does NOT require `emitTools`: an integration that builds its tools
+  // server-side (langgraph, mastra, pi) still streams tool calls back, and the
+  // loop that answers them is the same loop.
+  const emitToolLoop = !isMock && hasToolPanel(archetype);
   const frontend = renderFrontend(
     framework,
     archetype,
@@ -1674,6 +1933,7 @@ function compose(
     isMock,
     defaultModel,
     emitTools,
+    emitToolLoop,
   );
   const route = isMock ? undefined : chooseRoute(integration, framework);
 
