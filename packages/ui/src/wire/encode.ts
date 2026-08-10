@@ -192,6 +192,28 @@ export function toOpenAIMessages(messages: ChatMessage[]): OpenAIWireMessage[] {
  * or redacted block) is still emitted: the docs require sending back every block
  * "including any blocks with empty thinking fields".
  *
+ * ONE ChatMessage CAN BECOME SEVERAL WIRE MESSAGES, for the same reason as
+ * `toOpenAIMessages`: the kit streams a whole assistant turn into one message, so
+ * the tool call and the model's answer to it share a `parts` array, but Anthropic
+ * carries the result in a SEPARATE user message that has to sit between them. So
+ * the turn is SPLIT at each tool boundary, into
+ *
+ *   assistant(pre-tool blocks + tool_use) -> user(tool_result)... -> assistant(answer)
+ *
+ * Flattening instead puts the model's answer BEFORE the result it was based on,
+ * and strands every later round's thinking block in the first assistant message.
+ * Consecutive tool parts stay in ONE assistant message, because parallel calls are
+ * announced together and their results come back together.
+ *
+ * Adjacent user messages are MERGED. The API combines consecutive same-role turns
+ * itself rather than rejecting them, so this is not what stands between you and a
+ * 400; it is emitted anyway because the tool-result turn and a following user turn
+ * are one turn, several OpenAI-compatible Anthropic proxies do enforce strict
+ * alternation, and the merged form is what the models are trained on. Ordering is
+ * safe by construction: `results` is only non-empty when `blocks` is, so a
+ * tool_result message always follows its assistant message and can never be
+ * appended after a plain user turn.
+ *
  * Asymmetry worth knowing: `tool_use.input` is a parsed OBJECT on this wire, not
  * a string, so it uses `input` and not `rawInput`. Only thinking blocks carry a
  * verbatim requirement.
@@ -199,18 +221,36 @@ export function toOpenAIMessages(messages: ChatMessage[]): OpenAIWireMessage[] {
 export function toAnthropicMessages(messages: ChatMessage[]): AnthropicWireMessage[] {
   const out: AnthropicWireMessage[] = [];
 
+  /** Append to the trailing user message when there is one, so the wire never
+   *  carries two user turns in a row. */
+  const pushUser = (content: AnthropicContentBlock[]): void => {
+    const last = out[out.length - 1];
+    if (last?.role === 'user') last.content = [...last.content, ...content];
+    else out.push({ role: 'user', content });
+  };
+
   for (const message of messages) {
     if (message.role === 'user') {
       const userBlocks = message.parts
         .filter(isTextPart)
         .filter((p) => p.text !== '')
         .map<AnthropicContentBlock>((p) => ({ type: 'text', text: p.text }));
-      if (userBlocks.length > 0) out.push({ role: 'user', content: userBlocks });
+      if (userBlocks.length > 0) pushUser(userBlocks);
       continue;
     }
 
-    const blocks: AnthropicContentBlock[] = [];
-    const results: AnthropicContentBlock[] = [];
+    let blocks: AnthropicContentBlock[] = [];
+    let results: AnthropicContentBlock[] = [];
+
+    /** Emit the assistant message built so far, then the user message carrying the
+     *  results of the calls it announced. */
+    const flush = (): void => {
+      if (blocks.length > 0) out.push({ role: 'assistant', content: blocks });
+      // Anthropic carries tool results in the FOLLOWING user message.
+      if (results.length > 0) pushUser(results);
+      blocks = [];
+      results = [];
+    };
 
     message.parts.forEach((part, partIndex) => {
       switch (part.type) {
@@ -229,11 +269,17 @@ export function toAnthropicMessages(messages: ChatMessage[]): AnthropicWireMessa
               partIndex,
             );
           }
+          // A thinking block after a call belongs to the round that READ the
+          // result, so the result has to be on the wire before it is.
+          if (results.length > 0) flush();
           blocks.push(part.raw.payload as AnthropicContentBlock);
           break;
         }
         case 'text': {
-          if (part.text !== '') blocks.push({ type: 'text', text: part.text });
+          if (part.text === '') break;
+          // Text after a call is the model's answer to it. Same reason.
+          if (results.length > 0) flush();
+          blocks.push({ type: 'text', text: part.text });
           break;
         }
         case 'tool': {
@@ -268,9 +314,7 @@ export function toAnthropicMessages(messages: ChatMessage[]): AnthropicWireMessa
       }
     });
 
-    if (blocks.length > 0) out.push({ role: 'assistant', content: blocks });
-    // Anthropic carries tool results in the FOLLOWING user message.
-    if (results.length > 0) out.push({ role: 'user', content: results });
+    flush();
   }
 
   return out;
