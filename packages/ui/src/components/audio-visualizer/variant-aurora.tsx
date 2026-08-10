@@ -32,11 +32,18 @@ import auroraShader from './aurora.glsl';
  * replicating scripts/aurora-audit.mjs's estimator at its capture cadence)
  * so the audit-measured per-state rotation lands on the reference values:
  * speaking ~+17 (their +12.9, Rob's reference ~20 CW), listening ~+4.6,
- * thinking ~+9, connecting ~-4.7. The wind supplies most of the apparent
- * motion (post-flip it reads ~+22 CW at speaking, ~0 elsewhere); these
- * trims close the per-state gaps. Thinking and connecting share every
- * OTHER target but split here, matching the audit's measured baseline for
- * each. Like `speed`, rotation is never tweened.
+ * thinking ~+9. The wind supplies most of the apparent motion (post-flip
+ * it reads ~+22 CW at speaking, ~0 elsewhere); these trims close the
+ * per-state gaps. Like `speed`, rotation is never tweened.
+ *
+ * Connecting originally carried the probe's -4.7 CCW as a -5.5 trim,
+ * flipped to the clockwise equivalent (same magnitude) 2026-08-10
+ * (supervisor call, Rob delegated): the direction split came from the
+ * screenshot-cadence estimator later shown unreliable (closing-sweep
+ * finding: IQR swamps the medians), upstream's hook drives thinking and
+ * connecting with identical dynamics, and opposite spins on adjacent
+ * transitional states read inconsistent. Single-line revert (connecting's
+ * `rotation` below) if the eye test ever disagrees.
  */
 function auroraTargets(state: VisualizerState): {
   intensity: number | [number, number];
@@ -60,7 +67,9 @@ function auroraTargets(state: VisualizerState): {
     case 'connecting':
       return {
         intensity: [0.5, 2.5], speed: 1.5, complexity: 1.0, amplitude: 0.5, scale: 0.3,
-        rotation: -5.5,
+        // Clockwise like every other transitional state -- see the doc note
+        // above for the 2026-08-10 direction-unify rationale.
+        rotation: 5.5,
       };
     case 'speaking':
       // The pre-voice base. While actually speaking with volume > 0, the

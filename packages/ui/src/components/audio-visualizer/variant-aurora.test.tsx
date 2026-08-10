@@ -328,7 +328,7 @@ describe('AuroraVisualizer: state -> uniform mapping', () => {
     expect(captured!.uniforms.uScale?.value).toBeCloseTo(0.2 + 0.2 * 0.25, 6);
   });
 
-  it('exposes calibrated per-state uRotation values (deg/s -> rad/s, + = clockwise on screen), split for thinking vs connecting', async () => {
+  it('exposes calibrated per-state uRotation values (deg/s -> rad/s, + = clockwise on screen), every transitional state clockwise', async () => {
     const degToRad = (d: number) => (d * Math.PI) / 180;
     const expectRotation = async (state: ShaderVariantProps['state'], deg: number) => {
       const c = await renderAurora({ state, frozen: false });
@@ -338,11 +338,14 @@ describe('AuroraVisualizer: state -> uniform mapping', () => {
     // Values are the offline-probe calibration against the aurora-audit
     // rotation targets (see auroraTargets's own doc): the WIND supplies most
     // of the apparent motion; these are solid-body trims on top of it.
+    // Connecting used to pin -5.5 (CCW) from that probe; flipped to the
+    // clockwise equivalent 2026-08-10 (supervisor call, Rob delegated) --
+    // see the rationale in auroraTargets's doc.
     // Like uSpeed, uRotation is never tweened, so it reads synchronously.
     await expectRotation('idle', 0);
     await expectRotation('listening', 5.3);
     await expectRotation('thinking', 9.4);
-    await expectRotation('connecting', -5.5);
+    await expectRotation('connecting', 5.5);
     await expectRotation('speaking', -3.5);
   });
 
