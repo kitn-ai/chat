@@ -38,6 +38,13 @@ async function streamFixture(
 ): Promise<ChatMessage[]> {
   const sse = ANTHROPIC_FIXTURES[name];
   if (!sse) throw new Error(`missing fixture anthropic/${name}`);
+  return streamSse(sse, afterStream);
+}
+
+async function streamSse(
+  sse: string,
+  afterStream?: (stream: AssistantStream) => void,
+): Promise<ChatMessage[]> {
   let messages: ChatMessage[] = [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'go' }] }];
   const set: SetMessages = (fn) => {
     messages = fn(messages);
@@ -151,6 +158,24 @@ function wireToolIndex(name: string): number {
 /** All visible text the provider sent, assembled from its own text_deltas. */
 function wireText(name: string): string {
   return deltaText(name, 'text_delta', 'text');
+}
+
+/** The fixture's bytes truncated just before its first TEXT block: a real turn
+ *  cut short, which is what the user pressing stop, or a dropped connection,
+ *  actually delivers. The message that comes out has a reasoning part and
+ *  nothing else, and so encodes to nothing on the OpenAI wire. */
+function untilFirstText(name: string): string {
+  const kept: string[] = [];
+  for (const chunk of ANTHROPIC_FIXTURES[name].split('\n\n')) {
+    const line = chunk.split('\n').find((l) => l.startsWith('data: '));
+    const payload = line?.slice(6).trim();
+    if (payload !== undefined && payload !== '' && payload !== '[DONE]') {
+      const frame = JSON.parse(payload) as Record<string, unknown>;
+      if (frame.type === 'content_block_start' && blockType(frame) === 'text') break;
+    }
+    kept.push(chunk);
+  }
+  return `${kept.join('\n\n')}\n\n`;
 }
 
 describe('Anthropic round-trip fidelity', () => {
@@ -362,15 +387,25 @@ describe('OpenAI round-trip ordering', () => {
     expect(out[1].tool_calls?.[0].function.name).toBe('get_weather');
   });
 
-  it('never emits an assistant message with null content and no tool_calls', async () => {
-    // Reachable from a real stream: a reasoning-only turn encodes to nothing on
-    // this wire, and `{ content: null }` with no tool_calls is rejected by
-    // strict-compatible endpoints.
-    for (const name of ['thinking-tool', 'empty-thinking', 'redacted-thinking']) {
-      const out = toOpenAIMessages(await streamFixture(name));
-      for (const m of out) {
+  it('emits NOTHING for a real turn that was cut short after its thinking block', async () => {
+    // `{ role: 'assistant', content: null }` with no tool_calls is rejected by
+    // strict-compatible endpoints, and this is how a real stream reaches that
+    // state: the provider's own bytes, stopped before the text block, leaving a
+    // message that carries a reasoning part and nothing encodable.
+    const messages = await streamSse(untilFirstText('thinking-tool'));
+    const assistant = messages.find((m) => m.role === 'assistant')!;
+    expect(assistant.parts.map((p) => p.type)).toEqual(['reasoning']);
+
+    expect(toOpenAIMessages(messages)).toEqual([{ role: 'user', content: 'go' }]);
+  });
+
+  it('never emits an invalid assistant message for ANY captured fixture', async () => {
+    // The sweep, not the proof: the case above is what has teeth. This catches a
+    // fixture added later that reaches the same state by another route.
+    for (const name of Object.keys(ANTHROPIC_FIXTURES)) {
+      for (const m of toOpenAIMessages(await streamFixture(name))) {
         expect(
-          m.content !== null || (m.tool_calls?.length ?? 0) > 0,
+          m.role !== 'assistant' || m.content !== null || (m.tool_calls?.length ?? 0) > 0,
           `${name}: ${JSON.stringify(m)}`,
         ).toBe(true);
       }
