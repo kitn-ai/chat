@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { consumeModelStream } from './consume';
+import { readOpenAIStream } from './read';
 import { normalizeStopReason, type AssistantStreamSink, type ModelStreamChunk } from './chunk';
 import type { MessagePart } from '../elements/chat-types';
 import { appendReasoningPart, appendTextPart, upsertToolPart } from '../state/parts';
@@ -389,5 +390,53 @@ describe('consumeModelStream: reference stability', () => {
     const before = sink.snapshots[3];
     sink.upsertTool('c1', { state: 'input-available', rawInput: '{"city":"Paris"}' });
     expect(sink.snapshots[4]).toBe(before);
+  });
+});
+
+/**
+ * A 200 whose body is not SSE.
+ *
+ * This is the shape a proxy route produces when it forwards a provider FAILURE
+ * without its status: an upstream 401 (no key set — the most common way a
+ * developer first runs a scaffold) comes back as HTTP 200 carrying a JSON error
+ * body, mislabelled `text/event-stream`. `readOpenAIStream` does not throw (the
+ * response IS ok) and the SSE decoder finds no `data:` frame, so the turn used
+ * to resolve EMPTY with no error anywhere: no bubble, no console output, nothing
+ * to debug.
+ *
+ * The route templates forward the status now, so the throw comes back. This is
+ * the second, independent guard: a stream that yielded nothing has failed, and
+ * has to say so.
+ */
+describe('consumeModelStream: a stream that produced nothing', () => {
+  it('reports an error rather than resolving an empty turn', async () => {
+    const turn = await consumeModelStream(replayChunks([]), nullSink());
+    expect(turn.chunks).toBe(0);
+    expect(turn.error?.message).toBeDefined();
+    expect(turn.stopReason).toBe('error');
+  });
+
+  it('names the non-SSE 200 body as the likely cause', async () => {
+    const turn = await consumeModelStream(replayChunks([]), nullSink());
+    expect(turn.error?.message).toMatch(/text\/event-stream/);
+  });
+
+  it('surfaces a 200 JSON error body through readOpenAIStream', async () => {
+    const res = new Response(JSON.stringify({ error: { message: 'No auth credentials found' } }), {
+      status: 200,
+      headers: { 'Content-Type': 'text/event-stream' },
+    });
+    const turn = await readOpenAIStream(res, nullSink());
+    expect(turn.text).toBe('');
+    expect(turn.error?.message).toBeDefined();
+  });
+
+  it('leaves a stream that really did carry chunks alone', async () => {
+    const turn = await consumeModelStream(
+      replayChunks([{ text: 'hi' }, { finishReason: 'stop' }]),
+      nullSink(),
+    );
+    expect(turn.error).toBeUndefined();
+    expect(turn.stopReason).toBe('stop');
   });
 });

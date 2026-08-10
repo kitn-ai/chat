@@ -396,6 +396,29 @@ export async function consumeModelStream(
     if (chunk.finishReason) finishReason = chunk.finishReason;
   }
 
+  // A turn that received NOTHING has failed, and used to say so nowhere.
+  //
+  // The response was 200 and the body carried no parsable frame at all, which is
+  // exactly what a proxy route produces when it forwards a provider failure
+  // WITHOUT its status: an upstream 401 (no key — the most common first run)
+  // arrives as HTTP 200 whose body is a JSON error object mislabelled
+  // text/event-stream. `readModelStream` cannot throw for it (the response is
+  // ok) and the SSE decoder finds no `data:` line, so the turn resolved empty:
+  // no text, no error, no console output, nothing to debug. The route templates
+  // forward the status now; this is the second, independent guard, and it also
+  // covers a truncated body, a non-streaming completion returned by mistake, and
+  // an HTML proxy page.
+  if (chunkCount === 0 && !error) {
+    error = {
+      code: 'empty-stream',
+      message:
+        'The model stream produced no chunks. The response was 200 but nothing in its body parsed ' +
+        'as a stream frame — check the endpoint really sent Content-Type: text/event-stream and that ' +
+        'the request set stream: true. A route that forwards a provider error without its status ' +
+        'lands here: the body is a JSON error, not SSE.',
+    };
+  }
+
   // REWORK 3. `finishReason` is reported verbatim; `stopReason` is what the
   // adapter itself branches on, so no OpenAI literal leaks into adapter logic.
   const stopReason = normalizeStopReason(finishReason) ?? (error ? 'error' : undefined);
