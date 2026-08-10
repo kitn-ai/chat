@@ -15,16 +15,28 @@ const cloudflare: Integration = {
 // env.AI.run emits Cloudflare-native SSE (data: {"response":"<token>"}).
 // The TransformStream below re-frames each chunk to OpenAI-format SSE so
 // readOpenAIStream reads it without any client-side changes.
+import type { OpenAIWireMessage } from '@kitn.ai/ui/wire';
+
+/**
+ * What the front end POSTs. \`req.json()\` is \`unknown\` (it is whatever the
+ * client sent), so the body is narrowed once here instead of at every use —
+ * without it this Worker does not compile. Widen it as you add fields.
+ */
+type ChatRequestBody = { messages: OpenAIWireMessage[] };
+
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
-    const { messages } = await req.json();
+    const { messages } = (await req.json()) as ChatRequestBody;
 
     let nativeStream: ReadableStream<Uint8Array>;
     try {
+      // env.AI.run is typed to return the non-streaming shape; \`stream: true\`
+      // makes it a ReadableStream at runtime, which the types cannot express, so
+      // the hop through \`unknown\` is required rather than cosmetic.
       nativeStream = (await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
         messages,
         stream: true,
-      })) as ReadableStream<Uint8Array>;
+      })) as unknown as ReadableStream<Uint8Array>;
     } catch (err) {
       // A REAL status, before a byte is streamed. Returning 200 here would send
       // a JSON error labelled text/event-stream: the reader finds no frame and
@@ -89,7 +101,7 @@ export default {
   },
   webRoute: `async function chatHandler(request: Request): Promise<Response> {
   // Proxy Workers AI over its OpenAI-compatible HTTP endpoint, token server-side.
-  const { messages } = await request.json();
+  const { messages } = await readChatRequest(request);
 
   const upstream = await fetch(
     \`https://api.cloudflare.com/client/v4/accounts/\${process.env.CF_ACCOUNT_ID}/ai/v1/chat/completions\`,

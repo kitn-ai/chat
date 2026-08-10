@@ -31,11 +31,23 @@ const agent = createReactAgent({
 
 // Stream a compiled LangGraph agent to the browser as OpenAI-format SSE.
 async function chatHandler(request: Request): Promise<Response> {
-  const { messages } = await request.json();
+  const { messages } = await readChatRequest(request);
 
-  let stream: AsyncIterable<[{ content?: unknown }]>;
+  // agent.stream() coerces plain {role, content} objects into BaseMessage
+  // instances itself, including OpenAI-shaped tool_calls, so the wire messages
+  // can be passed through almost as-is. The one incompatible bit is content:
+  // OpenAI represents a tool-calls-only assistant turn as content: null, and
+  // LangChain's MessageContent type (and runtime coercion) only accepts string.
+  const agentMessages = messages.map((m) => ({ ...m, content: m.content ?? '' }));
+
+  // Let TS infer the stream's element type from this call instead of hand
+  // writing it: the real type is a [BaseMessage, metadata] tuple, keyed off the
+  // streamMode: 'messages' literal, not the plain object shape it looks like.
+  const startStream = () => agent.stream({ messages: agentMessages }, { streamMode: 'messages' });
+
+  let stream: Awaited<ReturnType<typeof startStream>>;
   try {
-    stream = await agent.stream({ messages }, { streamMode: 'messages' });
+    stream = await startStream();
   } catch (err) {
     // A REAL status, before a byte is streamed: a missing OPENAI_API_KEY fails
     // here. Returning 200 would send this JSON out labelled text/event-stream,

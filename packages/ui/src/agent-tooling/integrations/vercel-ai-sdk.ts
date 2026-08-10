@@ -11,17 +11,56 @@ const vercelAiSdk: Integration = {
   // scaffolder wraps it in the target framework's own route declaration.
   routeTemplates: {},
   webRoute: `import { streamText } from 'ai';
+import type { ModelMessage, AssistantContent, ToolResultPart } from 'ai';
 
 // Next.js only: add \`export const maxDuration = 30\` to the route file to allow
 // long streaming responses. It is a Next route-segment config, not part of the
 // handler, so it lives in the file rather than in here.
 
+// The kit's wire format is OpenAI-shaped (tool_calls on the assistant message,
+// a flat content string on the tool message). The AI SDK's ModelMessage is not:
+// a tool call is a CONTENT PART on the assistant message, and a tool result is a
+// tagged output union, not a bare string. Converting rather than casting is the
+// point — a cast would compile but hand the SDK the wrong shape at runtime.
+function toModelMessages(messages: ChatRequestBody['messages']): ModelMessage[] {
+  return messages.map((message): ModelMessage => {
+    switch (message.role) {
+      case 'system':
+      case 'user':
+        return { role: message.role, content: message.content ?? '' };
+      case 'tool': {
+        const result: ToolResultPart = {
+          type: 'tool-result',
+          toolCallId: message.tool_call_id ?? '',
+          toolName: message.name ?? '',
+          output: { type: 'text', value: message.content ?? '' },
+        };
+        return { role: 'tool', content: [result] };
+      }
+      case 'assistant': {
+        if (!message.tool_calls?.length) return { role: 'assistant', content: message.content ?? '' };
+        const content: AssistantContent = [];
+        if (message.content) content.push({ type: 'text', text: message.content });
+        for (const call of message.tool_calls) {
+          content.push({
+            type: 'tool-call',
+            toolCallId: call.id,
+            toolName: call.function.name,
+            input: JSON.parse(call.function.arguments),
+          });
+        }
+        return { role: 'assistant', content };
+      }
+    }
+  });
+}
+
 async function chatHandler(request: Request): Promise<Response> {
-  const { messages } = await request.json();
+  const { messages } = await readChatRequest(request);
 
   const result = streamText({
     model: 'openai/gpt-4o', // AI Gateway id; needs AI_GATEWAY_API_KEY
-    messages,
+    messages: toModelMessages(messages),
   });
 
   const encoder = new TextEncoder();

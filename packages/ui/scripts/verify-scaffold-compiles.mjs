@@ -29,10 +29,18 @@
 //
 // SCOPE
 // -----
-// 6 archetypes × 9 integrations × 7 TS frameworks = 378 compiled cells, at one
-// placement. `placement` is the fourth axis and is left at 'full-page' on
-// purpose: it only ever changes an inline CSS string, so the extra 3x compiles
-// the same types again.
+// FRONT END: 6 archetypes × 9 integrations × 7 TS frameworks = 378 compiled
+// cells, at one placement. `placement` is the fourth axis and is left at
+// 'full-page' on purpose: it only ever changes an inline CSS string, so the
+// extra 3x compiles the same types again.
+//
+// ROUTES: 9 integrations × 11 frameworks. The framework axis is WIDER here than
+// the front end's seven — `html` and `fastapi` cannot host a route but still
+// emit one to run elsewhere, and `express`/`worker` are backend-only targets a
+// consumer can ask for directly. The archetype axis is absent because
+// `chooseRoute` never reads the archetype; `assertRoutesAreArchetypeIndependent`
+// proves that rather than assuming it, so the day a route starts varying by
+// archetype this stops silently checking one sixth of the matrix.
 //
 // Three tsc PROJECTS, not one, because two frameworks cannot share a tsconfig
 // with the react-jsx family without failing for harness reasons rather than real
@@ -57,10 +65,42 @@
 // attributes, the kai-submit listener — and the template's real proof is
 // `ng build` in a throwaway app.
 //
-// NEITHER pass compiles block (2). `frontEnd()` slices the emitted text at
-// `=== (2) BACKEND ROUTE ===` and keeps only what is above it, so a green run
-// says nothing at all about whether a route runs. Routes are proven by running
-// them.
+// BLOCK (2), THE BACKEND ROUTE, IS COMPILED TOO — see `routeCheck` below.
+//
+// It was not, for most of this file's life: `frontEnd()` sliced the emitted text
+// at `=== (2) BACKEND ROUTE ===` and threw away everything under it, so the
+// server half of every scaffold — auth, status forwarding, the provider call,
+// SSE framing — had never been type-checked by any gate in this repo. That is
+// how a Next-only route reached five frameworks, how `pi` shipped a template
+// referencing variables it never declares, and how the dropped-status bug
+// survived. The first run of `routeCheck` found TS2339 on
+// `await request.json()` in all seven TypeScript integrations.
+//
+// Routes need typings the front end does not, and they are REAL packages
+// (@sveltejs/kit, @tanstack/react-start, express, @cloudflare/workers-types,
+// @angular/ssr, ai, @langchain/*, @mastra/client-js), added as devDependencies.
+// They are deliberately NOT stubbed: a hand-written `declare module` would
+// resolve every call to `any` and recreate the blind spot with extra steps,
+// letting a wrong route pass. The one thing that IS hand-written is each
+// framework's GENERATED file — SvelteKit's `./$types`, wrangler's `Env` — which
+// is reproduced exactly as the framework's own codegen writes it and typed
+// entirely through the real package.
+//
+// Routes compile under THREE projects, because the host decides the types and
+// the host is what block (2) gets wrong:
+//   · route-node   — express, Angular SSR, and the Vite dev-server middleware.
+//                    `lib: ES2023` + `types: ["node"]`, NO DOM: this is a stock
+//                    `npm create vite` tsconfig.node.json, and it is what makes
+//                    `await request.json()` `unknown` (undici) instead of `any`.
+//   · route-web    — Next, SvelteKit, TanStack Start. DOM lib present, which is
+//                    what those frameworks' own tsconfigs ship.
+//   · route-worker — Cloudflare. `@cloudflare/workers-types` + node, matching the
+//                    nodejs_compat setup the emitted route itself tells you to use.
+// A route is assigned to a project by the runtime the SCAFFOLDER declares for it
+// ("# Runtime: …"), not by the requested framework, so a fallback route is
+// checked against the host it will really run on. An unrecognised runtime label
+// is a hard failure rather than a skip — otherwise a new host would silently
+// stop being compiled, which is the bug this whole section exists to prevent.
 //
 // `.vue` / `.svelte` are not TS files, so their `<script>` blocks are lifted
 // verbatim into `.ts`. Lifting separates the script from its template, which
@@ -71,11 +111,26 @@
 //
 // COST AND WHERE IT RUNS
 // ----------------------
-// ~2s wall clock for all 270 cases (esbuild bundle + one `tsc` pass with
-// skipLibCheck over symlinked node_modules). No network. That is cheap enough
-// for the REQUIRED CI job, and it runs there, in `.github/workflows/test.yml`
-// after the build (it reads the SHIPPED dist/*.d.ts). It is deliberately NOT in
-// `npm test`: it needs `dist/`, and vitest does not build.
+// ~16s wall clock for the 378 front-end cells plus the 99 routes: one esbuild
+// bundle, then six `tsc` passes with skipLibCheck over symlinked node_modules.
+// Routes are most of the added time, and about a third of it is the
+// archetype-independence re-check (495 extra generations, no compiles).
+//
+// NO NETWORK, which is the property that keeps this in the REQUIRED CI job. The
+// route typings are devDependencies rather than a throwaway `npm install`
+// precisely for that: the required job already runs `pnpm install
+// --frozen-lockfile` behind a pnpm cache, so the packages are amortised to
+// nothing, whereas an uncached install inside a blocking check is a flake
+// waiting to happen (measuring this, `npm install ai` failed outright with
+// ETARGET on a transitive @ai-sdk/provider pin).
+//
+// If routes ever push this past ~60s, do NOT quietly narrow the matrix: subset
+// it deterministically and PRINT the subset, so a shrinking gate is visible in
+// the log instead of being discovered later.
+//
+// It runs in `.github/workflows/test.yml` after the build (it reads the SHIPPED
+// dist/*.d.ts). It is deliberately NOT in `npm test`: it needs `dist/`, and
+// vitest does not build.
 //
 //   npm run verify:scaffold                  # from packages/ui
 //   node scripts/verify-scaffold-compiles.mjs [--keep] [--filter <substring>]
@@ -175,10 +230,29 @@ symlinkSync(ROOT, join(nm, '@kitn.ai/ui'), 'dir');
 // `solid-js` is what the solid scaffold's own JSX is checked against, and
 // `@angular/core` is what the angular one's decorator + signals resolve to —
 // both are as load-bearing here as react's types are for the JSX family.
-mkdirSync(join(nm, '@angular'), { recursive: true });
+for (const scope of ['@angular', '@sveltejs', '@tanstack', '@cloudflare', '@langchain', '@mastra']) {
+  mkdirSync(join(nm, scope), { recursive: true });
+}
 for (const pkg of [
+  // ── front end (block 1) ──
   'react', 'react-dom', 'vue', 'svelte', '@types/react', '@types/react-dom',
   'solid-js', '@angular/core',
+  // ── backend routes (block 2) ──
+  // The HOSTS. These decide the shape a route has to have, and getting one wrong
+  // is the defect class block (2) keeps shipping, so they are the real packages
+  // rather than a `declare module`. @types/node is load-bearing twice over: it is
+  // what makes route-node's `Request` undici's instead of the browser's.
+  '@types/node', '@types/express', 'express', '@sveltejs/kit',
+  '@tanstack/react-router', '@tanstack/react-start', '@cloudflare/workers-types',
+  // Not imported by any route, but `routeTree.gen.ts` augments it by name, and a
+  // `declare module` only resolves against THIS node_modules tree.
+  '@tanstack/router-core',
+  '@angular/ssr', 'vite',
+  // The SDKs an integration's handler calls. Also real: a stub would make
+  // `streamText(...)` / `createReactAgent(...)` accept anything, so a scaffold
+  // that calls them wrongly would compile here and fail in the consumer's app.
+  'ai', '@langchain/core', '@langchain/openai', '@langchain/langgraph',
+  '@mastra/client-js', 'zod',
 ]) {
   const src = pkgDir(pkg);
   if (!src) {
@@ -265,6 +339,73 @@ const PROJECTS = {
     },
   },
   solid: { dir: join(tmp, 'solid'), options: { jsx: 'preserve', jsxImportSource: 'solid-js' } },
+
+  /**
+   * The three ROUTE projects. Block (2) runs on a server, and which server
+   * decides the global types — which is exactly the axis block (2) kept getting
+   * wrong, so each host gets the tsconfig it really ships with.
+   *
+   * `types` is set EXPLICITLY on all three. With the field absent, tsc pulls in
+   * every package under node_modules/@types, so a Worker route would silently be
+   * checked with Node's globals and a Vite middleware with the browser's. That
+   * default is what would quietly hand `request.json()` back as `any`.
+   *
+   * Routes live one directory per case (`<project>/<label>/…`) because a route is
+   * a multi-FILE document — the Vite adapter emits src/server/chat.ts AND
+   * vite-chat-api.ts, and the second imports the first. `moduleDetection: force`
+   * keeps a file that happens to have no import/export from leaking into the
+   * global scope and colliding with the other 98 cases.
+   */
+  'route-node': {
+    dir: join(tmp, 'route-node'),
+    include: ['**/*.ts', '**/*.d.ts'],
+    // A stock `npm create vite` tsconfig.node.json: ES lib, node types, NO DOM.
+    // The missing DOM lib is the whole point — it is what makes `Request` resolve
+    // to undici's (json(): Promise<unknown>) rather than the browser's
+    // (json(): Promise<any>), and therefore what a consumer's `tsc -b` really sees
+    // for vite.config.ts → vite-chat-api.ts → src/server/chat.ts.
+    options: { lib: ['ES2023'], types: ['node'], moduleDetection: 'force' },
+    // Proves express's types are the REAL ones and did not resolve to `any`.
+    probe: {
+      code: `import type { RequestHandler } from 'express';\nexport const bad: RequestHandler = 5;\n`,
+      expect: /error TS2322/,
+      why: "express's types resolved to `any`",
+    },
+  },
+  'route-web': {
+    dir: join(tmp, 'route-web'),
+    include: ['**/*.ts', '**/*.d.ts'],
+    // Next, SvelteKit and TanStack Start all ship DOM in `lib` (see the tsconfig
+    // each one generates), so `request.json()` is legitimately `any` here and the
+    // undici narrowing below does not apply. Keeping this project HONESTLY
+    // different from route-node is the point: a route that only compiles because
+    // the harness gave it the browser's globals is not a route that runs.
+    options: { lib: ['ES2023', 'DOM', 'DOM.Iterable'], types: ['node'], moduleDetection: 'force' },
+    probe: {
+      code: `import type { RequestHandler } from '@sveltejs/kit';\nexport const bad: RequestHandler = 5;\n`,
+      expect: /error TS2322/,
+      why: "@sveltejs/kit's types resolved to `any`",
+    },
+  },
+  'route-worker': {
+    dir: join(tmp, 'route-worker'),
+    include: ['**/*.ts', '**/*.d.ts'],
+    // workers-types AND node, which is the combination the emitted Worker route
+    // itself prescribes: "set compatibility_date 2025-04-01 (or later) with
+    // nodejs_compat, which populates process.env from your bindings". Dropping
+    // node here would fail the route on `process.env` for a reason the scaffold
+    // already tells the consumer how to fix.
+    options: {
+      lib: ['ES2023'],
+      types: ['@cloudflare/workers-types', 'node'],
+      moduleDetection: 'force',
+    },
+    probe: {
+      code: `export const bad: Ai = 5;\n`,
+      expect: /error TS2322/,
+      why: '@cloudflare/workers-types resolved to `any`',
+    },
+  },
 };
 
 for (const [name, project] of Object.entries(PROJECTS)) {
@@ -272,7 +413,10 @@ for (const [name, project] of Object.entries(PROJECTS)) {
   writeFileSync(
     join(project.dir, 'tsconfig.json'),
     JSON.stringify(
-      { compilerOptions: { ...BASE_OPTIONS, ...project.options }, include: ['*.ts', '*.tsx'] },
+      {
+        compilerOptions: { ...BASE_OPTIONS, ...project.options },
+        include: project.include ?? ['*.ts', '*.tsx'],
+      },
       null,
       2,
     ),
@@ -309,7 +453,7 @@ function clearSources(project = 'default') {
 // proves nothing, and the two new projects are the ones most likely to be
 // misconfigured (a wrong `jsx`, a missing symlink).
 function selfTest(project = 'default') {
-  const dir = PROJECTS[project].dir;
+  const { dir, probe } = PROJECTS[project];
   writeFileSync(
     join(dir, 'probe-wrong-type.ts'),
     `import { toOpenAIMessages } from '@kitn.ai/ui/wire';\nexport const bad: number = toOpenAIMessages([]);\n`,
@@ -318,9 +462,15 @@ function selfTest(project = 'default') {
     join(dir, 'probe-unused-import.ts'),
     `import { applyToolOutput } from '@kitn.ai/ui/wire';\nexport const ok = 1;\n`,
   );
+  // A route project's whole value is the HOST typings it adds, and those are the
+  // ones most likely to have silently not resolved (a missing devDependency, a
+  // wrong `types` entry). Assigning 5 to one of their types has to error, or the
+  // package came back as `any` and every route below would pass vacuously.
+  if (probe) writeFileSync(join(dir, 'probe-framework.ts'), probe.code);
   const out = runTsc(project);
   const wrongType = /probe-wrong-type\.ts.*error TS2322/s.test(out);
   const unused = /probe-unused-import\.ts.*error TS6133/s.test(out);
+  const frameworkReal = !probe || new RegExp(`probe-framework\\.ts.*${probe.expect.source}`, 's').test(out);
   clearSources(project);
   if (!wrongType)
     fail(
@@ -334,7 +484,16 @@ function selfTest(project = 'default') {
         '  noUnusedLocals is not in effect, which is the single most valuable check here.\n' +
         `  tsc said:\n${out || '  (nothing)'}`,
     );
-  console.log(`  ✓ self-test [${project}]: types resolve for real (TS2322) and noUnusedLocals is live (TS6133)`);
+  if (!frameworkReal)
+    fail(
+      `self-test [${project}]: the framework probe did NOT error — ${probe.why}.\n` +
+        '  Every route in this project would then typecheck against `any` and prove nothing.\n' +
+        `  tsc said:\n${out || '  (nothing)'}`,
+    );
+  console.log(
+    `  ✓ self-test [${project}]: types resolve for real (TS2322) and noUnusedLocals is live (TS6133)` +
+      (probe ? ' + host typings are real' : ''),
+  );
 }
 
 /**
@@ -478,6 +637,391 @@ async function htmlStructureCheck(scaffold, esbuild) {
   console.log(`  ✓ ${checked} html scaffolds: one chat element, one submit listener, script parses`);
 }
 
+// ── 3b. The BACKEND ROUTE, block (2) ────────────────────────────────────────
+
+/**
+ * Every framework the scaffolder will emit a route for.
+ *
+ * Wider than FRAMEWORKS on purpose. `html` and `fastapi` cannot HOST a route, but
+ * they still emit one (under a warning) for the consumer to run elsewhere, and
+ * `express` / `worker` are backend-only targets a consumer can ask for directly.
+ * All four produce code, and all four were unchecked.
+ */
+const ROUTE_FRAMEWORKS = [...FRAMEWORKS, 'html', 'express', 'worker', 'fastapi'];
+
+/**
+ * Runtime label → the tsc project whose globals that runtime really has.
+ *
+ * Keyed on what the SCAFFOLDER declares ("# Runtime: …"), not on the framework
+ * that was asked for, because a fallback route is emitted for a DIFFERENT host
+ * than the one requested — `framework: 'react'` with an integration that has no
+ * portable handler emits an Express server. Checking that against a browser
+ * tsconfig would be checking a fiction.
+ *
+ * `null` means "not TypeScript" and routes to the Python check instead. A label
+ * that is in neither this map nor that bucket is a hard failure: silently
+ * skipping an unrecognised host is precisely how block (2) went unchecked for so
+ * long, and a new adapter must not be able to opt itself out by existing.
+ */
+const RUNTIME_PROJECT = {
+  'Next.js route handler (Node/Edge)': 'route-web',
+  'SvelteKit +server.ts endpoint': 'route-web',
+  'TanStack Start server route': 'route-web',
+  'Express handler (Node)': 'route-node',
+  'Angular SSR server (Express, src/server.ts)': 'route-node',
+  'Vite dev-server middleware (Node)': 'route-node',
+  'Cloudflare Worker': 'route-worker',
+  'FastAPI (Python)': null,
+};
+
+/** Block 2 only: the scaffolder's backend route. */
+function backEnd(text) {
+  const after = text.split('=== (2) BACKEND ROUTE ===')[1];
+  if (after === undefined) return null;
+  return after.split(/^=== \(3\)/m)[0];
+}
+
+/**
+ * The runtime the scaffolder says this route is for, in either of the two shapes
+ * `compose` writes: an exact match prints "# Runtime: X", a fallback prints
+ * "Emitting its native\n# X route instead".
+ */
+function routeRuntime(block) {
+  const exact = block.match(/^# Runtime: (.+)$/m);
+  if (exact) return exact[1].trim();
+  const fallback = block.match(/Emitting its native\n# (.+?) route instead/);
+  if (fallback) return fallback[1].trim();
+  return null;
+}
+
+/** A chunk that is only blank lines and `//` comments is illustration, not code. */
+const hasCode = (s) => s.split('\n').some((l) => l.trim() && !l.trim().startsWith('//'));
+
+const FILE_SEPARATOR = /^\/\/ ── ([\w./+-]+\.\w+) ─+\s*$/;
+const LEADING_PATH = /^\/\/ ([\w./+-]+\.tsx?)\s*$/;
+
+/**
+ * Split one emitted route into the FILES it actually represents.
+ *
+ * A route is not one file. The Vite adapter emits `src/server/chat.ts`, then
+ * `vite-chat-api.ts` which imports `chatHandler` back out of it, then a
+ * commented-out `vite.config.ts`. Concatenating those into a single file would
+ * produce a bogus TS2440 (an import colliding with the local declaration it was
+ * imported from) and hide whatever is really wrong — and, worse, it would never
+ * check that the cross-file import RESOLVES, which is the part a consumer pastes
+ * wrong. So each `// ── name.ts ──` heading starts a new file, written at its
+ * real relative path.
+ *
+ * The fully-commented `vite.config.ts` chunk drops out via `hasCode`: it is
+ * guidance, and tsc has nothing to say about it.
+ */
+function splitRouteFiles(code, defaultName) {
+  const chunks = [];
+  let current = { path: null, lines: [] };
+  for (const line of code.split('\n')) {
+    const sep = line.match(FILE_SEPARATOR);
+    if (sep) {
+      chunks.push(current);
+      current = { path: sep[1], lines: [] };
+      continue;
+    }
+    current.lines.push(line);
+  }
+  chunks.push(current);
+  // The first chunk names itself with the adapter's `// path/to/file.ts` opener.
+  const lead = chunks[0].lines.find((l) => l.trim())?.match(LEADING_PATH);
+  chunks[0].path = lead ? lead[1] : defaultName;
+  return chunks.map((c) => ({ path: c.path, code: c.lines.join('\n') })).filter((c) => hasCode(c.code));
+}
+
+/**
+ * The files a framework GENERATES, reproduced exactly as its own codegen writes
+ * them and typed entirely through the real package.
+ *
+ * This is the one place the harness writes type declarations itself, and the
+ * line it does not cross matters: it never declares a framework's API. A
+ * `declare module '@sveltejs/kit'` would make RequestHandler `any` and let a
+ * route with the wrong signature sail through — the exact defect the svelte
+ * adapter exists to prevent. What is written here is only the per-PROJECT glue
+ * the framework's CLI emits and npm cannot ship:
+ *
+ *   · SvelteKit: `svelte-kit sync` writes a `./$types` per route directory,
+ *     specialising Kit's own RequestHandler to that route's params and id.
+ *   · Wrangler: `wrangler types` writes `Env` from the bindings in wrangler.jsonc.
+ *     The emitted Worker reads `env.AI`, so the binding declared here is `Ai` —
+ *     workers-types' real one.
+ */
+function generatedCompanions(files) {
+  const extra = [];
+  for (const f of files) {
+    if (f.path.endsWith('+server.ts')) {
+      extra.push({
+        path: join(dirname(f.path), '$types.d.ts'),
+        code: [
+          `// Reproduces what \`svelte-kit sync\` generates for this route. Kit's OWN`,
+          `// RequestHandler does the typing; nothing here is stubbed.`,
+          `import type * as Kit from '@sveltejs/kit';`,
+          `type RouteParams = Record<string, never>;`,
+          `export type RequestHandler = Kit.RequestHandler<RouteParams, '/api/chat'>;`,
+          ``,
+        ].join('\n'),
+      });
+    }
+  }
+  if (files.some((f) => /createFileRoute\(/.test(f.code))) {
+    extra.push({
+      path: 'routeTree.gen.ts',
+      code: [
+        `// Reproduces the entry \`tsr\` writes into routeTree.gen.ts when it picks up`,
+        `// src/routes/api/chat.ts. createFileRoute is typed`,
+        `// \`<TFilePath extends keyof FileRoutesByPath>\`, and FileRoutesByPath ships EMPTY —`,
+        `// the generator is what fills it in. Without this the route's own path literal is`,
+        `// not assignable to \`never\`, which is a missing codegen step, not a bad route.`,
+        `import type { createRootRoute } from '@tanstack/react-router';`,
+        ``,
+        `declare module '@tanstack/router-core' {`,
+        `  interface FileRoutesByPath {`,
+        `    '/api/chat': {`,
+        `      id: '/api/chat';`,
+        `      path: '/api/chat';`,
+        `      fullPath: '/api/chat';`,
+        `      parentRoute: ReturnType<typeof createRootRoute>;`,
+        `    };`,
+        `  }`,
+        `}`,
+        `export {};`,
+        ``,
+      ].join('\n'),
+    });
+  }
+  if (files.some((f) => /\benv: Env\b/.test(f.code))) {
+    extra.push({
+      path: 'worker-configuration.d.ts',
+      code: [
+        `// Reproduces what \`wrangler types\` generates from an AI binding in`,
+        `// wrangler.jsonc. \`Ai\` is @cloudflare/workers-types' real interface.`,
+        `declare namespace Cloudflare {`,
+        `  interface Env {`,
+        `    AI: Ai;`,
+        `  }`,
+        `}`,
+        `interface Env extends Cloudflare.Env {}`,
+        ``,
+      ].join('\n'),
+    });
+  }
+  return extra;
+}
+
+/**
+ * Block (2) must not depend on the archetype.
+ *
+ * The route matrix skips the archetype axis because `chooseRoute` only ever
+ * reads (integration, framework). That is true today and cheap to keep true, but
+ * if it stopped being true this check would silently be compiling one sixth of
+ * the real matrix and still reporting a full pass. So prove it, per integration
+ * and framework, against every archetype.
+ */
+async function assertRoutesAreArchetypeIndependent(scaffold, reference) {
+  const drift = [];
+  for (const [label, expected] of reference) {
+    const [, integration, framework] = label.split('__');
+    for (const useCase of ARCHETYPES.slice(1)) {
+      const out = await scaffold.handler({ useCase, integration, placement: 'full-page', framework });
+      if (backEnd(out.content[0].text) !== expected) drift.push(`${integration} × ${framework}: differs for archetype '${useCase}'`);
+    }
+  }
+  if (drift.length) {
+    for (const d of drift.slice(0, 10)) console.log(`  ✗ ${d}`);
+    cleanup();
+    fail(
+      `${drift.length} route(s) vary by ARCHETYPE, but the route matrix compiles one archetype per\n` +
+        '  (integration, framework). Add the archetype axis to routeCheck, or this gate is\n' +
+        '  now checking a fraction of the routes it claims to.',
+    );
+  }
+  console.log(`  ✓ routes are archetype-independent (${reference.size} × ${ARCHETYPES.length - 1} re-checked)`);
+}
+
+/**
+ * The FastAPI route, which tsc cannot see because it is Python.
+ *
+ * Compiled with the real `ast.parse` when python3 is on PATH — that is a genuine
+ * syntax check, needs no packages, and would have caught an unterminated string
+ * or a bad indent. When python3 is missing the check degrades to structure, and
+ * SAYS it degraded rather than printing a checkmark that means less than it looks.
+ */
+function pythonCheck(cells) {
+  let python3 = true;
+  try {
+    execFileSync('python3', ['--version'], { stdio: 'ignore' });
+  } catch {
+    python3 = false;
+  }
+  const failures = [];
+  for (const { label, code } of cells) {
+    if (python3) {
+      try {
+        execFileSync('python3', ['-c', 'import ast,sys; ast.parse(sys.stdin.read())'], {
+          input: code,
+          stdio: ['pipe', 'ignore', 'pipe'],
+        });
+      } catch (e) {
+        failures.push(`${label}: the emitted Python does not parse: ${`${e.stderr ?? ''}`.trim().split('\n').pop()}`);
+        continue;
+      }
+    }
+    // Structure tsc/ast cannot judge: this has to be a streaming SSE endpoint on
+    // the path the front end fetches, or the scaffold's two halves do not meet.
+    for (const [needle, why] of [
+      ["@app.post('/api/chat')", 'no POST /api/chat — the front end fetches that exact path'],
+      ['StreamingResponse', 'not a streaming response, so the thread would fill in one jump'],
+      ["media_type='text/event-stream'", 'not labelled as SSE, so readOpenAIStream sees no frames'],
+      ['data: [DONE]', 'never terminates the stream, so the browser waits forever'],
+    ]) {
+      if (!code.includes(needle)) failures.push(`${label}: ${why}`);
+    }
+  }
+  if (failures.length) {
+    for (const f of failures) console.log(`  ✗ ${f}`);
+    cleanup();
+    fail(`${failures.length} python route problem(s).`);
+  }
+  console.log(
+    `  ✓ ${cells.length} python routes: ${python3 ? 'parse (ast.parse)' : 'STRUCTURE ONLY — python3 not on PATH, syntax UNCHECKED'} + stream as SSE on /api/chat`,
+  );
+}
+
+/**
+ * Compile every emitted backend route.
+ *
+ * Returns nothing; fails the process on the first non-empty diagnostic set, the
+ * same way the front-end matrix does. Each reported path is the case label, so a
+ * failure names the (integration, framework) that produced it.
+ */
+async function routeCheck(scaffold) {
+  const cells = [];
+  for (const integration of INTEGRATIONS)
+    for (const framework of ROUTE_FRAMEWORKS) {
+      const label = `route__${integration}__${framework}`;
+      if (FILTER && !label.includes(FILTER)) continue;
+      cells.push({ integration, framework, label });
+    }
+  if (!cells.length) return;
+
+  console.log(`  · generating ${cells.length} backend routes`);
+  const reference = new Map();
+  const pythonCells = [];
+  const noRoute = [];
+  const usedProjects = new Set();
+
+  for (const c of cells) {
+    const out = await scaffold.handler({
+      useCase: ARCHETYPES[0],
+      integration: c.integration,
+      placement: 'full-page',
+      framework: c.framework,
+    });
+    const block = backEnd(out.content[0].text);
+    if (block === null) {
+      cleanup();
+      fail(`${c.label}: the scaffold has no "=== (2) BACKEND ROUTE ===" section at all.`);
+    }
+    reference.set(c.label, block);
+
+    const runtime = routeRuntime(block);
+    if (runtime === null) {
+      // `mock` streams in the browser and says so; anything ELSE without a
+      // runtime is a route the scaffolder failed to choose, and pasting the
+      // block would give a consumer prose where code should be.
+      if (c.integration === 'mock' && /No backend or API key needed/.test(block)) {
+        noRoute.push(c.label);
+        continue;
+      }
+      cleanup();
+      fail(
+        `${c.label}: block (2) declares no runtime.\n` +
+          "  Neither '# Runtime: X' nor a fallback note was emitted, so this route cannot be\n" +
+          '  routed to a tsc project and would go unchecked. Block was:\n' +
+          block.split('\n').slice(0, 12).map((l) => `    ${l}`).join('\n'),
+      );
+    }
+
+    if (!(runtime in RUNTIME_PROJECT)) {
+      cleanup();
+      fail(
+        `${c.label}: unrecognised runtime "${runtime}".\n` +
+          '  Add it to RUNTIME_PROJECT with the tsc project whose globals that host really has\n' +
+          '  (or null if it is not TypeScript). Refusing to skip it: an unchecked host is how\n' +
+          '  block (2) went unverified in the first place.',
+      );
+    }
+
+    const project = RUNTIME_PROJECT[runtime];
+    // Strip the scaffolder's `#` prose (notes + the cannot-host warning). It is
+    // commentary around the code, not part of it.
+    const code = block
+      .split('\n')
+      .filter((l) => !l.startsWith('#'))
+      .join('\n');
+
+    if (project === null) {
+      pythonCells.push({ label: c.label, code });
+      continue;
+    }
+
+    const files = splitRouteFiles(code, 'route.ts');
+    if (!files.length) {
+      cleanup();
+      fail(`${c.label}: block (2) declares runtime "${runtime}" but contains no code to compile.`);
+    }
+    usedProjects.add(project);
+    const cellDir = join(PROJECTS[project].dir, c.label);
+    for (const f of [...files, ...generatedCompanions(files)]) {
+      const dest = join(cellDir, f.path);
+      mkdirSync(dirname(dest), { recursive: true });
+      writeFileSync(dest, f.code);
+    }
+  }
+
+  await assertRoutesAreArchetypeIndependent(scaffold, reference);
+  if (noRoute.length) console.log(`  · ${noRoute.length} cases have no backend by design (mock streams in the browser)`);
+  if (pythonCells.length) pythonCheck(pythonCells);
+
+  const projects = [...usedProjects];
+  console.log(`  · running tsc over the routes (${projects.length} project(s): ${projects.join(', ')})`);
+  const diagnostics = projects.map((p) => runTsc(p)).join('\n');
+
+  // Group diagnostics by CASE. A route is several files, so the basename is not
+  // the label the way it is for the front end — the label is the directory the
+  // files were written into.
+  const labels = cells.map((c) => c.label);
+  const byLabel = new Map();
+  for (const line of diagnostics.split('\n')) {
+    const m = line.match(/^(.+?\.tsx?)\((\d+),(\d+)\): (error .+)$/);
+    if (!m) continue;
+    const label = labels.find((l) => m[1].includes(`/${l}/`)) ?? m[1];
+    const file = m[1].split(`/${label}/`)[1] ?? m[1].split('/').pop();
+    if (!byLabel.has(label)) byLabel.set(label, []);
+    byLabel.get(label).push(`      ${file} line ${m[2]}:${m[3]}  ${m[4]}`);
+  }
+
+  const compiled = cells.length - noRoute.length - pythonCells.length;
+  console.log(`\n  ${compiled - byLabel.size}/${compiled} backend routes compile clean\n`);
+  if (byLabel.size) {
+    for (const [label, errs] of [...byLabel.entries()].sort()) {
+      console.log(`  ✗ ${label}`);
+      errs.forEach((e) => console.log(e));
+    }
+    cleanup();
+    fail(
+      `${byLabel.size} backend route(s) do not compile. Each one is server code a consumer\n` +
+        '  would be handed and told to paste.',
+    );
+  }
+  console.log('  ✓ every emitted backend route compiles under its real host tsconfig');
+}
+
 async function main() {
   console.log('  · bundling the scaffolder with esbuild');
   const bundle = join(tmp, 'scaffold.bundle.mjs');
@@ -560,6 +1104,10 @@ async function main() {
   }
 
   console.log('  ✓ every emitted scaffold compiles under a stock consumer tsconfig');
+
+  // Block (2). Everything above this line is the FRONT END; the routes were
+  // sliced off and thrown away until this existed.
+  await routeCheck(scaffold);
   cleanup();
 }
 
