@@ -47,6 +47,31 @@ it('listIntegrations returns all integrations', () => {
   expect(listIntegrations()).toEqual(integrations);
 });
 
+// --- streamMapping copy ---
+//
+// These strings are the only streaming instruction a scaffolding agent reads, so
+// a stale one ships a hand-rolled reader into a consumer's app. Six of them used
+// to promise a "kai-chat SSE reader" that did not exist under any name. It does
+// now: readOpenAIStream from '@kitn.ai/ui/wire'.
+
+it('no streamMapping claims a reader that does not exist', () => {
+  for (const integration of integrations) {
+    expect(
+      integration.streamMapping,
+      `${integration.id} still refers to a nameless built-in reader`,
+    ).not.toMatch(/kai-chat's (SSE )?reader|Streaming-recipe reader|kai-chat SSE reader/i);
+  }
+});
+
+it('every streamMapping names the adapter that parses the stream', () => {
+  for (const integration of integrations) {
+    expect(
+      integration.streamMapping,
+      `${integration.id} describes a stream but does not say what parses it`,
+    ).toMatch(/readOpenAIStream/);
+  }
+});
+
 // --- Archetypes ---
 
 it('archetypes array is non-empty', () => {

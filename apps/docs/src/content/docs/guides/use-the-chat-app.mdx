@@ -58,48 +58,45 @@ Arrays and objects — `messages`, `models`, `suggestions`, `context` — are se
 
 ## Stream a reply
 
-`<kai-chat>` is transport-agnostic — it renders whatever you hand it, so it doesn't care whether tokens come from your own backend, a proxy, or a mock. The pattern: append an empty assistant message, then replace it with a fresh object on every chunk.
+`<kai-chat>` is transport-agnostic: it renders whatever you hand it, so it doesn't care whether tokens come from your own backend, a proxy, or a mock. You own the `fetch`; the kit parses what comes back.
 
 ```js
+import { createAssistantStream } from '@kitn.ai/ui/state';
+import { readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';
+
 chat.addEventListener('kai-submit', async (e) => {
   const prompt = e.detail.value.trim();
   if (!prompt) return;
 
-  // 1. Show the user's turn and an empty assistant placeholder.
-  const assistantId = crypto.randomUUID();
-  chat.messages = [
+  // 1. Show the user's turn.
+  const history = [
     ...chat.messages,
     { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: prompt }] },
-    { id: assistantId, role: 'assistant', parts: [] },
   ];
+  chat.messages = history;
   chat.loading = true;
 
-  // 2. Stream from your endpoint and grow the assistant message.
-  const res = await fetch('/api/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: prompt }),
+  // 2. Stream from your endpoint. createAssistantStream appends the assistant
+  //    message and hands readOpenAIStream a sink to fold deltas onto.
+  const stream = createAssistantStream((update) => {
+    chat.messages = update(chat.messages);
   });
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let answer = '';
 
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    answer += decoder.decode(value, { stream: true });
-
-    // New object per chunk — mutating in place won't re-render.
-    chat.messages = chat.messages.map((m) =>
-      m.id === assistantId ? { ...m, parts: [{ type: 'text', text: answer }] } : m,
-    );
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: toOpenAIMessages(history) }),
+    });
+    await readOpenAIStream(res, stream);
+  } finally {
+    stream.done();
+    chat.loading = false;
   }
-
-  chat.loading = false;
 });
 ```
 
-`loading` toggles the streaming indicator and disables submit while the reply is in flight. Set it back to `false` when the stream ends. For a full backend recipe — parsing SSE, error handling, the abort path — see the [streaming recipe](/guides/recipes/streaming/).
+`loading` toggles the streaming indicator and disables submit while the reply is in flight. Set it back to `false` when the stream ends. For the tool loop, Anthropic streams and the error model, see the [wire adapter recipe](/guides/recipes/wire-adapter/); for `kai-response-stream` and the raw-frames path, the [streaming recipe](/guides/recipes/streaming/).
 
 ## Offer models
 

@@ -131,6 +131,8 @@ The components are deliberately **transport-agnostic**: `<kai-chat>` just render
 
 <script type="module">
   import '@kitn.ai/ui/elements';
+  import { createAssistantStream } from '@kitn.ai/ui/state';
+  import { readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';
 
   // Registration is async (SSR-safe) — wait for the element before using it.
   await customElements.whenDefined('kai-chat');
@@ -149,20 +151,11 @@ The components are deliberately **transport-agnostic**: `<kai-chat>` just render
     chat.value = '';        // clear the input
     chat.loading = true;
 
-    // 2. Add an empty assistant message we'll stream into
-    const assistantId = crypto.randomUUID();
-    chat.messages = [...history, { id: assistantId, role: 'assistant', parts: [] }];
-
-    // Fold each delta onto the message's TRAILING text part, opening a new one
-    // when the last part is not text. Do NOT replace `parts` wholesale: that
-    // drops any reasoning/tool/card parts already on the message.
-    // `@kitn.ai/ui/state` exports this same function as `appendTextPart`.
-    const appendText = (parts, delta) => {
-      const last = parts[parts.length - 1];
-      return last?.type === 'text'
-        ? [...parts.slice(0, -1), { ...last, text: last.text + delta }]
-        : [...parts, { type: 'text', text: delta }];
-    };
+    // 2. Open the assistant message. createAssistantStream appends it and folds
+    //    each delta onto the right part, reassigning `messages` every time.
+    const stream = createAssistantStream((update) => {
+      chat.messages = update(chat.messages);
+    });
 
     try {
       // In production, replace this URL with your own proxy endpoint.
@@ -175,61 +168,39 @@ The components are deliberately **transport-agnostic**: `<kai-chat>` just render
         body: JSON.stringify({
           model: 'anthropic/claude-sonnet-4',
           stream: true,
-          // The wire format is a flat string; flatten the text parts for it.
-          messages: history.map((m) => ({
-            role: m.role,
-            content: m.parts.map((p) => (p.type === 'text' ? p.text : '')).join(''),
-          })),
+          // The encoder turns the thread into the OpenAI `messages` array,
+          // keeping tool calls and their results in the order the model needs.
+          messages: toOpenAIMessages(history),
         }),
       });
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        // SSE frames are separated by newlines; each data line is JSON
-        const lines = buffer.split('\n');
-        buffer = lines.pop();               // keep the partial last line
-        for (const line of lines) {
-          const s = line.trim();
-          if (!s.startsWith('data:')) continue;  // skip ": keep-alive" comments
-          const payload = s.slice(5).trim();
-          if (payload === '[DONE]') continue;
-          try {
-            const delta = JSON.parse(payload).choices?.[0]?.delta?.content;
-            if (!delta) continue;
-            // Replace the assistant message with a NEW object so the row re-renders
-            chat.messages = chat.messages.map((m) =>
-              m.id === assistantId ? { ...m, parts: appendText(m.parts, delta) } : m
-            );
-          } catch { /* ignore non-JSON keep-alive lines */ }
-        }
-      }
+      // Parses the whole stream: keep-alive comments, multi-line frames,
+      // codepoints split across a socket boundary, tool calls, reasoning.
+      await readOpenAIStream(res, stream);
     } catch (err) {
-      chat.messages = chat.messages.map((m) =>
-        m.id === assistantId ? { ...m, parts: appendText(m.parts, '⚠️ ' + err.message) } : m
-      );
+      stream.appendText('⚠️ ' + err.message);
     } finally {
+      stream.done();
       chat.loading = false;
     }
   });
 </script>
 ```
 
-Key point: reassign `chat.messages` with a **new array containing a new object** for the streaming message on each chunk — that's what triggers the re-render. Mutating the existing object in place won't update the view.
+Key point: `chat.messages` has to be reassigned with a **new array containing a new object** for the streaming message on each chunk. That's what triggers the re-render. Mutating the existing object in place won't update the view. `createAssistantStream` is what satisfies that rule for you; if you drive `messages` by hand, you own it.
+
+`@kitn.ai/ui/wire` also ships `readAnthropicStream`, the helpers for a multi-round tool loop, and a seam for a custom wire format. See the [wire adapter recipe](https://ui.kitn.ai/guides/recipes/wire-adapter/).
 
 ### Text-to-speech (TTS)
 
 #### Option 1 — Browser-native (zero dependencies)
 
-The Web Speech API speaks text with no network call. Speak each assistant reply once it finishes streaming — call `speak(answer)` right before `chat.loading = false` in the example above:
+The Web Speech API speaks text with no network call. `readOpenAIStream` resolves with the finished turn, so speak `turn.text` in the example above:
 
 ```js
+const turn = await readOpenAIStream(res, stream);
+speak(turn.text);
+
 function speak(text) {
   if (!('speechSynthesis' in window)) return;
   const utter = new SpeechSynthesisUtterance(text);
@@ -251,7 +222,19 @@ function speakIncremental(fullText) {
     spokenUpTo = lastBreak + 1;
   }
 }
-// call speakIncremental(answer) inside the streaming loop
+
+// A sink is a plain object, so wrap it to see the text as it arrives. Everything
+// else passes through untouched.
+let sofar = '';
+const speaking = {
+  ...stream,
+  appendText(delta) {
+    sofar += delta;
+    speakIncremental(sofar);
+    return stream.appendText(delta);
+  },
+};
+await readOpenAIStream(res, speaking);
 ```
 
 #### Option 2 — Cloud TTS (OpenAI, ElevenLabs, …)

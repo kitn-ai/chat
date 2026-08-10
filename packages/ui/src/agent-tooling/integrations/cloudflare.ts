@@ -8,7 +8,7 @@ const cloudflare: Integration = {
   streamFormat: 'openai-sse',
   envVars: ['CF_ACCOUNT_ID', 'CF_API_TOKEN'],
   routeTemplates: {
-    next: `// app/api/chat/route.ts — proxy Workers AI, keep the token server-side
+    next: `// app/api/chat/route.ts: proxy Workers AI, keep the token server-side
 export async function POST(req: Request) {
   const { messages } = await req.json();
 
@@ -28,10 +28,10 @@ export async function POST(req: Request) {
     },
   );
 
-  // Workers AI returns OpenAI-format SSE — pass it straight through.
+  // Workers AI returns OpenAI-format SSE. Pass it straight through.
   return new Response(upstream.body, { headers: { 'Content-Type': 'text/event-stream' } });
 }`,
-    worker: `// Worker handler — env.AI is bound in wrangler.toml
+    worker: `// Worker handler: env.AI is bound in wrangler.toml
 // env.AI.run emits Cloudflare-native SSE (data: {"response":"<token>"}).
 // The TransformStream below re-frames each chunk to OpenAI-format SSE so
 // readOpenAIStream reads it without any client-side changes.
@@ -80,7 +80,8 @@ export default {
   },
 };`,
   },
-  streamMapping: "Workers AI via the OpenAI-compatible HTTP endpoint returns OpenAI-format SSE — pipe upstream.body straight to the browser and read it with readOpenAIStream from '@kitn.ai/ui/wire'. The native env.AI binding streams Cloudflare's own format (data: {\"response\":\"...token...\"}); the worker route template re-frames these chunks to OpenAI-format SSE via a TransformStream before returning.",
+  streamMapping:
+    "Workers AI via the OpenAI-compatible HTTP endpoint returns OpenAI-format SSE. Pipe upstream.body straight to the browser; readOpenAIStream from @kitn.ai/ui/wire parses it, including tool calls and reasoning. The native env.AI binding streams Cloudflare's own format (data: {\"response\":\"...token...\"}); the worker route template re-frames these chunks to OpenAI-format SSE via a TransformStream before returning.",
   runNote: 'Set CF_ACCOUNT_ID and CF_API_TOKEN. Model ids are prefixed with @cf/, e.g. @cf/meta/llama-3.1-8b-instruct. For the AI binding (worker key), add an [ai] block with binding = "AI" in wrangler.toml.',
   docsSlug: 'integrations/cloudflare-ai',
 };

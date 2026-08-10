@@ -8,7 +8,7 @@ const langgraph: Integration = {
   streamFormat: 'openai-sse',
   envVars: ['OPENAI_API_KEY'],
   routeTemplates: {
-    next: `// POST /api/chat — stream a compiled LangGraph agent to the browser
+    next: `// POST /api/chat: stream a compiled LangGraph agent to the browser
 import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import { ChatOpenAI } from '@langchain/openai';
 import { tool } from '@langchain/core/tools';
@@ -52,7 +52,7 @@ export async function POST(req: Request) {
   return new Response(body, { headers: { 'Content-Type': 'text/event-stream' } });
 }`,
   },
-  streamMapping: "Use graph.stream(input, { streamMode: 'messages' }) to get [messageChunk, metadata] tuples. Extract chunk.content (string) and forward as OpenAI-format SSE frames: data: {choices:[{delta:{content}}]}. Close with data: [DONE]. Read it on the client with readOpenAIStream from '@kitn.ai/ui/wire'.",
+  streamMapping: "Use graph.stream(input, { streamMode: 'messages' }) to get [messageChunk, metadata] tuples. Extract chunk.content (string) and forward as OpenAI-format SSE frames: data: {choices:[{delta:{content}}]}. Close with data: [DONE]. readOpenAIStream from @kitn.ai/ui/wire parses it, including tool calls and reasoning.",
   runNote: 'Set OPENAI_API_KEY (or the key for your chosen model provider). Install @langchain/langgraph, @langchain/openai, @langchain/core.',
   docsSlug: 'integrations/langgraph',
 };

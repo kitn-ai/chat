@@ -1514,12 +1514,18 @@ describe('scaffold', () => {
 
 const REAL_FRAMEWORKS = ['react', 'vue', 'svelte', 'html', 'next', 'tanstack-start'] as const;
 
-/** Blocks 1 + the header — the scaffolder's OWN front-end code, excluding the
- *  backend route template (a route may legitimately hand-roll a re-framing
- *  reader; the cloudflare worker template does) and the reference snippets. */
+/** Block 1 ONLY: the scaffolder's own front-end CODE. Excludes the backend route
+ *  template (a route may legitimately hand-roll a re-framing reader; the
+ *  cloudflare worker template does), the reference snippets, and the header,
+ *  whose `stream:` line is the integration's streamMapping PROSE. That prose
+ *  names readOpenAIStream for every integration including mock, so asserting
+ *  over the whole response would confuse a sentence about the adapter with an
+ *  import of it. */
 function frontEnd(out: unknown): string {
   const text = ((out as { content: { type: string; text: string }[] }).content)[0].text;
-  return text.split('=== (2) BACKEND ROUTE ===')[0];
+  const body = text.split('=== (2) BACKEND ROUTE ===')[0];
+  const start = body.indexOf('=== (1) FRONT-END');
+  return start < 0 ? body : body.slice(start);
 }
 
 describe('scaffolds import the wire adapter for real backends', () => {
@@ -1561,12 +1567,15 @@ describe('scaffolds import the wire adapter for real backends', () => {
       integration: 'mock',
       placement: 'full-page',
     });
-    const emitted = JSON.stringify(out);
-    expect(emitted).not.toContain('@kitn.ai/ui/wire');
-    expect(emitted).not.toContain('readOpenAIStream');
+    // Scoped to the emitted CODE. mock's streamMapping now names the adapter as
+    // what takes over on the swap to a real backend, and that sentence is not an
+    // import.
+    const code = frontEnd(out);
+    expect(code).not.toContain('@kitn.ai/ui/wire');
+    expect(code).not.toContain('readOpenAIStream');
     // The inlined appendTextPart is still what folds the canned reply.
-    expect(emitted).toContain('const appendText =');
-    expect(emitted).toContain('parts:');
+    expect(code).toContain('const appendText =');
+    expect(code).toContain('parts:');
   });
 
   it('emits the multi-round tool loop as a COMMENTED block for tool archetypes', async () => {

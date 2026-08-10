@@ -71,47 +71,44 @@ From that example:
 
 ## Stream a reply
 
-`<kai-chat>` is transport-agnostic — it renders whatever you hand it. To stream, push an empty assistant message, then swap it for a fresh object on each chunk.
+`<kai-chat>` is transport-agnostic: it renders whatever you hand it. Two imports do the streaming: `createAssistantStream` owns the in-flight assistant message, `readOpenAIStream` parses the SSE onto it.
 
 ```js
+import { createAssistantStream } from '@kitn.ai/ui/state';
+import { readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';
+
 chat.addEventListener('kai-submit', async (e) => {
   const userText = e.detail.value.trim();
   if (!userText) return;
 
-  // 1. Show the user's message and an empty assistant placeholder.
-  const assistantId = crypto.randomUUID();
-  chat.messages = [
+  // 1. Show the user's message.
+  const history = [
     ...chat.messages,
     { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: userText }] },
-    { id: assistantId, role: 'assistant', parts: [] },
   ];
+  chat.messages = history;
   chat.loading = true;
 
   // 2. Stream from your endpoint (or a proxy to your model provider).
-  const res = await fetch('/api/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: userText }),
+  const stream = createAssistantStream((update) => {
+    chat.messages = update(chat.messages);
   });
 
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let answer = '';
-
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    answer += decoder.decode(value, { stream: true });
-
-    // Replace with a new object each chunk — mutation in place won't re-render.
-    chat.messages = chat.messages.map((m) =>
-      m.id === assistantId ? { ...m, parts: [{ type: 'text', text: answer }] } : m
-    );
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: toOpenAIMessages(history) }),
+    });
+    await readOpenAIStream(res, stream);
+  } finally {
+    stream.done();
+    chat.loading = false;
   }
-
-  chat.loading = false;
 });
 ```
+
+That covers text, reasoning and tool calls. For the tool loop, Anthropic streams and the error model, see the [wire adapter recipe](/guides/recipes/wire-adapter/).
 
 ## In your framework
 

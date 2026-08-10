@@ -1,0 +1,194 @@
+---
+title: Wire adapter
+description: Parse an OpenAI- or Anthropic-format model stream into kai-chat message parts with readOpenAIStream, and send the thread back with toOpenAIMessages.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The kit parses the stream. You own the transport. `@kitn.ai/ui/wire` takes a `Response` (or any byte source) and folds it onto an assistant message: text, reasoning, tool calls with their arguments streaming in, citations. There is no client, no key handling and no provider SDK anywhere in it, so auth, proxies, aborts and retries stay yours.
+
+## The smallest consumer
+
+```tsx
+import { Chat, useKaiChat } from '@kitn.ai/ui/react';
+import { readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';
+
+export function App() {
+  const chat = useKaiChat({
+    onSubmit: async ({ value }) => {
+      const user = {
+        id: crypto.randomUUID(),
+        role: 'user' as const,
+        parts: [{ type: 'text' as const, text: value }],
+      };
+      chat.append(user);
+      // streamAssistant appends the in-flight assistant message and hands back a
+      // sink. readOpenAIStream drives it, so every delta lands on the right part.
+      const stream = chat.streamAssistant();
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          // chat.messages is this render's snapshot, so it does not contain the
+          // turn appended a few lines up. Append it here too.
+          body: JSON.stringify({ messages: toOpenAIMessages([...chat.messages, user]) }),
+        });
+        await readOpenAIStream(res, stream);
+      } finally {
+        stream.done();
+      }
+    },
+  });
+
+  return <Chat {...chat.bind} style={{ display: 'block', height: '100dvh' }} />;
+}
+```
+
+Four lines are the adapter. The rest is `fetch` and React.
+
+Your `/api/chat` route forwards the provider's SSE bytes untouched. That is what every [integration](/integrations/overview/) template already does.
+
+<Aside type="caution" title="Keep API keys server-side">
+`readOpenAIStream` never opens a connection, so the key lives in your route and never reaches the browser.
+</Aside>
+
+Outside React, build the sink yourself with `createAssistantStream` from `@kitn.ai/ui/state` and pass it to the same reader.
+
+```js
+import { createAssistantStream } from '@kitn.ai/ui/state';
+import { readOpenAIStream } from '@kitn.ai/ui/wire';
+
+const stream = createAssistantStream((update) => {
+  chat.messages = update(chat.messages);
+});
+try {
+  await readOpenAIStream(res, stream);
+} finally {
+  stream.done();
+}
+```
+
+## Both formats
+
+`readAnthropicStream` reads Anthropic Messages SSE and produces the same parts:
+
+```ts
+import { readAnthropicStream } from '@kitn.ai/ui/wire';
+
+const turn = await readAnthropicStream(res, stream);
+```
+
+Both are thin wrappers over `readModelStream`, which takes any `WireFormat`. A format maps one decoded frame onto zero or more neutral chunks, so adding a third is a value, not a pull request:
+
+```ts
+import { readModelStream, type ModelStreamChunk, type WireFormat } from '@kitn.ai/ui/wire';
+
+// push receives `unknown`: a provider can put anything on the wire, and a format
+// that throws on an unrecognised frame takes the whole turn down. Return [].
+function isTextFrame(frame: unknown): frame is { text: string } {
+  return (
+    typeof frame === 'object' &&
+    frame !== null &&
+    typeof (frame as { text?: unknown }).text === 'string'
+  );
+}
+
+const acmeEvents: WireFormat = {
+  id: 'acme.events',
+  // open() runs once per stream. Hold per-stream state in this closure; two
+  // calls must share nothing.
+  open() {
+    return {
+      push(frame: unknown): ModelStreamChunk[] {
+        return isTextFrame(frame) ? [{ text: frame.text }] : [];
+      },
+    };
+  },
+};
+
+await readModelStream(res, stream, { format: acmeEvents });
+```
+
+## Tool loop
+
+The kit never calls your function. `readOpenAIStream` returns the turn, you run the tools, and `applyToolOutput` completes the panel:
+
+```ts
+import { applyToolOutput, readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';
+
+const turn = await readOpenAIStream(res, stream);
+for (const call of turn.toolCalls) {
+  if (call.error || call.providerExecuted) continue;
+  const output = await runYourTool(call.name, call.input ?? {});
+  applyToolOutput(stream, call.id, output);
+}
+// then POST again with toOpenAIMessages(latestMessages) to let the
+// model answer with the results. Cap the rounds: a runaway model is
+// a runaway bill.
+```
+
+`call.providerExecuted` marks a tool the provider already ran, with the result in the stream. Running it again bills you twice for the same answer. `call.error` marks arguments that never parsed, usually because the model was cut off at `max_tokens`.
+
+While the arguments stream, `ToolPart.rawInput` carries the partial JSON, so `<kai-tool>` renders it filling in character by character. You render nothing yourself.
+
+`toOpenAIMessages` splits an assistant turn at each tool boundary: the announcement, then each `role: 'tool'` result, then any text the model produced afterwards. Flattening instead would put the model's answer before the result it was based on, which no endpoint rejects and every later round pays for. A turn that encodes to nothing is skipped rather than sent as `{ content: null }`.
+
+## Extended thinking round-trips
+
+A reasoning part carries the provider's own block on `part.raw`. `toAnthropicMessages` echoes that payload verbatim.
+
+This is not a nicety. Anthropic returns 400 if a `thinking` block in the most recent assistant message is modified, reordered, filtered or reconstructed, so an encoder cannot rebuild one from `text` plus `signature`. A reasoning part with no `raw` throws a `WireEncodeError` at encode time, naming the message and the part index, rather than sending a request that fails at the provider.
+
+The practical consequence is in your persistence layer: strip `raw` when you save a message and the next turn will not encode. Keep it.
+
+## Errors
+
+Two different failures, two different channels.
+
+| Failure | Surfaces as | Read |
+|---------|-------------|------|
+| Non-ok HTTP response | `WireError` thrown before any chunk is read | `status`, `statusText`, `body`, `bodyText` |
+| Error frame inside a 200 stream | `ModelTurn.error` on the resolved turn | `code`, `message` |
+
+```ts
+import { WireError, readOpenAIStream } from '@kitn.ai/ui/wire';
+
+try {
+  const turn = await readOpenAIStream(res, stream);
+  if (turn.error) {
+    // The connection was fine. The model or the gateway failed mid-stream, and
+    // whatever streamed before it is already on the message.
+    console.error(turn.error.code, turn.error.message);
+  }
+} catch (err) {
+  if (err instanceof WireError) {
+    console.error(err.status, err.statusText, err.body);
+  } else {
+    throw err;
+  }
+} finally {
+  stream.done();
+}
+```
+
+`WireError.body` is the provider's own error JSON when the body parsed, and `undefined` when it did not (an HTML error page from a proxy is the usual case). `bodyText` is always the raw body.
+
+## What this does not do
+
+- No retries, reconnect, `Last-Event-ID` or backoff. Abort the `fetch` you own.
+- No tool executor and no loop driver. The loop above is yours.
+- No key handling and no hosted client. There is no `createChatClient({ apiKey })`.
+- No server-side route helpers.
+- No non-SSE transports.
+- No tolerant partial-JSON closer. Truncated tool arguments are reported as `call.error`, not guessed at.
+
+## Regenerating the fixtures
+
+The format tests run against captured provider streams in `packages/ui/src/wire/fixtures/`. `packages/ui/scripts/capture-wire-fixture.mjs` re-records them from a live provider:
+
+```bash
+OPENAI_API_KEY=... node scripts/capture-wire-fixture.mjs openai/text-only
+node scripts/capture-wire-fixture.mjs --list
+```
+
+CI never runs it. It needs a key and the network, and its output is checked in on purpose so the suite stays offline. Run it by hand when a provider changes its event surface, then read the diff before committing.
