@@ -41,7 +41,7 @@ interface PlacementStyle {
   /** one-line human description of the layout */
   note: string;
   /** optional extra comment lines describing an alternative layout form */
-  altNote?: string;
+  altNote?: string[];
 }
 
 // The chat element must fill its container. In a `display: flex; flex-direction:
@@ -50,14 +50,59 @@ interface PlacementStyle {
 const FLEX_FILL = 'flex: 1; min-height: 0;';
 const BLOCK_FILL = 'height: 100%; width: 100%;';
 
+/**
+ * full-page, and it has to be true in a STOCK starter — not just in an empty page.
+ *
+ * It used to be `height: 100dvh; width: 100%`, which is full-page only if nothing
+ * above it interferes, and in the templates consumers actually run something
+ * always does. Two frameworks hit it independently:
+ *
+ *   · Vite's `react-ts` template ships `#root { max-width: 1280px; margin: 0 auto;
+ *     padding: 2rem; text-align: center }`, so the chat was capped, inset by 2rem
+ *     and had its text centred — inherited straight through the shadow boundary.
+ *   · The official TanStack Start starter renders a Header (73px) and a Footer
+ *     (181px) around every route in `__root.tsx`, so a 100dvh sibling put the
+ *     composer 13px BELOW the fold at 1280x800.
+ *
+ * `position: fixed; inset: 0` is the one fix that works for both without a
+ * per-framework patch: it takes the surface out of flow entirely, so an ancestor's
+ * width cap, padding and flex centring stop applying and a sibling header/footer
+ * stops consuming height. `text-align: start` is still needed because text-align
+ * INHERITS regardless of positioning.
+ *
+ * `z-index` matters as much as the positioning, and is the same 1000 the other two
+ * fixed placements already use. Without it the surface stacks at `auto`, and the
+ * TanStack starter's header is `sticky top-0 z-50` — so the chat would sit at the
+ * right geometry and still have the top 73px of its thread painted over. Half-
+ * covered is the worst outcome available: either the chat owns the viewport or it
+ * does not.
+ *
+ * The trade is stated in the emitted comment rather than hidden: this overlays
+ * whatever the starter draws around it, nav included. A consumer who wants the chat
+ * inside their layout wants `placement: 'inline'`, which is what that placement is for.
+ */
+const FULL_PAGE: PlacementStyle = {
+  style:
+    'position: fixed; inset: 0; display: flex; flex-direction: column; ' +
+    'text-align: start; z-index: 1000;',
+  chatFill: FLEX_FILL,
+  note: 'fills the viewport (fixed, inset 0)',
+  altNote: [
+    'FULL PAGE MEANS FULL PAGE: `position: fixed; inset: 0` is deliberate, not a stray overlay.',
+    '`height: 100dvh` is full-page only in an empty document, and stock starters are not empty —',
+    "Vite's react-ts template caps #root at 1126px, centres its text and border-boxes it, and the",
+    'TanStack Start starter wraps every route in a Header + Footer that pushed the composer 13px',
+    'below the fold at 1280x800. Fixed positioning escapes both, `text-align: start` undoes the',
+    'inherited centring, and z-index keeps a sticky header from painting over the thread.',
+    'This DOES cover the chrome around it (nav included) — that is what full-page means here.',
+    'Want the chat to sit INSIDE your own layout instead? Use placement: "inline".',
+  ],
+};
+
 function placementStyle(placement: string): PlacementStyle {
   switch (placement) {
     case 'full-page':
-      return {
-        style: 'height: 100dvh; width: 100%; display: flex; flex-direction: column;',
-        chatFill: FLEX_FILL,
-        note: 'fills the viewport (100dvh)',
-      };
+      return FULL_PAGE;
     case 'inline':
       return {
         style: 'width: 100%; max-width: 720px; height: 540px; margin: 0 auto; display: flex; flex-direction: column;',
@@ -73,9 +118,10 @@ function placementStyle(placement: string): PlacementStyle {
           'border-inline-start: 1px solid var(--kai-color-border); display: flex; flex-direction: column; z-index: 1000;',
         chatFill: FLEX_FILL,
         note: 'full-height side panel, docked to the trailing edge (100dvh)',
-        altNote:
+        altNote: [
           'In-flow alternative (push content instead of overlay): drop `position`/`z-index` and ' +
-          'make this a `flex: 0 0 380px` column inside a `display: flex` row at `height: 100dvh`.',
+            'make this a `flex: 0 0 380px` column inside a `display: flex` row at `height: 100dvh`.',
+        ],
       };
     case 'docked-widget':
       // The bottom-right floating bubble — rounded, elevated, fixed size.
@@ -90,11 +136,7 @@ function placementStyle(placement: string): PlacementStyle {
     default:
       // Unknown placement falls back to full-page (full height) rather than the bubble,
       // so a future Placement enum member doesn't silently render as a widget.
-      return {
-        style: 'height: 100dvh; width: 100%; display: flex; flex-direction: column;',
-        chatFill: FLEX_FILL,
-        note: 'fills the viewport (100dvh)',
-      };
+      return FULL_PAGE;
   }
 }
 
@@ -995,7 +1037,7 @@ function renderHtml(archetype: Archetype, ctx: RenderCtx, isViteHtmlTarget: bool
   const { p, emptyHint } = ctx;
   return [
     `<!-- ${archetype.title} — ${p.note} -->`,
-    ...(p.altNote ? [`<!-- ${p.altNote} -->`] : []),
+    ...(p.altNote ?? []).map((l) => `<!-- ${l} -->`),
     `<div style="${p.style}">`,
     componentTags(archetype, p.chatFill),
     `</div>`,
@@ -1157,7 +1199,7 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
       ``,
       ...nextConfigNote,
       `// ${archetype.title} — ${p.note}. empty-state hint: ${emptyHint}`,
-      ...(p.altNote ? [`// ${p.altNote}`] : []),
+      ...(p.altNote ?? []).map((l) => `// ${l}`),
       ...chatMessageType,
       ``,
       `export default function App() {`,
@@ -1233,7 +1275,7 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
     ``,
     ...nextConfigNote,
     `// ${archetype.title} — ${p.note}. empty-state hint: ${emptyHint}`,
-    ...(p.altNote ? [`// ${p.altNote}`] : []),
+    ...(p.altNote ?? []).map((l) => `// ${l}`),
     ...chatMessageType,
     ``,
     `export default function App() {`,
@@ -1423,7 +1465,7 @@ function renderVue(archetype: Archetype, ctx: RenderCtx): string {
 
   return [
     `<!-- vue — ${archetype.title} — ${p.note}. empty-state hint: ${emptyHint} -->`,
-    ...(p.altNote ? [`<!-- ${p.altNote} -->`] : []),
+    ...(p.altNote ?? []).map((l) => `<!-- ${l} -->`),
     `<!-- SCAF-3: vite.config.ts — tell Vue that kai-* are custom elements (not Vue components).`,
     `     Without this, Vue warns "Unknown custom element" and .prop bindings may misbehave.`,
     `     import vue from '@vitejs/plugin-vue';`,
@@ -1583,7 +1625,7 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
 
   return [
     `<!-- svelte — ${archetype.title} — ${p.note}. empty-state hint: ${emptyHint} -->`,
-    ...(p.altNote ? [`<!-- ${p.altNote} -->`] : []),
+    ...(p.altNote ?? []).map((l) => `<!-- ${l} -->`),
     `<!-- SCAF-5: This uses Svelte-4 syntax ($:, on:event). Works in Svelte 5 via legacy mode;`,
     `     runes-mode users should adapt to $state/$effect and onkai-submit event handlers. -->`,
     `<script lang="ts">`,
@@ -1776,7 +1818,7 @@ function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
     `import '@kitn.ai/ui/theme.tokens.css'  // compiled token defaults`,
     ``,
     `// ${archetype.title} — ${p.note}. empty-state hint: ${emptyHint}`,
-    ...(p.altNote ? [`// ${p.altNote}`] : []),
+    ...(p.altNote ?? []).map((l) => `// ${l}`),
     ...chatMessageType,
     ``,
     `// ssr: false keeps the Solid-based web component client-only.`,
@@ -2010,7 +2052,7 @@ function renderAngular(archetype: Archetype, ctx: RenderCtx): string {
     ...(isMock ? [] : wireImportLines({ typed: true, toolLoop: emitToolLoop })),
     ``,
     `// ${archetype.title} — ${p.note}. empty-state hint: ${emptyHint}`,
-    ...(p.altNote ? [`// ${p.altNote}`] : []),
+    ...(p.altNote ?? []).map((l) => `// ${l}`),
     ...chatMessageDecl(isMock),
     ``,
     ...modelInit,
@@ -2320,7 +2362,7 @@ function renderSolid(archetype: Archetype, ctx: RenderCtx): string {
     ...(isMock ? [] : wireImportLines({ typed: false, toolLoop: emitToolLoop })),
     ``,
     `// ${archetype.title} — ${p.note}. empty-state hint: ${emptyHint}`,
-    ...(p.altNote ? [`// ${p.altNote}`] : []),
+    ...(p.altNote ?? []).map((l) => `// ${l}`),
     ``,
     `// EVERY part kind the stream can produce, in thread order. <kai-chat> does this`,
     `// internally for the element-based targets; composing from the SolidJS layer`,

@@ -83,6 +83,81 @@ describe('scaffold', () => {
     expect(text).not.toMatch(/height:\s*100dvh/);
   });
 
+  /**
+   * full-page has to be full-page in a STOCK starter, not just in an empty page.
+   *
+   * `height: 100dvh` was full-page only when nothing above it interfered, and in
+   * the templates consumers actually run something always did: Vite's `react-ts`
+   * caps and centres `#root` (measured: chat at x=78, 1124px wide, text-align
+   * computed `center`), and the official TanStack Start starter wraps every route
+   * in a Header + Footer (measured: composer bottom 813px against an 800px
+   * viewport — 13px below the fold). Both are fixed at once by taking the surface
+   * out of flow, which is why this asserts the mechanism and not just the numbers.
+   *
+   * Every framework, because the whole point of the fix is that it is NOT a
+   * per-framework patch.
+   */
+  it('full-page escapes the stock starter chrome in every framework (fixed + inset + z-index + text-align)', async () => {
+    /**
+     * Asserted against the emitted STYLE DECLARATION, never the whole scaffold.
+     *
+     * The first draft of this test matched `position:\s*fixed` (and inset, and
+     * text-align, and `placement: "inline"`) anywhere in the output — and every
+     * one of those passed against the UNFIXED scaffolder, because the comment
+     * this fix also adds talks about all four. Four assertions out of six were
+     * reading the prose that describes the fix instead of the fix. Pinning the
+     * exact declaration per syntax family is what makes this discriminate.
+     */
+    const EXPECTED: Record<string, string> = {
+      // html / vue / svelte / angular emit a CSS string.
+      css: 'position: fixed; inset: 0; display: flex; flex-direction: column; text-align: start; z-index: 1000;',
+      // react / next / tanstack-start emit a camelCased React style object.
+      jsx: "position: 'fixed', inset: '0', display: 'flex', flexDirection: 'column', textAlign: 'start', zIndex: '1000'",
+      // solid's style prop is csstype's HYPHENATED set, applied via setProperty.
+      solid:
+        "'position': 'fixed', 'inset': '0', 'display': 'flex', 'flex-direction': 'column', 'text-align': 'start', 'z-index': '1000'",
+    };
+    const FAMILY: Record<string, keyof typeof EXPECTED> = {
+      html: 'css', vue: 'css', svelte: 'css', angular: 'css',
+      react: 'jsx', next: 'jsx', 'tanstack-start': 'jsx',
+      solid: 'solid',
+    };
+
+    for (const framework of Object.keys(FAMILY)) {
+      const out = await scaffold.handler({
+        useCase: 'drop-in-chat',
+        integration: 'mock',
+        placement: 'full-page',
+        framework,
+      });
+      const text = (out.content as { type: string; text: string }[])[0].text;
+      const decl = EXPECTED[FAMILY[framework]];
+
+      // Out of flow (an ancestor's width cap, padding and flex centring stop
+      // applying, and a sibling header/footer stops consuming height), pinned to
+      // all four edges, un-centred (text-align INHERITS through the shadow
+      // boundary regardless of positioning), and stacked above a sticky header
+      // (TanStack's is `sticky top-0 z-50`).
+      expect(text, `${framework}: full-page container style must be exactly \`${decl}\``).toContain(decl);
+
+      // The old value is GONE from the code, not merely supplemented. Scoped to
+      // the emitted style attributes/objects: the explanatory comment names
+      // `height: 100dvh` on purpose, and must not satisfy this.
+      const styles = [
+        ...text.matchAll(/style=(?:"([^"]*)"|\{\{([^}]*)\}\})/g),
+      ].map((m) => m[1] ?? m[2]);
+      expect(styles.length, `${framework}: no style declaration found to check`).toBeGreaterThan(0);
+      for (const s of styles) {
+        expect(s, `${framework}: 100dvh is the defect, not the fix`).not.toMatch(/100dvh/);
+      }
+
+      // And it has to SAY so, because the trade (it covers your nav) is real.
+      expect(text, `${framework}: must state the trade and point at 'inline'`).toContain(
+        'Want the chat to sit INSIDE your own layout instead? Use placement: "inline".',
+      );
+    }
+  });
+
   it('falls back to a usable route when the framework has no exact template', async () => {
     // pydantic-ai only ships a fastapi template; asking for `next` (ts) should
     // still emit its python fastapi route rather than failing.
