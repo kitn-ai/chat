@@ -262,17 +262,21 @@ export function writeTypes(root, elements, _toAttr, IMPORTS) {
     .map(([src, names]) => `import type { ${names.sort().join(', ')} } from '${src}';`)
     .join('\n');
 
-  const interfaces = elements.map((el) => {
-    const body = [
-      `  /** Color mode (\`auto\` follows prefers-color-scheme). */`,
-      `  theme?: 'light' | 'dark' | 'auto';`,
-      ...el.props.flatMap((p) => [
-        ...(p.description ? [`  /** ${p.description} */`] : []),
-        `  ${p.name}${p.optional ? '?' : ''}: ${clean(p.type, p.optional)};`,
-      ]),
-    ].join('\n');
-    return `export interface ${el.className} extends HTMLElement {\n${body}\n}`;
-  }).join('\n\n');
+  // The declared (non-DOM) member list for one element. Shared by the
+  // HTMLElement interfaces below and the Vue GlobalComponents props interfaces,
+  // so the two can never disagree about what a kai-* element accepts.
+  const propBody = (el) => [
+    `  /** Color mode (\`auto\` follows prefers-color-scheme). */`,
+    `  theme?: 'light' | 'dark' | 'auto';`,
+    ...el.props.flatMap((p) => [
+      ...(p.description ? [`  /** ${p.description} */`] : []),
+      `  ${p.name}${p.optional ? '?' : ''}: ${clean(p.type, p.optional)};`,
+    ]),
+  ].join('\n');
+
+  const interfaces = elements
+    .map((el) => `export interface ${el.className} extends HTMLElement {\n${propBody(el)}\n}`)
+    .join('\n\n');
 
   const tagMap = elements.map((el) => `    '${el.tag}': ${el.className};`).join('\n');
 
@@ -330,6 +334,80 @@ ${jsxTagMap}
   }
 }`;
 
+  // Vue resolves a template tag against `GlobalComponents` FIRST and only then
+  // falls through to @vue/runtime-dom's JSX IntrinsicElements — which carries a
+  // `[name: string]: any` index signature. So an unregistered `<kai-chat>` types
+  // as `any` and vue-tsc silently checks NOTHING: a consumer-regression round
+  // proved a `boolean`-prop-bound-to-`string` positive control compiling with zero
+  // errors, and the removed 0.19 `ChatMessage.content` shape passing straight
+  // through to the runtime messages guard, which drops it. React consumers got a
+  // real error for the same mistake (the JSX block above); Vue consumers got
+  // nothing. This block closes that gap.
+  //
+  // Shape notes, all established empirically against vue-tsc (see
+  // src/elements/vue-global-components.test.ts for the drift guard):
+  //  - Volar looks the tag up under BOTH the raw kebab name and its PascalCase
+  //    form, depending on `vueCompilerOptions.strictTemplates`, so both keys are
+  //    emitted.
+  //  - Event handlers land on a camelized, prefix-KEEPING key: `@kai-submit` →
+  //    `onKaiSubmit` (unlike the React wrappers, which strip the `kai-` prefix).
+  //  - Props are wrapped in `Partial<>`: the kai- contract lets a consumer set any
+  //    prop imperatively through a ref, so flagging an "absent required prop" in a
+  //    template would be a false positive.
+  //  - `KaiElementVueProps`'s index signature keeps arbitrary attributes and
+  //    handlers legal (id, data-*, aria-*, v-*), which matters under
+  //    strictTemplates. An explicitly declared prop still wins over the index
+  //    signature, so the type check above is unaffected — that is exactly what the
+  //    positive control pins down.
+  //
+  // Declared locally, with no reference to any identifier that only exists inside
+  // the real 'vue' module — same constraint as the React block, since this file
+  // loads for every framework via `import '@kitn.ai/ui/elements'`.
+  const pascal = (s) => s.split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join('');
+  const vueEventKey = (ev) => `on${pascal(ev)}`;
+
+  const vuePropsInterfaces = elements
+    .map((el) => `export interface ${el.className}Props {\n${propBody(el)}\n}`)
+    .join('\n\n');
+
+  const vueEventInterfaces = elements
+    .map((el) => {
+      const body = el.events.flatMap((e) => [
+        ...(e.description ? [`  /** ${e.description} */`] : []),
+        `  ${vueEventKey(e.name)}?: (event: CustomEvent${e.detail ? `<${clean(e.detail, false)}>` : ''}) => void;`,
+      ]);
+      return `export interface ${el.className}Events {\n${body.join('\n')}\n}`;
+    })
+    .join('\n\n');
+
+  const vueTagMap = elements
+    .flatMap((el) => {
+      const t = `KaiVueElement<${el.className}Props, ${el.className}Events>`;
+      return [`    '${el.tag}': ${t};`, `    ${pascal(el.tag)}: ${t};`];
+    })
+    .join('\n');
+
+  const vueBlock = `/** Attributes every kai-* element tolerates in a Vue template on top of its own
+ *  props: \`id\`, \`data-*\`, \`aria-*\`, directives. The index signature keeps those
+ *  legal under \`strictTemplates\` WITHOUT weakening the declared props — an
+ *  explicit member always wins over an index signature. */
+export interface KaiElementVueProps {
+  [attr: string]: unknown;
+}
+
+/** A kai-* custom element as Vue's template type-checker sees it. Props are
+ *  \`Partial\` because the kai- contract allows setting any of them imperatively
+ *  through a ref instead of in the template. */
+export type KaiVueElement<Props, Events> = new () => {
+  $props: Partial<Props> & Events & KaiElementVueProps;
+};
+
+declare module 'vue' {
+  interface GlobalComponents {
+${vueTagMap}
+  }
+}`;
+
   // SOURCE copy (src/elements/element-types.d.ts): used internally + by the
   // elements/provider builds. Keeps type-only relative re-exports (fine — the
   // library's own tsconfig resolves them; they are erased at emit). The value
@@ -368,6 +446,12 @@ ${interfaces}
 ${tagMapBlock}
 
 ${jsxIntrinsicBlock}
+
+${vuePropsInterfaces}
+
+${vueEventInterfaces}
+
+${vueBlock}
 `;
   writeFileSync(resolve(root, 'src/elements/element-types.d.ts'), srcOut);
   console.log(`✓ src/elements/element-types.d.ts — ${elements.length} elements`);
@@ -390,6 +474,12 @@ ${interfaces}
 ${tagMapBlock}
 
 ${jsxIntrinsicBlock}
+
+${vuePropsInterfaces}
+
+${vueEventInterfaces}
+
+${vueBlock}
 `;
   const distDir = resolve(root, 'dist');
   if (!existsSync(distDir)) mkdirSync(distDir, { recursive: true });
