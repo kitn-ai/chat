@@ -112,35 +112,66 @@ function resolveKind(cur: ToolPart, patch: Partial<ToolPart>, nextType: string):
   return derived ? classifyTool(nextType) : cur.kind;
 }
 
-/** Structural equality for the two fields that are genuinely object-shaped, and
- *  reference or primitive equality for everything else.
+/** Every `ToolPart` key, in the order `toolsEqual` checks them (cheap identity
+ *  checks first, the two fingerprint-based checks last). See `ToolPart` in
+ *  `components/tool-types.ts`, which points back here.
  *
- *  This replaces `fingerprint(merged) === fingerprint(cur)`, which serialized the
- *  ENTIRE ToolPart on every patch. A streaming tool call is patched once per
- *  argument fragment while `rawInput` grows toward the full argument JSON, so
- *  hashing the whole part per fragment is quadratic in the argument size: fine at
- *  4 KB, not at 200 KB.
+ *  This is not just documentation: `_toolKeysExhaustive` below fails to compile
+ *  if `ToolPart` gains a key that is not listed here, and `TOOL_COMPARATORS`
+ *  fails to compile if this list gains a key with no comparator. Adding a field
+ *  to `ToolPart` without wiring it into both is a BUILD failure, not a silently
+ *  stale array reference. */
+const TOOL_KEYS = [
+  'type', 'state', 'kind', 'toolCallId', 'errorText', 'rawInput', 'raw', 'input', 'output',
+] as const satisfies readonly (keyof ToolPart)[];
+
+// If `ToolPart` gains a key absent from `TOOL_KEYS`, `Exclude<...>` stops being
+// `never`, the assigned literal type no longer matches `true`, and `tsc` reports
+// the offending key name right here.
+type _ToolKeysExhaustive = Exclude<keyof ToolPart, (typeof TOOL_KEYS)[number]> extends never
+  ? true
+  : ['ToolPart has a key missing from TOOL_KEYS', Exclude<keyof ToolPart, (typeof TOOL_KEYS)[number]>];
+const _toolKeysExhaustive: _ToolKeysExhaustive = true;
+void _toolKeysExhaustive;
+
+/** One comparator per key in `TOOL_KEYS`. The mapped type over
+ *  `(typeof TOOL_KEYS)[number]` means a key added to `TOOL_KEYS` with no
+ *  comparator here is ALSO a compile error ("Property 'x' is missing"), so the
+ *  guard reaches the actual comparison, not just the key list.
  *
- *  `rawInput` compares with `!==`. That is exactly the test we want (did the
- *  accumulated text change?) and it is cheap: two strings of different lengths
- *  are unequal after the length check.
+ *  Semantics are unchanged from before this table existed:
+ *  - `raw` compares by REFERENCE on purpose. It is the untranslated provider
+ *    payload; a producer attaches it once and never rebuilds it (upsertToolPart
+ *    itself carries `cur.raw` forward when a patch omits it), so reference
+ *    equality holds on every real path. Hashing it would walk the accumulated
+ *    argument string a second time, which is the cost this table exists to
+ *    remove. The worst case is a producer handing over a fresh-but-equal `raw`,
+ *    which costs one extra re-render and never a wrong render.
+ *  - `input` and `output` are the two fields that are genuinely object-shaped:
+ *    reference equality first, then `fingerprint()` as a structural fallback so
+ *    a fresh-but-identical object still dedupes.
+ *  - everything else, including `rawInput`, compares with `===`. `rawInput`
+ *    against `!==` is exactly the test we want (did the accumulated text
+ *    change?) and it is cheap: two strings of different lengths are unequal
+ *    after the length check, so it never walks the full string.
  *
- *  `raw` compares by REFERENCE on purpose. It is the untranslated provider
- *  payload; a producer attaches it once and never rebuilds it (upsertToolPart
- *  itself carries `cur.raw` forward when a patch omits it), so reference equality
- *  holds on every real path. Hashing it would walk the accumulated argument
- *  string a second time, which is the cost this function exists to remove. The
- *  worst case is a producer handing over a fresh-but-equal `raw`, which costs one
- *  extra re-render and never a wrong render. */
+ *  This replaces `fingerprint(merged) === fingerprint(cur)`, which serialized
+ *  the ENTIRE ToolPart on every patch. A streaming tool call is patched once
+ *  per argument fragment while `rawInput` grows toward the full argument JSON,
+ *  so hashing the whole part per fragment is quadratic in the argument size:
+ *  fine at 4 KB, not at 200 KB. */
+const TOOL_COMPARATORS: { [K in (typeof TOOL_KEYS)[number]]: (a: ToolPart, b: ToolPart) => boolean } = {
+  type: (a, b) => a.type === b.type,
+  state: (a, b) => a.state === b.state,
+  kind: (a, b) => a.kind === b.kind,
+  toolCallId: (a, b) => a.toolCallId === b.toolCallId,
+  errorText: (a, b) => a.errorText === b.errorText,
+  rawInput: (a, b) => a.rawInput === b.rawInput,
+  raw: (a, b) => a.raw === b.raw,
+  input: (a, b) => a.input === b.input || fingerprint(a.input) === fingerprint(b.input),
+  output: (a, b) => a.output === b.output || fingerprint(a.output) === fingerprint(b.output),
+};
+
 function toolsEqual(a: ToolPart, b: ToolPart): boolean {
-  if (a.type !== b.type) return false;
-  if (a.state !== b.state) return false;
-  if (a.kind !== b.kind) return false;
-  if (a.toolCallId !== b.toolCallId) return false;
-  if (a.errorText !== b.errorText) return false;
-  if (a.rawInput !== b.rawInput) return false;
-  if (a.raw !== b.raw) return false;
-  if (a.input !== b.input && fingerprint(a.input) !== fingerprint(b.input)) return false;
-  if (a.output !== b.output && fingerprint(a.output) !== fingerprint(b.output)) return false;
-  return true;
+  return TOOL_KEYS.every((key) => TOOL_COMPARATORS[key](a, b));
 }
