@@ -107,6 +107,20 @@ export type { CollapsedRailProps } from './components/conversation-list';
 // ---------------------------------------------------------------------------
 export { Thread } from './components/thread';
 export type { ThreadProps, ThreadController } from './components/thread';
+// ChatThread — the component behind `<kai-chat>`. VERIFIED standalone: rendered in
+// a plain Vite+Solid app (no custom element, no shadow root) it draws its header,
+// the full message list and its BUILT-IN composer; typing into that composer and
+// pressing Send fires `onSubmit` with the typed text and the thread updates, with
+// no console errors.
+//
+// It does emit 5 `<slot>` elements — header-start, header-end, input-top,
+// toolbar-start, toolbar-end. Those are OPTIONAL INJECT points with no assigned
+// nodes outside the facade, so they render nothing; they are only fillable from
+// `<kai-chat>`'s light DOM. The REPLACE/INJECT props (`sidebar`, `empty`,
+// `composer`, `headerFull`, `footer`, `composerActions`) are opt-in switches that
+// the FACADE sets when a host slots content — left at their default they emit no
+// slot at all and the built-in UI renders. So a Solid consumer can ignore all of
+// it; they just cannot project content into those five points without the element.
 export { ChatThread } from './components/chat-thread';
 export type { ChatThreadProps, ChatThreadController, ChatThreadContextUsage } from './components/chat-thread';
 export { Screen } from './components/screen';
