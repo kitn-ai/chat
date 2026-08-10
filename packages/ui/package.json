@@ -73,6 +73,10 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "worker": "./dist/index.server.js",
+      "browser": "./dist/index.js",
+      "deno": "./dist/index.server.js",
+      "node": "./dist/index.server.js",
       "default": "./dist/index.js"
     },
     "./elements": {
@@ -128,7 +132,7 @@
   "scripts": {
     "prepublishOnly": "npm run build",
     "prebuild": "npm run build:css",
-    "build": "vite build --config vite.config.ts && vite build --config vite.config.provider.ts && vite build --config vite.config.react.ts && vite build --config vite.config.barrel.ts && vite build --config vite.config.state.ts && vite build --config vite.config.wire.ts && vite build --config vite.config.mcp.ts && npm run build:elements && node scripts/verify-elements-bundle.mjs && node scripts/verify-react-wrappers.mjs",
+    "build": "vite build --config vite.config.ts && vite build --config vite.config.provider.ts && vite build --config vite.config.react.ts && vite build --config vite.config.barrel.ts && vite build --config vite.config.barrel.server.ts && vite build --config vite.config.state.ts && vite build --config vite.config.wire.ts && vite build --config vite.config.mcp.ts && npm run build:elements && node scripts/verify-elements-bundle.mjs && node scripts/verify-react-wrappers.mjs",
     "build:elements": "node scripts/gen-elements-manifest.mjs && vite build --config vite.config.elements.ts && node scripts/gen-element-dts.mjs",
     "postbuild": "npm run build:theme && npm run build:api && npm run build:schemas",
     "build:theme": "node scripts/build-theme-tokens.mjs",
@@ -136,6 +140,7 @@
     "build:schemas": "node scripts/copy-card-schemas.mjs",
     "verify:consumer": "node scripts/verify-consumer-sideeffects.mjs",
     "verify:scaffold": "node scripts/verify-scaffold-compiles.mjs",
+    "verify:ssr": "node scripts/verify-ssr-imports.mjs",
     "test": "vitest run",
     "test:react": "vitest run --config vitest.react.config.ts",
     "test:storybook": "vitest run --project=storybook",
