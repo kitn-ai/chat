@@ -43,6 +43,15 @@ jobs:
       - name: Consumer packaging guard (registrations survive a real bundler)
         run: pnpm --filter @kitn.ai/ui run verify:consumer
 
+      # Compiles the `kai` MCP scaffolder's EMITTED code (60 archetype x
+      # integration x framework combinations) with real `tsc --strict
+      # --noUnusedLocals`, resolving @kitn.ai/ui through the shipped exports map
+      # and .d.ts. Emitted code lives in string literals, so scaffold.test.ts can
+      # assert its wording but never its types; this caught an unused import that
+      # failed `npm run build` in a stock create-vite app. ~1.5s, no network.
+      - name: Scaffolder output compiles (tsc --strict over emitted code)
+        run: pnpm --filter @kitn.ai/ui run verify:scaffold
+
       # Run ONLY the jsdom unit project. pnpm test (= vitest run) would also
       # spin up the storybook BROWSER project; that runs in its own job now.
       - name: Unit tests (jsdom)

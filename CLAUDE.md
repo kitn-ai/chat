@@ -29,6 +29,7 @@ pnpm dev             # Storybook (6006) + docs site (4321) together via nx run-m
 nx build ui          # vite lib builds into packages/ui/dist/ (or pnpm build for all)
 nx typecheck ui      # 4 tsc passes: Solid src + react wrappers + react tests + the Node MCP
 pnpm --filter @kitn.ai/ui exec vitest run --project=unit  # jsdom unit suite; bare pnpm test / nx test ui also runs the flaky storybook browser project
+pnpm --filter @kitn.ai/ui run verify:scaffold  # compiles the MCP scaffolder's EMITTED code with tsc --strict (needs a build first)
 ```
 
 - **Gotcha:** after `nx build ui` / `build:api`, run `git checkout -- packages/ui/src/components/component-meta.json` — it churns with TS-type-expansion noise and is NOT used at runtime.
@@ -37,6 +38,11 @@ pnpm --filter @kitn.ai/ui exec vitest run --project=unit  # jsdom unit suite; ba
 ## Testing the CONSUMER experience (not just internals)
 
 `pnpm --filter @kitn.ai/ui exec vitest run --project=unit` is internal. To test what a consumer of the **published package** hits — packaging, exports, SSR, scaffold output, across every framework/integration — use the project skill **`/consumer-regression`** (`smoke` = one parallel pass + report; `regression` = the full build → triage → fix → re-verify loop). Unit tests catch none of those. See [`.claude/README.md`](.claude/README.md).
+
+Two cheap guards cover the same ground in the required CI job, and both are worth running locally before you push:
+
+- `pnpm --filter @kitn.ai/ui run verify:consumer` packs the build, installs it into a throwaway app, bundles it with Vite 8 / Rolldown, and asserts every `kai-*` registration survives a real consumer bundler.
+- `pnpm --filter @kitn.ai/ui run verify:scaffold` generates all 60 scaffolder outputs and compiles them with `tsc --strict --noUnusedLocals`, resolving `@kitn.ai/ui` through the shipped exports map. Emitted code lives in string literals, so `scaffold.test.ts` can assert its wording but never its types. Run this after touching `agent-tooling/mcp/tools/scaffold.ts` or any integration route template. Needs `nx build ui` first.
 
 ## Conventions
 

@@ -135,6 +135,7 @@
     "build:api": "node scripts/gen-element-api.mjs",
     "build:schemas": "node scripts/copy-card-schemas.mjs",
     "verify:consumer": "node scripts/verify-consumer-sideeffects.mjs",
+    "verify:scaffold": "node scripts/verify-scaffold-compiles.mjs",
     "test": "vitest run",
     "test:react": "vitest run --config vitest.react.config.ts",
     "test:storybook": "vitest run --project=storybook",
