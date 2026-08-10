@@ -88,7 +88,7 @@ export function upsertToolPart(
   const merged: ToolPart = { ...cur, ...patch, toolCallId };
   merged.kind = resolveKind(cur, patch, merged.type);
   if (merged.raw === undefined && cur.raw !== undefined) merged.raw = cur.raw;
-  if (fingerprint(merged) === fingerprint(cur)) return parts;
+  if (toolsEqual(cur, merged)) return parts;
   return [...parts.slice(0, i), { type: 'tool', tool: merged }, ...parts.slice(i + 1)];
 }
 
@@ -110,4 +110,37 @@ function resolveKind(cur: ToolPart, patch: Partial<ToolPart>, nextType: string):
   if (patch.kind !== undefined) return patch.kind;
   const derived = cur.kind === undefined || cur.kind === classifyTool(cur.type);
   return derived ? classifyTool(nextType) : cur.kind;
+}
+
+/** Structural equality for the two fields that are genuinely object-shaped, and
+ *  reference or primitive equality for everything else.
+ *
+ *  This replaces `fingerprint(merged) === fingerprint(cur)`, which serialized the
+ *  ENTIRE ToolPart on every patch. A streaming tool call is patched once per
+ *  argument fragment while `rawInput` grows toward the full argument JSON, so
+ *  hashing the whole part per fragment is quadratic in the argument size: fine at
+ *  4 KB, not at 200 KB.
+ *
+ *  `rawInput` compares with `!==`. That is exactly the test we want (did the
+ *  accumulated text change?) and it is cheap: two strings of different lengths
+ *  are unequal after the length check.
+ *
+ *  `raw` compares by REFERENCE on purpose. It is the untranslated provider
+ *  payload; a producer attaches it once and never rebuilds it (upsertToolPart
+ *  itself carries `cur.raw` forward when a patch omits it), so reference equality
+ *  holds on every real path. Hashing it would walk the accumulated argument
+ *  string a second time, which is the cost this function exists to remove. The
+ *  worst case is a producer handing over a fresh-but-equal `raw`, which costs one
+ *  extra re-render and never a wrong render. */
+function toolsEqual(a: ToolPart, b: ToolPart): boolean {
+  if (a.type !== b.type) return false;
+  if (a.state !== b.state) return false;
+  if (a.kind !== b.kind) return false;
+  if (a.toolCallId !== b.toolCallId) return false;
+  if (a.errorText !== b.errorText) return false;
+  if (a.rawInput !== b.rawInput) return false;
+  if (a.raw !== b.raw) return false;
+  if (a.input !== b.input && fingerprint(a.input) !== fingerprint(b.input)) return false;
+  if (a.output !== b.output && fingerprint(a.output) !== fingerprint(b.output)) return false;
+  return true;
 }

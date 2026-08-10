@@ -141,4 +141,73 @@ describe('upsertToolPart', () => {
     parts = upsertToolPart(parts, 'tc1', { raw: second });
     expect((parts[0] as { tool: ToolPart }).tool.raw).toEqual(second);
   });
+
+  it('never serializes `raw` when deciding equality', () => {
+    // A payload that EXPLODES if anything walks it. The old code called
+    // fingerprint(merged), which JSON-serialized raw.payload on every patch.
+    const exploding = {
+      source: 'test.explodes',
+      payload: {
+        get boom(): string {
+          throw new Error('raw.payload was serialized');
+        },
+      },
+    };
+    let parts = upsertToolPart([], 'tc1', {
+      type: 'bash',
+      state: 'input-streaming',
+      raw: exploding,
+    });
+    expect(() => {
+      parts = upsertToolPart(parts, 'tc1', { rawInput: '{"command":' });
+    }).not.toThrow();
+    expect(() => {
+      parts = upsertToolPart(parts, 'tc1', { rawInput: '{"command":"ls"}' });
+    }).not.toThrow();
+    const tool = (parts[0] as Extract<MessagePart, { type: 'tool' }>).tool;
+    expect(tool.rawInput).toBe('{"command":"ls"}');
+    expect(tool.raw).toBe(exploding);
+  });
+
+  it('assembles a large rawInput correctly across many fragments', () => {
+    let parts = upsertToolPart([], 'tc1', { type: 'write_file', state: 'input-streaming' });
+    let text = '';
+    for (let i = 0; i < 5000; i++) {
+      text += `frag${i},`;
+      parts = upsertToolPart(parts, 'tc1', { rawInput: text });
+    }
+    const tool = (parts[0] as Extract<MessagePart, { type: 'tool' }>).tool;
+    expect(tool.rawInput).toBe(text);
+    // 5000 fragments of `frag${i},` totals 43890 chars (variable-width `i`
+    // means it is not a round number). The assertion checks "assembled a large
+    // string correctly", not a specific byte count.
+    expect(tool.rawInput!.length).toBeGreaterThan(40_000);
+  });
+
+  it('still dedupes a structurally identical input arriving as a fresh object', () => {
+    const parts = upsertToolPart([], 'tc1', {
+      type: 'bash',
+      state: 'input-available',
+      input: { command: 'ls', flags: ['-a'] },
+    });
+    // A DIFFERENT object with the same shape, and reversed key order.
+    const same = upsertToolPart(parts, 'tc1', { input: { flags: ['-a'], command: 'ls' } });
+    expect(same).toBe(parts);
+  });
+
+  it('still dedupes a structurally identical output arriving as a fresh object', () => {
+    const parts = upsertToolPart([], 'tc1', {
+      type: 'bash',
+      state: 'output-available',
+      output: { stdout: 'a\nb', code: 0 },
+    });
+    const same = upsertToolPart(parts, 'tc1', { output: { code: 0, stdout: 'a\nb' } });
+    expect(same).toBe(parts);
+  });
+
+  it('does NOT dedupe when only rawInput changed', () => {
+    const parts = upsertToolPart([], 'tc1', { type: 'bash', state: 'input-streaming', rawInput: '{"a' });
+    const next = upsertToolPart(parts, 'tc1', { rawInput: '{"ab' });
+    expect(next).not.toBe(parts);
+  });
 });
