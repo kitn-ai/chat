@@ -372,6 +372,16 @@ function MessageBody(props: MessageBodyProps) {
                         </MessageContent>
                       )}
                     </Match>
+                    {/* A reasoning part with NO text is a round-trip carrier,
+                        not something to show. Anthropic's redacted_thinking
+                        blocks carry an opaque blob with no readable text, and
+                        the block assembled at content_block_stop carries the
+                        verbatim payload the encoder must echo back. Both are
+                        empty-text parts that MUST stay in `parts` (the encoder
+                        needs them, in order) and must not render a blank
+                        disclosure. This Match sits above the real one because
+                        <Switch> takes the FIRST match. */}
+                    <Match when={part.type === 'reasoning' && part.text === ''}>{null}</Match>
                     <Match when={part.type === 'reasoning' && part}>
                       {(p) => (
                         <Reasoning class="mb-2 w-full">

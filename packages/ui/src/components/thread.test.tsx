@@ -23,6 +23,16 @@ if (!Element.prototype.scrollTo) (Element.prototype as unknown as { scrollTo: ()
 const writeText = vi.fn();
 Object.assign(navigator, { clipboard: { writeText } });
 
+// jsdom has no ResizeObserver; the reasoning disclosure wires one when its
+// content is visible (see response-compare.test.tsx for the same stub).
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+}
+
 afterEach(cleanup);
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
@@ -167,5 +177,64 @@ describe('Thread stick-to-bottom', () => {
     // Sticks to the bottom instantly (not the smooth user-initiated scroll).
     expect(scrollTo).toHaveBeenLastCalledWith(expect.objectContaining({ behavior: 'instant' }));
     vi.unstubAllGlobals();
+  });
+});
+
+describe('Thread reasoning parts', () => {
+  it('renders a reasoning disclosure when the part has text', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        parts: [
+          { type: 'reasoning', text: 'Weighing the options.', label: 'Thinking', index: 0 },
+          { type: 'text', text: 'Done.' },
+        ],
+      },
+    ];
+    const { container } = render(() => <Thread messages={messages} />);
+    expect(container.textContent ?? '').toContain('Thinking');
+  });
+
+  it('renders NOTHING for a reasoning part with empty text', () => {
+    // Anthropic's redacted_thinking blocks and the block assembled at
+    // content_block_stop both arrive with no readable text and a `raw` payload
+    // the encoder has to echo back verbatim. They must stay in `parts` and must
+    // NOT produce a blank disclosure.
+    const messages: ChatMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'reasoning',
+            text: '',
+            label: 'Thinking',
+            index: 0,
+            raw: { source: 'anthropic.content_block', payload: { type: 'redacted_thinking', data: 'EroBCk...' } },
+          },
+          { type: 'text', text: 'Done.' },
+        ],
+      },
+    ];
+    const { container } = render(() => <Thread messages={messages} />);
+    const text = container.textContent ?? '';
+    expect(text).not.toContain('Thinking');
+    expect(text).toContain('Done.');
+  });
+
+  it('keeps a later non-empty reasoning block visible alongside an empty one', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        parts: [
+          { type: 'reasoning', text: '', label: 'Thinking', index: 0 },
+          { type: 'reasoning', text: 'Second block.', label: 'Thinking', index: 1 },
+        ],
+      },
+    ];
+    const { container } = render(() => <Thread messages={messages} />);
+    expect(container.textContent ?? '').toContain('Second block.');
   });
 });
