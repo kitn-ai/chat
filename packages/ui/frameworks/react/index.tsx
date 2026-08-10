@@ -114,6 +114,48 @@ export const Attachments = /*#__PURE__*/ createWebComponent<AttachmentsProps>(
   () => import('@kitn.ai/ui/elements/attachments'),
 );
 
+export interface AudioVisualizerProps extends WebComponentProps {
+  /** Look to render: `bar` (default), `grid`, `radial`, `wave`, `aurora`, `custom`. `aura` is accepted as a LiveKit-markup alias for `aurora`. Attribute: `variant`. */
+  variant?: string;
+  /** `idle` (default), `connecting`, `listening`, `thinking`, `speaking`, `disconnected` (connection down: the dead, flat look). LiveKit's room-lifecycle state names are accepted as aliases. Attribute: `state`. */
+  state?: string;
+  /** `icon` | `sm` | `md` (default) | `lg` | `xl`. Attribute: `size`. */
+  size?: string;
+  /** Bars to draw. Bar and radial only. Attribute: `bar-count`. */
+  barCount?: number;
+  /** Grid only: rows and columns of the (always square) grid. Attribute: `count`. */
+  count?: number;
+  /** Radial only: ring distance from center, in px. Attribute: `radius`. */
+  radius?: number;
+  /** Grid only: ring distance for the connecting animation, in cells. Attribute: `spread`. */
+  spread?: number;
+  /** Grid only: ms between scripted frames. Attribute: `interval`. */
+  interval?: number;
+  /** CSS color for the geometry, overriding the inherited `currentColor`. Attribute: `color`. */
+  color?: string;
+  /** Shader variants only: pattern density, 0..1. Attribute: `complexity`. */
+  complexity?: number;
+  /** Setting this makes the element an announced image (`role="img"`) instead of decorative (`aria-hidden`). Attribute: `label`. */
+  label?: string;
+  /** Live microphone or WebRTC audio to analyze. JS property only. */
+  stream?: MediaStream;
+  /** An `<audio>` or `<video>` element to tap for its audio. JS property only. */
+  audioElement?: HTMLMediaElement;
+  /** Pre-computed levels, 0..1. Set this and no AudioContext is ever built, which is what keeps headless/SSR rendering and browser-speech-synthesis playback (which exposes no audio node) free of Web Audio entirely. JS property only. A new array reference is required for each update; mutating the existing array in place will not re-render. */
+  bands?: number[];
+  /** Custom fragment shader for `variant="custom"`. JS property only. */
+  shader?: { fragment: string; uniforms?: Record<string, { type: "1f" | "1i" | "1fv" | "2f" | "3f" | "3fv" | "4f" | "4fv" | "Matrix2fv" | "Matrix3fv" | "Matrix4fv"; value: number | number[] }> };
+  /** Shader variants only: keep animating while scrolled off screen. Off by default, which stops drawing and releases the WebGL context until the element comes back (browsers ration contexts to roughly 16 a page). Does not override `prefers-reduced-motion`. Attribute: `animate-when-not-visible`. */
+  animateWhenNotVisible?: boolean;
+}
+
+export const AudioVisualizer = /*#__PURE__*/ createWebComponent<AudioVisualizerProps>(
+  'kai-audio-visualizer',
+  ["theme","variant","state","size","barCount","count","radius","spread","interval","color","complexity","label","stream","audioElement","bands","shader","animateWhenNotVisible"],
+  {  },
+  () => import('@kitn.ai/ui/elements/audio-visualizer'),
+);
+
 export interface AvatarProps extends WebComponentProps {
   /** Image URL/data-URI. When absent, the `fallback` initials show instead. */
   src?: string;

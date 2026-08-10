@@ -457,6 +457,176 @@
     ]
   },
   {
+    "tag": "kai-audio-visualizer",
+    "className": "KaiAudioVisualizerElement",
+    "displayName": "AudioVisualizer",
+    "props": [
+      {
+        "name": "variant",
+        "type": "undefined | string",
+        "optional": true,
+        "scalar": true,
+        "description": "Look to render: `bar` (default), `grid`, `radial`, `wave`, `aurora`, `custom`. `aura` is accepted as a LiveKit-markup alias for `aurora`. Attribute: `variant`.",
+        "default": "'bar'",
+        "displayType": "undefined | string"
+      },
+      {
+        "name": "state",
+        "type": "undefined | string",
+        "optional": true,
+        "scalar": true,
+        "description": "`idle` (default), `connecting`, `listening`, `thinking`, `speaking`, `disconnected` (connection down: the dead, flat look). LiveKit's room-lifecycle state names are accepted as aliases. Attribute: `state`.",
+        "default": "'idle'",
+        "displayType": "undefined | string"
+      },
+      {
+        "name": "size",
+        "type": "undefined | string",
+        "optional": true,
+        "scalar": true,
+        "description": "`icon` | `sm` | `md` (default) | `lg` | `xl`. Attribute: `size`.",
+        "default": "'md'",
+        "displayType": "undefined | string"
+      },
+      {
+        "name": "barCount",
+        "type": "undefined | number",
+        "optional": true,
+        "scalar": true,
+        "description": "Bars to draw. Bar and radial only. Attribute: `bar-count`.",
+        "displayType": "undefined | number"
+      },
+      {
+        "name": "count",
+        "type": "undefined | number",
+        "optional": true,
+        "scalar": true,
+        "description": "Grid only: rows and columns of the (always square) grid. Attribute: `count`.",
+        "displayType": "undefined | number"
+      },
+      {
+        "name": "radius",
+        "type": "undefined | number",
+        "optional": true,
+        "scalar": true,
+        "description": "Radial only: ring distance from center, in px. Attribute: `radius`.",
+        "displayType": "undefined | number"
+      },
+      {
+        "name": "spread",
+        "type": "undefined | number",
+        "optional": true,
+        "scalar": true,
+        "description": "Grid only: ring distance for the connecting animation, in cells. Attribute: `spread`.",
+        "displayType": "undefined | number"
+      },
+      {
+        "name": "interval",
+        "type": "undefined | number",
+        "optional": true,
+        "scalar": true,
+        "description": "Grid only: ms between scripted frames. Attribute: `interval`.",
+        "displayType": "undefined | number"
+      },
+      {
+        "name": "color",
+        "type": "undefined | string",
+        "optional": true,
+        "scalar": true,
+        "description": "CSS color for the geometry, overriding the inherited `currentColor`. Attribute: `color`.",
+        "displayType": "undefined | string"
+      },
+      {
+        "name": "complexity",
+        "type": "undefined | number",
+        "optional": true,
+        "scalar": true,
+        "description": "Shader variants only: pattern density, 0..1. Attribute: `complexity`.",
+        "displayType": "undefined | number"
+      },
+      {
+        "name": "label",
+        "type": "undefined | string",
+        "optional": true,
+        "scalar": true,
+        "description": "Setting this makes the element an announced image (`role=\"img\"`) instead of decorative (`aria-hidden`). Attribute: `label`.",
+        "displayType": "undefined | string"
+      },
+      {
+        "name": "stream",
+        "type": "undefined | MediaStream",
+        "optional": true,
+        "scalar": false,
+        "description": "Live microphone or WebRTC audio to analyze. JS property only.",
+        "displayType": "undefined | MediaStream"
+      },
+      {
+        "name": "audioElement",
+        "type": "undefined | HTMLMediaElement",
+        "optional": true,
+        "scalar": false,
+        "description": "An `<audio>` or `<video>` element to tap for its audio. JS property only.",
+        "displayType": "undefined | HTMLMediaElement"
+      },
+      {
+        "name": "bands",
+        "type": "undefined | number[]",
+        "optional": true,
+        "scalar": false,
+        "description": "Pre-computed levels, 0..1. Set this and no AudioContext is ever built, which is what keeps headless/SSR rendering and browser-speech-synthesis playback (which exposes no audio node) free of Web Audio entirely. JS property only. A new array reference is required for each update; mutating the existing array in place will not re-render.",
+        "displayType": "undefined | number[]"
+      },
+      {
+        "name": "shader",
+        "type": "undefined | { fragment: string; uniforms?: undefined | Record<string, { type: \"1f\" | \"1i\" | \"1fv\" | \"2f\" | \"3f\" | \"3fv\" | \"4f\" | \"4fv\" | \"Matrix2fv\" | \"Matrix3fv\" | \"Matrix4fv\"; value: number | number[] }> }",
+        "optional": true,
+        "scalar": false,
+        "description": "Custom fragment shader for `variant=\"custom\"`. JS property only.",
+        "displayType": "undefined | { fragment: string; uniforms?: undefined | Record<string, { type: \"1f\" | \"1i\" | \"1fv\" | \"2f\" | \"3f\" | \"3fv\" | \"4f\" | \"4fv\" | \"Matrix2fv\" | \"Matrix3fv\" | \"Matrix4fv\"; value: number | number[] }> }"
+      },
+      {
+        "name": "animateWhenNotVisible",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Shader variants only: keep animating while scrolled off screen. Off by default, which stops drawing and releases the WebGL context until the element comes back (browsers ration contexts to roughly 16 a page). Does not override `prefers-reduced-motion`. Attribute: `animate-when-not-visible`.",
+        "displayType": "undefined | false | true"
+      }
+    ],
+    "events": [],
+    "methods": [],
+    "composedFrom": [
+      {
+        "name": "AudioVisualizer",
+        "group": "Components",
+        "storyId": "solid-advanced-elements-audiovisualizer--docs"
+      }
+    ],
+    "tokens": [],
+    "parts": [
+      {
+        "name": "bar",
+        "doc": "A single bar in the `bar` variant, or a single spoke in the `radial` variant. Also carries `data-kai-index` and `data-kai-highlighted` (\"true\"/\"false\") for use inside the shadow root; to style the lit state from OUTSIDE, combine with the `highlighted` part below rather than an attribute selector.",
+        "recipe": "kai-audio-visualizer::part(bar) { border-radius: 2px }\nkai-audio-visualizer::part(bar highlighted) { background: var(--brand) }"
+      },
+      {
+        "name": "cell",
+        "doc": "A single dot in the `grid` variant. Also carries `data-kai-index` and `data-kai-highlighted` (\"true\"/\"false\") for use inside the shadow root; to style the lit state from OUTSIDE, combine with the `highlighted` part below rather than an attribute selector.",
+        "recipe": "kai-audio-visualizer::part(cell) { border-radius: 9999px }\nkai-audio-visualizer::part(cell highlighted) { background: var(--brand) }"
+      },
+      {
+        "name": "highlighted",
+        "doc": "A second part TOKEN present on a `bar` or `cell` exactly when the sequencer or live audio has it lit, not a standalone styleable element. Combine it in the same `::part()` argument: `::part(bar highlighted)` or `::part(cell highlighted)`. This is the external equivalent of the internal `data-kai-highlighted=\"true\"` attribute, which a `::part()` selector cannot reach (an attribute selector cannot follow a pseudo-element).",
+        "recipe": "kai-audio-visualizer::part(bar highlighted) { background: var(--brand) }\nkai-audio-visualizer::part(cell highlighted) { background: var(--brand) }"
+      },
+      {
+        "name": "canvas",
+        "doc": "The WebGL canvas backing the `wave` and `aurora` variants. Restyle its size or radius, or layer a mask/filter, from outside.",
+        "recipe": "kai-audio-visualizer::part(canvas) { border-radius: 0.75rem }"
+      }
+    ]
+  },
+  {
     "tag": "kai-avatar",
     "className": "KaiAvatarElement",
     "displayName": "Avatar",
