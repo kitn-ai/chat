@@ -100,7 +100,7 @@ The autoloader resolves element modules relative to its own URL and uses `docume
 </Aside>
 
 <Aside type="tip" title="Pin versions in production">
-An unversioned CDN URL tracks the latest release, which is risky on a pre-1.0 package. Pin an exact version: `https://cdn.jsdelivr.net/npm/@kitn.ai/ui@0.16.0/dist/elements/autoloader.js`.
+An unversioned CDN URL tracks the latest release, which is risky on a pre-1.0 package. Pin an exact version: `https://cdn.jsdelivr.net/npm/@kitn.ai/ui@0.20.1/dist/elements/autoloader.js`.
 </Aside>
 
 ## Code highlighting
@@ -111,8 +111,8 @@ Syntax highlighting (Shiki) loads on demand — per language, the first time a c
 
 | Strategy | SSR-safe? |
 |---|---|
-| `@kitn.ai/ui/elements` | Yes — side-effect only; no `document` on import |
-| Per-element (`@kitn.ai/ui/elements/chat`) | No — use inside a client-only boundary |
-| Autoloader | No — uses `document`; CDN `<script>`, not for SSR |
+| `@kitn.ai/ui/elements` | Yes — registration is gated on `window`; no `document` on import |
+| Per-element (`@kitn.ai/ui/elements/chat`) | No — throws `window is not defined`; use inside a client-only boundary |
+| Autoloader | Imports without throwing, but never use it here — it must resolve relative to its own URL, so it is a CDN `<script>`, not a bundled import |
 
 For SSR meta-frameworks, see the [meta-frameworks guide](/guides/frameworks/meta-frameworks/) for framework-specific client boundary patterns.

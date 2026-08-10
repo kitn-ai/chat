@@ -43,7 +43,13 @@ Assign the `sources` property — an array can't be an HTML attribute:
 - Each item accepts `href` (required), `title`, `description`, `label`, and `showFavicon`.
 - **`show-favicon`** enables favicons globally; a per-item `showFavicon: false` overrides for that chip.
 - **`numbered`** replaces domain labels with `[1]`, `[2]`, … — useful when the response body uses in-line citation markers.
-- **Declarative path** — write `<kai-source>` elements as light-DOM children of `<kai-sources>`. Prop sources render first; declarative children are appended after.
+- **Declarative path** — write `<kai-source>` elements as light-DOM children of `<kai-sources>`. Prop sources render first; declarative children are appended after. The attributes are `href`, `label`, `headline`, `description`, and the bare `show-favicon` — note **`headline`**, not `title`: `title` is a reserved global HTML attribute, so the declarative form spells the item's `title` field `headline`.
+
+```html
+<kai-sources>
+  <kai-source href="https://kitn.ai" headline="AI/UI" description="Web components for AI chat"></kai-source>
+</kai-sources>
+```
 
 ## Examples
 
