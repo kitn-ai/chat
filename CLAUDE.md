@@ -10,7 +10,7 @@ Guidance for working **in this repo** with Claude Code. Consumer-facing usage li
 
 - `packages/ui/src/primitives/` headless logic hooks + `ChatConfig` + on-demand highlighter · `packages/ui/src/ui/` in-house accessible UI primitives (no third-party UI deps) · `packages/ui/src/components/` the SolidJS AI feature components.
 - `packages/ui/src/elements/` wraps coarse **`kai-*` web-component facades** over those via `defineWebComponent`; the elements bundle registers them (client-only — `register.ts` → `register-impl.ts`). `packages/ui/frameworks/react/` holds generated typed React wrappers (`@kitn.ai/ui/react`, exports `Chat`, `Message`, …).
-- `packages/ui/src/state/` (`@kitn.ai/ui/state`) I/O-free pure folds over `ChatMessage[]` — `createAssistantStream`, `appendTextPart`/`appendReasoningPart`/`upsertToolPart` · `packages/ui/src/wire/` (`@kitn.ai/ui/wire`) the **model-stream adapter**: `readOpenAIStream` / `readAnthropicStream` / `readModelStream` parse provider SSE onto those parts, `toOpenAIMessages` / `toAnthropicMessages` encode the thread back. **The kit PARSES, the consumer FETCHES** — no client, no key handling, no provider SDK below `wire/`. Never hand-roll an SSE reader in a doc, example or scaffold: import this one.
+- `packages/ui/src/state/` (`@kitn.ai/ui/state`) I/O-free pure folds over `ChatMessage[]`: `createAssistantStream`, `appendTextPart`/`appendReasoningPart`/`upsertToolPart` · `packages/ui/src/wire/` (`@kitn.ai/ui/wire`) the **model-stream adapter**: `readOpenAIStream` / `readAnthropicStream` / `readModelStream` parse provider SSE onto those parts, `toOpenAIMessages` / `toAnthropicMessages` encode the thread back. **The kit PARSES, the consumer FETCHES**, so there is no client, no key handling and no provider SDK below `wire/`. Never hand-roll an SSE reader in a doc, example or scaffold: import this one.
 - `packages/ui/src/agent-tooling/` the `kai` MCP server + the integration/archetype catalogs — independent of the components.
 
 ## The `kai-` contract — do NOT get this wrong (it's what consumers hit)
@@ -43,7 +43,7 @@ pnpm --filter @kitn.ai/ui run verify:scaffold  # compiles the MCP scaffolder's E
 Two cheap guards cover the same ground in the required CI job, and both are worth running locally before you push:
 
 - `pnpm --filter @kitn.ai/ui run verify:consumer` packs the build, installs it into a throwaway app, bundles it with Vite 8 / Rolldown, and asserts every `kai-*` registration survives a real consumer bundler.
-- `pnpm --filter @kitn.ai/ui run verify:scaffold` generates all 60 scaffolder outputs and compiles them with `tsc --strict --noUnusedLocals`, resolving `@kitn.ai/ui` through the shipped exports map. Emitted code lives in string literals, so `scaffold.test.ts` can assert its wording but never its types. Run this after touching `agent-tooling/mcp/tools/scaffold.ts` or any integration route template. Needs `nx build ui` first.
+- `pnpm --filter @kitn.ai/ui run verify:scaffold` generates 270 scaffolder outputs (6 archetypes × 9 integrations × 5 TS frameworks) and compiles them with `tsc --strict --noUnusedLocals`, resolving `@kitn.ai/ui` through the shipped exports map, then structurally checks the 54 `html` ones tsc cannot see. Emitted code lives in string literals, so `scaffold.test.ts` can assert its wording but never its types. Run this after touching `agent-tooling/mcp/tools/scaffold.ts` or any integration route template. Needs `nx build ui` first.
 
 ## Conventions
 
