@@ -100,6 +100,10 @@
       "types": "./dist/state/index.d.ts",
       "default": "./dist/state.js"
     },
+    "./wire": {
+      "types": "./dist/wire/index.d.ts",
+      "default": "./dist/wire.js"
+    },
     "./provider": {
       "types": "./dist/kai-provider.d.ts",
       "default": "./dist/kai-provider.es.js"
@@ -114,6 +118,7 @@
     "!src/**/*.test.tsx",
     "!src/**/*.mdx",
     "!src/stories",
+    "!src/wire/fixtures",
     "!src/elements/logos",
     "frameworks",
     "theme.css",
@@ -123,7 +128,7 @@
   "scripts": {
     "prepublishOnly": "npm run build",
     "prebuild": "npm run build:css",
-    "build": "vite build --config vite.config.ts && vite build --config vite.config.provider.ts && vite build --config vite.config.react.ts && vite build --config vite.config.barrel.ts && vite build --config vite.config.state.ts && vite build --config vite.config.mcp.ts && npm run build:elements && node scripts/verify-elements-bundle.mjs && node scripts/verify-react-wrappers.mjs",
+    "build": "vite build --config vite.config.ts && vite build --config vite.config.provider.ts && vite build --config vite.config.react.ts && vite build --config vite.config.barrel.ts && vite build --config vite.config.state.ts && vite build --config vite.config.wire.ts && vite build --config vite.config.mcp.ts && npm run build:elements && node scripts/verify-elements-bundle.mjs && node scripts/verify-react-wrappers.mjs",
     "build:elements": "node scripts/gen-elements-manifest.mjs && vite build --config vite.config.elements.ts && node scripts/gen-element-dts.mjs",
     "postbuild": "npm run build:theme && npm run build:api && npm run build:schemas",
     "build:theme": "node scripts/build-theme-tokens.mjs",
