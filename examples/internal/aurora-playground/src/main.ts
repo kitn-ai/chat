@@ -13,6 +13,8 @@ interface Params {
   wWidth: number; wMin: number; fillGain: number; edgeGain: number;
   flut: number; twistSpd: number; warpAmp: number; theme: number;
   lens: number; spec: number; tint: number; vSpeed: number;
+  presence: number; gather: number; core: number; neural: number;
+  boltJag: number; boltWidth: number; boltRate: number;
 }
 
 const canvas = document.getElementById('c') as HTMLCanvasElement;
@@ -60,7 +62,7 @@ gl.clearColor(0, 0, 0, 0);
 const UNIFORM_NAMES = ['uRes','uTime','uLevel','uColor','uMode','uBaseR','uAmpIdle','uAmpVoice',
   'uRadVoice','uSigma','uGain','uF1','uF2','uS1','uS2','uEnvSpd','uSepSpd','uWhiteLo','uWhiteHi',
   'uBloomMul','uBloomGain','uDelta','uOff','uWWidth','uWMin','uFillGain','uEdgeGain','uFlut','uTwistSpd',
-  'uWarpAmp','uTheme','uLens','uSpec','uTint'] as const;
+  'uWarpAmp','uTheme','uLens','uSpec','uTint','uPresence','uGather','uCore','uNeural','uBoltJag','uBoltWidth','uBoltRate'] as const;
 const U: Record<string, WebGLUniformLocation | null> = {};
 for (const name of UNIFORM_NAMES) U[name] = gl.getUniformLocation(prog, name);
 
@@ -73,6 +75,9 @@ const BASE: Omit<Params, 'color'> = {
   bloomMul: 2.6, bloomGain: 0.18, delta: 0.35, off: 0.024,
   wWidth: 0.045, wMin: 0.006, fillGain: 0.38, edgeGain: 0.7, flut: 0.010, twistSpd: 0.55,
   warpAmp: 0.75, theme: 0, lens: 0.85, spec: 0.35, tint: 0.25, vSpeed: 2.2,
+  presence: 1, gather: 0, core: 0, neural: 0,
+  // bolt feel hand-tuned by Rob 2026-08-10: soft, wide, deliberate
+  boltJag: 0.5, boltWidth: 3, boltRate: 0.25,
 };
 export const PRESET_SOFT = { ...BASE };
 export const PRESET_BOLD = { ...BASE, sigma: 0.026, gain: 0.48, s1: 1.15, s2: 1.8, envSpd: 0.5, sepSpd: 0.85, bloomMul: 2.2, bloomGain: 0.14 };
@@ -120,44 +125,52 @@ function setParams(obj: Partial<Params>): void {
   syncUI();
 }
 
-function renderAt(t: number, level: number): void {
+function renderAt(t: number, level: number, ov?: Partial<Params>): void {
   const g = gl!;
+  const Q = ov ? ({ ...P, ...ov } as Params) : P;
   g.viewport(0, 0, canvas.width, canvas.height);
   g.clear(g.COLOR_BUFFER_BIT);
   g.uniform2f(U.uRes, canvas.width, canvas.height);
   g.uniform1f(U.uTime, t);
   g.uniform1f(U.uLevel, level);
-  g.uniform3f(U.uColor, P.color[0], P.color[1], P.color[2]);
-  g.uniform1f(U.uMode, P.mode);
-  g.uniform1f(U.uBaseR, P.baseR);
-  g.uniform1f(U.uAmpIdle, P.ampIdle);
-  g.uniform1f(U.uAmpVoice, P.ampVoice);
-  g.uniform1f(U.uRadVoice, P.radVoice);
-  g.uniform1f(U.uSigma, P.sigma);
-  g.uniform1f(U.uGain, P.gain);
-  g.uniform1f(U.uF1, P.f1);
-  g.uniform1f(U.uF2, P.f2);
-  g.uniform1f(U.uS1, P.s1);
-  g.uniform1f(U.uS2, P.s2);
-  g.uniform1f(U.uEnvSpd, P.envSpd);
-  g.uniform1f(U.uSepSpd, P.sepSpd);
-  g.uniform1f(U.uWhiteLo, P.whiteLo);
-  g.uniform1f(U.uWhiteHi, P.whiteHi);
-  g.uniform1f(U.uBloomMul, P.bloomMul);
-  g.uniform1f(U.uBloomGain, P.bloomGain);
-  g.uniform1f(U.uDelta, P.delta);
-  g.uniform1f(U.uOff, P.off);
-  g.uniform1f(U.uWWidth, P.wWidth);
-  g.uniform1f(U.uWMin, P.wMin);
-  g.uniform1f(U.uFillGain, P.fillGain);
-  g.uniform1f(U.uEdgeGain, P.edgeGain);
-  g.uniform1f(U.uFlut, P.flut);
-  g.uniform1f(U.uTwistSpd, P.twistSpd);
-  g.uniform1f(U.uWarpAmp, P.warpAmp);
-  g.uniform1f(U.uTheme, P.theme);
-  g.uniform1f(U.uLens, P.lens);
-  g.uniform1f(U.uSpec, P.spec);
-  g.uniform1f(U.uTint, P.tint);
+  g.uniform3f(U.uColor, Q.color[0], Q.color[1], Q.color[2]);
+  g.uniform1f(U.uMode, Q.mode);
+  g.uniform1f(U.uBaseR, Q.baseR);
+  g.uniform1f(U.uAmpIdle, Q.ampIdle);
+  g.uniform1f(U.uAmpVoice, Q.ampVoice);
+  g.uniform1f(U.uRadVoice, Q.radVoice);
+  g.uniform1f(U.uSigma, Q.sigma);
+  g.uniform1f(U.uGain, Q.gain);
+  g.uniform1f(U.uF1, Q.f1);
+  g.uniform1f(U.uF2, Q.f2);
+  g.uniform1f(U.uS1, Q.s1);
+  g.uniform1f(U.uS2, Q.s2);
+  g.uniform1f(U.uEnvSpd, Q.envSpd);
+  g.uniform1f(U.uSepSpd, Q.sepSpd);
+  g.uniform1f(U.uWhiteLo, Q.whiteLo);
+  g.uniform1f(U.uWhiteHi, Q.whiteHi);
+  g.uniform1f(U.uBloomMul, Q.bloomMul);
+  g.uniform1f(U.uBloomGain, Q.bloomGain);
+  g.uniform1f(U.uDelta, Q.delta);
+  g.uniform1f(U.uOff, Q.off);
+  g.uniform1f(U.uWWidth, Q.wWidth);
+  g.uniform1f(U.uWMin, Q.wMin);
+  g.uniform1f(U.uFillGain, Q.fillGain);
+  g.uniform1f(U.uEdgeGain, Q.edgeGain);
+  g.uniform1f(U.uFlut, Q.flut);
+  g.uniform1f(U.uTwistSpd, Q.twistSpd);
+  g.uniform1f(U.uWarpAmp, Q.warpAmp);
+  g.uniform1f(U.uTheme, Q.theme);
+  g.uniform1f(U.uLens, Q.lens);
+  g.uniform1f(U.uSpec, Q.spec);
+  g.uniform1f(U.uTint, Q.tint);
+  g.uniform1f(U.uPresence, Q.presence);
+  g.uniform1f(U.uGather, Q.gather);
+  g.uniform1f(U.uCore, Q.core);
+  g.uniform1f(U.uNeural, Q.neural);
+  g.uniform1f(U.uBoltJag, Q.boltJag);
+  g.uniform1f(U.uBoltWidth, Q.boltWidth);
+  g.uniform1f(U.uBoltRate, Q.boltRate);
   g.drawArrays(g.TRIANGLES, 0, 3);
   g.finish();
 }
@@ -199,6 +212,12 @@ const SLIDERS: SliderRow[] = [
   ['wWidth',   'fold width',   0.010, 0.090, 0.001],
   ['wMin',     'pinch width',  0.001, 0.020, 0.001],
   ['orb (modes 4 + 5)'],
+  ['presence', 'presence',     0.0, 1.0, 0.01],
+  ['neural',   'neurons',      0.0, 1.0, 0.01],
+  ['boltJag',  'bolt jag',     0.0, 2.5, 0.05],
+  ['boltWidth','bolt width',   0.3, 4.0, 0.05],
+  ['boltRate', 'bolt rate',    0.1, 2.0, 0.05],
+  ['gather',   'gather',       -1.0, 1.0, 0.02],
   ['lens',     'lens amount',  0.0, 1.0, 0.01],
   ['spec',     'highlight',    0.0, 1.0, 0.01],
   ['tint',     'smoke tint',   0.0, 1.0, 0.01],
@@ -227,6 +246,13 @@ function buildPanel(): void {
     + '<button data-mode="4">stormy planet</button>'
     + '<button data-mode="2">single ribbon (wind)</button>'
     + '<button data-mode="1">3-strand braid</button></div>'
+    + '<h3>state</h3><div id="states">'
+    + '<button data-state="manual" class="active">manual</button>'
+    + '<button data-state="idle">idle</button>'
+    + '<button data-state="connecting">connecting</button>'
+    + '<button data-state="listening">listening</button>'
+    + '<button data-state="thinking">thinking</button>'
+    + '<button data-state="speaking">speaking</button></div>'
     + '<h3>drive</h3><div id="drive">'
     + '<button data-src="env" class="active">envelope loop</button>'
     + '<button data-src="slider">slider</button>'
@@ -286,6 +312,13 @@ function buildPanel(): void {
   panel.querySelectorAll<HTMLButtonElement>('#modes button').forEach((b) => {
     b.addEventListener('click', () => { P.mode = parseInt(b.dataset.mode!, 10); syncUI(); });
   });
+  panel.querySelectorAll<HTMLButtonElement>('#states button').forEach((b) => {
+    b.addEventListener('click', () => {
+      agentState = b.dataset.state as AgentState;
+      panel.querySelectorAll('#states button').forEach((x) => x.classList.remove('active'));
+      b.classList.add('active');
+    });
+  });
   panel.querySelectorAll<HTMLButtonElement>('#drive button').forEach((b) => {
     b.addEventListener('click', () => {
       panel.querySelectorAll('#drive button').forEach((x) => x.classList.remove('active'));
@@ -327,6 +360,61 @@ function flash(text: string): void {
   if (!m) return;
   m.textContent = text;
   setTimeout(() => { m.textContent = ''; }, 2500);
+}
+
+// ---- agent-state preview ----
+type AgentState = 'manual' | 'idle' | 'connecting' | 'listening' | 'thinking' | 'speaking';
+let agentState: AgentState = 'manual';
+
+interface StateTargets {
+  presence: number; gather: number; tintAdd: number; warpMul: number;
+  deltaAdd: number; f2Add: number; gainMul: number; neural: number;
+}
+interface StateFast { rate: number; level: number; core: number; gpulse: number; usesDrive: boolean }
+
+// slow-tweened choreography: these values glide over seconds, so the smoke
+// visibly materializes, gathers, settles, and dissipates between states
+function stateTargets(): StateTargets {
+  const orb = P.mode >= 4;
+  const DEF: StateTargets = { presence: P.presence, gather: P.gather, tintAdd: 0, warpMul: 1, deltaAdd: 0, f2Add: 0, gainMul: 1, neural: P.neural };
+  switch (agentState) {
+    case 'idle':        // near-empty vessel, a settled wisp of floor mist
+      return orb ? { ...DEF, presence: 0.12, gather: -0.8, gainMul: 0.85 }
+                 : { ...DEF, gainMul: 0.8 };
+    case 'connecting':  // still nearly empty; the ember does the talking
+      return orb ? { ...DEF, presence: 0.22, gather: -0.25, gainMul: 0.9 }
+                 : { ...DEF, gainMul: 0.85 };
+    case 'listening':   // smoke materializes and leans in
+      return orb ? { ...DEF, presence: 0.8, gather: 0.5, tintAdd: 0.05 }
+                 : DEF;
+    case 'thinking':    // full presence, coiling hard, taking on the accent color
+      return orb ? { ...DEF, presence: 1, gather: 0.6, tintAdd: 0.5, warpMul: 1.3, neural: 1 }
+                 : { ...DEF, deltaAdd: 0.5, f2Add: 3 };  // braid weaves tighter and finer
+    case 'speaking':    // full presence handed to the live voice
+      return orb ? { ...DEF, presence: 1, gather: 0, warpMul: 1.25, gainMul: 1.05 } : DEF;
+    default:
+      return DEF;
+  }
+}
+
+// fast per-frame layer: tempo, scripted level, ember heartbeat
+function stateFast(el: number, drive: number): StateFast {
+  const orb = P.mode >= 4;
+  const base = orb ? 0.35 : 1.0;
+  const beat = Math.pow(0.5 + 0.5 * Math.sin((el / 1.2) * Math.PI * 2), 3.0);
+  const flick = 0.5 + 0.5 * Math.sin((el / 0.35) * Math.PI * 2);
+  switch (agentState) {
+    case 'idle':       return { rate: base, level: 0, core: orb ? 0.06 : 0, gpulse: 0, usesDrive: false };
+    case 'connecting': return { rate: base * 1.4, level: 0.04, core: orb ? 0.18 + 0.55 * beat : 0,
+                                gpulse: orb ? 0 : 0.2 * beat, usesDrive: false };
+    case 'listening':  return { rate: base * 1.7, level: 0.2, core: orb ? 0.12 : 0, gpulse: 0, usesDrive: false };
+    case 'thinking':   return { rate: orb ? 2.2 : 2.5, level: 0.12 + 0.2 * flick,
+                                core: orb ? 0.05 : 0,
+                                gpulse: orb ? 0 : 0.1 * flick, usesDrive: false };
+    case 'speaking':   return { rate: base * 1.5 + 5.5 * drive, level: Math.min(1, drive * 1.35),
+                                core: orb ? 0.08 + 0.6 * drive : 0, gpulse: 0, usesDrive: true };
+    default:           return { rate: base + P.vSpeed * drive, level: drive, core: 0, gpulse: 0, usesDrive: true };
+  }
 }
 
 // ---- level sources + run loop ----
@@ -380,6 +468,8 @@ if (PLAY) {
   let last = t0;
   let smooth = 0;
   let tAnim = 0;
+  let rateSm = 1.0;
+  const st = { presence: 1, gather: 0, tintAdd: 0, warpMul: 1, deltaAdd: 0, f2Add: 0, gainMul: 1, neural: 0 };
   const loop = (): void => {
     const now = performance.now();
     const el = (now - t0) / 1000;
@@ -388,12 +478,30 @@ if (PLAY) {
     const raw = rawLevel(el);
     const k = raw > smooth ? 0.25 : 0.06;  // fast attack, slow release
     smooth += (raw - smooth) * k;
-    // ALL modes run on a warped activity clock: voice accelerates the motion
-    // itself (no phase jumps). Aurora modes idle at their normal pace and
-    // speed up with voice; orb modes idle slow and serene.
-    const idleRate = P.mode >= 4 ? 0.35 : 1.0;
-    tAnim += dt * (idleRate + P.vSpeed * smooth);
-    renderAt(tAnim, smooth);
+    // choreography: slow targets glide (presence slowest, so smoke visibly
+    // forms and fades); tempo tweens; the ember beats in real time
+    const tg = stateTargets();
+    const mix = (cur: number, target: number, tc: number): number =>
+      cur + (target - cur) * (1 - Math.exp(-dt / tc));
+    st.presence = mix(st.presence, tg.presence, 1.4);
+    st.gather   = mix(st.gather, tg.gather, 1.0);
+    st.tintAdd  = mix(st.tintAdd, tg.tintAdd, 0.6);
+    st.warpMul  = mix(st.warpMul, tg.warpMul, 0.6);
+    st.deltaAdd = mix(st.deltaAdd, tg.deltaAdd, 0.6);
+    st.f2Add    = mix(st.f2Add, tg.f2Add, 0.6);
+    st.gainMul  = mix(st.gainMul, tg.gainMul, 0.6);
+    st.neural   = mix(st.neural, tg.neural, 0.6);
+    const fr = stateFast(el, smooth);
+    rateSm += (fr.rate - rateSm) * (1 - Math.exp(-dt / 0.4));
+    tAnim += dt * rateSm;
+    renderAt(tAnim, fr.level, {
+      presence: st.presence, gather: st.gather, core: fr.core, neural: st.neural,
+      tint: Math.min(1, P.tint + st.tintAdd),
+      warpAmp: P.warpAmp * st.warpMul,
+      delta: P.delta + st.deltaAdd,
+      f2: P.f2 + st.f2Add,
+      gain: P.gain * st.gainMul * (1 + fr.gpulse),
+    });
     requestAnimationFrame(loop);
   };
   loop();
