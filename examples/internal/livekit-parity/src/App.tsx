@@ -10,7 +10,7 @@ import { AgentAudioVisualizerRadial } from '@/components/agents-ui/agent-audio-v
 import { AgentAudioVisualizerWave } from '@/components/agents-ui/agent-audio-visualizer-wave';
 import { AgentAudioVisualizerAura } from '@/components/agents-ui/agent-audio-visualizer-aura';
 import { KaiVisualizer } from './kai/KaiVisualizer';
-import { syntheticDrive, useVoiceFixture } from './audio/fixture';
+import { gridDrive, syntheticDrive, useVoiceFixture } from './audio/fixture';
 import { openMic, openRecording, type LiveSource, type MicPreset } from './audio/sources';
 import { useKitProbe } from './probes';
 
@@ -113,6 +113,14 @@ export default function App() {
     () => (synthetic ? syntheticDrive(synthetic) : voiceFrame),
     [synthetic, voiceFrame],
   );
+  // Grid density override (Rob's 15x15 exploration): both grid tiles get
+  // rowCount/columnCount = gridCount and, in fixture mode, a column drive
+  // derived at that width (script-only, __parityControl.setGridCount).
+  const [gridCount, setGridCount] = useState<number | null>(null);
+  const gridBands = useMemo(
+    () => (gridCount ? gridDrive(fix.half, gridCount) : fix.bar5),
+    [gridCount, fix],
+  );
   const track = !isFixture ? live?.track : undefined;
   const stream = !isFixture ? live?.stream : undefined;
 
@@ -169,6 +177,7 @@ export default function App() {
         setSynthetic(levels ? [...levels] : null);
         if (levels) setFixturePlaying(false);
       },
+      setGridCount: (n: number | null) => setGridCount(n),
     };
     return () => {
       delete window.__parityControl;
@@ -324,8 +333,10 @@ export default function App() {
             <AgentAudioVisualizerGrid
               size="md"
               state={state}
+              rowCount={gridCount ?? undefined}
+              columnCount={gridCount ?? undefined}
               audioTrack={track}
-              volumeBands={isFixture ? fix.bar5 : undefined}
+              volumeBands={isFixture ? gridBands : undefined}
               className="text-zinc-100"
             />
           </Tile>
@@ -388,8 +399,10 @@ export default function App() {
             <KaiVisualizer
               variant="grid"
               state={agentState}
+              rowCount={gridCount ?? undefined}
+              columnCount={gridCount ?? undefined}
               stream={stream}
-              bands={isFixture ? fix.bar5 : undefined}
+              bands={isFixture ? gridBands : undefined}
               color="#f4f4f5"
             />
           </Tile>

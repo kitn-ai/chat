@@ -5,6 +5,9 @@ interface KaiVisualizerProps {
   state: string;
   size?: string;
   color?: string;
+  /** Grid only: row/column overrides (kebab attributes on the element). */
+  rowCount?: number;
+  columnCount?: number;
   /** Live audio. JS property on the element, never an attribute. */
   stream?: MediaStream;
   /** Pre-computed 0..1 levels. JS property; new array reference per update. */
@@ -17,7 +20,16 @@ interface KaiVisualizerProps {
  * ref (React 18 writes unknown JSX props on custom elements as attributes,
  * which would stringify them -- the kai- contract requires properties).
  */
-export function KaiVisualizer({ variant, state, size = 'md', color, stream, bands }: KaiVisualizerProps) {
+export function KaiVisualizer({
+  variant,
+  state,
+  size = 'md',
+  color,
+  rowCount,
+  columnCount,
+  stream,
+  bands,
+}: KaiVisualizerProps) {
   const ref = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -37,5 +49,7 @@ export function KaiVisualizer({ variant, state, size = 'md', color, stream, band
     size,
     theme: 'dark',
     ...(color ? { color } : {}),
+    ...(rowCount ? { 'row-count': rowCount } : {}),
+    ...(columnCount ? { 'column-count': columnCount } : {}),
   });
 }

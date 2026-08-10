@@ -26,6 +26,8 @@ interface ParityControl {
   setFixturePlaying(playing: boolean): void;
   /** Feed explicit levels (full-width, one per bar/column) to BOTH sides; null restores voice frames. */
   setSyntheticBands(levels: number[] | null): void;
+  /** Square grid density for BOTH grid tiles (rowCount = columnCount = n); null restores defaults. */
+  setGridCount(n: number | null): void;
 }
 
 interface Window {

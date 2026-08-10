@@ -71,6 +71,18 @@ function rms(values: number[]): number {
 }
 
 /**
+ * Column drive for an arbitrary grid density: the half-band frame resampled
+ * to ceil(count/2) and centre-out mirrored to `count` columns -- the same
+ * derivation the md tiles use, at the density's own width. At high counts
+ * the 3-band voice fixture is doing real interpolation work here; the
+ * result is honestly smoother/smearier than a real ceil(count/2)-band
+ * analysis would be.
+ */
+export function gridDrive(half: readonly number[], count: number): number[] {
+  return mirrorBandsCenterOut(resample(half, Math.ceil(count / 2)), count);
+}
+
+/**
  * Drive shapes for an EXPLICIT level set (scripted audits: constant levels,
  * ramps). `levels` is full-width (one value per bar/column at md); the ring
  * is resampled from it. `frame: -1` marks the drive as synthetic.
