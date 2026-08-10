@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.20.1](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.20.0...@kitn.ai/ui-v0.20.1) (2026-08-10)
+
+
+### Bug Fixes
+
+* **build:** make the root entry importable on the server ([#142](https://github.com/kitn-ai/ui/issues/142)) ([181961f](https://github.com/kitn-ai/ui/commit/181961f79eeb23519098468a3852b6b924596a10))
+
 ## [0.20.0](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.19.0...@kitn.ai/ui-v0.20.0) (2026-08-10)
 
 
