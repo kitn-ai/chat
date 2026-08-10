@@ -254,14 +254,26 @@ export function shaderTargets(
     case 'listening':
       return { intensity: [0.5, 0.8], speed: 2.5 };
     case 'thinking':
-    case 'connecting':
       return { intensity: [0.25, 0.5], speed: 4.0 };
+    // Same pulse as thinking, its own speed: uSpeed is the only
+    // state-correlated scalar besides intensity that reaches a custom
+    // shader's GLSL (see customUniforms in variant-custom.tsx), so the two
+    // transitional states sharing 4.0 made them indistinguishable to any
+    // consumer shader keying off the kit's uniforms -- the Custom story's
+    // per-state looks are the concrete consumer. Every state now maps to a
+    // distinct speed: idle 1, listening/speaking 2.5 (told apart by band
+    // energy), thinking 4, connecting 6.
+    case 'connecting':
+      return { intensity: [0.25, 0.5], speed: 6.0 };
     case 'speaking':
       return { intensity: 0.3, speed: 2.5 };
-    // Dead-connection look: mirrors idle's dim resting value for now,
+    // Dead-connection look: idle's dim intensity but its OWN speed, so a
+    // shader keying off uSpeed can draw a dead line distinct from idle's
+    // calm ridge (see the connecting arm's comment: uSpeed is the only
+    // other state-correlated scalar reaching consumer GLSL). Still
     // one-line adjustable once the LiveKit measurement lands.
     case 'disconnected':
-      return { intensity: 0.3, speed: 1 };
+      return { intensity: 0.3, speed: 0.5 };
     case 'idle':
     default:
       return { intensity: 0.3, speed: 1 };

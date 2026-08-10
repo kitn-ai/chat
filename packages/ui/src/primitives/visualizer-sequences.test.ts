@@ -192,12 +192,26 @@ describe('shaderTargets', () => {
   it('settles on a single dim value when idle', () => {
     expect(shaderTargets('idle')).toEqual({ intensity: 0.3, speed: 1 });
   });
-  it('disconnected settles on the idle dim value for now (LiveKit measurement pending)', () => {
-    expect(shaderTargets('disconnected')).toEqual({ intensity: 0.3, speed: 1 });
+  it('disconnected keeps the idle dim intensity but gets its OWN speed, so a shader can render a dead line distinct from idle', () => {
+    // Speed 0.5, not idle's 1: uSpeed is the only state-correlated scalar
+    // (besides intensity) a custom shader receives, and disconnected's look
+    // is a flat dead line where idle's is a calm breathing ridge -- sharing
+    // idle's speed made the two indistinguishable in GLSL. Intensity stays
+    // at the dim 0.3 resting value; still one-line adjustable if the
+    // pending LiveKit disconnected-state measurement says otherwise.
+    expect(shaderTargets('disconnected')).toEqual({ intensity: 0.3, speed: 0.5 });
   });
-  it('speeds up while thinking and connecting', () => {
+  it('speeds up while thinking, and faster still while connecting -- each state gets a distinct speed', () => {
+    // uSpeed is the ONLY state-correlated scalar (besides intensity) that
+    // reaches a custom shader's GLSL, so every state needs its own value or
+    // a consumer shader cannot tell them apart: idle 1, speaking/listening
+    // 2.5 (disambiguated by band energy), thinking 4, connecting 6. The
+    // shared 4.0 the two transitional states used to have made them
+    // pixel-identical in any shader keying off the kit's uniforms -- the
+    // Custom story's per-state looks are the concrete consumer.
     expect(shaderTargets('thinking').speed).toBe(4.0);
-    expect(shaderTargets('connecting').speed).toBe(4.0);
+    expect(shaderTargets('connecting').speed).toBe(6.0);
+    expect(shaderTargets('connecting').speed).not.toBe(shaderTargets('thinking').speed);
   });
   it('leaves speaking intensity to the live volume', () => {
     expect(shaderTargets('speaking').speed).toBe(2.5);

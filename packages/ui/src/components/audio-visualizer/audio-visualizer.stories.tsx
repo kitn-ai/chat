@@ -410,24 +410,73 @@ const SPECTRUM_SHADER = `
 void mainImage(out vec4 fragColor, in vec2 fragCoord) {
   vec2 uv = fragCoord / iResolution.xy;
 
-  // Sample the two nearest bands and ease between them: the spectrum reads
-  // as one continuous ridge instead of five hard boxes. (WebGL1 GLSL can
-  // only index a uniform array by a loop constant, hence the select loop.)
-  float x = clamp(uv.x * float(BAND_COUNT) - 0.5, 0.0, float(BAND_COUNT - 1));
-  float lo = floor(x);
-  float hi = min(lo + 1.0, float(BAND_COUNT - 1));
-  float levLo = 0.0;
-  float levHi = 0.0;
-  for (int i = 0; i < BAND_COUNT; i++) {
-    if (float(i) == lo) levLo = uBands[i];
-    if (float(i) == hi) levHi = uBands[i];
-  }
-  float level = mix(levLo, levHi, smoothstep(0.0, 1.0, x - lo));
+  // Band energy decides what this shader renders. With real voice bands
+  // present (the speaking tile; a live mic with speech), the ridge tracks
+  // them. With none -- every scripted state; the story zeroes bands
+  // outside speaking, matching the live pipeline where non-speaking
+  // states carry no stream -- the shader MODELS the state machine itself
+  // from the two state-correlated uniforms the kit provides: uSpeed,
+  // distinct per state (disconnected 0.5, idle 1, listening/speaking 2.5,
+  // thinking 4, connecting 6 -- shaderTargets in visualizer-sequences.ts),
+  // and uIntensity (dim / pulsing / volume-driven brightness).
+  float energy = 0.0;
+  for (int i = 0; i < BAND_COUNT; i++) energy += uBands[i];
 
-  // A faint travelling shimmer keeps the crest alive between band updates.
-  // Written the conventional iTime * uSpeed way on purpose: reduced motion
-  // pins uSpeed at 0 (see variant-custom.tsx), which genuinely stills it.
-  level += 0.02 * sin(uv.x * 18.0 + iTime * uSpeed * 1.5) * smoothstep(0.03, 0.1, level);
+  // All motion runs on iTime * uSpeed: reduced motion pins uSpeed at 0
+  // (variant-custom.tsx), which stills every look below and collapses the
+  // state branch to the calm idle arm -- a static resting ridge, states
+  // still hinted apart by uIntensity's collapsed brightness.
+  float t = iTime * uSpeed;
+  float level;
+
+  if (energy > 0.05) {
+    // Voice-driven ridge: sample the two nearest bands and ease between
+    // them, one continuous crest instead of five hard boxes. (WebGL1 GLSL
+    // can only index a uniform array by a loop constant, hence the loop.)
+    float x = clamp(uv.x * float(BAND_COUNT) - 0.5, 0.0, float(BAND_COUNT - 1));
+    float lo = floor(x);
+    float hi = min(lo + 1.0, float(BAND_COUNT - 1));
+    float levLo = 0.0;
+    float levHi = 0.0;
+    for (int i = 0; i < BAND_COUNT; i++) {
+      if (float(i) == lo) levLo = uBands[i];
+      if (float(i) == hi) levHi = uBands[i];
+    }
+    level = mix(levLo, levHi, smoothstep(0.0, 1.0, x - lo));
+  } else if (uSpeed > 5.0) {
+    // connecting: a mirrored pair of swells sweeping in from both edges to
+    // meet at the centre -- the same inward-sweep semantic the DOM
+    // variants' connecting sequence uses. Clearly transitional: it never
+    // settles.
+    float d = abs(uv.x - 0.5);
+    float pos = mix(0.55, 0.0, fract(t * 0.1));
+    level = 0.06 + 0.24 * exp(-pow((d - pos) * 8.0, 2.0));
+  } else if (uSpeed > 3.0) {
+    // thinking: one soft swell sweeping steadily across the ridge, edge to
+    // edge -- a shimmer working its way through.
+    float pos = fract(t * 0.08) * 1.2 - 0.1;
+    level = 0.08 + 0.18 * exp(-pow((uv.x - pos) * 6.0, 2.0));
+  } else if (uSpeed > 1.5) {
+    // listening: the whole ridge breathing in one gentle rhythm.
+    level = 0.13 + 0.05 * sin(t * 1.6) + 0.02 * sin(uv.x * 6.3 + t * 0.7);
+  } else if (uSpeed > 0.75) {
+    // idle: calm, low, barely moving.
+    level = 0.07 + 0.015 * sin(t * 0.9 + uv.x * 3.0);
+  } else if (uSpeed > 0.25) {
+    // disconnected (speed 0.5): a flat, dim dead line -- no motion terms
+    // at all, consistent with the wave variant's flat-line semantic. The
+    // low level also naturally suppresses the crest glow below.
+    level = 0.04;
+  } else {
+    // uSpeed 0 is FROZEN (reduced motion pins it there for every state):
+    // a static calm resting ridge; states stay hinted apart only by
+    // uIntensity's collapsed brightness.
+    level = 0.07;
+  }
+
+  // A faint travelling shimmer keeps any crest alive between updates,
+  // stilled with everything else when uSpeed is pinned to 0.
+  level += 0.02 * sin(uv.x * 18.0 + t * 1.5) * smoothstep(0.03, 0.1, level);
 
   // Inside the ridge: a vertical gradient, dimmest at the base, saturating
   // toward full opacity right at the crest.
@@ -732,13 +781,16 @@ export const Custom: Story = {
         story:
           'Set `variant="custom"` and a `shader` to render your own GLSL. It receives the ShaderToy built-ins ' +
           'plus `uColor`, `uIntensity`, `uSpeed`, `uComplexity`, `uVolume`, and `uBands[]` -- never declare ' +
-          'those yourself, the canvas declares them for you. This story\'s shader draws the five `uBands` as ' +
-          'one smoothly interpolated ridge with a vertical gradient and a soft crest glow that breathes with ' +
-          '`uVolume`; it is hardcoded for 5 bands, so every tile forces `barCount={5}` to match. `complexity` ' +
-          'slices the fill into LED-style segments when raised (solid at its 0 default), and `uIntensity` ' +
-          'scales overall brightness so the five states read as more than a relabelled copy of each other: a ' +
-          'steady dim idle, a pulsing listening/connecting/thinking, and a bright, volume-driven speaking. ' +
-          '`theme` is not listed: this shader does not read it yet either.',
+          'those yourself, the canvas declares them for you. This story\'s shader models the whole state ' +
+          'machine the way a consumer shader would, from the kit\'s own uniforms: `speaking` draws the five ' +
+          '`uBands` as one smoothly interpolated voice ridge; with no band energy it keys off `uSpeed` ' +
+          '(distinct per state) -- a flat dead line for `disconnected`, a calm, barely-moving `idle`, a ' +
+          'rhythmically breathing `listening`, a swell sweeping across for `thinking`, and a mirrored pair ' +
+          'rushing inward for `connecting` -- ' +
+          'while `uIntensity` layers the dim/pulsing/bright state brightness on top. Vertical gradient and ' +
+          'crest glow throughout; `complexity` slices the fill into LED-style segments when raised (solid at ' +
+          'its 0 default); hardcoded for 5 bands, so every tile forces `barCount={5}` to match. `theme` is ' +
+          'not listed: this shader does not read it yet either.',
       },
     },
   },
@@ -752,6 +804,14 @@ export const Custom: Story = {
     // hits `resampleBands`' passthrough fast path and mirrors the recording
     // out to 5 verbatim, no interpolation involved.
     const bands = useVoiceBands(() => 5, OFFSET_CUSTOM);
+    // Voice bands reach ONLY the speaking tile. Feeding the recording into
+    // every state used to swamp the scripted looks -- all five tiles
+    // rendered the same voice ridge, brightness aside. Zeroed bands are
+    // also what the real pipeline delivers outside speaking: the live
+    // Microphone story has no stream at all in non-speaking states, so a
+    // consumer shader sees uBands of zeros there and must (and now does,
+    // see SPECTRUM_SHADER) script those states from uSpeed/uIntensity.
+    const SILENT_BANDS = [0, 0, 0, 0, 0];
     return (
       <StateRow size={args.size ?? 'md'}>
         {(s) => (
@@ -762,7 +822,7 @@ export const Custom: Story = {
             color={args.color}
             complexity={args.complexity}
             barCount={5}
-            bands={bands()}
+            bands={s === 'speaking' ? bands() : SILENT_BANDS}
             shader={{ fragment: SPECTRUM_SHADER }}
           />
         )}
