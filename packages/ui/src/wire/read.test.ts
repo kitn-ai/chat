@@ -29,6 +29,28 @@ function readable(text: string, size = 17): ReadableStream<Uint8Array> {
   });
 }
 
+/** A ReadableStream that RECORDS whether it was cancelled, and by whom. The
+ *  `cancel` callback is the only honest signal that the underlying connection
+ *  was closed rather than merely unlocked. Never closes on its own, so a test
+ *  that expects cancellation cannot pass by the producer running dry. */
+function trackedStream(text: string, size = 17) {
+  const buf = new TextEncoder().encode(text);
+  let i = 0;
+  const state = { cancelled: false, reason: undefined as unknown };
+  const stream = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (i >= buf.length) return; // deliberately never close
+      controller.enqueue(buf.subarray(i, Math.min(i + size, buf.length)));
+      i += size;
+    },
+    cancel(reason) {
+      state.cancelled = true;
+      state.reason = reason;
+    },
+  });
+  return { stream, state };
+}
+
 const OPENAI_SSE =
   ': OPENROUTER PROCESSING\n\n' +
   'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n' +
@@ -157,5 +179,70 @@ describe('WireError', () => {
     const turn = await readOpenAIStream(new Response(readable(sse)), nullSink());
     expect(turn.error?.message).toBe('upstream dropped');
     expect(turn.text).toBe('Chec');
+  });
+});
+
+// Stopping mid-stream must CLOSE the connection. Releasing the reader's lock
+// leaves the body open, which leaks a socket per occurrence, and an in-band
+// error after a 200 is a normal provider behaviour rather than a rare one.
+describe('early exit cancels the underlying stream', () => {
+  const IN_BAND_ERROR =
+    'data: {"choices":[{"delta":{"content":"Chec"}}]}\n\n' +
+    'data: {"error":{"code":"server_error","message":"upstream dropped"}}\n\n' +
+    'data: {"choices":[{"delta":{"content":" never read"}}]}\n\n';
+
+  it('cancels a ReadableStream source when an in-band error ends the turn', async () => {
+    const { stream, state } = trackedStream(IN_BAND_ERROR);
+    const turn = await readOpenAIStream(stream, nullSink());
+
+    expect(turn.error?.message).toBe('upstream dropped');
+    expect(turn.text).toBe('Chec'); // stopped at the error, did not read on
+    expect(state.cancelled).toBe(true);
+  });
+
+  it('cancels the body of a Response source', async () => {
+    const { stream, state } = trackedStream(IN_BAND_ERROR);
+    await readOpenAIStream(new Response(stream), nullSink());
+    expect(state.cancelled).toBe(true);
+  });
+
+  it('cancels when the SINK throws mid-stream', async () => {
+    // The consumer's own failure has to close the connection too.
+    const { stream, state } = trackedStream(
+      'data: {"choices":[{"delta":{"content":"boom"}}]}\n\n'.repeat(4),
+    );
+    const exploding: AssistantStreamSink = {
+      appendText: () => {
+        throw new Error('sink exploded');
+      },
+      appendReasoning: () => undefined,
+      upsertTool: () => undefined,
+    };
+
+    await expect(readOpenAIStream(stream, exploding)).rejects.toThrow('sink exploded');
+    expect(state.cancelled).toBe(true);
+  });
+
+  it('does NOT cancel a stream that finished on its own', async () => {
+    // A stream the producer closed is already done. Cancelling it would be a
+    // no-op, but asserting the normal path stays clean keeps the two cases
+    // distinguishable if the guard is ever removed.
+    const state = { cancelled: false };
+    const buf = new TextEncoder().encode(OPENAI_SSE);
+    let i = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (i >= buf.length) return controller.close();
+        controller.enqueue(buf.subarray(i, Math.min(i + 17, buf.length)));
+        i += 17;
+      },
+      cancel() {
+        state.cancelled = true;
+      },
+    });
+
+    const turn = await readOpenAIStream(stream, nullSink());
+    expect(turn.text).toBe('Hello world');
+    expect(state.cancelled).toBe(false);
   });
 });

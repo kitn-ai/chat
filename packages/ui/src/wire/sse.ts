@@ -18,18 +18,37 @@
 export type ByteSource = AsyncIterable<Uint8Array | string> | ReadableStream<Uint8Array>;
 
 /** Adapt a WHATWG ReadableStream to an async iterable. Never rely on
- *  `for await (... of res.body)`: Safari still lacks async iteration on it. */
+ *  `for await (... of res.body)`: Safari still lacks async iteration on it.
+ *
+ *  On EARLY EXIT the underlying stream is CANCELLED, not just unlocked.
+ *  `releaseLock()` alone hands the reader back while the body stays open, which
+ *  leaks the socket. The adapter stops reading mid-stream on a real and
+ *  not-rare path (an in-band provider error after a 200), and every consumer
+ *  `break`/`throw` inside `for await` lands here too, so this is where the
+ *  connection has to be closed. */
 export async function* readableToAsyncIterable(
   stream: ReadableStream<Uint8Array>,
 ): AsyncGenerator<Uint8Array> {
   const reader = stream.getReader();
+  let drained = false;
   try {
     for (;;) {
       const { value, done } = await reader.read();
-      if (done) return;
+      if (done) {
+        drained = true;
+        return;
+      }
       if (value) yield value;
     }
   } finally {
+    // Only when the producer did NOT finish on its own. Cancelling a stream
+    // that already reported done is a no-op, but skipping it keeps the normal
+    // path free of an extra await.
+    if (!drained) {
+      // A cancel can reject if the stream already errored; that is not a new
+      // failure and must not mask whatever ended the iteration.
+      await reader.cancel().catch(() => undefined);
+    }
     reader.releaseLock();
   }
 }

@@ -46,6 +46,11 @@ export class WireError extends Error {
 
   constructor(status: number, statusText: string, bodyText: string, body: unknown) {
     super(buildMessage(status, statusText, bodyText, body));
+    // Restores the prototype chain when this class is DOWNLEVELLED to ES5 by a
+    // consumer's build. Without it `err instanceof WireError` is false there,
+    // and the documented way to tell a transport failure from an in-band error
+    // stops working. A no-op in the shipped ES2020+ output.
+    Object.setPrototypeOf(this, WireError.prototype);
     this.name = 'WireError';
     this.status = status;
     this.statusText = statusText;

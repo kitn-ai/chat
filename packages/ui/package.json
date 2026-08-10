@@ -105,7 +105,7 @@
       "default": "./dist/wire.js"
     },
     "./provider": {
-      "types": "./dist/kai-provider.d.ts",
+      "types": "./dist/remote/provider.d.ts",
       "default": "./dist/kai-provider.es.js"
     }
   },
