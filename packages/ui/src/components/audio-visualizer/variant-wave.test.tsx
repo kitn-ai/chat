@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
+import { createSignal } from 'solid-js';
 import { render, cleanup } from '@solidjs/testing-library';
 import { waveTargets } from '../../primitives/visualizer-sequences';
 import { installFakeClock } from '../../test-utils/fake-clock';
 import type { ShaderVariantProps } from './index';
+import type { VisualizerState } from '../../primitives/visualizer-sequences';
 
 // jsdom has no WebGL at all, so the shader itself never compiles or draws in
 // these tests -- see shader-canvas.test.tsx. What IS testable without a GPU:
@@ -283,6 +285,81 @@ describe('WaveVisualizer: state -> uniform mapping', () => {
 
     const frozenListening = await renderWave({ state: 'listening', frozen: true });
     expect(shapeOf(frozenListening)).toBe(idleShape);
+  });
+});
+
+// Regression for the speaking re-entry stall the wave parity audit measured
+// on the harness: after listening -> speaking with a PINNED volume (static
+// bands/volume-override drive, upstream's #1399-style prop mode -- the
+// volume signal never ticks again), the line landed at the 0.025 base
+// amplitude instead of 0.015 + 0.4v and stayed there until the next volume
+// change. Root cause: amplitude/frequency had TWO writers in TWO effects
+// sharing the `state` dependency -- the state effect tweening toward the
+// base over 0.2s, the volume effect applying the override instantly -- and
+// Solid re-runs sibling effects in the order they sit in the signal's
+// observer list, which REORDERS as effects re-subscribe over their
+// lifetimes. Whichever re-subscribed last ran last and won. Reproduced on
+// the harness 2/2 with a loaded main thread during the transition, 0/7
+// calm -- history-dependent, so this test FORCES the adverse history
+// deterministically instead of relying on load: flipping `frozen` re-runs
+// ONLY the state-target effect (the volume effect does not read frozen),
+// which re-subscribes it to `state` AFTER the volume effect -- exactly the
+// ordering the race resolves to when it bites. Verified RED against the
+// pre-fix two-effect code with that history, GREEN after the single-writer
+// merge.
+describe('WaveVisualizer: speaking re-entry override survives adverse effect ordering (static drive)', () => {
+  const { advance } = installFakeClock();
+
+  type CapturedProps = {
+    uniforms: Record<string, { type: string; value: number | number[] }>;
+  };
+  let captured: CapturedProps | undefined;
+
+  beforeEach(() => {
+    captured = undefined;
+    vi.doMock('./shader-canvas', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('./shader-canvas')>();
+      return {
+        ...actual,
+        ShaderCanvas: (props: CapturedProps) => {
+          captured = props;
+          return null;
+        },
+      };
+    });
+  });
+
+  it('lands amplitude and frequency on the volume override after listening -> speaking with a pinned volume, regardless of effect re-subscription order', async () => {
+    const { default: WaveVisualizer } = await import('./variant-wave');
+    const [state, setState] = createSignal<VisualizerState>('listening');
+    const [frozen, setFrozen] = createSignal(false);
+
+    render(() => (
+      <WaveVisualizer
+        {...baseProps}
+        state={state()}
+        frozen={frozen()}
+        volume={0.8}
+        onUnavailable={() => {}}
+      />
+    ));
+
+    // The adverse subscription history (see the describe comment): re-run
+    // only the state-target effect so it re-subscribes to `state` after the
+    // volume-override effect.
+    setFrozen(true);
+    setFrozen(false);
+
+    // The static-drive re-entry itself. Volume is pinned at 0.8 and never
+    // ticks again -- nothing self-heals this if the base tween wins.
+    setState('speaking');
+
+    // Run any 0.2s base tween to completion; if it stole amplitude, it has
+    // fully landed on 0.025 by now.
+    for (let i = 0; i < 10; i++) advance(50);
+
+    expect(captured!.uniforms.uAmplitude?.value).toBeCloseTo(0.015 + 0.4 * 0.8, 6);
+    expect(captured!.uniforms.uFrequency?.value).toBeCloseTo(20 + 60 * 0.8, 6);
   });
 });
 

@@ -32,11 +32,10 @@ export default function WaveVisualizer(props: ShaderVariantProps): JSX.Element {
   const transition = () =>
     props.frozen ? { duration: 0 } : { duration: 0.2, ease: 'easeOut' as const };
 
+  // Opacity alone: it only follows state/frozen, so a volume tick (nearly
+  // every animation frame while speaking) never restarts the pulse's tween.
   createEffect(() => {
     const t = targets();
-    amplitude.to(t.amplitude, transition());
-    frequency.to(t.frequency, transition());
-
     // A pulse is an array target ([from, to], see createTween's ping-pong).
     // Reduced motion collapses it to its first value so the line holds
     // still instead of breathing.
@@ -44,16 +43,38 @@ export default function WaveVisualizer(props: ShaderVariantProps): JSX.Element {
     opacity.to(fade, props.frozen ? { duration: 0 } : { duration: t.pulseDuration || 0.2 });
   });
 
-  // Live volume overrides amplitude and frequency instantly while speaking,
-  // so the line never lags the audio. Kept as its own effect rather than
-  // folded into the one above: that effect only reads `state`/`frozen`, so a
-  // volume tick (nearly every animation frame while speaking) does not also
-  // restart the opacity pulse's tween for no reason.
+  // Amplitude and frequency share ONE effect -- a single writer -- on
+  // purpose. They used to be split like opacity above: a state effect
+  // tweening toward the base target over 0.2s, plus a separate effect
+  // applying the live-volume override instantly while speaking. Both re-run
+  // on a state flip, and Solid re-runs sibling effects in the order they sit
+  // in the signal's observer list, which REORDERS as effects re-subscribe
+  // over their lifetimes -- so whichever happened to run last won. Under a
+  // loaded main thread the base tween could land AFTER the override,
+  // parking a speaking line at the 0.025 baseline until the next volume
+  // change; with live audio that self-heals within one ~33ms tick, but
+  // static drive (a pinned `bands`/`volume` override, upstream's #1399 prop
+  // mode) never ticks again, so it stalled visibly (measured on the parity
+  // harness, 2/2 under load). This is NOT the benign two-effect shape the
+  // Task 12 review ruled acceptable elsewhere -- that ruling covered
+  // effects with DISJOINT writers; these two wrote the same tweens. One
+  // effect, one writer, ordering can no longer matter. Same effect-race
+  // class as b5795ac's shared() finding.
   createEffect(() => {
-    if (props.state !== 'speaking') return;
-    const v = props.volume;
-    amplitude.to(0.015 + 0.4 * v, { duration: 0 });
-    frequency.to(20 + 60 * v, { duration: 0 });
+    if (props.state === 'speaking') {
+      // Live volume drives amplitude and frequency instantly while
+      // speaking, so the line never lags the audio -- and lands at the
+      // override immediately on re-entry, matching upstream's same-commit
+      // effect ordering. `volume` is only tracked in this branch, so
+      // volume ticks do not re-run the state-target path below.
+      const v = props.volume;
+      amplitude.to(0.015 + 0.4 * v, { duration: 0 });
+      frequency.to(20 + 60 * v, { duration: 0 });
+      return;
+    }
+    const t = targets();
+    amplitude.to(t.amplitude, transition());
+    frequency.to(t.frequency, transition());
   });
 
   const lineWidth = () => (props.size === 'icon' || props.size === 'sm' ? 2 : 1);

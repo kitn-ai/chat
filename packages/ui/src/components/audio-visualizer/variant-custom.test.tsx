@@ -686,3 +686,68 @@ function fakeGL(failures: { failFragmentCompile?: boolean } = {}) {
   };
   return gl as unknown as WebGLRenderingContext & { createProgram: () => object; uniformHistory: typeof uniformHistory };
 }
+
+// Same speaking re-entry stall class as variant-wave's (see that file's
+// "adverse effect ordering" describe for the full mechanism): intensity had
+// TWO writers in TWO effects sharing the `state` dependency -- the state
+// effect tweening toward the base target over 0.5s, plus the volume
+// override applying instantly -- and Solid's sibling-effect re-run order
+// follows the signal's observer list, which reorders as effects
+// re-subscribe. The wave audit measured the stall on the harness; this
+// variant carried the identical latent pattern (one of the shader-variant
+// tween-effect instances the final-review audit flagged). The frozen flip
+// below forces the adverse subscription history deterministically, exactly
+// like the wave test.
+describe('CustomVisualizer: speaking re-entry override survives adverse effect ordering (static drive)', () => {
+  const { advance } = installFakeClock();
+
+  type CapturedProps = {
+    uniforms: Record<string, { type: string; value: number | number[] }>;
+  };
+  let captured: CapturedProps | undefined;
+
+  beforeEach(() => {
+    captured = undefined;
+    vi.doMock('./shader-canvas', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('./shader-canvas')>();
+      return {
+        ...actual,
+        ShaderCanvas: (props: CapturedProps) => {
+          captured = props;
+          return null;
+        },
+      };
+    });
+  });
+
+  it('lands intensity on the volume override after listening -> speaking with a pinned volume, regardless of effect re-subscription order', async () => {
+    const { default: CustomVisualizer } = await import('./variant-custom');
+    const [state, setState] = createSignal<ShaderVariantProps['state']>('listening');
+    const [frozen, setFrozen] = createSignal(false);
+
+    render(() => (
+      <CustomVisualizer
+        {...baseProps}
+        state={state()}
+        frozen={frozen()}
+        volume={0.8}
+        shader={{ fragment: FRAGMENT }}
+        onUnavailable={() => {}}
+      />
+    ));
+
+    // Adverse history: re-run only the state-target effect (it alone reads
+    // `frozen`) so it re-subscribes to `state` after the volume override.
+    setFrozen(true);
+    setFrozen(false);
+
+    // Static-drive re-entry; volume is pinned and never ticks again.
+    setState('speaking');
+
+    // Run the 0.5s base tween to completion -- if it stole intensity, it
+    // has fully landed back on the 0.3 base by now.
+    for (let i = 0; i < 12; i++) advance(70);
+
+    expect(captured!.uniforms.uIntensity?.value).toBeCloseTo(0.3 + 0.7 * 0.8, 6);
+  });
+});
