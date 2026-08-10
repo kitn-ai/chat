@@ -156,10 +156,11 @@ The element is identical under React; the wrapper just gives you typed props and
 
 ```tsx
 import { Chat } from '@kitn.ai/ui/react';
+import type { ChatMessage } from '@kitn.ai/ui/react';
 import { useState } from 'react';
 
 export function App() {
-  const [messages, setMessages] = useState([
+  const [messages, setMessages] = useState<ChatMessage[]>([
     { id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello! How can I help?' }] },
   ]);
 
@@ -168,7 +169,7 @@ export function App() {
       messages={messages}
       style={{ display: 'block', height: '100dvh' }}
       onSubmit={(e) => {
-        const turn = { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: e.detail.value }] };
+        const turn: ChatMessage = { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: e.detail.value }] };
         setMessages((prev) => [...prev, turn]);
         // …call your model, then append an assistant message.
       }}

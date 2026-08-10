@@ -47,17 +47,21 @@ Svelte detects non-primitive values and assigns them as DOM properties rather th
 
 `<kai-chat>` is transport-agnostic: you own the API call, the element owns the UI. Pass a `messages` array and handle `kai-submit` to stream replies back into state.
 
-```svelte
-<script>
-  import '@kitn.ai/ui/elements';
+A message is an **ordered `parts` array**, not a string: text, reasoning, tool calls, generative-UI cards and file attachments, in the order the model produced them. Fold each token onto the existing parts with the kit's own `appendTextPart` rather than replacing `parts` with a single text part, which throws away every other kind.
 
-  let messages = [
+```svelte
+<script lang="ts">
+  import '@kitn.ai/ui/elements';
+  import type { ChatMessage } from '@kitn.ai/ui';
+  import { appendTextPart } from '@kitn.ai/ui/state';
+
+  let messages: ChatMessage[] = [
     { id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello! How can I help?' }] },
   ];
 
-  async function handleSubmit(e) {
+  async function handleSubmit(e: CustomEvent<{ value: string }>) {
     const userText = e.detail.value;
-    const history = [
+    const history: ChatMessage[] = [
       ...messages,
       { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: userText }] },
     ];
@@ -66,12 +70,10 @@ Svelte detects non-primitive values and assigns them as DOM properties rather th
     const assistantId = crypto.randomUUID();
     messages = [...history, { id: assistantId, role: 'assistant', parts: [] }];
 
-    let reply = '';
     for await (const token of streamFromYourAPI(history)) {
-      reply += token;
       // Reassign the array so Svelte detects the update.
       messages = messages.map((m) =>
-        m.id === assistantId ? { ...m, parts: [{ type: 'text', text: reply }] } : m
+        m.id === assistantId ? { ...m, parts: appendTextPart(m.parts, token) } : m
       );
     }
   }

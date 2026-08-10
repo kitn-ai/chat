@@ -74,31 +74,32 @@ The `.prop` modifier forces Vue to set the value as a live DOM property rather t
 
 `<kai-chat>` is transport-agnostic: give it a `messages` array, handle `@kai-submit`, and stream your model's reply back into state. The element owns the UI; you own the request.
 
+A message is an **ordered `parts` array**, not a string: text, reasoning, tool calls, generative-UI cards and file attachments, in the order the model produced them. `ChatMessage` is the kit's own type, so import it rather than hand-rolling a text-only copy — the copy compiles and then hides every other part kind from you.
+
 ```vue
 <script setup lang="ts">
 import '@kitn.ai/ui/elements';
+import type { ChatMessage } from '@kitn.ai/ui';
+import { appendTextPart } from '@kitn.ai/ui/state';
 import { ref } from 'vue';
 
-type MessagePart = { type: 'text'; text: string };
-type Message = { id: string; role: 'user' | 'assistant'; parts: MessagePart[] };
-
-const messages = ref<Message[]>([
+const messages = ref<ChatMessage[]>([
   { id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello! How can I help?' }] },
 ]);
 
 const onSubmit = async (e: CustomEvent<{ value: string }>) => {
-  const userMsg = { id: crypto.randomUUID(), role: 'user' as const, parts: [{ type: 'text' as const, text: e.detail.value }] };
+  const userMsg: ChatMessage = { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: e.detail.value }] };
   const history = [...messages.value, userMsg];
   messages.value = history;
 
   const aid = crypto.randomUUID();
   messages.value = [...history, { id: aid, role: 'assistant', parts: [] }];
 
-  let answer = '';
   for await (const token of streamFromYourAPI(history)) {
-    answer += token;
+    // appendTextPart returns a NEW parts array and leaves any reasoning, tool
+    // or card parts alone. Replacing `parts` wholesale would drop them.
     messages.value = messages.value.map((m) =>
-      m.id === aid ? { ...m, parts: [{ type: 'text', text: answer }] } : m,
+      m.id === aid ? { ...m, parts: appendTextPart(m.parts, token) } : m,
     );
   }
 };

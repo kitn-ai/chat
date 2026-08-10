@@ -64,12 +64,13 @@ Angular loads global CSS from the build config, **not** from a TS `import './x.c
 
 `<kai-chat>` is **transport-agnostic**: pass a `messages` array, handle `(kai-submit)`, and stream the reply back into state. The component owns the UI; you own the request.
 
+A message is an **ordered `parts` array**, not a string: text, reasoning, tool calls, generative-UI cards and file attachments, in the order the model produced them. `ChatMessage` is the kit's own type, so import it rather than hand-rolling a text-only copy — the copy compiles and then hides every other part kind from you.
+
 ```ts
 // app.component.ts
 import { Component, CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
-
-type MessagePart = { type: 'text'; text: string };
-type Message = { id: string; role: 'user' | 'assistant'; parts: MessagePart[] };
+import type { ChatMessage } from '@kitn.ai/ui';
+import { appendTextPart } from '@kitn.ai/ui/state';
 
 @Component({
   selector: 'app-root',
@@ -78,14 +79,14 @@ type Message = { id: string; role: 'user' | 'assistant'; parts: MessagePart[] };
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
 })
 export class AppComponent {
-  messages: Message[] = [
+  messages: ChatMessage[] = [
     { id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello! How can I help?' }] },
   ];
 
   async onSubmit(e: Event) {
     const { value } = (e as CustomEvent<{ value: string }>).detail;
     // Reassign a new array so Angular change detection picks it up.
-    const history: Message[] = [
+    const history: ChatMessage[] = [
       ...this.messages,
       { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: value }] },
     ];
@@ -94,11 +95,11 @@ export class AppComponent {
     const aid = crypto.randomUUID();
     this.messages = [...history, { id: aid, role: 'assistant', parts: [] }];
 
-    let answer = '';
     for await (const token of streamFromYourAPI(history)) {
-      answer += token;
+      // appendTextPart returns a NEW parts array and leaves any reasoning, tool
+      // or card parts alone. Replacing `parts` wholesale would drop them.
       this.messages = this.messages.map((m) =>
-        m.id === aid ? { ...m, parts: [{ type: 'text', text: answer }] } : m
+        m.id === aid ? { ...m, parts: appendTextPart(m.parts, token) } : m
       );
     }
   }

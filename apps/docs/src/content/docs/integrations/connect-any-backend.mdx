@@ -9,7 +9,7 @@ import { Aside } from '@astrojs/starlight/components';
 
 ## The contract
 
-`<kai-chat>` renders a `messages` array. You own the array; the component reflects it. A message is plain data:
+`<kai-chat>` renders a `messages` array. You own the array; the component reflects it. A message is plain data — spelled out below so you can see the whole contract, but don't retype it: the kit exports these as `ChatMessage`, `MessagePart`, and `ToolPart` from `@kitn.ai/ui` (types only, so they cost nothing at runtime).
 
 ```ts
 type Message = {
