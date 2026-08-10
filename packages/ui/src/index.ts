@@ -1,3 +1,22 @@
+// The package root entry (".").
+//
+// SCOPE — read before adding an export here.
+// -----------------------------------------
+// Every consumer of `@kitn.ai/ui` pays for this barrel, INCLUDING React/Vue/
+// Svelte consumers who never render a Solid component. It is therefore frozen at
+// the surface that shipped: adding a Solid component here taxes four frameworks
+// to serve one. Closing the 79/79 element coverage gaps on this file grew it
+// 591,359 -> 705,031 bytes (+19.2%), which is what motivated the split.
+//
+// The COMPLETE SolidJS surface — all 79 elements' components plus a `<Name>Props`
+// type for every public component — lives on `@kitn.ai/ui/solid` (src/solid.ts),
+// which is its own build target so only Solid consumers pay for it. `./solid`
+// re-exports this file, so it is a strict superset: anything here is reachable
+// there too, and a Solid consumer only ever needs the one import.
+//
+// Rule of thumb: a NEW Solid component export belongs in src/solid.ts.
+// Type-only exports are free (fully erased by the build) and may live in either.
+
 // Shared types (folded in from @tab-zen/shared)
 export type { ModelOption, SearchFilters, ConversationScope, ConversationSummary, ConversationGroup } from './types';
 
@@ -161,25 +180,17 @@ export { Avatar } from './ui/avatar';
 export type { AvatarProps } from './ui/avatar';
 export { Tooltip } from './ui/tooltip';
 export type { TooltipProps, TooltipController } from './ui/tooltip';
-export { HoverCard, HoverCardRoot, HoverCardTrigger, HoverCardContent } from './ui/hover-card';
-export type {
-  HoverCardProps, HoverCardRootProps, HoverCardTriggerProps, HoverCardContentProps, HoverCardController,
-} from './ui/hover-card';
+export { HoverCard } from './ui/hover-card';
+export type { HoverCardProps, HoverCardController } from './ui/hover-card';
 export { Collapsible, CollapsibleTrigger, CollapsibleContent } from './ui/collapsible';
 export type {
   CollapsibleProps, CollapsibleTriggerProps, CollapsibleContentProps, CollapsibleController,
 } from './ui/collapsible';
 export { ScrollArea } from './ui/scroll-area';
 export type { ScrollAreaProps, ScrollOrientation } from './ui/scroll-area';
-export {
-  Dropdown, DropdownTrigger, DropdownContent, DropdownItem,
-  DropdownSeparator, DropdownLabel, DropdownCheckboxItem, DropdownRadioItem,
-  DropdownSub, DropdownSubTrigger, DropdownSubContent,
-} from './ui/dropdown';
+export { Dropdown, DropdownTrigger, DropdownContent, DropdownItem } from './ui/dropdown';
 export type {
-  DropdownProps, DropdownTriggerProps, DropdownContentProps, DropdownItemProps,
-  DropdownSeparatorProps, DropdownLabelProps, DropdownCheckboxItemProps, DropdownRadioItemProps,
-  DropdownSubProps, DropdownSubTriggerProps, DropdownSubContentProps, DropdownController,
+  DropdownProps, DropdownTriggerProps, DropdownContentProps, DropdownItemProps, DropdownController,
 } from './ui/dropdown';
 export { Textarea } from './ui/textarea';
 export type { TextareaProps } from './ui/textarea';
@@ -187,49 +198,10 @@ export { Badge } from './ui/badge';
 export type { BadgeProps } from './ui/badge';
 export { Separator } from './ui/separator';
 export type { SeparatorProps } from './ui/separator';
-export { ResizablePanelGroup, ResizablePanel, ResizableHandle, Resizable, normalizeSize, resolveToPx, clampBasis } from './ui/resizable';
+export { ResizablePanelGroup, ResizablePanel, ResizableHandle, Resizable, normalizeSize, resolveToPx } from './ui/resizable';
 export type { ResizablePanelGroupProps, ResizablePanelProps, ResizableHandleProps, ResizableProps, SizeValue } from './ui/resizable';
 export { Skeleton } from './ui/skeleton';
 export type { SkeletonProps, SkeletonVariant } from './ui/skeleton';
-export { Input } from './ui/input';
-export type { InputProps } from './ui/input';
-export { Kbd } from './ui/kbd';
-export type { KbdProps, KbdPlatform } from './ui/kbd';
-export { Switch } from './ui/switch';
-export type { SwitchProps } from './ui/switch';
-export { Tabs } from './ui/tabs';
-export type { TabsProps, TabsVariant, KaiTabItem } from './ui/tabs';
-export { Segmented } from './ui/segmented';
-export type { SegmentedProps, SegmentedOption } from './ui/segmented';
-export { Status } from './ui/status';
-export type { StatusProps, StatusKind } from './ui/status';
-export { ProgressBar } from './ui/progress-bar';
-export type { ProgressBarProps, ProgressTone } from './ui/progress-bar';
-export { Notice } from './ui/notice';
-export type { NoticeProps, NoticeSeverity } from './ui/notice';
-export { EditableLabel } from './ui/editable-label';
-export type { EditableLabelProps } from './ui/editable-label';
-export { Dialog } from './ui/dialog';
-export type { DialogProps, DialogController } from './ui/dialog';
-export { Popover } from './ui/popover';
-export type { PopoverProps, PopoverController } from './ui/popover';
-export { Nav } from './ui/nav';
-export type { NavProps, KaiNavItem, NavItemStatus, NavStatusTone } from './ui/nav';
-export { CommandList } from './ui/command';
-export type { CommandListProps, CommandRow, CommandGroup } from './ui/command';
-export { AgentCard } from './ui/agent-card';
-export type { AgentCardProps, AgentStatus, AgentStatusTone } from './ui/agent-card';
-export { Pane } from './ui/pane';
-export type { PaneProps, PaneStatus, PaneStatusTone } from './ui/pane';
-export { PaneGroup } from './ui/pane-group';
-export type { PaneGroupProps, PaneTab, PaneTabStatus } from './ui/pane-group';
-export { PromptDock } from './ui/prompt-dock';
-export type { PromptDockProps, PromptDockFrame, PromptDockAppearance } from './ui/prompt-dock';
-export { SettingsGroup, SettingItem } from './ui/settings-group';
-export type { SettingsGroupProps, SettingItemProps } from './ui/settings-group';
-// `kai-icon` renders no kit component — it calls this. Solid consumers resolving
-// the same `icon` strings (named icon | URL | text fallback) need it too.
-export { renderIcon } from './ui/icon';
 export { FileTree, buildFileTree } from './components/file-tree';
 export type {
   FileTreeProps, FileTreeFile, FileTreeNode, FileTreeFolderNode, FileTreeFileNode,
@@ -295,11 +267,11 @@ export type {
 export { FeedbackBar, type FeedbackValue, type FeedbackDetail, type FeedbackBarProps } from './components/feedback-bar';
 export {
   ChainOfThought, ChainOfThoughtStep, ChainOfThoughtTrigger,
-  ChainOfThoughtContent, ChainOfThoughtItem, ChainOfThoughtAccordion,
+  ChainOfThoughtContent, ChainOfThoughtItem,
 } from './components/chain-of-thought';
 export type {
   ChainOfThoughtProps, ChainOfThoughtStepProps, ChainOfThoughtTriggerProps,
-  ChainOfThoughtContentProps, ChainOfThoughtItemProps, ChainOfThoughtAccordionProps,
+  ChainOfThoughtContentProps, ChainOfThoughtItemProps,
   ChainOfThoughtType, ChainOfThoughtStepData, ChainOfThoughtController,
 } from './components/chain-of-thought';
 export { Source, SourceTrigger, SourceContent, SourceList } from './components/source';
@@ -345,12 +317,8 @@ export type {
 } from './components/context';
 export { VoiceInput } from './components/voice-input';
 export type { VoiceInputProps, VoiceInputController } from './components/voice-input';
-export { VoiceOutput } from './components/voice-output';
-export type { VoiceOutputProps, VoiceOutputController } from './components/voice-output';
-export { ConversationList, CollapsedRail } from './components/conversation-list';
-export type {
-  ConversationListProps, ConversationListController, CollapsedRailProps,
-} from './components/conversation-list';
+export { ConversationList } from './components/conversation-list';
+export type { ConversationListProps, ConversationListController } from './components/conversation-list';
 export { ConversationItem } from './components/conversation-item';
 export type { ConversationItemProps } from './components/conversation-item';
 export { ModelSwitcher } from './components/model-switcher';
@@ -385,23 +353,6 @@ export type {
   AttachmentInfoProps, AttachmentRemoveProps, AttachmentEmptyProps,
   AttachmentHoverCardProps, AttachmentHoverCardTriggerProps, AttachmentHoverCardContentProps,
 } from './components/attachments';
-
-// Layer 3b: the composed thread/shell components the coarse elements wrap.
-// These are what `<kai-thread>`, `<kai-chat>`, `<kai-screen>`, `<kai-coachmark>` and
-// `<kai-composer>` render, so a Solid consumer writes one component for one element
-// instead of re-deriving the scroll/feedback/staging behaviour by hand.
-export { Thread } from './components/thread';
-export type { ThreadProps, ThreadController } from './components/thread';
-export { ChatThread } from './components/chat-thread';
-export type { ChatThreadProps, ChatThreadController, ChatThreadContextUsage } from './components/chat-thread';
-export { Screen } from './components/screen';
-export type { ScreenProps, ScreenController } from './components/screen';
-export { Coachmark } from './components/coachmark';
-export type { CoachmarkProps, CoachmarkController } from './components/coachmark';
-export { Composer } from './components/composer';
-export type {
-  ComposerProps, ComposerController, ComposerChange, TriggerDef, TriggerItem, HighlightRule,
-} from './components/composer';
 
 // Chat message types — public API for consumers who need to type their own message arrays.
 // NOTE: chat-types.ts also exports an unrelated `Source` interface (a citation), and

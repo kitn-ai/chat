@@ -15,10 +15,22 @@
 // or drift check can see.
 //
 //   catalog  = src/elements/element-meta.json            (the registered kai-* elements)
-//   surface  = the public root entry: `src/index.ts` module exports resolved by
+//   surface  = the public SolidJS entry: `src/solid.ts` module exports resolved by
 //              the TS checker, intersected with the runtime keys of the BUILT
-//              dist/index.server.js (a source export that does not survive the
+//              dist/solid.server.js (a source export that does not survive the
 //              build is not public)
+//
+// NOTE ON WHICH ENTRY IS CHECKED. This used to inspect the ROOT entry
+// (src/index.ts / dist/index.server.js). It does not any more, because full Solid
+// coverage no longer lives there: carrying it on "." cost every React/Vue/Svelte/
+// vanilla consumer +113,672 bytes (+19.2%) for components they cannot render, so
+// the complete Solid surface moved to `@kitn.ai/ui/solid` as its own build target.
+// This guard follows the surface — checking "." now would assert almost nothing,
+// which is the failure mode where a green check covers no ground.
+//
+// src/solid.ts is `export * from './index'` plus the Solid-only additions, so it
+// is a compiler-guaranteed superset of the root entry. Step 3b re-asserts that on
+// the BUILT artifacts, so a build-config change cannot quietly break it.
 //   usage    = the Solid components each facade actually renders, resolved
 //              JSX-tag -> declaring module by the checker, recursing through
 //              element-local helper components
@@ -35,7 +47,7 @@
 //
 // Usage:  node scripts/verify-solid-coverage.mjs [--json out.json]
 //         Needs `nx build ui` first — the surface is cross-checked against the
-//         runtime keys of the BUILT dist/index.server.js, and a missing build is
+//         runtime keys of the BUILT dist/solid.server.js, and a missing build is
 //         a hard error, not a silently-skipped check.
 
 import ts from 'typescript';
@@ -72,8 +84,11 @@ const tsconfig = ts.parseJsonConfigFileContent(
   ts.sys,
   pkgRoot,
 );
-const entryPath = resolve(srcDir, 'index.ts');
-const program = ts.createProgram([...facadeFiles, entryPath], { ...tsconfig.options, noEmit: true });
+// The COMPLETE Solid surface lives on `@kitn.ai/ui/solid`, not on "." — see the
+// header. `src/solid.ts` re-exports `src/index.ts`, so checking it covers both.
+const entryPath = resolve(srcDir, 'solid.ts');
+const rootEntryPath = resolve(srcDir, 'index.ts');
+const program = ts.createProgram([...facadeFiles, entryPath, rootEntryPath], { ...tsconfig.options, noEmit: true });
 const checker = program.getTypeChecker();
 
 // ---- 3. the public Solid surface -------------------------------------------
@@ -100,9 +115,9 @@ for (const s of entrySym ? checker.getExportsOfModule(entrySym) : []) {
 // would pass on an export that a consumer cannot actually reach. Missing build
 // is therefore a FAILURE, not a skipped check — a guard that silently degrades
 // to a weaker guard is how this repo has shipped green-but-empty checks before.
-const builtEntry = resolve(pkgRoot, 'dist/index.server.js');
+const builtEntry = resolve(pkgRoot, 'dist/solid.server.js');
 if (!existsSync(builtEntry)) {
-  console.error('verify-solid-coverage: dist/index.server.js is missing — run `nx build ui` first.');
+  console.error('verify-solid-coverage: dist/solid.server.js is missing — run `nx build ui` first.');
   console.error('  (the public surface is cross-checked against the BUILT entry; without it this check proves nothing)');
   process.exit(1);
 }
@@ -110,6 +125,23 @@ const runtimeExports = new Set(
   Object.keys(await import(pathToFileURL(builtEntry).href)).filter((k) => k !== 'default'),
 );
 const isPublic = (name) => publicValues.has(name) && runtimeExports.has(name);
+
+// ---- 3b. ./solid must remain a SUPERSET of "." ------------------------------
+// src/solid.ts is `export * from './index'` + additions, so TypeScript already
+// guarantees this at source level. Re-asserting it on the BUILT artifacts is the
+// part that can actually rot: a rollup/externals/config change could drop
+// re-exported bindings from dist/solid.js while the source still looks right,
+// and a Solid consumer — told to import ONLY from `@kitn.ai/ui/solid` — would
+// silently lose access to half the kit.
+const builtRootEntry = resolve(pkgRoot, 'dist/index.server.js');
+if (!existsSync(builtRootEntry)) {
+  console.error('verify-solid-coverage: dist/index.server.js is missing — run `nx build ui` first.');
+  process.exit(1);
+}
+const rootRuntimeExports = new Set(
+  Object.keys(await import(pathToFileURL(builtRootEntry).href)).filter((k) => k !== 'default'),
+);
+const notInSolid = [...rootRuntimeExports].filter((k) => !runtimeExports.has(k)).sort();
 
 // ---- 4. resolution helpers --------------------------------------------------
 const LAYER = (file) =>
@@ -363,7 +395,7 @@ const propTypesMissing = propTypes.filter((p) => !p.propsType).map((p) => p.name
 const counts = rows.reduce((a, r) => ((a[r.verdict] = (a[r.verdict] ?? 0) + 1), a), {});
 const grades = rows.filter((r) => r.verdict === 'GAP').reduce((a, r) => ((a[r.grade] = (a[r.grade] ?? 0) + 1), a), {});
 const result = {
-  generatedFrom: { catalog: 'src/elements/element-meta.json', surface: ['src/index.ts (TS checker)', 'dist/index.server.js (runtime keys)'] },
+  generatedFrom: { catalog: 'src/elements/element-meta.json', surface: ['src/solid.ts (TS checker)', 'dist/solid.server.js (runtime keys)'] },
   totals: {
     elements: catalog.length,
     publicValueExports: publicValues.size,
@@ -407,14 +439,23 @@ if (gapRows.length) {
     if (r.solidSurface.length) console.error(`    public today : ${r.solidSurface.join(', ')}`);
     for (const p of r.proof) {
       const fix = p.exportedFromOwnModule
-        ? `already exported by ${p.module} — re-export it from src/index.ts`
-        : `NOT exported by ${p.module} — export it there first, then from src/index.ts`;
+        ? `already exported by ${p.module} — re-export it from src/solid.ts`
+        : `NOT exported by ${p.module} — export it there first, then from src/solid.ts`;
       console.error(`    unreachable  : ${p.symbol}  (${fix})`);
     }
   }
   console.error('');
 } else {
   console.log(`✓ solid coverage: ${catalog.length}/${catalog.length} elements have a writable SolidJS equivalent.`);
+}
+
+if (notInSolid.length) {
+  failed = true;
+  console.error(`✗ ${notInSolid.length} export(s) reachable from "." are MISSING from ./solid:\n`);
+  for (const n of notInSolid) console.error(`    ${n}`);
+  console.error('\n  ./solid must be a superset of "." — Solid consumers are told to import only from it.\n');
+} else {
+  console.log(`✓ superset: all ${rootRuntimeExports.size} runtime exports of "." are reachable from ./solid.`);
 }
 
 if (propTypesMissing.length) {
