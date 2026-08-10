@@ -76,6 +76,8 @@ describe('SSR safety', () => {
     expect(typeof mod.applyToolOutput).toBe('function');
     expect(typeof mod.applyToolFailure).toBe('function');
     expect(typeof mod.bufferText).toBe('function');
+    expect(typeof mod.toOpenAIMessages).toBe('function');
+    expect(typeof mod.toAnthropicMessages).toBe('function');
     expect(mod.openaiChatFormat.id).toBe('openai.chat-completions');
     expect(mod.anthropicMessagesFormat.id).toBe('anthropic.messages');
     expect(typeof mod.WireError).toBe('function');

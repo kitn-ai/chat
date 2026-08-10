@@ -15,6 +15,14 @@ export type { StreamSource, ReadOptions } from './read';
 export { consumeModelStream, createToolCallAccumulator } from './consume';
 export { applyToolOutput, applyToolFailure, bufferText } from './sink-helpers';
 
+export { toOpenAIMessages, toAnthropicMessages, WireEncodeError } from './encode';
+export type {
+  AnthropicContentBlock,
+  AnthropicWireMessage,
+  OpenAIToolCall,
+  OpenAIWireMessage,
+} from './encode';
+
 export { openaiChatFormat } from './formats/openai';
 export { anthropicMessagesFormat } from './formats/anthropic';
 
