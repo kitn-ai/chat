@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import type { KaiPromptInputElementProps } from '@kitn.ai/ui/elements';
 import type { Theme } from '../types';
 import { useVoiceInput } from '../composables';
 
@@ -19,7 +20,10 @@ defineProps<{
   theme: Theme;
   loading: boolean;
   suggestions: string[];
-  triggers: unknown[];
+  // The kit owns this shape. Take it straight off the element's own prop type
+  // (`@kitn.ai/ui/elements`) instead of re-declaring it here, so a change to the
+  // trigger contract shows up as a build error rather than silent drift.
+  triggers: NonNullable<KaiPromptInputElementProps['triggers']>;
 }>();
 
 const emit = defineEmits<{
