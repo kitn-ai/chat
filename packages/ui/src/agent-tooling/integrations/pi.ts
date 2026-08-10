@@ -35,6 +35,9 @@ pi.on('close', () => { res.write('data: [DONE]\\n\\n'); res.end(); });`,
   streamMapping: "Pi runs as a local stdio process in RPC mode (pi --mode rpc --no-session). It emits newline-delimited JSON events on stdout. Map message_update events where assistantMessageEvent.type === 'text_delta' to data: {choices:[{delta:{content:part.delta}}]} SSE frames; send data: [DONE] on close. Split stdout on \\n (not readline, which breaks on Unicode separators U+2028/U+2029). Pi also emits thinking_delta and toolcall_* events; re-frame them onto delta.reasoning and delta.tool_calls in the same frames. readOpenAIStream from @kitn.ai/ui/wire parses it, including tool calls and reasoning.",
   runNote: "Pi must be installed locally and available on PATH as 'pi'. No API key is required by the bridge itself; Pi uses its own credentials. Pi runs with full user permissions, so sandbox it before exposing to a public endpoint. See the RPC reference: https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/rpc.md",
   docsSlug: 'integrations/harnesses',
+  // Nothing. Pi runs with its own credentials, model and tools; the bridge
+  // forwards a prompt, not a model id.
+  forwardsFromClient: [],
 };
 
 export default pi;

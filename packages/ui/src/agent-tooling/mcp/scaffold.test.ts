@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { scaffold } from './tools/scaffold';
-import { listIntegrations } from '../registry';
+import { getIntegration, listIntegrations } from '../registry';
 
 /**
  * scaffold composes a working chat surface from four axes:
@@ -1710,24 +1710,32 @@ describe('scaffolds import the wire adapter for real backends', () => {
     expect(code).toContain('parts:');
   });
 
-  it('emits the multi-round tool loop as a COMMENTED block for tool archetypes', async () => {
-    const out = await scaffold.handler({
-      framework: 'react',
-      useCase: 'agentic',
-      integration: 'openrouter',
-      placement: 'full-page',
-    });
-    const emitted = JSON.stringify(out);
-    expect(emitted).toContain('turn.toolCalls');
-    expect(emitted).toContain('applyToolOutput');
-    // Commented, not live: the kit never calls a consumer's function, and a live
-    // loop against tools that do not exist yet would fail on first run. `\\n` is
-    // the JSON-escaped newline in the stringified payload, so this anchors the
-    // `const turn =` form to the START of an emitted line.
-    expect(emitted).not.toMatch(/\\n\s*const turn = await readOpenAIStream/);
-    expect(emitted).toMatch(/\/\/\s+for \(const call of turn\.toolCalls\)/);
+  it('captures the turn LIVE and emits the multi-round tool loop COMMENTED', async () => {
+    const code = frontEnd(
+      await scaffold.handler({
+        framework: 'react',
+        useCase: 'agentic',
+        integration: 'openrouter',
+        placement: 'full-page',
+      }),
+    );
+    // The turn is bound live, and the commented loop reads THAT binding. The
+    // version this replaces opened the comment with its own
+    // `const turn = await readOpenAIStream(res, stream)`, which uncommented into a
+    // second read of an already-consumed Response: no throw, an empty ModelTurn,
+    // no tool calls, nothing to point at. Commented code still has to be correct,
+    // because being uncommented is the entire point of it.
+    expect(code).toContain('const turn = await readOpenAIStream(res, stream);');
+    expect(code.match(/readOpenAIStream\(res, stream\)/g)).toHaveLength(1);
+    // The in-band error channel is not silently dropped either.
+    expect(code).toContain('if (turn.error)');
+    // The LOOP itself stays commented: the kit never calls a consumer's function,
+    // and a live loop against tools that do not exist yet fails on the first run.
+    expect(code).toMatch(/\/\/\s+for \(const call of turn\.toolCalls\)/);
+    expect(code).not.toMatch(/^\s*for \(const call of turn\.toolCalls\)/m);
+    expect(code).not.toMatch(/^\s*applyToolOutput\(/m);
     // The scaffolder must never write a tool executor.
-    expect(emitted).not.toMatch(/\\n\s*async function runYourTool/);
+    expect(code).not.toMatch(/^\s*async function runYourTool/m);
   });
 
   // Regression guard for a defect this suite shipped once: applyToolOutput was
@@ -1798,6 +1806,165 @@ describe('scaffolds import the wire adapter for real backends', () => {
         expect(code, `${label}: stale updateTool`).not.toContain('updateTool');
         expect(code, `${label}: stale appendContent`).not.toContain('appendContent');
       }
+    }
+  });
+});
+
+// ── the request body, and what happens when the request fails ────────────────
+
+describe('real-backend scaffolds send what the panel needs and survive a failure', () => {
+  // A kai-tool archetype with no `tools` array in the request is a panel no code
+  // path can populate: the model never emits a tool call, so the element renders
+  // nothing, forever, with nothing to debug.
+  it.each(REAL_FRAMEWORKS)('%s tool archetype declares tool schemas and sends them', async (framework) => {
+    const code = frontEnd(
+      await scaffold.handler({
+        framework,
+        useCase: 'agentic',
+        integration: 'openrouter',
+        placement: 'full-page',
+      }),
+    );
+    expect(code, `${framework}: no tools declaration`).toMatch(/^\s*const tools = \[$/m);
+    expect(code, `${framework}: tools missing from the POST body`).toContain(
+      'toOpenAIMessages(history), tools }',
+    );
+  });
+
+  // The other half of the contract: a tools array the ROUTE drops is no better
+  // than no tools array at all. Asserted for every integration that declares it
+  // forwards the field, so the two halves can never drift apart.
+  it.each(listIntegrations().filter((i) => i.forwardsFromClient.includes('tools')).map((i) => i.id))(
+    '%s route destructures tools and forwards it upstream',
+    async (integration) => {
+      const out = await scaffold.handler({
+        framework: 'next',
+        useCase: 'agentic',
+        integration,
+        placement: 'full-page',
+      });
+      const route = (out.content as { type: string; text: string }[])[0].text.split(
+        '=== (2) BACKEND ROUTE ===',
+      )[1];
+      expect(route, `${integration}: route never reads tools`).toMatch(
+        /const \{[^}]*\btools\b[^}]*\} = await req\.json\(\);/,
+      );
+      expect(route, `${integration}: route never sends tools`).toMatch(
+        /JSON\.stringify\(\{[^}]*\btools\b[^}]*\}\)/,
+      );
+    },
+  );
+
+  it('a non-tool archetype declares no tools and sends none', async () => {
+    const code = frontEnd(
+      await scaffold.handler({
+        framework: 'react',
+        useCase: 'drop-in-chat',
+        integration: 'openrouter',
+        placement: 'full-page',
+      }),
+    );
+    expect(code).not.toContain('const tools = [');
+    expect(code).toContain('toOpenAIMessages(history) }');
+  });
+
+  // A field the route does not read must never be declared in the front end. The
+  // detection this replaced was `routeSrc.includes('model')`, true of any template
+  // that so much as writes `model: 'llama3.2'`, so ollama, langgraph,
+  // vercel-ai-sdk and cloudflare all shipped an editable model const their route
+  // threw away, cloudflare's not even a valid Workers AI id.
+  it.each(listIntegrations().filter((i) => i.id !== 'mock').map((i) => i.id))(
+    '%s declares only the request fields its route actually forwards',
+    async (integration) => {
+      const forwards = getIntegration(integration)!.forwardsFromClient;
+      const code = frontEnd(
+        await scaffold.handler({
+          framework: 'react',
+          useCase: 'agentic',
+          integration,
+          placement: 'full-page',
+        }),
+      );
+      const hasModel = /^\s*const model = /m.test(code);
+      const hasTools = code.includes('const tools = [');
+      expect(hasModel, `${integration}: model const vs forwardsFromClient`).toBe(
+        forwards.includes('model'),
+      );
+      expect(hasTools, `${integration}: tools const vs forwardsFromClient`).toBe(
+        forwards.includes('tools'),
+      );
+      // And what is declared is what is sent, in both directions.
+      expect(code.includes('{ model, messages:'), `${integration}: model in body`).toBe(
+        forwards.includes('model'),
+      );
+      expect(code.includes('toOpenAIMessages(history), tools }'), `${integration}: tools in body`).toBe(
+        forwards.includes('tools'),
+      );
+    },
+  );
+
+  // Without a catch, a bad key is a permanently blank assistant bubble plus an
+  // unhandled promise rejection, and any tool panel mid-flight spins forever.
+  it.each(REAL_FRAMEWORKS)('%s catches the failure and aborts the stream', async (framework) => {
+    const code = frontEnd(
+      await scaffold.handler({
+        framework,
+        useCase: 'agentic',
+        integration: 'openrouter',
+        placement: 'full-page',
+      }),
+    );
+    expect(code, `${framework}: no catch`).toMatch(/^\s*\} catch \(err\) \{$/m);
+    expect(code, `${framework}: never aborts`).toContain(
+      "stream.abort(err instanceof Error ? err.message : 'Request failed');",
+    );
+    // abort() lives INSIDE the catch, ahead of the finally: done() on its own
+    // settles the message but leaves an in-flight tool panel on input-available.
+    const catchAt = code.indexOf('} catch (err) {');
+    const finallyAt = code.indexOf('} finally {', catchAt);
+    const abortAt = code.indexOf('stream.abort(');
+    expect(abortAt, `${framework}: abort outside the catch`).toBeGreaterThan(catchAt);
+    expect(abortAt, `${framework}: abort after the finally`).toBeLessThan(finallyAt);
+  });
+
+  it('mock scaffolds stay catch-free: there is no request to fail', async () => {
+    const code = frontEnd(
+      await scaffold.handler({
+        framework: 'react',
+        useCase: 'agentic',
+        integration: 'mock',
+        placement: 'full-page',
+      }),
+    );
+    expect(code).not.toContain('stream.abort(');
+  });
+});
+
+// ── the backend block is a BACKEND route ─────────────────────────────────────
+
+describe('framework: html gets a server route, never a second front end', () => {
+  // routeTemplates keyed by 'html' can only hold a browser snippet, and block (1)
+  // already emits the browser side. ollama shipped one, so `framework: 'html'`
+  // printed a SECOND <kai-chat id="chat"> with its own kai-submit listener under
+  // the BACKEND ROUTE heading: a duplicate element id and two fetches per submit.
+  it.each(listIntegrations().map((i) => i.id))('%s emits exactly one kai-chat element', async (integration) => {
+    const out = await scaffold.handler({
+      framework: 'html',
+      useCase: 'drop-in-chat',
+      integration,
+      placement: 'full-page',
+    });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+    expect(text.match(/<kai-chat id="chat"/g) ?? [], `${integration}: duplicate kai-chat`).toHaveLength(1);
+    expect(
+      text.match(/addEventListener\('kai-submit'/g) ?? [],
+      `${integration}: competing kai-submit listeners`,
+    ).toHaveLength(1);
+  });
+
+  it('no integration ships an html routeTemplate', () => {
+    for (const integration of listIntegrations()) {
+      expect(Object.keys(integration.routeTemplates), `${integration.id}`).not.toContain('html');
     }
   });
 });

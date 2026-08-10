@@ -52,9 +52,12 @@ export async function POST(req: Request) {
   return new Response(body, { headers: { 'Content-Type': 'text/event-stream' } });
 }`,
   },
-  streamMapping: "Use graph.stream(input, { streamMode: 'messages' }) to get [messageChunk, metadata] tuples. Extract chunk.content (string) and forward as OpenAI-format SSE frames: data: {choices:[{delta:{content}}]}. Close with data: [DONE]. readOpenAIStream from @kitn.ai/ui/wire parses it, including tool calls and reasoning.",
+  streamMapping: "Use graph.stream(input, { streamMode: 'messages' }) to get [messageChunk, metadata] tuples. Extract chunk.content (string) and forward as OpenAI-format SSE frames: data: {choices:[{delta:{content}}]}. Close with data: [DONE]. readOpenAIStream from @kitn.ai/ui/wire parses tool calls and reasoning too, but the route template forwards chunk.content only, which is text: the same message chunks carry the tool-call fragments on chunk.tool_call_chunks, so re-frame those onto delta.tool_calls to fill kai-tool.",
   runNote: 'Set OPENAI_API_KEY (or the key for your chosen model provider). Install @langchain/langgraph, @langchain/openai, @langchain/core.',
   docsSlug: 'integrations/langgraph',
+  // Nothing. The agent owns both: ChatOpenAI({ model: 'gpt-4o' }) and the tools
+  // array passed to createReactAgent are server-side.
+  forwardsFromClient: [],
 };
 
 export default langgraph;

@@ -29,6 +29,8 @@ const mock: Integration = {
   runNote:
     'No backend or API key needed: replies stream locally for preview. Run the front-end as-is; swap `integration` for a real provider (e.g. openrouter, ollama) when ready.',
   docsSlug: 'integrations/mock',
+  // Nothing: there is no request at all, the reply is streamed client-side.
+  forwardsFromClient: [],
 };
 
 export default mock;

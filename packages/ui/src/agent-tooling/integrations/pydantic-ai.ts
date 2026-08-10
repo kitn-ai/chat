@@ -43,10 +43,13 @@ async def chat(req: ChatRequest):
     return StreamingResponse(openai_sse(req.messages), media_type='text/event-stream')`,
   },
   streamMapping:
-    "Pydantic AI's agent.run_stream() yields text deltas via result.stream_text(delta=True). Each delta is re-framed as a data: {choices:[{delta:{content}}]} SSE line and the stream closes with data: [DONE]. readOpenAIStream from @kitn.ai/ui/wire parses it, including tool calls and reasoning.",
+    "Pydantic AI's agent.run_stream() yields text deltas via result.stream_text(delta=True). Each delta is re-framed as a data: {choices:[{delta:{content}}]} SSE line and the stream closes with data: [DONE]. readOpenAIStream from @kitn.ai/ui/wire parses tool calls and reasoning too, but stream_text() yields text only: iterate the run's events instead and re-frame its tool-call events onto delta.tool_calls to fill kai-tool.",
   runNote:
     'Install: pip install pydantic-ai fastapi uvicorn. Set OPENAI_API_KEY. Run: uvicorn main:app --reload (default port 8000). Point kai-chat at http://localhost:8000/api/chat.',
   docsSlug: 'integrations/pydantic-ai',
+  // Nothing. Agent('openai:gpt-4o') pins the model and the agent registers its
+  // own tools, both server-side.
+  forwardsFromClient: [],
 };
 
 export default pydanticAi;

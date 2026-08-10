@@ -269,8 +269,20 @@ function realStreamBody(opts: {
     `${pad}    headers: { 'Content-Type': 'application/json' },`,
     `${pad}    body: JSON.stringify(${bodyPayload}),`,
     `${pad}  });`,
-    `${pad}  await readOpenAIStream(res, stream);`,
+    `${pad}  // The finished turn: text, reasoning, tool calls, stop reason, usage. An`,
+    `${pad}  // error FRAME inside a 200 stream lands on turn.error, and whatever`,
+    `${pad}  // streamed before it is already on the message. A non-ok RESPONSE throws`,
+    `${pad}  // instead, which is the catch below.`,
+    `${pad}  const turn = await readOpenAIStream(res, stream);`,
+    `${pad}  if (turn.error) console.error('Model error:', turn.error.message);`,
     ...(toolLoop ? toolLoopComment(`${pad}  `) : []),
+    `${pad}} catch (err) {`,
+    `${pad}  // Without this a bad key is a permanently blank assistant bubble plus an`,
+    `${pad}  // unhandled rejection. abort() settles the message and flips any tool`,
+    `${pad}  // panel still waiting on a result to output-error, so nothing spins`,
+    `${pad}  // forever; text that already streamed stays put.`,
+    `${pad}  stream.abort(err instanceof Error ? err.message : 'Request failed');`,
+    `${pad}  console.error(err);  // swap in your own error surface (a toast, a banner)`,
     `${pad}} finally {`,
     `${pad}  stream.done();`,
     `${pad}  ${setLoading('false')}`,
@@ -284,24 +296,35 @@ function realStreamBody(opts: {
  * The kit never calls a consumer's function, and a live loop against tools that
  * do not exist yet would fail on the first run. Commented is the honest default:
  * the shape is there to uncomment, and nothing pretends to work that does not.
+ *
+ * It is emitted directly under the LIVE `const turn = await readOpenAIStream(...)`
+ * and reads that binding. It used to open with a second
+ * `const turn = await readOpenAIStream(res, stream)`, which uncommented to a
+ * re-read of an already-consumed Response: no throw, an empty ModelTurn, no tool
+ * calls, and nothing to point at. Commented code still has to be correct, because
+ * the whole point of it is that someone uncomments it.
  */
 function toolLoopComment(pad: string): string[] {
   return [
     ``,
-    `${pad}// Multi-round tool loop. readOpenAIStream RETURNS the turn, so:`,
+    `${pad}// Multi-round tool loop. 'turn' above already holds this round's calls, so`,
+    `${pad}// this block uncomments as-is. Do NOT read 'res' again: its body is spent,`,
+    `${pad}// and a second readOpenAIStream(res, ...) resolves an EMPTY turn silently.`,
     `${pad}//`,
     `${pad}//   // add to the imports at the top of the file:`,
     `${pad}//   import { applyToolOutput } from '@kitn.ai/ui/wire';`,
     `${pad}//`,
-    `${pad}//   const turn = await readOpenAIStream(res, stream);`,
     `${pad}//   for (const call of turn.toolCalls) {`,
     `${pad}//     if (call.error || call.providerExecuted) continue;`,
     `${pad}//     const output = await runYourTool(call.name, call.input ?? {});`,
     `${pad}//     applyToolOutput(stream, call.id, output);`,
     `${pad}//   }`,
-    `${pad}//   // then POST again with toOpenAIMessages(latestMessages) to let the`,
-    `${pad}//   // model answer with the results. Cap the rounds: a runaway model is`,
-    `${pad}//   // a runaway bill.`,
+    `${pad}//   // Then POST again from INSIDE this try, with toOpenAIMessages() over the`,
+    `${pad}//   // updated thread, and read the answer into this same stream. It has to`,
+    `${pad}//   // finish before the finally: stream.done() settles the message and every`,
+    `${pad}//   // sink call after it is dropped, so an applyToolOutput that runs later`,
+    `${pad}//   // leaves the panel on input-available forever. Cap the rounds: a runaway`,
+    `${pad}//   // model is a runaway bill.`,
   ];
 }
 
@@ -333,11 +356,16 @@ function wireImportLines(opts: { pad?: string; typed: boolean }): string[] {
 }
 
 /** The POST body for a real backend. `toOpenAIMessages` keeps tool calls and
- *  tool results on the way back, which is what makes a second round possible. */
-function realBodyPayload(defaultModel?: string): string {
-  return defaultModel
-    ? `{ model, messages: toOpenAIMessages(history) }`
-    : `{ messages: toOpenAIMessages(history) }`;
+ *  tool results on the way back, which is what makes a second round possible;
+ *  `tools` is what makes a FIRST tool call possible at all. Each field appears
+ *  only when the emitted code declares the const it names. */
+function realBodyPayload(opts: { defaultModel?: string; tools: boolean }): string {
+  const fields = [
+    ...(opts.defaultModel ? ['model'] : []),
+    'messages: toOpenAIMessages(history)',
+    ...(opts.tools ? ['tools'] : []),
+  ];
+  return `{ ${fields.join(', ')} }`;
 }
 
 /**
@@ -357,23 +385,70 @@ function chatMessageDecl(isMock: boolean, pad = ''): string[] {
 
 // ── SCAF-8: per-integration default model ids ─────────────────────────────────
 
+/** Default model id per integration that forwards one. Anything else falls back
+ *  to a generic OpenAI-compatible id, which is safe: a route that forwards the
+ *  client's model is by definition pointed at an OpenAI-compatible endpoint. */
+const CLIENT_MODEL_IDS: Record<string, string> = {
+  openrouter: 'openai/gpt-4o-mini',
+};
+
 /**
- * Return a sensible default model id for integrations whose route forwards a
- * `model` field to the upstream provider.  The dev can change this const.
- * Returns undefined for integrations whose route does not use a model param.
+ * The default model id for an integration whose ROUTE reads the client's `model`
+ * field, and undefined for every other one.
+ *
+ * This used to be a substring test (`routeSrc.includes('model')`), which is true
+ * of any template that so much as writes `model: 'llama3.2'`. That emitted an
+ * editable `const model` into ollama, langgraph, vercel-ai-sdk and cloudflare
+ * scaffolds whose routes pin their own model and never read the field, so
+ * changing it did nothing, and cloudflare's default was not even a valid Workers
+ * AI id. `forwardsFromClient` states the fact instead of guessing at it.
  */
 function defaultModelFor(integration: Integration): string | undefined {
-  // Detect: any route template destructures `model` from the request body.
-  const routeSrc = Object.values(integration.routeTemplates).join('\n');
-  if (!routeSrc.includes('model')) return undefined;
+  if (!integration.forwardsFromClient.includes('model')) return undefined;
+  return CLIENT_MODEL_IDS[integration.id] ?? 'openai/gpt-4o-mini';
+}
 
-  const defaults: Record<string, string> = {
-    openrouter: 'openai/gpt-4o-mini',
-    ollama: 'llama3.2',
-    'vercel-ai-sdk': 'openai/gpt-4o-mini',
-    cloudflare: 'openai/gpt-4o-mini',
-  };
-  return defaults[integration.id] ?? 'openai/gpt-4o-mini';
+/**
+ * True when the scaffold should declare tool schemas and put them in the body.
+ *
+ * Both halves matter. A tool panel with no tools array in the request is a panel
+ * no code path can populate: the model never emits a tool call, so kai-tool
+ * renders nothing forever. And a tools array the route drops on the floor is the
+ * same dead-const defect as the model one: langgraph builds its tools into the
+ * agent, Mastra and Pi into the harness, and none of them read the field.
+ */
+function emitsToolSchemas(archetype: Archetype, integration: Integration): boolean {
+  return hasToolPanel(archetype) && integration.forwardsFromClient.includes('tools');
+}
+
+/**
+ * The tool schemas, emitted beside the model const. OpenAI function-calling
+ * form, which is what every passthrough route forwards.
+ *
+ * `search` on purpose: it is the tool `SAMPLE_AGENTIC_MESSAGE` already shows in
+ * the seeded thread, so the sample panel and the live one describe one tool.
+ */
+function toolSchemaLines(pad: string): string[] {
+  return [
+    `${pad}// The tools the model may call. The request body carries this array; without`,
+    `${pad}// it the model never emits a tool call and the kai-tool panel stays empty,`,
+    `${pad}// which is the whole reason it is here. Replace with your own. The kit never`,
+    `${pad}// RUNS a tool: see the loop in onSubmit for who does.`,
+    `${pad}const tools = [`,
+    `${pad}  {`,
+    `${pad}    type: 'function',`,
+    `${pad}    function: {`,
+    `${pad}      name: 'search',`,
+    `${pad}      description: 'Search the web for up-to-date information.',`,
+    `${pad}      parameters: {`,
+    `${pad}        type: 'object',`,
+    `${pad}        properties: { query: { type: 'string', description: 'What to search for.' } },`,
+    `${pad}        required: ['query'],`,
+    `${pad}      },`,
+    `${pad}    },`,
+    `${pad}  },`,
+    `${pad}];`,
+  ];
 }
 
 // ── SCAF-9: message-embedded companion logic ──────────────────────────────────
@@ -433,6 +508,9 @@ interface RenderCtx {
   isMock: boolean;
   /** SCAF-8: non-undefined when the integration forwards a model param */
   defaultModel?: string;
+  /** the archetype renders kai-tool AND the route forwards a tools array, so the
+   *  scaffold declares the schemas that make a tool call possible */
+  emitTools: boolean;
 }
 
 /** The kai-* tags for the archetype, in order, as opening/closing markup.
@@ -534,6 +612,9 @@ function htmlWiring(ctx: RenderCtx, archetype: Archetype): string {
       ]
     : [];
 
+  // Same scope, same reason: onSubmit puts `tools` in the request body.
+  const toolsLines = ctx.emitTools ? [...toolSchemaLines('      '), ``] : [];
+
   const head = [
     `  <script type="module">`,
     `    import '@kitn.ai/ui/elements';  // registers <kai-*> — required, must come first`,
@@ -553,6 +634,7 @@ function htmlWiring(ctx: RenderCtx, archetype: Archetype): string {
     `      chat.suggestionMode = 'submit';`,
     ``,
     ...modelLines,
+    ...toolsLines,
     ...seedLines.map((l) => (l.trim() === '' ? l : `  ${l}`)),
     ...sourcesSetupLines.map((l) => (l.trim() === '' ? l : `  ${l}`)),
   ];
@@ -597,7 +679,7 @@ function htmlWiring(ctx: RenderCtx, archetype: Archetype): string {
       commitSet: (expr) => `chat.messages = ${expr};`,
       setterAdapter: '(fn) => { chat.messages = fn(chat.messages); }',
       setLoading: (v) => `chat.loading = ${v};`,
-      bodyPayload: realBodyPayload(ctx.defaultModel),
+      bodyPayload: realBodyPayload({ defaultModel: ctx.defaultModel, tools: ctx.emitTools }),
       strictRoles: false,
       toolLoop: hasToolPanel(archetype),
     }),
@@ -667,7 +749,7 @@ function toPascalCase(tag: string): string {
 
 /** JSX usage for react/next: uses the official @kitn.ai/ui/react wrappers. */
 function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): string {
-  const { p, emptyHint, suggestions, isMock, defaultModel } = ctx;
+  const { p, emptyHint, suggestions, isMock, defaultModel, emitTools } = ctx;
 
   const hasEmbedded = archetype.components.some((t) => MESSAGE_EMBEDDED_TAGS.has(t));
   const workspace = isWorkspace(archetype);
@@ -738,6 +820,8 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
     ? `  // SCAF-8: change this to any provider/model string you want to use.\n  const model = '${defaultModel}';`
     : '';
 
+  const toolsInit = emitTools ? toolSchemaLines('  ').join('\n') : '';
+
   // onSubmit body: mock streams a canned reply client-side; otherwise fetch /api/chat.
   const onSubmitBody = isMock
     ? mockStreamBody({
@@ -756,7 +840,7 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
         // useState's setter IS a SetMessages: both are (updater) => void.
         setterAdapter: 'setMessages',
         setLoading: (v) => `setLoading(${v});`,
-        bodyPayload: realBodyPayload(defaultModel),
+        bodyPayload: realBodyPayload({ defaultModel, tools: emitTools }),
         strictRoles: true,
         toolLoop: hasToolPanel(archetype),
       });
@@ -806,6 +890,7 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
       `  const suggestions = ${jsArray(suggestions)};`,
       ...(sampleSourcesInit ? [sampleSourcesInit] : []),
       ...(modelInit ? [modelInit] : []),
+      ...(toolsInit ? [toolsInit] : []),
       ``,
       `  async function onSubmit(e: CustomEvent<{ value: string }>) {`,
       onSubmitBody,
@@ -878,6 +963,7 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
     `  const suggestions = ${jsArray(suggestions)};`,
     ...(sampleSourcesInit ? [sampleSourcesInit] : []),
     ...(modelInit ? [modelInit] : []),
+    ...(toolsInit ? [toolsInit] : []),
     ``,
     `  async function onSubmit(e: CustomEvent<{ value: string }>) {`,
     onSubmitBody,
@@ -927,7 +1013,7 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
 
 /** Vue: bind messages/suggestions as properties, listen for kai-submit with @. */
 function renderVue(archetype: Archetype, ctx: RenderCtx): string {
-  const { p, emptyHint, suggestions, isMock, defaultModel } = ctx;
+  const { p, emptyHint, suggestions, isMock, defaultModel, emitTools } = ctx;
 
   // SCAF-9: exclude message-embedded tags from companion rendering.
   // SCAF-14: also exclude workspace structural tags (handled by the workspace block below).
@@ -970,7 +1056,7 @@ function renderVue(archetype: Archetype, ctx: RenderCtx): string {
         commitSet: (expr) => `messages.value = ${expr};`,
         setterAdapter: '(fn) => { messages.value = fn(messages.value); }',
         setLoading: (v) => `loading.value = ${v};`,
-        bodyPayload: realBodyPayload(defaultModel),
+        bodyPayload: realBodyPayload({ defaultModel, tools: emitTools }),
         strictRoles: true,
         toolLoop: hasToolPanel(archetype),
       });
@@ -985,6 +1071,9 @@ function renderVue(archetype: Archetype, ctx: RenderCtx): string {
         `const model = '${defaultModel}';`,
       ]
     : [];
+
+  // Same scope, same reason: onSubmit puts `tools` in the request body.
+  const toolsLines = emitTools ? toolSchemaLines('') : [];
 
   // SCAF-9: sample seeding for agentic archetype.
   const sampleSeed = hasEmbedded
@@ -1067,6 +1156,7 @@ function renderVue(archetype: Archetype, ctx: RenderCtx): string {
     `const loading = ref(false);`,
     `const suggestions = ${jsArray(suggestions)};`,
     ...modelInit,
+    ...toolsLines,
     ...sourcesSeed,
     ``,
     `// SCAF-15: kai-* register via an async dynamic import (SSR-safety). The .prop`,
@@ -1095,7 +1185,7 @@ function renderVue(archetype: Archetype, ctx: RenderCtx): string {
 
 /** Svelte: use bind:this to set array/object properties reactively; on:kai-submit for the event. */
 function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
-  const { p, emptyHint, suggestions, isMock, defaultModel } = ctx;
+  const { p, emptyHint, suggestions, isMock, defaultModel, emitTools } = ctx;
 
   // SCAF-9: exclude message-embedded tags from companion rendering.
   // SCAF-14: also exclude workspace structural tags (handled by the workspace block below).
@@ -1139,7 +1229,7 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
         commitSet: (expr) => `messages = ${expr};`,
         setterAdapter: '(fn) => { messages = fn(messages); }',
         setLoading: (v) => `loading = ${v};`,
-        bodyPayload: realBodyPayload(defaultModel),
+        bodyPayload: realBodyPayload({ defaultModel, tools: emitTools }),
         strictRoles: true,
         toolLoop: hasToolPanel(archetype),
       });
@@ -1154,6 +1244,9 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
         `  const model = '${defaultModel}';`,
       ]
     : [];
+
+  // Same scope, same reason: onSubmit puts `tools` in the request body.
+  const toolsLines = emitTools ? toolSchemaLines('  ') : [];
 
   // SCAF-9: seed sample messages for agentic archetype.
   const sampleMessagesInit = hasEmbedded
@@ -1225,6 +1318,7 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
     `  let loading: boolean = false;`,
     `  const suggestions: string[] = ${jsArray(suggestions)};`,
     ...modelInit,
+    ...toolsLines,
     `  // suggestions/messages are JS PROPERTIES (arrays/objects can't be attributes)`,
     `  $: if (chatEl && defined) { chatEl.messages = messages; chatEl.loading = loading; chatEl.suggestions = suggestions; }`,
     ...sourcesReactive,
@@ -1266,7 +1360,7 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
  * or an external endpoint.
  */
 function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
-  const { p, emptyHint, suggestions, isMock, defaultModel } = ctx;
+  const { p, emptyHint, suggestions, isMock, defaultModel, emitTools } = ctx;
 
   // TanStack Start is React — reuse all the React composition logic:
   // same ChatMessage type, same state/loading/suggestions, same mock stream body,
@@ -1337,6 +1431,8 @@ function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
     ? `  // SCAF-8: change this to any provider/model string you want to use.\n  const model = '${defaultModel}';`
     : '';
 
+  const toolsInit = emitTools ? toolSchemaLines('  ').join('\n') : '';
+
   const onSubmitBody = isMock
     ? mockStreamBody({
         pad: '    ',
@@ -1353,7 +1449,7 @@ function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
         // useState's setter IS a SetMessages: both are (updater) => void.
         setterAdapter: 'setMessages',
         setLoading: (v) => `setLoading(${v});`,
-        bodyPayload: realBodyPayload(defaultModel),
+        bodyPayload: realBodyPayload({ defaultModel, tools: emitTools }),
         strictRoles: true,
         toolLoop: hasToolPanel(archetype),
       });
@@ -1397,6 +1493,7 @@ function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
     `  const suggestions = ${jsArray(suggestions)};`,
     ...(sampleSourcesInit ? [sampleSourcesInit] : []),
     ...(modelInit ? [modelInit] : []),
+    ...(toolsInit ? [toolsInit] : []),
     ``,
     `  async function onSubmit(e: CustomEvent<{ value: string }>) {`,
     onSubmitBody,
@@ -1465,9 +1562,17 @@ function renderFrontend(
   emptyHint: string,
   suggestions: string[],
   isMock: boolean,
-  defaultModel?: string,
+  defaultModel: string | undefined,
+  emitTools: boolean,
 ): string {
-  const ctx: RenderCtx = { p: placementStyle(placement), emptyHint, suggestions, isMock, defaultModel };
+  const ctx: RenderCtx = {
+    p: placementStyle(placement),
+    emptyHint,
+    suggestions,
+    isMock,
+    defaultModel,
+    emitTools,
+  };
   switch (framework) {
     case 'react':
     case 'next':
@@ -1516,8 +1621,13 @@ function preferredKeyFor(integration: Integration): string[] {
 function chooseRoute(integration: Integration, framework: string): RouteChoice | undefined {
   const templates = integration.routeTemplates;
 
-  // 1. exact match
-  if (templates[framework]) {
+  // 1. exact match. Never for 'html': that key can only hold a browser snippet,
+  //    and block (1) already emits the whole browser side. Selecting one here
+  //    printed a SECOND <kai-chat id="chat"> under a "BACKEND ROUTE" heading,
+  //    with its own kai-submit listener, so pasting both blocks gave a duplicate
+  //    element id and two fetches per submit. Step 3 below has always skipped
+  //    'html' for the same reason; step 1 did not.
+  if (framework !== 'html' && templates[framework]) {
     return { framework, template: templates[framework], runtime: RUNTIME_LABEL[framework] ?? framework, exact: true };
   }
 
@@ -1554,7 +1664,17 @@ function compose(
   const isMock = integration.id === 'mock';
   // SCAF-8: compute the default model only for non-mock integrations that forward model.
   const defaultModel = isMock ? undefined : defaultModelFor(integration);
-  const frontend = renderFrontend(framework, archetype, placement, audienceHint, suggestions, isMock, defaultModel);
+  const emitTools = !isMock && emitsToolSchemas(archetype, integration);
+  const frontend = renderFrontend(
+    framework,
+    archetype,
+    placement,
+    audienceHint,
+    suggestions,
+    isMock,
+    defaultModel,
+    emitTools,
+  );
   const route = isMock ? undefined : chooseRoute(integration, framework);
 
   const header = [

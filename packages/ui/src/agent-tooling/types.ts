@@ -17,6 +17,23 @@ export const IntegrationSchema = z.object({
   streamMapping: z.string(),                        // prose: how the stream maps to messages
   runNote: z.string(),
   docsSlug: z.string(),
+  /**
+   * The request-body fields this integration's ROUTE reads off the client and
+   * forwards upstream. Anything not listed is owned by the route or by the agent
+   * behind it.
+   *
+   * The scaffolder emits an editable const for a field only when it appears
+   * here, and that is the whole point: `model` used to be emitted whenever a
+   * route template contained the substring 'model', which is true of any
+   * template that so much as writes `model: 'llama3.2'`, so four integrations
+   * shipped an editable const their route threw away. The mirror-image bug is a
+   * `tools` array that never gets sent, which leaves kai-tool a panel no code
+   * path can populate.
+   *
+   * Empty by default, so a new integration emits nothing until its route really
+   * does forward the field.
+   */
+  forwardsFromClient: z.array(z.enum(['model', 'tools'])).default([]),
 });
 export type Integration = z.infer<typeof IntegrationSchema>;
 

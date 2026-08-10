@@ -29,8 +29,16 @@
 //
 // SCOPE
 // -----
-// The `html` target is deliberately excluded: SCAF-19 keeps it plain JS inside
-// an inline `<script>`, which is invisible to `tsc` by design.
+// 6 archetypes × 9 integrations × 5 TS frameworks = 270 compiled cells, at one
+// placement. `placement` is the fourth axis and is left at 'full-page' on
+// purpose: it only ever changes an inline CSS string, so the extra 3x compiles
+// the same types again.
+//
+// The `html` target cannot be compiled: SCAF-19 keeps it plain JS inside an
+// inline `<script>`, which is invisible to `tsc` by design. It gets a structural
+// pass instead (`htmlStructureCheck`) that parses the emitted script and counts
+// the chat elements and submit listeners in the whole scaffold, which is what
+// caught ollama emitting a second front end under the BACKEND ROUTE heading.
 //
 // `.vue` / `.svelte` are not TS files, so their `<script>` blocks are lifted
 // verbatim into `.ts`. Lifting separates the script from its template, which
@@ -41,7 +49,7 @@
 //
 // COST AND WHERE IT RUNS
 // ----------------------
-// ~1.5s wall clock for all 60 cases (esbuild bundle + one `tsc` pass with
+// ~2s wall clock for all 270 cases (esbuild bundle + one `tsc` pass with
 // skipLibCheck over symlinked node_modules). No network. That is cheap enough
 // for the REQUIRED CI job, and it runs there, in `.github/workflows/test.yml`
 // after the build (it reads the SHIPPED dist/*.d.ts). It is deliberately NOT in
@@ -84,8 +92,31 @@ const filterIdx = process.argv.indexOf('--filter');
 const FILTER = filterIdx > -1 ? process.argv[filterIdx + 1] : null;
 
 const ARCHETYPES = ['drop-in-chat', 'support-widget', 'knowledge-base', 'agentic', 'workspace', 'voice'];
-const INTEGRATIONS = ['openrouter', 'mock'];
-/** TS-visible frameworks only. `html` is plain JS by design (SCAF-19). */
+/**
+ * EVERY integration, not a representative pair.
+ *
+ * The integration axis is the one that changes emitted CODE: `requestBody`
+ * decides whether a `model` const and a `tools` array are declared and
+ * referenced, and each of those is an unused-local away from failing a stock
+ * `npm run build`. It was ['openrouter', 'mock'] and covered neither the
+ * declare-nothing path nor eight of the nine catalog entries.
+ *
+ * The other axis, `placement`, is deliberately left at one value: it only ever
+ * changes an inline CSS string, so the extra 3x buys no type coverage.
+ */
+const INTEGRATIONS = [
+  'openrouter',
+  'vercel-ai-sdk',
+  'langgraph',
+  'cloudflare',
+  'ollama',
+  'mastra',
+  'pi',
+  'pydantic-ai',
+  'mock',
+];
+/** TS-visible frameworks only. `html` is plain JS by design (SCAF-19), and is
+ *  covered structurally instead: see `htmlStructureCheck`. */
 const FRAMEWORKS = ['react', 'next', 'tanstack-start', 'vue', 'svelte'];
 const EXT = { react: 'tsx', next: 'tsx', 'tanstack-start': 'tsx', vue: 'ts', svelte: 'ts' };
 
@@ -262,6 +293,57 @@ function liftScript(block) {
   return `${body}\n${footer}`;
 }
 
+/**
+ * The `html` target, which tsc cannot see.
+ *
+ * SCAF-19 keeps it plain JS inside an inline `<script type="module">`, so there
+ * is no file for the matrix above to compile. Two things are still checkable
+ * cheaply, and one of them shipped broken: ollama carried a `routeTemplates.html`
+ * entry, so `framework: 'html'` printed a SECOND `<kai-chat id="chat">` with its
+ * own kai-submit listener under the BACKEND ROUTE heading. Pasting both blocks
+ * gave a duplicate element id and two fetches per submit, and nothing in this
+ * repo parsed or compiled that output.
+ *
+ *   1. the whole scaffold declares exactly one chat element and one submit
+ *      listener;
+ *   2. the emitted `<script>` body actually PARSES as an ES module.
+ */
+async function htmlStructureCheck(scaffold, esbuild) {
+  const failures = [];
+  let checked = 0;
+  for (const useCase of ARCHETYPES) {
+    for (const integration of INTEGRATIONS) {
+      const label = `${useCase}__${integration}__html`;
+      if (FILTER && !label.includes(FILTER)) continue;
+      checked++;
+      const out = await scaffold.handler({ useCase, integration, placement: 'full-page', framework: 'html' });
+      const text = out.content[0].text;
+
+      const chats = (text.match(/<kai-chat id="chat"/g) ?? []).length;
+      if (chats !== 1) failures.push(`${label}: ${chats} <kai-chat id="chat"> elements, expected 1`);
+      const submits = (text.match(/addEventListener\('kai-submit'/g) ?? []).length;
+      if (submits !== 1) failures.push(`${label}: ${submits} kai-submit listeners, expected 1`);
+
+      const script = text.match(/<script type="module">\n([\s\S]*?)\n\s*<\/script>/);
+      if (!script) {
+        failures.push(`${label}: no <script type="module"> block`);
+        continue;
+      }
+      try {
+        await esbuild.transform(script[1], { loader: 'js', format: 'esm' });
+      } catch (e) {
+        failures.push(`${label}: the emitted script does not parse: ${e.message.split('\n')[0]}`);
+      }
+    }
+  }
+  if (failures.length) {
+    for (const f of failures) console.log(`  ✗ ${f}`);
+    cleanup();
+    fail(`${failures.length} html scaffold problem(s).`);
+  }
+  console.log(`  ✓ ${checked} html scaffolds: one chat element, one submit listener, script parses`);
+}
+
 async function main() {
   console.log('  · bundling the scaffolder with esbuild');
   const bundle = join(tmp, 'scaffold.bundle.mjs');
@@ -279,6 +361,7 @@ async function main() {
   const { scaffold } = await import(pathToFileURL(bundle).href);
 
   selfTest();
+  await htmlStructureCheck(scaffold, esbuild);
 
   const cases = [];
   for (const useCase of ARCHETYPES)

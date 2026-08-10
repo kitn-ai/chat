@@ -84,6 +84,11 @@ export default {
     "Workers AI via the OpenAI-compatible HTTP endpoint returns OpenAI-format SSE. Pipe upstream.body straight to the browser; readOpenAIStream from @kitn.ai/ui/wire parses it, including tool calls and reasoning. The native env.AI binding streams Cloudflare's own format (data: {\"response\":\"...token...\"}); the worker route template re-frames these chunks to OpenAI-format SSE via a TransformStream before returning.",
   runNote: 'Set CF_ACCOUNT_ID and CF_API_TOKEN. Model ids are prefixed with @cf/, e.g. @cf/meta/llama-3.1-8b-instruct. For the AI binding (worker key), add an [ai] block with binding = "AI" in wrangler.toml.',
   docsSlug: 'integrations/cloudflare-ai',
+  // Nothing. Both routes pin '@cf/meta/llama-3.1-8b-instruct' (the generic
+  // 'openai/gpt-4o-mini' a scaffold used to default to is not even a valid
+  // Workers AI id), and the worker route's re-framing reader forwards only the
+  // text `response` field, so a tool call could not reach the browser anyway.
+  forwardsFromClient: [],
 };
 
 export default cloudflare;
