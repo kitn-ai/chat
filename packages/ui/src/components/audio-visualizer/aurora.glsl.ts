@@ -34,6 +34,36 @@
  * other number and formula but replaces the final write with true
  * premultiplied output, `fragColor = vec4(rgb * alpha, alpha)`.
  *
+ * PARITY RE-TUNE (campaign task #6). A pixel-level behavioral audit
+ * (examples/internal/livekit-parity scripts/aurora-audit.mjs) measured the
+ * rendered output against the reference and this file was re-tuned to the
+ * MEASURED targets -- numbers from screenshots and Rob's reference
+ * recording, never from restricted source. Four departures from the
+ * original fact-sheet pipeline, all clean-room rendering choices:
+ *   1. Wind direction + solid-body rotation: the octave phase runs on
+ *      NEGATIVE tau (the audit measured our lobes drifting counter-
+ *      clockwise where the reference turns clockwise, ~+13..+20 deg/s when
+ *      speaking), plus a per-state `uRotation` trim of the coordinate
+ *      frame so each state's measured rotation lands on its reference
+ *      value (see `auroraTargets` in variant-aurora.tsx).
+ *   2. Dark tonemap is chroma-preserving with a steeper knee (11x/(1+11x)
+ *      on the max channel, rescaled) plus an HSV shape-up: hue +0.013
+ *      turns, saturation scaled by (1.02 + 0.35 * value) capped at 0.98.
+ *      Rendered targets: hue ~197.5deg, saturation ~0.95 rising with
+ *      brightness, never white (the audit measured the original
+ *      per-channel 4x/(1+4x) map desaturating to ~0.72 and dragging hue
+ *      toward green).
+ *   3. Brightness is applied through strongly compressive curves
+ *      ((b/1.5)^0.07 on colour, 0.97*(b/1.5)^0.09 on alpha, with a
+ *      smoothstep alpha knee): the thinking/connecting pulse DRIVES
+ *      0.5..2.5 but must RENDER inside roughly 0.5..0.65 mean brightness
+ *      (the reference holds 0.53..0.65 where the linear map swung
+ *      0.16..0.83 and blinked the ring out entirely at pulse minima).
+ *   4. Edge falloff tightened (exp(2.3*spacing), was exp(2*spacing)) and
+ *      made asymmetric: the OUTER side of the ring renders at 0.66x the
+ *      inner width -- the reference's outer edge is consistently sharper
+ *      than its inner one at every volume.
+ *
  * Uniforms are declared by ShaderCanvas. Do not declare them here.
  *
  * Uniform contract (see the module doc in the Task 14 report for the full
@@ -64,6 +94,12 @@
  *                         genuine branch in the math, not just a
  *                         compositing background -- set it from the kit's
  *                         active theme, not a fixed constant.
+ *   uRotation    float -- solid-body rotation rate of the whole figure,
+ *                         rad/s, positive = CLOCKWISE on screen. A
+ *                         parity-calibrated per-state trim on top of the
+ *                         wind's own drift (see the module doc above and
+ *                         `auroraTargets`); the caller pins it to 0 under
+ *                         reduced motion, like uSpeed.
  */
 export default `
 const float PI = 3.14159265359;
@@ -143,7 +179,22 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
   vec2 uv = fragCoord / iResolution.xy;
   vec2 p = uv - 0.5;
 
-  float tau = iTime * uSpeed;
+  // Solid-body rotation of the sampling frame (module doc, departure 1).
+  // gl_FragCoord's y-up frame is mirrored against the screen's y-down one,
+  // so the sign here is what makes positive uRotation read CLOCKWISE on
+  // screen -- verified empirically against the audit's estimator (which
+  // measures +10 for uRotation = +10 deg/s with the wind frozen).
+  float rotA = -uRotation * iTime;
+  float rc = cos(rotA);
+  float rs = sin(rotA);
+  p = mat2(rc, -rs, rs, rc) * p;
+
+  // Negative tau: time-reversing the octave phases flips the wind's
+  // emergent angular drift from counter-clockwise (measured on the original)
+  // to the reference's clockwise, without touching any static property --
+  // lobes, radii, spectra are distribution-identical (module doc,
+  // departure 1).
+  float tau = -iTime * uSpeed;
   float freq = max(2.0 + 13.0 * uComplexity, 1.0);
   float amp = uAmplitude;
   float ringRadius = uScale;
@@ -159,15 +210,22 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     float phi = frac * STRAND_SIGMA;
     vec2 strand = auroraWarp(p, phi, tau, freq, amp);
 
-    // Distance to the (warped) ring, per strand.
-    float dist = abs(length(strand) - ringRadius);
+    // Signed distance to the (warped) ring, per strand: negative inside,
+    // positive outside -- the sign feeds the asymmetric edge width below.
+    float sd = length(strand) - ringRadius;
+    float dist = abs(sd);
     // Inter-strand spacing through the chain: an analytic blur exactly
     // proportional to how far this strand's warp has drifted from its
     // neighbour's. Fanned regions (large spacing) fuse into soft veils;
     // bunched regions (small spacing) stay crisp -- this is what turns 36
-    // discrete rings into an aurora (fact sheet section 2).
+    // discrete rings into an aurora (fact sheet section 2). The 2.3 growth
+    // rate (fact sheet's own is 2.0) and the 0.66x outer-side factor are
+    // the parity edge calibration: the reference holds a 10-90% rise of
+    // ~6-10px(2x) with the OUTER edge always the sharper of the two
+    // (module doc, departure 4).
     float spacing = length(strand - prevStrand);
-    float edgeWidth = 0.01 + max(exp(2.0 * spacing) - 1.0, 0.001);
+    float edgeWidth = 0.01 + max(exp(2.3 * spacing) - 1.0, 0.001);
+    edgeWidth *= mix(1.0, 0.66, step(0.0, sd));
     float coverage = 1.0 - smoothstep(0.0, 1.0, dist / edgeWidth);
 
     // Fixed hue drift across the strand fan, matching the fact sheet's
@@ -195,22 +253,49 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
   float alpha;
 
   if (uTheme < 0.5) {
-    // Dark pipeline (fact sheet section 4): RGB1 = 1.2 * I, THEN add
-    // dither, THEN tonemap -- dither is added after the pre-gain, not
-    // before, so its written amplitude stays +/- 1/510 rather than being
-    // scaled up by the 1.2 pre-gain too.
-    vec3 x1 = 1.2 * image + dither;
-    vec3 tm = 4.0 * x1 / (1.0 + 4.0 * x1);
+    // Dark pipeline, parity-calibrated (module doc, departures 2 + 3).
+    // RGB1 = 1.2 * I, THEN add dither (fact sheet order: pre-gain first so
+    // the dither's written amplitude stays +/- 1/510), then floor at 0 --
+    // a negative dither on a near-black pixel would otherwise be blown up
+    // by the chroma-preserving rescale's division right below.
+    vec3 x1 = max(1.2 * image + dither, 0.0);
+
+    // Chroma-preserving tonemap: knee the MAX channel (11x/(1+11x) -- a
+    // steeper knee than the fact sheet's per-channel 4x/(1+4x)) and rescale
+    // the vector, so ribbon cores land on a stable brightness level largely
+    // independent of how thin the veils have fanned (the audit measured the
+    // per-channel map crushing spread-out states to ~half the reference's
+    // rendered brightness) while hue and saturation pass through untouched
+    // for the HSV shape-up to own.
+    float mxc = max(x1.r, max(x1.g, x1.b));
+    float tmMax = 11.0 * mxc / (1.0 + 11.0 * mxc);
+    vec3 tm = x1 * (tmMax / max(mxc, 1.0e-5));
+
+    // Rendered-colour calibration: hue +0.013 turns (audit target
+    // ~197.5deg for the default accent), saturation proportional to the
+    // caller's own (a desaturated accent stays desaturated) but rising
+    // with the pixel's value and capped at 0.98 -- Rob's reference:
+    // saturation RISES with brightness, and nothing is ever white.
+    vec3 hv = auroraRgb2Hsv(tm);
+    hv.x = fract(hv.x + 0.013);
+    hv.y = min(hv.y * (1.02 + 0.35 * hv.z), 0.98);
+    tm = auroraHsv2Rgb(hv);
+
+    // Brightness compression (departure 3): uIntensity DRIVES 0.5..2.5 at
+    // the thinking/connecting pulse but must RENDER inside roughly
+    // 0.5..0.65 mean brightness, never dropping the ring below visibility.
+    // Two compressive powers (colour flatter than alpha) plus a smoothstep
+    // alpha knee that lifts ribbon cores to full opacity while cutting the
+    // dim tails -- which is also what keeps the centre transparent and the
+    // edges crisp. max(brightness, 0.05) only guards pow() against a
+    // (contractually impossible) zero or negative uniform.
+    float bVal = pow(max(brightness, 0.05) / 1.5, 0.07);
+    float bAlpha = 0.97 * pow(max(brightness, 0.05) / 1.5, 0.09);
     float luma = dot(tm, vec3(0.299, 0.587, 0.114));
     // Clamped to [0,1] before the premultiply below, mirroring the light
-    // branch. tm approaches but is not strictly bounded under 1/brightness,
-    // and uIntensity reaches 2.5 at the thinking/connecting pulse peaks, so
-    // tm * brightness can exceed 1 for achievable inputs. Unclamped, that
-    // would write rgb > alpha once premultiplied -- exactly the "hotter
-    // than premultiplied" state this port exists to eliminate, and what
-    // the fact sheet's own "nothing is ever white" measured fact forbids.
-    rgb = clamp(tm * brightness, 0.0, 1.0);
-    alpha = clamp(luma * brightness, 0.0, 1.0);
+    // branch, so rgb * alpha <= alpha stays enforced for every input.
+    rgb = clamp(tm * bVal, 0.0, 1.0);
+    alpha = clamp(smoothstep(0.0, 0.50, luma) * bAlpha, 0.0, 1.0);
   } else {
     // Light pipeline (fact sheet section 4): RGB1 = I, then add dither;
     // brightness curve on vector length, hue direction kept, saturation

@@ -140,6 +140,79 @@ describe('createTween', () => {
     expect(t.value()).toBe(before);
   });
 
+  // `animating` exists for the aurora variant's upstream-parity volume
+  // guard: live volume must not re-target uScale while a state landing (or
+  // the listening spring) is still in flight. It is a real signal, so an
+  // effect reading it re-runs the moment a tween settles.
+  it('animating() starts false', () => {
+    createRoot((dispose) => {
+      const t = createTween(0.3);
+      expect(t.animating()).toBe(false);
+      dispose();
+    });
+  });
+
+  it('animating() is true while a tween is in flight and false once it lands', () => {
+    createRoot((dispose) => {
+      const t = createTween(0);
+      t.to(1, { duration: 0.5 });
+      expect(t.animating()).toBe(true);
+      advance(250);
+      expect(t.animating()).toBe(true);
+      advance(250);
+      expect(t.animating()).toBe(false);
+      dispose();
+    });
+  });
+
+  it('animating() stays false for an instant to() -- duration 0 or no transition', () => {
+    createRoot((dispose) => {
+      const t = createTween(0);
+      t.to(1, { duration: 0 });
+      expect(t.animating()).toBe(false);
+      t.to(0.5);
+      expect(t.animating()).toBe(false);
+      dispose();
+    });
+  });
+
+  it('animating() stays true across ping-pong legs (a pulse never settles)', () => {
+    createRoot((dispose) => {
+      const t = createTween(0);
+      t.to([0.2, 0.8], { duration: 0.5, ease: 'linear' });
+      expect(t.animating()).toBe(true);
+      advance(500); // first leg lands, reverses
+      expect(t.animating()).toBe(true);
+      advance(500); // second leg lands, reverses again
+      expect(t.animating()).toBe(true);
+      dispose();
+    });
+  });
+
+  it('animating() goes false when an instant to() interrupts an in-flight tween', () => {
+    createRoot((dispose) => {
+      const t = createTween(0);
+      t.to(1, { duration: 1 });
+      advance(300);
+      expect(t.animating()).toBe(true);
+      t.to(0.4, { duration: 0 });
+      expect(t.animating()).toBe(false);
+      dispose();
+    });
+  });
+
+  it('animating() is true for the full duration of a spring and false after it settles', () => {
+    createRoot((dispose) => {
+      const t = createTween(0);
+      t.to(1, { type: 'spring', duration: 1, bounce: 0.35 });
+      advance(500);
+      expect(t.animating()).toBe(true);
+      for (let i = 0; i < 30; i++) advance(25);
+      expect(t.animating()).toBe(false);
+      dispose();
+    });
+  });
+
   it('eases from the moment to() is called, even after a long idle gap', () => {
     createRoot((dispose) => {
       const t = createTween(0);

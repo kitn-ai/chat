@@ -90,12 +90,21 @@ function isSpring(tr: Transition): tr is { type: 'spring'; duration: number; bou
  * its two values forever, which is how the listening and thinking pulses read.
  * `duration: 0` (or no transition) sets instantly, which live volume needs so
  * the picture never lags the audio.
+ *
+ * `animating` is true exactly while a frame loop is armed: from an animated
+ * `to()` until it lands (a ping-pong never lands, so it stays true), false
+ * for instant sets and after dispose. It is a real signal on purpose -- the
+ * aurora variant's volume-override effect reads it as its upstream-parity
+ * "scale tween idle" guard, and being reactive means that effect re-runs
+ * the moment a landing settles instead of waiting for the next volume tick.
  */
 export function createTween(initial: number): {
   value: Accessor<number>;
+  animating: Accessor<boolean>;
   to(target: number | [number, number], transition?: Transition): void;
 } {
   const [value, setValue] = createSignal(initial);
+  const [animating, setAnimating] = createSignal(false);
   let raf = 0;
   let disposed = false;
 
@@ -107,6 +116,7 @@ export function createTween(initial: number): {
   onCleanup(() => {
     disposed = true;
     stop();
+    setAnimating(false);
   });
 
   function to(target: number | [number, number], transition?: Transition) {
@@ -135,17 +145,20 @@ export function createTween(initial: number): {
     const [a, b] = pingPong ? target : [untrack(value), target];
 
     if (!transition || (!isSpring(transition) && transition.duration === 0)) {
+      setAnimating(false);
       setValue(pingPong ? a : b);
       return;
     }
 
     const durationMs = transition.duration * 1000;
     if (durationMs <= 0) {
+      setAnimating(false);
       setValue(b);
       return;
     }
 
     if (typeof requestAnimationFrame === 'undefined') {
+      setAnimating(false);
       setValue(b);
       return;
     }
@@ -182,6 +195,7 @@ export function createTween(initial: number): {
       if (!pingPong) {
         setValue(to_);
         raf = 0;
+        setAnimating(false);
         return;
       }
 
@@ -192,8 +206,9 @@ export function createTween(initial: number): {
       raf = requestAnimationFrame(step);
     };
 
+    setAnimating(true);
     raf = requestAnimationFrame(step);
   }
 
-  return { value, to };
+  return { value, animating, to };
 }

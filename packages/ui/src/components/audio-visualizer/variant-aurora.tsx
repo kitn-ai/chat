@@ -25,6 +25,18 @@ import auroraShader from './aurora.glsl';
  * `speed` here is fact sheet section 5's `S / 20` (state speed 10..70,
  * divided by 20) -- NOT the raw 10..70 value. `complexity` is `freqParam`
  * directly.
+ *
+ * `rotation` (deg/s, positive = clockwise ON SCREEN) is NOT from the fact
+ * sheet: it is this port's own solid-body trim on top of the wind's
+ * emergent angular drift, calibrated offline (campaign task #6's probe,
+ * replicating scripts/aurora-audit.mjs's estimator at its capture cadence)
+ * so the audit-measured per-state rotation lands on the reference values:
+ * speaking ~+17 (their +12.9, Rob's reference ~20 CW), listening ~+4.6,
+ * thinking ~+9, connecting ~-4.7. The wind supplies most of the apparent
+ * motion (post-flip it reads ~+22 CW at speaking, ~0 elsewhere); these
+ * trims close the per-state gaps. Thinking and connecting share every
+ * OTHER target but split here, matching the audit's measured baseline for
+ * each. Like `speed`, rotation is never tweened.
  */
 function auroraTargets(state: VisualizerState): {
   intensity: number | [number, number];
@@ -32,21 +44,38 @@ function auroraTargets(state: VisualizerState): {
   complexity: number;
   amplitude: number;
   scale: number;
+  rotation: number;
 } {
   switch (state) {
     case 'listening':
-      return { intensity: [1.5, 2.0], speed: 1.0, complexity: 0.7, amplitude: 1.0, scale: 0.3 };
+      return {
+        intensity: [1.5, 2.0], speed: 1.0, complexity: 0.7, amplitude: 1.0, scale: 0.3,
+        rotation: 5.3,
+      };
     case 'thinking':
+      return {
+        intensity: [0.5, 2.5], speed: 1.5, complexity: 1.0, amplitude: 0.5, scale: 0.3,
+        rotation: 9.4,
+      };
     case 'connecting':
-      return { intensity: [0.5, 2.5], speed: 1.5, complexity: 1.0, amplitude: 0.5, scale: 0.3 };
+      return {
+        intensity: [0.5, 2.5], speed: 1.5, complexity: 1.0, amplitude: 0.5, scale: 0.3,
+        rotation: -5.5,
+      };
     case 'speaking':
       // The pre-voice base. While actually speaking with volume > 0, the
-      // scale read by the shader comes from the live-volume override below
-      // instead -- see `scaleValue`.
-      return { intensity: 1.5, speed: 3.5, complexity: 1.25, amplitude: 0.75, scale: 0.3 };
+      // scale is driven through the tween by the live-volume override
+      // effect below.
+      return {
+        intensity: 1.5, speed: 3.5, complexity: 1.25, amplitude: 0.75, scale: 0.3,
+        rotation: -3.5,
+      };
     case 'idle':
     default:
-      return { intensity: 1.0, speed: 0.5, complexity: 0.4, amplitude: 1.2, scale: 0.2 };
+      return {
+        intensity: 1.0, speed: 0.5, complexity: 0.4, amplitude: 1.2, scale: 0.2,
+        rotation: 0,
+      };
   }
 }
 
@@ -91,8 +120,8 @@ function usePrefersDark(): Accessor<boolean> {
  * `wave` and `custom` use. There is deliberately no `uVolume` uniform: the
  * shader would double-apply voice-driven growth if it read one itself on top
  * of whatever this component also does at the state layer, so the live
- * volume is folded into `uScale` here, in exactly one place (`scaleValue`),
- * and nowhere else.
+ * volume drives the scale TWEEN here, in exactly one place (the
+ * volume-override effect below), and nowhere else.
  *
  * `dark` is an extra field on top of `ShaderVariantProps`, not yet a member
  * of that shared type: it is meant to carry the FACADE's already-resolved
@@ -132,7 +161,17 @@ export default function AuroraVisualizer(props: ShaderVariantProps & { dark?: bo
 
     complexity.to(t.complexity, landing);
     amplitude.to(t.amplitude, landing);
-    scale.to(t.scale, landing);
+
+    // Listening's scale landing is the one springy target -- the Apache
+    // driving hook's "perk up" (fact sheet section 5: spring 1.0 s, bounce
+    // 0.35; audit target 7). Every other state keeps the plain 0.5 s
+    // ease-out landing, and frozen collapses the spring like any tween.
+    scale.to(
+      t.scale,
+      props.state === 'listening' && !props.frozen
+        ? { type: 'spring', duration: 1.0, bounce: 0.35 }
+        : landing,
+    );
 
     // Fact sheet section 5: "Speed is NOT tweened and multiplies absolute
     // time -> every state change teleports the phase." Frozen pins it at 0
@@ -143,20 +182,38 @@ export default function AuroraVisualizer(props: ShaderVariantProps & { dark?: bo
     speed.to(props.frozen ? 0 : t.speed, { duration: 0 });
   });
 
-  // Voice-driven radius, folded into uScale here and ONLY here (fact sheet
-  // section 5: "0.2 + 0.2 x volume", speaking only, instant -- no tween, so
-  // the aura tracks the voice exactly; measured lag in the reference capture
-  // is at or under 33ms). A pure derivation, not an imperative effect like
-  // wave's equivalent override: an effect that only fires `scale.to(...)`
-  // while `volume > 0` would leave the radius stuck at its last
-  // voice-driven value through a mid-speech pause (volume dropping back to
-  // 0) instead of relaxing back to the state's base target, since nothing
-  // would re-trigger it. Reading `scale.value()` as the fallback here means
-  // the instant volume stops driving it, the current (already-tweening or
-  // settled) base value takes back over on the very next reactive read, with
-  // no separate revert step required.
-  const scaleValue = () =>
-    props.state === 'speaking' && props.volume > 0 ? 0.2 + 0.2 * props.volume : scale.value();
+  // Voice-driven radius: "0.2 + 0.2 x volume", speaking only, instant (fact
+  // sheet section 5 -- measured lag in the reference capture is at or under
+  // 33ms). This drives the scale TWEEN imperatively, deliberately NOT a
+  // pure derivation, because upstream's two guard semantics live in what
+  // this effect does NOT do (audit targets 6 + 7):
+  //   - `scale.animating()`: while the 0.5 s state landing (or the
+  //     listening spring) is in flight, volume ticks are ignored -- the
+  //     landing finishes first. Because `animating` is a signal this effect
+  //     tracks, it re-runs the moment the landing settles and applies the
+  //     CURRENT volume immediately, so a volume that arrived mid-landing is
+  //     not lost until the next tick.
+  //   - `volume > 0`: silence stops DRIVING the scale rather than reverting
+  //     it, so a mid-speech pause holds the last voice-driven radius
+  //     (silence-hold) until the voice resumes or the state changes -- a
+  //     state change re-targets the tween through the effect above.
+  // Reads scale.animating() but never scale.value(): reading the tween's
+  // own value here would wire the self-retriggering effect loop
+  // create-tween's doc warns about.
+  createEffect(() => {
+    if (props.state !== 'speaking') return;
+    const volume = props.volume;
+    if (!(volume > 0)) return;
+    if (scale.animating()) return;
+    scale.to(0.2 + 0.2 * volume);
+  });
+
+  // Solid-body rotation trim (deg/s -> rad/s for the shader), never
+  // tweened, pinned to 0 under frozen exactly like uSpeed -- it multiplies
+  // absolute time in the shader, so a nonzero value would keep the figure
+  // spinning through reduced motion.
+  const rotationValue = () =>
+    props.frozen ? 0 : (auroraTargets(props.state).rotation * Math.PI) / 180;
 
   // uTheme: 0 selects the shader's DARK colour pipeline, 1 selects LIGHT
   // (aurora.glsl.ts, fact sheet section 4 -- a real branch in the colour
@@ -184,8 +241,9 @@ export default function AuroraVisualizer(props: ShaderVariantProps & { dark?: bo
           uSpeed: { type: '1f', value: speed.value() },
           uComplexity: { type: '1f', value: complexity.value() },
           uAmplitude: { type: '1f', value: amplitude.value() },
-          uScale: { type: '1f', value: scaleValue() },
+          uScale: { type: '1f', value: scale.value() },
           uTheme: { type: '1f', value: uThemeValue() },
+          uRotation: { type: '1f', value: rotationValue() },
         }}
         onError={(message) => {
           // "not available" is ShaderCanvas's literal wording for a missing

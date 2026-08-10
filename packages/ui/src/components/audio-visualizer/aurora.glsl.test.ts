@@ -21,9 +21,9 @@ describe('aurora.glsl', () => {
     expect(auroraShader).not.toMatch(/void\s+main\s*\(\s*\)/);
   });
 
-  it('references every uniform Task 15 must supply, so the two files cannot silently drift apart', () => {
+  it('references every uniform the variant supplies, so the two files cannot silently drift apart', () => {
     for (const name of [
-      'uColor', 'uIntensity', 'uSpeed', 'uComplexity', 'uAmplitude', 'uScale', 'uTheme',
+      'uColor', 'uIntensity', 'uSpeed', 'uComplexity', 'uAmplitude', 'uScale', 'uTheme', 'uRotation',
     ]) {
       expect(auroraShader).toContain(name);
     }

@@ -176,10 +176,10 @@ describe('AuroraVisualizer: state -> uniform mapping', () => {
     expect(c.fragment).toBe(auroraShader);
   });
 
-  it('supplies exactly the seven documented aurora uniforms -- no uVolume, no uBands', async () => {
+  it('supplies exactly the eight documented aurora uniforms -- no uVolume, no uBands', async () => {
     const c = await renderAurora();
     expect(Object.keys(c.uniforms).sort()).toEqual(
-      ['uAmplitude', 'uColor', 'uComplexity', 'uIntensity', 'uScale', 'uSpeed', 'uTheme'].sort(),
+      ['uAmplitude', 'uColor', 'uComplexity', 'uIntensity', 'uRotation', 'uScale', 'uSpeed', 'uTheme'].sort(),
     );
   });
 
@@ -295,7 +295,7 @@ describe('AuroraVisualizer: state -> uniform mapping', () => {
     expect(c.uniforms.uScale?.value).toBeCloseTo(0.2, 6);
   });
 
-  it('reverts uScale to the state base target the instant volume drops back to 0, rather than sticking at the last voice-driven value', async () => {
+  it('HOLDS the last voice-driven uScale when volume drops back to 0 mid-speech (silence-hold), instead of relaxing to the state base', async () => {
     const { default: AuroraVisualizer } = await import('./variant-aurora');
     const [volume, setVolume] = createSignal(0.9);
     render(() => (
@@ -307,11 +307,39 @@ describe('AuroraVisualizer: state -> uniform mapping', () => {
 
     setVolume(0);
     await Promise.resolve();
-    // The override is a pure computed read, never a mutation of the
-    // underlying tween -- so the instant volume is no longer > 0, the base
-    // target (still 0.3; the state itself never changed) takes back over
-    // immediately, with no separate revert step required.
-    expect(captured!.uniforms.uScale?.value).toBe(0.3);
+    // Upstream-parity (audit target 6 + the Apache hook's semantics): the
+    // override drives the scale TWEEN, and silence simply stops driving it,
+    // so a mid-speech pause leaves the radius wherever the voice last put
+    // it. Only a STATE change re-targets it.
+    expect(captured!.uniforms.uScale?.value).toBeCloseTo(0.2 + 0.2 * 0.9, 6);
+
+    // And a later voice tick takes back over instantly.
+    setVolume(0.25);
+    await Promise.resolve();
+    expect(captured!.uniforms.uScale?.value).toBeCloseTo(0.2 + 0.2 * 0.25, 6);
+  });
+
+  it('exposes calibrated per-state uRotation values (deg/s -> rad/s, + = clockwise on screen), split for thinking vs connecting', async () => {
+    const degToRad = (d: number) => (d * Math.PI) / 180;
+    const expectRotation = async (state: ShaderVariantProps['state'], deg: number) => {
+      const c = await renderAurora({ state, frozen: false });
+      expect(c.uniforms.uRotation?.value).toBeCloseTo(degToRad(deg), 6);
+      cleanup();
+    };
+    // Values are the offline-probe calibration against the aurora-audit
+    // rotation targets (see auroraTargets's own doc): the WIND supplies most
+    // of the apparent motion; these are solid-body trims on top of it.
+    // Like uSpeed, uRotation is never tweened, so it reads synchronously.
+    await expectRotation('idle', 0);
+    await expectRotation('listening', 5.3);
+    await expectRotation('thinking', 9.4);
+    await expectRotation('connecting', -5.5);
+    await expectRotation('speaking', -3.5);
+  });
+
+  it('pins uRotation to 0 when frozen -- reduced motion freezes the spin along with the wind', async () => {
+    const c = await renderAurora({ state: 'speaking', frozen: true });
+    expect(c.uniforms.uRotation?.value).toBe(0);
   });
 
   it('keeps the uniform SHAPE (names, types) identical across every state, frozen, colour, and volume combination, so ShaderCanvas never recompiles on a value-only change', async () => {
@@ -332,6 +360,83 @@ describe('AuroraVisualizer: state -> uniform mapping', () => {
 
     const coloured = await renderAurora({ state: 'thinking', color: '#ff00ff' });
     expect(shapeOf(coloured)).toBe(idleShape);
+  });
+});
+
+// Upstream-parity driving behavior (audit targets 6 + 7): the listening
+// spring and the isAnimating guard on the volume override. Both need
+// deterministic time, so they run on the fake clock.
+describe('AuroraVisualizer: listening spring + volume-override guard', () => {
+  const { advance } = installFakeClock();
+
+  type CapturedProps = {
+    uniforms: Record<string, { type: string; value: number | number[] }>;
+  };
+  let captured: CapturedProps | undefined;
+
+  beforeEach(() => {
+    captured = undefined;
+    vi.doMock('./shader-canvas', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('./shader-canvas')>();
+      return {
+        ...actual,
+        ShaderCanvas: (props: CapturedProps) => {
+          captured = props;
+          return null;
+        },
+      };
+    });
+  });
+
+  const uScale = () => captured!.uniforms.uScale?.value as number;
+
+  it('idle -> listening lands uScale through a SPRING (1.0s, bounce 0.35): overshoots past 0.3, then settles on it', async () => {
+    const { default: AuroraVisualizer } = await import('./variant-aurora');
+    const [state, setState] = createSignal<ShaderVariantProps['state']>('idle');
+    render(() => (
+      <AuroraVisualizer {...baseProps} state={state()} frozen={false} onUnavailable={() => {}} />
+    ));
+    // Land idle's 0.2 first so the spring's start point is deterministic.
+    for (let i = 0; i < 30; i++) advance(25);
+    expect(uScale()).toBeCloseTo(0.2, 3);
+
+    setState('listening');
+    await Promise.resolve();
+    let peak = 0;
+    for (let i = 0; i < 50; i++) {
+      advance(25);
+      peak = Math.max(peak, uScale());
+    }
+    // A 0.5s easeOut landing (every other state's transition) can never
+    // exceed its target; the spring's bounce 0.35 must.
+    expect(peak).toBeGreaterThan(0.302);
+    expect(uScale()).toBeCloseTo(0.3, 2);
+  });
+
+  it('ignores live volume while the speaking landing is still animating (the isAnimating guard), then applies it the moment the landing settles', async () => {
+    const { default: AuroraVisualizer } = await import('./variant-aurora');
+    const [state, setState] = createSignal<ShaderVariantProps['state']>('idle');
+    render(() => (
+      <AuroraVisualizer {...baseProps} state={state()} volume={0.9} frozen={false} onUnavailable={() => {}} />
+    ));
+    for (let i = 0; i < 30; i++) advance(25);
+    expect(uScale()).toBeCloseTo(0.2, 3);
+
+    setState('speaking');
+    await Promise.resolve();
+    // Mid-landing (0.5s easeOut, 0.2 -> 0.3): volume 0.9 must NOT have
+    // snapped the scale to 0.38 -- the landing finishes first.
+    advance(100);
+    expect(uScale()).toBeLessThan(0.31);
+    advance(100);
+    expect(uScale()).toBeLessThan(0.31);
+
+    // Landing completes; the guard opens and the CURRENT volume applies
+    // immediately (the override effect also tracks scale.animating(), so a
+    // volume that arrived during the landing is not lost until a next tick).
+    for (let i = 0; i < 20; i++) advance(25);
+    await Promise.resolve();
+    expect(uScale()).toBeCloseTo(0.2 + 0.2 * 0.9, 6);
   });
 });
 
