@@ -51,7 +51,22 @@ const DIRS = {
 };
 for (const d of Object.values(DIRS)) mkdirSync(d, { recursive: true });
 
-const STORY_ANCHOR = '/iframe.html?id=components-elements-audiovisualizer--default&viewMode=story';
+// Points at the real "Bar" story specifically -- do not swap this for a
+// shader story (wave/aurora/custom) casually. This anchor's only job is to
+// get the page to load so preview.ts registers the kai-* custom elements
+// (see the module doc above: "any story works" for that purpose, every
+// test appends its own elements rather than depending on the anchor's
+// content). Previously pointed at "...--default", which was never a real
+// story id in this file (audio-visualizer.stories.tsx has no `Default`
+// export) -- caught by the strengthened drift guard
+// (tests/stories/e2e-story-fixtures.test.ts), harmless in practice only
+// because nothing here ever depended on that story actually rendering.
+// "Bar" is the DOM-variant default: cheapest real anchor, costs no WebGL
+// context. A shader story would be a WORSE choice now, not just an
+// unnecessary one: wave/aurora/custom defer their compile until visible,
+// so anchoring on one adds a real (if small) visibility/compile dependency
+// this file's own tests don't need and shouldn't pay for.
+const STORY_ANCHOR = '/iframe.html?id=components-elements-audiovisualizer--bar&viewMode=story';
 
 const VARIANTS = ['bar', 'grid', 'radial', 'wave', 'aurora', 'custom'] as const;
 const STATES = ['idle', 'connecting', 'listening', 'thinking', 'speaking'] as const;

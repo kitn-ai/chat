@@ -35,6 +35,14 @@ import { fileURLToPath } from 'node:url';
  * conclusion). Each tile's evidence file records the raw per-index
  * time-averaged profile.
  *
+ * The StateMatrix story (and its 3 tests here: bar/grid/radial against a
+ * SYNTHETIC feed) was deleted from `audio-visualizer.stories.tsx` -- it
+ * duplicated the per-variant stories, which already render every state.
+ * Removed here to match: the surviving Bar/Grid/Radial/Custom tests already
+ * prove the same centre-outward mirror contract against the REAL voice
+ * fixture, which is the stronger of the two coverages. Every remaining
+ * assertion and threshold below is untouched by that removal.
+ *
  * Run: `pnpm --filter @kitn.ai/ui exec playwright test --config playwright.audio-visualizer-band-shape.config.ts`
  *
  * Requires this worktree's OWN Storybook dev server already running on
@@ -192,8 +200,10 @@ async function sampleBarLevels(page: Page): Promise<number[]> {
  *  requires a `[data-kai-spoke]` ancestor so it can never match bar's own
  *  `[part~="bar"]` elements (bar's are direct children of the state
  *  wrapper; radial's are one level deeper, inside the spoke wrapper) --
- *  this is what lets the SAME query work unambiguously against StateMatrix,
- *  which has bar/grid/radial "speaking" wrappers all on the page at once. */
+ *  this is what would let the SAME query work unambiguously even if a
+ *  future page ever put bar/grid/radial "speaking" wrappers on screen at
+ *  once (the now-deleted StateMatrix story did -- see the file header's
+ *  provenance note). */
 async function sampleRadialLevels(page: Page): Promise<number[]> {
   return page.evaluate(() => {
     const bars = Array.from(
@@ -340,12 +350,11 @@ function computeRingResult(tileName: string, avg: number[]): TileResult {
  * (still exact) or the centre needing to be BELOW its neighbours (which
  * would be the actual regression this guard exists to catch). Every other
  * tile keeps the strict `slack: 0` default deliberately: Bar and Custom
- * read a continuous level (no saturation risk at any gain), and
- * StateMatrix's bar/grid/radial rows are driven by the synthetic
- * `useFakeBands` generator, NOT the rebaked voice fixture, so they were
- * never exposed to the +18.1dB change in the first place -- all of them
- * passed the strict check cleanly 3/3 runs, so amending them would be
- * loosening a check that was never broken.
+ * read a continuous level (no saturation risk at any gain) -- passed the
+ * strict check cleanly 3/3 runs, so amending them would be loosening a
+ * check that was never broken. (The StateMatrix bar/grid/radial tests that
+ * used to make the same point against a synthetic, un-rebaked feed were
+ * deleted along with the StateMatrix story -- see the file header.)
  */
 function assertResult(result: TileResult, kind: 'linear' | 'ring', opts: { centerMaxSlack?: number } = {}): void {
   const { tileName, pairs, maxPairDeviation, avgProfile, centerIndex } = result;
@@ -433,44 +442,5 @@ test.describe('Speaking tiles are centre-outward symmetric (regression guard for
     result.rawSamples = samples.length;
     writeEvidence('custom', result, { metric: 'uBands[i] read directly off the live GL program' });
     assertResult(result, 'linear');
-  });
-
-  test('StateMatrix: bar speaking tile is centre-symmetric', async ({ page }) => {
-    await gotoStory(page, 'state-matrix');
-    await page.screenshot({ path: join(SHOT_ROOT, 'state-matrix.png') });
-
-    const barSamples = await sampleOverTime(page, () => sampleBarLevels(page), SAMPLE_INTERVAL_MS, SAMPLE_DURATION_MS);
-    const barAvg = averageProfile(barSamples);
-    const result = computeLinearResult('StateMatrix/bar', barAvg);
-    result.rawSamples = barSamples.length;
-    writeEvidence('state-matrix-bar', result, {
-      note: 'size="sm" fixed; bar row generates Math.ceil(3/2)=2 half-bands spanning the full 0..1 spectral tilt and mirrors them via mirrorBandsCenterOut, so index 1 (centre) should read loudest and 0/2 (its mirrored pair) should match each other.',
-    });
-    assertResult(result, 'linear');
-  });
-
-  test('StateMatrix: grid speaking tile column lit-fraction is centre-symmetric', async ({ page }) => {
-    await gotoStory(page, 'state-matrix');
-    const samples = await sampleOverTime(
-      page,
-      () => sampleGridColumnLitFraction(page),
-      SAMPLE_INTERVAL_MS,
-      SAMPLE_DURATION_MS,
-    );
-    const avg = averageProfile(samples);
-    const result = computeLinearResult('StateMatrix/grid', avg);
-    result.rawSamples = samples.length;
-    writeEvidence('state-matrix-grid', result, { metric: 'column lit-fraction (0..1) proxy, same as the Grid story test' });
-    assertResult(result, 'linear');
-  });
-
-  test('StateMatrix: radial speaking tile is symmetric about the ring vertical axis', async ({ page }) => {
-    await gotoStory(page, 'state-matrix');
-    const samples = await sampleOverTime(page, () => sampleRadialLevels(page), SAMPLE_INTERVAL_MS, SAMPLE_DURATION_MS);
-    const avg = averageProfile(samples);
-    const result = computeRingResult('StateMatrix/radial', avg);
-    result.rawSamples = samples.length;
-    writeEvidence('state-matrix-radial', result);
-    assertResult(result, 'ring');
   });
 });
