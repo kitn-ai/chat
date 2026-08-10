@@ -32,7 +32,7 @@ Load the bundle straight from a CDN — no install, no build step:
 </script>
 ```
 
-Pin an exact version in production (e.g. `@kitn.ai/ui@0.16.0/dist/...`). The package is pre-1.0, so a minor release can break things.
+Pin an exact version in production (e.g. `@kitn.ai/ui@0.20.1/dist/...`). The package is pre-1.0, so a minor release can break things.
 </Aside>
 
 ## Your first chat
@@ -133,9 +133,12 @@ The element behaves the same everywhere. Only the binding syntax differs.
 <TabItem label="React">
 ```tsx
 import { Chat } from '@kitn.ai/ui/react';
+import type { ChatMessage } from '@kitn.ai/ui/react';
 
 export function App() {
-  const messages = [{ id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello!' }] }];
+  const messages: ChatMessage[] = [
+    { id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello!' }] },
+  ];
   return (
     <Chat
       messages={messages}
@@ -191,7 +194,7 @@ const onSubmit = (e) => console.log(e.detail.value);
 // Solid apps can compose the native components instead of the element.
 import { createSignal } from 'solid-js';
 import '@kitn.ai/ui/theme.css';
-import { ChatConfig, ChatContainer, ChatContainerContent, Message, MessageContent, PromptInput, PromptInputTextarea, PromptInputActions } from '@kitn.ai/ui';
+import { Button, ChatConfig, ChatContainer, ChatContainerContent, Message, MessageContent, PromptInput, PromptInputTextarea, PromptInputActions } from '@kitn.ai/ui/solid';
 
 function App() {
   const [input, setInput] = createSignal('');
@@ -214,7 +217,9 @@ function App() {
         }}
       >
         <PromptInputTextarea placeholder="Ask anything…" />
-        <PromptInputActions />
+        <PromptInputActions>
+          <Button size="sm" disabled={!input()}>Send</Button>
+        </PromptInputActions>
       </PromptInput>
     </ChatConfig>
   );

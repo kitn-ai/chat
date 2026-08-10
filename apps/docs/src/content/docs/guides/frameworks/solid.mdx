@@ -8,8 +8,12 @@ import SolidComponentIndex from '../../../../components/SolidComponentIndex.astr
 
 Solid apps get an extra path the other frameworks don't: the components are authored in SolidJS, so you can import them straight into your JSX instead of going through the `kai-*` web components. Both paths ship in the package and mix freely:
 
-- **Native SolidJS components** (`@kitn.ai/ui`) — import `ChatContainer`, `Message`, `PromptInput`, and the rest directly into your JSX. Full compositional control, tree-shaken alongside your own code. Reach for this in a Solid app.
+- **Native SolidJS components** (`@kitn.ai/ui/solid`) — import `ChatThread`, `Message`, `PromptInput`, and the rest directly into your JSX. Full compositional control, tree-shaken alongside your own code. Reach for this in a Solid app.
 - **`kai-*` web components** (`@kitn.ai/ui/elements`) — the drop-in shells when you want batteries included or need to share UI across frameworks.
+
+<Aside type="note" title="`@kitn.ai/ui/solid` is the Solid entry point">
+Import Solid components from `@kitn.ai/ui/solid`, not from the root `@kitn.ai/ui`. The root entry is what every consumer resolves, including the React / Vue / Svelte / vanilla majority who only ever touch the web components, so it carries the shared layer: the chat components, the types, the state and card helpers. `@kitn.ai/ui/solid` is that entry plus the rest of the Solid catalog (`ChatThread`, `Dialog`, `Popover`, `Input`, `Nav`, `Tabs`, and the other primitives the elements are built from), compiled as its own bundle so a React consumer never pays for it. It is a superset, so one import covers everything.
+</Aside>
 
 ## Install
 
@@ -40,8 +44,8 @@ Add `tailwindcss` and `@tailwindcss/vite` to your dev dependencies and put `tail
 
 The `kai-*` elements need none of this: they carry their own compiled styles inside Shadow DOM.
 
-<Aside type="note" title="What the `.` entry resolves to">
-The package ships **compiled**. `@kitn.ai/ui` resolves to `dist/index.js` in the browser and `dist/index.server.js` under the `node` / `deno` / `worker` conditions. Both are ESM, so your bundler still tree-shakes down to what you import, but it never compiles the kit's TSX. A stock `vite-plugin-solid()` is enough; nothing has to be told to transform `node_modules`.
+<Aside type="note" title="What the Solid entry resolves to">
+The package ships **compiled**. `@kitn.ai/ui/solid` resolves to `dist/solid.js` in the browser and `dist/solid.server.js` under the `node` / `deno` / `worker` conditions; `@kitn.ai/ui` resolves to `dist/index.js` / `dist/index.server.js` the same way. All four are ESM, so your bundler still tree-shakes down to what you import, but it never compiles the kit's TSX. A stock `vite-plugin-solid()` is enough; nothing has to be told to transform `node_modules`.
 </Aside>
 
 ## Native components
@@ -53,6 +57,7 @@ A message is an **ordered `parts` array**, not a string: text, reasoning, tool c
 ```tsx
 import { createSignal, For } from 'solid-js';
 import {
+  Button,
   ChatConfig,
   ChatContainer,
   ChatContainerContent,
@@ -62,8 +67,8 @@ import {
   PromptInput,
   PromptInputTextarea,
   PromptInputActions,
-} from '@kitn.ai/ui';
-import type { ChatMessage } from '@kitn.ai/ui';
+} from '@kitn.ai/ui/solid';
+import type { ChatMessage } from '@kitn.ai/ui/solid';
 import { appendTextPart } from '@kitn.ai/ui/state';
 
 export function Chat() {
@@ -114,7 +119,9 @@ export function Chat() {
         </ChatContainer>
         <PromptInput value={input()} onValueChange={setInput} onSubmit={handleSubmit}>
           <PromptInputTextarea placeholder="Ask anything..." />
-          <PromptInputActions />
+          <PromptInputActions>
+            <Button size="sm" disabled={!input()}>Send</Button>
+          </PromptInputActions>
         </PromptInput>
       </ChatConfig>
     </div>
@@ -154,7 +161,7 @@ export function Chat() {
 `Thread` is the message list as a single composable: the scrolling list, per-message rendering, stick-to-bottom with a scroll button, a typing indicator, and an empty state. It is the Solid component behind `<kai-thread>`, so you get the element's behavior without adopting the element.
 
 ```tsx
-import { Thread } from '@kitn.ai/ui';
+import { Thread } from '@kitn.ai/ui/solid';
 
 <Thread
   messages={messages()}
@@ -173,7 +180,7 @@ The same building blocks compose into any layout. Use `Resizable` with `Resizabl
 
 ```tsx
 import { createSignal } from 'solid-js';
-import { Resizable, ResizablePanel, ConversationList, ChatContainer, ChatContainerContent, PromptInput, PromptInputTextarea } from '@kitn.ai/ui';
+import { Resizable, ResizablePanel, ConversationList, ChatContainer, ChatContainerContent, PromptInput, PromptInputTextarea } from '@kitn.ai/ui/solid';
 
 function Workspace() {
   const [activeId, setActiveId] = createSignal<string | undefined>(undefined);
@@ -217,7 +224,7 @@ Every feature component works standalone — drop them into any part of your UI 
 ```tsx
 import {
   Markdown, Reasoning, ReasoningTrigger, ReasoningContent, Tool, Artifact,
-} from '@kitn.ai/ui';
+} from '@kitn.ai/ui/solid';
 
 <Markdown content={assistantReply} />
 <Reasoning isStreaming={isStreaming}>
@@ -272,7 +279,7 @@ Without `prop:`, Solid serializes objects to strings — breaking array props. U
 
 ## Every element, in Solid
 
-Nothing in the `kai-*` catalog is element-only. Each element is a thin facade over Solid components you can import from `@kitn.ai/ui` and compose yourself, and every public component ships a matching `<Name>Props` type. This table is generated from the kit's element metadata at build time, so it is the whole catalog, not a curated slice:
+Nothing in the `kai-*` catalog is element-only. Each element is a thin facade over Solid components you can import from `@kitn.ai/ui/solid` and compose yourself, and every public component ships a matching `<Name>Props` type. This table is generated from the kit's element metadata at build time, so it is the whole catalog, not a curated slice:
 
 <SolidComponentIndex />
 
@@ -280,7 +287,7 @@ Each element's own page carries the same mapping plus its full prop and event re
 
 ## Which path to choose
 
-| | Native components (`@kitn.ai/ui`) | Web components (`@kitn.ai/ui/elements`) |
+| | Native components (`@kitn.ai/ui/solid`) | Web components (`@kitn.ai/ui/elements`) |
 |---|---|---|
 | **Recommended for** | Solid apps | Any framework, or sharing UI across frameworks |
 | **Bundle** | Tree-shaken with your own code | Pre-built, self-contained |

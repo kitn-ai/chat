@@ -13,7 +13,8 @@ The `kai-*` web components drop into React, Vue, Angular, Svelte, or plain HTML 
 |---|---|
 | `@kitn.ai/ui/elements` | Any framework — registers every `kai-*` element |
 | `@kitn.ai/ui/react` | React — typed wrappers with camelCase props and event handlers |
-| `@kitn.ai/ui` | SolidJS — native Solid components for full compositional control |
+| `@kitn.ai/ui/solid` | SolidJS — native Solid components for full compositional control |
+| `@kitn.ai/ui` | The shared layer every framework uses — types, state and card helpers |
 
 ## Any framework: the web components
 
@@ -153,11 +154,12 @@ The React adapter ships full types for every prop and event, including the `Chat
 
 ## SolidJS native components
 
-Writing Solid? Skip the element wrapper and compose the kit's native components from `@kitn.ai/ui`. They tree-shake to exactly what you import and mix freely with your own primitives.
+Writing Solid? Skip the element wrapper and compose the kit's native components from `@kitn.ai/ui/solid`. That entry is the complete Solid catalog, compiled as its own bundle so the other frameworks never pay for it. It tree-shakes to exactly what you import and mixes freely with your own primitives.
 
 ```tsx
 import { createSignal } from 'solid-js';
 import {
+  Button,
   ChatConfig,
   ChatContainer,
   ChatContainerContent,
@@ -166,7 +168,7 @@ import {
   PromptInput,
   PromptInputTextarea,
   PromptInputActions,
-} from '@kitn.ai/ui';
+} from '@kitn.ai/ui/solid';
 
 export function App() {
   const [input, setInput] = createSignal('');
@@ -189,7 +191,9 @@ export function App() {
         }}
       >
         <PromptInputTextarea placeholder="Ask anything…" />
-        <PromptInputActions />
+        <PromptInputActions>
+          <Button size="sm" disabled={!input()}>Send</Button>
+        </PromptInputActions>
       </PromptInput>
     </ChatConfig>
   );

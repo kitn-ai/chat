@@ -76,10 +76,10 @@ Each element injects its own scoped CSS into its Shadow DOM, so the components l
 }
 ```
 
-Inherited custom properties cross the Shadow DOM boundary, so these reach every `kai-*` element automatically. Prefer shadcn-style unprefixed `--color-*` tokens? Import `@kitn.ai/ui/theme.css` and override those instead — see [Theming](/guides/theming/) for the full token list, dark mode, and typography.
+Inherited custom properties cross the Shadow DOM boundary, so these reach every `kai-*` element automatically. The `--kai-` form is the one that gets there: each element's own shadow CSS declares the unprefixed `--color-*` names on `:host`, which beats anything inherited from your `:root`. Import `@kitn.ai/ui/theme.css` when you want those `--color-*` tokens for your own markup or the light-DOM SolidJS components — see [Theming](/guides/theming/) for the full token list, dark mode, and typography.
 
 <Aside type="caution" title="Tailwind v4: theme.css can override your own tokens">
-The components need no CSS import - they are shadow-isolated. Importing `theme.css` is opt-in. In a Tailwind v4 app its generic `--color-*` names merge into your `@theme` and can override your own `bg-primary`, `bg-card`, and friends (last import wins). Prefer the namespaced `--kai-color-*` tokens above (no import); if you do import `theme.css`, import it before your own token overrides.
+The components need no CSS import - they are shadow-isolated. Importing `theme.css` is opt-in. In a Tailwind v4 app its generic `--color-*` names merge into your `@theme` and can override your own `bg-primary`, `bg-card`, and friends (last import wins). Use the namespaced `--kai-color-*` tokens above to retheme the elements (no import); if you do import `theme.css`, import it before your own token overrides.
 </Aside>
 
 ## Via CDN (no build step)
@@ -97,7 +97,7 @@ Load the bundle as a self-contained ES module — no install, no bundler:
 ```
 
 <Aside type="tip" title="Pin versions in production">
-An unpinned CDN URL tracks the latest release — fine for prototyping, risky for production. The package is pre-1.0, so a minor release can break things. Pin an exact version: `https://cdn.jsdelivr.net/npm/@kitn.ai/ui@0.16.0/dist/kai.es.js`.
+An unpinned CDN URL tracks the latest release — fine for prototyping, risky for production. The package is pre-1.0, so a minor release can break things. Pin an exact version: `https://cdn.jsdelivr.net/npm/@kitn.ai/ui@0.20.1/dist/kai.es.js`.
 </Aside>
 
 ## SolidJS projects
@@ -108,7 +108,7 @@ Writing Solid? You can skip the web components and import the native components 
 npm install solid-js
 ```
 
-Then import from the root entry (`@kitn.ai/ui`), which ships compiled and tree-shakes to what you use:
+Then import from the Solid entry (`@kitn.ai/ui/solid`), which ships compiled and tree-shakes to what you use:
 
 ```tsx
 import {
@@ -119,20 +119,25 @@ import {
   PromptInput,
   PromptInputTextarea,
   PromptInputActions,
-} from '@kitn.ai/ui';
+} from '@kitn.ai/ui/solid';
 import '@kitn.ai/ui/theme.css';
 ```
+
+`@kitn.ai/ui/solid` is the whole Solid catalog, compiled as its own bundle. It is a superset of the root `@kitn.ai/ui` entry, so one import covers the chat components, the UI primitives, and the shared types and helpers. See the [SolidJS guide](/guides/frameworks/solid/).
 
 ## Entry points
 
 | Import path | What it provides |
 |---|---|
 | `@kitn.ai/ui/elements` | All the web components — registers every `kai-*` element; use in any framework. The simple default. |
-| `@kitn.ai/ui/elements/<element>` | A single element, tree-shaken. See [Loading](/guides/loading/). |
+| `@kitn.ai/ui/elements/<module>` | A single element module, tree-shaken. The path is the module's basename, which is usually but not always the tag minus `kai-`. See [Loading](/guides/loading/). |
 | `@kitn.ai/ui/autoloader` | CDN / static auto-loader — loads each `kai-*` on demand, no build. See [Loading](/guides/loading/). |
 | `@kitn.ai/ui/react` | Generated React wrappers with typed props |
-| `@kitn.ai/ui` | Native SolidJS components — compiled, tree-shakeable; Solid projects only |
-| `@kitn.ai/ui/theme.css` | Design tokens for overriding the theme (or set `--kai-color-*` with no import — see [Theming](/guides/theming/)) |
+| `@kitn.ai/ui/solid` | The complete SolidJS catalog — compiled, tree-shakeable; Solid projects only |
+| `@kitn.ai/ui` | The shared layer every framework resolves: types, state and card helpers, and the chat components `./solid` builds on |
+| `@kitn.ai/ui/state` | Pure folds over `ChatMessage[]` — `createAssistantStream`, `appendTextPart`, … See [State & hooks](/guides/state-and-hooks/) |
+| `@kitn.ai/ui/wire` | The model-stream adapter — `readOpenAIStream`, `readAnthropicStream`, `toOpenAIMessages`, … See the [wire adapter recipe](/guides/recipes/wire-adapter/) |
+| `@kitn.ai/ui/theme.css` | Design tokens for your own markup and the Solid components (to retheme the elements, set `--kai-color-*` with no import — see [Theming](/guides/theming/)) |
 | `@kitn.ai/ui/provider` | Remote provider bundle for embedding the kit across origins |
 
 ## Next steps

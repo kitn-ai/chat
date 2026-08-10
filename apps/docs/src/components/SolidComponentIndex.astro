@@ -6,12 +6,18 @@
 // no hand-written name list here on purpose: the previous hand-maintained
 // "key exports" table listed ~30 of 251 public exports and drifted.
 import meta from '@kitn.ai/ui/element-meta.json';
-import * as kit from '@kitn.ai/ui';
+import * as solid from '@kitn.ai/ui/solid';
 
 // The public Solid surface, read off the BUILT package rather than a list here:
 // a name that does not survive the build is not something a consumer can import,
 // so it has no business in this table.
-const publicExports = new Set(Object.keys(kit));
+//
+// Read from `./solid`, not from `.`. The root entry carries the shared layer the
+// React/Vue/Svelte/vanilla majority resolve; `./solid` is `export * from './index'`
+// plus the rest of the Solid catalog, so it is a compiler-enforced superset and
+// the one entry a Solid consumer imports from. Reading `.` here silently blanked
+// 27 of the 79 rows.
+const publicExports = new Set(Object.keys(solid));
 const isComponent = (n: string) => /^[A-Z]/.test(n) && publicExports.has(n);
 
 // composedFrom carries the facade's value imports from ../components and ../ui.
@@ -39,9 +45,9 @@ const th =
 
 <p class="not-content my-4 text-sm text-ink-2">
   {rows.length} registered elements. {withComponents.length} wrap SolidJS components you can import
-  from <code>@kitn.ai/ui</code> and compose yourself; the other {functionOnly} expose a function API
-  rather than a component, so their row is blank. Every name below is cross-checked against the
-  built package's exports.
+  from <code>@kitn.ai/ui/solid</code> and compose yourself; the other {functionOnly} expose a
+  function API rather than a component, so their row is blank. Every name below is cross-checked
+  against the built package's exports.
 </p>
 
 <div class="not-content my-4 overflow-x-auto rounded-xl border border-line">
