@@ -3,7 +3,18 @@ import { z } from 'zod';
 export const Category = z.enum(['provider', 'gateway', 'framework', 'harness', 'mock']);
 export const Language = z.enum(['ts', 'python']);
 export const StreamFormat = z.enum(['openai-sse', 'ai-sdk', 'native']);
-export const Framework = z.enum(['html', 'react', 'next', 'vue', 'svelte', 'fastapi', 'express', 'worker', 'tanstack-start']);
+/**
+ * The scaffold's target.
+ *
+ * Two of these are NOT web-component consumers, and the difference is load-bearing:
+ *   - `angular` consumes `kai-*` like vue/svelte/html, but needs
+ *     `CUSTOM_ELEMENTS_SCHEMA` and binds arrays/objects with `[prop]="…"`.
+ *   - `solid` consumes the SolidJS components DIRECTLY from the `@kitn.ai/ui`
+ *     root entry. The kit is authored in Solid, so routing a Solid consumer
+ *     through the custom-element facade would ship the Solid runtime twice and
+ *     cross a reactive-context boundary for nothing.
+ */
+export const Framework = z.enum(['html', 'react', 'next', 'vue', 'svelte', 'angular', 'solid', 'fastapi', 'express', 'worker', 'tanstack-start']);
 export const Placement = z.enum(['side', 'full-page', 'docked-widget', 'inline']);
 
 export const IntegrationSchema = z.object({

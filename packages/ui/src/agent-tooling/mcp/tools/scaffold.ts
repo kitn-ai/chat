@@ -181,8 +181,20 @@ function mockStreamBody(opts: {
    * plain-JS contexts (html) where `as const` is invalid syntax.
    */
   strictRoles?: boolean;
+  /**
+   * Where the submitted text comes from. Every kai-* target reads it off the
+   * `kai-submit` CustomEvent; `solid` renders the SolidJS `PromptInput`, which
+   * has no such event — its submitted text is the controlled input signal.
+   */
+  valueSource?: string;
+  /** Lines emitted right after the value is read and guarded (solid clears its
+   *  controlled textarea there). */
+  afterValue?: string[];
 }): string {
-  const { pad, read, commitInitial, commitMap, setLoading, strictRoles = false } = opts;
+  const {
+    pad, read, commitInitial, commitMap, setLoading, strictRoles = false,
+    valueSource = 'e.detail.value', afterValue = [],
+  } = opts;
   const asConst = strictRoles ? ' as const' : '';
   // Under strict TS, an un-annotated array literal widens the part's `type` to
   // `string`, so the later `setMessages([...history, …])` fails TS2322. Plain-JS
@@ -190,8 +202,9 @@ function mockStreamBody(opts: {
   const historyType = strictRoles ? ': ChatMessage[]' : '';
   const mapBody = `(m.id === assistantId ? { ...m, parts: appendText(m.parts, tok) } : m)`;
   return [
-    `${pad}const value = e.detail.value.trim();`,
+    `${pad}const value = ${valueSource}.trim();`,
     `${pad}if (!value) return;`,
+    ...afterValue.map((l) => `${pad}${l}`),
     `${pad}const history${historyType} = [...${read}, { id: crypto.randomUUID(), role: 'user'${asConst}, parts: [{ type: 'text', text: value }] }];`,
     `${pad}const assistantId = crypto.randomUUID();`,
     `${pad}${commitInitial(`[...history, { id: assistantId, role: 'assistant'${asConst}, parts: [] }]`)}`,
@@ -283,6 +296,28 @@ function liveThreadBinding(expr: string, setter: string, firstRead = expr): Thre
 }
 
 /**
+ * A framework whose messages sit behind a GETTER plus a separate setter call —
+ * an Angular signal (`this.messages()` / `this.messages.set(…)`) or a Solid one
+ * (`messages()` / `setMessages(…)`). Same story as `liveThreadBinding`: the read
+ * is synchronous, so the live value IS the thread and React's turn-scoped copy
+ * (`REACT_THREAD`) is not needed. The only difference is that the write is a
+ * call, not an assignment, so the commit is passed in instead of derived.
+ */
+function accessorThreadBinding(read: string, commit: (value: string) => string, setter: string): ThreadBinding {
+  return {
+    open: ({ pad, userMessage }) => [
+      `${pad}// ${read} IS the thread: the stream writes the assistant message back`,
+      `${pad}// through the setter, so every round below re-encodes the live, current`,
+      `${pad}// value. A signal reads back synchronously, so there is no React-style`,
+      `${pad}// stale-closure problem and no turn-local copy to keep in sync.`,
+      `${pad}${commit(`[...${read}, ${userMessage}]`)}`,
+    ],
+    live: read,
+    setter,
+  };
+}
+
+/**
  * The real-backend submit body. Four lines of adapter, the rest is fetch.
  *
  * This deliberately reverses the inline-everything policy that governs the mock
@@ -321,8 +356,15 @@ function realStreamBody(opts: {
   toolLoop: boolean;
   /** how this framework exposes the turn's thread (tool-loop shape only) */
   thread: ThreadBinding;
+  /** where the submitted text comes from — see `mockStreamBody.valueSource` */
+  valueSource?: string;
+  /** lines emitted right after the value is read and guarded */
+  afterValue?: string[];
 }): string {
-  const { pad, read, commitSet, setterAdapter, setLoading, bodyPayload, strictRoles = false, toolLoop, thread } = opts;
+  const {
+    pad, read, commitSet, setterAdapter, setLoading, bodyPayload, strictRoles = false, toolLoop, thread,
+    valueSource = 'e.detail.value', afterValue = [],
+  } = opts;
   const asConst = strictRoles ? ' as const' : '';
   // Under strict TS an un-annotated array literal widens the part's `type` to
   // `string`, so the later commit fails TS2322. Plain-JS contexts (html) have no
@@ -353,8 +395,9 @@ function realStreamBody(opts: {
   ];
 
   return [
-    `${pad}const value = e.detail.value.trim();`,
+    `${pad}const value = ${valueSource}.trim();`,
     `${pad}if (!value) return;`,
+    ...afterValue.map((l) => `${pad}${l}`),
     ...open,
     `${pad}${setLoading('true')}`,
     `${pad}// createAssistantStream appends the in-flight assistant message and folds`,
@@ -1798,6 +1841,571 @@ function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
     .join('\n');
 }
 
+/**
+ * Angular: the `kai-*` custom elements, same as vue/svelte/html — plus the two
+ * things Angular needs and no other framework does.
+ *
+ *   1. `schemas: [CUSTOM_ELEMENTS_SCHEMA]` on the component. Without it the
+ *      template compiler REJECTS every unknown tag ("'kai-chat' is not a known
+ *      element") and `ng build` fails outright. With it, Angular stamps the tag
+ *      and passes the bindings straight through to the DOM.
+ *   2. `[messages]="messages()"` — the square brackets are what make it a DOM
+ *      PROPERTY. `messages="…"` would be an ATTRIBUTE, i.e. the string
+ *      "[object Object]": arrays and objects only ever reach a custom element as
+ *      properties. Same for `[suggestions]` and `[loading]`.
+ *
+ * Two Angular-specific facts the emitted comments carry, because getting either
+ * wrong is a build error rather than a subtle bug:
+ *
+ *   · Stylesheets come from `angular.json` -> architect.build.options.styles.
+ *     `@angular/build` does not take a TS `import './x.css'`, so the theme
+ *     cannot be imported the way every other framework imports it here.
+ *   · `$event` on an unknown custom-element event is typed `Event` under
+ *     `strictTemplates`, not `CustomEvent`, so the handler takes an `Event` and
+ *     narrows inside — exactly what examples/starters/angular does.
+ *
+ * The thread is an Angular signal, which reads back synchronously, so this uses
+ * `accessorThreadBinding` and not React's turn-scoped `thread` copy.
+ */
+function renderAngular(archetype: Archetype, ctx: RenderCtx): string {
+  const { p, emptyHint, suggestions, isMock, defaultModel, emitTools, emitToolLoop } = ctx;
+
+  const workspace = isWorkspace(archetype);
+  const standaloneCompanionTags = archetype.components.filter(
+    (t) => t !== 'kai-chat' && !MESSAGE_EMBEDDED_TAGS.has(t) && !WORKSPACE_STRUCTURAL_TAGS.has(t),
+  );
+  const hasEmbedded = archetype.components.some((t) => MESSAGE_EMBEDDED_TAGS.has(t));
+  const hasSourcesCompanion = standaloneCompanionTags.includes('kai-sources');
+
+  const companionLines: string[] = [];
+  if (hasEmbedded) {
+    companionLines.push(
+      `      <!-- kai-tool / kai-reasoning render INSIDE the thread, as parts on the assistant message the stream builds. -->`,
+    );
+  }
+  for (const t of standaloneCompanionTags) {
+    if (t === 'kai-sources') {
+      companionLines.push(
+        `      <!-- Replace sampleSources with your real data. [sources] is a PROPERTY binding: an array can't be an attribute. -->`,
+        `      <kai-sources #sources [sources]="sampleSources"></kai-sources>`,
+      );
+    } else {
+      companionLines.push(`      <!-- wire data props — see the component_reference MCP tool -->`);
+      companionLines.push(`      <${t}></${t}>`);
+    }
+  }
+
+  // Angular signals: `this.messages()` reads, `this.messages.set(next)` writes a
+  // BRAND-NEW array, which is what re-renders <kai-chat>.
+  const read = 'this.messages()';
+  const commit = (value: string) => `this.messages.set(${value});`;
+  const setter = '(fn) => this.messages.set(fn(this.messages()))';
+
+  const onSubmitBody = isMock
+    ? mockStreamBody({
+        pad: '    ',
+        read,
+        commitInitial: (expr) => commit(expr),
+        // the signal reads back live — map over the current value, not a snapshot
+        commitMap: (mapBody) => commit(`${read}.map((m) => ${mapBody})`),
+        setLoading: (v) => `this.loading.set(${v});`,
+        strictRoles: true,
+      })
+    : realStreamBody({
+        pad: '    ',
+        read,
+        commitSet: (expr) => commit(expr),
+        setterAdapter: setter,
+        setLoading: (v) => `this.loading.set(${v});`,
+        bodyPayload: realBodyPayload({ defaultModel, tools: emitTools }),
+        strictRoles: true,
+        toolLoop: emitToolLoop,
+        thread: accessorThreadBinding(read, commit, setter),
+      });
+
+  // Module scope, exactly like vue: a class can hold neither a bare `const` nor a
+  // `function` declaration, and the methods below close over all three.
+  const modelInit = defaultModel
+    ? [
+        `// SCAF-8: change this to any provider/model string you want to use.`,
+        `const model = '${defaultModel}';`,
+        ``,
+      ]
+    : [];
+  const toolsLines = emitTools ? [...toolSchemaLines(''), ``] : [];
+  const runnerLines = emitToolLoop ? [...toolRunnerLines('', true), ``] : [];
+
+  // SCAF-9: no fabricated seed — see SAMPLE_AGENTIC_MESSAGE.
+  const sampleSeed = [
+    ...(hasEmbedded
+      ? sampleSeedComment(isMock, '  ', (literal) => [
+          `readonly messages = signal<ChatMessage[]>([${literal}]);`,
+        ])
+      : []),
+    `  readonly messages = signal<ChatMessage[]>([]);`,
+  ];
+
+  const sourcesField = hasSourcesCompanion
+    ? [
+        `  // Replace sampleSources with your real source data.`,
+        `  readonly sampleSources = [`,
+        `    { href: 'https://example.com/doc1', title: 'Getting started', description: 'Overview of the product.' },`,
+        `    { href: 'https://example.com/doc2', title: 'API reference', description: 'Full API documentation.' },`,
+        `  ];`,
+        `  private readonly sourcesEl = viewChild.required<ElementRef<KaiSourcesElement>>('sources');`,
+      ]
+    : [];
+  const sourcesReapply = hasSourcesCompanion
+    ? [`      Object.assign(this.sourcesEl().nativeElement, { sources: this.sampleSources });`]
+    : [];
+
+  const chatTag = (pad: string) =>
+    [
+      `<kai-chat`,
+      `  #chat`,
+      `  [messages]="messages()"`,
+      `  [loading]="loading()"`,
+      `  [suggestions]="suggestions"`,
+      `  suggestion-mode="submit"`,
+      `  style="${p.chatFill}"`,
+      `  (kai-submit)="onSubmit($event)"`,
+      `></kai-chat>`,
+    ].map((l) => `${pad}${l}`);
+
+  const templateBody = workspace
+    ? [
+        `      <!-- SCAF-14: workspace split — chat pane left, artifact preview right. -->`,
+        `      <!-- kai-resizable needs kai-resizable-item children to render panels. -->`,
+        `      <kai-resizable orientation="horizontal" style="display:block;width:100%;height:100%">`,
+        `        <kai-resizable-item size="40%" min="240px">`,
+        ...chatTag('          '),
+        `        </kai-resizable-item>`,
+        `        <kai-resizable-item min="280px">`,
+        `          <!-- Replace src with your artifact URL or set [files] for multi-file preview. -->`,
+        `          <kai-artifact src="https://example.com" style="width:100%;height:100%"></kai-artifact>`,
+        `        </kai-resizable-item>`,
+        `      </kai-resizable>`,
+      ]
+    : [...chatTag('      '), ...companionLines];
+
+  // KaiSourcesElement is imported only when a kai-sources companion is really
+  // declared: an always-on import is unused on every other archetype, and a stock
+  // Angular tsconfig turns on the checks that make that a build error.
+  const elementTypes = hasSourcesCompanion ? 'KaiChatElement, KaiSourcesElement' : 'KaiChatElement';
+
+  return [
+    `// Angular standalone component — save as: src/app/chat.component.ts`,
+    `// Render it: put <app-chat /> in your root template and add ChatComponent to`,
+    `// that component's \`imports: [...]\`.`,
+    `//`,
+    `// SETUP, once — Angular takes stylesheets from angular.json, NOT from a TS`,
+    `// \`import './x.css'\`, so the theme cannot be imported here the way it is in`,
+    `// every other framework. Add it to architect.build.options.styles:`,
+    `//   "styles": ["node_modules/@kitn.ai/ui/dist/theme.tokens.css", "src/styles.css"]`,
+    `// (@kitn.ai/ui/theme.tokens.css is the compiled token file; theme.css is`,
+    `// Tailwind source and is only for apps that compile Tailwind themselves.)`,
+    `import { CUSTOM_ELEMENTS_SCHEMA, Component, ElementRef, afterNextRender, signal, viewChild } from '@angular/core';`,
+    `import '@kitn.ai/ui/elements';  // registers <kai-*> — required, must come first`,
+    `import type { ${elementTypes} } from '@kitn.ai/ui/elements';`,
+    ...(isMock ? [] : wireImportLines({ typed: true, toolLoop: emitToolLoop })),
+    ``,
+    `// ${archetype.title} — ${p.note}. empty-state hint: ${emptyHint}`,
+    ...(p.altNote ? [`// ${p.altNote}`] : []),
+    ...chatMessageDecl(isMock),
+    ``,
+    ...modelInit,
+    ...toolsLines,
+    ...runnerLines,
+    `@Component({`,
+    `  selector: 'app-chat',`,
+    `  // REQUIRED. Angular does not know the kai-* tags; without this the template`,
+    `  // compiler fails with "'kai-chat' is not a known element". With it, Angular`,
+    `  // stamps the tag and passes [prop] bindings through to the DOM.`,
+    `  schemas: [CUSTOM_ELEMENTS_SCHEMA],`,
+    `  template: \``,
+    `    <div style="${p.style}">`,
+    ...templateBody,
+    `    </div>`,
+    `  \`,`,
+    `})`,
+    `export class ChatComponent {`,
+    `  // Every write assigns a NEW array. That reference change is what re-renders`,
+    `  // <kai-chat> — mutating the array in place does nothing.`,
+    ...sampleSeed,
+    `  readonly loading = signal(false);`,
+    `  readonly suggestions = ${jsArray(suggestions)};`,
+    ...sourcesField,
+    `  private readonly chatEl = viewChild.required<ElementRef<KaiChatElement>>('chat');`,
+    ``,
+    `  constructor() {`,
+    `    // SCAF-15: kai-* register via an async dynamic import (SSR-safety), so the`,
+    `    // element may not be upgraded when Angular first applies the bindings above —`,
+    `    // and a property set on a not-yet-upgraded element is dropped on upgrade.`,
+    `    // Re-apply once it is defined so the initial messages/suggestions/loading stick.`,
+    `    // afterNextRender never runs on the server, which is also what keeps this`,
+    `    // \`customElements\` reference safe under SSR/prerender.`,
+    `    afterNextRender(async () => {`,
+    `      await customElements.whenDefined('kai-chat');`,
+    `      Object.assign(this.chatEl().nativeElement, {`,
+    `        messages: this.messages(),`,
+    `        loading: this.loading(),`,
+    `        suggestions: this.suggestions,`,
+    `      });`,
+    ...sourcesReapply,
+    `    });`,
+    `  }`,
+    ``,
+    `  // \`Event\`, not \`CustomEvent\`: under strictTemplates Angular types \`$event\` on`,
+    `  // an unknown custom-element event as a plain Event, so the narrowing happens`,
+    `  // here rather than in the signature.`,
+    `  async onSubmit(event: Event) {`,
+    `    const e = event as CustomEvent<{ value: string }>;`,
+    onSubmitBody,
+    `  }`,
+    `}`,
+  ]
+    // Collapse runs of blanks rather than dropping every blank (what the JSX/vue
+    // renderers do): this target emits one long file — imports, module-scope
+    // consts, the decorator, the class — and with no separators at all it reads
+    // as a wall.
+    .filter((l, i, arr) => l !== '' || (i > 0 && i < arr.length - 1 && arr[i - 1] !== ''))
+    .join('\n');
+}
+
+/**
+ * SolidJS — the one target that does NOT render `kai-*`.
+ *
+ * The kit is AUTHORED in Solid, so a Solid consumer imports the real components
+ * from the `@kitn.ai/ui` root entry and gets real props and real fine-grained
+ * reactivity. Routing it through the custom-element facade would ship the Solid
+ * runtime twice and put a reactive-context boundary in the middle of the app for
+ * no gain.
+ *
+ * THE GRANULARITY GAP. `<kai-chat>` is a coarse preset: one tag renders the
+ * thread, the parts, the scroll behaviour, the suggestions and the composer. The
+ * Solid layer is fine-grained — ChatContainer / Message / MessageContent /
+ * PromptInput / … — so the same capability has to be composed here. Two
+ * consequences the emitted code has to handle, and both are silent failures if
+ * it does not:
+ *
+ *   1. The thread renders exactly what `renderPart` renders. `<kai-chat>` knows
+ *      every MessagePart variant; a hand-composed tree that only handles `text`
+ *      shows nothing when a reasoning or tool part streams in. So the part
+ *      renderer is emitted for EVERY archetype, not just the agentic one — the
+ *      stream can produce those parts regardless of which components the
+ *      archetype names.
+ *   2. The components are Tailwind-v4 SOURCE, not shadow-encapsulated CSS. The
+ *      class names have to survive into the consumer's stylesheet, which is what
+ *      the `@source` line in the setup note is for. Without it Tailwind scans
+ *      only `src/`, strips every kit class as unused, and the app renders
+ *      unstyled — see examples/starters/solid/README.md.
+ *
+ * Solid signals read back synchronously, so this uses `accessorThreadBinding`
+ * and not React's turn-scoped `thread` copy.
+ */
+function renderSolid(archetype: Archetype, ctx: RenderCtx): string {
+  const { p, emptyHint, suggestions, isMock, defaultModel, emitTools, emitToolLoop } = ctx;
+
+  const workspace = isWorkspace(archetype);
+  const standaloneCompanionTags = archetype.components.filter(
+    (t) => t !== 'kai-chat' && !MESSAGE_EMBEDDED_TAGS.has(t) && !WORKSPACE_STRUCTURAL_TAGS.has(t),
+  );
+  const hasSources = standaloneCompanionTags.includes('kai-sources');
+  const hasVoice = standaloneCompanionTags.includes('kai-voice-input');
+
+  // Every name here is referenced by the emitted tree below — `noUnusedLocals` is
+  // on in a stock Solid app (`npm run build` runs `tsc` first), so an extra one
+  // is a build failure.
+  const componentImports = [
+    'Button',
+    'ChatConfig',
+    'ChatContainer',
+    'ChatContainerContent',
+    'ChatContainerScrollAnchor',
+    'Message',
+    'MessageContent',
+    'PromptInput',
+    'PromptInputActions',
+    'PromptInputTextarea',
+    'PromptSuggestion',
+    'Reasoning',
+    'ReasoningContent',
+    'ReasoningTrigger',
+    'ScrollButton',
+    'Tool',
+    ...(workspace ? ['Artifact', 'ResizableHandle', 'ResizablePanel', 'ResizablePanelGroup'] : []),
+    ...(hasSources ? ['Source', 'SourceContent', 'SourceList', 'SourceTrigger'] : []),
+    ...(hasVoice ? ['VoiceInput'] : []),
+  ].sort();
+
+  // Solid signals: `messages()` reads, `setMessages(next)` writes a NEW array.
+  const read = 'messages()';
+  const commit = (value: string) => `setMessages(${value});`;
+  // Solid's own Setter is overloaded (and treats a function argument as an
+  // updater), so it is wrapped rather than handed over directly — the wrapper is
+  // exactly the `SetMessages` shape createAssistantStream wants.
+  const setter = '(fn) => setMessages((prev) => fn(prev))';
+
+  const onSubmitBody = isMock
+    ? mockStreamBody({
+        pad: '    ',
+        read,
+        commitInitial: (expr) => commit(expr),
+        // the signal reads back live — map over the current value, not a snapshot
+        commitMap: (mapBody) => commit(`${read}.map((m) => ${mapBody})`),
+        setLoading: (v) => `setLoading(${v});`,
+        strictRoles: true,
+        valueSource: 'input()',
+        afterValue: [`setInput('');`],
+      })
+    : realStreamBody({
+        pad: '    ',
+        read,
+        commitSet: (expr) => commit(expr),
+        setterAdapter: setter,
+        setLoading: (v) => `setLoading(${v});`,
+        bodyPayload: realBodyPayload({ defaultModel, tools: emitTools }),
+        strictRoles: true,
+        toolLoop: emitToolLoop,
+        thread: accessorThreadBinding(read, commit, setter),
+        valueSource: 'input()',
+        afterValue: [`setInput('');`],
+      });
+
+  const modelInit = defaultModel
+    ? [
+        `  // SCAF-8: change this to any provider/model string you want to use.`,
+        `  const model = '${defaultModel}';`,
+      ]
+    : [];
+  const toolsLines = emitTools ? toolSchemaLines('  ') : [];
+  const runnerLines = emitToolLoop ? toolRunnerLines('  ', true) : [];
+
+  const sourcesInit = hasSources
+    ? [
+        `  // Replace sampleSources with your real source data.`,
+        `  const sampleSources = [`,
+        `    { href: 'https://example.com/doc1', title: 'Getting started', description: 'Overview of the product.' },`,
+        `    { href: 'https://example.com/doc2', title: 'API reference', description: 'Full API documentation.' },`,
+        `  ];`,
+      ]
+    : [];
+
+  // The scrolling thread + composer. Reused verbatim inside the workspace split.
+  // `fill` is how this column claims its height: the placement's own chatFill at
+  // the top level, 100% of the pane inside a resizable panel.
+  const surface = (pad: string, fill: string): string[] =>
+    [
+      `<div class="flex w-full flex-col" style={{ ${fill} }}>`,
+      `  <div class="relative min-h-0 flex-1">`,
+      // ChatContainer IS the scroll container (it carries overflow-y-auto and the
+      // stick-to-bottom ref), so the wrapper above must not also scroll.
+      `    <ChatContainer class="h-full">`,
+      `      <ChatContainerContent class="px-5 pt-4 pb-12">`,
+      `        <For each={messages()}>`,
+      `          {(m) => (`,
+      `            <Message class={\`mx-auto flex w-full max-w-3xl flex-col gap-2 px-6 \${m.role === 'user' ? 'items-end' : 'items-start'}\`}>`,
+      `              <For each={m.parts}>{(part) => renderPart(part, m.role)}</For>`,
+      `            </Message>`,
+      `          )}`,
+      `        </For>`,
+      ...(hasSources
+        ? [
+            `        {/* Replace sampleSources with your real data. */}`,
+            `        <SourceList class="mx-auto w-full max-w-3xl px-6 pt-2">`,
+            `          <For each={sampleSources}>`,
+            `            {(s) => (`,
+            `              <Source href={s.href}>`,
+            `                <SourceTrigger showFavicon />`,
+            `                <SourceContent title={s.title} description={s.description} />`,
+            `              </Source>`,
+            `            )}`,
+            `          </For>`,
+            `        </SourceList>`,
+          ]
+        : []),
+      `        <ChatContainerScrollAnchor />`,
+      `      </ChatContainerContent>`,
+      `      <div class="absolute bottom-4 left-1/2 flex w-full max-w-3xl -translate-x-1/2 justify-center px-5">`,
+      `        <ScrollButton />`,
+      `      </div>`,
+      `    </ChatContainer>`,
+      `  </div>`,
+      ``,
+      `  <div class="shrink-0 px-3 pb-3 md:px-5 md:pb-5">`,
+      `    <div class="mx-auto max-w-3xl">`,
+      `      {/* Starter prompts, shown only while the thread is empty. */}`,
+      `      <Show when={messages().length === 0}>`,
+      `        <div class="flex flex-wrap gap-2 pb-3">`,
+      `          <For each={suggestions}>`,
+      `            {(s) => <PromptSuggestion onClick={() => { setInput(s); void onSubmit(); }}>{s}</PromptSuggestion>}`,
+      `          </For>`,
+      `        </div>`,
+      `      </Show>`,
+      `      <PromptInput value={input()} onValueChange={setInput} onSubmit={onSubmit} isLoading={loading()}>`,
+      `        <div class="flex flex-col">`,
+      `          <PromptInputTextarea placeholder="Send a message…" class="min-h-[44px] pt-3 pl-4" />`,
+      `          <PromptInputActions class="mt-2 flex w-full items-center justify-end gap-2 px-3 pb-3">`,
+      ...(hasVoice
+        ? [
+            `            {/* hasTranscribe={false} uses the browser's native SpeechRecognition.`,
+            `                Point onTranscribe at your speech-to-text endpoint to record + upload instead. */}`,
+            `            <VoiceInput`,
+            `              hasTranscribe={false}`,
+            `              onTranscribe={async (audio) => {`,
+            `                const res = await fetch('/api/transcribe', { method: 'POST', body: audio });`,
+            `                const data = (await res.json()) as { text: string };`,
+            `                return data.text;`,
+            `              }}`,
+            `              onTranscription={(text) => setInput(text)}`,
+            `            />`,
+          ]
+        : []),
+      `            <Button size="sm" class="rounded-full" disabled={!input().trim() || loading()} onClick={onSubmit}>`,
+      `              Send`,
+      `            </Button>`,
+      `          </PromptInputActions>`,
+      `        </div>`,
+      `      </PromptInput>`,
+      `    </div>`,
+      `  </div>`,
+      `</div>`,
+    ].map((l) => (l === '' ? l : `${pad}${l}`));
+
+  const tree = workspace
+    ? [
+        `        {/* SCAF-14: workspace split — chat pane left, artifact preview right. */}`,
+        `        <ResizablePanelGroup orientation="horizontal" class="h-full w-full">`,
+        `          <ResizablePanel defaultSize={40} minSize="240px">`,
+        ...surface('            ', `'height': '100%', 'min-height': '0'`),
+        `          </ResizablePanel>`,
+        `          <ResizableHandle handle="grip" />`,
+        `          <ResizablePanel minSize="280px">`,
+        `            {/* Replace src + files with your real artifact data. */}`,
+        `            <Artifact`,
+        `              src="https://example.com"`,
+        `              files={[{ path: 'index.html', url: 'https://example.com' }]}`,
+        `              class="h-full w-full"`,
+        `            />`,
+        `          </ResizablePanel>`,
+        `        </ResizablePanelGroup>`,
+      ]
+    : surface('        ', solidStyle(p.chatFill));
+
+  return [
+    `// SolidJS + Vite — save as: src/App.tsx`,
+    `//`,
+    `// This target does NOT use the <kai-*> custom elements, and that is deliberate:`,
+    `// the kit is AUTHORED in SolidJS, so a Solid app renders the real components`,
+    `// with real props and real fine-grained reactivity. Going through the`,
+    `// web-component facade would ship the Solid runtime twice and cross a reactive`,
+    `// boundary for nothing.`,
+    `//`,
+    `// SETUP, once. These components are Tailwind-v4 SOURCE (not shadow-encapsulated),`,
+    `// so their class names have to reach YOUR stylesheet:`,
+    `//   npm i -D tailwindcss @tailwindcss/vite vite-plugin-solid`,
+    `//   vite.config.ts  -> plugins: [solid(), tailwindcss()]`,
+    `//   src/styles.css  -> @import "tailwindcss";`,
+    `//                      @import "@kitn.ai/ui/theme.css";        /* --color-* tokens */`,
+    `//                      @source "../node_modules/@kitn.ai/ui";  /* scan the kit for classes */`,
+    `// The @source line is NOT optional: without it Tailwind scans only src/, strips`,
+    `// every kit utility class as unused, and the whole UI renders unstyled.`,
+    `// (theme.css here, not theme.tokens.css: this app compiles Tailwind itself.)`,
+    `import { For, Show, createSignal } from 'solid-js';`,
+    `import {`,
+    ...componentImports.map((n) => `  ${n},`),
+    `} from '@kitn.ai/ui';`,
+    `// The kit's own types, from the same entry the components come from.`,
+    `import type { ChatMessage, MessagePart } from '@kitn.ai/ui';`,
+    ...(isMock ? [] : wireImportLines({ typed: false, toolLoop: emitToolLoop })),
+    ``,
+    `// ${archetype.title} — ${p.note}. empty-state hint: ${emptyHint}`,
+    ...(p.altNote ? [`// ${p.altNote}`] : []),
+    ``,
+    `// EVERY part kind the stream can produce, in thread order. <kai-chat> does this`,
+    `// internally for the element-based targets; composing from the SolidJS layer`,
+    `// means the thread renders exactly what this function renders, so a missing`,
+    `// branch is a reasoning or tool part that streams in and shows nothing.`,
+    `function renderPart(part: MessagePart, role: ChatMessage['role']) {`,
+    `  switch (part.type) {`,
+    `    case 'text':`,
+    `      return role === 'user' ? (`,
+    `        <MessageContent class="bg-muted text-primary max-w-[85%] rounded-3xl px-5 py-2.5">`,
+    `          {part.text}`,
+    `        </MessageContent>`,
+    `      ) : (`,
+    `        <MessageContent markdown class="text-foreground prose flex-1 rounded-lg bg-transparent p-0">`,
+    `          {part.text}`,
+    `        </MessageContent>`,
+    `      );`,
+    `    case 'reasoning':`,
+    `      return (`,
+    `        <Reasoning class="w-full">`,
+    `          <ReasoningTrigger>{part.label ?? 'Reasoning'}</ReasoningTrigger>`,
+    `          <ReasoningContent markdown>{part.text}</ReasoningContent>`,
+    `        </Reasoning>`,
+    `      );`,
+    `    case 'tool':`,
+    `      return <Tool toolPart={part.tool} />;`,
+    `    default:`,
+    `      // card / source / file parts — see the docs for the card dispatcher.`,
+    `      return null;`,
+    `  }`,
+    `}`,
+    ``,
+    `export default function App() {`,
+    `  // Each write assigns a NEW array; Solid's fine-grained <For> re-renders only`,
+    `  // the message whose object reference actually changed.`,
+    `  const [messages, setMessages] = createSignal<ChatMessage[]>([]);`,
+    `  const [loading, setLoading] = createSignal(false);`,
+    `  // PromptInput is CONTROLLED here, so this signal — not a kai-submit event — is`,
+    `  // where the submitted text comes from.`,
+    `  const [input, setInput] = createSignal('');`,
+    `  const suggestions = ${jsArray(suggestions)};`,
+    ...sourcesInit,
+    ...modelInit,
+    ...toolsLines,
+    ...runnerLines,
+    ``,
+    `  async function onSubmit() {`,
+    onSubmitBody,
+    `  }`,
+    ``,
+    `  return (`,
+    `    // ChatConfig carries prose size / code theme / portal target to every`,
+    `    // component below it. Mount it once, at the top.`,
+    `    <ChatConfig>`,
+    `      <div style={{ ${solidStyle(p.style)} }}>`,
+    ...tree,
+    `      </div>`,
+    `    </ChatConfig>`,
+    `  );`,
+    `}`,
+  ].join('\n');
+}
+
+/**
+ * Translate an inline CSS string into a SOLID style-object entry list.
+ *
+ * Not `jsxStyle`. Solid's `style` prop is typed from csstype's HYPHENATED
+ * property set (`'flex-direction'`) and applied with `style.setProperty(key,
+ * value)`; React's is camelCased (`flexDirection`). Handing Solid React's shape
+ * is a TS2561 on every cell AND, if it ever got past the compiler, a declaration
+ * that silently does nothing at runtime. Keys are quoted because
+ * `flex-direction` is not a bare identifier.
+ */
+function solidStyle(style: string): string {
+  return style
+    .split(';')
+    .map((d) => d.trim())
+    .filter(Boolean)
+    .map((d) => {
+      const [prop, ...rest] = d.split(':');
+      return `'${prop.trim()}': '${rest.join(':').trim()}'`;
+    })
+    .join(', ');
+}
+
 /** Translate an inline CSS string into JSX style-object entries. */
 function jsxStyle(style: string): string {
   return style
@@ -1840,6 +2448,10 @@ function renderFrontend(
       return renderVue(archetype, ctx);
     case 'svelte':
       return renderSvelte(archetype, ctx);
+    case 'angular':
+      return renderAngular(archetype, ctx);
+    case 'solid':
+      return renderSolid(archetype, ctx);
     case 'tanstack-start':
       return renderTanstackStart(archetype, ctx);
     case 'html':
@@ -1868,6 +2480,8 @@ const RUNTIME_LABEL: Record<string, string> = {
   fastapi: 'FastAPI (Python)',
   html: 'browser-direct (no server route)',
   'tanstack-start': 'TanStack Start server route',
+  angular: 'Angular SSR server (Express, src/server.ts)',
+  solid: 'Vite dev-server middleware (Node)',
 };
 
 /** How the emitted framework reads in a warning: "will NOT run in ___". */
@@ -1877,6 +2491,8 @@ const FRAMEWORK_LABEL: Record<string, string> = {
   next: 'a Next.js app',
   vue: 'a Vite Vue SPA',
   svelte: 'a SvelteKit app',
+  angular: 'an Angular app',
+  solid: 'a Vite SolidJS SPA',
   'tanstack-start': 'a TanStack Start app',
   express: 'an Express server',
   worker: 'a Cloudflare Worker',
@@ -1896,6 +2512,8 @@ const CANNOT_HOST_NOTE: Record<string, string> = {
   react: 'a Vite React SPA has no /api routes — add a dev-server middleware (Vite: server.middlewares in a plugin), proxy /api/chat to a separate server, or use framework: "next" | "tanstack-start".',
   vue: 'a Vite Vue SPA has no /api routes — add a dev-server middleware (Vite: server.middlewares in a plugin), proxy /api/chat to a separate server, or use framework: "next".',
   svelte: 'SvelteKit routes live at src/routes/api/chat/+server.ts and are called as POST(event) — `request` is a FIELD on that event, so a handler written to take a bare Request typechecks here and then throws "req.json is not a function" on the first submit.',
+  angular: "Angular's server route lives in src/server.ts — the Express app `ng add @angular/ssr` generates — and has to be registered BEFORE the Angular catch-all `app.use(...)` that renders the app, or the renderer answers /api/chat with HTML. A file exporting POST is never called.",
+  solid: 'a Vite SolidJS SPA has no /api routes — add a dev-server middleware (Vite: server.middlewares in a plugin), proxy /api/chat to a separate server, or run the handler on a real server (framework: "express" | "worker" | "next").',
   'tanstack-start': "TanStack Start routes the FILE: it needs createFileRoute('/api/chat')({ server: { handlers: { POST } } }) in src/routes/api/chat.ts. A bare `export async function POST` is never called.",
   next: 'Next.js needs the handler exported as POST from app/api/chat/route.ts.',
   express: 'Express hands the handler (req, res) — it does not take a Request or return a Response, so the code needs bridging.',
@@ -2042,6 +2660,117 @@ const WEB_ROUTE_ADAPTERS: Record<string, WebRouteAdapter> = {
   },
   react: viteMiddlewareAdapter('react()'),
   vue: viteMiddlewareAdapter('vue()'),
+  // A Solid app is a Vite SPA, so it hosts the route exactly the way react/vue
+  // do. `tailwindcss()` is in the plugin list because the Solid front end needs
+  // it (the components are Tailwind source) — see renderSolid's setup note.
+  solid: viteMiddlewareAdapter('solid(), tailwindcss()'),
+  /**
+   * Angular DOES have a server, and this is where it lives.
+   *
+   * `ng add @angular/ssr` (or `ng new --ssr`) generates `src/server.ts` as an
+   * Express app, and the Angular CLI loads it through the `reqHandler` export at
+   * the bottom for BOTH `ng serve` and `ng build` — the generated file's own
+   * comment reads "Request handler used by the Angular CLI (for dev-server and
+   * during build)". So an endpoint registered here answers in development and in
+   * production, unlike the react/vue Vite middleware, which is dev-only.
+   *
+   * There is no second option: `@angular/build:dev-server` exposes no middleware
+   * hook and takes no Vite plugins, so an Angular app WITHOUT SSR enabled cannot
+   * host `/api/chat` at all — it has to proxy to a separate server.
+   *
+   * The whole file is emitted rather than a fragment because placement is the
+   * part that goes wrong: the route must be registered BEFORE the catch-all
+   * `app.use` that renders the Angular app, or the renderer answers /api/chat
+   * with an HTML page and the front end tries to parse it as SSE.
+   */
+  angular: {
+    runtime: 'Angular SSR server (Express, src/server.ts)',
+    file: 'src/server.ts',
+    before: [
+      `// This is the file \`ng add @angular/ssr\` generates (\`ng new --ssr\` too), with`,
+      `// the chat endpoint added. The Angular CLI loads it via the \`reqHandler\` export`,
+      `// at the bottom for BOTH \`ng serve\` and \`ng build\`, so the route below answers`,
+      `// in development and in production.`,
+      `//`,
+      `// If your app has no src/server.ts, you have no SSR: run \`ng add @angular/ssr\`.`,
+      `// @angular/build's dev server takes no middleware and no Vite plugins, so a`,
+      `// non-SSR Angular app cannot host /api/chat — proxy it to a separate server`,
+      `// instead (framework: "express" | "worker" | "next").`,
+      `import {`,
+      `  AngularNodeAppEngine,`,
+      `  createNodeRequestHandler,`,
+      `  isMainModule,`,
+      `  writeResponseToNodeResponse,`,
+      `} from '@angular/ssr/node';`,
+      `import express from 'express';`,
+      `import { join } from 'node:path';`,
+    ],
+    after: [
+      ``,
+      `const browserDistFolder = join(import.meta.dirname, '../browser');`,
+      ``,
+      `const app = express();`,
+      `const angularApp = new AngularNodeAppEngine();`,
+      ``,
+      `// ORDER MATTERS: this has to come BEFORE the catch-all below, or Angular`,
+      `// renders the app for /api/chat and the browser parses an HTML page as SSE.`,
+      `// express.json() is scoped to this one route on purpose — page requests have`,
+      `// no reason to be body-parsed.`,
+      `app.post('/api/chat', express.json(), async (req, res) => {`,
+      `  const response = await chatHandler(`,
+      `    new Request('http://localhost/api/chat', {`,
+      `      method: 'POST',`,
+      `      headers: { 'Content-Type': 'application/json' },`,
+      `      body: JSON.stringify(req.body),`,
+      `    }),`,
+      `  );`,
+      ``,
+      `  // The STATUS has to survive the bridge: a 401 from the provider that arrives`,
+      `  // at the browser as a 200 is a blank bubble and no error.`,
+      `  res.status(response.status);`,
+      `  // Annotated: a server-side tsconfig has no DOM lib, so Headers comes from`,
+      `  // @types/node and these params are implicitly \`any\` (TS7006) under noImplicitAny.`,
+      `  response.headers.forEach((value: string, key: string) => res.setHeader(key, value));`,
+      `  if (!response.body) { res.end(); return; }`,
+      ``,
+      `  // Write each chunk as it lands — buffering here defeats streaming.`,
+      `  const reader = response.body.getReader();`,
+      `  for (;;) {`,
+      `    const { value, done } = await reader.read();`,
+      `    if (done) break;`,
+      `    res.write(value);`,
+      `  }`,
+      `  res.end();`,
+      `});`,
+      ``,
+      `// Serve the built browser assets.`,
+      `app.use(`,
+      `  express.static(browserDistFolder, { maxAge: '1y', index: false, redirect: false }),`,
+      `);`,
+      ``,
+      `// Everything else renders the Angular application.`,
+      `app.use((req, res, next) => {`,
+      `  angularApp`,
+      `    .handle(req)`,
+      `    .then((response) => (response ? writeResponseToNodeResponse(response, res) : next()))`,
+      `    .catch(next);`,
+      `});`,
+      ``,
+      `if (isMainModule(import.meta.url)) {`,
+      `  const port = process.env['PORT'] || 4000;`,
+      `  app.listen(port, (error) => {`,
+      `    if (error) {`,
+      `      throw error;`,
+      `    }`,
+      ``,
+      `    console.log(\`Node Express server listening on http://localhost:\${port}\`);`,
+      `  });`,
+      `}`,
+      ``,
+      `// The Angular CLI (dev-server and build) picks the app up from here.`,
+      `export const reqHandler = createNodeRequestHandler(app);`,
+    ],
+  },
   worker: {
     runtime: 'Cloudflare Worker',
     file: 'src/index.ts',
@@ -2295,7 +3024,15 @@ function compose(
   // the next output loads the React wrappers through next/dynamic instead, and each
   // wrapper lazy-registers its own element on first client mount.
   const defaultLoadNote =
-    framework === 'next'
+    framework === 'solid'
+      ? [
+          `The scaffold emits NO \`import '@kitn.ai/ui/elements'\` — a Solid app renders`,
+          `the SolidJS components straight from the root entry, so no custom element is`,
+          `registered at all and your bundler already tree-shakes what you never import.`,
+          `Leave it as is. The two modes below matter only if you ALSO put raw \`<kai-*>\``,
+          `tags on the page (you do not need to):`,
+        ]
+      : framework === 'next'
       ? [
           `The scaffold emits NO \`import '@kitn.ai/ui/elements'\` — it loads the React`,
           `wrappers through next/dynamic, and each wrapper lazy-registers ITS element on`,
@@ -2519,7 +3256,8 @@ export const scaffold: Tool = {
       'Where the surface lives: full-page | side | docked-widget | inline.',
     ),
     framework: Framework.describe(
-      'Target front-end/back-end framework: html | react | next | vue | svelte | fastapi | express | worker | tanstack-start.',
+      'Target front-end/back-end framework: html | react | next | vue | svelte | angular | solid | fastapi | express | worker | tanstack-start. ' +
+        'Note "solid" emits the SolidJS components from the @kitn.ai/ui root entry, not <kai-*> elements — the kit is authored in Solid.',
     ),
     suggestions: z
       .array(z.string())

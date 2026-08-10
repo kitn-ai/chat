@@ -2241,3 +2241,269 @@ describe('the backend route forwards the upstream status', () => {
     }
   });
 });
+
+/**
+ * angular + solid: the two frameworks the scaffolder could not target at all.
+ *
+ * They are grouped together because the interesting thing about them is that
+ * they are NOT the same kind of target:
+ *   · angular consumes the `kai-*` custom elements, like vue/svelte/html.
+ *   · solid consumes the SolidJS components DIRECTLY from the root entry —
+ *     the kit is authored in Solid, so the facade would ship the runtime twice.
+ *
+ * The last describe in this file is the consistency guard: whatever the two
+ * targets do differently in SYNTAX, they must offer the same CAPABILITIES as
+ * every other framework.
+ */
+describe('scaffold — angular', () => {
+  const emit = async (useCase = 'agentic', integration = 'openrouter') => {
+    const out = await scaffold.handler({ useCase, integration, placement: 'full-page', framework: 'angular' });
+    return (out.content as { type: string; text: string }[])[0].text;
+  };
+  const front = (text: string) => text.split('=== (2) BACKEND ROUTE ===')[0];
+  const route = (text: string) => text.split('=== (2) BACKEND ROUTE ===')[1].split('=== (3) RUN NOTE ===')[0];
+
+  it('declares CUSTOM_ELEMENTS_SCHEMA — without it every <kai-*> fails the template compiler', async () => {
+    const f = front(await emit());
+    expect(f).toContain('schemas: [CUSTOM_ELEMENTS_SCHEMA]');
+    expect(f).toMatch(/import \{[^}]*CUSTOM_ELEMENTS_SCHEMA[^}]*\} from '@angular\/core';/);
+  });
+
+  it('binds arrays as DOM PROPERTIES, never as attributes', async () => {
+    const f = front(await emit());
+    expect(f).toContain('[messages]="messages()"');
+    expect(f).toContain('[suggestions]="suggestions"');
+    // `messages="…"` would be an attribute: the array stringifies to "[object Object]".
+    expect(f).not.toMatch(/(?:^|\s)messages="/m);
+    expect(f).not.toMatch(/(?:^|\s)suggestions="/m);
+  });
+
+  it('listens for kai-submit and narrows the event inside the handler', async () => {
+    const f = front(await emit());
+    expect(f).toContain('(kai-submit)="onSubmit($event)"');
+    // Under strictTemplates Angular types `$event` on an unknown custom-element
+    // event as Event, so a CustomEvent-typed parameter would not compile.
+    expect(f).toContain('async onSubmit(event: Event) {');
+    expect(f).toContain('const e = event as CustomEvent<{ value: string }>;');
+  });
+
+  it('puts the theme in angular.json, not in a TS css import (the builder takes neither)', async () => {
+    const f = front(await emit());
+    expect(f).toContain('node_modules/@kitn.ai/ui/dist/theme.tokens.css');
+    expect(f).not.toMatch(/import ['"]@kitn\.ai\/ui\/theme(\.tokens)?\.css['"]/);
+  });
+
+  it('re-applies the properties after the element upgrades (the SCAF-15 race)', async () => {
+    const f = front(await emit());
+    expect(f).toContain("await customElements.whenDefined('kai-chat')");
+    expect(f).toContain('afterNextRender(');
+    expect(f).toContain('viewChild.required<ElementRef<KaiChatElement>>(');
+  });
+
+  it('reads the thread off the signal — no React-style turn-scoped copy', async () => {
+    const f = front(await emit());
+    expect(f).toContain('this.messages.set([...this.messages()');
+    expect(f).toContain('toOpenAIMessages(this.messages())');
+    expect(f).not.toContain('let thread: ChatMessage[]');
+  });
+
+  it('emits src/server.ts with /api/chat registered BEFORE the Angular catch-all', async () => {
+    const r = route(await emit());
+    expect(r).toContain('// src/server.ts');
+    expect(r).toContain('ng add @angular/ssr');
+    expect(r).toContain("app.post('/api/chat', express.json()");
+    expect(r).toContain('export const reqHandler = createNodeRequestHandler(app);');
+    // Order is the whole point: the renderer would answer /api/chat with HTML.
+    expect(r.indexOf("app.post('/api/chat'")).toBeLessThan(r.indexOf('angularApp\n'));
+    // and the status has to survive the (req, res) bridge
+    expect(r).toContain('res.status(response.status);');
+  });
+
+  it('does not silently claim a non-SSR Angular app can host the route', async () => {
+    const r = route(await emit());
+    expect(r).toMatch(/non-SSR Angular app cannot host \/api\/chat/);
+  });
+});
+
+describe('scaffold — solid', () => {
+  const emit = async (useCase = 'agentic', integration = 'openrouter') => {
+    const out = await scaffold.handler({ useCase, integration, placement: 'full-page', framework: 'solid' });
+    return (out.content as { type: string; text: string }[])[0].text;
+  };
+  const front = (text: string) => text.split('=== (2) BACKEND ROUTE ===')[0];
+  const route = (text: string) => text.split('=== (2) BACKEND ROUTE ===')[1].split('=== (3) RUN NOTE ===')[0];
+
+  it('renders the SolidJS components from the root entry — no kai-* anywhere', async () => {
+    const f = front(await emit());
+    expect(f).toMatch(/\} from '@kitn\.ai\/ui';/);
+    expect(f).toContain('<ChatContainer');
+    expect(f).toContain('<PromptInput');
+    // The architectural claim, asserted: no element tags, no element registration.
+    // Comment lines are stripped first — the emitted prose TALKS about <kai-chat>
+    // to explain why it is absent, and counting that as markup would make this
+    // assertion fail for the very sentence that documents it.
+    const code = f.replace(/^[ \t]*\/\/.*$/gm, '');
+    expect(code).not.toMatch(/<kai-[a-z-]+/);
+    expect(code).not.toContain("import '@kitn.ai/ui/elements'");
+  });
+
+  it('and the LOADING OPTIONS note says so rather than claiming a register-all import', async () => {
+    const text = await emit();
+    const note = text.split('=== LOADING OPTIONS ===')[1] ?? '';
+    expect(note).toContain("The scaffold emits NO `import '@kitn.ai/ui/elements'`");
+  });
+
+  it('renders EVERY part kind, not just text — the coarse element did that for free', async () => {
+    const f = front(await emit());
+    expect(f).toContain('function renderPart(part: MessagePart');
+    expect(f).toContain("case 'text':");
+    expect(f).toContain("case 'reasoning':");
+    expect(f).toContain("case 'tool':");
+    expect(f).toContain('<Tool toolPart={part.tool} />');
+  });
+
+  it('uses HYPHENATED style keys — Solid applies style via setProperty, not camelCase', async () => {
+    const f = front(await emit());
+    expect(f).toMatch(/'flex-direction': 'column'/);
+    expect(f).not.toMatch(/flexDirection:/);
+  });
+
+  it('carries the Tailwind setup the components actually need', async () => {
+    const f = front(await emit());
+    expect(f).toContain('@import "tailwindcss"');
+    expect(f).toContain('@import "@kitn.ai/ui/theme.css"');
+    expect(f).toContain('@source "../node_modules/@kitn.ai/ui"');
+  });
+
+  it('takes the submitted text from the controlled input signal, not a kai-submit event', async () => {
+    const f = front(await emit());
+    expect(f).toContain('const value = input().trim();');
+    expect(f).toContain("setInput('');");
+    expect(f).not.toContain('e.detail.value');
+  });
+
+  it('reads the thread off the signal — no React-style turn-scoped copy', async () => {
+    const f = front(await emit());
+    expect(f).toContain('setMessages([...messages()');
+    expect(f).toContain('toOpenAIMessages(messages())');
+    expect(f).not.toContain('let thread: ChatMessage[]');
+  });
+
+  it('hosts the route the way any Vite SPA does, and says it is dev-only', async () => {
+    const r = route(await emit());
+    expect(r).toContain('// src/server/chat.ts');
+    expect(r).toContain('configureServer(server)');
+    expect(r).toContain("server.middlewares.use('/api/chat'");
+    expect(r).toMatch(/DEV ONLY/);
+    expect(r).toContain('plugins: [solid(), tailwindcss(), chatApiPlugin()]');
+    expect(r).toContain('res.statusCode = response.status;');
+  });
+});
+
+/**
+ * The product constraint, as a test: a developer moving between frameworks finds
+ * the same components and the same concepts, with only the syntax differing.
+ * angular and solid are in every list here — that is the point.
+ */
+describe('scaffold — capability parity across every front-end framework', () => {
+  const FRONTENDS = ['html', 'react', 'next', 'vue', 'svelte', 'angular', 'solid', 'tanstack-start'] as const;
+
+  it('every framework gets the LIVE two-round tool loop for the agentic archetype', async () => {
+    for (const framework of FRONTENDS) {
+      const out = await scaffold.handler({
+        useCase: 'agentic',
+        integration: 'openrouter',
+        placement: 'full-page',
+        framework,
+      });
+      const front = (out.content as { type: string; text: string }[])[0].text.split('=== (2) BACKEND ROUTE ===')[0];
+      for (const marker of [
+        'MAX_TOOL_ROUNDS',
+        'applyToolOutput(',
+        'applyToolFailure(',
+        'createAssistantStream(',
+        'readOpenAIStream(',
+        'toOpenAIMessages(',
+        'function runTool(',
+      ]) {
+        expect(front, `${framework}: missing ${marker}`).toContain(marker);
+      }
+    }
+  });
+
+  it('every framework declares the tool schemas that make a first tool call possible', async () => {
+    for (const framework of FRONTENDS) {
+      const out = await scaffold.handler({
+        useCase: 'agentic',
+        integration: 'openrouter',
+        placement: 'full-page',
+        framework,
+      });
+      const front = (out.content as { type: string; text: string }[])[0].text.split('=== (2) BACKEND ROUTE ===')[0];
+      expect(front, `${framework}: no tools array`).toContain("name: 'search'");
+      // The thread expression varies per framework (`thread`, `messages()`,
+      // `this.messages()`, `chat.messages`), so match across its own parens.
+      expect(front, `${framework}: tools not sent`).toMatch(/messages: toOpenAIMessages\([\s\S]*?\), tools/);
+    }
+  });
+
+  it('every framework aborts the stream on a failed request instead of hanging the bubble', async () => {
+    for (const framework of FRONTENDS) {
+      const out = await scaffold.handler({
+        useCase: 'drop-in-chat',
+        integration: 'openrouter',
+        placement: 'full-page',
+        framework,
+      });
+      const front = (out.content as { type: string; text: string }[])[0].text.split('=== (2) BACKEND ROUTE ===')[0];
+      expect(front, `${framework}: no abort`).toContain('stream.abort(');
+      expect(front, `${framework}: no done`).toContain('stream.done()');
+    }
+  });
+
+  it('every framework offers the starter suggestions and the LOADING OPTIONS + INTERACTION PATTERNS sections', async () => {
+    for (const framework of FRONTENDS) {
+      const out = await scaffold.handler({
+        useCase: 'drop-in-chat',
+        integration: 'openrouter',
+        placement: 'full-page',
+        framework,
+      });
+      const text = (out.content as { type: string; text: string }[])[0].text;
+      expect(text, `${framework}: no suggestions`).toContain("What's new?");
+      expect(text, `${framework}: missing LOADING OPTIONS`).toContain('=== LOADING OPTIONS ===');
+      expect(text, `${framework}: missing INTERACTION PATTERNS`).toContain('=== INTERACTION PATTERNS ===');
+    }
+  });
+
+  it('angular and solid both get a REAL route, not a cannot-host warning', async () => {
+    for (const framework of ['angular', 'solid'] as const) {
+      const out = await scaffold.handler({
+        useCase: 'drop-in-chat',
+        integration: 'openrouter',
+        placement: 'full-page',
+        framework,
+      });
+      const route = (out.content as { type: string; text: string }[])[0].text
+        .split('=== (2) BACKEND ROUTE ===')[1]
+        .split('=== (3) RUN NOTE ===')[0];
+      expect(route, `${framework}: emitted a cannot-host warning`).not.toContain('will NOT run');
+      expect(route, `${framework}: no chatHandler`).toContain('async function chatHandler(request: Request)');
+    }
+  });
+
+  it('a python integration still warns honestly on both new frameworks', async () => {
+    for (const framework of ['angular', 'solid'] as const) {
+      const out = await scaffold.handler({
+        useCase: 'drop-in-chat',
+        integration: 'pydantic-ai',
+        placement: 'full-page',
+        framework,
+      });
+      const route = (out.content as { type: string; text: string }[])[0].text
+        .split('=== (2) BACKEND ROUTE ===')[1]
+        .split('=== (3) RUN NOTE ===')[0];
+      expect(route, `${framework}: no warning for a Python service`).toContain('will NOT run');
+    }
+  });
+});
