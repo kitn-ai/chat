@@ -82,6 +82,20 @@ const SCENARIOS = {
     ...OPENAI_COMPATIBLE,
     body: { stream: true, messages: ask('Say hi in five words.') },
   },
+  'openai/multibyte-text': {
+    // The ONLY fixture that can catch a decoder built without
+    // `TextDecoder.decode(chunk, { stream: true })`. Every other capture here is
+    // pure ASCII, where a chunk boundary can never land inside a codepoint, so
+    // the byte-boundary sweep would pass against a broken decoder without this.
+    // Emoji are 4 bytes and CJK is 3, so replaying at 1 and 3 bytes splits them.
+    ...OPENAI_COMPATIBLE,
+    body: {
+      stream: true,
+      messages: ask(
+        'Reply with exactly this line and nothing else: cafe latte 日本語 naive 🌍🇯🇵 Grüße',
+      ),
+    },
+  },
   'openai/tool-fragmented-args': {
     ...OPENAI_COMPATIBLE,
     body: {
@@ -178,6 +192,18 @@ const SCENARIOS = {
   'anthropic/max-tokens': {
     ...ANTHROPIC_COMPATIBLE,
     body: { stream: true, max_tokens: 8, messages: ask('Write a long paragraph about SSE.') },
+  },
+  'anthropic/multibyte-text': {
+    // The Anthropic-format half of the split-codepoint guard. See
+    // openai/multibyte-text for why this fixture has to exist.
+    ...ANTHROPIC_COMPATIBLE,
+    body: {
+      stream: true,
+      max_tokens: 256,
+      messages: ask(
+        'Reply with exactly this line and nothing else: cafe latte 日本語 naive 🌍🇯🇵 Grüße',
+      ),
+    },
   },
   'anthropic/empty-thinking': {
     // `display: "omitted"` is the documented, reproducible way to get a thinking
