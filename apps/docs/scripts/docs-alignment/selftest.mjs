@@ -22,6 +22,7 @@ import { join } from 'node:path';
 import { compileProject, writeShims, bareSpecifiers, chooseWrapper } from './compile.mjs';
 import { checkMarkup, checkCss, checkMdxComponents } from './structural.mjs';
 import { makeShadowVariant, diffFindings } from './shadow.mjs';
+import { classifyCompileFinding } from './classify.mjs';
 
 /** Snippets that MUST produce a KIT finding. */
 const MUST_FAIL = [
@@ -263,6 +264,65 @@ export function runSelfTest({ workspace, surface, uiRoot, verbose }) {
       );
     } else {
       log.push(`    ${wrapped ? 'WRAPPED as required ' : 'UNWRAPPED as required'} ${p.id}  ->  ${w.id}`);
+    }
+  }
+
+  // ── severity probes ───────────────────────────────────────────────────────
+  // What gates CI. Widening is advisory in an untyped block (correct JavaScript
+  // that no compiler reads), and that leniency must NOT leak into shape drift —
+  // a wrong message object in a ```js fence still has to gate. These drive
+  // classify.mjs directly with diagnostics of each shape.
+  const KIT = { origin: true };
+  const OWN = { origin: null };
+  const severityProbes = [
+    {
+      id: 'widening-in-ts-gates',
+      finding: { ...KIT, message: `Type '{ role: string; }' is not assignable to type 'ChatMessage'. Type 'string' is not assignable to type '"user" | "assistant"'.` },
+      lang: 'ts',
+      want: { kind: 'literal-widening', severity: 'high' },
+    },
+    {
+      id: 'widening-in-untyped-js-is-advisory',
+      finding: { ...KIT, message: `Type '{ role: string; }' is not assignable to type 'ChatMessage'. Type 'string' is not assignable to type '"user" | "assistant"'.` },
+      lang: 'js',
+      want: { kind: 'literal-widening', severity: 'advisory' },
+    },
+    {
+      // The leniency above must be narrow. A message object that is genuinely
+      // WRONG for the kit produces a missing-property diagnostic, not widening,
+      // and still gates in the same untyped block.
+      id: 'shape-drift-in-untyped-js-still-gates',
+      finding: { ...KIT, message: `Property 'parts' is missing in type '{ id: string; role: "user"; content: string; }' but required in type 'ChatMessage'.` },
+      lang: 'js',
+      want: { kind: 'kit-type-error', severity: 'high' },
+    },
+    {
+      id: 'unknown-prop-in-untyped-html-script-still-gates',
+      finding: { ...KIT, message: `Object literal may only specify known properties, and 'mesages' does not exist in type 'ChatMessage'.` },
+      lang: 'html-script',
+      want: { kind: 'kit-type-error', severity: 'high' },
+    },
+    {
+      id: 'readers-own-type-error-never-gates',
+      finding: { ...OWN, message: `Parameter 'm' implicitly has an 'any' type.` },
+      lang: 'ts',
+      want: { kind: 'snippet-type-error', severity: 'advisory' },
+    },
+    {
+      id: 'unparseable-snippet-is-medium',
+      finding: { ...OWN, syntactic: true, message: `'}' expected.` },
+      lang: 'ts',
+      want: { kind: 'snippet-syntax', severity: 'medium' },
+    },
+  ];
+  for (const p of severityProbes) {
+    const got = classifyCompileFinding(p.finding, p.lang);
+    if (got.kind !== p.want.kind || got.severity !== p.want.severity) {
+      problems.push(
+        `severity probe '${p.id}': expected ${p.want.kind}/${p.want.severity}, got ${got.kind}/${got.severity}.`,
+      );
+    } else {
+      log.push(`    CLASSIFIED as required ${p.id}  ->  ${got.kind}/${got.severity}`);
     }
   }
 

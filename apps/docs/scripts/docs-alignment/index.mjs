@@ -22,6 +22,7 @@ import { listDocs, parseDoc } from './extract.mjs';
 import { createWorkspace, compileProject, writeShims, bareSpecifiers, chooseWrapper, PROJECTS } from './compile.mjs';
 import { checkMarkup, checkCss, checkMdxComponents, counterExampleLines } from './structural.mjs';
 import { checkProse, flagForHuman } from './prose.mjs';
+import { classifyCompileFinding as classify } from './classify.mjs';
 import { coverage } from './coverage.mjs';
 import { runSelfTest } from './selftest.mjs';
 import { renderReport } from './report.mjs';
@@ -100,7 +101,11 @@ function liftSfcScript(block) {
   const lines = m[1].split('\n');
   const indents = lines.filter((l) => l.trim()).map((l) => l.match(/^ */)[0].length);
   const pad = indents.length ? Math.min(...indents) : 0;
-  return { body: lines.map((l) => l.slice(pad)).join('\n'), offset: before + 1 };
+  // `<script lang="ts">` / `<script setup lang="ts">` IS type-checked in the
+  // reader's app, so findings that only bite a TypeScript reader (literal
+  // widening) have to gate here the same as in a ```ts fence.
+  const typed = /\blang\s*=\s*["']ts["']/.test(m[0].slice(0, m[0].indexOf('>')));
+  return { body: lines.map((l) => l.slice(pad)).join('\n'), offset: before + 1, typed };
 }
 
 const hasJsx = (code) => /<[A-Z][A-Za-z0-9]*[\s/>]|<>/.test(code);
@@ -176,7 +181,7 @@ async function main() {
           for (const s of scriptBodies(block.code)) pieces.push({ code: s.body, lang: 'html-script', lineOffset: s.offset });
         } else if (lang === 'vue' || lang === 'svelte') {
           const lifted = liftSfcScript(block.code);
-          if (lifted) pieces.push({ code: lifted.body, lang, lineOffset: lifted.offset });
+          if (lifted) pieces.push({ code: lifted.body, lang, lineOffset: lifted.offset, typed: lifted.typed });
         } else if (lang !== 'css') {
           pieces.push({ code: block.code, lang, lineOffset: 0 });
         }
@@ -193,6 +198,9 @@ async function main() {
             doc,
             block,
             lang: piece.lang,
+            // What the READER's toolchain checks. Same as `lang` except for an
+            // SFC whose <script> declares lang="ts". Drives severity only.
+            typedLang: piece.typed ? 'ts' : piece.lang,
             project,
             path: join(workspace.dir(project), `${id}.${ext}`),
             ext,
@@ -252,24 +260,14 @@ async function main() {
         // is right at run time and flagging it is the noise that kills a harness.
         const looseUnit = u.project === 'loose';
         if (looseUnit && !f.origin && !f.syntactic) continue;
-        // A distinct, very common class worth counting on its own: the snippet
-        // writes `role: 'user'` in a plain object, TS widens it to `string`, and
-        // the kit's prop wants `'user' | 'assistant'`. Real — a TS reader who
-        // copies this does not compile, and the fix is the kit's own exported
-        // `ChatMessage` type — but it is not an API MISMATCH, and folding it in
-        // with genuinely wrong props would overstate the drift.
-        const widening = f.origin && /Type '(?:string|number|boolean)' is not assignable to type '"/.test(f.message);
-        const isTs = u.lang === 'ts' || u.lang === 'tsx';
+        // Kind + severity live in classify.mjs so the self-test can drive them
+        // directly. See that file for why widening is gating in a `ts` block and
+        // advisory in an untyped one.
+        const { kind, severity } = classify(f, u.typedLang ?? u.lang);
         add(u.doc, {
           source: 'compile',
-          kind: widening
-            ? 'literal-widening'
-            : f.origin
-              ? 'kit-type-error'
-              : f.syntactic
-                ? 'snippet-syntax'
-                : 'snippet-type-error',
-          severity: widening ? (isTs ? 'high' : 'medium') : f.origin ? 'high' : f.syntactic ? 'medium' : 'advisory',
+          kind,
+          severity,
           code: `TS${f.code}`,
           line: u.docLine + f.line - 1,
           detail: f.message,
