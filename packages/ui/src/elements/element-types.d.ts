@@ -497,7 +497,7 @@ export interface KaiConversationsElement extends HTMLElement {
   theme?: "light" | "dark" | "auto";
   /** The list's section headers (`{ id, name, sortOrder, createdAt }`), rendered in array order. A group carries no conversations of its own; it is matched against `conversations` by id, so the two props are complementary rather than alternatives. Omit for an ungrouped list. Set as a JS property. */
   groups?: { id: string; userId?: string; teamId?: string; name: string; sortOrder: number; createdAt: string }[];
-  /** Every conversation the list renders, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId` falls into a trailing "Ungrouped" section. There is no recency bucketing, and a `groupId` matching no entry in `groups` is not rendered. Set as a JS property. */
+  /** Every conversation the list renders, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId` — or with a `groupId` matching no entry in `groups` — falls into a trailing "Ungrouped" section, so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. */
   conversations: { id: string; title: string; groupId?: undefined | string; scope: { type: "document" | "collection"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | "transcript" | "markdown"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[];
   /** The id of the currently-open conversation, highlighted in the list. */
   activeId?: string;
@@ -1352,7 +1352,7 @@ export interface KaiWorkspaceElement extends HTMLElement {
   theme?: "light" | "dark" | "auto";
   /** The sidebar's section headers, rendered in array order. A group carries no conversations of its own; it is matched against `conversations` by id, so the two props are complementary rather than alternatives. Omit for an ungrouped sidebar. Set as a JS property. */
   groups?: { id: string; userId?: string; teamId?: string; name: string; sortOrder: number; createdAt: string }[];
-  /** Every conversation in the sidebar, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId` falls into a trailing ungrouped section (headerless when `compact`). There is no recency bucketing, and a `groupId` matching no entry in `groups` is not rendered. Set as a JS property. */
+  /** Every conversation in the sidebar, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId` — or with a `groupId` matching no entry in `groups` — falls into a trailing ungrouped section (headerless when `compact`), so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. */
   conversations: { id: string; title: string; groupId?: undefined | string; scope: { type: "document" | "collection"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | "transcript" | "markdown"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[];
   /** Id of the open conversation, highlighted in the sidebar. */
   activeId?: string;
@@ -1953,7 +1953,7 @@ export interface KaiConversationsElementProps {
   theme?: "light" | "dark" | "auto";
   /** The list's section headers (`{ id, name, sortOrder, createdAt }`), rendered in array order. A group carries no conversations of its own; it is matched against `conversations` by id, so the two props are complementary rather than alternatives. Omit for an ungrouped list. Set as a JS property. */
   groups?: { id: string; userId?: string; teamId?: string; name: string; sortOrder: number; createdAt: string }[];
-  /** Every conversation the list renders, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId` falls into a trailing "Ungrouped" section. There is no recency bucketing, and a `groupId` matching no entry in `groups` is not rendered. Set as a JS property. */
+  /** Every conversation the list renders, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId` — or with a `groupId` matching no entry in `groups` — falls into a trailing "Ungrouped" section, so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. */
   conversations: { id: string; title: string; groupId?: undefined | string; scope: { type: "document" | "collection"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | "transcript" | "markdown"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[];
   /** The id of the currently-open conversation, highlighted in the list. */
   activeId?: string;
@@ -2808,7 +2808,7 @@ export interface KaiWorkspaceElementProps {
   theme?: "light" | "dark" | "auto";
   /** The sidebar's section headers, rendered in array order. A group carries no conversations of its own; it is matched against `conversations` by id, so the two props are complementary rather than alternatives. Omit for an ungrouped sidebar. Set as a JS property. */
   groups?: { id: string; userId?: string; teamId?: string; name: string; sortOrder: number; createdAt: string }[];
-  /** Every conversation in the sidebar, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId` falls into a trailing ungrouped section (headerless when `compact`). There is no recency bucketing, and a `groupId` matching no entry in `groups` is not rendered. Set as a JS property. */
+  /** Every conversation in the sidebar, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId` — or with a `groupId` matching no entry in `groups` — falls into a trailing ungrouped section (headerless when `compact`), so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. */
   conversations: { id: string; title: string; groupId?: undefined | string; scope: { type: "document" | "collection"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | "transcript" | "markdown"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[];
   /** Id of the open conversation, highlighted in the sidebar. */
   activeId?: string;

@@ -12,9 +12,10 @@ interface Props extends Record<string, unknown> {
    *  than alternatives. Omit for an ungrouped list. Set as a JS property. */
   groups?: ConversationGroup[];
   /** Every conversation the list renders, flat. Each one is filed under the group
-   *  whose `id` equals its `groupId`; one with no `groupId` falls into a trailing
-   *  "Ungrouped" section. There is no recency bucketing, and a `groupId` matching
-   *  no entry in `groups` is not rendered. Set as a JS property. */
+   *  whose `id` equals its `groupId`; one with no `groupId` — or with a `groupId`
+   *  matching no entry in `groups` — falls into a trailing "Ungrouped" section, so
+   *  nothing you pass in is ever dropped. There is no recency bucketing. Set as a
+   *  JS property. */
   conversations: ConversationSummary[];
   /** The id of the currently-open conversation, highlighted in the list. */
   activeId?: string;

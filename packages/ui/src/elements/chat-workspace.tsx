@@ -20,10 +20,10 @@ interface Props extends Record<string, unknown> {
    *  ungrouped sidebar. Set as a JS property. */
   groups?: ConversationGroup[];
   /** Every conversation in the sidebar, flat. Each one is filed under the group
-   *  whose `id` equals its `groupId`; one with no `groupId` falls into a trailing
-   *  ungrouped section (headerless when `compact`). There is no recency bucketing,
-   *  and a `groupId` matching no entry in `groups` is not rendered. Set as a JS
-   *  property. */
+   *  whose `id` equals its `groupId`; one with no `groupId` — or with a `groupId`
+   *  matching no entry in `groups` — falls into a trailing ungrouped section
+   *  (headerless when `compact`), so nothing you pass in is ever dropped. There is
+   *  no recency bucketing. Set as a JS property. */
   conversations: ConversationSummary[];
   /** Id of the open conversation, highlighted in the sidebar. */
   activeId?: string;
