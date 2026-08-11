@@ -25,30 +25,15 @@ import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// The catalog lives in its own module so anything that needs to know what the
+// columns are — the reasoning-coverage guard and its vitest spec — can ask
+// without importing THIS file, which runs a whole sweep at import time.
+import { MODELS } from './models.mjs';
+import { auditReasoningCoverage, formatCoverageReport } from './reasoning-coverage.mjs';
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SPIKE_ROOT = resolve(HERE, '..');
 const REPORT_DIR = join(SPIKE_ROOT, 'harness', 'matrix-reports');
-
-/**
- * The models under test. Chosen to close gaps rather than for breadth:
- *
- *  1. the baseline everything else was proven on;
- *  2. an Anthropic model through OpenRouter's Anthropic Skin — the ONLY way to
- *     drive `readAnthropicStream` and `toAnthropicMessages` against a live
- *     provider, and the least-proven path in the kit;
- *  3. the SAME Anthropic model through the OpenAI-compatible endpoint, so a
- *     failure in (2) can be attributed to the wire or to the model, not to both;
- *  4. a genuine OpenAI model, to show the OpenAI reader is not accidentally
- *     shaped around DeepSeek's dialect;
- *  5. a small cheap model, to measure the floor of what a consumer gets away with.
- */
-const MODELS = [
-  { key: 'deepseek', model: '~deepseek/deepseek-v4-flash-latest', port: 5180 },
-  { key: 'haiku', model: 'anthropic/claude-haiku-4.5', port: 5181 },
-  { key: 'haiku-oai', model: 'anthropic/claude-haiku-4.5', wire: 'openai', port: 5182 },
-  { key: 'gpt', model: 'openai/gpt-5.4-mini', port: 5183 },
-  { key: 'ministral', model: 'mistralai/ministral-3b-2512', port: 5184 },
-];
 
 function arg(name, fallback) {
   const i = process.argv.indexOf(`--${name}`);
@@ -137,7 +122,7 @@ function scenarioIdOf(title) {
 }
 
 async function runOne(entry) {
-  const label = entry.wire ? `${entry.model} (${entry.wire} wire)` : entry.model;
+  const label = `${entry.model} (${entry.wire} wire)`;
   if (!(await portIsFree(entry.port))) {
     throw new Error(
       `Port ${entry.port} is already in use. The matrix gives each model its own port so a stale ` +
@@ -159,9 +144,16 @@ async function runOne(entry) {
       stdio: 'inherit',
       env: {
         ...process.env,
-        // Read by the Vite plugin the webServer starts, per request.
+        // Read by the Vite plugin the webServer starts, per request. The wire is
+        // sent EXPLICITLY rather than left to `auto`: the catalog declares it,
+        // the fixture directory is named after it, and the reasoning-coverage
+        // guard reads a different usage field per dialect. Letting the server
+        // derive one while the catalog declares another is how a column would be
+        // measured against the wrong recordings.
+        // `server/reasoning-coverage.test.ts` pins every declaration against
+        // `resolveWire`, so this is the same wire `auto` used to pick.
         OPENROUTER_MODEL: entry.model,
-        ...(entry.wire ? { OPENROUTER_WIRE: entry.wire } : { OPENROUTER_WIRE: 'auto' }),
+        OPENROUTER_WIRE: entry.wire,
         SPIKE_PORT: String(entry.port),
         SPIKE_MODE: MODE,
         SPIKE_EXPECT_MODEL: entry.model,
@@ -186,7 +178,7 @@ async function runOne(entry) {
   return {
     key: entry.key,
     model: entry.model,
-    wire: entry.wire ?? (/^~?anthropic\//.test(entry.model) ? 'anthropic' : 'openai'),
+    wire: entry.wire,
     label,
     exitCode: child.status,
     seconds: Math.round((Date.now() - started) / 1000),
@@ -261,3 +253,31 @@ for (const row of results) {
   }
 }
 console.log(`Raw reports: ${REPORT_DIR}`);
+
+// Every cell above can be green while a whole column recorded no reasoning at
+// all: none of the scenarios assert that the model THOUGHT, only that what it
+// produced rendered. `haiku-oai` passed a full sweep that way and its silence was
+// published as a provider limit. So the sweep ends by reading its own recordings
+// back and saying so out loud.
+//
+// The same audit runs offline in `server/reasoning-coverage.test.ts`, which is
+// the copy that cannot be skipped. This one exists so a live run fails at the
+// moment of recording rather than at the next CI run.
+console.log(`\n${'='.repeat(72)}\nREASONING COVERAGE\n${'='.repeat(72)}\n`);
+const coverage = auditReasoningCoverage(join(SPIKE_ROOT, 'fixtures'), selected);
+console.log(formatCoverageReport(coverage));
+
+if (coverage.roundsRead === 0) {
+  console.error(`\n!! read 0 recorded rounds — the coverage check measured NOTHING.`);
+  process.exitCode = 1;
+} else if (coverage.failures.length) {
+  console.error(
+    `\n!! reasoning coverage FAILED for ${coverage.failures.map((c) => c.key).join(', ')}. ` +
+      `Do not publish this sweep's reasoning column as a model characteristic until the request ` +
+      `shape and the recordings have been checked.`,
+  );
+  process.exitCode = 1;
+}
+if (coverage.missing.length) {
+  console.log(`\n   missing measurements (nothing recorded): ${coverage.missing.map((c) => c.key).join(', ')}`);
+}
