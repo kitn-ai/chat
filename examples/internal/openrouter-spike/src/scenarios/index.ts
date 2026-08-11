@@ -71,5 +71,5 @@ export function replayDirFor(
   return wire === 'anthropic' ? `canned-anthropic/${scenario.id}` : `canned/${scenario.id}`;
 }
 
-export type { Scenario, ScenarioMode } from './types';
+export type { KnownGap, Scenario, ScenarioMode, ScenarioWire } from './types';
 export { ScenarioAssertionError } from './types';

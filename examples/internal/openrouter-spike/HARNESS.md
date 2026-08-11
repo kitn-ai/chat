@@ -115,11 +115,38 @@ claim is an **absence** (S01: no tool panel on a tool-free turn) or a **failure*
 (S16: an error must be surfaced) use `canned/CONTROL-noisy`, a clean successful
 tool round, instead.
 
-Scenarios marked `knownGap` are skipped by the control pass — they already fail
-against their real stream. S12 gets a bespoke **positive** control instead
-(in `harness/scenarios.spec.ts`): a citation-shaped anchor is injected into the
-thread's shadow root and the locator must find it. A red S12 with a green control
-is a missing feature; a red S12 with a red control would just be a bad selector.
+A `knownGap` scenario's assertion is not put through this pass — it already fails
+against its real stream. Its **precondition** is, and S12 also gets a bespoke
+**positive** control (in `harness/scenarios.spec.ts`): a citation-shaped anchor is
+injected into the thread's shadow root and the locator must find it. A red S12
+with a green control is a missing feature; a red S12 with a red control would just
+be a bad selector.
+
+## Confirming a gap takes more than a red cell
+
+`knownGap` used to be one string, and any failure at all counted as the gap. That
+is a hole the size of the harness. It has already swallowed a real failure: on the
+run where the canned fixtures still existed only in OpenAI shape, S13 was replayed
+into `readAnthropicStream`, the stream parsed to **nothing**, the assertion spent
+20 seconds waiting for an artifact that was never going to exist — and the report
+said `KNOWN GAP CONFIRMED` and printed a tidy `gap` cell.
+
+So a gap is confirmable only when all three hold:
+
+1. **`knownGap.reached` passes.** Everything upstream of the gap worked, so the
+   run got far enough for the gap to be observable. S12 requires the `search_docs`
+   panel to have completed *and to show its doc URLs* — those results are what the
+   app turns into `source` parts, and no parts means nothing to fail to render.
+   S13 requires an artifact element on screen showing the `v2` revision.
+2. **The assertion still fails.** A gap that quietly closed is a gap nobody
+   documented.
+3. **It fails with the documented message** (`knownGap.signature`). A timeout, a
+   page error or a second unrelated bug is not this gap, and filing it as one
+   buries a real failure under a known one.
+
+Anything else is a loud red with the reason spelled out. The precondition is held
+to the same standard as every other assertion here: `conformance:control` points
+it at a stream that cannot reach the gap and fails it if it still passes.
 
 ## Live vs replay
 
@@ -216,6 +243,9 @@ PY
 2. Register it in `src/scenarios/index.ts`.
 3. `pnpm conformance:control` — watch it go red.
 4. `pnpm conformance:live` — watch it go green, and record its stream.
+
+A scenario that is expected to FAIL needs `knownGap: { what, reached, signature }`
+rather than a note, and step 3 covers the precondition too.
 
 The id is a directory name and the sidebar rail is generated from the same
 catalog, so a new scenario is also one click away in the browser.

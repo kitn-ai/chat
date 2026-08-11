@@ -21,12 +21,65 @@ export type ScenarioMode =
    *  arguments, a mid-stream provider error) and for wire-level timing. */
   | 'replay';
 
+/** The SSE dialect the server under test is speaking. Declared here rather than
+ *  imported from `../transport` so this module keeps its no-runtime rule. */
+export type ScenarioWire = 'openai' | 'anthropic';
+
+/**
+ * A documented, EXPECTED failure.
+ *
+ * The three fields exist because `knownGap` used to be one string, and one
+ * string is not enough to tell "the gap is still there" from "this run was
+ * broken and never got near the gap". That is not hypothetical: during the run
+ * where the canned fixtures were still OpenAI-only, S13 was replayed into
+ * `readAnthropicStream`, the stream parsed to NOTHING, the assertion timed out
+ * waiting for an artifact that was never going to exist — and the harness
+ * recorded it as `KNOWN GAP CONFIRMED`. A green table over a silent breakage,
+ * inside the harness built to prevent exactly that.
+ *
+ * So a gap is only confirmable when all three hold:
+ *
+ *   1. `reached` PASSES  — everything upstream of the gap worked, so the run got
+ *      far enough for the gap to be observable at all;
+ *   2. `assert` FAILS    — the gap is still open (a gap that silently closed is
+ *      a gap nobody documented);
+ *   3. the failure MATCHES `signature` — it failed for the documented reason and
+ *      not for some other one that happens to be red.
+ *
+ * Anything else is a LOUD failure.
+ */
+export interface KnownGap {
+  /** What is missing, in one line. Printed in the report. */
+  what: string;
+  /**
+   * The precondition: everything that must ALREADY work for the gap to be
+   * exhibited. Written against the rendered DOM like any other assertion, and
+   * held to the same standard — `conformance:control` points it at a stream that
+   * cannot reach the gap and requires it to go red.
+   */
+  reached: (page: Page) => Promise<void>;
+  /** The failure this gap actually produces. Matched against the assertion's own
+   *  message, so an unrelated red (a timeout, a page error) cannot pass for it. */
+  signature: RegExp;
+}
+
 export interface Scenario {
   /** Stable id, also the fixture directory name. */
   id: string;
   title: string;
   /** One line: what a PASS here actually proves. Printed in the report. */
   proves: string;
+  /**
+   * Per-wire override for `proves`, for the scenarios whose two fixtures cannot
+   * make the same claim.
+   *
+   * S05 is the case: chat-completions announces both tool calls up front and
+   * INTERLEAVES their argument fragments, and Anthropic streams content blocks
+   * strictly in sequence and cannot produce that framing at all. Both fixtures
+   * are realistic; they are not equally demanding, and a table that renders both
+   * as a bare `pass` reads the weaker one as the stronger claim.
+   */
+  provesByWire?: Partial<Record<ScenarioWire, string>>;
   prompt: string;
   tools: ToolSpec[];
   /** `live` scenarios can also be replayed once they have been recorded;
@@ -52,10 +105,10 @@ export interface Scenario {
   replayDelayMs?: number;
   /** Cap on the tool loop for this scenario. */
   maxRounds?: number;
-  /** Set when the scenario is EXPECTED to fail against today's kit. The runner
-   *  reports it as a known gap, and turns it into a LOUD failure if it ever
-   *  starts passing — a gap that silently closes is a gap nobody documented. */
-  knownGap?: string;
+  /** Set when the scenario is EXPECTED to fail against today's kit. See
+   *  `KnownGap`: confirming a gap takes a precondition and a signature, not just
+   *  a red cell. */
+  knownGap?: KnownGap;
   /**
    * Interaction to perform WHILE the assistant turn is still streaming. Runs as
    * soon as the app reports `running`, in parallel with the stream.

@@ -65,6 +65,28 @@ export async function seesRole(
   }
 }
 
+/** Assert a specific element renders. `state` is `visible` by default; pass
+ *  `attached` for something with no box of its own (a custom element wrapping
+ *  its own shadow content). Raw `locator.waitFor()` throws Playwright's own
+ *  "Timeout 20000ms exceeded" with the selector in a call log, which says
+ *  nothing about what was being proved — and a `knownGap` precondition is the
+ *  one place a mystery timeout must never be mistaken for the gap itself. */
+export async function seesElement(
+  locator: Locator,
+  what: string,
+  opts: { because?: string; state?: 'visible' | 'attached'; timeout?: number } = {},
+): Promise<void> {
+  const timeout = opts.timeout ?? VISIBLE_TIMEOUT;
+  try {
+    await locator.first().waitFor({ state: opts.state ?? 'visible', timeout });
+  } catch {
+    throw new ScenarioAssertionError(
+      `expected ${what} to render${opts.because ? ` — ${opts.because}` : ''}, ` +
+        `but nothing matched within ${timeout}ms`,
+    );
+  }
+}
+
 /** Assert a locator eventually resolves to at least `n` nodes. */
 export async function seesAtLeast(
   page: Page,
