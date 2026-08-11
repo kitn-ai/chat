@@ -305,12 +305,18 @@ for (const scenario of CONTROL ? [] : selected) {
 /**
  * S12's POSITIVE control.
  *
- * S12 is expected to fail, which raises an obvious objection: how do we know the
- * citation locator is looking in the right place, rather than being broken in a
- * way that would keep failing after the feature ships? So: inject an anchor of
- * exactly the shape a citation row would render, into the same shadow root, and
- * confirm the locator finds it. A red S12 with a green control here is a missing
- * FEATURE. A red S12 with a red control here would just be a bad selector.
+ * Written while S12 was a documented gap, to answer the obvious objection: how
+ * do we know the citation locator is looking in the right place, rather than
+ * being broken in a way that would keep failing after the feature ships? So:
+ * inject an anchor of exactly the shape a citation row renders, into the same
+ * shadow root, and confirm the locator finds it. A red S12 with a green control
+ * here was a missing FEATURE; a red S12 with a red control would have been a bad
+ * selector.
+ *
+ * The citation row has since shipped and S12 is an ordinary passing scenario, so
+ * this is no longer load-bearing for the gap — it is kept as a guard on the
+ * locator itself, which is the one part of S12 that could rot into a check that
+ * passes for the wrong reason.
  */
 test('S12 control: the citation locator finds a citation when one exists', async ({ page }) => {
   const dir = await controlDirFor(page, 'canned/CONTROL-empty');
