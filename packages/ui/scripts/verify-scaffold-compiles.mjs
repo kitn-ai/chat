@@ -71,6 +71,14 @@
 // attributes, the kai-submit listener — and the template's real proof is
 // `ng build` in a throwaway app.
 //
+// The `solid` target is fully visible to tsc and still has a hole tsc cannot
+// reach: it is the only framework that does NOT render through <kai-chat>, so it
+// composes the MessagePart switch itself, and a `<Switch>` missing a `<Match>`
+// compiles perfectly while that part renders nothing at runtime.
+// `solidPartCoverageCheck` asserts a branch per variant, with the variant list
+// derived from the union rather than restated. See its own comment for how that
+// shipped broken.
+//
 // BLOCK (2), THE BACKEND ROUTE, IS COMPILED TOO — see `routeCheck` below.
 //
 // It was not, for most of this file's life: `frontEnd()` sliced the emitted text
@@ -148,7 +156,7 @@
 //
 // `--keep` leaves the temp directory in place and prints its path.
 // `--filter agentic` narrows the matrix while iterating.
-import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync, existsSync, readdirSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, symlinkSync, rmSync, existsSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { resolve, dirname, join } from 'node:path';
@@ -597,6 +605,136 @@ async function angularStructureCheck(scaffold) {
   }
   console.log(
     `  ✓ ${checked} angular scaffolds: CUSTOM_ELEMENTS_SCHEMA, one chat element + submit binding, arrays bound as properties`,
+  );
+}
+
+/**
+ * The Solid target's `renderPart`, which tsc cannot judge either.
+ *
+ * Solid is the ONE framework that does not render through `<kai-chat>`: the kit
+ * is authored in Solid, so the scaffold composes the real components and has to
+ * do the part switch itself. That switch is a `<Switch>` of `<Match>`es, and a
+ * `<Switch>` with three `<Match>`es type-checks exactly as well as one with six.
+ * The part with no branch simply renders NOTHING — at runtime, in the consumer's
+ * app, with no error anywhere. That is not hypothetical: the emitted renderPart
+ * shipped handling `text`/`reasoning`/`tool` only, while its own comment claimed
+ * it rendered "exactly what `<kai-chat>` renders", so every scaffolded Solid app
+ * dropped `card` and `source` parts on the floor. A developer wires up a search
+ * tool, watches citations arrive in the data and render nothing, and has no
+ * reason to suspect the scaffold.
+ *
+ * So: every variant of the `MessagePart` union must appear as a
+ * `partAs(part(), '<variant>')` branch in every emitted Solid scaffold.
+ *
+ * The variant list is DERIVED from the union in src/elements/chat-types.ts and
+ * is never restated here. A literal list would be the same defect one level up —
+ * it goes stale the day someone adds a part kind, and it passes while doing so.
+ */
+function messagePartVariants() {
+  const ts = require('typescript');
+  const file = resolve(ROOT, 'src/elements/chat-types.ts');
+  if (!existsSync(file)) fail(`cannot derive the MessagePart variants: ${file} does not exist.`);
+  // `setParentNodes` so `.getText()` works for the error messages below.
+  const src = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
+
+  let alias = null;
+  src.forEachChild((n) => {
+    if (ts.isTypeAliasDeclaration(n) && n.name.text === 'MessagePart') alias = n;
+  });
+  if (!alias)
+    fail(
+      'no `type MessagePart = …` alias in src/elements/chat-types.ts.\n' +
+        '  This check derives its variant list from that union. If the union MOVED, point this\n' +
+        '  function at its new home — do NOT hard-code the variants, which is the failure mode\n' +
+        '  the whole check exists to prevent.',
+    );
+  if (!ts.isUnionTypeNode(alias.type))
+    fail('`MessagePart` is no longer a union type, so the variants cannot be derived from it.');
+
+  const variants = [];
+  for (const member of alias.type.types) {
+    let tag = null;
+    if (ts.isTypeLiteralNode(member)) {
+      for (const m of member.members) {
+        if (
+          ts.isPropertySignature(m) &&
+          m.name &&
+          m.name.getText() === 'type' &&
+          m.type &&
+          ts.isLiteralTypeNode(m.type) &&
+          ts.isStringLiteral(m.type.literal)
+        ) {
+          tag = m.type.literal.text;
+        }
+      }
+    }
+    if (!tag)
+      fail(
+        `a MessagePart union member has no string-literal \`type\` discriminant:\n    ${member.getText()}\n` +
+          '  Every member needs one, or a variant would silently drop out of this check.',
+      );
+    variants.push(tag);
+  }
+  // Two is arbitrary; the point is that an empty or one-element list means the
+  // parse quietly stopped working and the check below would pass trivially.
+  if (variants.length < 2)
+    fail(`derived only ${variants.length} MessagePart variant(s) — the union parse is broken, not the scaffolder.`);
+  return variants;
+}
+
+/**
+ * Extract the emitted `renderPart` function, comments stripped.
+ *
+ * Returns null when there is no such function at all, which is deliberately a
+ * FAILURE upstream rather than a skip: an empty emitted block, or one whose part
+ * renderer was deleted, must not read as "nothing missing".
+ */
+function renderPartBody(front) {
+  const at = front.indexOf('function renderPart(');
+  if (at < 0) return null;
+  // Top-level functions are emitted at column zero, so the closing brace on its
+  // own line ends it.
+  const end = front.indexOf('\n}\n', at);
+  const body = end < 0 ? front.slice(at) : front.slice(at, end + 3);
+  // Whole-line `//` comments go first. The prose inside renderPart NAMES the
+  // variants it handles, and letting a comment satisfy the check would recreate
+  // the exact defect under test — a claim standing in for the code.
+  return body.replace(/^[ \t]*\/\/.*$/gm, '');
+}
+
+async function solidPartCoverageCheck(scaffold) {
+  const variants = messagePartVariants();
+  const failures = [];
+  let checked = 0;
+  for (const useCase of ARCHETYPES) {
+    for (const integration of INTEGRATIONS) {
+      const label = `${useCase}__${integration}__solid`;
+      if (FILTER && !label.includes(FILTER)) continue;
+      checked++;
+      const out = await scaffold.handler({ useCase, integration, placement: 'full-page', framework: 'solid' });
+      const body = renderPartBody(frontEnd(out.content[0].text));
+      if (body === null) {
+        failures.push(
+          `${label}: no \`function renderPart(\` in the emitted front end — the thread renders no parts at all`,
+        );
+        continue;
+      }
+      const missing = variants.filter((v) => !body.includes(`partAs(part(), '${v}')`));
+      if (missing.length)
+        failures.push(
+          `${label}: renderPart has no branch for ${missing.map((v) => `\`${v}\``).join(', ')} — ` +
+            `those parts reach the thread and render NOTHING (tsc cannot see a missing <Match>)`,
+        );
+    }
+  }
+  if (failures.length) {
+    for (const f of failures) console.log(`  ✗ ${f}`);
+    cleanup();
+    fail(`${failures.length} solid scaffold(s) do not render every MessagePart variant.`);
+  }
+  console.log(
+    `  ✓ ${checked} solid scaffolds: renderPart branches on all ${variants.length} MessagePart variants ` +
+      `(${variants.join(', ')}), derived from the union`,
   );
 }
 
@@ -1200,6 +1338,7 @@ async function main() {
   for (const project of Object.keys(PROJECTS)) selfTest(project);
   await htmlStructureCheck(scaffold);
   await angularStructureCheck(scaffold);
+  await solidPartCoverageCheck(scaffold);
 
   const cases = [];
   for (const useCase of ARCHETYPES)
