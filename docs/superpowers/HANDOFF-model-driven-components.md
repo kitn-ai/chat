@@ -2,8 +2,11 @@
 
 Last updated 2026-08-11. Supersedes the 2026-08-10 version entirely.
 
-**Everything described here is MERGED TO MAIN.** `feat/message-parts` is level with
-`origin/main` (0 ahead, 0 behind). There is no unmerged work.
+**The epic through PR #147 is MERGED TO MAIN.** The 2026-08-11 work described below is not:
+sub-project D, the guard round, the re-recorded five-configuration matrix and the corrections
+to this document all sit on `feat/message-parts`, ahead of `origin/main`. Check the gap with
+`git rev-list --count origin/main..feat/message-parts` rather than trusting a count written
+here, because a count written here is stale by the next commit (§5.11).
 
 ---
 
@@ -35,8 +38,8 @@ Do these in order. The reasoning for the ordering matters more than the list.
 
 ### 1.1 Sub-project D — DONE. Nothing to do here.
 
-Tasks #65, #66, #67 and the citation row all landed on this branch. Recorded here so nobody
-re-opens them, and because the details are contracts a consumer can hit:
+Tasks #65, #66, #67, the citation row and the scaffold parity repair all landed on this branch.
+Recorded here so nobody re-opens them, and because the details are contracts a consumer can hit:
 
 - **#65 `addCard` is an id-keyed upsert** — `upsertCardPart` in `packages/ui/src/state/parts.ts`.
   It **replaces the envelope wholesale** rather than merging fields. Deliberate: a card envelope
@@ -49,10 +52,23 @@ re-opens them, and because the details are contracts a consumer can hit:
 - **#67 `Reasoning` has `aria-expanded` / `aria-controls` / `data-state`.**
 - **The citation row.** `source` parts render as a citation row (`part="citations"`), grouped the
   way `file` parts are and placed OUTSIDE the message bubble.
+- **The emitted Solid scaffold's `renderPart` matches `components/message.tsx` again.** Sub-project
+  D briefly broke that parity; it is repaired. Six branches: `text`, `reasoning`, `tool`, `card`,
+  `source` (consecutive ones collapsed into one `<SourceList part="citations">` that is a SIBLING
+  of the text bubble, not inside it) and `file` (collapsed into one `<Attachments>` row). Two
+  divergences from `<kai-chat>` genuinely remain, and are now stated instead of being papered over
+  by the old "renders exactly what `<kai-chat>` renders" claim: the bubble's own padding and
+  radius, and no `cardTypes` override prop.
+  **It is guarded structurally, not merely fixed.** `verify:scaffold` parses the `MessagePart`
+  union out of `src/elements/chat-types.ts` with the TypeScript compiler API and requires a
+  `partAs(part(), '<variant>')` branch per variant across all 54 Solid cells. Watched failing three
+  ways, one of them an emitted front end of `''`, because an empty `.tsx` compiles clean and tsc
+  would have waved it through.
 
-Both former red cells are closed: S12 and S13 no longer carry a `knownGap` at all. Evidence, and
-the limits on it, are in the results doc — the per-model matrix has NOT been re-run live, so do
-not read those cells as five fresh passes.
+Both former red cells are closed: S12 and S13 no longer carry a `knownGap` at all. **The full
+five-configuration matrix has since been re-run live**, so all ten S12/S13 cells are live passes,
+not replays. The hedge that used to sit here is retired, and it was retired by a measurement
+rather than by a judgement that it read as fussy. Per-cell evidence is in the results doc.
 
 ### 1.2 The emit contract (tasks #8–#11) — START HERE
 
@@ -102,13 +118,9 @@ source — would take 17 advisories to zero), #64 (the defensive `[]` defaults o
 `kai-segmented`), #68 (promote the Solid mid-stream repro into CI), #69 (Solid starter imports from
 the root entry while the guide says `./solid`).
 
-**New, from sub-project D. No issue numbers yet.** The first two are the ones that matter:
+**New, from sub-project D. No issue numbers yet.** The first is the one that matters. (The
+scaffolder's missing `source` branch used to head this list; it is fixed and guarded, see §1.1.)
 
-- **The scaffolder's emitted `renderPart` has no `source` branch** — `agent-tooling/mcp/tools/scaffold.ts:2479`,
-  where the fallback comment still says "card / source / file parts hit the fallback". It no longer
-  renders what `<kai-chat>` renders, and the scaffold's own stated invariant (line 2208, "the thread
-  renders exactly what `renderPart` renders") is now false. Every citation-emitting scaffold is a
-  developer watching search results arrive and nothing appear — the exact bug we just fixed in the kit.
 - **No CI guard that generated files are in sync with source.** `element-meta.json`, `llms-full.txt`
   and `docs/web-components.md` are derived, committed, and checked by nothing. The obvious guard is a
   regenerate-and-`git diff --exit-code` job. Watch it fail before trusting it (§5.10).
@@ -161,16 +173,21 @@ needed two attempts — the first collided with a concurrent `dist/` rebuild and
 that looks nothing like a build race (`data-kai-phase="running"` never appearing), then reproduced as
 a pass with no code change.
 
-**Still open, and cheap:**
+**Done since, and it paid for itself:**
 
-- **Re-run the other four configurations' S02.** Only `haiku-oai` was re-measured. `gpt-5.4-mini`
-  reports encrypted reasoning and `ministral-3b` has no reasoning mode, so neither is expected to
-  move — but "expected not to move" is exactly the reasoning that produced this bug, and the cost of
-  checking is a few cents.
-- **The scenario this makes possible.** An Anthropic model, thinking enabled, tool loop, on the
-  OpenAI wire was never actually exercised until now. That is the configuration where a signed
-  thinking block and a tool call have to survive the same round trip, and it is where the #70 fix
-  would need to prove itself. Sketch in the investigation doc, §7.
+- **All five configurations were re-run live**, not just `haiku-oai`. The item that used to sit
+  here proposed exactly that, noted `gpt-5.4-mini` and `ministral-3b` were "not expected to move",
+  and argued that expecting nothing is the reasoning that produced this bug in the first place.
+  **`gpt-5.4-mini` moved.** Its reasoning went from encrypted-only to a 2,111-char summary between
+  two runs hours apart: same model, same request, nothing changed on our side. A few cents bought
+  a retraction of a claim we would otherwise still be publishing.
+
+**Still open:**
+
+- **A scenario that asserts on thinking and a tool call surviving the same round trip.** The
+  re-recorded `haiku-oai` column now carries reasoning in all 13 scenario dirs, tool-loop
+  scenarios included, so that configuration is exercised in passing. Nothing asserts on it. It is
+  where the #70 fix would have to prove itself. Sketch in the investigation doc, §7.
 
 ---
 
@@ -214,7 +231,7 @@ or do not bother.
 | `verify:dts:consumer` | shipped `.d.ts` type-check under bundler AND nodenext, both directions | needs network |
 | `verify:ssr` | every public entry imports under `node` | 8 entries, derived from the exports map |
 | `verify:solid-coverage` | every element writable in Solid, every component has a `<Name>Props` | 80/80 + 164 |
-| `verify:scaffold` | 432 emitted front-ends + 77 backend routes compile under real host tsconfigs | ~18s, no network |
+| `verify:scaffold` | 432 emitted front-ends + 77 backend routes compile under real host tsconfigs; 54 html / 54 angular / 54 solid checked structurally, the solid ones per `MessagePart` variant | ~18s, no network |
 | `verify:docs` | every doc snippet compiles against the shipped API | BLOCKING, gates on `high` only |
 | `verify:dts` | no emitted declaration escapes `dist/`, all specifiers resolve | both resolution modes |
 | unit | 2306 tests / 209 files | |
@@ -234,10 +251,13 @@ types that error at everything; "right code compiles" alone is satisfied by type
 runner drives the real app; the proxy records every live stream to a fixture and replays it with no
 key and no network. Results: `docs/superpowers/specs/2026-08-11-cross-model-conformance-results.md`.
 
-**95 cells, ZERO UI failures, and no open known gaps.** S12 and S13 were the last two, and both are
-closed in the library. The per-cell counts live in the results doc rather than here, so they only
-have to be right in one place — and it matters that you read them there, because the S12/S13 cells
-are backed by an OFFLINE REPLAY, not by a re-run of the live matrix.
+**95 cells: 93 pass, 2 model-behaviour differences, zero known gaps, zero UI failures, $0.107.**
+Every cell has a live measurement, S12 and S13 included. Both non-passes are `ministral-3b` (S02
+reasoning, S04 multi-round tool loop), printed as `n/a` in the results table, and both are the
+model doing something else rather than a defect: ministral has no reasoning mode, and it settled
+the three-round loop in two. They are real, so do not round them off to "everything passes". The
+per-cell table lives in the results doc rather than here, so it only has to be right in one place
+(§5.11).
 
 ### Things about it you must know before touching it
 
@@ -260,18 +280,52 @@ are backed by an OFFLINE REPLAY, not by a re-run of the live matrix.
 - **S05's cells are not equivalent across wires.** The OpenAI fixture interleaves argument fragments
   adversarially; Anthropic streams content blocks sequentially and cannot produce that shape. Marked
   `pass*` with a footnote.
+- **A conformance cell measures one moment.** Of this table's three claims of the form "the
+  provider cannot do this", **two did not survive a second measurement**: Haiku's missing thinking
+  was us asking wrong, and `gpt-5.4-mini` went from encrypted-only reasoning to a 2,111-char
+  summary between two runs hours apart. Same model, same request, different day. Only ministral's
+  "no reasoning mode" held. Write these cells as **"did not, on this date"**, never as a provider
+  limit.
 - Switching models requires **restarting vite** — `OPENROUTER_MODEL` is read server-side per request.
   The matrix runner handles this; fixtures namespace by `modelSlug`.
-- **Cost is $0.1019 for a five-configuration sweep**, not "well under a cent". Price per token, not
-  volume: Haiku is 14–35x DeepSeek.
+- **A sweep is not "well under a cent".** The headline above is per five-configuration sweep
+  ($0.1019 for the original one, ~$0.264 cumulative for the day). Price per token, not volume:
+  Haiku is 14–35x DeepSeek, and the two Haiku columns are 84% of the total on 41% of the requests.
 
 ### Anthropic wire constraints, now documented
 
 `tool_choice` must be an object. `system` is top-level, not a message. `budget_tokens` >= 1024 with
 `max_tokens` strictly greater (reusing `max_tokens: 900` fails outright). Blocks stream strictly
 sequentially and are indexed by **content block**, so a thinking block pushes a tool call from index
-0 to 1 — which is the exact shape of the original Critical. Verbatim thinking costs 2.2x prompt
-tokens.
+0 to 1 — which is the exact shape of the original Critical.
+
+**Verbatim thinking costs about 1.07x prompt tokens, not 2.2x.** The 2.2x this document used to
+publish was a double-count, wrong by almost exactly a factor of two. **The Anthropic Skin emits
+`input_tokens` TWICE per request**, once in `message_start` and once in the final billed usage
+frame; the OpenAI wire emits it once. Counting every occurrence doubles one column and leaves the
+other alone. Re-derived from the committed fixtures by two sessions independently:
+
+| | anthropic | openai | ratio |
+|---|---|---|---|
+| `18e7dd8`, every occurrence | 52,922 | 24,039 | **2.20x, the figure that was published** |
+| `18e7dd8`, billed frame only | 26,461 | 24,039 | 1.10x |
+| `e352545`, billed frame only | 26,185 | 24,560 | **1.07x, like for like** |
+
+**Publish 1.07x.** The 1.10x row is not the answer either: it compares a thinking column against
+one that, because of the budget bug, had no thinking in it. Only the current sweep compares like
+with like.
+
+The corroboration that settles it does not go through token counting at all, which is why it is
+worth more than the arithmetic: **the two columns' billed costs differ by 7.5%** ($0.046465 vs
+$0.043233, same model, same price card). That tracks a 1.07x prompt-token ratio and is flatly
+inconsistent with 2.2x, which would have shown up as roughly double.
+
+**Why this was worth chasing rather than filing as tidying.** As written, the claim read *do not
+use verbatim thinking on Anthropic, it costs more than double.* It asserted a 120% premium; the
+real premium is about 7%. And verbatim thinking is not a tuning knob, it is a correctness
+requirement: a modified or filtered thinking block is a hard 400 from the provider. So the
+overstatement pushed the reader toward the one design that cannot work. It is a number someone
+makes an architecture decision on, and it would have talked them out of the correct choice.
 
 ---
 
@@ -300,6 +354,10 @@ This accounted for more defects than bad implementations, by a wide margin. Inst
 - The `knownGap` mechanism in the harness built to catch all of this (§4).
 - My own CI poller, twice — treating an empty API response, and an unenumerated status word, as
   "done".
+- A near-miss worth the line: the obvious implementation of the new `renderPart` variant guard
+  **would have been satisfied by a COMMENT.** The prose naming `card / source / file` sits in the
+  same emitted file as the branches that have to render them, so a text match cannot tell the
+  description from the code. `verify:scaffold` strips whole-line comments before matching.
 
 **How to apply:** require watching it fail. Ask "would this pass if I deleted the feature?" Verify
 the check reads the right artifact. Treat silence as unproven, never as success.
@@ -385,13 +443,24 @@ tell.** Read the whole diff of a generated file, not the lines you went looking 
 
 ### 5.8 A cached build looks exactly like a successful one
 
-**`nx build ui` does NOT regenerate the derived artifacts.** It hits the NX cache, prints
-"Successfully ran target build", and changes nothing — those generators write side-effects into the
-SOURCE tree, and the cache does not restore those. Use `npm run build:api` inside `packages/ui`, or
-`--skip-nx-cache`.
+**`nx build ui` CAN hit the NX cache and skip the generators entirely**, reporting "Successfully
+ran target build" while changing nothing: those generators write their side effects into the
+SOURCE tree, and a cache restore does not put them back. If you need the derived artifacts
+regenerated, run `npm run build:api` inside `packages/ui`, or pass `--skip-nx-cache`.
 
-Same family as §5.1: success and no-op are indistinguishable from the output. Verify the artifact
-changed, not that the command exited 0.
+**Rely on neither behaviour.** The cache hit was observed once, with output quoting "read the
+output from the cache" and zero changed files. A second agent could not reproduce it: three
+consecutive `nx build ui` runs all missed the cache and did regenerate, mtimes advancing each
+time. Both observations are probably true, since the target's own source-tree side effects dirty
+its input hash and most real edits dirty it further.
+
+The hazard holds either way, and it is the same family as §5.1: **success and no-op are
+indistinguishable from the output.** Verify the artifact changed, not that the command exited 0.
+
+This was first written flat ("`nx build ui` does NOT regenerate the derived artifacts"), here and
+in `CLAUDE.md`, generalised from that single observation inside an hour. It is the freshest
+instance of §5.13. The advice survives both observations, so it was safe to state; the mechanism
+was contingent on one run, and the mechanism is the half that had to be corrected.
 
 ### 5.9 Worktree-isolated agents branch from `origin/main`, not from your branch
 
@@ -422,7 +491,7 @@ This is the shape underneath §5.6, §5.7 and §5.10, and it is worth more than 
 
 **When a value appears in more than one place — a count in a summary and in a heading, a field name
 across two wire formats, a registry entry and the source it describes — changing one and verifying
-that one is indistinguishable from having changed both.** Four instances, all today:
+that one is indistinguishable from having changed both.** Five instances, all today:
 
 - **S13.** The assertion verified there was exactly one artifact card, and missed that the `v2` text
   proving the revision came from the tool panel rather than from the card. One half checked.
@@ -438,6 +507,12 @@ that one is indistinguishable from having changed both.** Four instances, all to
   unrelated to the claim — a validated-looking red/green pair keyed on a field that is meaningless
   on half the columns. Same failure as §5.6: **a real red is not sufficient; the red has to be red
   BECAUSE of the thing being measured.**
+- **The scaffold cell count, and it is the one instance here that got resolved by measurement.**
+  §3 says 432 emitted front ends; `CLAUDE.md` said 378 (6 x 9 x 7). Running the gate settled it:
+  **432 across 8 frameworks, 432/432 compiling**, plus 54 html / 54 angular / 54 solid structural
+  checks and 77/77 routes. §3 is correct, do not "fix" it; `CLAUDE.md` is the stale copy and is
+  being corrected separately. **The tell was not that either number looked wrong. It was that they
+  disagreed**, and neither document alone could have produced that signal.
 
 The check that catches this is not "did my change work" but **"where else is this same fact
 written"**.
@@ -448,14 +523,67 @@ guard now compares registry against source in both directions. **Make the duplic
 make it fail loudly.** Prose is where that is hardest and where no guard exists, which is why the
 results doc is the instance that got furthest.
 
+### 5.12 Absence read as a legitimate value
+
+**This and §5.13 are the two lessons from this session that leave this repo**, alongside §5.11.
+The rest above are instances: worth recognising when they recur, but tied to this codebase. These
+two are rules.
+
+Four separate bugs were the same bug: something was absent, and the absence was read as a value.
+
+- **The original Haiku bug.** HTTP 200 with no thinking block, read as a provider limit and
+  published as one (§1.6). A silent 200 is the best-disguised absence there is, because it arrives
+  carrying a success code.
+- **A truncated fixture has no usage frame**, so it reads as zero reasoning tokens, and a guard
+  built on that number blames a provider for a dead connection.
+- **The same fixture reads as a smaller cost total.** This one has no shape to notice at all: an
+  undercount is indistinguishable from a correct total.
+- **"Zero fixtures matched the glob" and "zero findings in the fixtures"** are the same number
+  with opposite meanings, and nothing in the output separates them.
+
+Operational form: **assert the COUNT before you trust the SUM, and state the count beside the
+figure so a reader can tell a complete measurement from a partial one.** Summing whatever happens
+to be present is not measuring it. The results doc's cost table prints `requests` next to `cost`
+for this reason, over an assertion that `cost_fields == count(*.sse)` per column.
+
+**The count check has its own blind spot, and it is a different failure: presence read as
+current.** That assertion reported OK on all five columns while two stale orphan fixtures from a
+previous run sat in the tree, inflating the naive total by $0.0024. They are complete files with
+valid cost fields; they are just from a different run. **A completeness check cannot tell you the
+data is fresh.** Keep it separate from the four above, because it defeats the check you would
+build to catch them.
+
+### 5.13 The contingent argument is the one that will need correcting later
+
+The question was whether replaying a recorded stream offline proves anything, or is circular
+because we changed the renderer and then replayed our own recording.
+
+There is an argument that cannot fail: **a fixture is the provider's SSE bytes, captured in the
+proxy upstream of everything the fix touched, so our rendering code cannot have influenced what a
+provider sent. In any ordering. Ever.** It holds for every fixture in the repo regardless of when
+it was made, and no later discovery about dates can touch it.
+
+Two sessions in sequence reached past it, for evidence that was vivid and checkable over evidence
+that was merely true. The first argued from a wall clock ("recorded before the citation row
+existed"), which was wrong as stated: the commit was 15:43 and the recording 15:52. The correction
+argued from commit timestamps, which survived one more round of checking and then also needed
+qualifying. Recorded honestly: one round more, which is not a difference in kind.
+
+**A timestamp feels like proof because it has a number in it and you can go and look.** The
+structural claim has no number and reads like a bare assertion, which is exactly why both sessions
+reached over it for the version that could be wrong. **When an argument is available in both a
+structural and a contingent form, the contingent one is the one that will need correcting later.**
+Lead with the structural one; keep the dates below it as corroboration for a reader who does not
+accept it.
+
 ---
 
 ## 6. Repo gotchas
 
 - After `nx build ui`, `packages/ui/src/components/component-meta.json` churns with TS-expansion
   noise. `git checkout --` it; it is not used at runtime. **Everything else regenerating is real** and
-  should be committed — the branch is meant to be a zero-drift build fixpoint. But if NOTHING
-  regenerated, you got a cache hit, not a clean tree: see §5.8.
+  should be committed — the branch is meant to be a zero-drift build fixpoint. But do not read
+  NOTHING regenerating as proof of a clean tree: that is also what a cache hit looks like (§5.8).
 - **Run `pnpm --filter @kitn.ai/ui run build:css` in a fresh worktree** before the unit suite.
   `src/elements/compiled.css` is generated and gitignored, and without it the element tests fail on
   `Failed to resolve import "./compiled.css?inline"` — which reads as a broken checkout.
