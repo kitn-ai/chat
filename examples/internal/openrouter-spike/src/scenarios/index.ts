@@ -52,12 +52,23 @@ export function findScenario(id: string): Scenario | undefined {
 }
 
 /** Where a scenario's replay fixture lives, relative to `fixtures/`. A `live`
- *  scenario replays from what it RECORDED (per model); a `replay` scenario has a
- *  hand-written stream under `canned/`, because the behaviour it covers cannot
- *  be provoked from a prompt. */
-export function replayDirFor(scenario: Scenario, modelSlug: string): string {
+ *  scenario replays from what it RECORDED (per model AND wire — `modelSlug`
+ *  already encodes both); a `replay` scenario has a generated stream under
+ *  `canned/`, because the behaviour it covers cannot be provoked from a prompt.
+ *
+ *  The canned streams exist in BOTH SSE dialects. They have to: a canned
+ *  chat-completions stream handed to `readAnthropicStream` does not fail loudly,
+ *  it parses to nothing — which showed up as six red cells that looked like UI
+ *  bugs the first time an Anthropic model was driven through the Anthropic Skin.
+ *  `harness/make-canned-fixtures.mjs` emits both from one description. */
+export function replayDirFor(
+  scenario: Scenario,
+  modelSlug: string,
+  wire: 'openai' | 'anthropic' = 'openai',
+): string {
   if (scenario.replayDir) return scenario.replayDir;
-  return scenario.mode === 'replay' ? `canned/${scenario.id}` : `live/${modelSlug}/${scenario.id}`;
+  if (scenario.mode !== 'replay') return `live/${modelSlug}/${scenario.id}`;
+  return wire === 'anthropic' ? `canned-anthropic/${scenario.id}` : `canned/${scenario.id}`;
 }
 
 export type { Scenario, ScenarioMode } from './types';

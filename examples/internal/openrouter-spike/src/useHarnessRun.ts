@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { findScenario, replayDirFor, type Scenario, type ScenarioMode } from './scenarios';
 import { publishHarnessState, type HarnessState } from './harness-state';
 import type { SpikeChat } from './hooks';
-import type { SpikeConfig } from './transport';
+import type { SpikeConfig, WireKind } from './transport';
 
 export interface HarnessRequest {
   scenario: Scenario;
@@ -45,6 +45,7 @@ export function sendOptionsFor(
   mode: ScenarioMode,
   modelSlug: string,
   fixtureDir?: string,
+  wire: WireKind = 'openai',
 ): Parameters<SpikeChat['send']>[1] {
   return {
     tools: scenario.tools,
@@ -52,7 +53,9 @@ export function sendOptionsFor(
     ...(mode === 'replay'
       ? {
           replay: {
-            dir: fixtureDir ?? replayDirFor(scenario, modelSlug),
+            // The wire picks the DIALECT of the canned stream. Get this wrong
+            // and the replay parses to an empty turn rather than erroring.
+            dir: fixtureDir ?? replayDirFor(scenario, modelSlug, wire),
             delayMs: scenario.replayDelayMs,
           },
         }
