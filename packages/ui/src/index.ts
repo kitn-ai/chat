@@ -364,3 +364,12 @@ export type {
   ChatMessage, ChatMessageAction, CustomAction, AvatarData, FeedbackVote, MessagePart,
   MessageSource, RawOrigin,
 } from './elements/chat-types';
+
+// Composer document model. This belongs on "." rather than "./solid" because it
+// is part of the ELEMENT contract, not the Solid-only surface: `ComposerDoc` is
+// the non-string half of `kai-prompt-input` / `kai-composer` / `kai-default-input`'s
+// `value` property, and `doc` + `entities` on their `kai-submit` /
+// `kai-value-change` details. The shipped prop docs name `ComposerDoc` by name,
+// so a React or Vue consumer reading them has to be able to import it. Type-only,
+// so it is erased by the build and costs the root barrel nothing.
+export type { ComposerDoc, Segment, EntityRef } from './primitives/composer-model';
