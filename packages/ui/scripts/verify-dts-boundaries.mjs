@@ -31,6 +31,45 @@
  * (`ts.resolveModuleName`) and the check asserts the specifier resolves to actual
  * DECLARATIONS — not merely that a file exists somewhere near the path. A guard
  * that re-implements tsc's resolution is a guard that disagrees with tsc.
+ *
+ * EVERY MODE A CONSUMER COMPILES IN, NOT JUST THE CONVENIENT ONE
+ * -------------------------------------------------------------
+ * This guard used to check `bundler` ALONE, and justified it in a comment: under
+ * node16/nodenext an extensionless relative import is illegal, vite-plugin-dts
+ * emits extensionless specifiers throughout, so checking that mode "would fail
+ * every file for a reason this guard cannot fix". Every clause of that was true.
+ * The conclusion was wrong. It was not unfixable — it was unfixed, and scoping the
+ * guard to the passing mode is what let it ship:
+ *
+ *     same file, same tarball, only moduleResolution changed
+ *     bundler  -> const x: OpenAIWireMessage = 12345   errors TS2322   (correct)
+ *     nodenext -> const x: OpenAIWireMessage = 12345   compiles clean  (bug)
+ *
+ * Not an error a consumer could see and act on — SILENCE. `dist/wire/index.d.ts`
+ * re-exports './read', './encode' and friends with no extension; nodenext rejects
+ * those (TS2834), `skipLibCheck: true` (on in every Vite template) SUPPRESSES the
+ * rejection, and the names re-exported through the broken specifier degrade to
+ * `any`. The whole public API silently stops type-checking. That is the same shape
+ * as the skipLibCheck bug: type-checking that appears to work and checks nothing.
+ *
+ * nodenext is not an exotic mode to us either — it is what the stock
+ * `tsconfig.node.json` in Vite's TS templates uses, i.e. the mode our own emitted
+ * backend routes compile under in a consumer's app.
+ *
+ * THE MODE ARGUMENT IS LOAD-BEARING — DO NOT DROP IT
+ * --------------------------------------------------
+ * `ts.resolveModuleName` under NodeNext with a DEFAULT resolutionMode resolves
+ * './read' just fine, because TS2834 is raised by the CHECKER, not the resolver.
+ * Adding NodeNext to the options without the mode makes this guard pass green on
+ * a package that is thoroughly broken:
+ *
+ *     NodeNext, mode=<default>  -> RESOLVED read.d.ts   <- proves nothing
+ *     NodeNext, mode=ESNext     -> UNRESOLVED           <- the real consumer result
+ *
+ * So each specifier is resolved with the CONTAINING file's implied module format
+ * (`ts.getImpliedNodeFormatForFile`; ESM here, since package.json is
+ * `"type": "module"`). If this check ever goes quiet, verify it can still fail:
+ * strip the extensions back off one dist/*.d.ts and confirm it goes red.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, dirname, resolve, relative, sep } from 'node:path';
@@ -91,14 +130,14 @@ if (!statSync(distRoot, { throwIfNoEntry: false })?.isDirectory()) {
 }
 
 /**
- * Ask TYPESCRIPT to resolve the specifier, exactly as a consumer's tsc would.
+ * Ask TYPESCRIPT to resolve the specifier, exactly as a consumer's tsc would — in
+ * BOTH module-resolution modes real consumers compile in:
  *
- * `bundler` is the mode this package's own tsconfig uses and the one Vite / Next /
- * Astro / TanStack consumers get by default. It is deliberately the only mode
- * checked: under `node16`/`nodenext` an extensionless relative import is illegal
- * outright, and vite-plugin-dts emits extensionless specifiers throughout, so
- * asserting that mode would fail every file for a reason this guard cannot fix.
- * `bundler` is where the interesting, fixable failures live — TS7016 included.
+ *   bundler  — this package's own tsconfig, and the Vite / Next / Astro / TanStack
+ *              default. Where TS7016 (resolves to a .js with no declarations) bites.
+ *   nodenext — the stock tsconfig.node.json in Vite's TS templates, and anything
+ *              running under Node's own ESM resolution. Where TS2834 (extensionless
+ *              relative specifier) bites, silently, via skipLibCheck.
  *
  * allowJs:true so a specifier that lands on a .js is REPORTED as "resolved, but
  * to JavaScript with no declarations" instead of silently reading as unresolved.
@@ -106,24 +145,64 @@ if (!statSync(distRoot, { throwIfNoEntry: false })?.isDirectory()) {
  *
  * @returns {{ok: true} | {ok: false, reason: string}}
  */
-const RESOLVE_OPTS = {
-  moduleResolution: ts.ModuleResolutionKind.Bundler,
-  module: ts.ModuleKind.ESNext,
-  target: ts.ScriptTarget.ESNext,
-  allowJs: true,
-};
+const MODES = [
+  {
+    label: 'bundler',
+    opts: {
+      moduleResolution: ts.ModuleResolutionKind.Bundler,
+      module: ts.ModuleKind.ESNext,
+      target: ts.ScriptTarget.ESNext,
+      allowJs: true,
+    },
+    // `bundler` has no per-file ESM/CJS split; resolution is mode-independent.
+    impliedMode: false,
+  },
+  {
+    label: 'nodenext',
+    opts: {
+      moduleResolution: ts.ModuleResolutionKind.NodeNext,
+      module: ts.ModuleKind.NodeNext,
+      target: ts.ScriptTarget.ESNext,
+      allowJs: true,
+    },
+    // Load-bearing: see the header. Without the containing file's implied format
+    // this degrades to a check that passes on extensionless specifiers.
+    impliedMode: true,
+  },
+];
 const TYPED_EXTENSIONS = new Set([ts.Extension.Dts, ts.Extension.Ts, ts.Extension.Tsx]);
 
 function resolvesToDeclarations(spec, containingFile) {
-  const { resolvedModule } = ts.resolveModuleName(spec, containingFile, RESOLVE_OPTS, ts.sys);
-  if (!resolvedModule) return { ok: false, reason: 'resolves to nothing (TS2307)' };
-  if (!TYPED_EXTENSIONS.has(resolvedModule.extension)) {
-    return {
-      ok: false,
-      reason:
-        `resolves to ${relative(pkgRoot, resolvedModule.resolvedFileName)} ` +
-        `(${resolvedModule.extension}) — JavaScript with no declaration file beside it (TS7016)`,
-    };
+  for (const { label, opts, impliedMode } of MODES) {
+    const mode = impliedMode
+      ? ts.getImpliedNodeFormatForFile(containingFile, undefined, ts.sys, opts)
+      : undefined;
+    const { resolvedModule } = ts.resolveModuleName(
+      spec,
+      containingFile,
+      opts,
+      ts.sys,
+      undefined,
+      undefined,
+      mode,
+    );
+    if (!resolvedModule) {
+      const hint =
+        label === 'nodenext' && !/\.[a-z]+$/i.test(spec)
+          ? ' — extensionless relative specifier, illegal under node16/nodenext ESM (TS2834).' +
+            ` Consumers with skipLibCheck:true see NO error, just '${spec}' typed as any.` +
+            ` Did you mean '${spec}.js'?`
+          : '';
+      return { ok: false, reason: `[${label}] resolves to nothing (TS2307)${hint}` };
+    }
+    if (!TYPED_EXTENSIONS.has(resolvedModule.extension)) {
+      return {
+        ok: false,
+        reason:
+          `[${label}] resolves to ${relative(pkgRoot, resolvedModule.resolvedFileName)} ` +
+          `(${resolvedModule.extension}) — JavaScript with no declaration file beside it (TS7016)`,
+      };
+    }
   }
   return { ok: true };
 }
@@ -159,7 +238,8 @@ for (const file of files) {
 if (escapes.length === 0 && dangling.length === 0 && badSelfRefs.length === 0) {
   console.log(
     `✓ dts boundaries: ${files.length} emitted .d.ts files reference nothing outside dist/,\n` +
-      '  and every relative specifier in them resolves to declarations under `bundler` resolution.',
+      '  and every relative specifier in them resolves to declarations under BOTH\n' +
+      '  `bundler` and `nodenext` (ESM) resolution.',
   );
   process.exit(0);
 }
