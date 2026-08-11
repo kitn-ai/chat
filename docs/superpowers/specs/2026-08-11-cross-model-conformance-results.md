@@ -26,6 +26,23 @@
 > `haiku-4.5 (openai wire)` passes**, with 25–30 `reasoning_details` frames,
 > `format: anthropic-claude-v1`, and `reasoning_tokens` 111 where it was 0.
 >
+> **The defect was the whole column, not the one red cell.** `max_tokens: 900` is
+> harness-wide, so every Anthropic-family request was under the same derived floor.
+> Counted across the re-recorded fixtures:
+>
+> | | scenario dirs carrying reasoning |
+> |---|---|
+> | pre-fix | **0 of 13** |
+> | post-fix | **13 of 13** |
+>
+> S02 was merely the only scenario that *asserts* on reasoning, so the only one that
+> could go red. The other 18 cells in that column were not wrong — they do not test
+> reasoning — but the column as a whole was never exercising "Anthropic model,
+> thinking enabled, on the OpenAI wire", which is the entire reason that
+> configuration is in the matrix. **A silent 18-cell hole, held open by one green
+> column.** The re-recorded fixtures are committed, so the offline suite now replays
+> streams that match what live produces.
+>
 > Corrected numbers are below. The row is marked `pass†`. Everything else in this
 > document stands as measured.
 
@@ -267,6 +284,25 @@ token. DeepSeek costs $0.07/$0.14 per Mtok; Haiku 4.5 costs $1/$5, roughly 14x a
 cheap in absolute terms, and worth stating rather than rounding away.
 
 `anthropic/claude-opus-*` would be another 5x on top of Haiku. Not run.
+
+### What thinking actually costs, measured
+
+The correction at the top has a price attached, and it is smaller than the existing
+2.2x figure would lead you to guess. The identical 28 requests of the `haiku-oai`
+column, before and after the thinking budget was fixed:
+
+| | cost | reasoning |
+|---|---|---|
+| pre-fix (derived budget 450, under the floor) | $0.037089 | none, in any scenario |
+| post-fix (explicit budget 1024) | $0.045223 | all 13 scenario dirs |
+
+**+$0.008134, or +21.9%**, to make that column actually test what it exists to test.
+
+**Do not conflate this with the 2.2x prompt-token figure** recorded for the Anthropic
+wire. They measure different things: 2.2x is verbatim thinking inflating PROMPT tokens
+as it is echoed back across rounds of a loop; +21.9% is OUTPUT tokens on a single
+pass. Both are real, they compound rather than substitute, and collapsing them into
+one number would be a plausible-looking error that nothing downstream would catch.
 
 ## What I could not classify confidently
 
