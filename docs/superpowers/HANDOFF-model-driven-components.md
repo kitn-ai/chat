@@ -105,15 +105,54 @@ source — would take 17 advisories to zero), #64 (the defensive `[]` defaults o
 `kai-segmented`), #68 (promote the Solid mid-stream repro into CI), #69 (Solid starter imports from
 the root entry while the guide says `./solid`).
 
-### 1.5 #70 needs an INVESTIGATION, not a fix
+### 1.5 #70 — INVESTIGATED, and it demoted itself. Do not fix it next.
 
-`reasoning_details` is absent from `packages/ui/src/wire/` entirely, so it is dropped on the OpenAI
-path. That is asymmetric with the Anthropic path, which deliberately preserves opaque blocks
-verbatim in `part.raw`.
+Done: [`specs/2026-08-11-reasoning-details-investigation.md`](specs/2026-08-11-reasoning-details-investigation.md).
 
-**The drop is certain. The consequence is NOT established.** Nobody has tested whether OpenRouter
-accepts `reasoning_details` on the way back in, or whether dropping it degrades a multi-round loop
-with a reasoning model. Establish that first. If it round-trips fine, this is a non-issue.
+**The filing's premise was wrong.** `reasoning_details` is NOT absent from `wire/` — the read path
+handles it deliberately and with tests. The drop is one function on encode (`toOpenAIMessages`), and
+the comment justifying it ("OpenAI chat completions has no reasoning channel on the way back in") is
+the real error. OpenRouter has one.
+
+**The untested question is answered: it round-trips.** OpenRouter accepts `reasoning_details` on the
+way back in (200), and omitting it is accepted too (200). Zero 400s. The signature is the
+load-bearing field — stripping it is a hard 400 from Anthropic upstream.
+
+**If you do fix it, do not echo `part.raw`.** After a streamed turn `part.raw` holds the FINAL
+fragment only — a signature with no text. Reassemble from `part.text` + `part.signature`.
+
+**Verdict: a latent quality-and-cost gap, not a defect.** Including reasoning costs ~+25% prompt
+tokens per round. Reprioritise it below §1.6.
+
+### 1.6 The finding that came out of #70, and is worth more than it
+
+**The matrix was measuring a harness parameter and reporting it as a provider limit** — for a whole
+five-configuration sweep, in a published table, as a confident `n/a`.
+
+The spike asked for thinking with `reasoning: {effort: 'medium'}`. OpenRouter derives an Anthropic
+budget from `effort` as a PERCENTAGE of `max_tokens` (medium ~= 50%), and the spike caps `max_tokens`
+at 900 for cost. That derives 450 — under Anthropic's 1024 floor — so the provider returned no
+thinking, silently, with a 200. The Anthropic-wire column meanwhile asked for a full 1024. **The two
+columns were never asking the same question, which is the single thing that configuration exists to
+guarantee.**
+
+Fixed and guarded (`server/thinking-budget.test.ts`, cross-wire assertion, watched failing first).
+S02 on `haiku-4.5 (openai wire)` is now a live `pass` with real signed thinking.
+
+**Still open, and cheap:**
+
+- **Re-confirm S02's offline replay.** Its live pass is committed; the replay re-run collided with a
+  concurrent `packages/ui/dist/` rebuild, and this repo's standing rule is that a gate reading a
+  mid-rebuild `dist/` produces false failures. One command, no spend:
+  `node harness/run-matrix.mjs --only haiku-oai --scenarios S02-reasoning --mode replay`.
+- **Re-run the other four configurations' S02.** Only `haiku-oai` was re-measured. `gpt-5.4-mini`
+  reports encrypted reasoning and `ministral-3b` has no reasoning mode, so neither is expected to
+  move — but "expected not to move" is exactly the reasoning that produced this bug, and the cost of
+  checking is a few cents.
+- **The scenario this makes possible.** An Anthropic model, thinking enabled, tool loop, on the
+  OpenAI wire was never actually exercised until now. That is the configuration where a signed
+  thinking block and a tool call have to survive the same round trip, and it is where the #70 fix
+  would need to prove itself. Sketch in the investigation doc, §7.
 
 ---
 
@@ -261,6 +300,26 @@ the bug in seconds.
 File-ownership instructions do not constrain whole-tree operations. One agent's
 `git checkout -- <path>` clobbered another's in-flight edit; `npm pack` captured a third's mid-edit
 file. Use `isolation: "worktree"` for agents that WRITE; readers can share.
+
+**Third instance, 2026-08-11, and the first to destroy PAID evidence.** Two sessions shared
+`.claude/worktrees/message-parts`. One ran a bulk `git checkout`/`reset` at 15:56:53 which, in a
+single operation: reverted the other's uncommitted source edits, discarded **28 freshly recorded
+live fixtures** (~$0.045 of API spend), and orphaned an already-made commit off the branch tip. A
+second collision rebuilt `packages/ui/dist/` mid-run, producing a false conformance failure.
+
+Three things made it recoverable and one made it detectable:
+
+- **Commit early; committed work survives a checkout.** The orphaned commit was recovered intact
+  with `git cherry-pick` — nothing was lost that had been committed. The fixtures, which had not,
+  were gone.
+- **Reports outlive artifacts.** `harness/matrix-reports/*.live.json` survived and was the durable
+  proof the live pass had really happened, after the fixtures proving it were reverted.
+- **Identical mtimes to the second across 28 files is the signature of a bulk VCS operation**, not
+  of a run. A live run writes them spread over its duration. That is what distinguished "someone
+  reverted this" from "another live run overwrote this", which have opposite responses.
+- Detection was luck: the reverted file happened to surface in a tool notification. **Re-read
+  `git log --oneline -1` before trusting that the tree still contains your work**, especially before
+  spending money on a run whose output you intend to commit.
 
 ### 5.5 Compilation is not behaviour
 

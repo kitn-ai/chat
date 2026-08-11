@@ -1,18 +1,43 @@
 # Cross-model conformance: five configurations, 19 scenarios
 
-**Date:** 2026-08-11 · **Harness:** [`examples/internal/openrouter-spike/HARNESS.md`](../../../examples/internal/openrouter-spike/HARNESS.md) · **Total measured spend:** $0.1019
+**Date:** 2026-08-11 · **Harness:** [`examples/internal/openrouter-spike/HARNESS.md`](../../../examples/internal/openrouter-spike/HARNESS.md) · **Total measured spend:** $0.1019 for the original sweep, **+$0.052** for the correction below ($0.0054 of root-cause probes, $0.0452 for a corrected `haiku-oai` pass, ~$0.0015 to re-record S02)
 
 "A real model drives our UI" used to rest on one model. This is the table.
 
+> ### CORRECTION, 2026-08-11 (later the same day)
+>
+> **One cell in this table was measuring our own bug and is now green.** The
+> `haiku-4.5 (openai wire)` column reported S02 as `n/a` — "the model emits no
+> reasoning on this wire" — and §2 below drew a conclusion from it about
+> OpenRouter's normalisation layer. **That conclusion was wrong.**
+>
+> The harness asked for thinking with `reasoning: {effort: 'medium'}`. OpenRouter
+> derives an Anthropic budget from `effort` as a percentage of `max_tokens`
+> (medium ~= 50%), and this spike caps `max_tokens` at 900 for cost. That derives
+> **450 tokens, under Anthropic's documented 1024 floor**, so the provider
+> returned no thinking at all — silently, with a 200. Meanwhile the Anthropic-wire
+> column asked the same model for a full 1024-token budget. **The two columns were
+> never asking for the same thing, which is the one thing that configuration
+> exists to guarantee.**
+>
+> Fixed in `openrouter-proxy.ts` (Anthropic-family models get an explicit budget on
+> both wires); guarded by `server/thinking-budget.test.ts`, whose load-bearing
+> assertion is cross-wire rather than per-wire. Re-measured live: **S02 on
+> `haiku-4.5 (openai wire)` passes**, with 25–30 `reasoning_details` frames,
+> `format: anthropic-claude-v1`, and `reasoning_tokens` 111 where it was 0.
+>
+> Corrected numbers are below. The row is marked `pass†`. Everything else in this
+> document stands as measured.
+
 ## The result
 
-95 cells: **81 pass, 10 confirmed known gaps** (S12 and S13 in all five columns, both
-already documented), **4 model-behaviour differences**, and **zero UI failures**.
+95 cells: **82 pass, 10 confirmed known gaps** (S12 and S13 in all five columns, both
+already documented), **3 model-behaviour differences**, and **zero UI failures**.
 
 | scenario | deepseek-v4-flash | haiku-4.5 (anthropic wire) | haiku-4.5 (openai wire) | gpt-5.4-mini | ministral-3b |
 |---|---|---|---|---|---|
 | S01 plain text | pass | pass | pass | pass | pass |
-| S02 reasoning | pass | pass | **n/a** | **n/a** | **n/a** |
+| S02 reasoning | pass | pass | **pass†** | **n/a** | **n/a** |
 | S03 single tool | pass | pass | pass | pass | pass |
 | S04 multi-round tool loop | pass | pass | pass | pass | **n/a** |
 | S05 parallel tools | pass | pass\* | pass | pass | pass |
@@ -40,12 +65,25 @@ tests two complete tool_use blocks arriving one after another. The harness now
 carries this per wire (`provesByWire` in `s05-parallel-tools.ts`) and prints it as a
 footnote, rather than leaving a reader to infer equivalence from two green cells.
 
+† **This cell read `n/a` until the harness stopped asking for a sub-floor thinking
+budget.** See the correction at the top. It is the one cell in this table that was
+measuring the harness rather than the model, and it is worth more than its single
+green square: an `n/a` that means "the provider cannot do this" and an `n/a` that
+means "we asked wrong" are indistinguishable from the table, and only running the
+same model down a second wire made the difference visible at all.
+
 `pass` = the behaviour rendered · `gap` = a documented known gap, failing as
 documented · **`n/a`** = the model did not produce the input the scenario needs.
 Not a failure of ours, and the distinction is argued below rather than asserted.
 
 Every cell was produced twice: once live, once by replaying the recording offline.
-The two agree exactly, including the failures.
+The two agree exactly, including the failures. **Exception, the corrected S02 cell:**
+its live pass is recorded in `harness/matrix-reports/haiku-oai.live.json` and its
+fixture is committed, but its offline replay has NOT been re-confirmed — a
+concurrent session was rebuilding `packages/ui/dist/` during the re-run, and this
+repo has a standing rule that a gate reading a mid-rebuild `dist/` produces false
+failures. Re-run `--only haiku-oai --scenarios S02-reasoning --mode replay` against
+a settled build before treating the pair as agreeing.
 
 ## The three things that look alike
 
@@ -65,19 +103,32 @@ recorded bytes rather than inferred from the red cell:
 |---|---|---|
 | deepseek-v4-flash | `delta.reasoning` + `reasoning_details` | 708 |
 | haiku-4.5, anthropic wire | `thinking` block + `thinking_delta` | 519 |
-| haiku-4.5, openai wire | **nothing** — only `content` and `role` | 0 |
+| ~~haiku-4.5, openai wire~~ | ~~**nothing** — only `content` and `role`~~ | ~~0~~ |
+| **haiku-4.5, openai wire (corrected)** | `delta.reasoning` + `reasoning_details`, `format: anthropic-claude-v1`, signed | 421–535 |
 | gpt-5.4-mini | `reasoning: null` + `reasoning_details: [{type: "reasoning.encrypted"}]` | 0 |
 | ministral-3b | **nothing** — the model has no reasoning mode | 0 |
 
-Three different causes, one symptom. Ministral has no reasoning at all. GPT-5.4-mini
-reasons but returns it **encrypted** — the raw chain of thought is never exposed, so
-there is no text any UI could render. Haiku reasons, and its thinking is visible over
-the Anthropic wire and *absent* over OpenRouter's OpenAI-compat normalisation of the
-same request.
+Ministral has no reasoning at all. GPT-5.4-mini reasons but returns it **encrypted** —
+the raw chain of thought is never exposed, so there is no text any UI could render.
+Haiku reasons, and its thinking is visible over **both** wires.
 
-That last row is the useful one, and it is only available because the same model was
-run down both paths: it isolates the loss to the normalisation layer, not to the
-model and not to the kit.
+**The struck row is the correction, and the original conclusion drawn from it was
+exactly backwards.** It read:
+
+> That last row is the useful one, and it is only available because the same model was
+> run down both paths: it isolates the loss to the normalisation layer, not to the
+> model and not to the kit.
+
+There was no loss to isolate. The normalisation layer surfaces Haiku's thinking
+fine; the harness had asked for a budget below the provider's floor and read the
+resulting silence as a property of the provider. The reasoning was sound and the
+premise was ours.
+
+The row is still the useful one, for the opposite reason: **running the same model
+down two wires is what made our own bug visible.** With only the OpenAI column, "no
+reasoning" would have looked like a settled fact about OpenRouter. The second column
+is what turned it into a discrepancy worth chasing. That is the argument for the
+configuration, and it survives the correction intact.
 
 **S04 (multi-round tool loop) on ministral-3b.** The scenario wants three sequential
 rounds; ministral emitted all three calls in one batch and settled in two. The tool
@@ -163,20 +214,28 @@ the full UI on a model costing $0.10 per million tokens.
 
 ## Findings for the library (reported, not fixed — outside this surface)
 
-**1. `reasoning_details` is dropped on the OpenAI wire.** `grep -rn reasoning_details
-packages/ui/src/wire/` returns nothing. OpenRouter sends
-`reasoning_details: [{type: "reasoning.encrypted", data: "..."}]` for OpenAI
-reasoning models, and the kit ignores it.
+**1. `reasoning_details` is dropped on the OpenAI wire — but only on ENCODE, and the
+claim below overstated it.**
 
-This is an asymmetry with the Anthropic path, which deliberately preserves opaque
-`redacted_thinking` blocks in `part.raw` precisely so they round-trip verbatim. The
-OpenAI-format equivalent has no such home, so encrypted reasoning cannot be echoed
-back on a later round.
+~~`grep -rn reasoning_details packages/ui/src/wire/` returns nothing.~~ **That is
+false.** It returns four files; the READ path handles `reasoning_details`
+deliberately and with tests (`wire/formats/openai.ts:96-115`), including the
+text-doubling trap, the block index and the signature. The drop is one function on
+the way OUT — `toOpenAIMessages` never emits a reasoning channel — and the comment
+justifying it (`encode.ts:131-134`, "OpenAI chat completions has no reasoning
+channel on the way back in") is the actual error. OpenRouter has one.
 
-*Confidence: the drop is certain. The consequence is not.* Whether OpenRouter's
-`/chat/completions` accepts `reasoning_details` on the way back in, and whether
-omitting it measurably degrades a multi-turn loop, was **not tested** — S02 is a
-single-round scenario. Worth a deliberate experiment before anyone acts on it.
+The experiment this section asked for was run the same day. Settled, with
+measurements: **OpenRouter accepts `reasoning_details` on the way back in (200), and
+omitting it is accepted too (200)** — zero 400s across two models and 28 recorded
+requests per configuration. The signature, not the text, is load-bearing: stripping
+it is a hard 400 from Anthropic upstream. And the obvious fix is the dangerous one,
+because after a streamed turn `part.raw` holds the final fragment only — a signature
+with no text — so echoing it is not a reassembly.
+
+Full write-up, including what was NOT measured (answer quality, prompt-cache
+behaviour, multi-entry sequences): [`2026-08-11-reasoning-details-investigation.md`](2026-08-11-reasoning-details-investigation.md).
+**Verdict: a latent quality-and-cost gap, not a defect.**
 
 **2. `knownGap` swallows unrelated failures.** A `knownGap` scenario that fails for
 *any* reason is recorded as "gap confirmed". During the broken-dialect run, S13
@@ -207,13 +266,17 @@ cheap in absolute terms, and worth stating rather than rounding away.
 
 ## What I could not classify confidently
 
-- **Whether the dropped `reasoning_details` actually matters.** Certain that it is
-  dropped; untested whether the round-trip needs it. Flagged above rather than
-  fixed or dismissed.
-- **Whether OpenRouter's OpenAI-compat layer can surface Haiku's thinking at all.**
-  Observed that it did not with `reasoning: {effort: 'medium'}`. Whether a different
-  parameter would, or whether it is a hard limit of the normalisation, was not
-  explored — one request shape was tested, not the space.
+- ~~**Whether the dropped `reasoning_details` actually matters.**~~ **RESOLVED** —
+  see finding 1. It round-trips; omitting it is accepted. What remains genuinely
+  unmeasured is whether omitting it degrades *answer quality* on a hard multi-step
+  task, which is a benchmark rather than a conformance cell.
+- ~~**Whether OpenRouter's OpenAI-compat layer can surface Haiku's thinking at
+  all.**~~ **RESOLVED, and it was our bug** — see the correction at the top. It can.
+  This bullet was the honest one in the original document ("one request shape was
+  tested, not the space"), and testing the second shape is what found it. **The
+  lesson is that the hedge was correct and the table was not**: the table printed a
+  confident `n/a` for the same measurement this bullet flagged as unexplored. When a
+  caveat and a cell disagree, the cell is what people read.
 - **S05 on the Anthropic wire tests a weaker claim than on the OpenAI wire.** The
   OpenAI fixture interleaves two calls' argument fragments round-robin, which is the
   adversarial case. Anthropic cannot produce that framing, so its fixture is two
