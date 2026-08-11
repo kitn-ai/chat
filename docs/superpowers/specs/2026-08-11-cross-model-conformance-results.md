@@ -77,13 +77,17 @@ documented · **`n/a`** = the model did not produce the input the scenario needs
 Not a failure of ours, and the distinction is argued below rather than asserted.
 
 Every cell was produced twice: once live, once by replaying the recording offline.
-The two agree exactly, including the failures. **Exception, the corrected S02 cell:**
-its live pass is recorded in `harness/matrix-reports/haiku-oai.live.json` and its
-fixture is committed, but its offline replay has NOT been re-confirmed — a
-concurrent session was rebuilding `packages/ui/dist/` during the re-run, and this
-repo has a standing rule that a gate reading a mid-rebuild `dist/` produces false
-failures. Re-run `--only haiku-oai --scenarios S02-reasoning --mode replay` against
-a settled build before treating the pair as agreeing.
+The two agree exactly, including the failures. **The corrected S02 cell holds to the
+same standard**: live pass recorded in `harness/matrix-reports/haiku-oai.live.json`,
+fixture committed, offline replay re-confirmed green against a settled build.
+
+That replay took two attempts, and the first one is worth recording rather than
+quietly dropping: it failed against a `packages/ui/dist/` that a concurrent session
+was rebuilding mid-run, with a symptom (`data-kai-phase="running"` never appearing)
+that looks nothing like a build race. It reproduced as a pass five minutes later
+with no code change. **A conformance failure that cannot be reproduced against a
+settled tree is a report about the tree, not about the kit** — the standing repo
+rule, met here for the third time.
 
 ## The three things that look alike
 

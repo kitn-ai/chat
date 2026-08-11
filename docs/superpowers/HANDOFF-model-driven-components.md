@@ -139,12 +139,13 @@ guarantee.**
 Fixed and guarded (`server/thinking-budget.test.ts`, cross-wire assertion, watched failing first).
 S02 on `haiku-4.5 (openai wire)` is now a live `pass` with real signed thinking.
 
+Both halves are confirmed: live pass, and offline replay green against a settled build. The replay
+needed two attempts — the first collided with a concurrent `dist/` rebuild and failed with a symptom
+that looks nothing like a build race (`data-kai-phase="running"` never appearing), then reproduced as
+a pass with no code change.
+
 **Still open, and cheap:**
 
-- **Re-confirm S02's offline replay.** Its live pass is committed; the replay re-run collided with a
-  concurrent `packages/ui/dist/` rebuild, and this repo's standing rule is that a gate reading a
-  mid-rebuild `dist/` produces false failures. One command, no spend:
-  `node harness/run-matrix.mjs --only haiku-oai --scenarios S02-reasoning --mode replay`.
 - **Re-run the other four configurations' S02.** Only `haiku-oai` was re-measured. `gpt-5.4-mini`
   reports encrypted reasoning and `ministral-3b` has no reasoning mode, so neither is expected to
   move — but "expected not to move" is exactly the reasoning that produced this bug, and the cost of
