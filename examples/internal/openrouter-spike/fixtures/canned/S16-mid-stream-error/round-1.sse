@@ -1,0 +1,10 @@
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"content":"Streaming is "},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"content":"the part everyone gets wrong: a new array reference per chunk is "},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"content":"what makes the thread re-render. "},"finish_reason":null}]}
+
+data: {"error":{"code":"rate_limit_exceeded","message":"Provider rate limit exceeded mid-generation."},"choices":[{"index":0,"delta":{},"finish_reason":"error"}]}
+
+data: [DONE]
+

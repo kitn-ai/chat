@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Badge, Button, Resizable, ResizableItem, Segmented, useKaiChat } from '@kitn.ai/ui/react';
-import { SCENARIOS, SUGGESTIONS, type Scenario } from './chat-data';
+import { RAIL, SUGGESTIONS, type RailEntry } from './chat-data';
 import { fetchSpikeConfig, type CardMode, type SpikeConfig } from './transport';
 import { useSpikeChat } from './hooks';
+import type { Scenario, ScenarioMode } from './scenarios';
+import { readHarnessRequest, sendOptionsFor, useHarnessRun } from './useHarnessRun';
+import { registerSpikeArtifact, SPIKE_CARD_TYPES } from './spike-artifact';
 import { Sidebar } from './components/Sidebar';
 import { ThreadView } from './components/ThreadView';
 import { Composer } from './components/Composer';
@@ -11,6 +14,10 @@ import { ThemeToggle } from './components/ThemeToggle';
 
 export type Theme = 'light' | 'dark';
 
+// A consumer-registered card type. See spike-artifact.ts: the kit has no
+// `artifact` card, so S13 reaches one through the documented `cardTypes` seam.
+registerSpikeArtifact();
+
 /**
  * ⚠ SPIKE, not a supported starter. See README.md.
  *
@@ -18,14 +25,10 @@ export type Theme = 'light' | 'dark';
  * REAL model over OpenRouter, so the kit's tool / reasoning / card components
  * are driven by actual model output instead of hand-written fixtures.
  *
- * Shape:
- *   src/transport.ts      browser → /api/chat, and nothing else
- *   server/               the dev proxy: adds the key, forwards raw upstream SSE
- *
- * The adapter it used to carry (src/model-stream.ts, src/sse-frames.ts) now ships
- * as `@kitn.ai/ui/wire`, and the proxy no longer needs a provider SDK. What is
- * left is the reason to keep the spike: `useKaiChat` owns the message array and
- * `useSpikeChat` owns the multi-round tool loop, driven by a real model.
+ * It is also the instrument the CONFORMANCE HARNESS drives (see HARNESS.md):
+ * `?scenario=<id>&mode=live|replay` fires one catalog scenario and publishes a
+ * phase for Playwright to wait on. The rail and the harness share one catalog,
+ * so a click in the browser and a run in CI are the same run.
  */
 export default function App() {
   const [theme, setTheme] = useState<Theme>('dark');
@@ -37,6 +40,15 @@ export default function App() {
 
   const chat = useKaiChat();
   const spike = useSpikeChat(chat, cardMode);
+
+  // Parsed once: a bad ?scenario= is a harness bug worth failing loudly on.
+  const [harnessRequest, harnessError] = useMemo(() => {
+    try {
+      return [readHarnessRequest(window.location.search), null] as const;
+    } catch (e) {
+      return [null, e instanceof Error ? e.message : String(e)] as const;
+    }
+  }, []);
 
   useEffect(() => {
     fetchSpikeConfig()
@@ -51,13 +63,30 @@ export default function App() {
   }, [chat, spike]);
 
   const runScenario = useCallback(
-    (s: Scenario) => {
+    (scenario: Scenario, mode: ScenarioMode, fixtureDir?: string) => {
       chat.setMessages([]);
       spike.reset();
-      setActiveId(s.id);
-      void spike.send(s.prompt);
+      setActiveId(scenario.id);
+      void spike.send(
+        scenario.prompt,
+        sendOptionsFor(scenario, mode, config?.modelSlug ?? 'unknown', fixtureDir),
+      );
     },
-    [chat, spike],
+    [chat, spike, config],
+  );
+
+  useHarnessRun({
+    request: harnessRequest,
+    config,
+    configError: configError ?? harnessError,
+    spike,
+    loading: chat.loading,
+    run: runScenario,
+  });
+
+  const runFromRail = useCallback(
+    (entry: RailEntry) => runScenario(entry.scenario, entry.scenario.mode),
+    [runScenario],
   );
 
   const send = useCallback((text: string) => void spike.send(text), [spike]);
@@ -68,10 +97,10 @@ export default function App() {
         <ResizableItem theme={theme} size="280px" min="220px" max="420px" collapsed={collapsed}>
           <Sidebar
             theme={theme}
-            scenarios={SCENARIOS}
+            entries={RAIL}
             activeId={activeId}
             collapsed={collapsed}
-            onRun={runScenario}
+            onRun={runFromRail}
             onNewChat={newChat}
             onToggle={() => setCollapsed((c) => !c)}
           />
@@ -100,6 +129,7 @@ export default function App() {
                   </span>
                 )}
                 {configError && <span className="model model-bad">proxy unreachable: {configError}</span>}
+                {harnessError && <span className="model model-bad">{harnessError}</span>}
               </div>
               <div className="bar-right">
                 {/* Path A vs Path B: the generative-UI comparison. */}
@@ -120,7 +150,12 @@ export default function App() {
               </div>
             </header>
 
-            <ThreadView theme={theme} messages={chat.messages} loading={chat.loading} />
+            <ThreadView
+              theme={theme}
+              messages={chat.messages}
+              loading={chat.loading}
+              cardTypes={SPIKE_CARD_TYPES}
+            />
 
             <ModelPanel theme={theme} error={spike.error} stats={spike.stats} />
 
@@ -129,6 +164,7 @@ export default function App() {
               loading={chat.loading}
               suggestions={chat.messages.length === 0 ? SUGGESTIONS : []}
               onSubmit={send}
+              onStop={spike.stop}
             />
           </main>
         </ResizableItem>

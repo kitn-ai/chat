@@ -3,6 +3,12 @@ dist/
 *.log
 .DS_Store
 
+# Playwright output. `fixtures/` is NOT ignored: the captured streams are the
+# point — every live run is meant to leave the offline suite stronger.
+test-results/
+playwright-report/
+harness-report.json
+
 # The API key lives here. NEVER commit it.
 .env
 .env.local

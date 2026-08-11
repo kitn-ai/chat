@@ -1,5 +1,13 @@
-// Spike scaffolding: ids, the scenario rail, and the composer suggestions.
-// There is no canned responder here: every reply comes from a real model.
+// Spike scaffolding: ids and the scenario rail. There is no canned responder
+// here: every reply comes from a real model (or, in replay, from a stream a real
+// model produced earlier).
+//
+// The rail is DERIVED from the conformance catalog rather than hand-listed, so
+// clicking an entry in the browser runs exactly what the Playwright runner runs.
+// A rail that drifted from the harness would be the most expensive kind of
+// green: a demo that works and a suite that tests something else.
+import { SCENARIOS as CONFORMANCE_SCENARIOS } from './scenarios';
+import type { Scenario as ConformanceScenario } from './scenarios';
 
 export function newId(): string {
   return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -7,42 +15,31 @@ export function newId(): string {
     : 'id-' + Math.random().toString(36).slice(2);
 }
 
-export interface Scenario {
+/** The `<kai-conversations>` row shape, plus the scenario it stands for. */
+export interface RailEntry {
   id: string;
   title: string;
-  prompt: string;
-  /** Which component the result is meant to land in. */
-  targets: string;
   scope: { type: 'collection' };
   messageCount: number;
   lastMessageAt: string;
   updatedAt: string;
+  scenario: ConformanceScenario;
 }
 
 const now = new Date().toISOString();
-const scenario = (id: string, title: string, prompt: string, targets: string): Scenario => ({
-  id,
-  title,
-  prompt,
-  targets,
-  scope: { type: 'collection' },
+
+export const RAIL: RailEntry[] = CONFORMANCE_SCENARIOS.map((scenario) => ({
+  id: scenario.id,
+  // The `replay` badge is load-bearing in the UI too: it is the difference
+  // between "this cost money" and "this cost nothing".
+  title: `${scenario.id.replace(/^S0?/, '')} · ${scenario.title}${scenario.mode === 'replay' ? ' (replay)' : ''}`,
+  scope: { type: 'collection' as const },
   messageCount: 0,
   lastMessageAt: now,
   updatedAt: now,
-});
+  scenario,
+}));
 
-/** Each scenario is a one-click prompt aimed at a different kit component. */
-export const SCENARIOS: Scenario[] = [
-  scenario('weather', '1 · Tool panel', "What's the weather in Paris?", 'kai-tool'),
-  scenario('docs', '2 · Sources row', 'How does theming work in @kitn.ai/ui? Cite your sources.', 'kai-sources'),
-  scenario('confirm', '3 · Confirm card', 'Redeploy the staging environment for me.', 'kai-cards'),
-  scenario(
-    'combo',
-    '4 · All three',
-    'Check the weather in Tokyo, look up how streaming works, then offer to publish a summary.',
-    'kai-tool + kai-sources + kai-cards',
-  ),
-  scenario('plain', '5 · No tools', 'In two sentences, what is a web component?', 'plain text + reasoning'),
-];
-
-export const SUGGESTIONS = SCENARIOS.slice(0, 3).map((s) => s.prompt);
+export const SUGGESTIONS = ['S03-single-tool', 'S07-confirm-card', 'S15-interleaving']
+  .map((id) => CONFORMANCE_SCENARIOS.find((s) => s.id === id)?.prompt)
+  .filter((p): p is string => !!p);
