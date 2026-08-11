@@ -56,6 +56,12 @@ interface Events extends Record<string, unknown> {
   'kai-file-select': { path: string };
   /** Artifact's own maximize button toggled (consumer-observable; non-bubbling). */
   'kai-maximize-change': { maximized: boolean };
+  /** The maximize PROTOCOL intent, raised as a raw bubbling + composed CustomEvent
+   *  (not through `dispatch`) so an enclosing `<kai-resizable>` can catch it and
+   *  maximize the containing panel. Declared here so it is typed and reaches the
+   *  generated API — listen for it to drive maximize from your own chrome, or
+   *  re-emit it to trigger one. */
+  'kai-maximize-intent': { requested: boolean };
 }
 
 /**

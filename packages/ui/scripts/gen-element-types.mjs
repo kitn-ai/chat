@@ -293,9 +293,10 @@ export function writeTypes(root, elements, _toAttr, IMPORTS, { domMembers = new 
   // don't extend HTMLElement and keep the prop optional (a Vue template legitimately
   // omits it). Guarded by tests/elements/element-types-lib-check.test.ts, which
   // compiles this file with `skipLibCheck: false`.
+  // `theme` used to be hand-written here as the first two lines. It now arrives in
+  // el.props like every other prop, read off define.tsx's injected defaults by
+  // gen-element-api.mjs, so there is one declaration instead of three copies.
   const propBody = (el, domSafe = false) => [
-    `  /** Color mode (\`auto\` follows prefers-color-scheme). */`,
-    `  theme?: 'light' | 'dark' | 'auto';`,
     ...el.props.flatMap((p) => {
       const collides = domSafe && domMembers.has(p.name);
       // One JSDoc block per member — a second one would shadow the first.

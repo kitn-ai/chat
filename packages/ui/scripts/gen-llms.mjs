@@ -241,7 +241,27 @@ function renderElement(el) {
         '',
         '| Slot | Mode | Description |',
         '|---|---|---|',
-        el.slots.map((s) => `| \`${s.name}\` | ${s.mode ?? '—'} | ${escapeCell(s.doc)} |`).join('\n'),
+        el.slots
+          .map((s) => `| ${s.name ? `\`${s.name}\`` : '_(default)_'} | ${s.mode ?? '—'} | ${escapeCell(s.doc)} |`)
+          .join('\n'),
+      ].join('\n'),
+    );
+  }
+
+  // "Route 2": the light-DOM child elements this element parses. The only way to
+  // drive some elements from plain HTML with no JS, and previously in no generated
+  // artifact at all — so an agent reading this file could not know they exist.
+  if (el.declarativeChildren?.length) {
+    out.push('');
+    out.push(
+      [
+        '**Declarative children** (compose these in light DOM instead of setting the JS property):',
+        '',
+        '| Child element | Attributes | Text content | Notes |',
+        '|---|---|---|---|',
+        el.declarativeChildren
+          .map((c) => `| \`<${c.tag}>\` | ${c.attributes.length ? c.attributes.map((a) => `\`${a}\``).join(', ') : '—'} | ${c.text ? 'yes' : '—'} | ${escapeCell(c.description ?? '')} |`)
+          .join('\n'),
       ].join('\n'),
     );
   }
@@ -372,6 +392,7 @@ function fromElements(elements) {
     })),
     slots: el.slots,
     parts: el.parts,
+    declarativeChildren: el.declarativeChildren,
   }));
 }
 
@@ -399,6 +420,12 @@ function fromManifest(cem) {
       })),
       slots: (d.slots || []).map((s) => ({ name: s.name, doc: s.description ?? '' })),
       parts: (d.cssParts || []).map((p) => ({ name: p.name, doc: p.description ?? '', recipe: p.recipe })),
+      declarativeChildren: (d.declarativeChildren || []).map((c) => ({
+        tag: c.tagName,
+        attributes: (c.attributes || []).map((a) => a.name),
+        text: !!c.textContent,
+        description: c.description ?? '',
+      })),
     };
   });
 }

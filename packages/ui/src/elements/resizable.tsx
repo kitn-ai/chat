@@ -70,6 +70,11 @@ interface GroupEvents extends Record<string, unknown> {
   'kai-change': { sizes: number[] };
   /** Observe layout maximize state. */
   'kai-maximize-change': { maximized: boolean; index: number | null };
+  /** Authoritative maximize state, dispatched as a raw composed CustomEvent (not
+   *  through `dispatch`) onto the affected `<kai-resizable-item>` and, on restore,
+   *  onto the group host. A nested element (e.g. `<kai-artifact>`) listens for it
+   *  to reconcile its own toggle. */
+  'kai-maximize-state': { maximized: boolean };
 }
 
 /**

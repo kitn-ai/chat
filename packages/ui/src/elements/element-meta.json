@@ -5,6 +5,16 @@
     "displayName": "AgentCard",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "name",
         "type": "undefined | string",
         "optional": true,
@@ -81,6 +91,16 @@
     "className": "KaiArtifactElement",
     "displayName": "Artifact",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "src",
         "type": "undefined | string",
@@ -255,6 +275,12 @@
         "displayDetail": "{ maximized: false | true }"
       },
       {
+        "name": "kai-maximize-intent",
+        "detail": "{ requested: false | true }",
+        "description": "The maximize PROTOCOL intent, raised as a raw bubbling + composed CustomEvent (not through `dispatch`) so an enclosing `<kai-resizable>` can catch it and maximize the containing panel. Declared here so it is typed and reaches the generated API — listen for it to drive maximize from your own chrome, or re-emit it to trigger one.",
+        "displayDetail": "{ requested: false | true }"
+      },
+      {
         "name": "kai-navigate",
         "detail": "{ url: string }",
         "description": "Fired when the preview navigates. `detail.url` = the new location.",
@@ -337,6 +363,16 @@
     "className": "KaiAttachmentsElement",
     "displayName": "Attachments",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "items",
         "type": "{ id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[]",
@@ -465,6 +501,16 @@
     "displayName": "Avatar",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "src",
         "type": "undefined | string",
         "optional": true,
@@ -516,6 +562,16 @@
     "displayName": "Badge",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "variant",
         "type": "undefined | \"default\" | \"count\" | \"citation\"",
         "optional": true,
@@ -535,6 +591,13 @@
       }
     ],
     "tokens": [],
+    "slots": [
+      {
+        "name": "",
+        "mode": "inject",
+        "doc": "The badge's label — text, or a small inline icon plus text."
+      }
+    ],
     "parts": [
       {
         "name": "badge",
@@ -548,6 +611,16 @@
     "className": "KaiButtonElement",
     "displayName": "Button",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "variant",
         "type": "undefined | \"default\" | \"subtle\" | \"ghost\" | \"outline\" | \"destructive\"",
@@ -665,6 +738,11 @@
     "tokens": [],
     "slots": [
       {
+        "name": "",
+        "mode": "inject",
+        "doc": "The button's label. Omit it for an icon-only button (pair with `aria-label`)."
+      },
+      {
         "name": "icon",
         "mode": "replace",
         "doc": "A custom leading icon (any inline SVG, inherits `currentColor`). Wins over the `icon` prop."
@@ -683,6 +761,16 @@
     "className": "KaiCardElement",
     "displayName": "Card",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "appearance",
         "type": "undefined | \"outlined\" | \"filled\" | \"plain\" | \"accent\"",
@@ -787,6 +875,11 @@
     "tokens": [],
     "slots": [
       {
+        "name": "",
+        "mode": "inject",
+        "doc": "The card body, below the header/media regions."
+      },
+      {
         "name": "media",
         "mode": "inject",
         "doc": "Full-bleed media (image/video/illustration) at the top (vertical) or start (horizontal). Clipped to the card corners."
@@ -850,6 +943,16 @@
     "className": "KaiCardsElement",
     "displayName": "Cards",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "cards",
         "type": "undefined | { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }[]",
@@ -924,6 +1027,16 @@
     "displayName": "ChainOfThought",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "steps",
         "type": "{ label: string; content?: undefined | string; id?: undefined | string }[]",
         "optional": false,
@@ -995,13 +1108,34 @@
         "storyId": "solid-advanced-elements-chainofthoughtaccordion--docs"
       }
     ],
-    "tokens": []
+    "tokens": [],
+    "declarativeChildren": [
+      {
+        "tag": "kai-step",
+        "attributes": [
+          "label",
+          "step-id"
+        ],
+        "text": true,
+        "description": "Parse a single light-DOM `<kai-step>` element into a `Step` descriptor. Attribute mapping: - `label` → Step.label (the always-visible heading) - `step-id` → Step.id (optional stable open-set key) - textContent → Step.content (optional expandable detail)"
+      }
+    ]
   },
   {
     "tag": "kai-chat",
     "className": "KaiChatElement",
     "displayName": "Chat",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "search",
         "type": "undefined | false | true",
@@ -1420,6 +1554,16 @@
     "displayName": "Checkpoint",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "label",
         "type": "undefined | string",
         "optional": true,
@@ -1487,6 +1631,16 @@
     "className": "KaiChoiceElement",
     "displayName": "Choice",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "data",
         "type": "undefined | Record<string, unknown>",
@@ -1599,6 +1753,16 @@
     "displayName": "Coachmark",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "open",
         "type": "undefined | false | true",
         "optional": true,
@@ -1700,6 +1864,11 @@
     "tokens": [],
     "slots": [
       {
+        "name": "",
+        "mode": "inject",
+        "doc": "The ANCHOR the coachmark points at — the element it attaches to and positions against. The bubble body is the `content` slot."
+      },
+      {
         "name": "content",
         "mode": "replace",
         "doc": "The bubble body text shown under the headline."
@@ -1738,6 +1907,16 @@
     "className": "KaiCodeBlockElement",
     "displayName": "CodeBlock",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "code",
         "type": "string",
@@ -1806,6 +1985,16 @@
     "className": "KaiCommandElement",
     "displayName": "Command",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "items",
         "type": "undefined | { id: string; label: string; icon?: undefined | string; description?: undefined | string; shortcut?: undefined | string; group?: undefined | string }[]",
@@ -1895,6 +2084,16 @@
     "className": "KaiCompareElement",
     "displayName": "Compare",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "data",
         "type": "undefined | Record<string, unknown>",
@@ -2001,6 +2200,16 @@
     "className": "KaiComposerElement",
     "displayName": "Composer",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "value",
         "type": "undefined | string | ({ type: \"text\"; text: string } | { type: \"entity\"; entity: { kind: string; id: string; label: string; icon?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> } })[]",
@@ -2178,6 +2387,16 @@
     "displayName": "Confirm",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "data",
         "type": "undefined | Record<string, unknown>",
         "optional": true,
@@ -2260,6 +2479,16 @@
     "className": "KaiContextElement",
     "displayName": "Context",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "context",
         "type": "undefined | { usedTokens: number; maxTokens: number; inputTokens?: undefined | number; outputTokens?: undefined | number; reasoningTokens?: undefined | number; cacheTokens?: undefined | number; estimatedCost?: undefined | number }",
@@ -2356,6 +2585,16 @@
     "className": "KaiConversationsElement",
     "displayName": "Conversations",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "groups",
         "type": "undefined | { id: string; userId?: undefined | string; teamId?: undefined | string; name: string; sortOrder: number; createdAt: string }[]",
@@ -2491,6 +2730,17 @@
       "--color-sidebar",
       "--color-scrollbar-thumb"
     ],
+    "declarativeChildren": [
+      {
+        "tag": "kai-conversation",
+        "attributes": [
+          "group-id",
+          "id"
+        ],
+        "text": true,
+        "description": "Parse a single light-DOM `<kai-conversation>` element into a `ConversationSummary`. Attribute mapping: - `id` → ConversationSummary.id - `group-id` → ConversationSummary.groupId (optional) - textContent → ConversationSummary.title Required fields not expressible as HTML attributes (`scope`, `messageCount`, `lastMessageAt`, `updatedAt`) receive safe defaults so the rendered list item is fully functional with just `id` + title text."
+      }
+    ],
     "slots": [
       {
         "name": "header",
@@ -2521,6 +2771,16 @@
     "className": "KaiDialogElement",
     "displayName": "Dialog",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "open",
         "type": "undefined | false | true",
@@ -2582,6 +2842,11 @@
     "tokens": [],
     "slots": [
       {
+        "name": "",
+        "mode": "inject",
+        "doc": "The dialog body, between the `header` and `footer` slots."
+      },
+      {
         "name": "header",
         "mode": "inject",
         "part": true,
@@ -2625,6 +2890,16 @@
     "className": "KaiEditableLabelElement",
     "displayName": "EditableLabel",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "value",
         "type": "undefined | string",
@@ -2709,6 +2984,16 @@
     "displayName": "Embed",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "cardId",
         "type": "undefined | string",
         "optional": true,
@@ -2744,6 +3029,16 @@
     "className": "KaiEmptyElement",
     "displayName": "Empty",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "emptyTitle",
         "type": "undefined | string",
@@ -2797,13 +3092,35 @@
         "storyId": "solid-advanced-elements-emptycontent--docs"
       }
     ],
-    "tokens": []
+    "tokens": [],
+    "slots": [
+      {
+        "name": "",
+        "mode": "inject",
+        "doc": "The empty-state body below the title/description — usually the call to action."
+      },
+      {
+        "name": "media",
+        "mode": "replace",
+        "doc": "The leading illustration or icon above the title (any inline SVG or <img>). Replaces the built-in media box."
+      }
+    ]
   },
   {
     "tag": "kai-feedback-bar",
     "className": "KaiFeedbackBarElement",
     "displayName": "FeedbackBar",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "barTitle",
         "type": "undefined | string",
@@ -2898,6 +3215,16 @@
     "displayName": "FileTree",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "files",
         "type": "{ path: string; url?: undefined | string; code?: undefined | string; language?: undefined | string; type?: undefined | \"html\" | \"pdf\" | \"image\" | \"other\"; additions?: undefined | number; deletions?: undefined | number; status?: undefined | \"added\" | \"modified\" | \"deleted\" | \"renamed\" | \"untracked\" }[]",
         "optional": false,
@@ -2981,6 +3308,16 @@
     "displayName": "FileUpload",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "multiple",
         "type": "undefined | false | true",
         "optional": true,
@@ -3037,13 +3374,30 @@
         "storyId": "solid-advanced-elements-fileuploadtrigger--docs"
       }
     ],
-    "tokens": []
+    "tokens": [],
+    "slots": [
+      {
+        "name": "",
+        "mode": "inject",
+        "doc": "Custom dropzone content, replacing the default label (the `label` prop is the fallback)."
+      }
+    ]
   },
   {
     "tag": "kai-form",
     "className": "KaiFormElement",
     "displayName": "Form",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "data",
         "type": "undefined | Record<string, unknown>",
@@ -3163,6 +3517,16 @@
     "displayName": "HoverCard",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "openDelay",
         "type": "undefined | number",
         "optional": true,
@@ -3259,6 +3623,11 @@
     "tokens": [],
     "slots": [
       {
+        "name": "",
+        "mode": "inject",
+        "doc": "The TRIGGER the card hovers off. The card body is the `card` slot."
+      },
+      {
         "name": "card",
         "mode": "inject",
         "doc": "The rich content shown in the floating hover card."
@@ -3270,6 +3639,16 @@
     "className": "KaiIconElement",
     "displayName": "Icon",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "name",
         "type": "undefined | string",
@@ -3306,6 +3685,16 @@
     "className": "KaiImageElement",
     "displayName": "Image",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "base64",
         "type": "undefined | string",
@@ -3356,6 +3745,16 @@
     "className": "KaiInputElement",
     "displayName": "Input",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "type",
         "type": "undefined | string",
@@ -3554,6 +3953,16 @@
     "displayName": "Kbd",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "keys",
         "type": "undefined | string",
         "optional": true,
@@ -3563,12 +3972,12 @@
       },
       {
         "name": "platform",
-        "type": "undefined | \"other\" | \"auto\" | \"mac\"",
+        "type": "undefined | \"auto\" | \"other\" | \"mac\"",
         "optional": true,
         "scalar": true,
         "description": "`mac` uses ⌘/⌥, `other` uses Ctrl. `auto` (default) sniffs the OS.",
         "default": "'auto'",
-        "displayType": "undefined | \"other\" | \"auto\" | \"mac\""
+        "displayType": "undefined | \"auto\" | \"other\" | \"mac\""
       },
       {
         "name": "size",
@@ -3590,6 +3999,13 @@
       }
     ],
     "tokens": [],
+    "slots": [
+      {
+        "name": "",
+        "mode": "inject",
+        "doc": "Literal key text, when you are not using the `keys` prop to render key caps."
+      }
+    ],
     "parts": [
       {
         "name": "key",
@@ -3608,6 +4024,16 @@
     "className": "KaiLinkPreviewElement",
     "displayName": "LinkPreview",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "cardId",
         "type": "undefined | string",
@@ -3644,6 +4070,16 @@
     "className": "KaiLoaderElement",
     "displayName": "Loader",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "variant",
         "type": "undefined | \"circular\" | \"classic\" | \"pulse\" | \"pulse-dot\" | \"dots\" | \"typing\" | \"wave\" | \"bars\" | \"terminal\" | \"text-blink\" | \"text-shimmer\" | \"loading-dots\"",
@@ -3687,6 +4123,16 @@
     "className": "KaiMarkdownElement",
     "displayName": "Markdown",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "content",
         "type": "string",
@@ -3740,6 +4186,16 @@
     "className": "KaiMenuElement",
     "displayName": "Menu",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "items",
         "type": "undefined | { id?: undefined | string; label?: undefined | string; icon?: undefined | string; shortcut?: undefined | string; checked?: undefined | false | true; radioGroup?: undefined | string; disabled?: undefined | false | true; separator?: undefined | false | true; heading?: undefined | false | true; items?: undefined | Record<string, unknown>[] }[]",
@@ -3934,6 +4390,16 @@
     "displayName": "Message",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "message",
         "type": "undefined | { id: string; role: \"user\" | \"assistant\"; parts: ({ type: \"text\"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: \"reasoning\"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: \"tool\"; tool: { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"card\"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"source\"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: \"file\"; attachment: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }",
         "optional": true,
@@ -4064,6 +4530,19 @@
       }
     ],
     "tokens": [],
+    "declarativeChildren": [
+      {
+        "tag": "kai-action",
+        "attributes": [
+          "action",
+          "icon",
+          "id",
+          "label",
+          "tooltip"
+        ],
+        "text": true
+      }
+    ],
     "slots": [
       {
         "name": "before-body",
@@ -4114,6 +4593,16 @@
     "className": "KaiModelSwitcherElement",
     "displayName": "ModelSwitcher",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "models",
         "type": "{ id: string; name: string; provider?: undefined | string; description?: undefined | string; group?: undefined | string }[]",
@@ -4200,13 +4689,36 @@
         "storyId": "solid-advanced-elements-modelswitcher--docs"
       }
     ],
-    "tokens": []
+    "tokens": [],
+    "declarativeChildren": [
+      {
+        "tag": "kai-model",
+        "attributes": [
+          "description",
+          "group",
+          "id",
+          "provider"
+        ],
+        "text": true,
+        "description": "Parse a single light-DOM `<kai-model>` element into a `ModelOption` descriptor. Attribute mapping: - `id` → ModelOption.id - textContent → ModelOption.name - `provider` → ModelOption.provider (optional) - `description` → ModelOption.description (optional subtitle) - `group` → ModelOption.group (optional collapsible section)"
+      }
+    ]
   },
   {
     "tag": "kai-nav",
     "className": "KaiNavElement",
     "displayName": "Nav",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "items",
         "type": "undefined | { id: string; label?: undefined | string; icon?: undefined | string; badge?: undefined | string; trailing?: undefined | string; disabled?: undefined | false | true; children?: undefined | Record<string, unknown>[]; status?: undefined | { tone: \"error\" | \"primary\" | \"info\" | \"success\" | \"warning\" | \"neutral\"; label?: undefined | string; pulse?: undefined | false | true }; meta?: undefined | string; action?: undefined | { icon: string; label: string }; closable?: undefined | false | true }[]",
@@ -4323,6 +4835,16 @@
     "displayName": "Notice",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "severity",
         "type": "undefined | \"error\" | \"info\" | \"success\" | \"warning\" | \"neutral\"",
         "optional": true,
@@ -4368,6 +4890,11 @@
     "tokens": [],
     "slots": [
       {
+        "name": "",
+        "mode": "inject",
+        "doc": "The notice message. `icon` and `action` are the named seams around it."
+      },
+      {
         "name": "action",
         "mode": "inject",
         "doc": "A trailing action beside the message — a link or button."
@@ -4384,6 +4911,16 @@
     "className": "KaiPaneElement",
     "displayName": "Pane",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "headline",
         "type": "undefined | string",
@@ -4486,6 +5023,11 @@
     "tokens": [],
     "slots": [
       {
+        "name": "",
+        "mode": "inject",
+        "doc": "The pane body, below the header row."
+      },
+      {
         "name": "leading",
         "mode": "inject",
         "doc": "A glyph or avatar at the start of the pane header."
@@ -4529,6 +5071,16 @@
     "className": "KaiPaneGroupElement",
     "displayName": "PaneGroup",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "tabs",
         "type": "undefined | { id: string; name: string; status?: undefined | { tone: \"working\" | \"idle\" | \"done\" | \"error\" | \"blocked\"; label?: undefined | string; pulse?: undefined | false | true }; needsAttention?: undefined | false | true; number?: undefined | number }[]",
@@ -4600,6 +5152,13 @@
       }
     ],
     "tokens": [],
+    "slots": [
+      {
+        "name": "",
+        "mode": "inject",
+        "doc": "Content shown for every tab. Use it INSTEAD of the per-tab `slot=\"<tab id>\"` seams when you swap the content yourself."
+      }
+    ],
     "parts": [
       {
         "name": "tabs",
@@ -4633,6 +5192,16 @@
     "className": "KaiPopoverElement",
     "displayName": "Popover",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "placement",
         "type": "undefined | \"top\" | \"right\" | \"bottom\" | \"left\" | \"top-start\" | \"top-end\" | \"right-start\" | \"right-end\" | \"bottom-start\" | \"bottom-end\" | \"left-start\" | \"left-end\"",
@@ -4711,13 +5280,35 @@
         "storyId": "solid-advanced-primitives-popover--docs"
       }
     ],
-    "tokens": []
+    "tokens": [],
+    "slots": [
+      {
+        "name": "",
+        "mode": "inject",
+        "doc": "The popover panel body. The control that opens it is the `trigger` slot."
+      },
+      {
+        "name": "trigger",
+        "mode": "replace",
+        "doc": "The control that opens the popover (a button, an avatar, …). The panel anchors to it."
+      }
+    ]
   },
   {
     "tag": "kai-progress-bar",
     "className": "KaiProgressBarElement",
     "displayName": "ProgressBar",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "value",
         "type": "undefined | number",
@@ -4781,6 +5372,16 @@
     "displayName": "PromptDock",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "frame",
         "type": "undefined | \"none\" | \"inset\" | \"edge\"",
         "optional": true,
@@ -4810,6 +5411,11 @@
     ],
     "tokens": [],
     "slots": [
+      {
+        "name": "",
+        "mode": "inject",
+        "doc": "The input the dock wraps — typically a `<kai-prompt-input>`. The `top`/`bottom` slots are the lips around it."
+      },
       {
         "name": "top",
         "mode": "inject",
@@ -4844,6 +5450,16 @@
     "className": "KaiPromptInputElement",
     "displayName": "PromptInput",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "value",
         "type": "undefined | string | ({ type: \"text\"; text: string } | { type: \"entity\"; entity: { kind: string; id: string; label: string; icon?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> } })[]",
@@ -4925,12 +5541,12 @@
       },
       {
         "name": "submit",
-        "type": "undefined | \"always\" | \"auto\"",
+        "type": "undefined | \"auto\" | \"always\"",
         "optional": true,
         "scalar": true,
         "description": "Send-button visibility. `'always'` (default) always shows it; `'auto'` shows it only when there's text/attachments (an empty composer hides it — Enter still submits). To hide it entirely (Enter-only), it's pure CSS: `::part(send){display:none}` — no prop needed. Restyle via `::part(send)`. The Stop button (`stoppable` + `loading`) is unaffected.",
         "default": "'always'",
-        "displayType": "undefined | \"always\" | \"auto\""
+        "displayType": "undefined | \"auto\" | \"always\""
       },
       {
         "name": "attach",
@@ -5106,6 +5722,19 @@
       }
     ],
     "tokens": [],
+    "declarativeChildren": [
+      {
+        "tag": "kai-action",
+        "attributes": [
+          "action",
+          "icon",
+          "id",
+          "label",
+          "tooltip"
+        ],
+        "text": true
+      }
+    ],
     "slots": [
       {
         "name": "input-top",
@@ -5136,6 +5765,16 @@
     "className": "KaiReasoningElement",
     "displayName": "Reasoning",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "text",
         "type": "string",
@@ -5250,6 +5889,16 @@
     "displayName": "Remote",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "src",
         "type": "undefined | string",
         "optional": true,
@@ -5293,6 +5942,16 @@
     "displayName": "Resizable",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "orientation",
         "type": "undefined | \"vertical\" | \"horizontal\"",
         "optional": true,
@@ -5332,6 +5991,12 @@
         "detail": "{ maximized: false | true; index: null | number }",
         "description": "Observe layout maximize state.",
         "displayDetail": "{ maximized: false | true; index: null | number }"
+      },
+      {
+        "name": "kai-maximize-state",
+        "detail": "{ maximized: false | true }",
+        "description": "Authoritative maximize state, dispatched as a raw composed CustomEvent (not through `dispatch`) onto the affected `<kai-resizable-item>` and, on restore, onto the group host. A nested element (e.g. `<kai-artifact>`) listens for it to reconcile its own toggle.",
+        "displayDetail": "{ maximized: false | true }"
       }
     ],
     "methods": [],
@@ -5342,13 +6007,30 @@
         "storyId": "solid-advanced-primitives-resizablehandle--docs"
       }
     ],
-    "tokens": []
+    "tokens": [],
+    "slots": [
+      {
+        "name": "",
+        "mode": "inject",
+        "doc": "The `<kai-resizable-item>` panels, in order. Dividers are inserted between them."
+      }
+    ]
   },
   {
     "tag": "kai-resizable-item",
     "className": "KaiResizableItemElement",
     "displayName": "ResizableItem",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "size",
         "type": "undefined | string",
@@ -5413,6 +6095,12 @@
         "detail": "unknown",
         "description": "",
         "displayDetail": "unknown"
+      },
+      {
+        "name": "kai-maximize-state",
+        "detail": "unknown",
+        "description": "",
+        "displayDetail": "unknown"
       }
     ],
     "methods": [],
@@ -5423,13 +6111,30 @@
         "storyId": "solid-advanced-primitives-resizablehandle--docs"
       }
     ],
-    "tokens": []
+    "tokens": [],
+    "slots": [
+      {
+        "name": "",
+        "mode": "inject",
+        "doc": "This panel's content."
+      }
+    ]
   },
   {
     "tag": "kai-response-stream",
     "className": "KaiResponseStreamElement",
     "displayName": "ResponseStream",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "text",
         "type": "undefined | string | AsyncIterable<string>",
@@ -5489,6 +6194,16 @@
     "className": "KaiScopePickerElement",
     "displayName": "ScopePicker",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "availableAuthors",
         "type": "string[]",
@@ -5590,6 +6305,16 @@
     "displayName": "Screen",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "open",
         "type": "undefined | false | true",
         "optional": true,
@@ -5680,6 +6405,11 @@
     "tokens": [],
     "slots": [
       {
+        "name": "",
+        "mode": "inject",
+        "doc": "The screen body, below the title bar."
+      },
+      {
         "name": "title",
         "mode": "replace",
         "part": true,
@@ -5719,6 +6449,16 @@
     "displayName": "ScrollArea",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "orientation",
         "type": "undefined | \"vertical\" | \"horizontal\" | \"both\"",
         "optional": true,
@@ -5738,6 +6478,13 @@
       }
     ],
     "tokens": [],
+    "slots": [
+      {
+        "name": "",
+        "mode": "inject",
+        "doc": "The scrollable content."
+      }
+    ],
     "parts": [
       {
         "name": "viewport",
@@ -5751,6 +6498,16 @@
     "className": "KaiScrollButtonElement",
     "displayName": "ScrollButton",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "for",
         "type": "undefined | string",
@@ -5801,6 +6558,16 @@
     "className": "KaiSearchElement",
     "displayName": "Search",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "value",
         "type": "undefined | string",
@@ -5924,6 +6691,16 @@
     "displayName": "Segmented",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "options",
         "type": "{ value: string; label: string; icon?: undefined | string }[]",
         "optional": false,
@@ -5989,6 +6766,16 @@
     "displayName": "Separator",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "orientation",
         "type": "undefined | \"vertical\" | \"horizontal\"",
         "optional": true,
@@ -6021,6 +6808,16 @@
     "className": "KaiSettingItemElement",
     "displayName": "SettingItem",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "label",
         "type": "undefined | string",
@@ -6075,6 +6872,16 @@
     "displayName": "SettingsGroup",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "heading",
         "type": "undefined | string",
         "optional": true,
@@ -6102,6 +6909,13 @@
       }
     ],
     "tokens": [],
+    "slots": [
+      {
+        "name": "",
+        "mode": "inject",
+        "doc": "The `<kai-setting-item>` rows in this group."
+      }
+    ],
     "parts": [
       {
         "name": "header",
@@ -6120,6 +6934,16 @@
     "className": "KaiSkeletonElement",
     "displayName": "Skeleton",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "variant",
         "type": "undefined | \"text\" | \"rect\" | \"circle\"",
@@ -6178,6 +7002,16 @@
     "displayName": "Skills",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "skills",
         "type": "{ id: string; name: string }[]",
         "optional": false,
@@ -6199,13 +7033,33 @@
         "storyId": "solid-advanced-elements-messageskills--docs"
       }
     ],
-    "tokens": []
+    "tokens": [],
+    "declarativeChildren": [
+      {
+        "tag": "kai-skill",
+        "attributes": [
+          "id"
+        ],
+        "text": true,
+        "description": "Parse a single light-DOM `<kai-skill>` element into a `Skill` descriptor. Attribute / content mapping: - `id` → Skill.id (falls back to `name` when absent) - `textContent` → Skill.name (the human-readable badge label) Example: `<kai-skill id=\"web-search\">Web Search</kai-skill>`"
+      }
+    ]
   },
   {
     "tag": "kai-source",
     "className": "KaiSourceElement",
     "displayName": "Source",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "href",
         "type": "undefined | string",
@@ -6283,6 +7137,16 @@
     "displayName": "Sources",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "sources",
         "type": "{ href: string; title?: undefined | string; description?: undefined | string; label?: undefined | string; showFavicon?: undefined | false | true }[]",
         "optional": false,
@@ -6337,13 +7201,37 @@
         "storyId": "solid-advanced-elements-sourcelist--docs"
       }
     ],
-    "tokens": []
+    "tokens": [],
+    "declarativeChildren": [
+      {
+        "tag": "kai-source",
+        "attributes": [
+          "description",
+          "headline",
+          "href",
+          "label",
+          "show-favicon"
+        ],
+        "text": false,
+        "description": "Parse a single light-DOM `<kai-source>` element into a `KaiSourceItem` descriptor. Attribute mapping: - `href` → KaiSourceItem.href - `label` → KaiSourceItem.label - `headline` → KaiSourceItem.title (matches kai-source's prop name; \"title\" is a reserved HTMLElement attribute so kai-source uses \"headline\") - `description` → KaiSourceItem.description - `show-favicon`→ KaiSourceItem.showFavicon (bare boolean attribute)"
+      }
+    ]
   },
   {
     "tag": "kai-status",
     "className": "KaiStatusElement",
     "displayName": "Status",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "status",
         "type": "undefined | \"new\" | \"online\" | \"busy\" | \"away\" | \"offline\"",
@@ -6403,6 +7291,16 @@
     "className": "KaiSuggestionsElement",
     "displayName": "Suggestions",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "suggestions",
         "type": "(string | { label: string; value?: undefined | string; icon?: undefined | string })[]",
@@ -6473,13 +7371,34 @@
         "storyId": "solid-advanced-elements-promptsuggestion--docs"
       }
     ],
-    "tokens": []
+    "tokens": [],
+    "declarativeChildren": [
+      {
+        "tag": "kai-suggestion",
+        "attributes": [
+          "icon",
+          "value"
+        ],
+        "text": true,
+        "description": "Parse a single `<kai-suggestion>` node into an `Item` descriptor."
+      }
+    ]
   },
   {
     "tag": "kai-switch",
     "className": "KaiSwitchElement",
     "displayName": "Switch",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "checked",
         "type": "undefined | false | true",
@@ -6565,6 +7484,16 @@
     "className": "KaiTabsElement",
     "displayName": "Tabs",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "items",
         "type": "undefined | { id: string; label?: undefined | string; icon?: undefined | string; disabled?: undefined | false | true }[]",
@@ -6666,6 +7595,16 @@
     "className": "KaiTasksElement",
     "displayName": "Tasks",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "data",
         "type": "undefined | Record<string, unknown>",
@@ -6794,6 +7733,16 @@
     "displayName": "TextShimmer",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "text",
         "type": "undefined | string",
         "optional": true,
@@ -6847,6 +7796,16 @@
     "displayName": "ThinkingBar",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "text",
         "type": "undefined | string",
         "optional": true,
@@ -6897,6 +7856,16 @@
     "className": "KaiThreadElement",
     "displayName": "Thread",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "messages",
         "type": "undefined | { id: string; role: \"user\" | \"assistant\"; parts: ({ type: \"text\"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: \"reasoning\"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: \"tool\"; tool: { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"card\"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"source\"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: \"file\"; attachment: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]",
@@ -7017,6 +7986,16 @@
     "displayName": "ToastRegion",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "toasts",
         "type": "{ id: string; message: string; variant?: undefined | \"error\" | \"info\" | \"success\" | \"warning\" | \"neutral\"; appearance?: undefined | \"card\" | \"pill\"; inverse?: undefined | false | true; description?: undefined | string; action?: undefined | { label: string; onAction: () => void | false }; duration?: undefined | number; dismissible?: undefined | false | true; target?: undefined | HTMLElement }[]",
         "optional": false,
@@ -7112,6 +8091,16 @@
     "displayName": "Tool",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "tool",
         "type": "undefined | { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }",
         "optional": true,
@@ -7194,6 +8183,16 @@
     "className": "KaiTooltipElement",
     "displayName": "Tooltip",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "content",
         "type": "undefined | string",
@@ -7287,13 +8286,30 @@
         "storyId": "solid-advanced-primitives-tooltip--docs"
       }
     ],
-    "tokens": []
+    "tokens": [],
+    "slots": [
+      {
+        "name": "",
+        "mode": "inject",
+        "doc": "The TRIGGER the tooltip describes. The tip text is the `text` prop."
+      }
+    ]
   },
   {
     "tag": "kai-voice-input",
     "className": "KaiVoiceInputElement",
     "displayName": "VoiceInput",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "transcribe",
         "type": "undefined | (audio: Blob) => Promise<string>",
@@ -7383,6 +8399,16 @@
     "className": "KaiVoiceOutputElement",
     "displayName": "VoiceOutput",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "text",
         "type": "undefined | string",
@@ -7480,6 +8506,16 @@
     "className": "KaiWorkspaceElement",
     "displayName": "Workspace",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "groups",
         "type": "undefined | { id: string; userId?: undefined | string; teamId?: undefined | string; name: string; sortOrder: number; createdAt: string }[]",

@@ -125,7 +125,7 @@ export declare function configureToasts(config: ToastConfig): void;
 
 export interface KaiAgentCardElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The agent's name — the primary label. Attribute: `name`. */
   name?: string;
   /** Selected / focused state: highlighted border + surface. Attribute: `active`. */
@@ -138,7 +138,7 @@ export interface KaiAgentCardElement extends HTMLElement {
 
 export interface KaiArtifactElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** URL the preview iframe frames. Consumer-controlled. */
   src?: string;
   /** Files for the Code tab tree + each file's preview `url`. Set as a JS property (array). */
@@ -179,7 +179,7 @@ export interface KaiArtifactElement extends HTMLElement {
 
 export interface KaiAttachmentsElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The attachments to render. Set as a JS property (array). */
   items: { id: string; type: "file" | "source-document"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[];
   /** Layout: `grid` = visual tiles, `inline` = icon + label chips, `list` = rows. */
@@ -196,7 +196,7 @@ export interface KaiAttachmentsElement extends HTMLElement {
 
 export interface KaiAvatarElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Image URL/data-URI. When absent, the `fallback` initials show instead. */
   src?: string;
   /** Alt text for the image. Defaults to `fallback`. */
@@ -209,14 +209,14 @@ export interface KaiAvatarElement extends HTMLElement {
 
 export interface KaiBadgeElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** `default` (muted pill) · `count` (compact number badge) · `citation` (filled primary, for inline citation markers). Defaults to `default`. */
   variant?: "default" | "count" | "citation";
 }
 
 export interface KaiButtonElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Visual style. `default` (filled), `subtle` (muted text, hover tint — the toolbar icon look), `ghost` (transparent, hover fill), `outline`, or `destructive`. Defaults to `default`. */
   variant?: "default" | "subtle" | "ghost" | "outline" | "destructive";
   /** Size token. `icon` / `icon-sm` are square (for icon-only buttons); `sm` / `md` / `lg` size text buttons. Defaults to `md`. */
@@ -239,7 +239,7 @@ export interface KaiButtonElement extends HTMLElement {
 
 export interface KaiCardElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Surface treatment: `outlined` (default) | `filled` | `plain` | `accent`. Attribute: `appearance`. */
   appearance?: "outlined" | "filled" | "plain" | "accent";
   /** `vertical` (default, media on top) | `horizontal` (media at the start) | `responsive` (horizontal when the card's container is wide enough, else vertical — a container query on the card's own width). Attribute: `orientation`. */
@@ -262,7 +262,7 @@ export interface KaiCardElement extends HTMLElement {
 
 export interface KaiCardsElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The stream of card envelopes to render. Set as a JS PROPERTY: `el.cards = [...]`. */
   cards?: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }[];
   /** Optional type→tag overrides/additions (merged over the built-ins). Property: `el.types`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type. */
@@ -273,7 +273,7 @@ export interface KaiCardsElement extends HTMLElement {
 
 export interface KaiChainOfThoughtElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The reasoning steps. Set as a JS property. Compound sub-parts collapse to this one data model (Route 1). Each `{ label, content?, id? }`. */
   steps: { label: string; content?: undefined | string; id?: undefined | string }[];
   /** Open mode: `'multiple'` (default — any number of steps open at once) or `'single'` (at most one open; opening a step closes the others). */
@@ -286,7 +286,7 @@ export interface KaiChainOfThoughtElement extends HTMLElement {
 
 export interface KaiChatElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Show a Search (Globe) button in the input toolbar; fires a `search` event. */
   search?: boolean;
   /** The full message thread to render, newest last. Each entry carries its role, ordered `parts`, and optional actions/avatar/feedback. Set as a JS property (`el.messages = [...]`). */
@@ -349,7 +349,7 @@ export interface KaiChatElement extends HTMLElement {
 
 export interface KaiCheckpointElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Optional text beside the icon. */
   label?: string;
   /** Tooltip on hover. */
@@ -362,7 +362,7 @@ export interface KaiCheckpointElement extends HTMLElement {
 
 export interface KaiChoiceElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The choice definition (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { prompt, options:[…], allowOther?, submitLabel? }`. Import `ChoiceCardData` from `@kitn.ai/ui` for the full shape. */
   data?: Record<string, unknown>;
   /** Stable card id correlating every emitted CardEvent. Attribute: `card-id`. */
@@ -381,7 +381,7 @@ export interface KaiChoiceElement extends HTMLElement {
 
 export interface KaiCoachmarkElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Drive/observe open state (Shoelace-style: settable + reflected to the `open` attribute; the element still self-manages). Set `el.open = true`, or `<kai-coachmark open>`; listen for `kai-open-change`. */
   open?: boolean;
   /** Initial open state on mount (uncontrolled seed). */
@@ -400,7 +400,7 @@ export interface KaiCoachmarkElement extends HTMLElement {
 
 export interface KaiCodeBlockElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The source code to render. */
   code: string;
   /** Language grammar (e.g. `js`, `python`). Defaults to `tsx`. */
@@ -415,7 +415,7 @@ export interface KaiCodeBlockElement extends HTMLElement {
 
 export interface KaiCommandElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Flat list of items. Set as a JS property — not an HTML attribute. */
   items?: { id: string; label: string; icon?: string; description?: string; shortcut?: string; group?: string }[];
   /** Placeholder text for the search input. */
@@ -426,7 +426,7 @@ export interface KaiCommandElement extends HTMLElement {
 
 export interface KaiCompareElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The compare definition (prompt + the two candidates). Set as a JS PROPERTY: `el.data = { prompt, candidates: [A, B], collapse? }`. Import `ResponseCompareData` from `@kitn.ai/ui` for the full shape. */
   data?: Record<string, unknown>;
   /** Stable id correlating every emitted event. Attribute: `compare-id`. */
@@ -445,7 +445,7 @@ export interface KaiCompareElement extends HTMLElement {
 
 export interface KaiComposerElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Controlled value — string or a full ComposerDoc (set as JS property). */
   value?: string | ({ type: "text"; text: string } | { type: "entity"; entity: { kind: string; id: string; label: string; icon?: string; promptText?: string; data?: Record<string, unknown> } })[];
   /** Placeholder text shown when the composer is empty. */
@@ -468,7 +468,7 @@ export interface KaiComposerElement extends HTMLElement {
 
 export interface KaiConfirmElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The confirm definition (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { body, tone, actions:[…] }`. Import `ConfirmCardData` from `@kitn.ai/ui` for the full shape. */
   data?: Record<string, unknown>;
   /** Stable card id correlating every emitted CardEvent. Attribute: `card-id`. */
@@ -483,7 +483,7 @@ export interface KaiConfirmElement extends HTMLElement {
 
 export interface KaiContextElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Token-usage data. Set as a JS property. */
   context?: { usedTokens: number; maxTokens: number; inputTokens?: number; outputTokens?: number; reasoningTokens?: number; cacheTokens?: number; estimatedCost?: number };
   /** Fraction (0–1) above which the meter turns yellow. Defaults to `0.7` (70%). */
@@ -494,7 +494,7 @@ export interface KaiContextElement extends HTMLElement {
 
 export interface KaiConversationsElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The list's section headers (`{ id, name, sortOrder, createdAt }`), rendered in array order. A group carries no conversations of its own; it is matched against `conversations` by id, so the two props are complementary rather than alternatives. Omit for an ungrouped list. Set as a JS property. */
   groups?: { id: string; userId?: string; teamId?: string; name: string; sortOrder: number; createdAt: string }[];
   /** Every conversation the list renders, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId` falls into a trailing "Ungrouped" section. There is no recency bucketing, and a `groupId` matching no entry in `groups` is not rendered. Set as a JS property. */
@@ -509,7 +509,7 @@ export interface KaiConversationsElement extends HTMLElement {
 
 export interface KaiDialogElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Drive/observe open state (Shoelace-style: settable + reflected to the `open` attribute; the element still self-manages on Escape/backdrop). Set `el.open = true`, or `<kai-dialog open>`; listen for `kai-open-change`. */
   open?: boolean;
   /** Initial open state on mount (uncontrolled seed). */
@@ -518,7 +518,7 @@ export interface KaiDialogElement extends HTMLElement {
 
 export interface KaiEditableLabelElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The label text — settable and reflected to the `value` attribute. Read `el.value` for live state. */
   value?: string;
   /** Controlled edit state. `el.editing = true` opens the field; reflected to the `editing` attribute. */
@@ -531,7 +531,7 @@ export interface KaiEditableLabelElement extends HTMLElement {
 
 export interface KaiEmbedElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Stable card id correlating every emitted event. Set as an attribute or property. */
   cardId?: string;
   /** The embed payload (provider + id/url + options). Set as a JS **property** (object). */
@@ -540,7 +540,7 @@ export interface KaiEmbedElement extends HTMLElement {
 
 export interface KaiEmptyElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Title text. Attribute: `empty-title` (`title` is a global HTML attribute). */
   emptyTitle?: string;
   /** Description text. */
@@ -549,7 +549,7 @@ export interface KaiEmptyElement extends HTMLElement {
 
 export interface KaiFeedbackBarElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The banner label (e.g. "Was this helpful?"). Attribute: `bar-title` (`title` is avoided — it's a global HTML attribute). */
   barTitle?: string;
   /** When set, a not-helpful vote opens an optional detail form before the thank-you confirmation. Attribute: `collect-detail`. */
@@ -568,7 +568,7 @@ export interface KaiFeedbackBarElement extends HTMLElement {
 
 export interface KaiFileTreeElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The files to render. Set as a JS property (array of `{ path, url?, code?, language?, type?, additions?, deletions?, status? }`). */
   files: { path: string; url?: undefined | string; code?: undefined | string; language?: undefined | string; type?: undefined | "html" | "pdf" | "image" | "other"; additions?: undefined | number; deletions?: undefined | number; status?: undefined | "added" | "modified" | "deleted" | "renamed" | "untracked" }[];
   /** Selected file path — highlighted in the tree. */
@@ -581,7 +581,7 @@ export interface KaiFileTreeElement extends HTMLElement {
 
 export interface KaiFileUploadElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Allow selecting multiple files (default true). */
   multiple?: boolean;
   /** `accept` attribute for the file picker (e.g. `image/*`). */
@@ -594,7 +594,7 @@ export interface KaiFileUploadElement extends HTMLElement {
 
 export interface KaiFormElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The form definition — a JSON Schema (`type:'object'`) + `x-kai-*` UI hints (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { type:'object', properties:{…} }`. Import the `FormDefinition` type from `@kitn.ai/ui` for the full shape (it is self-referential, so the element types it loosely). */
   data?: Record<string, unknown>;
   /** Stable card id correlating every emitted CardEvent. Attribute: `card-id`. */
@@ -613,7 +613,7 @@ export interface KaiFormElement extends HTMLElement {
 
 export interface KaiHoverCardElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Delay (ms) before the card opens on hover. Defaults to 0 (focus opens it immediately too). */
   openDelay?: number;
   /** Delay (ms) before it closes after the pointer leaves. Defaults to 300. */
@@ -630,7 +630,7 @@ export interface KaiHoverCardElement extends HTMLElement {
 
 export interface KaiIconElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** A curated icon name (e.g. `"mic"`, `"globe"`), an image URL/data-URI, or plain text. */
   name?: string;
   /** Size token: `sm` | `md` (default) | `lg`. */
@@ -639,7 +639,7 @@ export interface KaiIconElement extends HTMLElement {
 
 export interface KaiImageElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Base64-encoded image data (pair with `media-type`). */
   base64?: string;
   /** Raw image bytes (set as a JS property). */
@@ -652,7 +652,7 @@ export interface KaiImageElement extends HTMLElement {
 
 export interface KaiInputElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Native input type: `text` (default) · `email` · `url` · `search` · `tel` · `password` · `number`. Single-line only. */
   type?: string;
   /** Controlled value — settable and reflected to the `value` attribute. `el.value = 'hi'` drives it (no event); typing updates it and fires `kai-input`. Read `el.value` for live state. */
@@ -685,18 +685,18 @@ export interface KaiInputElement extends HTMLElement {
 
 export interface KaiKbdElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Shortcut spec — tokens joined by `+` (e.g. `Mod+Shift+K`). Omit it to show default-slot content instead. Display only; the element does not bind keys. */
   keys?: string;
   /** `mac` uses ⌘/⌥, `other` uses Ctrl. `auto` (default) sniffs the OS. */
-  platform?: "other" | "auto" | "mac";
+  platform?: "auto" | "other" | "mac";
   /** Cap size: `sm` or `md`. Defaults to `md`. */
   size?: "sm" | "md";
 }
 
 export interface KaiLinkPreviewElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Stable card id correlating every emitted event. Set as an attribute or property. */
   cardId?: string;
   /** The link payload (OG metadata). Set as a JS **property** (object). */
@@ -705,7 +705,7 @@ export interface KaiLinkPreviewElement extends HTMLElement {
 
 export interface KaiLoaderElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The animation style: `'circular' | 'classic' | 'pulse' | 'pulse-dot' | 'dots' | 'typing' | 'wave' | 'bars' | 'terminal' | 'text-blink' | 'text-shimmer' | 'loading-dots'`. Defaults to `'circular'`. */
   variant?: "circular" | "classic" | "pulse" | "pulse-dot" | "dots" | "typing" | "wave" | "bars" | "terminal" | "text-blink" | "text-shimmer" | "loading-dots";
   /** Loader size: `'sm' | 'md' | 'lg'`. Defaults to `'md'`. */
@@ -716,7 +716,7 @@ export interface KaiLoaderElement extends HTMLElement {
 
 export interface KaiMarkdownElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The markdown source to render. */
   content: string;
   /** Text/markdown sizing. */
@@ -729,7 +729,7 @@ export interface KaiMarkdownElement extends HTMLElement {
 
 export interface KaiMenuElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Tree of menu items. Set as a JS property — not an HTML attribute. */
   items?: { id?: string; label?: string; icon?: string; shortcut?: string; checked?: boolean; radioGroup?: string; disabled?: boolean; separator?: boolean; heading?: boolean; items?: Record<string, unknown>[] }[];
   /** Optional placement hint (unused by the underlying Dropdown which always positions bottom-start, kept for future extension). */
@@ -752,7 +752,7 @@ export interface KaiMenuElement extends HTMLElement {
 
 export interface KaiMessageElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The full message object. Set as a JS property. */
   message?: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: string; index?: number; streamId?: string; signature?: string; raw?: { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: "image" | "command" | "file-change" | "search" | "fetch" | "mcp" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } }; raw?: { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }; raw?: { source: string; payload: unknown } } | { type: "source"; source: { id?: string; url?: string; title?: string; snippet?: string; index?: number }; raw?: { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }; raw?: { source: string; payload: unknown } })[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" };
   /** Convenience for simple cases when not passing a `message` object. Re-declares the DOM member `HTMLElement.role`, so it is NOT optional here: an interface extending HTMLElement may only narrow it, and the element always carries a value for it. */
@@ -779,7 +779,7 @@ export interface KaiMessageElement extends HTMLElement {
 
 export interface KaiModelSwitcherElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The selectable models. Set as a JS property (array). */
   models: { id: string; name: string; provider?: undefined | string; description?: undefined | string; group?: undefined | string }[];
   /** The currently-selected model id. Defaults to the first model. */
@@ -794,7 +794,7 @@ export interface KaiModelSwitcherElement extends HTMLElement {
 
 export interface KaiNavElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The nav items. Set as a JS property (array, not an attribute). Each item may carry `children` (a collapsible group), a `status` dot, and trailing `meta` text. */
   items?: { id: string; label?: string; icon?: string; badge?: string; trailing?: string; disabled?: boolean; children?: Record<string, unknown>[]; status?: { tone: "error" | "primary" | "info" | "success" | "warning" | "neutral"; label?: string; pulse?: boolean }; meta?: string; action?: { icon: string; label: string }; closable?: boolean }[];
   /** Active item id (controlled). */
@@ -807,7 +807,7 @@ export interface KaiNavElement extends HTMLElement {
 
 export interface KaiNoticeElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** `neutral` (default) · `info` · `warning` · `error` · `success`. Drives the leading icon's color and the a11y role (`alert` for errors, else `status`). */
   severity?: "error" | "info" | "success" | "warning" | "neutral";
   /** Leading icon: omit for the severity default, `"none"` to hide it, or a named icon to override. */
@@ -818,7 +818,7 @@ export interface KaiNoticeElement extends HTMLElement {
 
 export interface KaiPaneElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The pane title (the agent / window name). Named `headline` because `title` collides with the global `HTMLElement.title` attribute (it throws at registration). Attribute: `headline`. */
   headline?: string;
   /** A role / label shown under the title (e.g. "Reviewer", "claude-sonnet"). Attribute: `subtitle`. */
@@ -837,7 +837,7 @@ export interface KaiPaneElement extends HTMLElement {
 
 export interface KaiPaneGroupElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The tabs to render. An array of `{ id, name, status?, needsAttention?, number? }` set as a JS PROPERTY (not an HTML attribute). */
   tabs?: { id: string; name: string; status?: { tone: "working" | "idle" | "done" | "error" | "blocked"; label?: string; pulse?: boolean }; needsAttention?: boolean; number?: number }[];
   /** The active tab id (controlled, and reflected to the `active` ATTRIBUTE so `::part`/`[active]` selectors and the per-tab named slot follow it). Set it as the `active` attribute or drive it from `kai-tab-change`; omit for uncontrolled (the first tab). */
@@ -848,7 +848,7 @@ export interface KaiPaneGroupElement extends HTMLElement {
 
 export interface KaiPopoverElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Floating placement relative to the trigger (floating-ui placement). */
   placement?: "top" | "right" | "bottom" | "left" | "top-start" | "top-end" | "right-start" | "right-end" | "bottom-start" | "bottom-end" | "left-start" | "left-end";
   /** Gap in px between the trigger and the panel. */
@@ -863,7 +863,7 @@ export interface KaiPopoverElement extends HTMLElement {
 
 export interface KaiProgressBarElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Current progress value (0..max). Attribute: `value`. */
   value?: number;
   /** The value `value` runs to (default 100). Attribute: `max`. */
@@ -876,7 +876,7 @@ export interface KaiProgressBarElement extends HTMLElement {
 
 export interface KaiPromptDockElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** How the tray frames the input — the SPATIAL inset axis: `inset` (default, the classic recessed frame on every side) | `edge` (top/bottom inset only; the input sits flush left/right so the lips span the full width) | `none` (no inset; the lips attach directly as a plain stack). Attribute: `frame`. */
   frame?: "none" | "inset" | "edge";
   /** How the tray surface looks — the VISUAL axis, orthogonal to `frame`: `soft` (default, sunken surface + border + radius) | `outlined` (transparent + border + radius) | `filled` (sunken, no border, + radius) | `plain` (bare). Attribute: `appearance`. */
@@ -885,7 +885,7 @@ export interface KaiPromptDockElement extends HTMLElement {
 
 export interface KaiPromptInputElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Value of the input, as a JS property. A **string** is the controlled text mirror (the host owns it and updates on `kai-value-change`). A **ComposerDoc** (array of text/entity segments) is a one-time **seed** that pre-populates pills (skills/agents/plugins); the user then edits freely. Leave unset for uncontrolled behavior. `kai-submit`/`kai-value-change` always emit `value` as the flattened string (back-compat) plus the structured `doc` + `entities`. */
   value?: string | ({ type: "text"; text: string } | { type: "entity"; entity: { kind: string; id: string; label: string; icon?: string; promptText?: string; data?: Record<string, unknown> } })[];
   /** Placeholder text shown in the empty input. */
@@ -905,7 +905,7 @@ export interface KaiPromptInputElement extends HTMLElement {
   /** When set and `loading` is true, the send button is replaced by a Stop button (square icon, "Stop" aria-label). Clicking it fires `kai-stop`. */
   stoppable?: boolean;
   /** Send-button visibility. `'always'` (default) always shows it; `'auto'` shows it only when there's text/attachments (an empty composer hides it — Enter still submits). To hide it entirely (Enter-only), it's pure CSS: `::part(send){display:none}` — no prop needed. Restyle via `::part(send)`. The Stop button (`stoppable` + `loading`) is unaffected. */
-  submit?: "always" | "auto";
+  submit?: "auto" | "always";
   /** When `false`, hides the built-in paperclip attach button even though the element otherwise supports attachments. Use this when a `+` menu in `toolbar-start` already exposes "Add files", to avoid a duplicate control. Defaults to `true`. */
   attach?: boolean;
   /** Attachments to seed the input with (so a consumer can pre-populate staged files without an upload). Set as a JS property; the element then manages its own attachment state from there (add via the paperclip, remove per chip). */
@@ -918,7 +918,7 @@ export interface KaiPromptInputElement extends HTMLElement {
 
 export interface KaiReasoningElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The reasoning text to display. */
   text: string;
   /** Trigger label. */
@@ -937,7 +937,7 @@ export interface KaiReasoningElement extends HTMLElement {
 
 export interface KaiRemoteElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The remote card URL. Attribute: `src`. */
   src?: string;
   /** Exact provider origin (https: or http://localhost for dev). Attribute: `provider-origin`. */
@@ -950,7 +950,7 @@ export interface KaiRemoteElement extends HTMLElement {
 
 export interface KaiResizableElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Layout axis: `horizontal` (row, default) or `vertical` (column). */
   orientation?: "vertical" | "horizontal";
   /** Which item index is maximized (null = none). Declarative source of truth. */
@@ -961,7 +961,7 @@ export interface KaiResizableElement extends HTMLElement {
 
 export interface KaiResizableItemElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Initial main-axis size: `"280px"` (fixed) or `"25%"`/`25` (percent). Omitted → flexible. */
   size?: string;
   /** Minimum size during resize (px or %). */
@@ -978,7 +978,7 @@ export interface KaiResizableItemElement extends HTMLElement {
 
 export interface KaiResponseStreamElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Text to stream. A string, or an `AsyncIterable<string>` (set as a JS property — async iterables can't be HTML attributes). */
   text?: string | AsyncIterable<string>;
   /** Reveal animation. */
@@ -991,7 +991,7 @@ export interface KaiResponseStreamElement extends HTMLElement {
 
 export interface KaiScopePickerElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Authors to offer as scope filters. Set as a JS property. */
   availableAuthors: string[];
   /** Tags to offer as scope filters. Set as a JS property. */
@@ -1008,7 +1008,7 @@ export interface KaiScopePickerElement extends HTMLElement {
 
 export interface KaiScreenElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Drive/observe open state (Shoelace-style: settable + reflected to the `open` attribute; the element still self-manages). Set `el.open = true`, or `<kai-screen open>`; listen for `kai-open-change`. */
   open?: boolean;
   /** Initial open state on mount (uncontrolled seed). */
@@ -1023,14 +1023,14 @@ export interface KaiScreenElement extends HTMLElement {
 
 export interface KaiScrollAreaElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Which axis scrolls. `vertical` (default) · `horizontal` · `both`. The cross axis is clamped so content can't overflow it. */
   orientation?: "vertical" | "horizontal" | "both";
 }
 
 export interface KaiScrollButtonElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** CSS id of the scroll container to control. When omitted the element walks up the DOM (outside its own shadow root) to find the nearest scrollable ancestor. Mirrors the `for` convention of `<label for="...">`. */
   for?: string;
   /** Button visual variant: `'outline' | 'ghost' | 'default'`. Defaults to `'outline'`. */
@@ -1041,7 +1041,7 @@ export interface KaiScrollButtonElement extends HTMLElement {
 
 export interface KaiSearchElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Controlled query — settable and reflected to the `value` attribute. Read `el.value` for live state. */
   value?: string;
   /** Placeholder. Defaults to `Search…`. */
@@ -1058,7 +1058,7 @@ export interface KaiSearchElement extends HTMLElement {
 
 export interface KaiSegmentedElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The selectable segments, left to right. Set as a JS property (array). */
   options: { value: string; label: string; icon?: undefined | string }[];
   /** Controlled selected `value` — settable and reflected to the `value` attribute. `el.value = 'preview'` drives it; choosing a segment updates it and fires `kai-change`. Read `el.value` for live state. */
@@ -1069,14 +1069,14 @@ export interface KaiSegmentedElement extends HTMLElement {
 
 export interface KaiSeparatorElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** `horizontal` (default, block + full-width) or `vertical` (a rule inside a flex/grid row — it stretches to the row height). */
   orientation?: "vertical" | "horizontal";
 }
 
 export interface KaiSettingItemElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Row label (primary text). Attribute: `label`. */
   label?: string;
   /** Optional secondary description under the label. Attribute: `description`. */
@@ -1085,7 +1085,7 @@ export interface KaiSettingItemElement extends HTMLElement {
 
 export interface KaiSettingsGroupElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Small section heading shown above the card. Attribute: `heading`. */
   heading?: string;
   /** Optional muted description under the heading. Attribute: `description`. */
@@ -1094,7 +1094,7 @@ export interface KaiSettingsGroupElement extends HTMLElement {
 
 export interface KaiSkeletonElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** `text` (one or more lines), `rect` (a block), or `circle` (round). Defaults to `text`. */
   variant?: "text" | "rect" | "circle";
   /** CSS width (e.g. `'12rem'`, `'60%'`). Defaults to full width (responsive); for `circle` it is the diameter. */
@@ -1107,14 +1107,14 @@ export interface KaiSkeletonElement extends HTMLElement {
 
 export interface KaiSkillsElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The active skills to badge. Set as a JS property. */
   skills: { id: string; name: string }[];
 }
 
 export interface KaiSourceElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The URL this citation links to (the domain also seeds the default label/favicon). */
   href?: string;
   /** Trigger label (defaults to the domain). */
@@ -1129,7 +1129,7 @@ export interface KaiSourceElement extends HTMLElement {
 
 export interface KaiSourcesElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The sources to render. Set as a JS property. */
   sources: { href: string; title?: undefined | string; description?: undefined | string; label?: undefined | string; showFavicon?: undefined | boolean }[];
   /** Show favicons on all items (per-item `showFavicon` overrides). */
@@ -1140,7 +1140,7 @@ export interface KaiSourcesElement extends HTMLElement {
 
 export interface KaiStatusElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Presence/notification state → color. `new` (default) maps to the blue hue. */
   status?: "new" | "online" | "busy" | "away" | "offline";
   /** Animated ping ring (off by default; respects prefers-reduced-motion). */
@@ -1153,7 +1153,7 @@ export interface KaiStatusElement extends HTMLElement {
 
 export interface KaiSuggestionsElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The suggestions. Strings, or `{ label, value }` when the displayed text and the emitted value differ. Set as a JS property. */
   suggestions: (string | { label: string; value?: undefined | string; icon?: undefined | string })[];
   /** Chip style: `'outline'` (default), `'ghost'`, or `'default'` (filled). */
@@ -1170,7 +1170,7 @@ export interface KaiSuggestionsElement extends HTMLElement {
 
 export interface KaiSwitchElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Controlled checked state — settable and reflected to the `checked` attribute. `el.checked = true` (or `<kai-switch checked>`) drives it; the toggle UI updates it and fires `kai-change`. Read `el.checked` for live state. */
   checked?: boolean;
   /** Initial checked state on mount (uncontrolled seed). Bare attribute (`<kai-switch default-checked>`) turns it on. */
@@ -1187,7 +1187,7 @@ export interface KaiSwitchElement extends HTMLElement {
 
 export interface KaiTabsElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Tabs to render. Set as a JS property, not an HTML attribute. */
   items?: { id: string; label?: string; icon?: string; disabled?: boolean }[];
   /** Controlled selected id. Set as a JS property (or the `value` attribute); drive it from your app in response to `kai-tab-change`. Omit for uncontrolled. */
@@ -1204,7 +1204,7 @@ export interface KaiTabsElement extends HTMLElement {
 
 export interface KaiTasksElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The tasks definition (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { tasks:[…], selectAll, confirmLabel, … }`. Import `TasksCardData` from `@kitn.ai/ui` for the full shape. */
   data?: Record<string, unknown>;
   /** Stable card id correlating every emitted CardEvent. Attribute: `card-id`. */
@@ -1225,7 +1225,7 @@ export interface KaiTasksElement extends HTMLElement {
 
 export interface KaiTextShimmerElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The text to shimmer. */
   text?: string;
   /** Element tag to render as (default `span`). */
@@ -1238,7 +1238,7 @@ export interface KaiTextShimmerElement extends HTMLElement {
 
 export interface KaiThinkingBarElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The shimmering label, e.g. "Thinking…". */
   text?: string;
   /** When true, show a "stop" affordance that fires a `stop` event. */
@@ -1249,7 +1249,7 @@ export interface KaiThinkingBarElement extends HTMLElement {
 
 export interface KaiThreadElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The full message thread to render, newest last. Each entry carries its role, ordered `parts`, and optional actions/avatar/feedback. Set as a JS property (`el.messages = [...]`); a NEW array reference per streaming chunk re-renders (mutating in place does not). */
   messages?: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: string; index?: number; streamId?: string; signature?: string; raw?: { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: "image" | "command" | "file-change" | "search" | "fetch" | "mcp" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } }; raw?: { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }; raw?: { source: string; payload: unknown } } | { type: "source"; source: { id?: string; url?: string; title?: string; snippet?: string; index?: number }; raw?: { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }; raw?: { source: string; payload: unknown } })[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" }[];
   /** Show a typing indicator on the pending assistant turn — set while awaiting the assistant's reply. */
@@ -1272,7 +1272,7 @@ export interface KaiThreadElement extends HTMLElement {
 
 export interface KaiToastRegionElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The toasts to render. Newest is shown on top. Set as a JS property (array); pass a new array reference to update. */
   toasts: { id: string; message: string; variant?: undefined | "error" | "info" | "success" | "warning" | "neutral"; appearance?: undefined | "card" | "pill"; inverse?: undefined | boolean; description?: undefined | string; action?: undefined | { label: string; onAction: () => void | false }; duration?: undefined | number; dismissible?: undefined | boolean; target?: undefined | HTMLElement }[];
   /** Stack anchor: `'top-center'` (default), `'top-right'`, `'bottom-center'`, … */
@@ -1291,7 +1291,7 @@ export interface KaiToastRegionElement extends HTMLElement {
 
 export interface KaiToolElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The tool-call to display. Set as a JS property. */
   tool?: { type: string; kind?: "image" | "command" | "file-change" | "search" | "fetch" | "mcp" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } };
   /** Drive/observe open state (Shoelace-style: settable + reflected to the `open` attribute; the element still self-manages on trigger click). Set `el.open = true`, or `<kai-tool open>`; listen for `kai-open-change`. */
@@ -1304,7 +1304,7 @@ export interface KaiToolElement extends HTMLElement {
 
 export interface KaiTooltipElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The hint text shown on hover/focus of the slotted trigger. */
   content?: string;
   /** Delay (ms) before the tooltip appears on hover. Defaults to 600. Focus shows it immediately regardless. */
@@ -1323,7 +1323,7 @@ export interface KaiTooltipElement extends HTMLElement {
 
 export interface KaiVoiceInputElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Transcriber the host supplies — records audio, returns the text. This is a **function-valued property** (`el.transcribe = async blob => '...'`) because a value-returning callback can't be modelled as a fire-and-forget event. */
   transcribe?: (audio: Blob) => Promise<string>;
   /** Disable the mic button (non-interactive). */
@@ -1336,7 +1336,7 @@ export interface KaiVoiceInputElement extends HTMLElement {
 
 export interface KaiVoiceOutputElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The utterance to read aloud. */
   text?: string;
   /** Speak automatically when `text` is set/changed. */
@@ -1349,7 +1349,7 @@ export interface KaiVoiceOutputElement extends HTMLElement {
 
 export interface KaiWorkspaceElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The sidebar's section headers, rendered in array order. A group carries no conversations of its own; it is matched against `conversations` by id, so the two props are complementary rather than alternatives. Omit for an ungrouped sidebar. Set as a JS property. */
   groups?: { id: string; userId?: string; teamId?: string; name: string; sortOrder: number; createdAt: string }[];
   /** Every conversation in the sidebar, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId` falls into a trailing ungrouped section (headerless when `compact`). There is no recency bucketing, and a `groupId` matching no entry in `groups` is not rendered. Set as a JS property. */
@@ -1581,7 +1581,7 @@ declare module 'react' {
 
 export interface KaiAgentCardElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The agent's name — the primary label. Attribute: `name`. */
   name?: string;
   /** Selected / focused state: highlighted border + surface. Attribute: `active`. */
@@ -1594,7 +1594,7 @@ export interface KaiAgentCardElementProps {
 
 export interface KaiArtifactElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** URL the preview iframe frames. Consumer-controlled. */
   src?: string;
   /** Files for the Code tab tree + each file's preview `url`. Set as a JS property (array). */
@@ -1635,7 +1635,7 @@ export interface KaiArtifactElementProps {
 
 export interface KaiAttachmentsElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The attachments to render. Set as a JS property (array). */
   items: { id: string; type: "file" | "source-document"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[];
   /** Layout: `grid` = visual tiles, `inline` = icon + label chips, `list` = rows. */
@@ -1652,7 +1652,7 @@ export interface KaiAttachmentsElementProps {
 
 export interface KaiAvatarElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Image URL/data-URI. When absent, the `fallback` initials show instead. */
   src?: string;
   /** Alt text for the image. Defaults to `fallback`. */
@@ -1665,14 +1665,14 @@ export interface KaiAvatarElementProps {
 
 export interface KaiBadgeElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** `default` (muted pill) · `count` (compact number badge) · `citation` (filled primary, for inline citation markers). Defaults to `default`. */
   variant?: "default" | "count" | "citation";
 }
 
 export interface KaiButtonElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Visual style. `default` (filled), `subtle` (muted text, hover tint — the toolbar icon look), `ghost` (transparent, hover fill), `outline`, or `destructive`. Defaults to `default`. */
   variant?: "default" | "subtle" | "ghost" | "outline" | "destructive";
   /** Size token. `icon` / `icon-sm` are square (for icon-only buttons); `sm` / `md` / `lg` size text buttons. Defaults to `md`. */
@@ -1695,7 +1695,7 @@ export interface KaiButtonElementProps {
 
 export interface KaiCardElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Surface treatment: `outlined` (default) | `filled` | `plain` | `accent`. Attribute: `appearance`. */
   appearance?: "outlined" | "filled" | "plain" | "accent";
   /** `vertical` (default, media on top) | `horizontal` (media at the start) | `responsive` (horizontal when the card's container is wide enough, else vertical — a container query on the card's own width). Attribute: `orientation`. */
@@ -1718,7 +1718,7 @@ export interface KaiCardElementProps {
 
 export interface KaiCardsElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The stream of card envelopes to render. Set as a JS PROPERTY: `el.cards = [...]`. */
   cards?: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }[];
   /** Optional type→tag overrides/additions (merged over the built-ins). Property: `el.types`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type. */
@@ -1729,7 +1729,7 @@ export interface KaiCardsElementProps {
 
 export interface KaiChainOfThoughtElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The reasoning steps. Set as a JS property. Compound sub-parts collapse to this one data model (Route 1). Each `{ label, content?, id? }`. */
   steps: { label: string; content?: undefined | string; id?: undefined | string }[];
   /** Open mode: `'multiple'` (default — any number of steps open at once) or `'single'` (at most one open; opening a step closes the others). */
@@ -1742,7 +1742,7 @@ export interface KaiChainOfThoughtElementProps {
 
 export interface KaiChatElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Show a Search (Globe) button in the input toolbar; fires a `search` event. */
   search?: boolean;
   /** The full message thread to render, newest last. Each entry carries its role, ordered `parts`, and optional actions/avatar/feedback. Set as a JS property (`el.messages = [...]`). */
@@ -1805,7 +1805,7 @@ export interface KaiChatElementProps {
 
 export interface KaiCheckpointElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Optional text beside the icon. */
   label?: string;
   /** Tooltip on hover. */
@@ -1818,7 +1818,7 @@ export interface KaiCheckpointElementProps {
 
 export interface KaiChoiceElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The choice definition (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { prompt, options:[…], allowOther?, submitLabel? }`. Import `ChoiceCardData` from `@kitn.ai/ui` for the full shape. */
   data?: Record<string, unknown>;
   /** Stable card id correlating every emitted CardEvent. Attribute: `card-id`. */
@@ -1837,7 +1837,7 @@ export interface KaiChoiceElementProps {
 
 export interface KaiCoachmarkElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Drive/observe open state (Shoelace-style: settable + reflected to the `open` attribute; the element still self-manages). Set `el.open = true`, or `<kai-coachmark open>`; listen for `kai-open-change`. */
   open?: boolean;
   /** Initial open state on mount (uncontrolled seed). */
@@ -1856,7 +1856,7 @@ export interface KaiCoachmarkElementProps {
 
 export interface KaiCodeBlockElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The source code to render. */
   code: string;
   /** Language grammar (e.g. `js`, `python`). Defaults to `tsx`. */
@@ -1871,7 +1871,7 @@ export interface KaiCodeBlockElementProps {
 
 export interface KaiCommandElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Flat list of items. Set as a JS property — not an HTML attribute. */
   items?: { id: string; label: string; icon?: string; description?: string; shortcut?: string; group?: string }[];
   /** Placeholder text for the search input. */
@@ -1882,7 +1882,7 @@ export interface KaiCommandElementProps {
 
 export interface KaiCompareElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The compare definition (prompt + the two candidates). Set as a JS PROPERTY: `el.data = { prompt, candidates: [A, B], collapse? }`. Import `ResponseCompareData` from `@kitn.ai/ui` for the full shape. */
   data?: Record<string, unknown>;
   /** Stable id correlating every emitted event. Attribute: `compare-id`. */
@@ -1901,7 +1901,7 @@ export interface KaiCompareElementProps {
 
 export interface KaiComposerElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Controlled value — string or a full ComposerDoc (set as JS property). */
   value?: string | ({ type: "text"; text: string } | { type: "entity"; entity: { kind: string; id: string; label: string; icon?: string; promptText?: string; data?: Record<string, unknown> } })[];
   /** Placeholder text shown when the composer is empty. */
@@ -1924,7 +1924,7 @@ export interface KaiComposerElementProps {
 
 export interface KaiConfirmElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The confirm definition (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { body, tone, actions:[…] }`. Import `ConfirmCardData` from `@kitn.ai/ui` for the full shape. */
   data?: Record<string, unknown>;
   /** Stable card id correlating every emitted CardEvent. Attribute: `card-id`. */
@@ -1939,7 +1939,7 @@ export interface KaiConfirmElementProps {
 
 export interface KaiContextElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Token-usage data. Set as a JS property. */
   context?: { usedTokens: number; maxTokens: number; inputTokens?: number; outputTokens?: number; reasoningTokens?: number; cacheTokens?: number; estimatedCost?: number };
   /** Fraction (0–1) above which the meter turns yellow. Defaults to `0.7` (70%). */
@@ -1950,7 +1950,7 @@ export interface KaiContextElementProps {
 
 export interface KaiConversationsElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The list's section headers (`{ id, name, sortOrder, createdAt }`), rendered in array order. A group carries no conversations of its own; it is matched against `conversations` by id, so the two props are complementary rather than alternatives. Omit for an ungrouped list. Set as a JS property. */
   groups?: { id: string; userId?: string; teamId?: string; name: string; sortOrder: number; createdAt: string }[];
   /** Every conversation the list renders, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId` falls into a trailing "Ungrouped" section. There is no recency bucketing, and a `groupId` matching no entry in `groups` is not rendered. Set as a JS property. */
@@ -1965,7 +1965,7 @@ export interface KaiConversationsElementProps {
 
 export interface KaiDialogElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Drive/observe open state (Shoelace-style: settable + reflected to the `open` attribute; the element still self-manages on Escape/backdrop). Set `el.open = true`, or `<kai-dialog open>`; listen for `kai-open-change`. */
   open?: boolean;
   /** Initial open state on mount (uncontrolled seed). */
@@ -1974,7 +1974,7 @@ export interface KaiDialogElementProps {
 
 export interface KaiEditableLabelElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The label text — settable and reflected to the `value` attribute. Read `el.value` for live state. */
   value?: string;
   /** Controlled edit state. `el.editing = true` opens the field; reflected to the `editing` attribute. */
@@ -1987,7 +1987,7 @@ export interface KaiEditableLabelElementProps {
 
 export interface KaiEmbedElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Stable card id correlating every emitted event. Set as an attribute or property. */
   cardId?: string;
   /** The embed payload (provider + id/url + options). Set as a JS **property** (object). */
@@ -1996,7 +1996,7 @@ export interface KaiEmbedElementProps {
 
 export interface KaiEmptyElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Title text. Attribute: `empty-title` (`title` is a global HTML attribute). */
   emptyTitle?: string;
   /** Description text. */
@@ -2005,7 +2005,7 @@ export interface KaiEmptyElementProps {
 
 export interface KaiFeedbackBarElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The banner label (e.g. "Was this helpful?"). Attribute: `bar-title` (`title` is avoided — it's a global HTML attribute). */
   barTitle?: string;
   /** When set, a not-helpful vote opens an optional detail form before the thank-you confirmation. Attribute: `collect-detail`. */
@@ -2024,7 +2024,7 @@ export interface KaiFeedbackBarElementProps {
 
 export interface KaiFileTreeElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The files to render. Set as a JS property (array of `{ path, url?, code?, language?, type?, additions?, deletions?, status? }`). */
   files: { path: string; url?: undefined | string; code?: undefined | string; language?: undefined | string; type?: undefined | "html" | "pdf" | "image" | "other"; additions?: undefined | number; deletions?: undefined | number; status?: undefined | "added" | "modified" | "deleted" | "renamed" | "untracked" }[];
   /** Selected file path — highlighted in the tree. */
@@ -2037,7 +2037,7 @@ export interface KaiFileTreeElementProps {
 
 export interface KaiFileUploadElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Allow selecting multiple files (default true). */
   multiple?: boolean;
   /** `accept` attribute for the file picker (e.g. `image/*`). */
@@ -2050,7 +2050,7 @@ export interface KaiFileUploadElementProps {
 
 export interface KaiFormElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The form definition — a JSON Schema (`type:'object'`) + `x-kai-*` UI hints (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { type:'object', properties:{…} }`. Import the `FormDefinition` type from `@kitn.ai/ui` for the full shape (it is self-referential, so the element types it loosely). */
   data?: Record<string, unknown>;
   /** Stable card id correlating every emitted CardEvent. Attribute: `card-id`. */
@@ -2069,7 +2069,7 @@ export interface KaiFormElementProps {
 
 export interface KaiHoverCardElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Delay (ms) before the card opens on hover. Defaults to 0 (focus opens it immediately too). */
   openDelay?: number;
   /** Delay (ms) before it closes after the pointer leaves. Defaults to 300. */
@@ -2086,7 +2086,7 @@ export interface KaiHoverCardElementProps {
 
 export interface KaiIconElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** A curated icon name (e.g. `"mic"`, `"globe"`), an image URL/data-URI, or plain text. */
   name?: string;
   /** Size token: `sm` | `md` (default) | `lg`. */
@@ -2095,7 +2095,7 @@ export interface KaiIconElementProps {
 
 export interface KaiImageElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Base64-encoded image data (pair with `media-type`). */
   base64?: string;
   /** Raw image bytes (set as a JS property). */
@@ -2108,7 +2108,7 @@ export interface KaiImageElementProps {
 
 export interface KaiInputElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Native input type: `text` (default) · `email` · `url` · `search` · `tel` · `password` · `number`. Single-line only. */
   type?: string;
   /** Controlled value — settable and reflected to the `value` attribute. `el.value = 'hi'` drives it (no event); typing updates it and fires `kai-input`. Read `el.value` for live state. */
@@ -2141,18 +2141,18 @@ export interface KaiInputElementProps {
 
 export interface KaiKbdElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Shortcut spec — tokens joined by `+` (e.g. `Mod+Shift+K`). Omit it to show default-slot content instead. Display only; the element does not bind keys. */
   keys?: string;
   /** `mac` uses ⌘/⌥, `other` uses Ctrl. `auto` (default) sniffs the OS. */
-  platform?: "other" | "auto" | "mac";
+  platform?: "auto" | "other" | "mac";
   /** Cap size: `sm` or `md`. Defaults to `md`. */
   size?: "sm" | "md";
 }
 
 export interface KaiLinkPreviewElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Stable card id correlating every emitted event. Set as an attribute or property. */
   cardId?: string;
   /** The link payload (OG metadata). Set as a JS **property** (object). */
@@ -2161,7 +2161,7 @@ export interface KaiLinkPreviewElementProps {
 
 export interface KaiLoaderElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The animation style: `'circular' | 'classic' | 'pulse' | 'pulse-dot' | 'dots' | 'typing' | 'wave' | 'bars' | 'terminal' | 'text-blink' | 'text-shimmer' | 'loading-dots'`. Defaults to `'circular'`. */
   variant?: "circular" | "classic" | "pulse" | "pulse-dot" | "dots" | "typing" | "wave" | "bars" | "terminal" | "text-blink" | "text-shimmer" | "loading-dots";
   /** Loader size: `'sm' | 'md' | 'lg'`. Defaults to `'md'`. */
@@ -2172,7 +2172,7 @@ export interface KaiLoaderElementProps {
 
 export interface KaiMarkdownElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The markdown source to render. */
   content: string;
   /** Text/markdown sizing. */
@@ -2185,7 +2185,7 @@ export interface KaiMarkdownElementProps {
 
 export interface KaiMenuElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Tree of menu items. Set as a JS property — not an HTML attribute. */
   items?: { id?: string; label?: string; icon?: string; shortcut?: string; checked?: boolean; radioGroup?: string; disabled?: boolean; separator?: boolean; heading?: boolean; items?: Record<string, unknown>[] }[];
   /** Optional placement hint (unused by the underlying Dropdown which always positions bottom-start, kept for future extension). */
@@ -2208,7 +2208,7 @@ export interface KaiMenuElementProps {
 
 export interface KaiMessageElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The full message object. Set as a JS property. */
   message?: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: string; index?: number; streamId?: string; signature?: string; raw?: { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: "image" | "command" | "file-change" | "search" | "fetch" | "mcp" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } }; raw?: { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }; raw?: { source: string; payload: unknown } } | { type: "source"; source: { id?: string; url?: string; title?: string; snippet?: string; index?: number }; raw?: { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }; raw?: { source: string; payload: unknown } })[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" };
   /** Convenience for simple cases when not passing a `message` object. */
@@ -2235,7 +2235,7 @@ export interface KaiMessageElementProps {
 
 export interface KaiModelSwitcherElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The selectable models. Set as a JS property (array). */
   models: { id: string; name: string; provider?: undefined | string; description?: undefined | string; group?: undefined | string }[];
   /** The currently-selected model id. Defaults to the first model. */
@@ -2250,7 +2250,7 @@ export interface KaiModelSwitcherElementProps {
 
 export interface KaiNavElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The nav items. Set as a JS property (array, not an attribute). Each item may carry `children` (a collapsible group), a `status` dot, and trailing `meta` text. */
   items?: { id: string; label?: string; icon?: string; badge?: string; trailing?: string; disabled?: boolean; children?: Record<string, unknown>[]; status?: { tone: "error" | "primary" | "info" | "success" | "warning" | "neutral"; label?: string; pulse?: boolean }; meta?: string; action?: { icon: string; label: string }; closable?: boolean }[];
   /** Active item id (controlled). */
@@ -2263,7 +2263,7 @@ export interface KaiNavElementProps {
 
 export interface KaiNoticeElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** `neutral` (default) · `info` · `warning` · `error` · `success`. Drives the leading icon's color and the a11y role (`alert` for errors, else `status`). */
   severity?: "error" | "info" | "success" | "warning" | "neutral";
   /** Leading icon: omit for the severity default, `"none"` to hide it, or a named icon to override. */
@@ -2274,7 +2274,7 @@ export interface KaiNoticeElementProps {
 
 export interface KaiPaneElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The pane title (the agent / window name). Named `headline` because `title` collides with the global `HTMLElement.title` attribute (it throws at registration). Attribute: `headline`. */
   headline?: string;
   /** A role / label shown under the title (e.g. "Reviewer", "claude-sonnet"). Attribute: `subtitle`. */
@@ -2293,7 +2293,7 @@ export interface KaiPaneElementProps {
 
 export interface KaiPaneGroupElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The tabs to render. An array of `{ id, name, status?, needsAttention?, number? }` set as a JS PROPERTY (not an HTML attribute). */
   tabs?: { id: string; name: string; status?: { tone: "working" | "idle" | "done" | "error" | "blocked"; label?: string; pulse?: boolean }; needsAttention?: boolean; number?: number }[];
   /** The active tab id (controlled, and reflected to the `active` ATTRIBUTE so `::part`/`[active]` selectors and the per-tab named slot follow it). Set it as the `active` attribute or drive it from `kai-tab-change`; omit for uncontrolled (the first tab). */
@@ -2304,7 +2304,7 @@ export interface KaiPaneGroupElementProps {
 
 export interface KaiPopoverElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Floating placement relative to the trigger (floating-ui placement). */
   placement?: "top" | "right" | "bottom" | "left" | "top-start" | "top-end" | "right-start" | "right-end" | "bottom-start" | "bottom-end" | "left-start" | "left-end";
   /** Gap in px between the trigger and the panel. */
@@ -2319,7 +2319,7 @@ export interface KaiPopoverElementProps {
 
 export interface KaiProgressBarElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Current progress value (0..max). Attribute: `value`. */
   value?: number;
   /** The value `value` runs to (default 100). Attribute: `max`. */
@@ -2332,7 +2332,7 @@ export interface KaiProgressBarElementProps {
 
 export interface KaiPromptDockElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** How the tray frames the input — the SPATIAL inset axis: `inset` (default, the classic recessed frame on every side) | `edge` (top/bottom inset only; the input sits flush left/right so the lips span the full width) | `none` (no inset; the lips attach directly as a plain stack). Attribute: `frame`. */
   frame?: "none" | "inset" | "edge";
   /** How the tray surface looks — the VISUAL axis, orthogonal to `frame`: `soft` (default, sunken surface + border + radius) | `outlined` (transparent + border + radius) | `filled` (sunken, no border, + radius) | `plain` (bare). Attribute: `appearance`. */
@@ -2341,7 +2341,7 @@ export interface KaiPromptDockElementProps {
 
 export interface KaiPromptInputElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Value of the input, as a JS property. A **string** is the controlled text mirror (the host owns it and updates on `kai-value-change`). A **ComposerDoc** (array of text/entity segments) is a one-time **seed** that pre-populates pills (skills/agents/plugins); the user then edits freely. Leave unset for uncontrolled behavior. `kai-submit`/`kai-value-change` always emit `value` as the flattened string (back-compat) plus the structured `doc` + `entities`. */
   value?: string | ({ type: "text"; text: string } | { type: "entity"; entity: { kind: string; id: string; label: string; icon?: string; promptText?: string; data?: Record<string, unknown> } })[];
   /** Placeholder text shown in the empty input. */
@@ -2361,7 +2361,7 @@ export interface KaiPromptInputElementProps {
   /** When set and `loading` is true, the send button is replaced by a Stop button (square icon, "Stop" aria-label). Clicking it fires `kai-stop`. */
   stoppable?: boolean;
   /** Send-button visibility. `'always'` (default) always shows it; `'auto'` shows it only when there's text/attachments (an empty composer hides it — Enter still submits). To hide it entirely (Enter-only), it's pure CSS: `::part(send){display:none}` — no prop needed. Restyle via `::part(send)`. The Stop button (`stoppable` + `loading`) is unaffected. */
-  submit?: "always" | "auto";
+  submit?: "auto" | "always";
   /** When `false`, hides the built-in paperclip attach button even though the element otherwise supports attachments. Use this when a `+` menu in `toolbar-start` already exposes "Add files", to avoid a duplicate control. Defaults to `true`. */
   attach?: boolean;
   /** Attachments to seed the input with (so a consumer can pre-populate staged files without an upload). Set as a JS property; the element then manages its own attachment state from there (add via the paperclip, remove per chip). */
@@ -2374,7 +2374,7 @@ export interface KaiPromptInputElementProps {
 
 export interface KaiReasoningElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The reasoning text to display. */
   text: string;
   /** Trigger label. */
@@ -2393,7 +2393,7 @@ export interface KaiReasoningElementProps {
 
 export interface KaiRemoteElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The remote card URL. Attribute: `src`. */
   src?: string;
   /** Exact provider origin (https: or http://localhost for dev). Attribute: `provider-origin`. */
@@ -2406,7 +2406,7 @@ export interface KaiRemoteElementProps {
 
 export interface KaiResizableElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Layout axis: `horizontal` (row, default) or `vertical` (column). */
   orientation?: "vertical" | "horizontal";
   /** Which item index is maximized (null = none). Declarative source of truth. */
@@ -2417,7 +2417,7 @@ export interface KaiResizableElementProps {
 
 export interface KaiResizableItemElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Initial main-axis size: `"280px"` (fixed) or `"25%"`/`25` (percent). Omitted → flexible. */
   size?: string;
   /** Minimum size during resize (px or %). */
@@ -2434,7 +2434,7 @@ export interface KaiResizableItemElementProps {
 
 export interface KaiResponseStreamElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Text to stream. A string, or an `AsyncIterable<string>` (set as a JS property — async iterables can't be HTML attributes). */
   text?: string | AsyncIterable<string>;
   /** Reveal animation. */
@@ -2447,7 +2447,7 @@ export interface KaiResponseStreamElementProps {
 
 export interface KaiScopePickerElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Authors to offer as scope filters. Set as a JS property. */
   availableAuthors: string[];
   /** Tags to offer as scope filters. Set as a JS property. */
@@ -2464,7 +2464,7 @@ export interface KaiScopePickerElementProps {
 
 export interface KaiScreenElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Drive/observe open state (Shoelace-style: settable + reflected to the `open` attribute; the element still self-manages). Set `el.open = true`, or `<kai-screen open>`; listen for `kai-open-change`. */
   open?: boolean;
   /** Initial open state on mount (uncontrolled seed). */
@@ -2479,14 +2479,14 @@ export interface KaiScreenElementProps {
 
 export interface KaiScrollAreaElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Which axis scrolls. `vertical` (default) · `horizontal` · `both`. The cross axis is clamped so content can't overflow it. */
   orientation?: "vertical" | "horizontal" | "both";
 }
 
 export interface KaiScrollButtonElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** CSS id of the scroll container to control. When omitted the element walks up the DOM (outside its own shadow root) to find the nearest scrollable ancestor. Mirrors the `for` convention of `<label for="...">`. */
   for?: string;
   /** Button visual variant: `'outline' | 'ghost' | 'default'`. Defaults to `'outline'`. */
@@ -2497,7 +2497,7 @@ export interface KaiScrollButtonElementProps {
 
 export interface KaiSearchElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Controlled query — settable and reflected to the `value` attribute. Read `el.value` for live state. */
   value?: string;
   /** Placeholder. Defaults to `Search…`. */
@@ -2514,7 +2514,7 @@ export interface KaiSearchElementProps {
 
 export interface KaiSegmentedElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The selectable segments, left to right. Set as a JS property (array). */
   options: { value: string; label: string; icon?: undefined | string }[];
   /** Controlled selected `value` — settable and reflected to the `value` attribute. `el.value = 'preview'` drives it; choosing a segment updates it and fires `kai-change`. Read `el.value` for live state. */
@@ -2525,14 +2525,14 @@ export interface KaiSegmentedElementProps {
 
 export interface KaiSeparatorElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** `horizontal` (default, block + full-width) or `vertical` (a rule inside a flex/grid row — it stretches to the row height). */
   orientation?: "vertical" | "horizontal";
 }
 
 export interface KaiSettingItemElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Row label (primary text). Attribute: `label`. */
   label?: string;
   /** Optional secondary description under the label. Attribute: `description`. */
@@ -2541,7 +2541,7 @@ export interface KaiSettingItemElementProps {
 
 export interface KaiSettingsGroupElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Small section heading shown above the card. Attribute: `heading`. */
   heading?: string;
   /** Optional muted description under the heading. Attribute: `description`. */
@@ -2550,7 +2550,7 @@ export interface KaiSettingsGroupElementProps {
 
 export interface KaiSkeletonElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** `text` (one or more lines), `rect` (a block), or `circle` (round). Defaults to `text`. */
   variant?: "text" | "rect" | "circle";
   /** CSS width (e.g. `'12rem'`, `'60%'`). Defaults to full width (responsive); for `circle` it is the diameter. */
@@ -2563,14 +2563,14 @@ export interface KaiSkeletonElementProps {
 
 export interface KaiSkillsElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The active skills to badge. Set as a JS property. */
   skills: { id: string; name: string }[];
 }
 
 export interface KaiSourceElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The URL this citation links to (the domain also seeds the default label/favicon). */
   href?: string;
   /** Trigger label (defaults to the domain). */
@@ -2585,7 +2585,7 @@ export interface KaiSourceElementProps {
 
 export interface KaiSourcesElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The sources to render. Set as a JS property. */
   sources: { href: string; title?: undefined | string; description?: undefined | string; label?: undefined | string; showFavicon?: undefined | boolean }[];
   /** Show favicons on all items (per-item `showFavicon` overrides). */
@@ -2596,7 +2596,7 @@ export interface KaiSourcesElementProps {
 
 export interface KaiStatusElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Presence/notification state → color. `new` (default) maps to the blue hue. */
   status?: "new" | "online" | "busy" | "away" | "offline";
   /** Animated ping ring (off by default; respects prefers-reduced-motion). */
@@ -2609,7 +2609,7 @@ export interface KaiStatusElementProps {
 
 export interface KaiSuggestionsElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The suggestions. Strings, or `{ label, value }` when the displayed text and the emitted value differ. Set as a JS property. */
   suggestions: (string | { label: string; value?: undefined | string; icon?: undefined | string })[];
   /** Chip style: `'outline'` (default), `'ghost'`, or `'default'` (filled). */
@@ -2626,7 +2626,7 @@ export interface KaiSuggestionsElementProps {
 
 export interface KaiSwitchElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Controlled checked state — settable and reflected to the `checked` attribute. `el.checked = true` (or `<kai-switch checked>`) drives it; the toggle UI updates it and fires `kai-change`. Read `el.checked` for live state. */
   checked?: boolean;
   /** Initial checked state on mount (uncontrolled seed). Bare attribute (`<kai-switch default-checked>`) turns it on. */
@@ -2643,7 +2643,7 @@ export interface KaiSwitchElementProps {
 
 export interface KaiTabsElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Tabs to render. Set as a JS property, not an HTML attribute. */
   items?: { id: string; label?: string; icon?: string; disabled?: boolean }[];
   /** Controlled selected id. Set as a JS property (or the `value` attribute); drive it from your app in response to `kai-tab-change`. Omit for uncontrolled. */
@@ -2660,7 +2660,7 @@ export interface KaiTabsElementProps {
 
 export interface KaiTasksElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The tasks definition (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { tasks:[…], selectAll, confirmLabel, … }`. Import `TasksCardData` from `@kitn.ai/ui` for the full shape. */
   data?: Record<string, unknown>;
   /** Stable card id correlating every emitted CardEvent. Attribute: `card-id`. */
@@ -2681,7 +2681,7 @@ export interface KaiTasksElementProps {
 
 export interface KaiTextShimmerElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The text to shimmer. */
   text?: string;
   /** Element tag to render as (default `span`). */
@@ -2694,7 +2694,7 @@ export interface KaiTextShimmerElementProps {
 
 export interface KaiThinkingBarElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The shimmering label, e.g. "Thinking…". */
   text?: string;
   /** When true, show a "stop" affordance that fires a `stop` event. */
@@ -2705,7 +2705,7 @@ export interface KaiThinkingBarElementProps {
 
 export interface KaiThreadElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The full message thread to render, newest last. Each entry carries its role, ordered `parts`, and optional actions/avatar/feedback. Set as a JS property (`el.messages = [...]`); a NEW array reference per streaming chunk re-renders (mutating in place does not). */
   messages?: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: string; index?: number; streamId?: string; signature?: string; raw?: { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: "image" | "command" | "file-change" | "search" | "fetch" | "mcp" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } }; raw?: { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }; raw?: { source: string; payload: unknown } } | { type: "source"; source: { id?: string; url?: string; title?: string; snippet?: string; index?: number }; raw?: { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }; raw?: { source: string; payload: unknown } })[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" }[];
   /** Show a typing indicator on the pending assistant turn — set while awaiting the assistant's reply. */
@@ -2728,7 +2728,7 @@ export interface KaiThreadElementProps {
 
 export interface KaiToastRegionElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The toasts to render. Newest is shown on top. Set as a JS property (array); pass a new array reference to update. */
   toasts: { id: string; message: string; variant?: undefined | "error" | "info" | "success" | "warning" | "neutral"; appearance?: undefined | "card" | "pill"; inverse?: undefined | boolean; description?: undefined | string; action?: undefined | { label: string; onAction: () => void | false }; duration?: undefined | number; dismissible?: undefined | boolean; target?: undefined | HTMLElement }[];
   /** Stack anchor: `'top-center'` (default), `'top-right'`, `'bottom-center'`, … */
@@ -2747,7 +2747,7 @@ export interface KaiToastRegionElementProps {
 
 export interface KaiToolElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The tool-call to display. Set as a JS property. */
   tool?: { type: string; kind?: "image" | "command" | "file-change" | "search" | "fetch" | "mcp" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } };
   /** Drive/observe open state (Shoelace-style: settable + reflected to the `open` attribute; the element still self-manages on trigger click). Set `el.open = true`, or `<kai-tool open>`; listen for `kai-open-change`. */
@@ -2760,7 +2760,7 @@ export interface KaiToolElementProps {
 
 export interface KaiTooltipElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The hint text shown on hover/focus of the slotted trigger. */
   content?: string;
   /** Delay (ms) before the tooltip appears on hover. Defaults to 600. Focus shows it immediately regardless. */
@@ -2779,7 +2779,7 @@ export interface KaiTooltipElementProps {
 
 export interface KaiVoiceInputElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** Transcriber the host supplies — records audio, returns the text. This is a **function-valued property** (`el.transcribe = async blob => '...'`) because a value-returning callback can't be modelled as a fire-and-forget event. */
   transcribe?: (audio: Blob) => Promise<string>;
   /** Disable the mic button (non-interactive). */
@@ -2792,7 +2792,7 @@ export interface KaiVoiceInputElementProps {
 
 export interface KaiVoiceOutputElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The utterance to read aloud. */
   text?: string;
   /** Speak automatically when `text` is set/changed. */
@@ -2805,7 +2805,7 @@ export interface KaiVoiceOutputElementProps {
 
 export interface KaiWorkspaceElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   /** The sidebar's section headers, rendered in array order. A group carries no conversations of its own; it is matched against `conversations` by id, so the two props are complementary rather than alternatives. Omit for an ungrouped sidebar. Set as a JS property. */
   groups?: { id: string; userId?: string; teamId?: string; name: string; sortOrder: number; createdAt: string }[];
   /** Every conversation in the sidebar, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId` falls into a trailing ungrouped section (headerless when `compact`). There is no recency bucketing, and a `groupId` matching no entry in `groups` is not rendered. Set as a JS property. */
@@ -2865,6 +2865,8 @@ export interface KaiArtifactElementEvents {
   onKaiFileSelect?: (event: CustomEvent<{ path: string }>) => void;
   /** Artifact's own maximize button toggled (consumer-observable; non-bubbling). */
   onKaiMaximizeChange?: (event: CustomEvent<{ maximized: boolean }>) => void;
+  /** The maximize PROTOCOL intent, raised as a raw bubbling + composed CustomEvent (not through `dispatch`) so an enclosing `<kai-resizable>` can catch it and maximize the containing panel. Declared here so it is typed and reaches the generated API — listen for it to drive maximize from your own chrome, or re-emit it to trigger one. */
+  onKaiMaximizeIntent?: (event: CustomEvent<{ requested: boolean }>) => void;
   /** Fired when the preview navigates. `detail.url` = the new location. */
   onKaiNavigate?: (event: CustomEvent<{ url: string }>) => void;
   /** Fired when the Preview|Code tab changes. `detail.tab`. */
@@ -3184,11 +3186,14 @@ export interface KaiResizableElementEvents {
   onKaiChange?: (event: CustomEvent<{ sizes: number[] }>) => void;
   /** Observe layout maximize state. */
   onKaiMaximizeChange?: (event: CustomEvent<{ maximized: boolean; index: null | number }>) => void;
+  /** Authoritative maximize state, dispatched as a raw composed CustomEvent (not through `dispatch`) onto the affected `<kai-resizable-item>` and, on restore, onto the group host. A nested element (e.g. `<kai-artifact>`) listens for it to reconcile its own toggle. */
+  onKaiMaximizeState?: (event: CustomEvent<{ maximized: boolean }>) => void;
 }
 
 export interface KaiResizableItemElementEvents {
   onKaiChange?: (event: CustomEvent<unknown>) => void;
   onKaiMaximizeChange?: (event: CustomEvent<unknown>) => void;
+  onKaiMaximizeState?: (event: CustomEvent<unknown>) => void;
 }
 
 export interface KaiResponseStreamElementEvents {

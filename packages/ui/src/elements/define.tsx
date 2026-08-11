@@ -151,11 +151,21 @@ export function defineWebComponent<P extends Record<string, unknown>, E = Record
   // reads it back for styling) and never touches a host attribute.
   const NON_REFLECTING = ['role'];
 
-  // Every element gets a `theme` property/attribute: 'light' | 'dark' | 'auto'
-  // (default 'auto' = follow the OS `prefers-color-scheme`). It drives a `.dark`
-  // class on an inner wrapper, which the injected kit CSS already styles — so dark
-  // mode works in standalone Shadow-DOM usage with no token duplication.
-  const defaults = { theme: 'auto', ...propDefaults };
+  // Every element gets a `theme` property/attribute. It drives a `.dark` class on
+  // an inner wrapper, which the injected kit CSS already styles — so dark mode
+  // works in standalone Shadow-DOM usage with no token duplication.
+  //
+  // The `as` annotation is load-bearing, not decoration: scripts/gen-element-api.mjs
+  // reads THIS object literal to learn which props every element gets for free, and
+  // takes each one's type and doc comment off the checker. Without it the inferred
+  // type is the literal `"auto"`. Add a universal prop here and it appears in
+  // element-meta.json, the generated .d.ts, custom-elements.json and llms-full.txt
+  // for all 79 elements, with no second list to update.
+  const defaults = {
+    /** Color mode (`auto` follows prefers-color-scheme). */
+    theme: 'auto' as 'light' | 'dark' | 'auto',
+    ...propDefaults,
+  };
 
   const Ctor = customElement(tag, defaults, (props: typeof defaults, options: { element: object }) => {
     const element = options.element as HTMLElement;

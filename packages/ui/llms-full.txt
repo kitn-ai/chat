@@ -258,6 +258,7 @@ Every element also accepts the `theme` attribute. Array/object properties are ma
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `name` | `name` | `undefined \| string` | The agent's name — the primary label. Attribute: `name`. |
 | `active` | `active` | `undefined \| false \| true` | Selected / focused state: highlighted border + surface. Attribute: `active`. |
 | `needsAttention` | `needs-attention` | `undefined \| false \| true` | Raise a prominent "Needs you" pill plus a glowing amber edge — the attention-routing signal that pulls focus to this agent. Attribute: `needs-attention`. |
@@ -285,6 +286,7 @@ Every element also accepts the `theme` attribute. Array/object properties are ma
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `src` | `src` | `undefined \| string` | URL the preview iframe frames. Consumer-controlled. |
 | `files` | — | `{ path: string; url?: undefined \| string; code?: undefined \| string; language?: undefined \| string; type?: undefined \| "html" \| "pdf" \| "image" \| "other"; additions?: undefined \| number; deletions?: undefined \| number; status?: undefined \| "added" \| "modified" \| "deleted" \| "renamed" \| "untracked" }[]` | Files for the Code tab tree + each file's preview `url`. Set as a JS property (array). |
 | `tab` | `tab` | `undefined \| "preview" \| "code"` | Controlled active tab: `preview` or `code`. When set, the artifact follows it (re-asserted on change). Leave unset for an uncontrolled tab (see `defaultTab`). |
@@ -310,6 +312,7 @@ Every element also accepts the `theme` attribute. Array/object properties are ma
 |---|---|---|
 | `kai-file-select` | `CustomEvent<{ path: string }>` | Fired when a file is selected. `detail.path`. |
 | `kai-maximize-change` | `CustomEvent<{ maximized: false \| true }>` | Artifact's own maximize button toggled (consumer-observable; non-bubbling). |
+| `kai-maximize-intent` | `CustomEvent<{ requested: false \| true }>` | The maximize PROTOCOL intent, raised as a raw bubbling + composed CustomEvent (not through `dispatch`) so an enclosing `<kai-resizable>` can catch it and maximize the containing panel. Declared here so it is typed and reaches the generated API — listen for it to drive maximize from your own chrome, or re-emit it to trigger one. |
 | `kai-navigate` | `CustomEvent<{ url: string }>` | Fired when the preview navigates. `detail.url` = the new location. |
 | `kai-tab-change` | `CustomEvent<{ tab: "preview" \| "code" }>` | Fired when the Preview\|Code tab changes. `detail.tab`. |
 
@@ -321,6 +324,7 @@ Every element also accepts the `theme` attribute. Array/object properties are ma
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `items` | — | `{ id: string; type: "file" \| "source-document"; filename?: undefined \| string; mediaType?: undefined \| string; url?: undefined \| string; title?: undefined \| string }[]` | The attachments to render. Set as a JS property (array). |
 | `variant` | `variant` | `undefined \| "grid" \| "inline" \| "list"` | Layout: `grid` = visual tiles, `inline` = icon + label chips, `list` = rows. |
 | `hoverCard` | `hover-card` | `undefined \| false \| true` | Wrap each item in a hover card that previews its details. |
@@ -348,6 +352,7 @@ Every element also accepts the `theme` attribute. Array/object properties are ma
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `src` | `src` | `undefined \| string` | Image URL/data-URI. When absent, the `fallback` initials show instead. |
 | `alt` | `alt` | `undefined \| string` | Alt text for the image. Defaults to `fallback`. |
 | `fallback` | `fallback` | `undefined \| string` | Short text shown when there's no image — usually initials (e.g. "JD", "AI"). |
@@ -363,9 +368,16 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `variant` | `variant` | `undefined \| "default" \| "count" \| "citation"` | `default` (muted pill) · `count` (compact number badge) · `citation` (filled primary, for inline citation markers). Defaults to `default`. |
 
 _No events._
+
+**Slots** (project your own markup via `slot="name"` on a light-DOM child):
+
+| Slot | Mode | Description |
+|---|---|---|
+| _(default)_ | inject | The badge's label — text, or a small inline icon plus text. |
 
 **Styleable parts** (restyle from outside via `kai-badge::part(name)`):
 
@@ -381,6 +393,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `variant` | `variant` | `undefined \| "default" \| "subtle" \| "ghost" \| "outline" \| "destructive"` | Visual style. `default` (filled), `subtle` (muted text, hover tint — the toolbar icon look), `ghost` (transparent, hover fill), `outline`, or `destructive`. Defaults to `default`. |
 | `size` | `size` | `undefined \| "sm" \| "md" \| "lg" \| "icon" \| "icon-sm"` | Size token. `icon` / `icon-sm` are square (for icon-only buttons); `sm` / `md` / `lg` size text buttons. Defaults to `md`. |
 | `icon` | `icon` | `undefined \| string` | Leading icon: a named icon (e.g. `"mic"`, `"plus"`), an image URL/data-URI, or plain text. Renders before any slotted label. |
@@ -401,6 +414,7 @@ _No events._
 
 | Slot | Mode | Description |
 |---|---|---|
+| _(default)_ | inject | The button's label. Omit it for an icon-only button (pair with `aria-label`). |
 | `icon` | replace | A custom leading icon (any inline SVG, inherits `currentColor`). Wins over the `icon` prop. |
 
 **Styleable parts** (restyle from outside via `kai-button::part(name)`):
@@ -417,6 +431,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `appearance` | `appearance` | `undefined \| "outlined" \| "filled" \| "plain" \| "accent"` | Surface treatment: `outlined` (default) \| `filled` \| `plain` \| `accent`. Attribute: `appearance`. |
 | `orientation` | `orientation` | `undefined \| "vertical" \| "horizontal" \| "responsive"` | `vertical` (default, media on top) \| `horizontal` (media at the start) \| `responsive` (horizontal when the card's container is wide enough, else vertical — a container query on the card's own width). Attribute: `orientation`. |
 | `collapse` | `collapse` | `undefined \| string` | The card width below which a `responsive` card collapses to vertical and the footer actions stack. A CSS length; default `28rem`. Attribute: `collapse`. |
@@ -438,6 +453,7 @@ _No events._
 
 | Slot | Mode | Description |
 |---|---|---|
+| _(default)_ | inject | The card body, below the header/media regions. |
 | `media` | inject | Full-bleed media (image/video/illustration) at the top (vertical) or start (horizontal). Clipped to the card corners. |
 | `header` | inject | Header content, e.g. a title. Rendered above the body. |
 | `header-actions` | inject | An actions cluster pinned to the end of the header row. |
@@ -463,6 +479,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `cards` | — | `undefined \| { type: string; id: string; data: unknown; title?: undefined \| string; resolution?: undefined \| { kind: "action"; action: string; payload?: unknown; at?: undefined \| string } \| { kind: "submit"; data: unknown; at?: undefined \| string } \| { kind: "dismissed"; at?: undefined \| string } \| { kind: "expired"; reason?: undefined \| string; at?: undefined \| string } }[]` | The stream of card envelopes to render. Set as a JS PROPERTY: `el.cards = [...]`. |
 | `types` | — | `undefined \| Record<string, string>` | Optional type→tag overrides/additions (merged over the built-ins). Property: `el.types`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type. |
 | `policy` | — | `undefined \| { onSubmit?: undefined \| (cardId: string, data: unknown) => void; onAction?: undefined \| (cardId: string, action: string, payload?: unknown) => void; onSendPrompt?: undefined \| (text: string, opts: { mode: "compose" \| "send"; context?: unknown; }) => void; onOpen?: undefined \| (url: string, target: "tab" \| "artifact") => void; onState?: undefined \| (cardId: string, patch: unknown) => void; onDismiss?: undefined \| (cardId: string) => void; onReopen?: undefined \| (cardId: string) => void; onError?: undefined \| (cardId: string, message: string) => void; maxSendPromptMode?: undefined \| "compose" \| "send" }` | Optional CardPolicy handling child events. Property: `el.policy`. |
@@ -481,6 +498,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `steps` | — | `{ label: string; content?: undefined \| string; id?: undefined \| string }[]` | The reasoning steps. Set as a JS property. Compound sub-parts collapse to this one data model (Route 1). Each `{ label, content?, id? }`. |
 | `type` | `type` | `undefined \| "single" \| "multiple"` | Open mode: `'multiple'` (default — any number of steps open at once) or `'single'` (at most one open; opening a step closes the others). |
 | `value` | — | `undefined \| string \| string[]` | Controlled open step key(s). When set, it WINS over user interaction (the consumer owns the open set). String in `single` mode, string[] in `multiple` mode. Set as a JS property. |
@@ -492,6 +510,12 @@ _No events._
 |---|---|---|
 | `kai-value-change` | `CustomEvent<{ value: string \| string[] }>` | The open set changed — by user click OR an expand()/collapse()/toggle() call. `value` is a string in `single` mode, a string[] in `multiple` mode. (Maps Radix Accordion's onValueChange.) |
 
+**Declarative children** (compose these in light DOM instead of setting the JS property):
+
+| Child element | Attributes | Text content | Notes |
+|---|---|---|---|
+| `<kai-step>` | `label`, `step-id` | yes | Parse a single light-DOM `<kai-step>` element into a `Step` descriptor. Attribute mapping: - `label` → Step.label (the always-visible heading) - `step-id` → Step.id (optional stable open-set key) - textContent → Step.content (optional expandable detail) |
+
 ---
 
 ### `kai-chat` / `Chat`
@@ -500,6 +524,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `search` | `search` | `undefined \| false \| true` | Show a Search (Globe) button in the input toolbar; fires a `search` event. |
 | `messages` | — | `{ id: string; role: "user" \| "assistant"; parts: ({ type: "text"; text: string; raw?: undefined \| { source: string; payload: unknown } } \| { type: "reasoning"; text: string; label?: undefined \| string; index?: undefined \| number; streamId?: undefined \| string; signature?: undefined \| string; raw?: undefined \| { source: string; payload: unknown } } \| { type: "tool"; tool: { type: string; kind?: undefined \| "image" \| "command" \| "file-change" \| "search" \| "fetch" \| "mcp" \| "generic"; state: "input-streaming" \| "input-available" \| "output-available" \| "output-error"; input?: undefined \| Record<string, unknown>; rawInput?: undefined \| string; output?: undefined \| Record<string, unknown>; toolCallId?: undefined \| string; errorText?: undefined \| string; raw?: undefined \| { source: string; payload: unknown } }; raw?: undefined \| { source: string; payload: unknown } } \| { type: "card"; envelope: { type: string; id: string; data: unknown; title?: undefined \| string; resolution?: undefined \| { kind: "action"; action: string; payload?: unknown; at?: undefined \| string } \| { kind: "submit"; data: unknown; at?: undefined \| string } \| { kind: "dismissed"; at?: undefined \| string } \| { kind: "expired"; reason?: undefined \| string; at?: undefined \| string } }; raw?: undefined \| { source: string; payload: unknown } } \| { type: "source"; source: { id?: undefined \| string; url?: undefined \| string; title?: undefined \| string; snippet?: undefined \| string; index?: undefined \| number }; raw?: undefined \| { source: string; payload: unknown } } \| { type: "file"; attachment: { id: string; type: "file" \| "source-document"; filename?: undefined \| string; mediaType?: undefined \| string; url?: undefined \| string; title?: undefined \| string }; raw?: undefined \| { source: string; payload: unknown } })[]; actions?: undefined \| ("copy" \| "like" \| "dislike" \| "regenerate" \| "edit" \| { id: string; label: string; icon?: undefined \| string; tooltip?: undefined \| string })[]; avatar?: undefined \| { src?: undefined \| string; fallback?: undefined \| string; alt?: undefined \| string }; feedback?: undefined \| "like" \| "dislike" }[]` | The full message thread to render, newest last. Each entry carries its role, ordered `parts`, and optional actions/avatar/feedback. Set as a JS property (`el.messages = [...]`). |
 | `value` | — | `undefined \| string \| ({ type: "text"; text: string } \| { type: "entity"; entity: { kind: string; id: string; label: string; icon?: undefined \| string; promptText?: undefined \| string; data?: undefined \| Record<string, unknown> } })[]` | Value of the input. A **string** is controlled (the host owns the text and updates it on `kai-value-change`). A **ComposerDoc** is a one-time seed that pre-populates pills; the user then edits freely. Leave unset for uncontrolled. |
@@ -573,6 +598,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `label` | `label` | `undefined \| string` | Optional text beside the icon. |
 | `tooltip` | `tooltip` | `undefined \| string` | Tooltip on hover. |
 | `variant` | `variant` | `undefined \| "default" \| "ghost" \| "outline"` | Visual button style. |
@@ -592,6 +618,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `data` | — | `undefined \| Record<string, unknown>` | The choice definition (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { prompt, options:[…], allowOther?, submitLabel? }`. Import `ChoiceCardData` from `@kitn.ai/ui` for the full shape. |
 | `cardId` | `card-id` | `undefined \| string` | Stable card id correlating every emitted CardEvent. Attribute: `card-id`. |
 | `heading` | `heading` | `undefined \| string` | Heading rendered in the card chrome (= CardEnvelope.title). Attribute: `heading`. |
@@ -614,6 +641,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `open` | `open` | `undefined \| false \| true` | Drive/observe open state (Shoelace-style: settable + reflected to the `open` attribute; the element still self-manages). Set `el.open = true`, or `<kai-coachmark open>`; listen for `kai-open-change`. |
 | `defaultOpen` | `default-open` | `undefined \| false \| true` | Initial open state on mount (uncontrolled seed). |
 | `headline` | `headline` | `undefined \| string` | The bold title. Named `headline` because `title` collides with the global `HTMLElement.title` attribute (it throws at registration). |
@@ -633,6 +661,7 @@ _No events._
 
 | Slot | Mode | Description |
 |---|---|---|
+| _(default)_ | inject | The ANCHOR the coachmark points at — the element it attaches to and positions against. The bubble body is the `content` slot. |
 | `content` | replace | The bubble body text shown under the headline. |
 
 **Styleable parts** (restyle from outside via `kai-coachmark::part(name)`):
@@ -653,6 +682,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `code` | `code` | `string` | The source code to render. |
 | `language` | `language` | `undefined \| string` | Language grammar (e.g. `js`, `python`). Defaults to `tsx`. |
 | `codeTheme` | `code-theme` | `undefined \| string` | Shiki theme name. |
@@ -669,6 +699,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `items` | — | `undefined \| { id: string; label: string; icon?: undefined \| string; description?: undefined \| string; shortcut?: undefined \| string; group?: undefined \| string }[]` | Flat list of items. Set as a JS property — not an HTML attribute. |
 | `placeholder` | `placeholder` | `undefined \| string` | Placeholder text for the search input. |
 | `emptyLabel` | `empty-label` | `undefined \| string` | Label shown when no items match the current query. |
@@ -695,6 +726,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `data` | — | `undefined \| Record<string, unknown>` | The compare definition (prompt + the two candidates). Set as a JS PROPERTY: `el.data = { prompt, candidates: [A, B], collapse? }`. Import `ResponseCompareData` from `@kitn.ai/ui` for the full shape. |
 | `compareId` | `compare-id` | `undefined \| string` | Stable id correlating every emitted event. Attribute: `compare-id`. |
 | `selection` | — | `undefined \| Record<string, unknown>` | Re-hydrate / control the user's pick. Set as a JS PROPERTY: `el.selection = { chosenId, rejectedIds }`. Renders the collapsed winner. |
@@ -719,6 +751,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `value` | — | `undefined \| string \| ({ type: "text"; text: string } \| { type: "entity"; entity: { kind: string; id: string; label: string; icon?: undefined \| string; promptText?: undefined \| string; data?: undefined \| Record<string, unknown> } })[]` | Controlled value — string or a full ComposerDoc (set as JS property). |
 | `placeholder` | `placeholder` | `undefined \| string` | Placeholder text shown when the composer is empty. |
 | `disabled` | `disabled` | `undefined \| false \| true` | Disable the composer entirely (non-interactive). |
@@ -750,6 +783,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `data` | — | `undefined \| Record<string, unknown>` | The confirm definition (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { body, tone, actions:[…] }`. Import `ConfirmCardData` from `@kitn.ai/ui` for the full shape. |
 | `cardId` | `card-id` | `undefined \| string` | Stable card id correlating every emitted CardEvent. Attribute: `card-id`. |
 | `heading` | `heading` | `undefined \| string` | Heading rendered in the card chrome (= CardEnvelope.title). Attribute: `heading`. |
@@ -766,6 +800,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `context` | — | `undefined \| { usedTokens: number; maxTokens: number; inputTokens?: undefined \| number; outputTokens?: undefined \| number; reasoningTokens?: undefined \| number; cacheTokens?: undefined \| number; estimatedCost?: undefined \| number }` | Token-usage data. Set as a JS property. |
 | `warnThreshold` | `warn-threshold` | `undefined \| number` | Fraction (0–1) above which the meter turns yellow. Defaults to `0.7` (70%). |
 | `dangerThreshold` | `danger-threshold` | `undefined \| number` | Fraction (0–1) above which the meter turns red. Defaults to `0.9` (90%). |
@@ -784,6 +819,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `groups` | — | `undefined \| { id: string; userId?: undefined \| string; teamId?: undefined \| string; name: string; sortOrder: number; createdAt: string }[]` | The list's section headers (`{ id, name, sortOrder, createdAt }`), rendered in array order. A group carries no conversations of its own; it is matched against `conversations` by id, so the two props are complementary rather than alternatives. Omit for an ungrouped list. Set as a JS property. |
 | `conversations` | — | `{ id: string; title: string; groupId?: undefined \| string; scope: { type: "document" \| "collection"; documentId?: undefined \| string; filters?: undefined \| { tags?: undefined \| string[]; authors?: undefined \| string[]; contentType?: undefined \| "transcript" \| "markdown"; dateRange?: undefined \| { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined \| string }[]` | Every conversation the list renders, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId` falls into a trailing "Ungrouped" section. There is no recency bucketing, and a `groupId` matching no entry in `groups` is not rendered. Set as a JS property. |
 | `activeId` | `active-id` | `undefined \| string` | The id of the currently-open conversation, highlighted in the list. |
@@ -808,6 +844,12 @@ _No events._
 | `empty` | replace | Custom zero-state shown when there are no conversations; replaces the built-in "No conversations yet". |
 | `footer` | inject | A row below the list — account, settings, or usage. |
 
+**Declarative children** (compose these in light DOM instead of setting the JS property):
+
+| Child element | Attributes | Text content | Notes |
+|---|---|---|---|
+| `<kai-conversation>` | `group-id`, `id` | yes | Parse a single light-DOM `<kai-conversation>` element into a `ConversationSummary`. Attribute mapping: - `id` → ConversationSummary.id - `group-id` → ConversationSummary.groupId (optional) - textContent → ConversationSummary.title Required fields not expressible as HTML attributes (`scope`, `messageCount`, `lastMessageAt`, `updatedAt`) receive safe defaults so the rendered list item is fully functional with just `id` + title text. |
+
 **Styleable parts** (restyle from outside via `kai-conversations::part(name)`):
 
 | Part | Description |
@@ -822,6 +864,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `open` | `open` | `undefined \| false \| true` | Drive/observe open state (Shoelace-style: settable + reflected to the `open` attribute; the element still self-manages on Escape/backdrop). Set `el.open = true`, or `<kai-dialog open>`; listen for `kai-open-change`. |
 | `defaultOpen` | `default-open` | `undefined \| false \| true` | Initial open state on mount (uncontrolled seed). |
 
@@ -835,6 +878,7 @@ _No events._
 
 | Slot | Mode | Description |
 |---|---|---|
+| _(default)_ | inject | The dialog body, between the `header` and `footer` slots. |
 | `header` | inject | Optional title region at the top of the panel. |
 | `footer` | inject | Optional actions region at the bottom of the panel. |
 
@@ -856,6 +900,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `value` | `value` | `undefined \| string` | The label text — settable and reflected to the `value` attribute. Read `el.value` for live state. |
 | `editing` | `editing` | `undefined \| false \| true` | Controlled edit state. `el.editing = true` opens the field; reflected to the `editing` attribute. |
 | `placeholder` | `placeholder` | `undefined \| string` | Placeholder shown while editing / when the value is empty. |
@@ -883,6 +928,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `cardId` | `card-id` | `undefined \| string` | Stable card id correlating every emitted event. Set as an attribute or property. |
 | `data` | — | `undefined \| { provider: "generic" \| "youtube" \| "vimeo"; id?: undefined \| string; url?: undefined \| string; title?: undefined \| string; poster?: undefined \| string; start?: undefined \| number; aspectRatio?: undefined \| "16:9" \| "4:3" \| "1:1" \| "9:16" }` | The embed payload (provider + id/url + options). Set as a JS **property** (object). |
 
@@ -896,10 +942,18 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `emptyTitle` | `empty-title` | `undefined \| string` | Title text. Attribute: `empty-title` (`title` is a global HTML attribute). |
 | `description` | `description` | `undefined \| string` | Description text. |
 
 _No events._
+
+**Slots** (project your own markup via `slot="name"` on a light-DOM child):
+
+| Slot | Mode | Description |
+|---|---|---|
+| _(default)_ | inject | The empty-state body below the title/description — usually the call to action. |
+| `media` | replace | The leading illustration or icon above the title (any inline SVG or <img>). Replaces the built-in media box. |
 
 ---
 
@@ -909,6 +963,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `barTitle` | `bar-title` | `undefined \| string` | The banner label (e.g. "Was this helpful?"). Attribute: `bar-title` (`title` is avoided — it's a global HTML attribute). |
 | `collectDetail` | `collect-detail` | `undefined \| false \| true` | When set, a not-helpful vote opens an optional detail form before the thank-you confirmation. Attribute: `collect-detail`. |
 | `categories` | — | `undefined \| string[]` | Optional category chips for the detail form. Set as a JS property (array). |
@@ -933,6 +988,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `files` | — | `{ path: string; url?: undefined \| string; code?: undefined \| string; language?: undefined \| string; type?: undefined \| "html" \| "pdf" \| "image" \| "other"; additions?: undefined \| number; deletions?: undefined \| number; status?: undefined \| "added" \| "modified" \| "deleted" \| "renamed" \| "untracked" }[]` | The files to render. Set as a JS property (array of `{ path, url?, code?, language?, type?, additions?, deletions?, status? }`). |
 | `activeFile` | `active-file` | `undefined \| string` | Selected file path — highlighted in the tree. |
 | `defaultExpanded` | — | `undefined \| string[]` | Folder paths expanded initially. Omit to start with all folders open. |
@@ -961,6 +1017,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `multiple` | `multiple` | `undefined \| false \| true` | Allow selecting multiple files (default true). |
 | `accept` | `accept` | `undefined \| string` | `accept` attribute for the file picker (e.g. `image/*`). |
 | `disabled` | `disabled` | `undefined \| false \| true` | Disable the dropzone — no clicking, no drag-and-drop. |
@@ -972,6 +1029,12 @@ _No events._
 |---|---|---|
 | `kai-files-added` | `CustomEvent<{ files: File[] }>` | Files were picked or dropped. |
 
+**Slots** (project your own markup via `slot="name"` on a light-DOM child):
+
+| Slot | Mode | Description |
+|---|---|---|
+| _(default)_ | inject | Custom dropzone content, replacing the default label (the `label` prop is the fallback). |
+
 ---
 
 ### `kai-form` / `Form`
@@ -980,6 +1043,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `data` | — | `undefined \| Record<string, unknown>` | The form definition — a JSON Schema (`type:'object'`) + `x-kai-*` UI hints (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { type:'object', properties:{…} }`. Import the `FormDefinition` type from `@kitn.ai/ui` for the full shape (it is self-referential, so the element types it loosely). |
 | `cardId` | `card-id` | `undefined \| string` | Stable card id correlating every emitted CardEvent. Attribute: `card-id`. |
 | `heading` | `heading` | `undefined \| string` | Heading rendered in the card chrome (= CardEnvelope.title). Attribute: `heading`. |
@@ -1002,6 +1066,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `openDelay` | `open-delay` | `undefined \| number` | Delay (ms) before the card opens on hover. Defaults to 0 (focus opens it immediately too). |
 | `closeDelay` | `close-delay` | `undefined \| number` | Delay (ms) before it closes after the pointer leaves. Defaults to 300. |
 | `placement` | `placement` | `undefined \| string` | Preferred placement: `'top' \| 'bottom' \| 'left' \| 'right'` (+ optional `-start`/`-end`). Defaults to `'bottom'`; flips to stay in view. |
@@ -1019,6 +1084,7 @@ _No events._
 
 | Slot | Mode | Description |
 |---|---|---|
+| _(default)_ | inject | The TRIGGER the card hovers off. The card body is the `card` slot. |
 | `card` | inject | The rich content shown in the floating hover card. |
 
 ---
@@ -1029,6 +1095,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `name` | `name` | `undefined \| string` | A curated icon name (e.g. `"mic"`, `"globe"`), an image URL/data-URI, or plain text. |
 | `size` | `size` | `undefined \| "sm" \| "md" \| "lg"` | Size token: `sm` \| `md` (default) \| `lg`. |
 
@@ -1048,6 +1115,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `base64` | `base64` | `undefined \| string` | Base64-encoded image data (pair with `media-type`). |
 | `bytes` | — | `undefined \| Uint8Array<ArrayBufferLike>` | Raw image bytes (set as a JS property). |
 | `alt` | `alt` | `undefined \| string` | Alt text. |
@@ -1063,6 +1131,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `type` | `type` | `undefined \| string` | Native input type: `text` (default) · `email` · `url` · `search` · `tel` · `password` · `number`. Single-line only. |
 | `value` | `value` | `undefined \| string` | Controlled value — settable and reflected to the `value` attribute. `el.value = 'hi'` drives it (no event); typing updates it and fires `kai-input`. Read `el.value` for live state. |
 | `placeholder` | `placeholder` | `undefined \| string` | Placeholder shown when empty. |
@@ -1109,11 +1178,18 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `keys` | `keys` | `undefined \| string` | Shortcut spec — tokens joined by `+` (e.g. `Mod+Shift+K`). Omit it to show default-slot content instead. Display only; the element does not bind keys. |
-| `platform` | `platform` | `undefined \| "other" \| "auto" \| "mac"` | `mac` uses ⌘/⌥, `other` uses Ctrl. `auto` (default) sniffs the OS. |
+| `platform` | `platform` | `undefined \| "auto" \| "other" \| "mac"` | `mac` uses ⌘/⌥, `other` uses Ctrl. `auto` (default) sniffs the OS. |
 | `size` | `size` | `undefined \| "sm" \| "md"` | Cap size: `sm` or `md`. Defaults to `md`. |
 
 _No events._
+
+**Slots** (project your own markup via `slot="name"` on a light-DOM child):
+
+| Slot | Mode | Description |
+|---|---|---|
+| _(default)_ | inject | Literal key text, when you are not using the `keys` prop to render key caps. |
 
 **Styleable parts** (restyle from outside via `kai-kbd::part(name)`):
 
@@ -1130,6 +1206,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `cardId` | `card-id` | `undefined \| string` | Stable card id correlating every emitted event. Set as an attribute or property. |
 | `data` | — | `undefined \| { url: string; title?: undefined \| string; description?: undefined \| string; image?: undefined \| string; imageAlt?: undefined \| string; favicon?: undefined \| string; domain?: undefined \| string; siteName?: undefined \| string }` | The link payload (OG metadata). Set as a JS **property** (object). |
 
@@ -1143,6 +1220,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `variant` | `variant` | `undefined \| "circular" \| "classic" \| "pulse" \| "pulse-dot" \| "dots" \| "typing" \| "wave" \| "bars" \| "terminal" \| "text-blink" \| "text-shimmer" \| "loading-dots"` | The animation style: `'circular' \| 'classic' \| 'pulse' \| 'pulse-dot' \| 'dots' \| 'typing' \| 'wave' \| 'bars' \| 'terminal' \| 'text-blink' \| 'text-shimmer' \| 'loading-dots'`. Defaults to `'circular'`. |
 | `size` | `size` | `undefined \| "sm" \| "md" \| "lg"` | Loader size: `'sm' \| 'md' \| 'lg'`. Defaults to `'md'`. |
 | `text` | `text` | `undefined \| string` | Label for the text-based variants. |
@@ -1157,6 +1235,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `content` | `content` | `string` | The markdown source to render. |
 | `proseSize` | `prose-size` | `undefined \| "sm" \| "lg" \| "xs" \| "base"` | Text/markdown sizing. |
 | `codeTheme` | `code-theme` | `undefined \| string` | Shiki theme for fenced code blocks. |
@@ -1172,6 +1251,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `items` | — | `undefined \| { id?: undefined \| string; label?: undefined \| string; icon?: undefined \| string; shortcut?: undefined \| string; checked?: undefined \| false \| true; radioGroup?: undefined \| string; disabled?: undefined \| false \| true; separator?: undefined \| false \| true; heading?: undefined \| false \| true; items?: undefined \| Record<string, unknown>[] }[]` | Tree of menu items. Set as a JS property — not an HTML attribute. |
 | `placement` | `placement` | `undefined \| string` | Optional placement hint (unused by the underlying Dropdown which always positions bottom-start, kept for future extension). |
 | `triggerIcon` | `trigger-icon` | `undefined \| string` | Built-in trigger: leading icon (a named icon like `"plus"`, an image URL/data-URI, or text). Use this instead of slotting `slot="trigger"` for the common case — a slotted trigger overrides it. |
@@ -1209,6 +1289,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `message` | — | `undefined \| { id: string; role: "user" \| "assistant"; parts: ({ type: "text"; text: string; raw?: undefined \| { source: string; payload: unknown } } \| { type: "reasoning"; text: string; label?: undefined \| string; index?: undefined \| number; streamId?: undefined \| string; signature?: undefined \| string; raw?: undefined \| { source: string; payload: unknown } } \| { type: "tool"; tool: { type: string; kind?: undefined \| "image" \| "command" \| "file-change" \| "search" \| "fetch" \| "mcp" \| "generic"; state: "input-streaming" \| "input-available" \| "output-available" \| "output-error"; input?: undefined \| Record<string, unknown>; rawInput?: undefined \| string; output?: undefined \| Record<string, unknown>; toolCallId?: undefined \| string; errorText?: undefined \| string; raw?: undefined \| { source: string; payload: unknown } }; raw?: undefined \| { source: string; payload: unknown } } \| { type: "card"; envelope: { type: string; id: string; data: unknown; title?: undefined \| string; resolution?: undefined \| { kind: "action"; action: string; payload?: unknown; at?: undefined \| string } \| { kind: "submit"; data: unknown; at?: undefined \| string } \| { kind: "dismissed"; at?: undefined \| string } \| { kind: "expired"; reason?: undefined \| string; at?: undefined \| string } }; raw?: undefined \| { source: string; payload: unknown } } \| { type: "source"; source: { id?: undefined \| string; url?: undefined \| string; title?: undefined \| string; snippet?: undefined \| string; index?: undefined \| number }; raw?: undefined \| { source: string; payload: unknown } } \| { type: "file"; attachment: { id: string; type: "file" \| "source-document"; filename?: undefined \| string; mediaType?: undefined \| string; url?: undefined \| string; title?: undefined \| string }; raw?: undefined \| { source: string; payload: unknown } })[]; actions?: undefined \| ("copy" \| "like" \| "dislike" \| "regenerate" \| "edit" \| { id: string; label: string; icon?: undefined \| string; tooltip?: undefined \| string })[]; avatar?: undefined \| { src?: undefined \| string; fallback?: undefined \| string; alt?: undefined \| string }; feedback?: undefined \| "like" \| "dislike" }` | The full message object. Set as a JS property. |
 | `role` | `role` | `undefined \| "user" \| "assistant"` | Convenience for simple cases when not passing a `message` object. |
 | `markdown` | `markdown` | `undefined \| false \| true` | Force markdown on/off. Defaults to on for assistant, off for user. |
@@ -1235,6 +1316,12 @@ _No events._
 | `after-body` | inject | A row at the BOTTOM of the body, below the action bar — a citation/sources row, a token-cost/latency line. |
 | `avatar` | replace | Replaces the built-in avatar rail with your own node. Use `avatar="none"` to omit the rail and let the body span the full row. |
 
+**Declarative children** (compose these in light DOM instead of setting the JS property):
+
+| Child element | Attributes | Text content | Notes |
+|---|---|---|---|
+| `<kai-action>` | `action`, `icon`, `id`, `label`, `tooltip` | yes |  |
+
 **Styleable parts** (restyle from outside via `kai-message::part(name)`):
 
 | Part | Description |
@@ -1253,6 +1340,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `models` | — | `{ id: string; name: string; provider?: undefined \| string; description?: undefined \| string; group?: undefined \| string }[]` | The selectable models. Set as a JS property (array). |
 | `currentModel` | `current-model` | `undefined \| string` | The currently-selected model id. Defaults to the first model. |
 | `open` | `open` | `undefined \| false \| true` | Drive/observe the dropdown's open state (Shoelace-style: settable + reflected to the `open` attribute, the dropdown still self-manages on click/keyboard). Set `el.open = true`, or `<kai-model-switcher open>`; listen for `kai-open-change`. |
@@ -1266,6 +1354,12 @@ _No events._
 | `kai-model-change` | `CustomEvent<{ modelId: string }>` | A model was selected. |
 | `kai-open-change` | `CustomEvent<{ open: false \| true }>` | The model dropdown opened or closed (by click, keyboard, Escape, outside-click, or a method). |
 
+**Declarative children** (compose these in light DOM instead of setting the JS property):
+
+| Child element | Attributes | Text content | Notes |
+|---|---|---|---|
+| `<kai-model>` | `description`, `group`, `id`, `provider` | yes | Parse a single light-DOM `<kai-model>` element into a `ModelOption` descriptor. Attribute mapping: - `id` → ModelOption.id - textContent → ModelOption.name - `provider` → ModelOption.provider (optional) - `description` → ModelOption.description (optional subtitle) - `group` → ModelOption.group (optional collapsible section) |
+
 ---
 
 ### `kai-nav` / `Nav`
@@ -1274,6 +1368,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `items` | — | `undefined \| { id: string; label?: undefined \| string; icon?: undefined \| string; badge?: undefined \| string; trailing?: undefined \| string; disabled?: undefined \| false \| true; children?: undefined \| Record<string, unknown>[]; status?: undefined \| { tone: "error" \| "primary" \| "info" \| "success" \| "warning" \| "neutral"; label?: undefined \| string; pulse?: undefined \| false \| true }; meta?: undefined \| string; action?: undefined \| { icon: string; label: string }; closable?: undefined \| false \| true }[]` | The nav items. Set as a JS property (array, not an attribute). Each item may carry `children` (a collapsible group), a `status` dot, and trailing `meta` text. |
 | `value` | `value` | `undefined \| string` | Active item id (controlled). |
 | `defaultValue` | `default-value` | `undefined \| string` | Initial active id when uncontrolled. |
@@ -1307,6 +1402,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `severity` | `severity` | `undefined \| "error" \| "info" \| "success" \| "warning" \| "neutral"` | `neutral` (default) · `info` · `warning` · `error` · `success`. Drives the leading icon's color and the a11y role (`alert` for errors, else `status`). |
 | `icon` | `icon` | `undefined \| string` | Leading icon: omit for the severity default, `"none"` to hide it, or a named icon to override. |
 | `dismissible` | `dismissible` | `undefined \| false \| true` | Show a dismiss (×) that hides the notice and emits `kai-dismiss`. |
@@ -1321,6 +1417,7 @@ _No events._
 
 | Slot | Mode | Description |
 |---|---|---|
+| _(default)_ | inject | The notice message. `icon` and `action` are the named seams around it. |
 | `action` | inject | A trailing action beside the message — a link or button. |
 | `icon` | replace | A custom leading icon (any inline SVG, inherits `currentColor`). Overrides the severity default and the `icon` prop — the same escape hatch as `kai-button`. |
 
@@ -1332,6 +1429,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `headline` | `headline` | `undefined \| string` | The pane title (the agent / window name). Named `headline` because `title` collides with the global `HTMLElement.title` attribute (it throws at registration). Attribute: `headline`. |
 | `subtitle` | `subtitle` | `undefined \| string` | A role / label shown under the title (e.g. "Reviewer", "claude-sonnet"). Attribute: `subtitle`. |
 | `maximized` | `maximized` | `undefined \| false \| true` | Show the restore glyph instead of maximize, and signal the maximized view-state. Drive it yourself in response to `kai-maximize`. Attribute: `maximized`. |
@@ -1353,6 +1451,7 @@ _No events._
 
 | Slot | Mode | Description |
 |---|---|---|
+| _(default)_ | inject | The pane body, below the header row. |
 | `leading` | inject | A glyph or avatar at the start of the pane header. |
 | `actions` | inject | Extra header controls, before the built-in window controls. |
 | `footer` | inject | A pinned row below the body (e.g. a composer). |
@@ -1374,6 +1473,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `tabs` | — | `undefined \| { id: string; name: string; status?: undefined \| { tone: "working" \| "idle" \| "done" \| "error" \| "blocked"; label?: undefined \| string; pulse?: undefined \| false \| true }; needsAttention?: undefined \| false \| true; number?: undefined \| number }[]` | The tabs to render. An array of `{ id, name, status?, needsAttention?, number? }` set as a JS PROPERTY (not an HTML attribute). |
 | `active` | `active` | `undefined \| string` | The active tab id (controlled, and reflected to the `active` ATTRIBUTE so `::part`/`[active]` selectors and the per-tab named slot follow it). Set it as the `active` attribute or drive it from `kai-tab-change`; omit for uncontrolled (the first tab). |
 | `focused` | `focused` | `undefined \| false \| true` | Highlight the frame as the ACTIVE group in a multi-group layout. Attribute: `focused`. |
@@ -1385,6 +1485,12 @@ _No events._
 | `kai-tab-change` | `CustomEvent<{ id: string }>` | A tab was selected (click, Enter/Space, or arrow-key move). `detail.id` is the tab's id. |
 | `kai-tab-close` | `CustomEvent<{ id: string }>` | A tab's close (×) was clicked. Drop the tab from `tabs` yourself. |
 | `kai-tab-menu` | `CustomEvent<{ id: string }>` | A tab's "…" overflow was clicked. Open your own menu from `detail.id`. |
+
+**Slots** (project your own markup via `slot="name"` on a light-DOM child):
+
+| Slot | Mode | Description |
+|---|---|---|
+| _(default)_ | inject | Content shown for every tab. Use it INSTEAD of the per-tab `slot="<tab id>"` seams when you swap the content yourself. |
 
 **Styleable parts** (restyle from outside via `kai-pane-group::part(name)`):
 
@@ -1404,6 +1510,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `placement` | `placement` | `undefined \| "top" \| "right" \| "bottom" \| "left" \| "top-start" \| "top-end" \| "right-start" \| "right-end" \| "bottom-start" \| "bottom-end" \| "left-start" \| "left-end"` | Floating placement relative to the trigger (floating-ui placement). |
 | `gutter` | `gutter` | `undefined \| number` | Gap in px between the trigger and the panel. |
 | `open` | `open` | `undefined \| false \| true` | Drive/observe open state (Shoelace-style: settable + reflected to the `open` attribute, the element still self-manages on click). Set `el.open = true`, or `<kai-popover open>`; listen for `kai-open-change`. |
@@ -1416,6 +1523,13 @@ _No events._
 |---|---|---|
 | `kai-open-change` | `CustomEvent<{ open: false \| true }>` | The popover opened or closed (click, Escape, outside-click, or a method). |
 
+**Slots** (project your own markup via `slot="name"` on a light-DOM child):
+
+| Slot | Mode | Description |
+|---|---|---|
+| _(default)_ | inject | The popover panel body. The control that opens it is the `trigger` slot. |
+| `trigger` | replace | The control that opens the popover (a button, an avatar, …). The panel anchors to it. |
+
 ---
 
 ### `kai-progress-bar` / `ProgressBar`
@@ -1424,6 +1538,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `value` | `value` | `undefined \| number` | Current progress value (0..max). Attribute: `value`. |
 | `max` | `max` | `undefined \| number` | The value `value` runs to (default 100). Attribute: `max`. |
 | `label` | `label` | `undefined \| string` | Optional caption above the track. Attribute: `label`. |
@@ -1446,6 +1561,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `frame` | `frame` | `undefined \| "none" \| "inset" \| "edge"` | How the tray frames the input — the SPATIAL inset axis: `inset` (default, the classic recessed frame on every side) \| `edge` (top/bottom inset only; the input sits flush left/right so the lips span the full width) \| `none` (no inset; the lips attach directly as a plain stack). Attribute: `frame`. |
 | `appearance` | `appearance` | `undefined \| "outlined" \| "filled" \| "plain" \| "soft"` | How the tray surface looks — the VISUAL axis, orthogonal to `frame`: `soft` (default, sunken surface + border + radius) \| `outlined` (transparent + border + radius) \| `filled` (sunken, no border, + radius) \| `plain` (bare). Attribute: `appearance`. |
 
@@ -1455,6 +1571,7 @@ _No events._
 
 | Slot | Mode | Description |
 |---|---|---|
+| _(default)_ | inject | The input the dock wraps — typically a `<kai-prompt-input>`. The `top`/`bottom` slots are the lips around it. |
 | `top` | inject | The top lip: a notice or banner above the input. Rendered only when filled. |
 | `bottom` | inject | The bottom lip: a mode or controls row below the input. Rendered only when filled. |
 
@@ -1474,6 +1591,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `value` | — | `undefined \| string \| ({ type: "text"; text: string } \| { type: "entity"; entity: { kind: string; id: string; label: string; icon?: undefined \| string; promptText?: undefined \| string; data?: undefined \| Record<string, unknown> } })[]` | Value of the input, as a JS property. A **string** is the controlled text mirror (the host owns it and updates on `kai-value-change`). A **ComposerDoc** (array of text/entity segments) is a one-time **seed** that pre-populates pills (skills/agents/plugins); the user then edits freely. Leave unset for uncontrolled behavior. `kai-submit`/`kai-value-change` always emit `value` as the flattened string (back-compat) plus the structured `doc` + `entities`. |
 | `placeholder` | `placeholder` | `undefined \| string` | Placeholder text shown in the empty input. |
 | `disabled` | `disabled` | `undefined \| false \| true` | Disable the input and submit button entirely (non-interactive). |
@@ -1483,7 +1601,7 @@ _No events._
 | `search` | `search` | `undefined \| false \| true` | Show a Search (Globe) button in the left toolbar; clicking it fires a `search` event. |
 | `voice` | `voice` | `undefined \| false \| true` | Show a Voice (Mic) button in the left toolbar; clicking it fires a `voice` event. |
 | `stoppable` | `stoppable` | `undefined \| false \| true` | When set and `loading` is true, the send button is replaced by a Stop button (square icon, "Stop" aria-label). Clicking it fires `kai-stop`. |
-| `submit` | `submit` | `undefined \| "always" \| "auto"` | Send-button visibility. `'always'` (default) always shows it; `'auto'` shows it only when there's text/attachments (an empty composer hides it — Enter still submits). To hide it entirely (Enter-only), it's pure CSS: `::part(send){display:none}` — no prop needed. Restyle via `::part(send)`. The Stop button (`stoppable` + `loading`) is unaffected. |
+| `submit` | `submit` | `undefined \| "auto" \| "always"` | Send-button visibility. `'always'` (default) always shows it; `'auto'` shows it only when there's text/attachments (an empty composer hides it — Enter still submits). To hide it entirely (Enter-only), it's pure CSS: `::part(send){display:none}` — no prop needed. Restyle via `::part(send)`. The Stop button (`stoppable` + `loading`) is unaffected. |
 | `attach` | `attach` | `undefined \| false \| true` | When `false`, hides the built-in paperclip attach button even though the element otherwise supports attachments. Use this when a `+` menu in `toolbar-start` already exposes "Add files", to avoid a duplicate control. Defaults to `true`. |
 | `attachments` | — | `undefined \| { id: string; type: "file" \| "source-document"; filename?: undefined \| string; mediaType?: undefined \| string; url?: undefined \| string; title?: undefined \| string }[]` | Attachments to seed the input with (so a consumer can pre-populate staged files without an upload). Set as a JS property; the element then manages its own attachment state from there (add via the paperclip, remove per chip). |
 | `triggers` | — | `undefined \| { char: string; kind: string; items?: undefined \| { id: string; label: string; icon?: undefined \| string; description?: undefined \| string; group?: undefined \| string; kind?: undefined \| string; promptText?: undefined \| string; data?: undefined \| Record<string, unknown> }[] }[]` | Rich entity triggers — each `{ char, kind, items }` opens a caret-anchored menu that inserts an atomic pill. Convention: `/` → skills, `@` → agents (plugins are the grouping/provenance of those items). Set as a JS property. |
@@ -1510,6 +1628,12 @@ _No events._
 | `toolbar-start` | inject | Leading controls in the input toolbar — where a + menu goes. |
 | `toolbar-end` | inject | Trailing controls in the toolbar, before the Send button. |
 
+**Declarative children** (compose these in light DOM instead of setting the JS property):
+
+| Child element | Attributes | Text content | Notes |
+|---|---|---|---|
+| `<kai-action>` | `action`, `icon`, `id`, `label`, `tooltip` | yes |  |
+
 **Styleable parts** (restyle from outside via `kai-prompt-input::part(name)`):
 
 | Part | Description |
@@ -1524,6 +1648,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `text` | `text` | `string` | The reasoning text to display. |
 | `label` | `label` | `undefined \| string` | Trigger label. |
 | `open` | `open` | `undefined \| false \| true` | Drive/observe open state (Shoelace-style: settable + reflected to the `open` attribute; the element still self-manages on trigger click + while streaming). Set `el.open = true`; listen for `kai-open-change`. |
@@ -1546,6 +1671,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `src` | `src` | `undefined \| string` | The remote card URL. Attribute: `src`. |
 | `providerOrigin` | `provider-origin` | `undefined \| string` | Exact provider origin (https: or http://localhost for dev). Attribute: `provider-origin`. |
 | `envelope` | — | `undefined \| Record<string, unknown>` | The card envelope to render. JS property only. |
@@ -1561,6 +1687,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `orientation` | `orientation` | `undefined \| "vertical" \| "horizontal"` | Layout axis: `horizontal` (row, default) or `vertical` (column). |
 | `maximizedIndex` | — | `undefined \| null \| number` | Which item index is maximized (null = none). Declarative source of truth. |
 | `handle` | `handle` | `undefined \| "none" \| "line" \| "grip"` | Divider affordance drawn inside each draggable handle's 8px grab zone: - `line` (default) — a 1px hairline, transparent at rest, tinting on hover/drag. - `grip` — a dotted grip handle. - `none` — no visible divider, just the invisible hit-area. The full grab zone and keyboard/ARIA behavior are identical for all three. |
@@ -1571,6 +1698,13 @@ _No events._
 |---|---|---|
 | `kai-change` | `CustomEvent<{ sizes: number[] }>` | Fired on drag-end / keyboard resize / visibility change. `detail.sizes` = panel sizes in percent. |
 | `kai-maximize-change` | `CustomEvent<{ maximized: false \| true; index: null \| number }>` | Observe layout maximize state. |
+| `kai-maximize-state` | `CustomEvent<{ maximized: false \| true }>` | Authoritative maximize state, dispatched as a raw composed CustomEvent (not through `dispatch`) onto the affected `<kai-resizable-item>` and, on restore, onto the group host. A nested element (e.g. `<kai-artifact>`) listens for it to reconcile its own toggle. |
+
+**Slots** (project your own markup via `slot="name"` on a light-DOM child):
+
+| Slot | Mode | Description |
+|---|---|---|
+| _(default)_ | inject | The `<kai-resizable-item>` panels, in order. Dividers are inserted between them. |
 
 ---
 
@@ -1580,6 +1714,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `size` | `size` | `undefined \| string` | Initial main-axis size: `"280px"` (fixed) or `"25%"`/`25` (percent). Omitted → flexible. |
 | `min` | `min` | `undefined \| string` | Minimum size during resize (px or %). |
 | `max` | `max` | `undefined \| string` | Maximum size during resize (px or %). |
@@ -1593,6 +1728,13 @@ _No events._
 |---|---|---|
 | `kai-change` | `CustomEvent<unknown>` |  |
 | `kai-maximize-change` | `CustomEvent<unknown>` |  |
+| `kai-maximize-state` | `CustomEvent<unknown>` |  |
+
+**Slots** (project your own markup via `slot="name"` on a light-DOM child):
+
+| Slot | Mode | Description |
+|---|---|---|
+| _(default)_ | inject | This panel's content. |
 
 ---
 
@@ -1602,6 +1744,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `text` | — | `undefined \| string \| AsyncIterable<string>` | Text to stream. A string, or an `AsyncIterable<string>` (set as a JS property — async iterables can't be HTML attributes). |
 | `mode` | `mode` | `undefined \| "typewriter" \| "fade"` | Reveal animation. |
 | `speed` | `speed` | `undefined \| number` | Characters/segments per tick. |
@@ -1621,6 +1764,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `availableAuthors` | — | `string[]` | Authors to offer as scope filters. Set as a JS property. |
 | `availableTags` | — | `string[]` | Tags to offer as scope filters. Set as a JS property. |
 | `currentLabel` | `current-label` | `undefined \| string` | The label shown on the trigger for the active scope. |
@@ -1643,6 +1787,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `open` | `open` | `undefined \| false \| true` | Drive/observe open state (Shoelace-style: settable + reflected to the `open` attribute; the element still self-manages). Set `el.open = true`, or `<kai-screen open>`; listen for `kai-open-change`. |
 | `defaultOpen` | `default-open` | `undefined \| false \| true` | Initial open state on mount (uncontrolled seed). |
 | `headline` | `headline` | `undefined \| string` | Header title text. A projected `title` slot overrides it. (Named `headline` because `title` collides with the global `HTMLElement.title` attribute.) |
@@ -1660,6 +1805,7 @@ _No events._
 
 | Slot | Mode | Description |
 |---|---|---|
+| _(default)_ | inject | The screen body, below the title bar. |
 | `title` | replace | Rich header title; overrides the `headline` prop. |
 | `actions` | inject | Header trailing cluster (e.g. an avatar or overflow menu). |
 
@@ -1680,9 +1826,16 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `orientation` | `orientation` | `undefined \| "vertical" \| "horizontal" \| "both"` | Which axis scrolls. `vertical` (default) · `horizontal` · `both`. The cross axis is clamped so content can't overflow it. |
 
 _No events._
+
+**Slots** (project your own markup via `slot="name"` on a light-DOM child):
+
+| Slot | Mode | Description |
+|---|---|---|
+| _(default)_ | inject | The scrollable content. |
 
 **Styleable parts** (restyle from outside via `kai-scroll-area::part(name)`):
 
@@ -1698,6 +1851,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `for` | `for` | `undefined \| string` | CSS id of the scroll container to control. When omitted the element walks up the DOM (outside its own shadow root) to find the nearest scrollable ancestor. Mirrors the `for` convention of `<label for="...">`. |
 | `variant` | `variant` | `undefined \| "default" \| "ghost" \| "outline"` | Button visual variant: `'outline' \| 'ghost' \| 'default'`. Defaults to `'outline'`. |
 | `size` | `size` | `undefined \| "sm" \| "md" \| "lg" \| "icon" \| "icon-sm"` | Button size token. Defaults to `'icon'` (square). |
@@ -1716,6 +1870,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `value` | `value` | `undefined \| string` | Controlled query — settable and reflected to the `value` attribute. Read `el.value` for live state. |
 | `placeholder` | `placeholder` | `undefined \| string` | Placeholder. Defaults to `Search…`. |
 | `icon` | `icon` | `undefined \| string` | Leading icon-NAME string (a curated name, URL, or text), resolved to a glyph the same way `kai-button`'s `icon` is. Defaults to `search`. |
@@ -1747,6 +1902,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `options` | — | `{ value: string; label: string; icon?: undefined \| string }[]` | The selectable segments, left to right. Set as a JS property (array). |
 | `value` | `value` | `undefined \| string` | Controlled selected `value` — settable and reflected to the `value` attribute. `el.value = 'preview'` drives it; choosing a segment updates it and fires `kai-change`. Read `el.value` for live state. |
 | `size` | `size` | `undefined \| "sm" \| "md"` | Control density: `sm` or `md`. Defaults to `md`. |
@@ -1772,6 +1928,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `orientation` | `orientation` | `undefined \| "vertical" \| "horizontal"` | `horizontal` (default, block + full-width) or `vertical` (a rule inside a flex/grid row — it stretches to the row height). |
 
 _No events._
@@ -1790,6 +1947,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `label` | `label` | `undefined \| string` | Row label (primary text). Attribute: `label`. |
 | `description` | `description` | `undefined \| string` | Optional secondary description under the label. Attribute: `description`. |
 
@@ -1816,10 +1974,17 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `heading` | `heading` | `undefined \| string` | Small section heading shown above the card. Attribute: `heading`. |
 | `description` | `description` | `undefined \| string` | Optional muted description under the heading. Attribute: `description`. |
 
 _No events._
+
+**Slots** (project your own markup via `slot="name"` on a light-DOM child):
+
+| Slot | Mode | Description |
+|---|---|---|
+| _(default)_ | inject | The `<kai-setting-item>` rows in this group. |
 
 **Styleable parts** (restyle from outside via `kai-settings-group::part(name)`):
 
@@ -1836,6 +2001,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `variant` | `variant` | `undefined \| "text" \| "rect" \| "circle"` | `text` (one or more lines), `rect` (a block), or `circle` (round). Defaults to `text`. |
 | `width` | `width` | `undefined \| string` | CSS width (e.g. `'12rem'`, `'60%'`). Defaults to full width (responsive); for `circle` it is the diameter. |
 | `height` | `height` | `undefined \| string` | CSS height. Defaults per variant (a text line height; circle = width). |
@@ -1857,9 +2023,16 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `skills` | — | `{ id: string; name: string }[]` | The active skills to badge. Set as a JS property. |
 
 _No events._
+
+**Declarative children** (compose these in light DOM instead of setting the JS property):
+
+| Child element | Attributes | Text content | Notes |
+|---|---|---|---|
+| `<kai-skill>` | `id` | yes | Parse a single light-DOM `<kai-skill>` element into a `Skill` descriptor. Attribute / content mapping: - `id` → Skill.id (falls back to `name` when absent) - `textContent` → Skill.name (the human-readable badge label) Example: `<kai-skill id="web-search">Web Search</kai-skill>` |
 
 ---
 
@@ -1869,6 +2042,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `href` | `href` | `undefined \| string` | The URL this citation links to (the domain also seeds the default label/favicon). |
 | `label` | `label` | `undefined \| string` | Trigger label (defaults to the domain). |
 | `headline` | `headline` | `undefined \| string` | Hover-card headline. Attribute: `headline` (`title` is avoided — it's a global HTML attribute that reflects in a CE constructor and breaks it). |
@@ -1885,11 +2059,18 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `sources` | — | `{ href: string; title?: undefined \| string; description?: undefined \| string; label?: undefined \| string; showFavicon?: undefined \| false \| true }[]` | The sources to render. Set as a JS property. |
 | `showFavicon` | `show-favicon` | `undefined \| false \| true` | Show favicons on all items (per-item `showFavicon` overrides). |
 | `numbered` | `numbered` | `undefined \| false \| true` | When true, each citation chip is labelled with its 1-based index in the merged (prop + declarative-children) list (`[1]`, `[2]`, …) instead of the per-item `label` or domain fallback. HTML attribute: `numbered` (boolean — bare attribute or `numbered="true"`). JS property: `el.numbered = true`. |
 
 _No events._
+
+**Declarative children** (compose these in light DOM instead of setting the JS property):
+
+| Child element | Attributes | Text content | Notes |
+|---|---|---|---|
+| `<kai-source>` | `description`, `headline`, `href`, `label`, `show-favicon` | — | Parse a single light-DOM `<kai-source>` element into a `KaiSourceItem` descriptor. Attribute mapping: - `href` → KaiSourceItem.href - `label` → KaiSourceItem.label - `headline` → KaiSourceItem.title (matches kai-source's prop name; "title" is a reserved HTMLElement attribute so kai-source uses "headline") - `description` → KaiSourceItem.description - `show-favicon`→ KaiSourceItem.showFavicon (bare boolean attribute) |
 
 ---
 
@@ -1899,6 +2080,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `status` | `status` | `undefined \| "new" \| "online" \| "busy" \| "away" \| "offline"` | Presence/notification state → color. `new` (default) maps to the blue hue. |
 | `pulse` | `pulse` | `undefined \| false \| true` | Animated ping ring (off by default; respects prefers-reduced-motion). |
 | `label` | `label` | `undefined \| string` | Accessible name. Without it the dot is decorative. |
@@ -1920,6 +2102,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `suggestions` | — | `(string \| { label: string; value?: undefined \| string; icon?: undefined \| string })[]` | The suggestions. Strings, or `{ label, value }` when the displayed text and the emitted value differ. Set as a JS property. |
 | `variant` | `variant` | `undefined \| "default" \| "ghost" \| "outline"` | Chip style: `'outline'` (default), `'ghost'`, or `'default'` (filled). |
 | `size` | `size` | `undefined \| "md" \| "lg"` | Row height for `layout="list"`: `'md'` (default) or `'lg'` for taller rows. Chips are unaffected. |
@@ -1933,6 +2116,12 @@ _No events._
 |---|---|---|
 | `kai-select` | `CustomEvent<{ value: string }>` | A suggestion was clicked. |
 
+**Declarative children** (compose these in light DOM instead of setting the JS property):
+
+| Child element | Attributes | Text content | Notes |
+|---|---|---|---|
+| `<kai-suggestion>` | `icon`, `value` | yes | Parse a single `<kai-suggestion>` node into an `Item` descriptor. |
+
 ---
 
 ### `kai-switch` / `Switch`
@@ -1941,6 +2130,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `checked` | `checked` | `undefined \| false \| true` | Controlled checked state — settable and reflected to the `checked` attribute. `el.checked = true` (or `<kai-switch checked>`) drives it; the toggle UI updates it and fires `kai-change`. Read `el.checked` for live state. |
 | `defaultChecked` | `default-checked` | `undefined \| false \| true` | Initial checked state on mount (uncontrolled seed). Bare attribute (`<kai-switch default-checked>`) turns it on. |
 | `disabled` | `disabled` | `undefined \| false \| true` | Disable interaction. |
@@ -1962,6 +2152,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `items` | — | `undefined \| { id: string; label?: undefined \| string; icon?: undefined \| string; disabled?: undefined \| false \| true }[]` | Tabs to render. Set as a JS property, not an HTML attribute. |
 | `value` | `value` | `undefined \| string` | Controlled selected id. Set as a JS property (or the `value` attribute); drive it from your app in response to `kai-tab-change`. Omit for uncontrolled. |
 | `defaultValue` | `default-value` | `undefined \| string` | Initial selected id when uncontrolled (use the `default-value` attribute in plain HTML). |
@@ -1990,6 +2181,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `data` | — | `undefined \| Record<string, unknown>` | The tasks definition (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { tasks:[…], selectAll, confirmLabel, … }`. Import `TasksCardData` from `@kitn.ai/ui` for the full shape. |
 | `cardId` | `card-id` | `undefined \| string` | Stable card id correlating every emitted CardEvent. Attribute: `card-id`. |
 | `heading` | `heading` | `undefined \| string` | Heading rendered in the card chrome (= CardEnvelope.title). Attribute: `heading`. |
@@ -2013,6 +2205,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `text` | `text` | `undefined \| string` | The text to shimmer. |
 | `as` | `as` | `undefined \| string` | Element tag to render as (default `span`). |
 | `duration` | `duration` | `undefined \| number` | Animation duration in seconds. |
@@ -2028,6 +2221,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `text` | `text` | `undefined \| string` | The shimmering label, e.g. "Thinking…". |
 | `stoppable` | `stoppable` | `undefined \| false \| true` | When true, show a "stop" affordance that fires a `stop` event. |
 | `stopLabel` | `stop-label` | `undefined \| string` | Label for the stop affordance. |
@@ -2046,6 +2240,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `messages` | — | `undefined \| { id: string; role: "user" \| "assistant"; parts: ({ type: "text"; text: string; raw?: undefined \| { source: string; payload: unknown } } \| { type: "reasoning"; text: string; label?: undefined \| string; index?: undefined \| number; streamId?: undefined \| string; signature?: undefined \| string; raw?: undefined \| { source: string; payload: unknown } } \| { type: "tool"; tool: { type: string; kind?: undefined \| "image" \| "command" \| "file-change" \| "search" \| "fetch" \| "mcp" \| "generic"; state: "input-streaming" \| "input-available" \| "output-available" \| "output-error"; input?: undefined \| Record<string, unknown>; rawInput?: undefined \| string; output?: undefined \| Record<string, unknown>; toolCallId?: undefined \| string; errorText?: undefined \| string; raw?: undefined \| { source: string; payload: unknown } }; raw?: undefined \| { source: string; payload: unknown } } \| { type: "card"; envelope: { type: string; id: string; data: unknown; title?: undefined \| string; resolution?: undefined \| { kind: "action"; action: string; payload?: unknown; at?: undefined \| string } \| { kind: "submit"; data: unknown; at?: undefined \| string } \| { kind: "dismissed"; at?: undefined \| string } \| { kind: "expired"; reason?: undefined \| string; at?: undefined \| string } }; raw?: undefined \| { source: string; payload: unknown } } \| { type: "source"; source: { id?: undefined \| string; url?: undefined \| string; title?: undefined \| string; snippet?: undefined \| string; index?: undefined \| number }; raw?: undefined \| { source: string; payload: unknown } } \| { type: "file"; attachment: { id: string; type: "file" \| "source-document"; filename?: undefined \| string; mediaType?: undefined \| string; url?: undefined \| string; title?: undefined \| string }; raw?: undefined \| { source: string; payload: unknown } })[]; actions?: undefined \| ("copy" \| "like" \| "dislike" \| "regenerate" \| "edit" \| { id: string; label: string; icon?: undefined \| string; tooltip?: undefined \| string })[]; avatar?: undefined \| { src?: undefined \| string; fallback?: undefined \| string; alt?: undefined \| string }; feedback?: undefined \| "like" \| "dislike" }[]` | The full message thread to render, newest last. Each entry carries its role, ordered `parts`, and optional actions/avatar/feedback. Set as a JS property (`el.messages = [...]`); a NEW array reference per streaming chunk re-renders (mutating in place does not). |
 | `loading` | `loading` | `undefined \| false \| true` | Show a typing indicator on the pending assistant turn — set while awaiting the assistant's reply. |
 | `proseSize` | `prose-size` | `undefined \| "sm" \| "lg" \| "xs" \| "base"` | Body/prose font scale for rendered markdown (`'xs' \| 'sm' \| 'base' \| 'lg'`). Defaults to `'sm'`. |
@@ -2076,6 +2271,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `toasts` | — | `{ id: string; message: string; variant?: undefined \| "error" \| "info" \| "success" \| "warning" \| "neutral"; appearance?: undefined \| "card" \| "pill"; inverse?: undefined \| false \| true; description?: undefined \| string; action?: undefined \| { label: string; onAction: () => void \| false }; duration?: undefined \| number; dismissible?: undefined \| false \| true; target?: undefined \| HTMLElement }[]` | The toasts to render. Newest is shown on top. Set as a JS property (array); pass a new array reference to update. |
 | `position` | `position` | `undefined \| "top-center" \| "top-right" \| "top-left" \| "bottom-center" \| "bottom-right" \| "bottom-left"` | Stack anchor: `'top-center'` (default), `'top-right'`, `'bottom-center'`, … |
 | `max` | `max` | `undefined \| number` | Max simultaneously-visible toasts; the rest queue. Defaults to `3`. |
@@ -2099,6 +2295,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `tool` | — | `undefined \| { type: string; kind?: undefined \| "image" \| "command" \| "file-change" \| "search" \| "fetch" \| "mcp" \| "generic"; state: "input-streaming" \| "input-available" \| "output-available" \| "output-error"; input?: undefined \| Record<string, unknown>; rawInput?: undefined \| string; output?: undefined \| Record<string, unknown>; toolCallId?: undefined \| string; errorText?: undefined \| string; raw?: undefined \| { source: string; payload: unknown } }` | The tool-call to display. Set as a JS property. |
 | `open` | `open` | `undefined \| false \| true` | Drive/observe open state (Shoelace-style: settable + reflected to the `open` attribute; the element still self-manages on trigger click). Set `el.open = true`, or `<kai-tool open>`; listen for `kai-open-change`. |
 | `defaultOpen` | `default-open` | `undefined \| false \| true` | Initial open state on mount (uncontrolled seed). |
@@ -2118,6 +2315,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `content` | `content` | `undefined \| string` | The hint text shown on hover/focus of the slotted trigger. |
 | `openDelay` | `open-delay` | `undefined \| number` | Delay (ms) before the tooltip appears on hover. Defaults to 600. Focus shows it immediately regardless. |
 | `closeDelay` | `close-delay` | `undefined \| number` | Delay (ms) before it hides after the pointer leaves. Defaults to 0 (hides immediately). |
@@ -2132,6 +2330,12 @@ _No events._
 |---|---|---|
 | `kai-open-change` | `CustomEvent<{ open: false \| true }>` | The tooltip opened or closed (by hover/focus, outside-click, or a method). |
 
+**Slots** (project your own markup via `slot="name"` on a light-DOM child):
+
+| Slot | Mode | Description |
+|---|---|---|
+| _(default)_ | inject | The TRIGGER the tooltip describes. The tip text is the `text` prop. |
+
 ---
 
 ### `kai-voice-input` / `VoiceInput`
@@ -2140,6 +2344,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `transcribe` | — | `undefined \| (audio: Blob) => Promise<string>` | Transcriber the host supplies — records audio, returns the text. This is a **function-valued property** (`el.transcribe = async blob => '...'`) because a value-returning callback can't be modelled as a fire-and-forget event. |
 | `disabled` | `disabled` | `undefined \| false \| true` | Disable the mic button (non-interactive). |
 | `recognitionLang` | `recognition-lang` | `undefined \| string` | BCP-47 language tag for the native `SpeechRecognition` path (e.g. `en-US`). Attribute: `recognition-lang` (the plain `lang` attribute is reserved by `HTMLElement` and can't be a custom-element property). No effect when `transcribe` is set or the browser lacks SpeechRecognition. |
@@ -2162,6 +2367,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `text` | `text` | `undefined \| string` | The utterance to read aloud. |
 | `autoplay` | `autoplay` | `undefined \| false \| true` | Speak automatically when `text` is set/changed. |
 | `synthesize` | — | `undefined \| (text: string) => Promise<Blob>` | TTS model seam the host supplies — given text, returns an audio `Blob` to play. This is a **function-valued property** (`el.synthesize = async text => blob`); when set, the native `speechSynthesis` path is bypassed. Mirrors `<kai-voice-input>`'s `transcribe`. A value-returning callback can't be modelled as a fire-and-forget event, hence a property. |
@@ -2188,6 +2394,7 @@ _No events._
 
 | Property | Attribute | Type | Description |
 |---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `groups` | — | `undefined \| { id: string; userId?: undefined \| string; teamId?: undefined \| string; name: string; sortOrder: number; createdAt: string }[]` | The sidebar's section headers, rendered in array order. A group carries no conversations of its own; it is matched against `conversations` by id, so the two props are complementary rather than alternatives. Omit for an ungrouped sidebar. Set as a JS property. |
 | `conversations` | — | `{ id: string; title: string; groupId?: undefined \| string; scope: { type: "document" \| "collection"; documentId?: undefined \| string; filters?: undefined \| { tags?: undefined \| string[]; authors?: undefined \| string[]; contentType?: undefined \| "transcript" \| "markdown"; dateRange?: undefined \| { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined \| string }[]` | Every conversation in the sidebar, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId` falls into a trailing ungrouped section (headerless when `compact`). There is no recency bucketing, and a `groupId` matching no entry in `groups` is not rendered. Set as a JS property. |
 | `activeId` | `active-id` | `undefined \| string` | Id of the open conversation, highlighted in the sidebar. |

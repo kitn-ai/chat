@@ -83,6 +83,8 @@ export interface ArtifactProps extends WebComponentProps {
   onFileSelect?: (event: CustomEvent<{ path: string }>) => void;
   /** Artifact's own maximize button toggled (consumer-observable; non-bubbling). */
   onMaximizeChange?: (event: CustomEvent<{ maximized: boolean }>) => void;
+  /** The maximize PROTOCOL intent, raised as a raw bubbling + composed CustomEvent (not through `dispatch`) so an enclosing `<kai-resizable>` can catch it and maximize the containing panel. Declared here so it is typed and reaches the generated API — listen for it to drive maximize from your own chrome, or re-emit it to trigger one. */
+  onMaximizeIntent?: (event: CustomEvent<{ requested: boolean }>) => void;
   /** Fired when the preview navigates. `detail.url` = the new location. */
   onNavigate?: (event: CustomEvent<{ url: string }>) => void;
   /** Fired when the Preview|Code tab changes. `detail.tab`. */
@@ -92,7 +94,7 @@ export interface ArtifactProps extends WebComponentProps {
 export const Artifact = /*#__PURE__*/ createWebComponent<ArtifactProps>(
   'kai-artifact',
   ["theme","src","files","tab","defaultTab","activeFile","sandbox","iframeTitle","maximized","expandable","openInTab","noNav","noReload","noHome","noPathField","noTabs","standalone","readonlyPath","displayUrl"],
-  { onFileSelect: 'kai-file-select', onMaximizeChange: 'kai-maximize-change', onNavigate: 'kai-navigate', onTabChange: 'kai-tab-change' },
+  { onFileSelect: 'kai-file-select', onMaximizeChange: 'kai-maximize-change', onMaximizeIntent: 'kai-maximize-intent', onNavigate: 'kai-navigate', onTabChange: 'kai-tab-change' },
   () => import('@kitn.ai/ui/elements/artifact'),
 );
 
@@ -856,7 +858,7 @@ export interface KbdProps extends WebComponentProps {
   /** Shortcut spec — tokens joined by `+` (e.g. `Mod+Shift+K`). Omit it to show default-slot content instead. Display only; the element does not bind keys. */
   keys?: string;
   /** `mac` uses ⌘/⌥, `other` uses Ctrl. `auto` (default) sniffs the OS. */
-  platform?: "other" | "auto" | "mac";
+  platform?: "auto" | "other" | "mac";
   /** Cap size: `sm` or `md`. Defaults to `md`. */
   size?: "sm" | "md";
 }
@@ -1176,7 +1178,7 @@ export interface PromptInputProps extends WebComponentProps {
   /** When set and `loading` is true, the send button is replaced by a Stop button (square icon, "Stop" aria-label). Clicking it fires `kai-stop`. */
   stoppable?: boolean;
   /** Send-button visibility. `'always'` (default) always shows it; `'auto'` shows it only when there's text/attachments (an empty composer hides it — Enter still submits). To hide it entirely (Enter-only), it's pure CSS: `::part(send){display:none}` — no prop needed. Restyle via `::part(send)`. The Stop button (`stoppable` + `loading`) is unaffected. */
-  submit?: "always" | "auto";
+  submit?: "auto" | "always";
   /** When `false`, hides the built-in paperclip attach button even though the element otherwise supports attachments. Use this when a `+` menu in `toolbar-start` already exposes "Add files", to avoid a duplicate control. Defaults to `true`. */
   attach?: boolean;
   /** Attachments to seed the input with (so a consumer can pre-populate staged files without an upload). Set as a JS property; the element then manages its own attachment state from there (add via the paperclip, remove per chip). */
@@ -1265,12 +1267,14 @@ export interface ResizableProps extends WebComponentProps {
   onChange?: (event: CustomEvent<{ sizes: number[] }>) => void;
   /** Observe layout maximize state. */
   onMaximizeChange?: (event: CustomEvent<{ maximized: boolean; index: null | number }>) => void;
+  /** Authoritative maximize state, dispatched as a raw composed CustomEvent (not through `dispatch`) onto the affected `<kai-resizable-item>` and, on restore, onto the group host. A nested element (e.g. `<kai-artifact>`) listens for it to reconcile its own toggle. */
+  onMaximizeState?: (event: CustomEvent<{ maximized: boolean }>) => void;
 }
 
 export const Resizable = /*#__PURE__*/ createWebComponent<ResizableProps>(
   'kai-resizable',
   ["theme","orientation","maximizedIndex","handle"],
-  { onChange: 'kai-change', onMaximizeChange: 'kai-maximize-change' },
+  { onChange: 'kai-change', onMaximizeChange: 'kai-maximize-change', onMaximizeState: 'kai-maximize-state' },
   () => import('@kitn.ai/ui/elements/resizable'),
 );
 
@@ -1289,12 +1293,13 @@ export interface ResizableItemProps extends WebComponentProps {
   collapsed?: boolean;
   onChange?: (event: CustomEvent<unknown>) => void;
   onMaximizeChange?: (event: CustomEvent<unknown>) => void;
+  onMaximizeState?: (event: CustomEvent<unknown>) => void;
 }
 
 export const ResizableItem = /*#__PURE__*/ createWebComponent<ResizableItemProps>(
   'kai-resizable-item',
   ["theme","size","min","max","locked","hidden","collapsed"],
-  { onChange: 'kai-change', onMaximizeChange: 'kai-maximize-change' },
+  { onChange: 'kai-change', onMaximizeChange: 'kai-maximize-change', onMaximizeState: 'kai-maximize-state' },
   () => import('@kitn.ai/ui/elements/resizable'),
 );
 
