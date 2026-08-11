@@ -14,9 +14,71 @@ suite stronger than it found it.
 pnpm --filter @kitn.ai/ui-example-openrouter-spike conformance          # replay: no key, no network
 pnpm --filter @kitn.ai/ui-example-openrouter-spike conformance:live     # hits the model, records fixtures
 pnpm --filter @kitn.ai/ui-example-openrouter-spike conformance:control  # the negative-control pass
+pnpm --filter @kitn.ai/ui-example-openrouter-spike conformance:matrix   # every model, then a table
 ```
 
 `SPIKE_ONLY=S03-single-tool,S07-confirm-card` narrows a run.
+
+## Across models
+
+One model is an anecdote. `harness/run-matrix.mjs` runs the whole catalog once per
+model and prints a scenario x model table.
+
+```bash
+node harness/run-matrix.mjs                      # live, every model
+node harness/run-matrix.mjs --mode replay        # offline, from what was recorded
+node harness/run-matrix.mjs --only deepseek,haiku
+node harness/run-matrix.mjs --scenarios S01-plain-text
+```
+
+`OPENROUTER_MODEL` is read **server-side, per request**, so switching models means
+a new dev server. Playwright will start one — but `reuseExistingServer: true`
+means a second model would silently reuse the first model's server, and every row
+after the first would be wrong with no symptom. So each model gets its **own
+port**, which makes reuse impossible, and `SPIKE_EXPECT_MODEL` makes the suite
+assert what the page actually reports before it believes a single result.
+
+Cells are `pass` / `FAIL` / `gap` / `skip`. `gap` is a `knownGap` scenario failing
+as documented — worth its own glyph, because the runner reports a confirmed gap as
+a *passing* test and only the annotation tells them apart. `skip` is a live
+scenario with no recording yet: a missing measurement, not a failing one.
+
+## Two wires, not one
+
+OpenRouter's `/api/v1/chat/completions` normalises **every** model onto the OpenAI
+shape — Anthropic's included. So pointing the spike at an Anthropic model does not
+exercise `readAnthropicStream`; it exercises `readOpenAIStream` against an
+Anthropic model, which is a different claim.
+
+`OPENROUTER_WIRE` (`auto` | `openai` | `anthropic`) picks the dialect, and `auto`
+routes `anthropic/*` through OpenRouter's **Anthropic Skin**
+(`/api/v1/messages`), which speaks native `message_start` / `content_block_delta`
+SSE. That is the only configuration in which the kit's Anthropic reader and
+`toAnthropicMessages` run against a live provider.
+
+The wire is chosen **server-side** from the model id and reported by
+`/api/config`; the browser reads it to pick the matching encoder and reader, and
+the proxy rejects a request whose shape disagrees rather than forwarding it. It is
+also part of the fixture directory name (`<model>-anthropic-wire`), because the
+two dialects are not interchangeable: a chat-completions stream fed to
+`readAnthropicStream` does not throw, it parses to **nothing**.
+
+Running the same model down both paths is the point. It is what separates a
+model-behaviour difference from a wire bug.
+
+### The canned streams exist in both dialects
+
+`fixtures/canned/` is OpenAI-shaped and `fixtures/canned-anthropic/` is its
+Anthropic twin; `pnpm fixtures` emits both from one description. This is not
+symmetry for its own sake — the first Anthropic run failed all six replay-only
+scenarios, and none of it was the UI: the Anthropic reader was being handed
+chat-completions frames and correctly made nothing of them. Six red cells that
+said nothing about the kit.
+
+The two dialects index different things, which the generator makes explicit: on the
+OpenAI wire the index is a position in the `tool_calls` array, on the Anthropic
+wire it is a **content block** index, so a thinking block ahead of a call pushes
+that call from 0 to 1.
 
 ## The assertion rule
 
@@ -117,9 +179,36 @@ print(sum(float(m) for f in glob.glob('fixtures/live/*/*/*.sse')
 PY
 ```
 
-A different model's number will differ by its own price per token, but not by its
-token COUNT: the prompts and the `max_tokens: 900` cap are fixed by the harness.
-Multiply by the ratio of prices to price a sweep.
+A different model's number differs by its own price per token, and the prompts and
+the `max_tokens: 900` cap are fixed by the harness — but the token COUNT is not
+fixed, and assuming it was is how a sweep gets mispriced. A five-configuration
+matrix measured **$0.1019** in total, dominated by per-token price rather than by
+volume:
+
+| configuration | requests | prompt tok | completion tok | measured |
+|---|---:|---:|---:|---:|
+| `~deepseek/deepseek-v4-flash-latest` | 28 | 16,369 | 3,225 | $0.0017 |
+| `anthropic/claude-haiku-4.5` (openai wire) | 28 | 24,039 | 2,610 | $0.0371 |
+| `anthropic/claude-haiku-4.5` (anthropic wire) | 28 | 52,922 | 4,182 | $0.0468 |
+| `openai/gpt-5.4-mini` | 27 | 7,418 | 2,200 | $0.0155 |
+| `mistralai/ministral-3b-2512` | 27 | 9,825 | 1,561 | $0.0008 |
+
+The row worth reading twice is the same model on two wires: **2.2x the prompt
+tokens on the Anthropic wire**. That is the verbatim-thinking round-trip doing
+exactly what it is supposed to — `toAnthropicMessages` echoes every thinking block
+back unmodified, so a multi-round tool loop re-sends its own reasoning each round.
+It is a correctness requirement, not waste, but it is a real cost multiplier and
+worth knowing before pricing an agent loop on Anthropic.
+
+Both wires report `usage.cost`, so the sum below is measured rather than derived:
+
+```bash
+python3 - <<'PY'
+import re, glob
+print(sum(float(m) for f in glob.glob('fixtures/live/*/*/*.sse')
+          for m in re.findall(r'"cost":([0-9.eE-]+)', open(f).read())))
+PY
+```
 
 ## Adding a scenario
 

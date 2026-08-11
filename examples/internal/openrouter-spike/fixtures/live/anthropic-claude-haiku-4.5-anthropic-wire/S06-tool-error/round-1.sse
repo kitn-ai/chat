@@ -1,0 +1,132 @@
+event: message_start
+data: {"type":"message_start","message":{"id":"gen-1786476928-67RYqWkRrFOSbEOVm4m1","type":"message","role":"assistant","container":null,"content":[],"model":"anthropic/claude-haiku-4.5","stop_reason":null,"stop_details":null,"stop_sequence":null,"usage":{"input_tokens":709,"output_tokens":8,"output_tokens_details":null,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"inference_geo":null,"server_tool_use":null,"service_tier":null,"speed":"standard"},"provider":"Amazon Bedrock"}}
+
+event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"The user is asking me to deploy the"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" api service to production. I"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" have"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" a tool available"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" called `"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"fail_deploy` which"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" is"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" for"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" deploy"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"/ship/release requests. The instructions"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" say to \""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"Use"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" your tools eagerly: the whole point"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" of this demo is to show the tool"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" UI\""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" and specifically"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" mentions"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" to"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" \"use"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" fail"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"_deploy:"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" for any deploy/ship/release request"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":".\"\n\nThe target"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" woul"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"d be \"production\" since"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" the"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" user specifie"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"d production environment"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":".\n\nLet"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" me call"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" the fail_deploy function"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" with target"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"=\"production\"."}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"Eo8FCkgIEBABGAIqQBTcROMiwiECLGL65tIFVzOhto+g/1qEI0XMFsx5fZrR28vObcTKz5aCoCfJlgYNHjEhCUcXY9Lne7PNLesTIPMSDEHTkBsvYg2LEp3kzRoMeMb42qTFDG0sdtcaIjArv1xtcC9ZM/OM45ovjaMHeyiQ2JgjjVuI6a/Co9+rWUbELQ3g/Ib5MwN3SC/D70gq9APuDi5xuqpC1yAVWsEM5awtuiLEN+pWgjNA0vXPM6tfH5uuhYFxsv5oxDyqGVVVYE8IQ+MMMNL1segKZXK1zE9aVr5oZGtGLe/GJYJKQtTHJpokdXt0/w1/YJBs4BSuxP+rc+7CkFY4dkHO14DPXFv/eoRqnSfekmpO5OfwRE5JwqhGDXlTE0weXEzcBK1Nw7VU+FWeQAA3+bNjRsrkgDFhVhkJ7Kb+LO/FrWBDRckNW8q7THLhXbfwu5xCVTG47nM0DSMVDNT/yNztjFn9clhTOVnzlq8sEqzH5jAn/BJBIEbtyIvm1uTrIxqnLfOa4ec2IvKE4OpC3JzEr6kBwZRfdkpKFqBQqwLxP0b/faAB2I1OA9Pcgf8nUhCpTpCVrz4wCeFo/+SXsaUugntU0pCsL31jVKF0OeGE0AOPwZZpwcjbHwfwsR4FHKCoVFUNPQpJNKsMxVP57km7s3bTXjxXrNu0QeZWSiPYeXVgDCDPC5nwKOiWTez3NxiNSRg2AzQVcTun+KY5WQEjb+2K60sI6vEIkTE+9hiVli47fkuQhscrjOA2LdzmsCJgENZrwYEz84MpOScJnxygijcTpXNOGlDXeWuEVo9ga0yeZscwkp3ihHVvNfGHG8qXOM59LALbuDIfykxhHPmYzCb+UNbX1JPOhhgB"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":0}
+
+event: content_block_start
+data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_bdrk_01BG3Kudivs5uCeUGSmoAxVq","caller":{"type":"direct"},"name":"fail_deploy","input":{}}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"target\": \"production"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\"}"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":1}
+
+event: message_delta
+data: {"type":"message_delta","delta":{"container":null,"stop_details":null,"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":709,"output_tokens":167,"output_tokens_details":{"thinking_tokens":122},"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"server_tool_use":null,"service_tier":null,"speed":"standard","cost":0.001544,"is_byok":false,"cost_details":{"upstream_inference_cost":0.001544,"upstream_inference_prompt_cost":0.000709,"upstream_inference_completions_cost":0.000835}},"context_management":null}
+
+event: message_stop
+data: {"type":"message_stop"}
+
+event: data
+data: [DONE]
+
