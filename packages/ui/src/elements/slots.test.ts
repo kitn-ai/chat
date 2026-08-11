@@ -124,9 +124,9 @@ describe('MESSAGE_SLOTS registry', () => {
 });
 
 describe('MESSAGE_PARTS registry', () => {
-  it('declares row / bubble / content / actions, with unique names', () => {
+  it('declares row / bubble / content / actions / citations, with unique names', () => {
     const names = MESSAGE_PARTS.map((p) => p.name);
-    expect(names).toEqual(['row', 'bubble', 'content', 'actions']);
+    expect(names).toEqual(['row', 'bubble', 'content', 'actions', 'citations']);
     expect(new Set(names).size).toBe(names.length);
   });
 
