@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kitn.ai/schemas/card/artifact.schema.json",
+  "title": "ArtifactCardData",
+  "description": "Generated-artifact viewer payload: a framed preview plus the source files behind it. A deliberately NARROW subset of the Artifact component's props — it says WHAT to show, never how the viewer behaves. Toolbar composition, view-state and the iframe `sandbox` are host-owned and stay off the wire, so a model cannot widen its own sandbox or hide the chrome the user needs to inspect what it built.",
+  "type": "object",
+  "x-kai-card-type": "artifact",
+  "x-kai-contract-version": "1",
+  "additionalProperties": false,
+  "anyOf": [{ "required": ["src"] }, { "required": ["files"] }],
+  "properties": {
+    "src": {
+      "type": "string",
+      "format": "uri",
+      "description": "URL the preview iframe frames, and the target of the Home button. Omit for a source-only artifact (`tab: 'code'` with `files`).",
+      "x-kai-format": "url"
+    },
+    "files": {
+      "type": "array",
+      "description": "Files behind the artifact: the Code tab's tree, each optionally carrying its own preview url and source.",
+      "maxItems": 500,
+      "items": {
+        "type": "object",
+        "required": ["path"],
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Tree label/key. Folders are built from `/`-delimited segments.",
+            "maxLength": 1024
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Where the preview loads this file. Defaults to `path` resolved against `src`.",
+            "x-kai-format": "url"
+          },
+          "code": {
+            "type": "string",
+            "description": "Source shown in the Code tab. Omit for binary files (image/pdf), which have no code view."
+          },
+          "language": {
+            "type": "string",
+            "description": "Language id for syntax highlighting (e.g. 'html', 'css', 'tsx').",
+            "maxLength": 40
+          },
+          "type": {
+            "type": "string",
+            "enum": ["html", "pdf", "image", "other"],
+            "description": "File kind. Drives the tree icon and whether the Code view applies; 'pdf' also routes the preview to the inline PDF viewer.",
+            "x-kai-control": "select"
+          },
+          "additions": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Lines added vs the base. Rendered as a trailing '+N' stat."
+          },
+          "deletions": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Lines removed vs the base. Rendered as a trailing '-N' stat."
+          },
+          "status": {
+            "type": "string",
+            "enum": ["added", "modified", "deleted", "renamed", "untracked"],
+            "description": "Change status vs the base. Drives a trailing status letter in the conventional VCS hue.",
+            "x-kai-control": "select"
+          }
+        }
+      }
+    },
+    "tab": {
+      "type": "string",
+      "enum": ["preview", "code"],
+      "default": "preview",
+      "description": "Which view opens first. The user can switch freely afterwards; a change is reported back as a `state` patch.",
+      "x-kai-control": "select"
+    },
+    "activeFile": {
+      "type": "string",
+      "description": "Path of the file selected in the tree (must match a `files[].path`). Syncs the tree highlight, the Code source and the preview.",
+      "maxLength": 1024
+    },
+    "displayUrl": {
+      "type": "string",
+      "description": "Friendly address shown in the path field INSTEAD of the real url, which also makes the field read-only. Use when `src` is not consumer-facing (e.g. a `data:` blob) so a clean address is shown rather than leaking it.",
+      "maxLength": 2048
+    },
+    "height": {
+      "description": "Frame height. A bare number is px; a string is any CSS length. Defaults to 420px. REQUIRED CONCEPT, not decoration: the viewer is built to fill its container, and a message thread supplies no height, so the card sets one explicitly or the artifact collapses to zero and renders invisible.",
+      "oneOf": [{ "type": "number", "minimum": 1 }, { "type": "string", "maxLength": 32 }]
+    }
+  }
+}
