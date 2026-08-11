@@ -312,7 +312,10 @@ Free coverage worth knowing: `verify:ssr` derives its entry list from the export
 
 ### Needing a human decision
 
-1. **Live re-run budget.** S19a needs one live cell to be honest (a replayed-only pass is a replayed-only pass, per §4). Roughly $0.02-0.10. Also still open from §1.6: the other four configurations' S02.
+**None outstanding.** Both questions that stood here were answered by measurement after this plan was written. They are recorded rather than deleted, so the next reader can see they were resolved instead of assuming they were never asked.
+
+- **Live re-run budget: answered by spending it.** The full matrix sweep ran live at $0.107, with S12 and S13 passing live in all ten cells. The willingness and the price are now established rather than hypothetical, and the original $0.02-0.10 estimate held. S19a will still need one live cell to be honest when it is built (a replayed-only pass is a replayed-only pass, per §4), but that is a requirement of the task, not a decision waiting on anyone.
+- **S02 is measured in all five configurations.** Three of them (haiku-oai, gpt, ministral) previously read `n/a`; all five now carry a real result. Four produce reasoning and one does not. Two qualifications, because a bare "S02 passes everywhere now" would be its own overclaim. (a) **ministral's FAIL is model behaviour, not a defect and not environmental:** it emits zero reasoning tokens across all 27 requests and reproduces identically offline, so it belongs in the model-behaviour bucket rather than the failure bucket. (b) **gpt-5.4-mini's pass is provider-side variance and must not be read as a fix:** it flipped from `n/a` to `pass` with nothing on our side to explain it, since the thinking-budget fix is gated on `isAnthropicFamily()` and gpt is not, and the provider is `OpenAI` in both recordings. What changed is the response shape, previously `reasoning.encrypted` only, now `reasoning.summary` with 153 streamed deltas and 2,111 chars. Same model, same request, different day. That cell is a measurement, not a stable property, and anything built on gpt reasoning being available should be hedged accordingly.
 
 ### Resolved, recorded so they are not re-litigated
 
