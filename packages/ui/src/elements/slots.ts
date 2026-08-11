@@ -434,6 +434,17 @@ export const FILE_TREE_PARTS: PartDef[] = [
 export interface ElementComposition {
   slots?: SlotDef[];
   parts?: PartDef[];
+  /**
+   * What the element's DEFAULT (unnamed) `<slot>` projects — i.e. what a consumer
+   * puts between the tags. Kept OUT of `slots` on purpose: those arrays are also
+   * read at runtime by `readSlots()`, which would query a meaningless `[slot=""]`.
+   * scripts/gen-element-api.mjs merges it back in as a slot with the empty name,
+   * which is how the Custom Elements Manifest spells the default slot.
+   *
+   * Every facade that renders a bare `<slot />` needs one; guarded by
+   * tests/elements/slot-registry-coverage.test.ts.
+   */
+  children?: string;
 }
 
 /** Slots + styleable `::part`s of `<kai-prompt-dock>`. */
@@ -558,6 +569,17 @@ export const THREAD_SLOTS: SlotDef[] = [
   { name: 'empty', mode: 'replace', doc: 'Custom zero-state rendered in the message area while the thread is empty; replaces the built-in default.' },
 ];
 
+/** Slots of `<kai-empty>`. The body is the default slot; `media` is the named seam. */
+export const EMPTY_SLOTS: SlotDef[] = [
+  { name: 'media', mode: 'replace', doc: 'The leading illustration or icon above the title (any inline SVG or <img>). Replaces the built-in media box.' },
+];
+
+/** Slots of `<kai-popover>`. The panel body is the default slot; `trigger` is the
+ *  control the panel anchors to and opens from. */
+export const POPOVER_SLOTS: SlotDef[] = [
+  { name: 'trigger', mode: 'replace', doc: 'The control that opens the popover (a button, an avatar, …). The panel anchors to it.' },
+];
+
 /** Styleable `::part`s of `<kai-audio-visualizer>`. Every DOM variant (`bar`,
  *  `grid`, `radial`) shares the `bar`/`cell` markup pattern; the shader variants
  *  (`wave`, `aurora`) share the `canvas` part. Lit items ALSO carry the
@@ -599,38 +621,44 @@ export const ELEMENT_COMPOSITION: Record<string, ElementComposition> = {
   'kai-message': { slots: MESSAGE_SLOTS, parts: MESSAGE_PARTS },
   'kai-thread': { slots: THREAD_SLOTS },
   'kai-prompt-input': { slots: PROMPT_INPUT_SLOTS, parts: PROMPT_INPUT_PARTS },
-  'kai-button': { slots: BUTTON_SLOTS, parts: BUTTON_PARTS },
-  'kai-badge': { parts: BADGE_PARTS },
+  'kai-button': { slots: BUTTON_SLOTS, parts: BUTTON_PARTS, children: 'The button\'s label. Omit it for an icon-only button (pair with `aria-label`).' },
+  'kai-badge': { parts: BADGE_PARTS, children: 'The badge\'s label — text, or a small inline icon plus text.' },
   'kai-icon': { parts: ICON_PARTS },
   'kai-separator': { parts: SEPARATOR_PARTS },
-  'kai-scroll-area': { parts: SCROLL_AREA_PARTS },
-  'kai-notice': { slots: NOTICE_SLOTS },
-  'kai-hover-card': { slots: HOVER_CARD_SLOTS },
+  'kai-scroll-area': { parts: SCROLL_AREA_PARTS, children: 'The scrollable content.' },
+  'kai-notice': { slots: NOTICE_SLOTS, children: 'The notice message. `icon` and `action` are the named seams around it.' },
+  'kai-hover-card': { slots: HOVER_CARD_SLOTS, children: 'The TRIGGER the card hovers off. The card body is the `card` slot.' },
   'kai-menu': { slots: MENU_SLOTS, parts: MENU_PARTS },
   'kai-skeleton': { parts: SKELETON_PARTS },
   'kai-attachments': { parts: ATTACHMENTS_PARTS },
   'kai-status': { parts: STATUS_PARTS },
   'kai-tabs': { parts: TABS_PARTS },
   'kai-voice-output': { parts: VOICE_OUTPUT_PARTS },
-  'kai-screen': { slots: SCREEN_SLOTS, parts: SCREEN_PARTS },
-  'kai-card': { slots: CARD_SLOTS, parts: CARD_PARTS },
+  'kai-screen': { slots: SCREEN_SLOTS, parts: SCREEN_PARTS, children: 'The screen body, below the title bar.' },
+  'kai-card': { slots: CARD_SLOTS, parts: CARD_PARTS, children: 'The card body, below the header/media regions.' },
   'kai-workspace': { slots: WORKSPACE_SLOTS, parts: WORKSPACE_PARTS },
   'kai-nav': { parts: NAV_PARTS },
-  'kai-coachmark': { slots: COACHMARK_SLOTS, parts: COACHMARK_PARTS },
+  'kai-coachmark': { slots: COACHMARK_SLOTS, parts: COACHMARK_PARTS, children: 'The ANCHOR the coachmark points at — the element it attaches to and positions against. The bubble body is the `content` slot.' },
   'kai-progress-bar': { parts: PROGRESS_BAR_PARTS },
   'kai-file-tree': { parts: FILE_TREE_PARTS },
-  'kai-prompt-dock': { slots: PROMPT_DOCK_SLOTS, parts: PROMPT_DOCK_PARTS },
+  'kai-prompt-dock': { slots: PROMPT_DOCK_SLOTS, parts: PROMPT_DOCK_PARTS, children: 'The input the dock wraps — typically a `<kai-prompt-input>`. The `top`/`bottom` slots are the lips around it.' },
   'kai-segmented': { parts: SEGMENTED_PARTS },
-  'kai-settings-group': { parts: SETTINGS_GROUP_PARTS },
+  'kai-settings-group': { parts: SETTINGS_GROUP_PARTS, children: 'The `<kai-setting-item>` rows in this group.' },
   'kai-setting-item': { slots: SETTING_ITEM_SLOTS, parts: SETTING_ITEM_PARTS },
-  'kai-pane': { slots: PANE_SLOTS, parts: PANE_PARTS },
-  'kai-pane-group': { parts: PANE_GROUP_PARTS },
+  'kai-pane': { slots: PANE_SLOTS, parts: PANE_PARTS, children: 'The pane body, below the header row.' },
+  'kai-pane-group': { parts: PANE_GROUP_PARTS, children: 'Content shown for every tab. Use it INSTEAD of the per-tab `slot="<tab id>"` seams when you swap the content yourself.' },
   'kai-agent-card': { parts: AGENT_CARD_PARTS },
-  'kai-dialog': { slots: DIALOG_SLOTS, parts: DIALOG_PARTS },
+  'kai-dialog': { slots: DIALOG_SLOTS, parts: DIALOG_PARTS, children: 'The dialog body, between the `header` and `footer` slots.' },
   'kai-input': { slots: INPUT_SLOTS, parts: INPUT_PARTS },
   'kai-search': { parts: SEARCH_PARTS },
-  'kai-kbd': { parts: KBD_PARTS },
+  'kai-kbd': { parts: KBD_PARTS, children: 'Literal key text, when you are not using the `keys` prop to render key caps.' },
   'kai-editable-label': { parts: EDITABLE_LABEL_PARTS },
+  'kai-empty': { slots: EMPTY_SLOTS, children: 'The empty-state body below the title/description — usually the call to action.' },
+  'kai-file-upload': { children: 'Custom dropzone content, replacing the default label (the `label` prop is the fallback).' },
+  'kai-popover': { slots: POPOVER_SLOTS, children: 'The popover panel body. The control that opens it is the `trigger` slot.' },
+  'kai-resizable': { children: 'The `<kai-resizable-item>` panels, in order. Dividers are inserted between them.' },
+  'kai-resizable-item': { children: 'This panel\'s content.' },
+  'kai-tooltip': { children: 'The TRIGGER the tooltip describes. The tip text is the `text` prop.' },
   'kai-audio-visualizer': { parts: AUDIO_VISUALIZER_PARTS },
 };
 

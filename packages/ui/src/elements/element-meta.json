@@ -5,6 +5,16 @@
     "displayName": "AgentCard",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "name",
         "type": "undefined | string",
         "optional": true,
@@ -34,6 +44,9 @@
         "optional": true,
         "scalar": false,
         "description": "Run status — a JS PROPERTY (object), not an attribute. Shape: `{ tone, label?, pulse? }`, where `tone` is one of `working` | `idle` | `done` | `error` | `blocked` (maps to the kit's tool hues), `label` is an optional short string beside the dot, and `pulse` animates the dot. Set it with `el.status = { tone: 'working', label: 'Working', pulse: true }`.",
+        "typeName": "AgentStatus",
+        "typeShape": "{ tone: \"working\" | \"idle\" | \"done\" | \"error\" | \"blocked\"; label?: undefined | string; pulse?: undefined | false | true }",
+        "typeImport": "AgentStatus",
         "displayType": "undefined | { tone: \"working\" | \"idle\" | \"done\" | \"error\" | \"blocked\"; label?: undefined | string; pulse?: undefined | false | true }"
       }
     ],
@@ -79,6 +92,16 @@
     "displayName": "Artifact",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "src",
         "type": "undefined | string",
         "optional": true,
@@ -88,15 +111,15 @@
       },
       {
         "name": "files",
-        "type": "{ path: string; url?: undefined | string; code?: undefined | string; language?: undefined | string; type?: undefined | \"html\" | \"pdf\" | \"image\" | \"other\"; additions?: undefined | number; deletions?: undefined | number; status?: undefined | \"added\" | \"modified\" | \"deleted\" | \"renamed\" | \"untracked\" }[]",
-        "optional": false,
+        "type": "undefined | { path: string; url?: undefined | string; code?: undefined | string; language?: undefined | string; type?: undefined | \"html\" | \"pdf\" | \"image\" | \"other\"; additions?: undefined | number; deletions?: undefined | number; status?: undefined | \"added\" | \"modified\" | \"deleted\" | \"renamed\" | \"untracked\" }[]",
+        "optional": true,
         "scalar": false,
-        "description": "Files for the Code tab tree + each file's preview `url`. Set as a JS property (array).",
+        "description": "Files for the Code tab tree + each file's preview `url`. Omit for a preview-only artifact (the Code tab then has nothing to show; pair it with `no-tabs` to hide the toggle). Set as a JS property (array).",
         "typeName": "FileTreeFile[]",
         "typeShape": "{ path: string; url?: undefined | string; code?: undefined | string; language?: undefined | string; type?: undefined | \"html\" | \"pdf\" | \"image\" | \"other\"; additions?: undefined | number; deletions?: undefined | number; status?: undefined | \"added\" | \"modified\" | \"deleted\" | \"renamed\" | \"untracked\" }[]",
         "default": "[]",
         "typeImport": "FileTreeFile",
-        "displayType": "{ path: string; url?: undefined | string; code?: undefined | string; language?: undefined | string; type?: undefined | \"html\" | \"pdf\" | \"image\" | \"other\"; additions?: undefined | number; deletions?: undefined | number; status?: undefined | \"added\" | \"modified\" | \"deleted\" | \"renamed\" | \"untracked\" }[]"
+        "displayType": "undefined | { path: string; url?: undefined | string; code?: undefined | string; language?: undefined | string; type?: undefined | \"html\" | \"pdf\" | \"image\" | \"other\"; additions?: undefined | number; deletions?: undefined | number; status?: undefined | \"added\" | \"modified\" | \"deleted\" | \"renamed\" | \"untracked\" }[]"
       },
       {
         "name": "tab",
@@ -252,6 +275,12 @@
         "displayDetail": "{ maximized: false | true }"
       },
       {
+        "name": "kai-maximize-intent",
+        "detail": "{ requested: false | true }",
+        "description": "The maximize PROTOCOL intent, raised as a raw bubbling + composed CustomEvent (not through `dispatch`) so an enclosing `<kai-resizable>` can catch it and maximize the containing panel. Declared here so it is typed and reaches the generated API — listen for it to drive maximize from your own chrome, or re-emit it to trigger one.",
+        "displayDetail": "{ requested: false | true }"
+      },
+      {
         "name": "kai-navigate",
         "detail": "{ url: string }",
         "description": "Fired when the preview navigates. `detail.url` = the new location.",
@@ -335,16 +364,26 @@
     "displayName": "Attachments",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "items",
-        "type": "{ id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[]",
-        "optional": false,
+        "type": "undefined | { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[]",
+        "optional": true,
         "scalar": false,
-        "description": "The attachments to render. Set as a JS property (array).",
+        "description": "The attachments to render. Omit (or pass an empty array) for the empty state, which shows `emptyText` if set and nothing otherwise. Set as a JS property (array).",
         "typeName": "AttachmentData[]",
         "typeShape": "{ id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[]",
         "default": "[]",
         "typeImport": "AttachmentData",
-        "displayType": "AttachmentData[]"
+        "displayType": "AttachmentData[] | undefined"
       },
       {
         "name": "variant",
@@ -461,6 +500,16 @@
     "className": "KaiAudioVisualizerElement",
     "displayName": "AudioVisualizer",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "variant",
         "type": "undefined | string",
@@ -582,6 +631,9 @@
         "optional": true,
         "scalar": false,
         "description": "Custom fragment shader for `variant=\"custom\"`. JS property only.",
+        "typeName": "ShaderSpec",
+        "typeShape": "{ fragment: string; uniforms?: undefined | Record<string, { type: \"1f\" | \"1i\" | \"1fv\" | \"2f\" | \"3f\" | \"3fv\" | \"4f\" | \"4fv\" | \"Matrix2fv\" | \"Matrix3fv\" | \"Matrix4fv\"; value: number | number[] }> }",
+        "typeImport": "ShaderSpec",
         "displayType": "undefined | { fragment: string; uniforms?: undefined | Record<string, { type: \"1f\" | \"1i\" | \"1fv\" | \"2f\" | \"3f\" | \"3fv\" | \"4f\" | \"4fv\" | \"Matrix2fv\" | \"Matrix3fv\" | \"Matrix4fv\"; value: number | number[] }> }"
       },
       {
@@ -631,6 +683,16 @@
     "className": "KaiAvatarElement",
     "displayName": "Avatar",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "src",
         "type": "undefined | string",
@@ -683,6 +745,16 @@
     "displayName": "Badge",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "variant",
         "type": "undefined | \"default\" | \"count\" | \"citation\"",
         "optional": true,
@@ -702,6 +774,13 @@
       }
     ],
     "tokens": [],
+    "slots": [
+      {
+        "name": "",
+        "mode": "inject",
+        "doc": "The badge's label — text, or a small inline icon plus text."
+      }
+    ],
     "parts": [
       {
         "name": "badge",
@@ -715,6 +794,16 @@
     "className": "KaiButtonElement",
     "displayName": "Button",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "variant",
         "type": "undefined | \"default\" | \"subtle\" | \"ghost\" | \"outline\" | \"destructive\"",
@@ -832,6 +921,11 @@
     "tokens": [],
     "slots": [
       {
+        "name": "",
+        "mode": "inject",
+        "doc": "The button's label. Omit it for an icon-only button (pair with `aria-label`)."
+      },
+      {
         "name": "icon",
         "mode": "replace",
         "doc": "A custom leading icon (any inline SVG, inherits `currentColor`). Wins over the `icon` prop."
@@ -850,6 +944,16 @@
     "className": "KaiCardElement",
     "displayName": "Card",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "appearance",
         "type": "undefined | \"outlined\" | \"filled\" | \"plain\" | \"accent\"",
@@ -954,6 +1058,11 @@
     "tokens": [],
     "slots": [
       {
+        "name": "",
+        "mode": "inject",
+        "doc": "The card body, below the header/media regions."
+      },
+      {
         "name": "media",
         "mode": "inject",
         "doc": "Full-bleed media (image/video/illustration) at the top (vertical) or start (horizontal). Clipped to the card corners."
@@ -1018,11 +1127,24 @@
     "displayName": "Cards",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "cards",
         "type": "undefined | { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }[]",
         "optional": true,
         "scalar": false,
         "description": "The stream of card envelopes to render. Set as a JS PROPERTY: `el.cards = [...]`.",
+        "typeName": "CardEnvelope[]",
+        "typeShape": "{ type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }[]",
+        "typeImport": "CardEnvelope",
         "displayType": "undefined | { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }[]"
       },
       {
@@ -1039,6 +1161,9 @@
         "optional": true,
         "scalar": false,
         "description": "Optional CardPolicy handling child events. Property: `el.policy`.",
+        "typeName": "CardPolicy",
+        "typeShape": "{ onSubmit?: undefined | (cardId: string, data: unknown) => void; onAction?: undefined | (cardId: string, action: string, payload?: unknown) => void; onSendPrompt?: undefined | (text: string, opts: { mode: \"compose\" | \"send\"; context?: unknown; }) => void; onOpen?: undefined | (url: string, target: \"tab\" | \"artifact\") => void; onState?: undefined | (cardId: string, patch: unknown) => void; onDismiss?: undefined | (cardId: string) => void; onReopen?: undefined | (cardId: string) => void; onError?: undefined | (cardId: string, message: string) => void; maxSendPromptMode?: undefined | \"compose\" | \"send\" }",
+        "typeImport": "CardPolicy",
         "displayType": "undefined | { onSubmit?: undefined | (cardId: string, data: unknown) => void; onAction?: undefined | (cardId: string, action: string, payload?: unknown) => void; onSendPrompt?: undefined | (text: string, opts: { mode: \"compose\" | \"send\"; context?: unknown; }) => void; onOpen?: undefined | (url: string, target: \"tab\" | \"artifact\") => void; onState?: undefined | (cardId: string, patch: unknown) => void; onDismiss?: undefined | (cardId: string) => void; onReopen?: undefined | (cardId: string) => void; onError?: undefined | (cardId: string, message: string) => void; maxSendPromptMode?: undefined | \"compose\" | \"send\" }"
       }
     ],
@@ -1085,15 +1210,26 @@
     "displayName": "ChainOfThought",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "steps",
-        "type": "{ label: string; content?: undefined | string; id?: undefined | string }[]",
-        "optional": false,
+        "type": "undefined | { label: string; content?: undefined | string; id?: undefined | string }[]",
+        "optional": true,
         "scalar": false,
-        "description": "The reasoning steps. Set as a JS property. Compound sub-parts collapse to this one data model (Route 1). Each `{ label, content?, id? }`.",
+        "description": "The reasoning steps. Set as a JS property. Compound sub-parts collapse to this one data model (Route 1). Each `{ label, content?, id? }`. Omit to supply the steps as `<kai-step>` light-DOM children instead; when both are present the property's steps come first.",
         "typeName": "ChainOfThoughtStepData[]",
         "typeShape": "{ label: string; content?: undefined | string; id?: undefined | string }[]",
         "default": "[]",
-        "displayType": "{ label: string; content?: undefined | string; id?: undefined | string }[]"
+        "typeImport": "ChainOfThoughtStepData",
+        "displayType": "undefined | { label: string; content?: undefined | string; id?: undefined | string }[]"
       },
       {
         "name": "type",
@@ -1155,7 +1291,18 @@
         "storyId": "solid-advanced-elements-chainofthoughtaccordion--docs"
       }
     ],
-    "tokens": []
+    "tokens": [],
+    "declarativeChildren": [
+      {
+        "tag": "kai-step",
+        "attributes": [
+          "label",
+          "step-id"
+        ],
+        "text": true,
+        "description": "Parse a single light-DOM `<kai-step>` element into a `Step` descriptor. Attribute mapping: - `label` → Step.label (the always-visible heading) - `step-id` → Step.id (optional stable open-set key) - textContent → Step.content (optional expandable detail)"
+      }
+    ]
   },
   {
     "tag": "kai-chat",
@@ -1163,16 +1310,23 @@
     "displayName": "Chat",
     "props": [
       {
-        "name": "messages",
-        "type": "{ id: string; role: \"user\" | \"assistant\"; content: string; reasoning?: undefined | { text: string; label?: undefined | string }; tools?: undefined | { type: string; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string }[]; attachments?: undefined | { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]",
-        "optional": false,
-        "scalar": false,
-        "description": "The full message thread to render, newest last. Each entry carries its role, content, and optional reasoning/tools/attachments/actions. Set as a JS property (`el.messages = [...]`).",
-        "typeName": "ChatMessage[]",
-        "typeShape": "{ id: string; role: \"user\" | \"assistant\"; content: string; reasoning?: undefined | { text: string; label?: undefined | string }; tools?: undefined | { type: string; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string }[]; attachments?: undefined | { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]",
-        "default": "[]",
-        "typeImport": "ChatMessage",
-        "displayType": "{ id: string; role: \"user\" | \"assistant\"; content: string; reasoning?: undefined | { text: string; label?: undefined | string }; tools?: undefined | { type: string; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string }[]; attachments?: undefined | { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]"
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
+        "name": "search",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Show a Search (Globe) button in the input toolbar; fires a `search` event.",
+        "default": "false",
+        "displayType": "undefined | false | true"
       },
       {
         "name": "value",
@@ -1267,6 +1421,9 @@
         "optional": true,
         "scalar": false,
         "description": "Optional model list. When set (>1 model) a ModelSwitcher is shown in the header and a `kai-model-change` event fires on selection.",
+        "typeName": "ModelOption[]",
+        "typeShape": "{ id: string; name: string; provider?: undefined | string; description?: undefined | string; group?: undefined | string }[]",
+        "typeImport": "ModelOption",
         "displayType": "undefined | { id: string; name: string; provider?: undefined | string; description?: undefined | string; group?: undefined | string }[]"
       },
       {
@@ -1283,6 +1440,9 @@
         "optional": true,
         "scalar": false,
         "description": "Optional context-window token usage. When set, a Context token meter is shown in the header.",
+        "typeName": "ChatThreadContextUsage",
+        "typeShape": "{ usedTokens: number; maxTokens: number; inputTokens?: undefined | number; outputTokens?: undefined | number; estimatedCost?: undefined | number }",
+        "typeImport": "ChatThreadContextUsage",
         "displayType": "ContextData | undefined"
       },
       {
@@ -1359,15 +1519,6 @@
         "displayType": "undefined | false | true"
       },
       {
-        "name": "search",
-        "type": "undefined | false | true",
-        "optional": true,
-        "scalar": true,
-        "description": "Show a Search (Globe) button in the input toolbar; fires a `search` event.",
-        "default": "false",
-        "displayType": "undefined | false | true"
-      },
-      {
         "name": "voice",
         "type": "undefined | false | true",
         "optional": true,
@@ -1382,6 +1533,9 @@
         "optional": true,
         "scalar": false,
         "description": "Rich entity triggers — each `{ char, kind, items }` opens a caret-anchored menu that inserts an atomic pill (`/` skills, `@` agents/plugins). Set as a JS property; forwarded to the input.",
+        "typeName": "TriggerDef[]",
+        "typeShape": "{ char: string; kind: string; items?: undefined | { id: string; label: string; icon?: undefined | string; description?: undefined | string; group?: undefined | string; kind?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[] }[]",
+        "typeImport": "TriggerDef",
         "displayType": "undefined | { char: string; kind: string; items?: undefined | { id: string; label: string; icon?: undefined | string; description?: undefined | string; group?: undefined | string; kind?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[] }[]"
       },
       {
@@ -1400,6 +1554,26 @@
         "description": "Whether each message's action bar is always visible (`'always'`, default) or only revealed on hover of that message row (`'hover'`).",
         "default": "'always'",
         "displayType": "undefined | \"always\" | \"hover\""
+      },
+      {
+        "name": "messages",
+        "type": "undefined | { id: string; role: \"user\" | \"assistant\"; parts: ({ type: \"text\"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: \"reasoning\"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: \"tool\"; tool: { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"card\"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"source\"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: \"file\"; attachment: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]",
+        "optional": true,
+        "scalar": false,
+        "description": "The full message thread to render, newest last. Each entry carries its role, ordered `parts`, and optional actions/avatar/feedback. Set as a JS property (`el.messages = [...]`); a NEW array reference per streaming chunk re-renders (mutating in place does not). Omit for an empty thread. Re-declared here (rather than inherited from `ChatThreadProps`) because the ELEMENT registers a `[]` default and renders the empty state without it, while the SolidJS `<ChatThread>` component still requires it — the facade hands it a validated array either way. Matches `<kai-thread>`.",
+        "typeName": "ChatMessage[]",
+        "typeShape": "{ id: string; role: \"user\" | \"assistant\"; parts: ({ type: \"text\"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: \"reasoning\"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: \"tool\"; tool: { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"card\"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"source\"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: \"file\"; attachment: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]",
+        "default": "[]",
+        "typeImport": "ChatMessage",
+        "displayType": "undefined | { id: string; role: \"user\" | \"assistant\"; parts: ({ type: \"text\"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: \"reasoning\"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: \"tool\"; tool: { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"card\"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"source\"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: \"file\"; attachment: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]"
+      },
+      {
+        "name": "cardTypes",
+        "type": "undefined | Record<string, string>",
+        "optional": true,
+        "scalar": false,
+        "description": "Optional card type -> custom-element tag overrides/additions for `card` parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type.",
+        "displayType": "undefined | Record<string, string>"
       }
     ],
     "events": [
@@ -1563,6 +1737,16 @@
     "displayName": "Checkpoint",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "label",
         "type": "undefined | string",
         "optional": true,
@@ -1630,6 +1814,16 @@
     "className": "KaiChoiceElement",
     "displayName": "Choice",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "data",
         "type": "undefined | Record<string, unknown>",
@@ -1742,6 +1936,16 @@
     "displayName": "Coachmark",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "open",
         "type": "undefined | false | true",
         "optional": true,
@@ -1843,6 +2047,11 @@
     "tokens": [],
     "slots": [
       {
+        "name": "",
+        "mode": "inject",
+        "doc": "The ANCHOR the coachmark points at — the element it attaches to and positions against. The bubble body is the `content` slot."
+      },
+      {
         "name": "content",
         "mode": "replace",
         "doc": "The bubble body text shown under the headline."
@@ -1881,6 +2090,16 @@
     "className": "KaiCodeBlockElement",
     "displayName": "CodeBlock",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "code",
         "type": "string",
@@ -1950,11 +2169,24 @@
     "displayName": "Command",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "items",
         "type": "undefined | { id: string; label: string; icon?: undefined | string; description?: undefined | string; shortcut?: undefined | string; group?: undefined | string }[]",
         "optional": true,
         "scalar": false,
         "description": "Flat list of items. Set as a JS property — not an HTML attribute.",
+        "typeName": "KaiCommandItem[]",
+        "typeShape": "{ id: string; label: string; icon?: undefined | string; description?: undefined | string; shortcut?: undefined | string; group?: undefined | string }[]",
+        "typeImport": "KaiCommandItem",
         "displayType": "undefined | { id: string; label: string; icon?: undefined | string; description?: undefined | string; shortcut?: undefined | string; group?: undefined | string }[]"
       },
       {
@@ -2035,6 +2267,16 @@
     "className": "KaiCompareElement",
     "displayName": "Compare",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "data",
         "type": "undefined | Record<string, unknown>",
@@ -2142,6 +2384,16 @@
     "displayName": "Composer",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "value",
         "type": "undefined | string | ({ type: \"text\"; text: string } | { type: \"entity\"; entity: { kind: string; id: string; label: string; icon?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> } })[]",
         "optional": true,
@@ -2199,6 +2451,9 @@
         "optional": true,
         "scalar": false,
         "description": "Trigger definitions — set as a JS property.",
+        "typeName": "TriggerDef[]",
+        "typeShape": "{ char: string; kind: string; items?: undefined | { id: string; label: string; icon?: undefined | string; description?: undefined | string; group?: undefined | string; kind?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[] }[]",
+        "typeImport": "TriggerDef",
         "displayType": "undefined | { char: string; kind: string; items?: undefined | { id: string; label: string; icon?: undefined | string; description?: undefined | string; group?: undefined | string; kind?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[] }[]"
       },
       {
@@ -2315,6 +2570,16 @@
     "displayName": "Confirm",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "data",
         "type": "undefined | Record<string, unknown>",
         "optional": true,
@@ -2398,11 +2663,24 @@
     "displayName": "Context",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "context",
         "type": "undefined | { usedTokens: number; maxTokens: number; inputTokens?: undefined | number; outputTokens?: undefined | number; reasoningTokens?: undefined | number; cacheTokens?: undefined | number; estimatedCost?: undefined | number }",
         "optional": true,
         "scalar": false,
         "description": "Token-usage data. Set as a JS property.",
+        "typeName": "KaiContextUsage",
+        "typeShape": "{ usedTokens: number; maxTokens: number; inputTokens?: undefined | number; outputTokens?: undefined | number; reasoningTokens?: undefined | number; cacheTokens?: undefined | number; estimatedCost?: undefined | number }",
+        "typeImport": "KaiContextUsage",
         "displayType": "ContextData | undefined"
       },
       {
@@ -2481,16 +2759,6 @@
         "name": "ContextCacheUsage",
         "group": "Components",
         "storyId": "solid-advanced-elements-contextcacheusage--docs"
-      },
-      {
-        "name": "DEFAULT_WARN_THRESHOLD",
-        "group": "Components",
-        "storyId": "solid-advanced-elements-defaultwarnthreshold--docs"
-      },
-      {
-        "name": "DEFAULT_DANGER_THRESHOLD",
-        "group": "Components",
-        "storyId": "solid-advanced-elements-defaultdangerthreshold--docs"
       }
     ],
     "tokens": []
@@ -2501,28 +2769,38 @@
     "displayName": "Conversations",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "groups",
-        "type": "{ id: string; userId?: undefined | string; teamId?: undefined | string; name: string; sortOrder: number; createdAt: string }[]",
-        "optional": false,
+        "type": "undefined | { id: string; userId?: undefined | string; teamId?: undefined | string; name: string; sortOrder: number; createdAt: string }[]",
+        "optional": true,
         "scalar": false,
-        "description": "Pre-bucketed conversation groups (e.g. \"Today\", \"Yesterday\"), each with its own conversations. Use this when you want to control the grouping/headers yourself; otherwise pass a flat `conversations` array. Set as a JS property.",
+        "description": "The list's section headers (`{ id, name, sortOrder, createdAt }`), rendered in array order. A group carries no conversations of its own; it is matched against `conversations` by id, so the two props are complementary rather than alternatives. Omit for an ungrouped list. Set as a JS property.",
         "typeName": "ConversationGroup[]",
         "typeShape": "{ id: string; userId?: undefined | string; teamId?: undefined | string; name: string; sortOrder: number; createdAt: string }[]",
         "default": "[]",
         "typeImport": "ConversationGroup",
-        "displayType": "ConversationGroup[]"
+        "displayType": "undefined | { id: string; userId?: undefined | string; teamId?: undefined | string; name: string; sortOrder: number; createdAt: string }[]"
       },
       {
         "name": "conversations",
-        "type": "{ id: string; title: string; groupId?: undefined | string; scope: { type: \"document\" | \"collection\"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | \"transcript\" | \"markdown\"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[]",
-        "optional": false,
+        "type": "undefined | { id: string; title: string; groupId?: undefined | string; scope: { type: \"document\" | \"collection\"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | \"transcript\" | \"markdown\"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[]",
+        "optional": true,
         "scalar": false,
-        "description": "A flat list of conversation summaries; the component buckets them by recency for you. Ignored when `groups` is provided. Set as a JS property.",
+        "description": "Every conversation the list renders, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId` — or with a `groupId` matching no entry in `groups` — falls into a trailing \"Ungrouped\" section, so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. Omit to supply them as `<kai-conversation>` light-DOM children instead, or for the empty state.",
         "typeName": "ConversationSummary[]",
         "typeShape": "{ id: string; title: string; groupId?: undefined | string; scope: { type: \"document\" | \"collection\"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | \"transcript\" | \"markdown\"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[]",
         "default": "[]",
         "typeImport": "ConversationSummary",
-        "displayType": "{ id: string; title: string; groupId?: undefined | string; scope: { type: \"document\" | \"collection\"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | \"transcript\" | \"markdown\"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[]"
+        "displayType": "undefined | { id: string; title: string; groupId?: undefined | string; scope: { type: \"document\" | \"collection\"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | \"transcript\" | \"markdown\"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[]"
       },
       {
         "name": "activeId",
@@ -2635,6 +2913,17 @@
       "--color-sidebar",
       "--color-scrollbar-thumb"
     ],
+    "declarativeChildren": [
+      {
+        "tag": "kai-conversation",
+        "attributes": [
+          "group-id",
+          "id"
+        ],
+        "text": true,
+        "description": "Parse a single light-DOM `<kai-conversation>` element into a `ConversationSummary`. Attribute mapping: - `id` → ConversationSummary.id - `group-id` → ConversationSummary.groupId (optional) - textContent → ConversationSummary.title Required fields not expressible as HTML attributes (`scope`, `messageCount`, `lastMessageAt`, `updatedAt`) receive safe defaults so the rendered list item is fully functional with just `id` + title text."
+      }
+    ],
     "slots": [
       {
         "name": "header",
@@ -2665,6 +2954,16 @@
     "className": "KaiDialogElement",
     "displayName": "Dialog",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "open",
         "type": "undefined | false | true",
@@ -2726,6 +3025,11 @@
     "tokens": [],
     "slots": [
       {
+        "name": "",
+        "mode": "inject",
+        "doc": "The dialog body, between the `header` and `footer` slots."
+      },
+      {
         "name": "header",
         "mode": "inject",
         "part": true,
@@ -2769,6 +3073,16 @@
     "className": "KaiEditableLabelElement",
     "displayName": "EditableLabel",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "value",
         "type": "undefined | string",
@@ -2853,6 +3167,16 @@
     "displayName": "Embed",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "cardId",
         "type": "undefined | string",
         "optional": true,
@@ -2862,11 +3186,14 @@
       },
       {
         "name": "data",
-        "type": "undefined | { provider: \"youtube\" | \"vimeo\" | \"generic\"; id?: undefined | string; url?: undefined | string; title?: undefined | string; poster?: undefined | string; start?: undefined | number; aspectRatio?: undefined | \"16:9\" | \"4:3\" | \"1:1\" | \"9:16\" }",
+        "type": "undefined | { provider: \"generic\" | \"youtube\" | \"vimeo\"; id?: undefined | string; url?: undefined | string; title?: undefined | string; poster?: undefined | string; start?: undefined | number; aspectRatio?: undefined | \"16:9\" | \"4:3\" | \"1:1\" | \"9:16\" }",
         "optional": true,
         "scalar": false,
         "description": "The embed payload (provider + id/url + options). Set as a JS **property** (object).",
-        "displayType": "undefined | { provider: \"youtube\" | \"vimeo\" | \"generic\"; id?: undefined | string; url?: undefined | string; title?: undefined | string; poster?: undefined | string; start?: undefined | number; aspectRatio?: undefined | \"16:9\" | \"4:3\" | \"1:1\" | \"9:16\" }"
+        "typeName": "EmbedCardData",
+        "typeShape": "{ provider: \"generic\" | \"youtube\" | \"vimeo\"; id?: undefined | string; url?: undefined | string; title?: undefined | string; poster?: undefined | string; start?: undefined | number; aspectRatio?: undefined | \"16:9\" | \"4:3\" | \"1:1\" | \"9:16\" }",
+        "typeImport": "EmbedCardData",
+        "displayType": "undefined | { provider: \"generic\" | \"youtube\" | \"vimeo\"; id?: undefined | string; url?: undefined | string; title?: undefined | string; poster?: undefined | string; start?: undefined | number; aspectRatio?: undefined | \"16:9\" | \"4:3\" | \"1:1\" | \"9:16\" }"
       }
     ],
     "events": [],
@@ -2885,6 +3212,16 @@
     "className": "KaiEmptyElement",
     "displayName": "Empty",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "emptyTitle",
         "type": "undefined | string",
@@ -2938,13 +3275,35 @@
         "storyId": "solid-advanced-elements-emptycontent--docs"
       }
     ],
-    "tokens": []
+    "tokens": [],
+    "slots": [
+      {
+        "name": "",
+        "mode": "inject",
+        "doc": "The empty-state body below the title/description — usually the call to action."
+      },
+      {
+        "name": "media",
+        "mode": "replace",
+        "doc": "The leading illustration or icon above the title (any inline SVG or <img>). Replaces the built-in media box."
+      }
+    ]
   },
   {
     "tag": "kai-feedback-bar",
     "className": "KaiFeedbackBarElement",
     "displayName": "FeedbackBar",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "barTitle",
         "type": "undefined | string",
@@ -3039,6 +3398,16 @@
     "displayName": "FileTree",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "files",
         "type": "{ path: string; url?: undefined | string; code?: undefined | string; language?: undefined | string; type?: undefined | \"html\" | \"pdf\" | \"image\" | \"other\"; additions?: undefined | number; deletions?: undefined | number; status?: undefined | \"added\" | \"modified\" | \"deleted\" | \"renamed\" | \"untracked\" }[]",
         "optional": false,
@@ -3122,6 +3491,16 @@
     "displayName": "FileUpload",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "multiple",
         "type": "undefined | false | true",
         "optional": true,
@@ -3178,13 +3557,30 @@
         "storyId": "solid-advanced-elements-fileuploadtrigger--docs"
       }
     ],
-    "tokens": []
+    "tokens": [],
+    "slots": [
+      {
+        "name": "",
+        "mode": "inject",
+        "doc": "Custom dropzone content, replacing the default label (the `label` prop is the fallback)."
+      }
+    ]
   },
   {
     "tag": "kai-form",
     "className": "KaiFormElement",
     "displayName": "Form",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "data",
         "type": "undefined | Record<string, unknown>",
@@ -3304,6 +3700,16 @@
     "displayName": "HoverCard",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "openDelay",
         "type": "undefined | number",
         "optional": true,
@@ -3400,6 +3806,11 @@
     "tokens": [],
     "slots": [
       {
+        "name": "",
+        "mode": "inject",
+        "doc": "The TRIGGER the card hovers off. The card body is the `card` slot."
+      },
+      {
         "name": "card",
         "mode": "inject",
         "doc": "The rich content shown in the floating hover card."
@@ -3411,6 +3822,16 @@
     "className": "KaiIconElement",
     "displayName": "Icon",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "name",
         "type": "undefined | string",
@@ -3447,6 +3868,16 @@
     "className": "KaiImageElement",
     "displayName": "Image",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "base64",
         "type": "undefined | string",
@@ -3497,6 +3928,16 @@
     "className": "KaiInputElement",
     "displayName": "Input",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "type",
         "type": "undefined | string",
@@ -3695,6 +4136,16 @@
     "displayName": "Kbd",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "keys",
         "type": "undefined | string",
         "optional": true,
@@ -3704,12 +4155,12 @@
       },
       {
         "name": "platform",
-        "type": "undefined | \"other\" | \"auto\" | \"mac\"",
+        "type": "undefined | \"auto\" | \"other\" | \"mac\"",
         "optional": true,
         "scalar": true,
         "description": "`mac` uses ⌘/⌥, `other` uses Ctrl. `auto` (default) sniffs the OS.",
         "default": "'auto'",
-        "displayType": "undefined | \"other\" | \"auto\" | \"mac\""
+        "displayType": "undefined | \"auto\" | \"other\" | \"mac\""
       },
       {
         "name": "size",
@@ -3731,6 +4182,13 @@
       }
     ],
     "tokens": [],
+    "slots": [
+      {
+        "name": "",
+        "mode": "inject",
+        "doc": "Literal key text, when you are not using the `keys` prop to render key caps."
+      }
+    ],
     "parts": [
       {
         "name": "key",
@@ -3750,6 +4208,16 @@
     "displayName": "LinkPreview",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "cardId",
         "type": "undefined | string",
         "optional": true,
@@ -3763,6 +4231,9 @@
         "optional": true,
         "scalar": false,
         "description": "The link payload (OG metadata). Set as a JS **property** (object).",
+        "typeName": "LinkPreviewData",
+        "typeShape": "{ url: string; title?: undefined | string; description?: undefined | string; image?: undefined | string; imageAlt?: undefined | string; favicon?: undefined | string; domain?: undefined | string; siteName?: undefined | string }",
+        "typeImport": "LinkPreviewData",
         "displayType": "undefined | { url: string; title?: undefined | string; description?: undefined | string; image?: undefined | string; imageAlt?: undefined | string; favicon?: undefined | string; domain?: undefined | string; siteName?: undefined | string }"
       }
     ],
@@ -3782,6 +4253,16 @@
     "className": "KaiLoaderElement",
     "displayName": "Loader",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "variant",
         "type": "undefined | \"circular\" | \"classic\" | \"pulse\" | \"pulse-dot\" | \"dots\" | \"typing\" | \"wave\" | \"bars\" | \"terminal\" | \"text-blink\" | \"text-shimmer\" | \"loading-dots\"",
@@ -3825,6 +4306,16 @@
     "className": "KaiMarkdownElement",
     "displayName": "Markdown",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "content",
         "type": "string",
@@ -3879,11 +4370,24 @@
     "displayName": "Menu",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "items",
         "type": "undefined | { id?: undefined | string; label?: undefined | string; icon?: undefined | string; shortcut?: undefined | string; checked?: undefined | false | true; radioGroup?: undefined | string; disabled?: undefined | false | true; separator?: undefined | false | true; heading?: undefined | false | true; items?: undefined | Record<string, unknown>[] }[]",
         "optional": true,
         "scalar": false,
         "description": "Tree of menu items. Set as a JS property — not an HTML attribute.",
+        "typeName": "KaiMenuItem[]",
+        "typeShape": "{ id?: undefined | string; label?: undefined | string; icon?: undefined | string; shortcut?: undefined | string; checked?: undefined | false | true; radioGroup?: undefined | string; disabled?: undefined | false | true; separator?: undefined | false | true; heading?: undefined | false | true; items?: undefined | { id?: undefined | string; label?: undefined | string; icon?: undefined | string; shortcut?: undefined | string; checked?: undefined | false | true; radioGroup?: undefined | string; disabled?: undefined | false | true; separator?: undefined | false | true; heading?: undefined | false | true; items?: undefined | Record<string, unknown>[] }[] }[]",
+        "typeImport": "KaiMenuItem",
         "displayType": "undefined | { id?: undefined | string; label?: undefined | string; icon?: undefined | string; shortcut?: undefined | string; checked?: undefined | false | true; radioGroup?: undefined | string; disabled?: undefined | false | true; separator?: undefined | false | true; heading?: undefined | false | true; items?: undefined | Record<string, unknown>[] }[]"
       },
       {
@@ -4069,12 +4573,25 @@
     "displayName": "Message",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "message",
-        "type": "undefined | { id: string; role: \"user\" | \"assistant\"; content: string; reasoning?: undefined | { text: string; label?: undefined | string }; tools?: undefined | { type: string; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string }[]; attachments?: undefined | { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }",
+        "type": "undefined | { id: string; role: \"user\" | \"assistant\"; parts: ({ type: \"text\"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: \"reasoning\"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: \"tool\"; tool: { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"card\"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"source\"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: \"file\"; attachment: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }",
         "optional": true,
         "scalar": false,
         "description": "The full message object. Set as a JS property.",
-        "displayType": "undefined | { id: string; role: \"user\" | \"assistant\"; content: string; reasoning?: undefined | { text: string; label?: undefined | string }; tools?: undefined | { type: string; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string }[]; attachments?: undefined | { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }"
+        "typeName": "ChatMessage",
+        "typeShape": "{ id: string; role: \"user\" | \"assistant\"; parts: ({ type: \"text\"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: \"reasoning\"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: \"tool\"; tool: { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"card\"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"source\"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: \"file\"; attachment: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }",
+        "typeImport": "ChatMessage",
+        "displayType": "undefined | { id: string; role: \"user\" | \"assistant\"; parts: ({ type: \"text\"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: \"reasoning\"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: \"tool\"; tool: { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"card\"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"source\"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: \"file\"; attachment: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }"
       },
       {
         "name": "role",
@@ -4084,14 +4601,6 @@
         "description": "Convenience for simple cases when not passing a `message` object.",
         "default": "'assistant'",
         "displayType": "undefined | \"user\" | \"assistant\""
-      },
-      {
-        "name": "content",
-        "type": "undefined | string",
-        "optional": true,
-        "scalar": true,
-        "description": "Convenience content (used when `message` is not set).",
-        "displayType": "undefined | string"
       },
       {
         "name": "markdown",
@@ -4160,6 +4669,14 @@
         "scalar": true,
         "description": "Avatar rail mode. `'none'` omits the avatar rail entirely so the body spans the full row (predictable layout when you never show avatars). Any other value keeps the default behaviour: the built-in avatar when one resolves, or your `slot=\"avatar\"` content when projected (which REPLACES the built-in).",
         "displayType": "undefined | string"
+      },
+      {
+        "name": "cardTypes",
+        "type": "undefined | Record<string, string>",
+        "optional": true,
+        "scalar": false,
+        "description": "Optional card type -> custom-element tag overrides/additions for `card` parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type.",
+        "displayType": "undefined | Record<string, string>"
       }
     ],
     "events": [
@@ -4196,6 +4713,19 @@
       }
     ],
     "tokens": [],
+    "declarativeChildren": [
+      {
+        "tag": "kai-action",
+        "attributes": [
+          "action",
+          "icon",
+          "id",
+          "label",
+          "tooltip"
+        ],
+        "text": true
+      }
+    ],
     "slots": [
       {
         "name": "before-body",
@@ -4247,16 +4777,26 @@
     "displayName": "ModelSwitcher",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "models",
-        "type": "{ id: string; name: string; provider?: undefined | string; description?: undefined | string; group?: undefined | string }[]",
-        "optional": false,
+        "type": "undefined | { id: string; name: string; provider?: undefined | string; description?: undefined | string; group?: undefined | string }[]",
+        "optional": true,
         "scalar": false,
-        "description": "The selectable models. Set as a JS property (array).",
+        "description": "The selectable models. Set as a JS property (array). Omit to supply them as `<kai-model>` light-DOM children instead; when both are present the property's models come first.",
         "typeName": "ModelOption[]",
         "typeShape": "{ id: string; name: string; provider?: undefined | string; description?: undefined | string; group?: undefined | string }[]",
         "default": "[]",
         "typeImport": "ModelOption",
-        "displayType": "{ id: string; name: string; provider?: undefined | string; description?: undefined | string; group?: undefined | string }[]"
+        "displayType": "undefined | { id: string; name: string; provider?: undefined | string; description?: undefined | string; group?: undefined | string }[]"
       },
       {
         "name": "currentModel",
@@ -4332,7 +4872,20 @@
         "storyId": "solid-advanced-elements-modelswitcher--docs"
       }
     ],
-    "tokens": []
+    "tokens": [],
+    "declarativeChildren": [
+      {
+        "tag": "kai-model",
+        "attributes": [
+          "description",
+          "group",
+          "id",
+          "provider"
+        ],
+        "text": true,
+        "description": "Parse a single light-DOM `<kai-model>` element into a `ModelOption` descriptor. Attribute mapping: - `id` → ModelOption.id - textContent → ModelOption.name - `provider` → ModelOption.provider (optional) - `description` → ModelOption.description (optional subtitle) - `group` → ModelOption.group (optional collapsible section)"
+      }
+    ]
   },
   {
     "tag": "kai-nav",
@@ -4340,11 +4893,24 @@
     "displayName": "Nav",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "items",
         "type": "undefined | { id: string; label?: undefined | string; icon?: undefined | string; badge?: undefined | string; trailing?: undefined | string; disabled?: undefined | false | true; children?: undefined | Record<string, unknown>[]; status?: undefined | { tone: \"error\" | \"primary\" | \"info\" | \"success\" | \"warning\" | \"neutral\"; label?: undefined | string; pulse?: undefined | false | true }; meta?: undefined | string; action?: undefined | { icon: string; label: string }; closable?: undefined | false | true }[]",
         "optional": true,
         "scalar": false,
         "description": "The nav items. Set as a JS property (array, not an attribute). Each item may carry `children` (a collapsible group), a `status` dot, and trailing `meta` text.",
+        "typeName": "KaiNavItem[]",
+        "typeShape": "{ id: string; label?: undefined | string; icon?: undefined | string; badge?: undefined | string; trailing?: undefined | string; disabled?: undefined | false | true; children?: undefined | { id: string; label?: undefined | string; icon?: undefined | string; badge?: undefined | string; trailing?: undefined | string; disabled?: undefined | false | true; children?: undefined | Record<string, unknown>[]; status?: undefined | { tone: \"error\" | \"primary\" | \"info\" | \"success\" | \"warning\" | \"neutral\"; label?: undefined | string; pulse?: undefined | false | true }; meta?: undefined | string; action?: undefined | { icon: string; label: string }; closable?: undefined | false | true }[]; status?: undefined | { tone: \"error\" | \"primary\" | \"info\" | \"success\" | \"warning\" | \"neutral\"; label?: undefined | string; pulse?: undefined | false | true }; meta?: undefined | string; action?: undefined | { icon: string; label: string }; closable?: undefined | false | true }[]",
+        "typeImport": "KaiNavItem",
         "displayType": "undefined | { id: string; label?: undefined | string; icon?: undefined | string; badge?: undefined | string; trailing?: undefined | string; disabled?: undefined | false | true; children?: undefined | Record<string, unknown>[]; status?: undefined | { tone: \"error\" | \"primary\" | \"info\" | \"success\" | \"warning\" | \"neutral\"; label?: undefined | string; pulse?: undefined | false | true }; meta?: undefined | string; action?: undefined | { icon: string; label: string }; closable?: undefined | false | true }[]"
       },
       {
@@ -4452,6 +5018,16 @@
     "displayName": "Notice",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "severity",
         "type": "undefined | \"error\" | \"info\" | \"success\" | \"warning\" | \"neutral\"",
         "optional": true,
@@ -4497,6 +5073,11 @@
     "tokens": [],
     "slots": [
       {
+        "name": "",
+        "mode": "inject",
+        "doc": "The notice message. `icon` and `action` are the named seams around it."
+      },
+      {
         "name": "action",
         "mode": "inject",
         "doc": "A trailing action beside the message — a link or button."
@@ -4513,6 +5094,16 @@
     "className": "KaiPaneElement",
     "displayName": "Pane",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "headline",
         "type": "undefined | string",
@@ -4572,6 +5163,9 @@
         "optional": true,
         "scalar": false,
         "description": "A tone-colored status dot (+ optional label) in the header. An object `{ tone, label?, pulse? }` set as a JS PROPERTY (not an attribute).",
+        "typeName": "PaneStatus",
+        "typeShape": "{ tone: \"working\" | \"idle\" | \"done\" | \"error\" | \"blocked\"; label?: undefined | string; pulse?: undefined | false | true }",
+        "typeImport": "PaneStatus",
         "displayType": "undefined | { tone: \"working\" | \"idle\" | \"done\" | \"error\" | \"blocked\"; label?: undefined | string; pulse?: undefined | false | true }"
       }
     ],
@@ -4611,6 +5205,11 @@
     ],
     "tokens": [],
     "slots": [
+      {
+        "name": "",
+        "mode": "inject",
+        "doc": "The pane body, below the header row."
+      },
       {
         "name": "leading",
         "mode": "inject",
@@ -4656,11 +5255,24 @@
     "displayName": "PaneGroup",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "tabs",
         "type": "undefined | { id: string; name: string; status?: undefined | { tone: \"working\" | \"idle\" | \"done\" | \"error\" | \"blocked\"; label?: undefined | string; pulse?: undefined | false | true }; needsAttention?: undefined | false | true; number?: undefined | number }[]",
         "optional": true,
         "scalar": false,
         "description": "The tabs to render. An array of `{ id, name, status?, needsAttention?, number? }` set as a JS PROPERTY (not an HTML attribute).",
+        "typeName": "PaneTab[]",
+        "typeShape": "{ id: string; name: string; status?: undefined | { tone: \"working\" | \"idle\" | \"done\" | \"error\" | \"blocked\"; label?: undefined | string; pulse?: undefined | false | true }; needsAttention?: undefined | false | true; number?: undefined | number }[]",
+        "typeImport": "PaneTab",
         "displayType": "undefined | { id: string; name: string; status?: undefined | { tone: \"working\" | \"idle\" | \"done\" | \"error\" | \"blocked\"; label?: undefined | string; pulse?: undefined | false | true }; needsAttention?: undefined | false | true; number?: undefined | number }[]"
       },
       {
@@ -4723,6 +5335,13 @@
       }
     ],
     "tokens": [],
+    "slots": [
+      {
+        "name": "",
+        "mode": "inject",
+        "doc": "Content shown for every tab. Use it INSTEAD of the per-tab `slot=\"<tab id>\"` seams when you swap the content yourself."
+      }
+    ],
     "parts": [
       {
         "name": "tabs",
@@ -4756,6 +5375,16 @@
     "className": "KaiPopoverElement",
     "displayName": "Popover",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "placement",
         "type": "undefined | \"top\" | \"right\" | \"bottom\" | \"left\" | \"top-start\" | \"top-end\" | \"right-start\" | \"right-end\" | \"bottom-start\" | \"bottom-end\" | \"left-start\" | \"left-end\"",
@@ -4834,13 +5463,35 @@
         "storyId": "solid-advanced-primitives-popover--docs"
       }
     ],
-    "tokens": []
+    "tokens": [],
+    "slots": [
+      {
+        "name": "",
+        "mode": "inject",
+        "doc": "The popover panel body. The control that opens it is the `trigger` slot."
+      },
+      {
+        "name": "trigger",
+        "mode": "replace",
+        "doc": "The control that opens the popover (a button, an avatar, …). The panel anchors to it."
+      }
+    ]
   },
   {
     "tag": "kai-progress-bar",
     "className": "KaiProgressBarElement",
     "displayName": "ProgressBar",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "value",
         "type": "undefined | number",
@@ -4904,6 +5555,16 @@
     "displayName": "PromptDock",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "frame",
         "type": "undefined | \"none\" | \"inset\" | \"edge\"",
         "optional": true,
@@ -4933,6 +5594,11 @@
     ],
     "tokens": [],
     "slots": [
+      {
+        "name": "",
+        "mode": "inject",
+        "doc": "The input the dock wraps — typically a `<kai-prompt-input>`. The `top`/`bottom` slots are the lips around it."
+      },
       {
         "name": "top",
         "mode": "inject",
@@ -4967,6 +5633,16 @@
     "className": "KaiPromptInputElement",
     "displayName": "PromptInput",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "value",
         "type": "undefined | string | ({ type: \"text\"; text: string } | { type: \"entity\"; entity: { kind: string; id: string; label: string; icon?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> } })[]",
@@ -5048,12 +5724,12 @@
       },
       {
         "name": "submit",
-        "type": "undefined | \"always\" | \"auto\"",
+        "type": "undefined | \"auto\" | \"always\"",
         "optional": true,
         "scalar": true,
         "description": "Send-button visibility. `'always'` (default) always shows it; `'auto'` shows it only when there's text/attachments (an empty composer hides it — Enter still submits). To hide it entirely (Enter-only), it's pure CSS: `::part(send){display:none}` — no prop needed. Restyle via `::part(send)`. The Stop button (`stoppable` + `loading`) is unaffected.",
         "default": "'always'",
-        "displayType": "undefined | \"always\" | \"auto\""
+        "displayType": "undefined | \"auto\" | \"always\""
       },
       {
         "name": "attach",
@@ -5070,6 +5746,9 @@
         "optional": true,
         "scalar": false,
         "description": "Attachments to seed the input with (so a consumer can pre-populate staged files without an upload). Set as a JS property; the element then manages its own attachment state from there (add via the paperclip, remove per chip).",
+        "typeName": "AttachmentData[]",
+        "typeShape": "{ id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[]",
+        "typeImport": "AttachmentData",
         "displayType": "AttachmentData[] | undefined"
       },
       {
@@ -5078,6 +5757,9 @@
         "optional": true,
         "scalar": false,
         "description": "Rich entity triggers — each `{ char, kind, items }` opens a caret-anchored menu that inserts an atomic pill. Convention: `/` → skills, `@` → agents (plugins are the grouping/provenance of those items). Set as a JS property.",
+        "typeName": "TriggerDef[]",
+        "typeShape": "{ char: string; kind: string; items?: undefined | { id: string; label: string; icon?: undefined | string; description?: undefined | string; group?: undefined | string; kind?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[] }[]",
+        "typeImport": "TriggerDef",
         "displayType": "undefined | { char: string; kind: string; items?: undefined | { id: string; label: string; icon?: undefined | string; description?: undefined | string; group?: undefined | string; kind?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[] }[]"
       },
       {
@@ -5165,8 +5847,77 @@
         "description": "Send the current value programmatically — same path as Enter / the send button (fires kai-submit, then clears staged attachments). Named `send`, not `submit`, to avoid colliding with the `submit` prop."
       }
     ],
-    "composedFrom": [],
+    "composedFrom": [
+      {
+        "name": "PromptInput",
+        "group": "Components",
+        "storyId": "solid-advanced-elements-promptinput--docs"
+      },
+      {
+        "name": "PromptInputTextarea",
+        "group": "Components",
+        "storyId": "solid-advanced-elements-promptinputtextarea--docs"
+      },
+      {
+        "name": "PromptInputActions",
+        "group": "Components",
+        "storyId": "solid-advanced-elements-promptinputactions--docs"
+      },
+      {
+        "name": "PromptSuggestion",
+        "group": "Components",
+        "storyId": "solid-advanced-elements-promptsuggestion--docs"
+      },
+      {
+        "name": "Button",
+        "group": "UI",
+        "storyId": "solid-advanced-primitives-button--docs"
+      },
+      {
+        "name": "Tooltip",
+        "group": "UI",
+        "storyId": "solid-advanced-primitives-tooltip--docs"
+      },
+      {
+        "name": "Attachments",
+        "group": "Components",
+        "storyId": "solid-advanced-elements-attachments--docs"
+      },
+      {
+        "name": "Attachment",
+        "group": "Components",
+        "storyId": "solid-advanced-elements-attachment--docs"
+      },
+      {
+        "name": "AttachmentPreview",
+        "group": "Components",
+        "storyId": "solid-advanced-elements-attachmentpreview--docs"
+      },
+      {
+        "name": "AttachmentInfo",
+        "group": "Components",
+        "storyId": "solid-advanced-elements-attachmentinfo--docs"
+      },
+      {
+        "name": "AttachmentRemove",
+        "group": "Components",
+        "storyId": "solid-advanced-elements-attachmentremove--docs"
+      }
+    ],
     "tokens": [],
+    "declarativeChildren": [
+      {
+        "tag": "kai-action",
+        "attributes": [
+          "action",
+          "icon",
+          "id",
+          "label",
+          "tooltip"
+        ],
+        "text": true
+      }
+    ],
     "slots": [
       {
         "name": "input-top",
@@ -5197,6 +5948,16 @@
     "className": "KaiReasoningElement",
     "displayName": "Reasoning",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "text",
         "type": "string",
@@ -5311,6 +6072,16 @@
     "displayName": "Remote",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "src",
         "type": "undefined | string",
         "optional": true,
@@ -5354,6 +6125,16 @@
     "displayName": "Resizable",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "orientation",
         "type": "undefined | \"vertical\" | \"horizontal\"",
         "optional": true,
@@ -5393,6 +6174,12 @@
         "detail": "{ maximized: false | true; index: null | number }",
         "description": "Observe layout maximize state.",
         "displayDetail": "{ maximized: false | true; index: null | number }"
+      },
+      {
+        "name": "kai-maximize-state",
+        "detail": "{ maximized: false | true }",
+        "description": "Authoritative maximize state, dispatched as a raw composed CustomEvent (not through `dispatch`) onto the affected `<kai-resizable-item>` and, on restore, onto the group host. A nested element (e.g. `<kai-artifact>`) listens for it to reconcile its own toggle.",
+        "displayDetail": "{ maximized: false | true }"
       }
     ],
     "methods": [],
@@ -5403,13 +6190,30 @@
         "storyId": "solid-advanced-primitives-resizablehandle--docs"
       }
     ],
-    "tokens": []
+    "tokens": [],
+    "slots": [
+      {
+        "name": "",
+        "mode": "inject",
+        "doc": "The `<kai-resizable-item>` panels, in order. Dividers are inserted between them."
+      }
+    ]
   },
   {
     "tag": "kai-resizable-item",
     "className": "KaiResizableItemElement",
     "displayName": "ResizableItem",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "size",
         "type": "undefined | string",
@@ -5474,6 +6278,12 @@
         "detail": "unknown",
         "description": "",
         "displayDetail": "unknown"
+      },
+      {
+        "name": "kai-maximize-state",
+        "detail": "unknown",
+        "description": "",
+        "displayDetail": "unknown"
       }
     ],
     "methods": [],
@@ -5484,13 +6294,30 @@
         "storyId": "solid-advanced-primitives-resizablehandle--docs"
       }
     ],
-    "tokens": []
+    "tokens": [],
+    "slots": [
+      {
+        "name": "",
+        "mode": "inject",
+        "doc": "This panel's content."
+      }
+    ]
   },
   {
     "tag": "kai-response-stream",
     "className": "KaiResponseStreamElement",
     "displayName": "ResponseStream",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "text",
         "type": "undefined | string | AsyncIterable<string>",
@@ -5551,22 +6378,32 @@
     "displayName": "ScopePicker",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "availableAuthors",
-        "type": "string[]",
-        "optional": false,
+        "type": "undefined | string[]",
+        "optional": true,
         "scalar": false,
-        "description": "Authors to offer as scope filters. Set as a JS property.",
+        "description": "Authors to offer as scope filters. Omit to drop the Authors section (for a tag-only picker). Set as a JS property.",
         "default": "[]",
-        "displayType": "string[]"
+        "displayType": "undefined | string[]"
       },
       {
         "name": "availableTags",
-        "type": "string[]",
-        "optional": false,
+        "type": "undefined | string[]",
+        "optional": true,
         "scalar": false,
-        "description": "Tags to offer as scope filters. Set as a JS property.",
+        "description": "Tags to offer as scope filters. Omit to drop the Tags section (for an author-only picker). Set as a JS property.",
         "default": "[]",
-        "displayType": "string[]"
+        "displayType": "undefined | string[]"
       },
       {
         "name": "currentLabel",
@@ -5650,6 +6487,16 @@
     "className": "KaiScreenElement",
     "displayName": "Screen",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "open",
         "type": "undefined | false | true",
@@ -5741,6 +6588,11 @@
     "tokens": [],
     "slots": [
       {
+        "name": "",
+        "mode": "inject",
+        "doc": "The screen body, below the title bar."
+      },
+      {
         "name": "title",
         "mode": "replace",
         "part": true,
@@ -5780,6 +6632,16 @@
     "displayName": "ScrollArea",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "orientation",
         "type": "undefined | \"vertical\" | \"horizontal\" | \"both\"",
         "optional": true,
@@ -5799,6 +6661,13 @@
       }
     ],
     "tokens": [],
+    "slots": [
+      {
+        "name": "",
+        "mode": "inject",
+        "doc": "The scrollable content."
+      }
+    ],
     "parts": [
       {
         "name": "viewport",
@@ -5812,6 +6681,16 @@
     "className": "KaiScrollButtonElement",
     "displayName": "ScrollButton",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "for",
         "type": "undefined | string",
@@ -5862,6 +6741,16 @@
     "className": "KaiSearchElement",
     "displayName": "Search",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "value",
         "type": "undefined | string",
@@ -5985,14 +6874,25 @@
     "displayName": "Segmented",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "options",
         "type": "{ value: string; label: string; icon?: undefined | string }[]",
         "optional": false,
         "scalar": false,
         "description": "The selectable segments, left to right. Set as a JS property (array).",
-        "typeName": "Option[]",
+        "typeName": "KaiSegmentedOption[]",
         "typeShape": "{ value: string; label: string; icon?: undefined | string }[]",
         "default": "[]",
+        "typeImport": "KaiSegmentedOption",
         "displayType": "{ value: string; label: string; icon?: undefined | string }[]"
       },
       {
@@ -6049,6 +6949,16 @@
     "displayName": "Separator",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "orientation",
         "type": "undefined | \"vertical\" | \"horizontal\"",
         "optional": true,
@@ -6081,6 +6991,16 @@
     "className": "KaiSettingItemElement",
     "displayName": "SettingItem",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "label",
         "type": "undefined | string",
@@ -6135,6 +7055,16 @@
     "displayName": "SettingsGroup",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "heading",
         "type": "undefined | string",
         "optional": true,
@@ -6162,6 +7092,13 @@
       }
     ],
     "tokens": [],
+    "slots": [
+      {
+        "name": "",
+        "mode": "inject",
+        "doc": "The `<kai-setting-item>` rows in this group."
+      }
+    ],
     "parts": [
       {
         "name": "header",
@@ -6180,6 +7117,16 @@
     "className": "KaiSkeletonElement",
     "displayName": "Skeleton",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "variant",
         "type": "undefined | \"text\" | \"rect\" | \"circle\"",
@@ -6238,15 +7185,26 @@
     "displayName": "Skills",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "skills",
-        "type": "{ id: string; name: string }[]",
-        "optional": false,
+        "type": "undefined | { id: string; name: string }[]",
+        "optional": true,
         "scalar": false,
-        "description": "The active skills to badge. Set as a JS property.",
+        "description": "The active skills to badge. Set as a JS property. Omit to supply them as `<kai-skill>` light-DOM children instead; when both are present the property's skills come first. Nothing renders when there are none.",
         "typeName": "Skill[]",
         "typeShape": "{ id: string; name: string }[]",
         "default": "[]",
-        "displayType": "{ id: string; name: string }[]"
+        "typeImport": "Skill",
+        "displayType": "undefined | { id: string; name: string }[]"
       }
     ],
     "events": [],
@@ -6258,13 +7216,33 @@
         "storyId": "solid-advanced-elements-messageskills--docs"
       }
     ],
-    "tokens": []
+    "tokens": [],
+    "declarativeChildren": [
+      {
+        "tag": "kai-skill",
+        "attributes": [
+          "id"
+        ],
+        "text": true,
+        "description": "Parse a single light-DOM `<kai-skill>` element into a `Skill` descriptor. Attribute / content mapping: - `id` → Skill.id (falls back to `name` when absent) - `textContent` → Skill.name (the human-readable badge label) Example: `<kai-skill id=\"web-search\">Web Search</kai-skill>`"
+      }
+    ]
   },
   {
     "tag": "kai-source",
     "className": "KaiSourceElement",
     "displayName": "Source",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "href",
         "type": "undefined | string",
@@ -6342,15 +7320,26 @@
     "displayName": "Sources",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "sources",
-        "type": "{ href: string; title?: undefined | string; description?: undefined | string; label?: undefined | string; showFavicon?: undefined | false | true }[]",
-        "optional": false,
+        "type": "undefined | { href: string; title?: undefined | string; description?: undefined | string; label?: undefined | string; showFavicon?: undefined | false | true }[]",
+        "optional": true,
         "scalar": false,
-        "description": "The sources to render. Set as a JS property.",
-        "typeName": "SourceItem[]",
+        "description": "The sources to render. Set as a JS property. Omit to supply them as `<kai-source>` light-DOM children instead; when both are present the property's sources come first.",
+        "typeName": "KaiSourceItem[]",
         "typeShape": "{ href: string; title?: undefined | string; description?: undefined | string; label?: undefined | string; showFavicon?: undefined | false | true }[]",
         "default": "[]",
-        "displayType": "SourceItem[]"
+        "typeImport": "KaiSourceItem",
+        "displayType": "undefined | { href: string; title?: undefined | string; description?: undefined | string; label?: undefined | string; showFavicon?: undefined | false | true }[]"
       },
       {
         "name": "showFavicon",
@@ -6395,13 +7384,37 @@
         "storyId": "solid-advanced-elements-sourcelist--docs"
       }
     ],
-    "tokens": []
+    "tokens": [],
+    "declarativeChildren": [
+      {
+        "tag": "kai-source",
+        "attributes": [
+          "description",
+          "headline",
+          "href",
+          "label",
+          "show-favicon"
+        ],
+        "text": false,
+        "description": "Parse a single light-DOM `<kai-source>` element into a `KaiSourceItem` descriptor. Attribute mapping: - `href` → KaiSourceItem.href - `label` → KaiSourceItem.label - `headline` → KaiSourceItem.title (matches kai-source's prop name; \"title\" is a reserved HTMLElement attribute so kai-source uses \"headline\") - `description` → KaiSourceItem.description - `show-favicon`→ KaiSourceItem.showFavicon (bare boolean attribute)"
+      }
+    ]
   },
   {
     "tag": "kai-status",
     "className": "KaiStatusElement",
     "displayName": "Status",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "status",
         "type": "undefined | \"new\" | \"online\" | \"busy\" | \"away\" | \"offline\"",
@@ -6462,13 +7475,23 @@
     "displayName": "Suggestions",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "suggestions",
-        "type": "(string | { label: string; value?: undefined | string; icon?: undefined | string })[]",
-        "optional": false,
+        "type": "undefined | (string | { label: string; value?: undefined | string; icon?: undefined | string })[]",
+        "optional": true,
         "scalar": false,
-        "description": "The suggestions. Strings, or `{ label, value }` when the displayed text and the emitted value differ. Set as a JS property.",
+        "description": "The suggestions. Strings, or `{ label, value }` when the displayed text and the emitted value differ. Set as a JS property. Omit to supply them as `<kai-suggestion>` light-DOM children instead; when both are present the property's suggestions come first.",
         "default": "[]",
-        "displayType": "(string | { label: string; value?: undefined | string; icon?: undefined | string })[]"
+        "displayType": "undefined | (string | { label: string; value?: undefined | string; icon?: undefined | string })[]"
       },
       {
         "name": "variant",
@@ -6531,13 +7554,34 @@
         "storyId": "solid-advanced-elements-promptsuggestion--docs"
       }
     ],
-    "tokens": []
+    "tokens": [],
+    "declarativeChildren": [
+      {
+        "tag": "kai-suggestion",
+        "attributes": [
+          "icon",
+          "value"
+        ],
+        "text": true,
+        "description": "Parse a single `<kai-suggestion>` node into an `Item` descriptor."
+      }
+    ]
   },
   {
     "tag": "kai-switch",
     "className": "KaiSwitchElement",
     "displayName": "Switch",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "checked",
         "type": "undefined | false | true",
@@ -6624,11 +7668,24 @@
     "displayName": "Tabs",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "items",
         "type": "undefined | { id: string; label?: undefined | string; icon?: undefined | string; disabled?: undefined | false | true }[]",
         "optional": true,
         "scalar": false,
         "description": "Tabs to render. Set as a JS property, not an HTML attribute.",
+        "typeName": "KaiTabItem[]",
+        "typeShape": "{ id: string; label?: undefined | string; icon?: undefined | string; disabled?: undefined | false | true }[]",
+        "typeImport": "KaiTabItem",
         "displayType": "undefined | { id: string; label?: undefined | string; icon?: undefined | string; disabled?: undefined | false | true }[]"
       },
       {
@@ -6721,6 +7778,16 @@
     "className": "KaiTasksElement",
     "displayName": "Tasks",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "data",
         "type": "undefined | Record<string, unknown>",
@@ -6849,6 +7916,16 @@
     "displayName": "TextShimmer",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "text",
         "type": "undefined | string",
         "optional": true,
@@ -6902,6 +7979,16 @@
     "displayName": "ThinkingBar",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "text",
         "type": "undefined | string",
         "optional": true,
@@ -6953,12 +8040,25 @@
     "displayName": "Thread",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "messages",
-        "type": "undefined | { id: string; role: \"user\" | \"assistant\"; content: string; reasoning?: undefined | { text: string; label?: undefined | string }; tools?: undefined | { type: string; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string }[]; attachments?: undefined | { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]",
+        "type": "undefined | { id: string; role: \"user\" | \"assistant\"; parts: ({ type: \"text\"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: \"reasoning\"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: \"tool\"; tool: { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"card\"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"source\"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: \"file\"; attachment: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]",
         "optional": true,
         "scalar": false,
-        "description": "The full message thread to render, newest last. Each entry carries its role, content, and optional reasoning/tools/attachments/actions/avatar. Set as a JS property (`el.messages = [...]`); a NEW array reference per streaming chunk re-renders (mutating in place does not).",
-        "displayType": "undefined | { id: string; role: \"user\" | \"assistant\"; content: string; reasoning?: undefined | { text: string; label?: undefined | string }; tools?: undefined | { type: string; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string }[]; attachments?: undefined | { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]"
+        "description": "The full message thread to render, newest last. Each entry carries its role, ordered `parts`, and optional actions/avatar/feedback. Set as a JS property (`el.messages = [...]`); a NEW array reference per streaming chunk re-renders (mutating in place does not).",
+        "typeName": "ChatMessage[]",
+        "typeShape": "{ id: string; role: \"user\" | \"assistant\"; parts: ({ type: \"text\"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: \"reasoning\"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: \"tool\"; tool: { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"card\"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"source\"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: \"file\"; attachment: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]",
+        "typeImport": "ChatMessage",
+        "displayType": "undefined | { id: string; role: \"user\" | \"assistant\"; parts: ({ type: \"text\"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: \"reasoning\"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: \"tool\"; tool: { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"card\"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"source\"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: \"file\"; attachment: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]"
       },
       {
         "name": "loading",
@@ -7021,6 +8121,14 @@
         "scalar": true,
         "description": "Extra classes applied to the thread's inner root.",
         "displayType": "undefined | string"
+      },
+      {
+        "name": "cardTypes",
+        "type": "undefined | Record<string, string>",
+        "optional": true,
+        "scalar": false,
+        "description": "Optional card type -> custom-element tag overrides/additions for `card` parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type.",
+        "displayType": "undefined | Record<string, string>"
       }
     ],
     "events": [
@@ -7061,16 +8169,26 @@
     "displayName": "ToastRegion",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "toasts",
-        "type": "{ id: string; message: string; variant?: undefined | \"error\" | \"info\" | \"success\" | \"warning\" | \"neutral\"; appearance?: undefined | \"pill\" | \"card\"; inverse?: undefined | false | true; description?: undefined | string; action?: undefined | { label: string; onAction: () => void | false }; duration?: undefined | number; dismissible?: undefined | false | true; target?: undefined | HTMLElement }[]",
-        "optional": false,
+        "type": "undefined | { id: string; message: string; variant?: undefined | \"error\" | \"info\" | \"success\" | \"warning\" | \"neutral\"; appearance?: undefined | \"card\" | \"pill\"; inverse?: undefined | false | true; description?: undefined | string; action?: undefined | { label: string; onAction: () => void | false }; duration?: undefined | number; dismissible?: undefined | false | true; target?: undefined | HTMLElement }[]",
+        "optional": true,
         "scalar": false,
-        "description": "The toasts to render. Newest is shown on top. Set as a JS property (array); pass a new array reference to update.",
+        "description": "The toasts to render. Newest is shown on top. Set as a JS property (array); pass a new array reference to update. Omit for an empty region, which is the normal resting state and how the imperative `toast()` API starts.",
         "typeName": "ToastItem[]",
-        "typeShape": "{ id: string; message: string; variant?: undefined | \"error\" | \"info\" | \"success\" | \"warning\" | \"neutral\"; appearance?: undefined | \"pill\" | \"card\"; inverse?: undefined | false | true; description?: undefined | string; action?: undefined | { label: string; onAction: () => void | false }; duration?: undefined | number; dismissible?: undefined | false | true; target?: undefined | HTMLElement }[]",
+        "typeShape": "{ id: string; message: string; variant?: undefined | \"error\" | \"info\" | \"success\" | \"warning\" | \"neutral\"; appearance?: undefined | \"card\" | \"pill\"; inverse?: undefined | false | true; description?: undefined | string; action?: undefined | { label: string; onAction: () => void | false }; duration?: undefined | number; dismissible?: undefined | false | true; target?: undefined | HTMLElement }[]",
         "default": "[]",
         "typeImport": "ToastItem",
-        "displayType": "{ id: string; message: string; variant?: undefined | \"error\" | \"info\" | \"success\" | \"warning\" | \"neutral\"; appearance?: undefined | \"pill\" | \"card\"; inverse?: undefined | false | true; description?: undefined | string; action?: undefined | { label: string; onAction: () => void | false }; duration?: undefined | number; dismissible?: undefined | false | true; target?: undefined | HTMLElement }[]"
+        "displayType": "undefined | { id: string; message: string; variant?: undefined | \"error\" | \"info\" | \"success\" | \"warning\" | \"neutral\"; appearance?: undefined | \"card\" | \"pill\"; inverse?: undefined | false | true; description?: undefined | string; action?: undefined | { label: string; onAction: () => void | false }; duration?: undefined | number; dismissible?: undefined | false | true; target?: undefined | HTMLElement }[]"
       },
       {
         "name": "position",
@@ -7101,12 +8219,12 @@
       },
       {
         "name": "appearance",
-        "type": "undefined | \"pill\" | \"card\"",
+        "type": "undefined | \"card\" | \"pill\"",
         "optional": true,
         "scalar": true,
         "description": "Default appearance for this region's toasts: `'pill'` (default, compact) | `'card'` (richer, with a description line). A per-toast `appearance` wins. Attribute: `appearance`.",
         "default": "'pill'",
-        "displayType": "undefined | \"pill\" | \"card\""
+        "displayType": "undefined | \"card\" | \"pill\""
       },
       {
         "name": "inverse",
@@ -7156,12 +8274,25 @@
     "displayName": "Tool",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "tool",
-        "type": "undefined | { type: string; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string }",
+        "type": "undefined | { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }",
         "optional": true,
         "scalar": false,
         "description": "The tool-call to display. Set as a JS property.",
-        "displayType": "ToolPart | undefined"
+        "typeName": "ToolPart",
+        "typeShape": "{ type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }",
+        "typeImport": "ToolPart",
+        "displayType": "undefined | { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }"
       },
       {
         "name": "open",
@@ -7235,6 +8366,16 @@
     "className": "KaiTooltipElement",
     "displayName": "Tooltip",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "content",
         "type": "undefined | string",
@@ -7328,13 +8469,30 @@
         "storyId": "solid-advanced-primitives-tooltip--docs"
       }
     ],
-    "tokens": []
+    "tokens": [],
+    "slots": [
+      {
+        "name": "",
+        "mode": "inject",
+        "doc": "The TRIGGER the tooltip describes. The tip text is the `text` prop."
+      }
+    ]
   },
   {
     "tag": "kai-voice-input",
     "className": "KaiVoiceInputElement",
     "displayName": "VoiceInput",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "transcribe",
         "type": "undefined | (audio: Blob) => Promise<string>",
@@ -7424,6 +8582,16 @@
     "className": "KaiVoiceOutputElement",
     "displayName": "VoiceOutput",
     "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
       {
         "name": "text",
         "type": "undefined | string",
@@ -7522,28 +8690,38 @@
     "displayName": "Workspace",
     "props": [
       {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
         "name": "groups",
-        "type": "{ id: string; userId?: undefined | string; teamId?: undefined | string; name: string; sortOrder: number; createdAt: string }[]",
-        "optional": false,
+        "type": "undefined | { id: string; userId?: undefined | string; teamId?: undefined | string; name: string; sortOrder: number; createdAt: string }[]",
+        "optional": true,
         "scalar": false,
-        "description": "Pre-bucketed conversation groups for the sidebar. Set as a JS property.",
+        "description": "The sidebar's section headers, rendered in array order. A group carries no conversations of its own; it is matched against `conversations` by id, so the two props are complementary rather than alternatives. Omit for an ungrouped sidebar. Set as a JS property.",
         "typeName": "ConversationGroup[]",
         "typeShape": "{ id: string; userId?: undefined | string; teamId?: undefined | string; name: string; sortOrder: number; createdAt: string }[]",
         "default": "[]",
         "typeImport": "ConversationGroup",
-        "displayType": "ConversationGroup[]"
+        "displayType": "undefined | { id: string; userId?: undefined | string; teamId?: undefined | string; name: string; sortOrder: number; createdAt: string }[]"
       },
       {
         "name": "conversations",
-        "type": "{ id: string; title: string; groupId?: undefined | string; scope: { type: \"document\" | \"collection\"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | \"transcript\" | \"markdown\"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[]",
-        "optional": false,
+        "type": "undefined | { id: string; title: string; groupId?: undefined | string; scope: { type: \"document\" | \"collection\"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | \"transcript\" | \"markdown\"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[]",
+        "optional": true,
         "scalar": false,
-        "description": "Flat conversation list (auto-bucketed if `groups` is empty). Set as a JS property.",
+        "description": "Every conversation in the sidebar, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId` — or with a `groupId` matching no entry in `groups` — falls into a trailing ungrouped section (headerless when `compact`), so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. Omit for an empty sidebar, or when `no-conversations` replaces the built-in list with your own `sidebar-header` content.",
         "typeName": "ConversationSummary[]",
         "typeShape": "{ id: string; title: string; groupId?: undefined | string; scope: { type: \"document\" | \"collection\"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | \"transcript\" | \"markdown\"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[]",
         "default": "[]",
         "typeImport": "ConversationSummary",
-        "displayType": "{ id: string; title: string; groupId?: undefined | string; scope: { type: \"document\" | \"collection\"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | \"transcript\" | \"markdown\"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[]"
+        "displayType": "undefined | { id: string; title: string; groupId?: undefined | string; scope: { type: \"document\" | \"collection\"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | \"transcript\" | \"markdown\"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[]"
       },
       {
         "name": "activeId",
@@ -7555,15 +8733,15 @@
       },
       {
         "name": "messages",
-        "type": "{ id: string; role: \"user\" | \"assistant\"; content: string; reasoning?: undefined | { text: string; label?: undefined | string }; tools?: undefined | { type: string; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string }[]; attachments?: undefined | { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]",
-        "optional": false,
+        "type": "undefined | { id: string; role: \"user\" | \"assistant\"; parts: ({ type: \"text\"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: \"reasoning\"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: \"tool\"; tool: { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"card\"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"source\"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: \"file\"; attachment: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]",
+        "optional": true,
         "scalar": false,
-        "description": "The active conversation's message thread, newest last. Set as a JS property.",
+        "description": "The active conversation's message thread, newest last. Set as a JS property (`el.messages = [...]`); a NEW array reference per streaming chunk re-renders (mutating in place does not). Omit for an empty thread.",
         "typeName": "ChatMessage[]",
-        "typeShape": "{ id: string; role: \"user\" | \"assistant\"; content: string; reasoning?: undefined | { text: string; label?: undefined | string }; tools?: undefined | { type: string; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string }[]; attachments?: undefined | { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]",
+        "typeShape": "{ id: string; role: \"user\" | \"assistant\"; parts: ({ type: \"text\"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: \"reasoning\"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: \"tool\"; tool: { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"card\"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"source\"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: \"file\"; attachment: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]",
         "default": "[]",
         "typeImport": "ChatMessage",
-        "displayType": "{ id: string; role: \"user\" | \"assistant\"; content: string; reasoning?: undefined | { text: string; label?: undefined | string }; tools?: undefined | { type: string; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string }[]; attachments?: undefined | { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]"
+        "displayType": "undefined | { id: string; role: \"user\" | \"assistant\"; parts: ({ type: \"text\"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: \"reasoning\"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: \"tool\"; tool: { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"card\"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"source\"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: \"file\"; attachment: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]"
       },
       {
         "name": "value",
@@ -7649,6 +8827,9 @@
         "optional": true,
         "scalar": false,
         "description": "",
+        "typeName": "ModelOption[]",
+        "typeShape": "{ id: string; name: string; provider?: undefined | string; description?: undefined | string; group?: undefined | string }[]",
+        "typeImport": "ModelOption",
         "displayType": "undefined | { id: string; name: string; provider?: undefined | string; description?: undefined | string; group?: undefined | string }[]"
       },
       {
@@ -7665,6 +8846,9 @@
         "optional": true,
         "scalar": false,
         "description": "",
+        "typeName": "ChatThreadContextUsage",
+        "typeShape": "{ usedTokens: number; maxTokens: number; inputTokens?: undefined | number; outputTokens?: undefined | number; estimatedCost?: undefined | number }",
+        "typeImport": "ChatThreadContextUsage",
         "displayType": "ContextData | undefined"
       },
       {
@@ -7700,6 +8884,9 @@
         "optional": true,
         "scalar": false,
         "description": "Rich entity triggers (`/` skills, `@` agents/plugins) forwarded to the input.",
+        "typeName": "TriggerDef[]",
+        "typeShape": "{ char: string; kind: string; items?: undefined | { id: string; label: string; icon?: undefined | string; description?: undefined | string; group?: undefined | string; kind?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[] }[]",
+        "typeImport": "TriggerDef",
         "displayType": "undefined | { char: string; kind: string; items?: undefined | { id: string; label: string; icon?: undefined | string; description?: undefined | string; group?: undefined | string; kind?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[] }[]"
       },
       {
@@ -7776,6 +8963,14 @@
         "scalar": true,
         "description": "Suppress the built-in ConversationList so the `sidebar-header` slot owns the whole rail flex region (for apps that supply their own rail nav). Default false. Attribute: `no-conversations`.",
         "displayType": "undefined | false | true"
+      },
+      {
+        "name": "cardTypes",
+        "type": "undefined | Record<string, string>",
+        "optional": true,
+        "scalar": false,
+        "description": "Optional card type -> custom-element tag overrides/additions for `card` parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type.",
+        "displayType": "undefined | Record<string, string>"
       }
     ],
     "events": [

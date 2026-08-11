@@ -5,8 +5,10 @@ import { Artifact, type ArtifactController, type ArtifactFile, type ArtifactTab 
 interface Props extends Record<string, unknown> {
   /** URL the preview iframe frames. Consumer-controlled. */
   src?: string;
-  /** Files for the Code tab tree + each file's preview `url`. Set as a JS property (array). */
-  files: ArtifactFile[];
+  /** Files for the Code tab tree + each file's preview `url`. Omit for a
+   *  preview-only artifact (the Code tab then has nothing to show; pair it with
+   *  `no-tabs` to hide the toggle). Set as a JS property (array). */
+  files?: ArtifactFile[];
   /** Controlled active tab: `preview` or `code`. When set, the artifact follows it
    *  (re-asserted on change). Leave unset for an uncontrolled tab (see `defaultTab`). */
   tab?: ArtifactTab;
@@ -56,6 +58,12 @@ interface Events extends Record<string, unknown> {
   'kai-file-select': { path: string };
   /** Artifact's own maximize button toggled (consumer-observable; non-bubbling). */
   'kai-maximize-change': { maximized: boolean };
+  /** The maximize PROTOCOL intent, raised as a raw bubbling + composed CustomEvent
+   *  (not through `dispatch`) so an enclosing `<kai-resizable>` can catch it and
+   *  maximize the containing panel. Declared here so it is typed and reaches the
+   *  generated API — listen for it to drive maximize from your own chrome, or
+   *  re-emit it to trigger one. */
+  'kai-maximize-intent': { requested: boolean };
 }
 
 /**
@@ -157,7 +165,7 @@ defineWebComponent<Props, Events>('kai-artifact', {
       >
         <Artifact
           src={props.src}
-          files={props.files}
+          files={props.files ?? []}
           tab={props.tab}
           defaultTab={props.defaultTab}
           activeFile={props.activeFile}

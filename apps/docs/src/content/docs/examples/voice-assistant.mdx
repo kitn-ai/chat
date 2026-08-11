@@ -43,8 +43,8 @@ import VoiceAssistantDemo from '../../../components/VoiceAssistantDemo.tsx';
     const assistantId = crypto.randomUUID();
     chat.messages = [
       ...chat.messages,
-      { id: crypto.randomUUID(), role: 'user', content: question },
-      { id: assistantId, role: 'assistant', content: '' },
+      { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: question }] },
+      { id: assistantId, role: 'assistant', parts: [] },
     ];
     chat.loading = true;
 
@@ -52,7 +52,7 @@ import VoiceAssistantDemo from '../../../components/VoiceAssistantDemo.tsx';
     for await (const token of streamAnswer(question)) {
       answer += token;
       chat.messages = chat.messages.map((m) =>
-        m.id === assistantId ? { ...m, content: answer } : m,
+        m.id === assistantId ? { ...m, parts: [{ type: 'text', text: answer }] } : m,
       );
     }
 

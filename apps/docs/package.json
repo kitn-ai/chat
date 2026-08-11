@@ -11,7 +11,9 @@
     "prebuild": "node scripts/copy-kit-assets.mjs",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "verify:docs": "node scripts/docs-alignment/index.mjs",
+    "verify:docs:report": "node scripts/docs-alignment/index.mjs --report-only --report docs/superpowers/specs/2026-08-10-docs-code-alignment.md"
   },
   "dependencies": {
     "@astrojs/solid-js": "^6.0.1",

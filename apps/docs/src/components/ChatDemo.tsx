@@ -5,13 +5,25 @@
 import { createSignal, onMount, onCleanup } from 'solid-js';
 import { loadKit } from './example/kit';
 
+interface ToolPart {
+  type: string;
+  state: 'input-streaming' | 'input-available' | 'output-available' | 'output-error';
+  toolCallId?: string;
+  input?: Record<string, unknown>;
+  output?: Record<string, unknown>;
+  errorText?: string;
+}
+
+export type MessagePart =
+  | { type: 'text'; text: string }
+  | { type: 'reasoning'; text: string; label?: string }
+  | { type: 'tool'; tool: ToolPart };
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
-  content: string;
+  parts: MessagePart[];
   actions?: string[];
-  reasoning?: unknown;
-  tools?: unknown[];
 }
 
 interface Props {
@@ -48,7 +60,11 @@ export default function ChatDemo(props: Props) {
     const text = (e as CustomEvent).detail?.value?.trim();
     if (!text || !host) return;
     const aId = nextId();
-    host.messages = [...(host.messages ?? []), { id: nextId(), role: 'user', content: text }, { id: aId, role: 'assistant', content: '' }];
+    host.messages = [
+      ...(host.messages ?? []),
+      { id: nextId(), role: 'user', parts: [{ type: 'text', text }] },
+      { id: aId, role: 'assistant', parts: [] },
+    ];
     (host as any).loading = true;
     const words = replyFor(text).split(/(\s+)/);
     let i = 0;
@@ -58,7 +74,7 @@ export default function ChatDemo(props: Props) {
       const partial = words.slice(0, i).join('');
       const done = i >= words.length;
       host!.messages = (host!.messages ?? []).map((m) =>
-        m.id === aId ? { ...m, content: partial, ...(done ? { actions: ['copy', 'like', 'dislike'] } : {}) } : m,
+        m.id === aId ? { ...m, parts: [{ type: 'text', text: partial }], ...(done ? { actions: ['copy', 'like', 'dislike'] } : {}) } : m,
       );
       if (!done) timer = window.setTimeout(tick, 38);
       else (host as any).loading = false;

@@ -5,47 +5,59 @@ description: Render an agent's thinking trace and tool invocations inline in a m
 
 import ChatDemo from '../../../components/ChatDemo.tsx';
 
-<p class="kai-lede">Agents think before they act and invoke tools to get things done. The `tools` and `reasoning` fields on `ChatMessage` bring both inline — one object per tool call, updated in place as the agent streams its output.</p>
+<p class="kai-lede">Agents think before they act and invoke tools to get things done. `reasoning` and `tool` parts in a message's `parts` array bring both inline — one part per tool call, updated in place as the agent streams its output.</p>
 
 <ChatDemo client:only="solid" chatTitle="Research Agent" placeholder="Ask the agent anything…" messages={[
-  { id: 'u1', role: 'user', content: 'What is the current price of NVDA stock and its 52-week range?' },
+  { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'What is the current price of NVDA stock and its 52-week range?' }] },
   {
     id: 'a1',
     role: 'assistant',
-    content: "Here's what I found for NVIDIA (NVDA):\n\n- **Current price:** $875.40\n- **52-week low:** $402.11\n- **52-week high:** $974.00\n\nThe stock has nearly doubled from its 52-week low, driven by sustained demand for AI training hardware.",
-    reasoning: {
-      text: "The user wants current market data for NVDA. I should use the stock_quote tool to fetch the price and the market_data tool to get the 52-week range. I'll call stock_quote first since I need the current price, then market_data for the range.",
-      label: 'Agent reasoning',
-    },
-    tools: [
+    parts: [
       {
-        type: 'stock_quote',
-        state: 'output-available',
-        toolCallId: 'call_abc123',
-        input: { ticker: 'NVDA', exchange: 'NASDAQ' },
-        output: { price: 875.4, currency: 'USD', timestamp: '2026-06-17T14:30:00Z' },
+        type: 'reasoning',
+        text: "The user wants current market data for NVDA. I should use the stock_quote tool to fetch the price and the market_data tool to get the 52-week range. I'll call stock_quote first since I need the current price, then market_data for the range.",
+        label: 'Agent reasoning',
       },
       {
-        type: 'market_data',
-        state: 'output-available',
-        toolCallId: 'call_def456',
-        input: { ticker: 'NVDA', fields: ['52w_low', '52w_high'] },
-        output: { '52w_low': 402.11, '52w_high': 974.0 },
+        type: 'tool',
+        tool: {
+          type: 'stock_quote',
+          state: 'output-available',
+          toolCallId: 'call_abc123',
+          input: { ticker: 'NVDA', exchange: 'NASDAQ' },
+          output: { price: 875.4, currency: 'USD', timestamp: '2026-06-17T14:30:00Z' },
+        },
+      },
+      {
+        type: 'tool',
+        tool: {
+          type: 'market_data',
+          state: 'output-available',
+          toolCallId: 'call_def456',
+          input: { ticker: 'NVDA', fields: ['52w_low', '52w_high'] },
+          output: { '52w_low': 402.11, '52w_high': 974.0 },
+        },
+      },
+      {
+        type: 'text',
+        text: "Here's what I found for NVIDIA (NVDA):\n\n- **Current price:** $875.40\n- **52-week low:** $402.11\n- **52-week high:** $974.00\n\nThe stock has nearly doubled from its 52-week low, driven by sustained demand for AI training hardware.",
       },
     ],
     actions: ['copy', 'like', 'dislike'],
   },
-  { id: 'u2', role: 'user', content: 'Now look up the weather in San Francisco.' },
+  { id: 'u2', role: 'user', parts: [{ type: 'text', text: 'Now look up the weather in San Francisco.' }] },
   {
     id: 'a2',
     role: 'assistant',
-    content: '',
-    tools: [
+    parts: [
       {
-        type: 'get_weather',
-        state: 'input-available',
-        toolCallId: 'call_ghi789',
-        input: { city: 'San Francisco', units: 'imperial' },
+        type: 'tool',
+        tool: {
+          type: 'get_weather',
+          state: 'input-available',
+          toolCallId: 'call_ghi789',
+          input: { city: 'San Francisco', units: 'imperial' },
+        },
       },
     ],
   },
@@ -53,7 +65,7 @@ import ChatDemo from '../../../components/ChatDemo.tsx';
 
 ## How it works
 
-Both `tools` and `reasoning` live directly on the `ChatMessage` object you pass to `<kai-chat>` or `<kai-message>`. Update the message in place as the agent streams. Since the message carries arrays, you assign it in JavaScript rather than as an HTML attribute.
+Both `tool` and `reasoning` are parts inside the `parts` array of the `ChatMessage` object you pass to `<kai-chat>` or `<kai-message>`. Update the matching part in place (immutably) as the agent streams. Since the message carries arrays, you assign it in JavaScript rather than as an HTML attribute.
 
 ```js
 import '@kitn.ai/ui/elements';
@@ -67,32 +79,38 @@ const callId = crypto.randomUUID();
 // Append an empty assistant message the moment the agent starts
 chat.messages = [
   ...chat.messages,
-  { id: crypto.randomUUID(), role: 'user', content: prompt },
+  { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: prompt }] },
   {
     id: aId,
     role: 'assistant',
-    content: '',
-    reasoning: { text: '', label: 'Agent reasoning' },
-    tools: [
+    parts: [
+      { type: 'reasoning', text: '', label: 'Agent reasoning' },
       {
-        type: 'search_web',
-        state: 'input-streaming',   // tool call incoming — inputs not yet complete
-        toolCallId: callId,
+        type: 'tool',
+        tool: {
+          type: 'search_web',
+          state: 'input-streaming',   // tool call incoming — inputs not yet complete
+          toolCallId: callId,
+        },
       },
     ],
   },
 ];
 chat.loading = true;
 
-// As the stream arrives, mutate the message array with new array references
-// to drive re-renders. Each state transition is a new array assigned to chat.messages.
+// As the stream arrives, replace the matching part with a new array reference
+// to drive re-renders. Each state transition reassigns chat.messages.
 
 // Input fully received → update state to 'input-available'
 chat.messages = chat.messages.map((m) =>
   m.id === aId
     ? {
         ...m,
-        tools: [{ ...m.tools[0], state: 'input-available', input: { query: 'AI/UI docs' } }],
+        parts: m.parts.map((p) =>
+          p.type === 'tool'
+            ? { ...p, tool: { ...p.tool, state: 'input-available', input: { query: 'AI/UI docs' } } }
+            : p,
+        ),
       }
     : m,
 );
@@ -102,7 +120,11 @@ chat.messages = chat.messages.map((m) =>
   m.id === aId
     ? {
         ...m,
-        tools: [{ ...m.tools[0], state: 'output-available', output: { results: ['…'] } }],
+        parts: m.parts.map((p) =>
+          p.type === 'tool'
+            ? { ...p, tool: { ...p.tool, state: 'output-available', output: { results: ['…'] } } }
+            : p,
+        ),
       }
     : m,
 );
@@ -110,18 +132,24 @@ chat.messages = chat.messages.map((m) =>
 // Tool failed → state becomes 'output-error'
 // chat.messages = chat.messages.map((m) =>
 //   m.id === aId
-//     ? { ...m, tools: [{ ...m.tools[0], state: 'output-error', errorText: 'Rate limit exceeded' }] }
+//     ? { ...m, parts: m.parts.map((p) => p.type === 'tool' ? { ...p, tool: { ...p.tool, state: 'output-error', errorText: 'Rate limit exceeded' } } : p) }
 //     : m
 // );
 
-// Stream the final reply into content
+// Stream the final reply into a text part, appended after reasoning + tool
+let answer = '';
 for await (const token of streamFromYourModel(prompt)) {
+  answer += token;
   chat.messages = chat.messages.map((m) =>
-    m.id === aId ? { ...m, content: m.content + token } : m,
+    m.id === aId
+      ? { ...m, parts: [...m.parts.filter((p) => p.type !== 'text'), { type: 'text', text: answer }] }
+      : m,
   );
 }
 chat.loading = false;
 ```
+
+The ergonomic path is `createAssistantStream` from `@kitn.ai/ui/state`: its `upsertTool(toolCallId, patch)` and `appendReasoning(delta)` handle the part-lookup and new-reference plumbing above for you.
 
 **Tool lifecycle — four states:**
 
@@ -132,7 +160,7 @@ chat.loading = false;
 | `output-available` | Check icon, "Completed" badge | Tool returned successfully |
 | `output-error` | X icon, "Error" badge + `errorText` | Tool threw or returned an error |
 
-**`reasoning`** is a single `{ text, label? }` object — append tokens to `text` as they stream in. The block auto-expands while reasoning is in progress if you use `<kai-reasoning streaming>` directly; via `<kai-chat>` or `<kai-message>` the block is collapsible once complete.
+**`reasoning`** is a `{ type: 'reasoning', text, label? }` part — append tokens to `text` as they stream in. The block auto-expands while reasoning is in progress if you use `<kai-reasoning streaming>` directly; via `<kai-chat>` or `<kai-message>` the block is collapsible once complete.
 
 **`<kai-thinking-bar>`** is the pre-reasoning status bar — show it before the first reasoning token arrives. It fires `kai-stop` when the user clicks "Answer now" (requires `stoppable`):
 

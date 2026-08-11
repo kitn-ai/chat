@@ -63,14 +63,14 @@ The browser side is the OpenAI-format SSE reader from the [Streaming recipe](/gu
 
 ## Tool calls and reasoning
 
-The loop above renders the answer. To show the agent's *work* — the tool calls and reasoning LangGraph emits — map them onto the message contract and forward extra frames a richer browser reader picks up. A `<kai-chat>` message carries a `tools[]` array, each part moving through a `state`:
+The loop above renders the answer. To show the agent's *work* — the tool calls and reasoning LangGraph emits — map them onto the message contract and forward extra frames a richer browser reader picks up. A `<kai-chat>` message's `parts` array carries `tool` and `reasoning` parts alongside its `text` part, each tool part moving through a `state`:
 
 | LangGraph piece | Message contract field |
 |---|---|
-| `messageChunk.content` (string) | assistant `content` |
-| `chunk.tool_call_chunks[].name` / `.args` | tool part `input` (`input-streaming` → `input-available`) |
-| `ToolMessage.content` | tool part `output` (`output-available`) |
-| `additional_kwargs.reasoning_content` | `reasoning.text` |
+| `messageChunk.content` (string) | a `{ type: 'text' }` part's `text` |
+| `chunk.tool_call_chunks[].name` / `.args` | a `{ type: 'tool' }` part's `tool.input` (`input-streaming` → `input-available`) |
+| `ToolMessage.content` | the tool part's `tool.output` (`output-available`) |
+| `additional_kwargs.reasoning_content` | a `{ type: 'reasoning' }` part's `text` |
 
 Open a tool part with `state: "input-streaming"` and a `toolCallId` when the first chunk arrives, fill `input` as the arguments stream, then set `output` and flip to `output-available` once the `ToolMessage` lands. A failed tool becomes `output-error` with `errorText`. Render the result with a [tool](/components/tool/) card and reasoning with a [reasoning](/components/reasoning/) part.
 

@@ -47,7 +47,7 @@ type Story = StoryObj<typeof meta>;
 
 const DEFAULT_SNIPPET = `import { createSignal } from 'solid-js';
 import { Monitor, Sun, Moon } from 'lucide-solid';
-import { SettingsGroup, SettingItem, Segmented, Switch } from '@kitn.ai/ui';
+import { SettingsGroup, SettingItem, Segmented, Switch } from '@kitn.ai/ui/solid';
 
 function Example() {
   const [appearance, setAppearance] = createSignal('system');
@@ -97,7 +97,7 @@ function Example() {
   );
 }`;
 
-const STACKED_SNIPPET = `import { SettingsGroup, SettingItem, Switch } from '@kitn.ai/ui';
+const STACKED_SNIPPET = `import { SettingsGroup, SettingItem, Switch } from '@kitn.ai/ui/solid';
 
 function Example() {
   return (

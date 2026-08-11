@@ -32,7 +32,7 @@ Load the bundle straight from a CDN — no install, no build step:
 </script>
 ```
 
-Pin an exact version in production (e.g. `@kitn.ai/ui@0.16.0/dist/...`). The package is pre-1.0, so a minor release can break things.
+Pin an exact version in production (e.g. `@kitn.ai/ui@0.20.1/dist/...`). The package is pre-1.0, so a minor release can break things.
 </Aside>
 
 ## Your first chat
@@ -51,12 +51,12 @@ You'll lean on two patterns over and over: set rich data on a JavaScript propert
 
   // Seed the thread. Arrays can't be attributes, so this goes in JavaScript.
   chat.messages = [
-    { id: '1', role: 'assistant', content: 'Hello! How can I help?' },
+    { id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello! How can I help?' }] },
   ];
 
   // kai-submit fires when the user sends.
   chat.addEventListener('kai-submit', (e) => {
-    const userMessage = { id: crypto.randomUUID(), role: 'user', content: e.detail.value };
+    const userMessage = { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: e.detail.value }] };
     chat.messages = [...chat.messages, userMessage];
     // Call your model here, then append an assistant message.
   });
@@ -71,47 +71,44 @@ From that example:
 
 ## Stream a reply
 
-`<kai-chat>` is transport-agnostic — it renders whatever you hand it. To stream, push an empty assistant message, then swap it for a fresh object on each chunk.
+`<kai-chat>` is transport-agnostic: it renders whatever you hand it. Two imports do the streaming: `createAssistantStream` owns the in-flight assistant message, `readOpenAIStream` parses the SSE onto it.
 
 ```js
+import { createAssistantStream } from '@kitn.ai/ui/state';
+import { readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';
+
 chat.addEventListener('kai-submit', async (e) => {
   const userText = e.detail.value.trim();
   if (!userText) return;
 
-  // 1. Show the user's message and an empty assistant placeholder.
-  const assistantId = crypto.randomUUID();
-  chat.messages = [
+  // 1. Show the user's message.
+  const history = [
     ...chat.messages,
-    { id: crypto.randomUUID(), role: 'user', content: userText },
-    { id: assistantId, role: 'assistant', content: '' },
+    { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: userText }] },
   ];
+  chat.messages = history;
   chat.loading = true;
 
   // 2. Stream from your endpoint (or a proxy to your model provider).
-  const res = await fetch('/api/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: userText }),
+  const stream = createAssistantStream((update) => {
+    chat.messages = update(chat.messages);
   });
 
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let answer = '';
-
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    answer += decoder.decode(value, { stream: true });
-
-    // Replace with a new object each chunk — mutation in place won't re-render.
-    chat.messages = chat.messages.map((m) =>
-      m.id === assistantId ? { ...m, content: answer } : m
-    );
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: toOpenAIMessages(history) }),
+    });
+    await readOpenAIStream(res, stream);
+  } finally {
+    stream.done();
+    chat.loading = false;
   }
-
-  chat.loading = false;
 });
 ```
+
+That covers text, reasoning and tool calls. For the tool loop, Anthropic streams and the error model, see the [wire adapter recipe](/guides/recipes/wire-adapter/).
 
 ## In your framework
 
@@ -128,7 +125,7 @@ The element behaves the same everywhere. Only the binding syntax differs.
   await customElements.whenDefined('kai-chat');
 
   const chat = document.getElementById('chat');
-  chat.messages = [{ id: '1', role: 'assistant', content: 'Hello!' }];
+  chat.messages = [{ id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello!' }] }];
   chat.addEventListener('kai-submit', (e) => console.log(e.detail.value));
 </script>
 ```
@@ -136,9 +133,12 @@ The element behaves the same everywhere. Only the binding syntax differs.
 <TabItem label="React">
 ```tsx
 import { Chat } from '@kitn.ai/ui/react';
+import type { ChatMessage } from '@kitn.ai/ui/react';
 
 export function App() {
-  const messages = [{ id: '1', role: 'assistant', content: 'Hello!' }];
+  const messages: ChatMessage[] = [
+    { id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello!' }] },
+  ];
   return (
     <Chat
       messages={messages}
@@ -161,7 +161,7 @@ export function App() {
 
 <script setup>
 import '@kitn.ai/ui/elements';
-const messages = [{ id: '1', role: 'assistant', content: 'Hello!' }];
+const messages = [{ id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello!' }] }];
 const onSubmit = (e) => console.log(e.detail.value);
 </script>
 ```
@@ -170,7 +170,7 @@ const onSubmit = (e) => console.log(e.detail.value);
 ```svelte
 <script>
   import '@kitn.ai/ui/elements';
-  const messages = [{ id: '1', role: 'assistant', content: 'Hello!' }];
+  const messages = [{ id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello!' }] }];
 </script>
 
 <kai-chat
@@ -194,7 +194,7 @@ const onSubmit = (e) => console.log(e.detail.value);
 // Solid apps can compose the native components instead of the element.
 import { createSignal } from 'solid-js';
 import '@kitn.ai/ui/theme.css';
-import { ChatConfig, ChatContainer, ChatContainerContent, Message, MessageContent, PromptInput, PromptInputTextarea, PromptInputActions } from '@kitn.ai/ui';
+import { Button, ChatConfig, ChatContainer, ChatContainerContent, Message, MessageContent, PromptInput, PromptInputTextarea, PromptInputActions } from '@kitn.ai/ui/solid';
 
 function App() {
   const [input, setInput] = createSignal('');
@@ -217,7 +217,9 @@ function App() {
         }}
       >
         <PromptInputTextarea placeholder="Ask anything…" />
-        <PromptInputActions />
+        <PromptInputActions>
+          <Button size="sm" disabled={!input()}>Send</Button>
+        </PromptInputActions>
       </PromptInput>
     </ChatConfig>
   );

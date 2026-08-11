@@ -64,7 +64,7 @@ export class App {
     if (!text) return;
     // The Composer already cleared its own input; here we just append the user
     // message and stream the (fake) assistant reply.
-    this.chat.append({ id: newId(), role: 'user', content: text });
+    this.chat.append({ id: newId(), role: 'user', parts: [{ type: 'text', text }] });
     const stream = this.chat.streamAssistant();
     await streamFakeReply(text, (delta) => stream.appendText(delta));
     stream.done();

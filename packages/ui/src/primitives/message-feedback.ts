@@ -9,6 +9,7 @@
 
 import { createSignal, onCleanup } from 'solid-js';
 import type { ChatMessage, FeedbackVote } from '../elements/chat-types';
+import { partsToText } from '../state';
 import { toast } from './toast-store';
 
 /** Detail shape emitted by the action row. `state` is present only for the
@@ -38,7 +39,7 @@ export interface MessageFeedback {
   /** Whether a message's copy button should currently show its check. */
   isCopied: (id: string) => boolean;
   /** Route a clicked action through copy / vote / passthrough handling. */
-  handleAction: (m: Pick<ChatMessage, 'id' | 'content' | 'feedback'>, action: string) => void;
+  handleAction: (m: Pick<ChatMessage, 'id' | 'parts' | 'feedback'>, action: string) => void;
 }
 
 const DEFAULT_COPIED_DURATION = 2000;
@@ -96,7 +97,7 @@ export function createMessageFeedback(opts: MessageFeedbackOptions): MessageFeed
   const handleAction: MessageFeedback['handleAction'] = (m, action) => {
     if (action === 'copy') {
       // Clipboard may be unavailable (insecure context / jsdom); fail soft.
-      try { navigator.clipboard?.writeText(m.content); } catch { /* ignore */ }
+      try { navigator.clipboard?.writeText(partsToText(m.parts)); } catch { /* ignore */ }
       markCopied(m.id);
       toast('Copied to clipboard', { target: opts.target?.() });
       opts.emit({ messageId: m.id, action });

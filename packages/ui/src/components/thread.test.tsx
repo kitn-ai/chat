@@ -23,14 +23,24 @@ if (!Element.prototype.scrollTo) (Element.prototype as unknown as { scrollTo: ()
 const writeText = vi.fn();
 Object.assign(navigator, { clipboard: { writeText } });
 
+// jsdom has no ResizeObserver; the reasoning disclosure wires one when its
+// content is visible (see response-compare.test.tsx for the same stub).
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+}
+
 afterEach(cleanup);
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
 describe('Thread message rendering', () => {
   const convo: ChatMessage[] = [
-    { id: 'u1', role: 'user', content: 'Hello there' },
-    { id: 'a1', role: 'assistant', content: 'General Kenobi' },
+    { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'Hello there' }] },
+    { id: 'a1', role: 'assistant', parts: [{ type: 'text', text: 'General Kenobi' }] },
   ];
 
   it('renders one row per message with its content', () => {
@@ -41,10 +51,33 @@ describe('Thread message rendering', () => {
 
   it('renders an avatar rail for messages that carry an avatar', () => {
     const withAvatar: ChatMessage[] = [
-      { id: 'a1', role: 'assistant', content: 'hi', avatar: { fallback: 'AI' } },
+      { id: 'a1', role: 'assistant', parts: [{ type: 'text', text: 'hi' }], avatar: { fallback: 'AI' } },
     ];
     const { getByText } = render(() => <Thread messages={withAvatar} />);
     expect(getByText('AI')).toBeInTheDocument();
+  });
+
+  it('renders parts in order, not grouped by type', () => {
+    const message: ChatMessage = {
+      id: 'm1', role: 'assistant',
+      parts: [
+        { type: 'text', text: 'Checking.' },
+        { type: 'tool', tool: { type: 'get_weather', kind: 'generic', state: 'output-available' } },
+        { type: 'text', text: 'Done.' },
+      ],
+    };
+    const { container } = render(() => <Thread messages={[message]} />);
+    const text = container.textContent ?? '';
+    // A grouped render (all tools, then all text concatenated) would still put
+    // "Checking." before "Done." and would still contain "get_weather", so a
+    // real three-way check is required to prove genuine interleaving, not just
+    // grouping-by-luck.
+    const iChecking = text.indexOf('Checking.');
+    const iTool = text.indexOf('get_weather');
+    const iDone = text.indexOf('Done.');
+    expect(iChecking).toBeGreaterThanOrEqual(0);
+    expect(iTool).toBeGreaterThan(iChecking);
+    expect(iDone).toBeGreaterThan(iTool);
   });
 });
 
@@ -64,7 +97,7 @@ describe('Thread empty state', () => {
 
   it('hides the empty state once the thread has messages', () => {
     const { queryByText } = render(() => (
-      <Thread messages={[{ id: 'u1', role: 'user', content: 'hi' }]} />
+      <Thread messages={[{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }]} />
     ));
     expect(queryByText('No messages yet')).toBeNull();
   });
@@ -81,8 +114,8 @@ describe('Thread message actions', () => {
     writeText.mockClear();
   });
 
-  const assistant = (content: string): ChatMessage => ({
-    id: 'a1', role: 'assistant', content, actions: ['copy', 'like', 'dislike'],
+  const assistant = (text: string): ChatMessage => ({
+    id: 'a1', role: 'assistant', parts: [{ type: 'text', text }], actions: ['copy', 'like', 'dislike'],
   });
 
   it('fires onMessageAction with { messageId, action:"copy" } and copies content', () => {
@@ -114,7 +147,7 @@ describe('Thread stick-to-bottom', () => {
     (Element.prototype as unknown as { scrollTo: typeof scrollTo }).scrollTo = scrollTo;
     let controller: ThreadController | undefined;
     const { container } = render(() => (
-      <Thread messages={[{ id: 'u1', role: 'user', content: 'hi' }]} controllerRef={(c) => (controller = c)} />
+      <Thread messages={[{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }]} controllerRef={(c) => (controller = c)} />
     ));
     const viewport = container.querySelector('.overflow-y-auto') as HTMLElement;
     // Give the viewport a scrollHeight the jsdom layout won't.
@@ -131,18 +164,77 @@ describe('Thread stick-to-bottom', () => {
     const scrollTo = vi.fn();
     (Element.prototype as unknown as { scrollTo: typeof scrollTo }).scrollTo = scrollTo;
 
-    const base: ChatMessage[] = [{ id: 'u1', role: 'user', content: 'Stream please' }];
+    const base: ChatMessage[] = [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'Stream please' }] }];
     const [messages, setMessages] = createSignal<ChatMessage[]>(base);
     render(() => <Thread messages={messages()} />);
 
     scrollTo.mockClear();
     // A NEW array reference with an appended assistant turn — as a stream chunk.
-    setMessages([...base, { id: 'a1', role: 'assistant', content: 'streaming...' }]);
+    setMessages([...base, { id: 'a1', role: 'assistant', parts: [{ type: 'text', text: 'streaming...' }] }]);
     await tick();
 
     expect(scrollTo).toHaveBeenCalled();
     // Sticks to the bottom instantly (not the smooth user-initiated scroll).
     expect(scrollTo).toHaveBeenLastCalledWith(expect.objectContaining({ behavior: 'instant' }));
     vi.unstubAllGlobals();
+  });
+});
+
+describe('Thread reasoning parts', () => {
+  it('renders a reasoning disclosure when the part has text', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        parts: [
+          { type: 'reasoning', text: 'Weighing the options.', label: 'Thinking', index: 0 },
+          { type: 'text', text: 'Done.' },
+        ],
+      },
+    ];
+    const { container } = render(() => <Thread messages={messages} />);
+    expect(container.textContent ?? '').toContain('Thinking');
+  });
+
+  it('renders NOTHING for a reasoning part with empty text', () => {
+    // Anthropic's redacted_thinking blocks and the block assembled at
+    // content_block_stop both arrive with no readable text and a `raw` payload
+    // the encoder has to echo back verbatim. They must stay in `parts` and must
+    // NOT produce a blank disclosure.
+    const messages: ChatMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'reasoning',
+            text: '',
+            label: 'Thinking',
+            index: 0,
+            raw: { source: 'anthropic.content_block', payload: { type: 'redacted_thinking', data: 'EroBCk...' } },
+          },
+          { type: 'text', text: 'Done.' },
+        ],
+      },
+    ];
+    const { container } = render(() => <Thread messages={messages} />);
+    const text = container.textContent ?? '';
+    expect(text).not.toContain('Thinking');
+    expect(text).toContain('Done.');
+  });
+
+  it('keeps a later non-empty reasoning block visible alongside an empty one', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        parts: [
+          { type: 'reasoning', text: '', label: 'Thinking', index: 0 },
+          { type: 'reasoning', text: 'Second block.', label: 'Thinking', index: 1 },
+        ],
+      },
+    ];
+    const { container } = render(() => <Thread messages={messages} />);
+    expect(container.textContent ?? '').toContain('Second block.');
   });
 });

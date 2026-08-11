@@ -17,7 +17,7 @@ This deploys **many parallel subagents** (one per matrix cell, each building + r
 
 Prove that a developer can drop the `kai` MCP's scaffold output + the `@kitn.ai/ui` package into a real app and get a working chat — across every framework, archetype, integration, placement, and model tier. It builds real throwaway consumer apps (against a **local** package build, so unmerged fixes are testable) with parallel subagents, diagnoses every failure by **layer**, and loops fix → re-verify until clean.
 
-**Core principle:** the only proof that consumers can build a chat is a real consumer app that builds AND runs. The kit's own unit suite (`npm test`, ~1190 tests) does NOT catch packaging / exports / SSR / scaffold-output bugs — those only surface in a fresh consumer app. This harness is what catches them.
+**Core principle:** the only proof that consumers can build a chat is a real consumer app that builds AND runs. The kit's own unit suite does NOT catch packaging / exports / SSR / scaffold-output bugs; those only surface in a fresh consumer app. This harness is what catches them.
 
 This complements, never replaces, the kit suite. Run the kit suite for internals; run THIS for the published-package consumer experience.
 
@@ -40,14 +40,16 @@ Dispatch them with the Agent tool (`subagent_type: "consumer-probe"` / `"regress
 ## Phases
 
 ### Phase 0 — Setup (controller, once)
-First resolve the **portable paths** — NEVER hardcode them (the repo lives elsewhere on every machine; see recipes.md "Conventions"):
-`REPO="$(git rev-parse --show-toplevel)"; HARNESS="$(dirname "$REPO")/consumer-harness"`
-1. Build + pack the LOCAL package so fixes are testable (NOT the published version):
-   `cd "$REPO" && npm run build && git checkout -- src/components/component-meta.json && npm pack` → `kitn.ai-ui-<v>.tgz`.
+First resolve the **portable paths**: NEVER hardcode them (the repo lives elsewhere on every machine; see recipes.md "Conventions"). This is a pnpm + NX workspace: the publishable package is `packages/ui`, not the repo root (root is `kitn-ai`, `private: true`).
+`REPO="$(git rev-parse --show-toplevel)"; HARNESS="$(dirname "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")")/consumer-harness"`
+Running from a **git worktree** is supported and intentional: `$REPO` resolves to the worktree, which is exactly right when the point is to test an unmerged branch. The `$HARNESS` derivation above walks through the main checkout's `.git` so the harness still lands outside every worktree.
+1. Build + pack the LOCAL package so fixes are testable (NOT the published version). Build from the repo ROOT (`nx` is not on PATH, so the `pnpm exec` prefix is required), then pack from `packages/ui`:
+   `cd "$REPO" && pnpm exec nx build ui && cd packages/ui && npm pack` → `kitn.ai-ui-<v>.tgz`.
+   The build regenerates six checked-in files (recipes.md "Post-build churn"). On a branch where the shapes genuinely changed, that regeneration is legitimate and should be committed, not reverted. Only discard it when you're packing mid-investigation and don't want the churn.
 2. Copy it to a **stable** path the probes install from — so a re-pack during a fix can't race a reading probe:
    `mkdir -p "$HARNESS" && cp kitn.ai-ui-*.tgz "$HARNESS/kitn-stable.tgz"`.
-3. `$HARNESS` is a **sibling of the repo, OUTSIDE it** — keeps the repo's git clean.
-4. Generate the scaffolds for each cell from the live MCP bin (recipes.md `gen-scaffolds`). **After ANY `src/agent-tooling/mcp/tools/scaffold.ts` change, rebuild the bin first** (`npx vite build --config vite.config.mcp.ts`) or you'll generate stale output.
+3. `$HARNESS` is a **sibling of the main checkout, OUTSIDE it**: keeps the repo's git clean regardless of worktree.
+4. Generate the scaffolds for each cell from the live MCP bin (recipes.md `gen-scaffolds`). **After ANY `packages/ui/src/agent-tooling/mcp/tools/scaffold.ts` change, rebuild the bin first** (from `packages/ui`: `npx vite build --config vite.config.mcp.ts`) or you'll generate stale output.
 
 ### Phase 1 — Probe (parallel consumer-probe agents, MIXED models)
 Dispatch one `consumer-probe` per matrix cell, in a single message so they run concurrently. **Pass each probe the RESOLVED absolute paths** in its prompt — the repo path (`$REPO`), the tarball (`$HARNESS/kitn-stable.tgz`), its scaffold file, and its report path. The probe never resolves these itself (its cwd is a throwaway app, not the library repo). Deliberately spread model tiers (haiku/sonnet/opus — see Model strategy). Each returns a verdict + a report file.
@@ -79,10 +81,10 @@ Add cells — a new framework, archetype, integration, placement, or backend —
 - **Probes are READ-ONLY on the repo.** They must never edit/build/repack the library — only their own app dir. (Rogue probes that "helpfully" fixed the lib + repacked raced each other and corrupted a whole round. A library bug = REPORT, not fix.)
 - **Install the LOCAL tarball, never npm.** The published version doesn't have the fix you're testing.
 - **Stable tarball copy** so a fix's re-pack can't race a reading probe.
-- **Harness outside the repo** → clean `git status`.
+- **Harness outside the main checkout** → clean `git status`, in a normal clone or a worktree.
 - **Rebuild the MCP bin after every `scaffold.ts` change** before regenerating scaffolds (else stale output — this slipped repeatedly).
 - **Re-pack + refresh the stable copy after every library change**, then re-probe.
-- **`git checkout -- src/components/component-meta.json`** after any `npm run build` / `build:api` (TS-expansion churn, not used at runtime).
+- **Six files churn on every build** (recipes.md "Post-build churn"). Revert them only when you're packing mid-investigation and don't want the noise. If the shapes genuinely changed on this branch, commit the regeneration instead.
 - **No-creds backends:** never skip the stream test — mock the upstream/model (recipes.md).
 
 ## Heavy reference

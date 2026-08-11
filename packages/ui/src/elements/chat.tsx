@@ -2,7 +2,10 @@ import { createEffect, createSignal, onCleanup, onMount } from 'solid-js';
 import { defineWebComponent } from './define';
 import { CHAT_SLOTS, readSlots } from './slots';
 import { ChatThread, type ChatThreadProps, type ChatThreadContextUsage, type ChatThreadController } from '../components/chat-thread';
+import { cardComponentsFromTags } from './message';
+import { createMessagesGuard } from './validate-messages';
 import type { AttachmentData } from '../components/attachments';
+import type { ChatMessage } from './chat-types';
 import type { TriggerDef } from '../components/composer';
 import type { ComposerDoc } from '../primitives/composer-model';
 import type { ProseSize } from '../primitives/chat-config';
@@ -10,7 +13,23 @@ import type { ModelOption } from '../types';
 
 type Props = Omit<ChatThreadProps,
   'class' | 'onValueChange' | 'onSubmit' | 'onAttachmentsChange' | 'onSuggestionClick' | 'onModelChange'
-  | 'onMessageAction' | 'onSearch' | 'onVoice' | 'controllerRef'> & Record<string, unknown>;
+  | 'onMessageAction' | 'onSearch' | 'onVoice' | 'controllerRef' | 'cardTypes' | 'messages'> & Record<string, unknown> & {
+    /** The full message thread to render, newest last. Each entry carries its
+     *  role, ordered `parts`, and optional actions/avatar/feedback. Set as a JS
+     *  property (`el.messages = [...]`); a NEW array reference per streaming
+     *  chunk re-renders (mutating in place does not). Omit for an empty thread.
+     *
+     *  Re-declared here (rather than inherited from `ChatThreadProps`) because
+     *  the ELEMENT registers a `[]` default and renders the empty state without
+     *  it, while the SolidJS `<ChatThread>` component still requires it — the
+     *  facade hands it a validated array either way. Matches `<kai-thread>`. */
+    messages?: ChatMessage[];
+    /** Optional card type -> custom-element tag overrides/additions for `card`
+     *  parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a
+     *  plain string map (not the `CardTagMap` alias) so the generated React
+     *  wrapper inlines it instead of emitting an unresolved named type. */
+    cardTypes?: Record<string, string>;
+  };
 
 interface Events {
   /** User submitted a message. */
@@ -40,8 +59,14 @@ defineWebComponent<Props, Events>('kai-chat', {
   codeTheme: 'github-dark-dimmed', codeHighlight: true, chatTitle: undefined,
   models: undefined, currentModel: undefined, context: undefined, scrollButton: true,
   search: false, voice: false, triggers: undefined, kindIcons: undefined,
-  actionsReveal: 'always',
+  actionsReveal: 'always', cardTypes: undefined,
 }, (props, { dispatch, flag, element, expose }) => {
+  // `messages` is an untyped boundary: a consumer can hand it anything at
+  // runtime (a pre-0.20.0 `{ id, role, content }` array, in particular). Skip
+  // the invalid entries rather than let `groupMessageParts` throw deep inside a
+  // render pass, which would blank the whole chat instead of one message.
+  const validMessages = createMessagesGuard('kai-chat');
+
   // Slot detection is driven by the CHAT_SLOTS registry (single source of truth)
   // so slot names never drift between the view, the facade, and the docs.
   const [slots, setSlots] = createSignal<Record<string, boolean>>({});
@@ -71,7 +96,7 @@ defineWebComponent<Props, Events>('kai-chat', {
 
   return (
   <ChatThread
-    messages={props.messages} value={props.value as string | ComposerDoc | undefined} placeholder={props.placeholder as string}
+    messages={validMessages(props.messages)} value={props.value as string | ComposerDoc | undefined} placeholder={props.placeholder as string}
     loading={flag('loading')} suggestions={props.suggestions as string[] | undefined}
     suggestionMode={props.suggestionMode as 'submit' | 'fill'} persistSuggestions={flag('persistSuggestions')}
     proseSize={props.proseSize as ProseSize}
@@ -82,6 +107,7 @@ defineWebComponent<Props, Events>('kai-chat', {
     triggers={props.triggers as TriggerDef[] | undefined}
     kindIcons={props.kindIcons as Record<string, string> | undefined}
     actionsReveal={props.actionsReveal as 'always' | 'hover'}
+    cardTypes={cardComponentsFromTags(props.cardTypes as Record<string, string> | undefined, (props as { theme?: string }).theme)}
     onValueChange={(value) => dispatch('kai-value-change', { value })}
     onSubmit={(detail) => dispatch('kai-submit', detail)}
     onAttachmentsChange={(attachments) => dispatch('kai-attachments-change', { attachments })}

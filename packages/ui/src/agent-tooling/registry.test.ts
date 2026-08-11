@@ -29,9 +29,46 @@ it('every integration validates against IntegrationSchema', () => {
   }
 });
 
-it('every real (non-mock) integration ships at least one route template', () => {
+it('every real (non-mock) integration ships a route some framework can host', () => {
   for (const i of integrations.filter((i) => i.id !== 'mock')) {
-    expect(Object.keys(i.routeTemplates).length, `${i.id}: no route template`).toBeGreaterThan(0);
+    const routes = Object.keys(i.routeTemplates).length + (i.webRoute ? 1 : 0);
+    expect(routes, `${i.id}: no route template and no webRoute`).toBeGreaterThan(0);
+  }
+});
+
+/**
+ * The portable handler is what stops a framework being handed another
+ * framework's route. It has to BE portable: a `chatHandler(request)` the
+ * scaffolder can wrap, with no framework's own export in it.
+ */
+it('every webRoute declares a chatHandler and nothing framework-specific', () => {
+  for (const i of integrations.filter((i) => i.webRoute)) {
+    expect(i.webRoute, `${i.id}`).toMatch(/async function chatHandler\(request: Request\): Promise<Response>/);
+    // `export async function POST` / `export default {` belong to a framework's
+    // route declaration, which the scaffolder appends per framework.
+    expect(i.webRoute, `${i.id}: exports a framework's route from the portable body`).not.toMatch(
+      /export (async function (POST|GET)|default)/,
+    );
+  }
+});
+
+/**
+ * DEFECT (2): a route that drops the upstream status turns a 401 — the no-key
+ * first run — into a 200 carrying a JSON error body labelled text/event-stream.
+ * The browser then sees an empty stream: no bubble, no console output. Every
+ * route that proxies an upstream Response must forward its status.
+ */
+it('every route that proxies an upstream forwards its status', () => {
+  const bodies = integrations.flatMap((i) =>
+    [...Object.entries(i.routeTemplates), ...(i.webRoute ? [['webRoute', i.webRoute] as const] : [])].map(
+      ([key, code]) => ({ label: `${i.id}.${key}`, code }),
+    ),
+  );
+  for (const { label, code } of bodies) {
+    if (!/upstream\.ok/.test(code)) continue;
+    expect(code, `${label}: checks upstream.ok but never forwards upstream.status`).toMatch(
+      /status: upstream\.status/,
+    );
   }
 });
 
@@ -45,6 +82,31 @@ it('getIntegration returns undefined for unknown id', () => {
 
 it('listIntegrations returns all integrations', () => {
   expect(listIntegrations()).toEqual(integrations);
+});
+
+// --- streamMapping copy ---
+//
+// These strings are the only streaming instruction a scaffolding agent reads, so
+// a stale one ships a hand-rolled reader into a consumer's app. Six of them used
+// to promise a "kai-chat SSE reader" that did not exist under any name. It does
+// now: readOpenAIStream from '@kitn.ai/ui/wire'.
+
+it('no streamMapping claims a reader that does not exist', () => {
+  for (const integration of integrations) {
+    expect(
+      integration.streamMapping,
+      `${integration.id} still refers to a nameless built-in reader`,
+    ).not.toMatch(/kai-chat's (SSE )?reader|Streaming-recipe reader|kai-chat SSE reader/i);
+  }
+});
+
+it('every streamMapping names the adapter that parses the stream', () => {
+  for (const integration of integrations) {
+    expect(
+      integration.streamMapping,
+      `${integration.id} describes a stream but does not say what parses it`,
+    ).toMatch(/readOpenAIStream/);
+  }
 });
 
 // --- Archetypes ---

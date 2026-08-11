@@ -17,8 +17,10 @@ import {
 } from '../components/attachments';
 
 interface Props extends Record<string, unknown> {
-  /** The attachments to render. Set as a JS property (array). */
-  items: AttachmentData[];
+  /** The attachments to render. Omit (or pass an empty array) for the empty
+   *  state, which shows `emptyText` if set and nothing otherwise. Set as a JS
+   *  property (array). */
+  items?: AttachmentData[];
   /** Layout: `grid` = visual tiles, `inline` = icon + label chips, `list` = rows. */
   variant?: AttachmentVariant;
   /** Wrap each item in a hover card that previews its details. */
@@ -67,11 +69,11 @@ defineWebComponent<Props, Events>('kai-attachments', {
 
   return (
     <Show
-      when={props.items.length}
+      when={props.items?.length}
       fallback={<Show when={props.emptyText}><AttachmentEmpty>{props.emptyText}</AttachmentEmpty></Show>}
     >
       <Attachments variant={variant()}>
-        <For each={props.items}>
+        <For each={props.items ?? []}>
           {(item) => (
             <Attachment
               data={item}

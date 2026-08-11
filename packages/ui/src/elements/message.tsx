@@ -1,18 +1,67 @@
-import { Show, createSignal, onMount, onCleanup } from 'solid-js';
+import { Show, createSignal, createEffect, onMount, onCleanup, type JSX } from 'solid-js';
+import { Dynamic } from 'solid-js/web';
 import { defineWebComponent } from './define';
 import { readSlots, MESSAGE_SLOTS } from './slots';
 import { ChatConfig, useChatConfig, type ProseSize } from '../primitives/chat-config';
 import { Message, MessageAvatar, MessageBody } from '../components/message';
 import { createMessageFeedback } from '../primitives/message-feedback';
+import {
+  mergeCardTags,
+  BUILTIN_CARD_TAGS,
+  BUILTIN_CARD_COMPONENTS,
+  type CardTagMap,
+  type CardComponentMap,
+} from '../primitives/card-registry';
+import type { CardEnvelope } from '../primitives/card-contract';
+import { hasParts } from './validate-messages';
 import type { ChatMessage } from './chat-types';
+
+/**
+ * Bridges the web-component-facing `cardTypes` (envelope type -> custom-element
+ * TAG name, e.g. `{ 'my-widget': 'my-widget-el' }`) into the `CardComponentMap`
+ * that `MessageBody`/`Thread` expect. A type the consumer did NOT override keeps
+ * rendering its built-in Solid component directly (no extra custom-element
+ * indirection); an overridden built-in or a brand-new consumer type renders as a
+ * dynamically-created custom element instead, mirroring `<kai-cards>`'s
+ * `CardSlot`. A type with no tag at all (unregistered) simply gets no entry, so
+ * `CardRenderer`'s own fallback (`CardFallback`) takes over.
+ */
+export function cardComponentsFromTags(types?: CardTagMap, theme = 'auto'): CardComponentMap {
+  const tags = mergeCardTags(types);
+  const map: CardComponentMap = {};
+  for (const type of Object.keys(tags)) {
+    const tag = tags[type];
+    map[type] = tag === BUILTIN_CARD_TAGS[type] && BUILTIN_CARD_COMPONENTS[type]
+      ? BUILTIN_CARD_COMPONENTS[type]
+      : (p) => <CardTagSlot tag={tag} envelope={p.envelope} theme={theme} />;
+  }
+  return map;
+}
+
+/** Renders one envelope as a dynamically-created custom element, setting the
+ *  envelope's data/id/title/resolution as DOM properties (reactive) plus the
+ *  `theme` + `data-card-id` chrome, mirroring `<kai-cards>`'s `CardSlot` so a
+ *  custom card behaves identically whether it arrives via `<kai-cards>` or a
+ *  `card` message part here. */
+function CardTagSlot(props: { tag: string; envelope: CardEnvelope; theme: string }): JSX.Element {
+  let ref: HTMLElement | undefined;
+  createEffect(() => {
+    if (!ref) return;
+    (ref as unknown as { data: unknown }).data = props.envelope.data;
+    (ref as unknown as { cardId: string }).cardId = props.envelope.id;
+    if (props.envelope.title != null) (ref as unknown as { heading: string }).heading = props.envelope.title;
+    (ref as unknown as { resolution: unknown }).resolution = props.envelope.resolution;
+    ref.setAttribute('theme', props.theme);
+    ref.setAttribute('data-card-id', props.envelope.id);
+  });
+  return <Dynamic component={props.tag} ref={ref} />;
+}
 
 interface Props extends Record<string, unknown> {
   /** The full message object. Set as a JS property. */
   message?: ChatMessage;
   /** Convenience for simple cases when not passing a `message` object. */
   role?: 'user' | 'assistant';
-  /** Convenience content (used when `message` is not set). */
-  content?: string;
   /** Force markdown on/off. Defaults to on for assistant, off for user. */
   markdown?: boolean;
   /** Text/markdown sizing for the message body. */
@@ -33,6 +82,11 @@ interface Props extends Record<string, unknown> {
    *  value keeps the default behaviour: the built-in avatar when one resolves, or
    *  your `slot="avatar"` content when projected (which REPLACES the built-in). */
   avatar?: 'none' | string;
+  /** Optional card type -> custom-element tag overrides/additions for `card`
+   *  parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a
+   *  plain string map (not the `CardTagMap` alias) so the generated React
+   *  wrapper inlines it instead of emitting an unresolved named type. */
+  cardTypes?: Record<string, string>;
 }
 
 /** Events fired by `<kai-message>`. */
@@ -52,7 +106,6 @@ interface Events {
 defineWebComponent<Props, Events>('kai-message', {
   message: undefined,
   role: 'assistant',
-  content: undefined,
   markdown: undefined,
   proseSize: 'sm',
   codeTheme: 'github-dark-dimmed',
@@ -61,10 +114,35 @@ defineWebComponent<Props, Events>('kai-message', {
   avatarSrc: undefined,
   avatarFallback: undefined,
   avatar: undefined,
+  cardTypes: undefined,
 }, (props, { dispatch, flag, element, expose }) => {
   const outer = useChatConfig();
   const msg = (): ChatMessage =>
-    props.message ?? { id: 'message', role: props.role ?? 'assistant', content: props.content ?? '' };
+    props.message ?? {
+      id: 'message',
+      role: props.role ?? 'assistant',
+      parts: [],
+    };
+  // `message` is an untyped boundary: a consumer can hand it anything at
+  // runtime (a pre-0.20.0 `{ id, role, content }` object, in particular).
+  // `parts` is a REQUIRED field, so validate it here rather than let
+  // `MessageBody`/`groupMessageParts` throw deep inside a Solid render pass;
+  // an uncaught exception there blanks the whole element instead of just this
+  // one message. Warn once per bad message (not on every unrelated re-render)
+  // and render nothing for it, matching the old pre-parts fallback behavior
+  // (an unusable message rendered an empty body, not a crash).
+  let lastWarnedMessage: unknown;
+  const hasValidParts = (): boolean => {
+    const m = msg();
+    if (hasParts(m)) return true;
+    if (m !== lastWarnedMessage) {
+      lastWarnedMessage = m;
+      console.error(
+        "<kai-message>: 'message' must have a 'parts' array. The 'content' string field was removed in 0.20.0.",
+      );
+    }
+    return false;
+  };
   // Copy + vote state lives here (above the rendered body) so it survives a
   // re-render when the host swaps in a fresh `message` object during streaming.
   const feedback = createMessageFeedback({
@@ -82,7 +160,7 @@ defineWebComponent<Props, Events>('kai-message', {
   // `kai-message-action{action:'copy'}`.
   expose({
     /** Copy the message content to the clipboard and show the copied check. */
-    copy: () => feedback.handleAction(msg(), 'copy'),
+    copy: () => { if (hasValidParts()) feedback.handleAction(msg(), 'copy'); },
   });
 
   // Read declarative <kai-action> children from light DOM.
@@ -127,10 +205,8 @@ defineWebComponent<Props, Events>('kai-message', {
   const mergedActions = () => [...(msg().actions ?? []), ...slottedActions()];
   const body = () => (
     <MessageBody
-      content={msg().content}
-      reasoning={msg().reasoning}
-      tools={msg().tools}
-      attachments={msg().attachments}
+      parts={msg().parts}
+      cardTypes={cardComponentsFromTags(props.cardTypes, (props as { theme?: string }).theme)}
       isUser={isUser()}
       markdown={useMarkdown()}
       actions={mergedActions()}
@@ -165,27 +241,31 @@ defineWebComponent<Props, Events>('kai-message', {
   );
 
   return (
-    <ChatConfig
-      proseSize={props.proseSize}
-      codeTheme={props.codeTheme}
-      codeHighlight={flag('codeHighlight')}
-      portalMount={outer.portalMount()}
-    >
-      <Show
-        when={showRail()}
-        fallback={
-          <Message class={`${rowGroup()}${isUser() ? 'flex-col items-end' : 'flex-col items-start'}`}>
-            {body()}
-          </Message>
-        }
+    // No fallback: an invalid `message` (missing `parts`) renders nothing for
+    // this element rather than crashing. `hasValidParts()` already logged why.
+    <Show when={hasValidParts()}>
+      <ChatConfig
+        proseSize={props.proseSize}
+        codeTheme={props.codeTheme}
+        codeHighlight={flag('codeHighlight')}
+        portalMount={outer.portalMount()}
       >
-        <Message class={rowGroup()}>
-          {avatarRail()}
-          <div class={`flex min-w-0 flex-1 flex-col ${isUser() ? 'items-end' : 'items-start'}`}>
-            {body()}
-          </div>
-        </Message>
-      </Show>
-    </ChatConfig>
+        <Show
+          when={showRail()}
+          fallback={
+            <Message class={`${rowGroup()}${isUser() ? 'flex-col items-end' : 'flex-col items-start'}`}>
+              {body()}
+            </Message>
+          }
+        >
+          <Message class={rowGroup()}>
+            {avatarRail()}
+            <div class={`flex min-w-0 flex-1 flex-col ${isUser() ? 'items-end' : 'items-start'}`}>
+              {body()}
+            </div>
+          </Message>
+        </Show>
+      </ChatConfig>
+    </Show>
   );
 });

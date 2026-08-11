@@ -9,8 +9,8 @@ const conversations: ConversationSummary[] = [
   { id: 'c1', title: 'First chat', scope: { type: 'document' }, messageCount: 2, lastMessageAt: '2026-06-13T10:00:00Z', updatedAt: '2026-06-13T10:00:00Z' },
 ];
 const messages: ChatMessage[] = [
-  { id: 'm1', role: 'user', content: 'Hi there' },
-  { id: 'm2', role: 'assistant', content: 'Hello!' },
+  { id: 'm1', role: 'user', parts: [{ type: 'text', text: 'Hi there' }] },
+  { id: 'm2', role: 'assistant', parts: [{ type: 'text', text: 'Hello!' }] },
 ];
 
 test('renders the list + thread and emits conversationselect and submit', async () => {

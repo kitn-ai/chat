@@ -58,13 +58,14 @@ const attachments = [
 const chat = document.getElementById('chat');
 chat.models = models; chat.currentModel = 'opus'; chat.context = ctx;
 chat.suggestions = ['Summarize this thread', 'What changed in v0.3?'];
-chat.messages = [{ id: '1', role: 'assistant', content: 'Hi! I\'m the **drop-in** `<kai-chat>`. Ask me anything.', actions: ['copy', 'like', 'dislike'] }];
+// A message's content is an ordered `parts` array; there is no `content` string.
+chat.messages = [{ id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hi! I\'m the **drop-in** `<kai-chat>`. Ask me anything.' }], actions: ['copy', 'like', 'dislike'] }];
 chat.addEventListener('kai-submit', (e) => {
   log('submit', e.detail.value);
-  chat.messages = [...chat.messages, { id: Date.now() + '', role: 'user', content: e.detail.value }];
+  chat.messages = [...chat.messages, { id: Date.now() + '', role: 'user', parts: [{ type: 'text', text: e.detail.value }] }];
   chat.loading = true;
   setTimeout(() => {
-    chat.messages = [...chat.messages, { id: Date.now() + 'a', role: 'assistant', content: 'Echo: ' + e.detail.value, actions: ['copy'] }];
+    chat.messages = [...chat.messages, { id: Date.now() + 'a', role: 'assistant', parts: [{ type: 'text', text: 'Echo: ' + e.detail.value }], actions: ['copy'] }];
     chat.loading = false;
   }, 600);
 });
@@ -113,16 +114,20 @@ pi.addEventListener('kai-value-change', (e) => {
 pi.addEventListener('kai-submit', (e) => { log('submit', e.detail.value); pi.value = ''; });
 
 // ── messages ──
+// Reasoning, tools and attachments are PARTS now, ordered exactly as they render:
+// the thinking, then the tool panel, then the answer, then the file.
 document.getElementById('msg-a').message = {
   id: 'm-a', role: 'assistant',
-  content: 'Here\'s the plan, with a quick code sample:\n```js\nconst kit = useKitn();\n```',
-  reasoning: { text: 'The user wants X, so I should do Y then Z.', label: 'Reasoning' },
-  tools: [{ type: 'search', state: 'output-available', input: { query: 'kitn docs' }, output: { hits: 3 } }],
-  attachments: [attachments[0]],
+  parts: [
+    { type: 'reasoning', text: 'The user wants X, so I should do Y then Z.', label: 'Reasoning' },
+    { type: 'tool', tool: { type: 'search', state: 'output-available', input: { query: 'kitn docs' }, output: { hits: 3 }, toolCallId: 'tc-1' } },
+    { type: 'text', text: 'Here\'s the plan, with a quick code sample:\n```js\nconst kit = useKitn();\n```' },
+    { type: 'file', attachment: attachments[0] },
+  ],
   actions: ['copy', 'like', 'dislike', 'regenerate'],
 };
 document.getElementById('msg-a').addEventListener('kai-message-action', (e) => log('messageaction', e.detail.action));
-document.getElementById('msg-u').message = { id: 'm-u', role: 'user', content: 'How do I compose these myself?' };
+document.getElementById('msg-u').message = { id: 'm-u', role: 'user', parts: [{ type: 'text', text: 'How do I compose these myself?' }] };
 document.getElementById('md').content = '### Markdown\nRenders **bold**, _italic_, `code`, and lists:\n- one\n- two\n\n> and blockquotes.';
 document.getElementById('code').code = 'export function add(a: number, b: number): number {\n  return a + b;\n}';
 document.getElementById('reason').text = 'First I parse the request, then I plan the steps, then I execute and verify.';

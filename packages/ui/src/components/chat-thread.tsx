@@ -16,6 +16,7 @@ import type { TriggerDef } from './composer';
 import type { ChatMessage } from '../elements/chat-types';
 import type { ProseSize } from '../primitives/chat-config';
 import type { ModelOption } from '../types';
+import type { CardComponentMap } from '../primitives/card-registry';
 
 export interface ChatThreadContextUsage {
   usedTokens: number;
@@ -29,9 +30,12 @@ export interface ChatThreadProps {
   /** Extra classes for the thread root (e.g. `h-full`). */
   class?: string;
   /** The full message thread to render, newest last. Each entry carries its role,
-   *  content, and optional reasoning/tools/attachments/actions. Set as a JS
-   *  property (`el.messages = [...]`). */
+   *  ordered `parts`, and optional actions/avatar/feedback. Set as a JS property
+   *  (`el.messages = [...]`). */
   messages: ChatMessage[];
+  /** Add/override card type -> component entries, forwarded to `CardRenderer`
+   *  for `card` parts. */
+  cardTypes?: CardComponentMap;
   /** Value of the input. A **string** is controlled (the host owns the text and
    *  updates it on `kai-value-change`). A **ComposerDoc** is a one-time seed that
    *  pre-populates pills; the user then edits freely. Leave unset for uncontrolled. */
@@ -265,10 +269,8 @@ export function ChatThread(props: ChatThreadProps) {
                   {(m) => {
                     const body = (
                       <MessageBody
-                        content={m.content}
-                        reasoning={m.reasoning}
-                        tools={m.tools}
-                        attachments={m.attachments}
+                        parts={m.parts}
+                        cardTypes={props.cardTypes}
                         isUser={m.role === 'user'}
                         markdown={m.role === 'assistant'}
                         actions={m.actions}

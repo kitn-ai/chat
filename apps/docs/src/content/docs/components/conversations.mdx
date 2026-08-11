@@ -9,6 +9,7 @@ import Example from '../../../components/Example.tsx';
 import PropTable from '../../../components/PropTable.astro';
 import EventTable from '../../../components/EventTable.astro';
 import SlotTable from '../../../components/SlotTable.astro';
+import DeclarativeChildrenTable from '../../../components/DeclarativeChildrenTable.astro';
 import ComposedFrom from '../../../components/ComposedFrom.astro';
 import Facts from '../../../components/Facts.astro';
 import NeedAHand from '../../../components/NeedAHand.astro';
@@ -17,7 +18,7 @@ import NeedAHand from '../../../components/NeedAHand.astro';
 
 <p class="kai-lede">A self-contained sidebar that renders a grouped, scrollable conversation list with a "New chat" button and collapse toggle — drop it into any framework and wire up three events.</p>
 
-<Facts items={['Shadow DOM', '3 events', 'Auto-bucketing by recency', 'Pre-bucketed groups', 'Declarative child elements']} />
+<Facts items={['Shadow DOM', '3 events', 'Flat or grouped lists', 'Built-in search', 'Declarative child elements']} />
 
 ## Preview
 
@@ -61,14 +62,16 @@ Set the data in JavaScript (it's arrays and objects) and listen for CustomEvents
 
 **Two data approaches:**
 
-- **In JavaScript** — `el.conversations` (flat list, auto-bucketed by recency) or `el.groups` (pre-bucketed; supply when you own the section headers). When `groups` is set it takes precedence.
+- **In JavaScript** — `el.conversations` is the rows; `el.groups` is the section headers. They work together, not as alternatives: each row lands in the group whose `id` matches its `groupId`, and anything with no match falls into a single **Ungrouped** section. Leave `groups` empty and the whole list renders as one Ungrouped section.
 - **Declarative children** — nest `<kai-conversation>` tags directly; each carries its `id` as an attribute and title as text content. The element reads them on mount and watches via MutationObserver — works in plain HTML, SSR, or any framework that sets innerHTML.
+
+<DeclarativeChildrenTable tag="kai-conversations" />
 
 ## Examples
 
 ### Default List
 
-A flat `conversations` array — the element auto-buckets by recency.
+A flat `conversations` array with no `groups` — every row renders in one Ungrouped section.
 
 <Example client:visible tag="kai-conversations" />
 
@@ -80,7 +83,7 @@ A flat `conversations` array — the element auto-buckets by recency.
 
 ### Pre-bucketed Groups
 
-Supply `groups` to own the section headers; ungrouped items fall to an "Other" bucket.
+Supply `groups` for the section headers and give each conversation a matching `groupId`; anything unmatched falls to the "Ungrouped" section.
 
 <Example client:visible tag="kai-conversations" config={{ activeId: 'c-1' }} data="withGroups" />
 

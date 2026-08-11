@@ -30,7 +30,7 @@ Two properties hold the state: `conversations` (the sidebar list) and `messages`
 
   const ws = document.getElementById('ws');
 
-  // The sidebar list. The component buckets rows by recency using the timestamps.
+  // The sidebar list. With no `groups`, every row renders in one Ungrouped section.
   ws.conversations = [
     {
       id: 'c1',
@@ -45,8 +45,12 @@ Two properties hold the state: `conversations` (the sidebar list) and `messages`
 
   // The open thread — same ChatMessage shape as <kai-chat>.
   ws.messages = [
-    { id: 'u1', role: 'user', content: 'How do I share state across the panels?' },
-    { id: 'a1', role: 'assistant', content: 'Keep one source of truth and reassign it on each change.', actions: ['copy', 'like', 'dislike'] },
+    { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'How do I share state across the panels?' }] },
+    {
+      id: 'a1', role: 'assistant',
+      parts: [{ type: 'text', text: 'Keep one source of truth and reassign it on each change.' }],
+      actions: ['copy', 'like', 'dislike'],
+    },
   ];
 
   // Highlight the open conversation in the sidebar.
@@ -56,7 +60,7 @@ Two properties hold the state: `conversations` (the sidebar list) and `messages`
 
 Each conversation needs `id`, `title`, `scope` (`{ type: 'collection' }` for a general chat, or `{ type: 'document' }` when it's scoped to a document), `messageCount`, `lastMessageAt`, and `updatedAt`. The two timestamps drive the "Today" / "Yesterday" / "Last 7 days" grouping.
 
-`messages` is the same shape `<kai-chat>` uses: `id`, `role`, `content`, plus optional `actions`, `reasoning`, `tools`, and `attachments`.
+`messages` is the same shape `<kai-chat>` uses: `id`, `role`, an ordered `parts` array (`text`, `reasoning`, `tool`, `card`, `source`, `file`), plus optional `actions`.
 
 ## Handle the events
 
@@ -83,16 +87,18 @@ ws.addEventListener('kai-submit', async (e) => {
   const aId = crypto.randomUUID();
   ws.messages = [
     ...ws.messages,
-    { id: crypto.randomUUID(), role: 'user', content: text },
-    { id: aId, role: 'assistant', content: '' },
+    { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text }] },
+    { id: aId, role: 'assistant', parts: [] },
   ];
   ws.loading = true;
 
   // Stream the reply from your backend (or a proxy to your model provider).
+  let answer = '';
   for await (const token of streamFromYourModel(text)) {
     // Reassign a NEW array each token — mutating in place won't re-render.
+    answer += token;
     ws.messages = ws.messages.map((m) =>
-      m.id === aId ? { ...m, content: m.content + token } : m,
+      m.id === aId ? { ...m, parts: [{ type: 'text', text: answer }] } : m,
     );
   }
   ws.loading = false;

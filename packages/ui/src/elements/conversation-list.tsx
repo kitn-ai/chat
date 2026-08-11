@@ -6,13 +6,18 @@ import { ConversationList, CollapsedRail, type ConversationListController } from
 import type { ConversationGroup, ConversationSummary, ConversationScope } from '../types';
 
 interface Props extends Record<string, unknown> {
-  /** Pre-bucketed conversation groups (e.g. "Today", "Yesterday"), each with its
-   *  own conversations. Use this when you want to control the grouping/headers
-   *  yourself; otherwise pass a flat `conversations` array. Set as a JS property. */
-  groups: ConversationGroup[];
-  /** A flat list of conversation summaries; the component buckets them by recency
-   *  for you. Ignored when `groups` is provided. Set as a JS property. */
-  conversations: ConversationSummary[];
+  /** The list's section headers (`{ id, name, sortOrder, createdAt }`), rendered
+   *  in array order. A group carries no conversations of its own; it is matched
+   *  against `conversations` by id, so the two props are complementary rather
+   *  than alternatives. Omit for an ungrouped list. Set as a JS property. */
+  groups?: ConversationGroup[];
+  /** Every conversation the list renders, flat. Each one is filed under the group
+   *  whose `id` equals its `groupId`; one with no `groupId` — or with a `groupId`
+   *  matching no entry in `groups` — falls into a trailing "Ungrouped" section, so
+   *  nothing you pass in is ever dropped. There is no recency bucketing. Set as a
+   *  JS property. Omit to supply them as `<kai-conversation>` light-DOM children
+   *  instead, or for the empty state. */
+  conversations?: ConversationSummary[];
   /** The id of the currently-open conversation, highlighted in the list. */
   activeId?: string;
   /** Controlled collapsed state. Set as a JS property (`el.collapsed = true`) to
@@ -132,7 +137,7 @@ defineWebComponent<Props, Events>('kai-conversations', {
       fallback={<CollapsedRail onExpand={() => setCollapsedTo(false)} />}
     >
       <ConversationList
-        groups={props.groups}
+        groups={props.groups ?? []}
         conversations={allConversations()}
         activeId={props.activeId}
         onSelect={(id) => dispatch('kai-conversation-select', { id })}

@@ -11,7 +11,7 @@ import ChatDemo from '../../../components/ChatDemo.tsx';
 
 ## Wire it up
 
-Start with an empty thread and a few `suggestions`. The chips render in the empty state and disappear once the conversation has a message, so they read as conversation starters. Assign both in JavaScript (arrays can't be HTML attributes), then handle `kai-submit`: append the user's turn, add an empty assistant message, and grow its `content` as tokens arrive.
+Start with an empty thread and a few `suggestions`. The chips render in the empty state and disappear once the conversation has a message, so they read as conversation starters. Assign both in JavaScript (arrays can't be HTML attributes), then handle `kai-submit`: append the user's turn, add an empty assistant message, and grow its `parts` as tokens arrive.
 
 ```html
 <kai-chat id="chat" chat-title="Assistant" placeholder="Ask anything…"></kai-chat>
@@ -34,15 +34,17 @@ Start with an empty thread and a few `suggestions`. The chips render in the empt
     // append the user turn + an empty assistant message
     chat.messages = [
       ...chat.messages,
-      { id: crypto.randomUUID(), role: 'user', content: prompt },
-      { id: aId, role: 'assistant', content: '' },
+      { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: prompt }] },
+      { id: aId, role: 'assistant', parts: [] },
     ];
     chat.loading = true;
 
     // stream tokens from your backend into the assistant message
+    let answer = '';
     for await (const token of streamFromYourModel(prompt)) {
+      answer += token;
       chat.messages = chat.messages.map((m) =>
-        m.id === aId ? { ...m, content: m.content + token } : m,
+        m.id === aId ? { ...m, parts: [{ type: 'text', text: answer }] } : m,
       );
     }
     chat.loading = false;

@@ -7,5 +7,8 @@ packages:
   - 'examples/starters/vanilla'
   - 'examples/starters/angular'
   - 'examples/starters/solid'
+  - 'examples/internal/openrouter-spike'
 # nextjs + tanstack-start stay standalone `file:` consumers (not workspace members).
-# demos/* and internal/* are not workspace members.
+# demos/* are not workspace members. internal/* generally are not either — the
+# openrouter-spike is enumerated explicitly because it needs `workspace:*` linkage
+# to the kit for its vitest suite.

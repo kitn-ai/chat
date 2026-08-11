@@ -10,6 +10,7 @@ import PropTable from '../../../components/PropTable.astro';
 import EventTable from '../../../components/EventTable.astro';
 import SlotTable from '../../../components/SlotTable.astro';
 import PartTable from '../../../components/PartTable.astro';
+import DeclarativeChildrenTable from '../../../components/DeclarativeChildrenTable.astro';
 import Facts from '../../../components/Facts.astro';
 import NeedAHand from '../../../components/NeedAHand.astro';
 
@@ -58,7 +59,9 @@ Register elements once, then wire up JS properties and DOM events:
 - **Loading + stoppable** — set `loading` while a response streams; add `stoppable` to swap the send button for a Stop button that fires `kai-stop`.
 - **Custom toolbar buttons** — place `<kai-action id icon tooltip>` children inside the element; clicks fire `kai-toolbar-action` with `detail.action`.
 - **Entity pills** — set `triggers` to let `/` and `@` insert atomic skill/agent/plugin pills. `kai-submit` and `kai-value-change` then carry the structured `doc` + `entities` alongside the flattened `value` string. See [`<kai-composer>`](/components/composer/) for the full pill model.
-- **Pre-populate pills** — set `value` to a `ComposerDoc` (an array of text/entity segments) instead of a string to seed pills programmatically; the user edits from there.
+- **Pre-populate pills** — set `value` to an array of segments (`{ type: 'text', text }` and `{ type: 'entity', entity }`) instead of a string to seed pills programmatically; the user edits from there. The prop tables call that shape a **ComposerDoc**; it is a structural type, not something you import.
+
+<DeclarativeChildrenTable tag="kai-prompt-input" />
 
 ## Examples
 

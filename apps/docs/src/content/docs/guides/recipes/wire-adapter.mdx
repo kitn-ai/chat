@@ -1,0 +1,271 @@
+---
+title: Wire adapter
+description: Parse an OpenAI- or Anthropic-format model stream into kai-chat message parts with readOpenAIStream, and send the thread back with toOpenAIMessages.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The kit parses the stream. You own the transport. `@kitn.ai/ui/wire` takes a `Response` (or any byte source) and folds it onto an assistant message: text, reasoning, tool calls with their arguments streaming in, citations. There is no client, no key handling and no provider SDK anywhere in it, so auth, proxies, aborts and retries stay yours.
+
+## The smallest consumer
+
+```tsx
+import { Chat, useKaiChat } from '@kitn.ai/ui/react';
+import { readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';
+
+export function App() {
+  const chat = useKaiChat({
+    onSubmit: async ({ value }) => {
+      const user = {
+        id: crypto.randomUUID(),
+        role: 'user' as const,
+        parts: [{ type: 'text' as const, text: value }],
+      };
+      chat.append(user);
+      // streamAssistant appends the in-flight assistant message and hands back a
+      // sink. readOpenAIStream drives it, so every delta lands on the right part.
+      const stream = chat.streamAssistant();
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          // chat.messages is this render's snapshot, so it does not contain the
+          // turn appended a few lines up. Append it here too.
+          body: JSON.stringify({ messages: toOpenAIMessages([...chat.messages, user]) }),
+        });
+        await readOpenAIStream(res, stream);
+      } finally {
+        stream.done();
+      }
+    },
+  });
+
+  return <Chat {...chat.bind} style={{ display: 'block', height: '100dvh' }} />;
+}
+```
+
+Four lines are the adapter. The rest is `fetch` and React.
+
+Your `/api/chat` route forwards the provider's SSE bytes untouched. That is what every [integration](/integrations/overview/) template already does.
+
+<Aside type="caution" title="Keep API keys server-side">
+`readOpenAIStream` never opens a connection, so the key lives in your route and never reaches the browser.
+</Aside>
+
+Outside React, build the sink yourself with `createAssistantStream` from `@kitn.ai/ui/state` and pass it to the same reader.
+
+```js
+import { createAssistantStream } from '@kitn.ai/ui/state';
+import { readOpenAIStream } from '@kitn.ai/ui/wire';
+
+const stream = createAssistantStream((update) => {
+  chat.messages = update(chat.messages);
+});
+try {
+  await readOpenAIStream(res, stream);
+} finally {
+  stream.done();
+}
+```
+
+## Both formats
+
+`readAnthropicStream` reads Anthropic Messages SSE and produces the same parts:
+
+```ts
+import { readAnthropicStream } from '@kitn.ai/ui/wire';
+
+const turn = await readAnthropicStream(res, stream);
+```
+
+Both are thin wrappers over `readModelStream`, which takes any `WireFormat`. A format maps one decoded frame onto zero or more neutral chunks, so adding a third is a value, not a pull request:
+
+```ts
+import { readModelStream, type ModelStreamChunk, type WireFormat } from '@kitn.ai/ui/wire';
+
+// push receives `unknown`: a provider can put anything on the wire, and a format
+// that throws on an unrecognised frame takes the whole turn down. Return [].
+function isTextFrame(frame: unknown): frame is { text: string } {
+  return (
+    typeof frame === 'object' &&
+    frame !== null &&
+    typeof (frame as { text?: unknown }).text === 'string'
+  );
+}
+
+const acmeEvents: WireFormat = {
+  id: 'acme.events',
+  // open() runs once per stream. Hold per-stream state in this closure; two
+  // calls must share nothing.
+  open() {
+    return {
+      push(frame: unknown): ModelStreamChunk[] {
+        return isTextFrame(frame) ? [{ text: frame.text }] : [];
+      },
+    };
+  },
+};
+
+await readModelStream(res, stream, { format: acmeEvents });
+```
+
+## Tool loop
+
+The kit never calls your function. `readOpenAIStream` returns the turn, you run the tools, `applyToolOutput` completes the panel and `applyToolFailure` fails it. Every round folds onto the same assistant message, so one stream spans the whole loop.
+
+<Aside type="caution" title="React state can't be read back mid-turn">
+`chat.messages` (or any `useState`) is off-limits inside the loop below. `dispatchSetState` only computes the next value eagerly when the fiber has no pending lanes, and that's never true while a turn is streaming, so the closure would keep reading the pre-submit snapshot every round and miss the tool call and result the turn just wrote. Declare a turn-scoped `thread` instead and route every write through it, as below. A store that already reads back synchronously (a Vue `ref`, a Svelte `let`, a Solid-backed store) doesn't need this: reassign it directly each round, it already is the thread.
+</Aside>
+
+```tsx
+import { Chat, useKaiChat } from '@kitn.ai/ui/react';
+import type { ChatMessage } from '@kitn.ai/ui/react';
+import { createAssistantStream, type SetMessages } from '@kitn.ai/ui/state';
+import { applyToolFailure, applyToolOutput, readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';
+
+// The tools the model may call. The request body carries this array; without it
+// the model never emits a tool call and <kai-tool> stays empty.
+const tools = [
+  {
+    type: 'function' as const,
+    function: {
+      name: 'search',
+      description: 'Search the web for up-to-date information.',
+      parameters: {
+        type: 'object',
+        properties: { query: { type: 'string', description: 'What to search for.' } },
+        required: ['query'],
+      },
+    },
+  },
+];
+
+// YOUR tool runs here. The kit never calls it: the model asks, you execute, and
+// applyToolOutput reports the result back into the panel and the next round.
+async function runTool(name: string, input: Record<string, unknown>) {
+  if (name === 'search') return { results: [`Searched for: ${String(input.query ?? '')}`] };
+  return { error: `Unknown tool: ${name}` };
+}
+
+export function App() {
+  const chat = useKaiChat({
+    onSubmit: async ({ value }) => {
+      const userMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: 'user',
+        parts: [{ type: 'text', text: value }],
+      };
+
+      // `thread` is this turn's source of truth. `set` mutates it and projects
+      // the result through chat.setMessages, so every round below re-encodes the
+      // live thread instead of the stale `chat.messages` this closure captured
+      // at submit time.
+      let thread: ChatMessage[] = [...chat.messages, userMsg];
+      const set: SetMessages = (fn) => {
+        thread = fn(thread);
+        chat.setMessages(thread);
+      };
+      chat.setMessages(thread);
+
+      const stream = createAssistantStream(set);
+      try {
+        // Cap the rounds: a runaway model is a runaway bill.
+        for (let round = 0; round < 4; round++) {
+          const res = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            // Re-encoded every round, so the results applyToolOutput just wrote
+            // travel back with the next request. That is what lets the model
+            // answer with them.
+            body: JSON.stringify({ messages: toOpenAIMessages(thread), tools }),
+          });
+
+          const turn = await readOpenAIStream(res, stream);
+          const pending = turn.toolCalls.filter((call) => !call.error && !call.providerExecuted);
+          if (pending.length === 0) break;
+
+          for (const call of pending) {
+            try {
+              applyToolOutput(stream, call.id, await runTool(call.name, call.input ?? {}));
+            } catch (err) {
+              applyToolFailure(stream, call.id, err instanceof Error ? err.message : 'Tool failed');
+            }
+          }
+        }
+      } finally {
+        stream.done();
+      }
+    },
+  });
+
+  return <Chat {...chat.bind} style={{ display: 'block', height: '100dvh' }} />;
+}
+```
+
+The loop runs *inside* the `try`. `stream.done()` settles the message and every sink call after it is dropped, so an `applyToolOutput` placed after a `try`/`finally` that already called `done()` leaves the panel stuck on `input-available` forever, with no error to point at.
+
+`call.providerExecuted` marks a tool the provider already ran, with the result in the stream. Running it again bills you twice for the same answer. `call.error` marks arguments that never parsed, usually because the model was cut off at `max_tokens`.
+
+While the arguments stream, `ToolPart.rawInput` carries the partial JSON, so `<kai-tool>` renders it filling in character by character. You render nothing yourself.
+
+`toOpenAIMessages` splits an assistant turn at each tool boundary: the announcement, then each `role: 'tool'` result, then any text the model produced afterwards. Flattening instead would put the model's answer before the result it was based on, which no endpoint rejects and every later round pays for. A turn that encodes to nothing is skipped rather than sent as `{ content: null }`.
+
+## Extended thinking round-trips
+
+A reasoning part carries the provider's own block on `part.raw`. `toAnthropicMessages` echoes that payload verbatim.
+
+This is not a nicety. Anthropic returns 400 if a `thinking` block in the most recent assistant message is modified, reordered, filtered or reconstructed, so an encoder cannot rebuild one from `text` plus `signature`. A reasoning part with no `raw` throws a `WireEncodeError` at encode time, naming the message and the part index, rather than sending a request that fails at the provider.
+
+The practical consequence is in your persistence layer: strip `raw` when you save a message and the next turn will not encode. Keep it.
+
+## Errors
+
+Two different failures, two different channels.
+
+| Failure | Surfaces as | Read |
+|---------|-------------|------|
+| Non-ok HTTP response | `WireError` thrown before any chunk is read | `status`, `statusText`, `body`, `bodyText` |
+| Error frame inside a 200 stream | `ModelTurn.error` on the resolved turn | `code`, `message` |
+
+```ts
+import { WireError, readOpenAIStream } from '@kitn.ai/ui/wire';
+
+try {
+  const turn = await readOpenAIStream(res, stream);
+  if (turn.error) {
+    // The connection was fine. The model or the gateway failed mid-stream, and
+    // whatever streamed before it is already on the message.
+    console.error(turn.error.code, turn.error.message);
+  }
+} catch (err) {
+  if (err instanceof WireError) {
+    console.error(err.status, err.statusText, err.body);
+  } else {
+    throw err;
+  }
+} finally {
+  stream.done();
+}
+```
+
+`WireError.body` is the provider's own error JSON when the body parsed, and `undefined` when it did not (an HTML error page from a proxy is the usual case). `bodyText` is always the raw body.
+
+## What this does not do
+
+- No retries, reconnect, `Last-Event-ID` or backoff. Abort the `fetch` you own.
+- No tool executor and no loop driver. The loop above is yours.
+- No key handling and no hosted client. There is no `createChatClient({ apiKey })`.
+- No server-side route helpers.
+- No non-SSE transports.
+- No tolerant partial-JSON closer. Truncated tool arguments are reported as `call.error`, not guessed at.
+
+## Regenerating the fixtures
+
+The format tests run against captured provider streams in `packages/ui/src/wire/fixtures/`. `packages/ui/scripts/capture-wire-fixture.mjs` re-records them from a live provider:
+
+```bash
+OPENAI_API_KEY=... node scripts/capture-wire-fixture.mjs openai/text-only
+node scripts/capture-wire-fixture.mjs --list
+```
+
+CI never runs it. It needs a key and the network, and its output is checked in on purpose so the suite stays offline. Run it by hand when a provider changes its event surface, then read the diff before committing.

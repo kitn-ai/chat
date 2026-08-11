@@ -1,0 +1,37 @@
+: fixture: openai/multibyte-text
+: capture: live
+: provider: openrouter
+: model: openai/gpt-4o-mini
+: captured: 2026-08-10
+: request: {"model":"openai/gpt-4o-mini","stream":true,"messages":[{"role":"user","content":"Reply with exactly this line and nothing else: cafe latte 日本語 naive 🌍🇯🇵 Grüße"}]}
+
+: OPENROUTER PROCESSING
+
+: OPENROUTER PROCESSING
+
+data: {"id":"gen-1786338430-bCXvwNZsIjlmJd3dm24A","object":"chat.completion.chunk","created":1786338430,"model":"openai/gpt-4o-mini","provider":"Azure","system_fingerprint":"fp_369e662417","choices":[{"index":0,"delta":{"content":"c","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1786338430-bCXvwNZsIjlmJd3dm24A","object":"chat.completion.chunk","created":1786338430,"model":"openai/gpt-4o-mini","provider":"Azure","system_fingerprint":"fp_369e662417","choices":[{"index":0,"delta":{"content":"afe","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1786338430-bCXvwNZsIjlmJd3dm24A","object":"chat.completion.chunk","created":1786338430,"model":"openai/gpt-4o-mini","provider":"Azure","system_fingerprint":"fp_369e662417","choices":[{"index":0,"delta":{"content":" latte","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1786338430-bCXvwNZsIjlmJd3dm24A","object":"chat.completion.chunk","created":1786338430,"model":"openai/gpt-4o-mini","provider":"Azure","system_fingerprint":"fp_369e662417","choices":[{"index":0,"delta":{"content":" 日本","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1786338430-bCXvwNZsIjlmJd3dm24A","object":"chat.completion.chunk","created":1786338430,"model":"openai/gpt-4o-mini","provider":"Azure","system_fingerprint":"fp_369e662417","choices":[{"index":0,"delta":{"content":"語","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1786338430-bCXvwNZsIjlmJd3dm24A","object":"chat.completion.chunk","created":1786338430,"model":"openai/gpt-4o-mini","provider":"Azure","system_fingerprint":"fp_369e662417","choices":[{"index":0,"delta":{"content":" naive","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1786338430-bCXvwNZsIjlmJd3dm24A","object":"chat.completion.chunk","created":1786338430,"model":"openai/gpt-4o-mini","provider":"Azure","system_fingerprint":"fp_369e662417","choices":[{"index":0,"delta":{"content":" 🌍","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1786338430-bCXvwNZsIjlmJd3dm24A","object":"chat.completion.chunk","created":1786338430,"model":"openai/gpt-4o-mini","provider":"Azure","system_fingerprint":"fp_369e662417","choices":[{"index":0,"delta":{"content":"🇯","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1786338430-bCXvwNZsIjlmJd3dm24A","object":"chat.completion.chunk","created":1786338430,"model":"openai/gpt-4o-mini","provider":"Azure","system_fingerprint":"fp_369e662417","choices":[{"index":0,"delta":{"content":"🇵","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1786338430-bCXvwNZsIjlmJd3dm24A","object":"chat.completion.chunk","created":1786338430,"model":"openai/gpt-4o-mini","provider":"Azure","system_fingerprint":"fp_369e662417","choices":[{"index":0,"delta":{"content":" Grüße","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1786338430-bCXvwNZsIjlmJd3dm24A","object":"chat.completion.chunk","created":1786338430,"model":"openai/gpt-4o-mini","provider":"Azure","system_fingerprint":"fp_369e662417","choices":[{"index":0,"delta":{"content":"","role":"assistant"},"finish_reason":"stop","native_finish_reason":"stop"}]}
+
+data: {"id":"gen-1786338430-bCXvwNZsIjlmJd3dm24A","object":"chat.completion.chunk","created":1786338430,"model":"openai/gpt-4o-mini","provider":"Azure","system_fingerprint":"fp_369e662417","service_tier":null,"choices":[{"index":0,"delta":{"content":"","role":"assistant"},"finish_reason":"stop","native_finish_reason":"stop"}],"usage":{"prompt_tokens":28,"completion_tokens":14,"total_tokens":42,"cost":0.0000126,"is_byok":false,"prompt_tokens_details":{"cached_tokens":0,"cache_write_tokens":0,"audio_tokens":0,"video_tokens":0},"cost_details":{"upstream_inference_cost":0.0000126,"upstream_inference_prompt_cost":0.0000042,"upstream_inference_completions_cost":0.0000084},"completion_tokens_details":{"reasoning_tokens":0,"image_tokens":0,"audio_tokens":0}}}
+
+data: [DONE]
+

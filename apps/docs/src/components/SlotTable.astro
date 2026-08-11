@@ -1,8 +1,8 @@
 ---
 // Composition slots for an element, from the generated element-meta.json.
 // `inject` = additive (the built-in region still renders); `replace` = your
-// markup stands in for that region. The default (unnamed) slot — the element's
-// primary content — is covered in each page's Usage, not here.
+// markup stands in for that region. The default (unnamed) slot — an element's
+// primary content — is a `name: ""` entry like any other and renders here too.
 import meta from '@kitn.ai/ui/element-meta.json';
 interface Props { tag: string }
 const { tag } = Astro.props;
@@ -18,7 +18,7 @@ const th = 'text-left text-xs font-semibold uppercase tracking-wide text-ink-3 b
         {slots.map((s: any) => (
           <tr>
             <td class="border-b border-line px-4 py-3 align-top font-mono text-sm font-semibold text-link">
-              {s.name}{s.part && <span class="ml-1 font-sans text-xs text-ink-3">· <code>::part</code></span>}
+              {s.name === '' ? <span class="italic text-ink-2">(default)</span> : s.name}{s.part && <span class="ml-1 font-sans text-xs text-ink-3">· <code>::part</code></span>}
             </td>
             <td class="border-b border-line px-4 py-3 align-top font-mono text-sm text-ink-2">{s.mode}</td>
             <td class="border-b border-line px-4 py-3 align-top text-sm text-ink-2">{s.doc}</td>

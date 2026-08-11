@@ -37,7 +37,7 @@ async function send(raw: string) {
   if (!text) return;
   // The Composer already cleared its own input; here we just append the user
   // message and stream the (fake) assistant reply.
-  chat.append({ id: newId(), role: 'user', content: text });
+  chat.append({ id: newId(), role: 'user', parts: [{ type: 'text', text }] });
   const stream = chat.streamAssistant();
   await streamFakeReply(text, (delta) => stream.appendText(delta));
   stream.done();

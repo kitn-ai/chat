@@ -92,22 +92,31 @@ const ARTIFACT_ATTACHMENT = {
 
 type CustomAction = { id: string; label: string; icon?: string; tooltip?: string };
 
+interface MessagePart {
+  type: 'text' | 'file';
+  text?: string;
+  attachment?: Record<string, unknown>;
+}
+
 interface ChatMsg {
   id: string;
   role: 'user' | 'assistant';
-  content: string;
+  parts: MessagePart[];
   actions?: (string | CustomAction)[];
-  attachments?: Record<string, unknown>[];
 }
 
 const SEED_MESSAGES: ChatMsg[] = [
-  { id: 'm1', role: 'user', content: 'Build a small landing page for Starboard.' },
+  { id: 'm1', role: 'user', parts: [{ type: 'text', text: 'Build a small landing page for Starboard.' }] },
   {
     id: 'm2',
     role: 'assistant',
-    content:
-      "Here's a landing page for Starboard — a hero, a feature card, and an About page sharing one stylesheet. Open the preview to see it rendered, or read the source on the Code tab.",
-    attachments: [ARTIFACT_ATTACHMENT],
+    parts: [
+      { type: 'file', attachment: ARTIFACT_ATTACHMENT },
+      {
+        type: 'text',
+        text: "Here's a landing page for Starboard — a hero, a feature card, and an About page sharing one stylesheet. Open the preview to see it rendered, or read the source on the Code tab.",
+      },
+    ],
     actions: [OPEN_ACTION, 'copy'],
   },
 ];
@@ -153,8 +162,8 @@ export default function ArtifactRevealDemo(props: Props) {
     const aId = nextId();
     chatEl.messages = [
       ...(chatEl.messages ?? []),
-      { id: nextId(), role: 'user', content: text },
-      { id: aId, role: 'assistant', content: '' },
+      { id: nextId(), role: 'user', parts: [{ type: 'text', text }] },
+      { id: aId, role: 'assistant', parts: [] },
     ];
     (chatEl as any).loading = true;
     const words = REPLY.split(/(\s+)/);
@@ -166,7 +175,13 @@ export default function ArtifactRevealDemo(props: Props) {
       const done = i >= words.length;
       chatEl!.messages = (chatEl!.messages ?? []).map((m) =>
         m.id === aId
-          ? { ...m, content: partial, ...(done ? { attachments: [ARTIFACT_ATTACHMENT], actions: [OPEN_ACTION, 'copy'] } : {}) }
+          ? {
+              ...m,
+              parts: done
+                ? [{ type: 'file', attachment: ARTIFACT_ATTACHMENT }, { type: 'text', text: partial }]
+                : [{ type: 'text', text: partial }],
+              ...(done ? { actions: [OPEN_ACTION, 'copy'] } : {}),
+            }
           : m,
       );
       if (!done) timer = window.setTimeout(tick, 38);

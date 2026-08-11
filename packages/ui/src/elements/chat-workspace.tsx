@@ -5,6 +5,8 @@ import { readSlots, WORKSPACE_SLOTS } from './slots';
 import { ChatThread, type ChatThreadContextUsage, type ChatThreadController } from '../components/chat-thread';
 import { ConversationList, CollapsedRail } from '../components/conversation-list';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '../ui/resizable';
+import { cardComponentsFromTags } from './message';
+import { createMessagesGuard } from './validate-messages';
 import type { AttachmentData } from '../components/attachments';
 import type { TriggerDef } from '../components/composer';
 import type { ChatMessage } from './chat-types';
@@ -12,14 +14,25 @@ import type { ProseSize } from '../primitives/chat-config';
 import type { ModelOption, ConversationGroup, ConversationSummary } from '../types';
 
 interface Props extends Record<string, unknown> {
-  /** Pre-bucketed conversation groups for the sidebar. Set as a JS property. */
-  groups: ConversationGroup[];
-  /** Flat conversation list (auto-bucketed if `groups` is empty). Set as a JS property. */
-  conversations: ConversationSummary[];
+  /** The sidebar's section headers, rendered in array order. A group carries no
+   *  conversations of its own; it is matched against `conversations` by id, so
+   *  the two props are complementary rather than alternatives. Omit for an
+   *  ungrouped sidebar. Set as a JS property. */
+  groups?: ConversationGroup[];
+  /** Every conversation in the sidebar, flat. Each one is filed under the group
+   *  whose `id` equals its `groupId`; one with no `groupId` — or with a `groupId`
+   *  matching no entry in `groups` — falls into a trailing ungrouped section
+   *  (headerless when `compact`), so nothing you pass in is ever dropped. There is
+   *  no recency bucketing. Set as a JS property. Omit for an empty sidebar, or
+   *  when `no-conversations` replaces the built-in list with your own
+   *  `sidebar-header` content. */
+  conversations?: ConversationSummary[];
   /** Id of the open conversation, highlighted in the sidebar. */
   activeId?: string;
-  /** The active conversation's message thread, newest last. Set as a JS property. */
-  messages: ChatMessage[];
+  /** The active conversation's message thread, newest last. Set as a JS property
+   *  (`el.messages = [...]`); a NEW array reference per streaming chunk
+   *  re-renders (mutating in place does not). Omit for an empty thread. */
+  messages?: ChatMessage[];
   value?: string;
   placeholder?: string;
   loading?: boolean;
@@ -63,6 +76,11 @@ interface Props extends Record<string, unknown> {
    *  whole rail flex region (for apps that supply their own rail nav). Default
    *  false. Attribute: `no-conversations`. */
   noConversations?: boolean;
+  /** Optional card type -> custom-element tag overrides/additions for `card`
+   *  parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a
+   *  plain string map (not the `CardTagMap` alias) so the generated React
+   *  wrapper inlines it instead of emitting an unresolved named type. */
+  cardTypes?: Record<string, string>;
 }
 
 interface Events {
@@ -99,8 +117,14 @@ defineWebComponent<Props, Events>('kai-workspace', {
   search: false, voice: false, triggers: undefined, kindIcons: undefined,
   sidebarWidth: 26, sidebarMinWidth: 240, sidebarMaxWidth: 420,
   sidebarCollapsed: undefined, defaultSidebarCollapsed: undefined, collapseBelow: undefined, compact: undefined,
-  noConversations: undefined,
+  noConversations: undefined, cardTypes: undefined,
 }, (props, { dispatch, flag, expose, element }) => {
+  // `messages` is an untyped boundary: a consumer can hand it anything at
+  // runtime (a pre-0.20.0 `{ id, role, content }` array, in particular). Skip
+  // the invalid entries rather than let `groupMessageParts` throw deep inside a
+  // render pass, which would blank the whole workspace instead of one message.
+  const validMessages = createMessagesGuard('kai-workspace');
+
   // Which injection slots the consumer has filled. A bare <slot> is always a
   // truthy JSX node, so we render each region wrapper ONLY when readSlots reports
   // projected light-DOM content (re-read on childList mutation).
@@ -180,7 +204,7 @@ defineWebComponent<Props, Events>('kai-workspace', {
   // own state (e.g. an uncontrolled draft) survives the collapse/expand.
   const threadEl = (
     <ChatThread
-      messages={props.messages} value={props.value as string | undefined} placeholder={props.placeholder as string}
+      messages={validMessages(props.messages)} value={props.value as string | undefined} placeholder={props.placeholder as string}
       loading={flag('loading')} suggestions={props.suggestions as string[] | undefined}
       suggestionMode={props.suggestionMode as 'submit' | 'fill'} proseSize={props.proseSize as ProseSize}
       codeTheme={props.codeTheme as string} codeHighlight={flag('codeHighlight')}
@@ -189,6 +213,7 @@ defineWebComponent<Props, Events>('kai-workspace', {
       scrollButton={props.scrollButton !== false} search={flag('search')} voice={flag('voice')}
       triggers={props.triggers as TriggerDef[] | undefined}
       kindIcons={props.kindIcons as Record<string, string> | undefined}
+      cardTypes={cardComponentsFromTags(props.cardTypes as Record<string, string> | undefined, (props as { theme?: string }).theme)}
       onValueChange={(value) => dispatch('kai-value-change', { value })}
       onSubmit={(detail) => dispatch('kai-submit', detail)}
       onSuggestionClick={(value) => dispatch('kai-suggestion-click', { value })}
@@ -253,7 +278,7 @@ defineWebComponent<Props, Events>('kai-workspace', {
                 <div class="min-h-0 flex-1">
                   <ConversationList
                     class="bg-transparent"
-                    groups={props.groups} conversations={props.conversations} activeId={props.activeId as string | undefined}
+                    groups={props.groups ?? []} conversations={props.conversations ?? []} activeId={props.activeId as string | undefined}
                     compact={flag('compact')}
                     onSelect={(id) => dispatch('kai-conversation-select', { id })}
                     onNewChat={() => dispatch('kai-new-chat', {})}

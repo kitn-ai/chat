@@ -3,6 +3,7 @@ import { onMount, onCleanup } from 'solid-js';
 import { LifeBuoy, Sparkles } from 'lucide-solid';
 import './register'; // side effect: registers <kai-chat> et al.
 import { attachKaiActions } from '../stories/docs/story-actions';
+import { textMessage } from '../state';
 import type { ChatMessage } from './chat-types';
 import type { ConversationSummary, ConversationGroup } from '../types';
 
@@ -33,13 +34,12 @@ type ConversationsEl = HTMLElement & {
 };
 
 const thread: ChatMessage[] = [
-  { id: '1', role: 'user', content: 'Can you summarize last quarter?' },
-  {
-    id: '2',
-    role: 'assistant',
-    content: 'Revenue was up 18% QoQ, driven mostly by the self-serve tier. Want the breakdown by plan?',
-    actions: ['copy', 'like', 'dislike'],
-  },
+  textMessage('user', 'Can you summarize last quarter?', { id: '1' }),
+  textMessage(
+    'assistant',
+    'Revenue was up 18% QoQ, driven mostly by the self-serve tier. Want the breakdown by plan?',
+    { id: '2', actions: ['copy', 'like', 'dislike'] },
+  ),
 ];
 
 // Sample data for the dogfooded <kai-conversations> sidebar.
@@ -194,7 +194,7 @@ function ReplaceDemo() {
     const text = input?.value.trim();
     if (!text || !el) return;
     // Consumer owns the composer behavior end-to-end: append to the thread.
-    el.messages = [...(el.messages ?? []), { id: `m${nextId++}`, role: 'user', content: text }];
+    el.messages = [...(el.messages ?? []), textMessage('user', text, { id: `m${nextId++}` })];
     if (input) input.value = '';
   };
   return (
@@ -233,7 +233,7 @@ export const ReplaceComposer: Story = {
   document.querySelector('form[slot="composer"]').addEventListener('submit', (e) => {
     e.preventDefault();
     const input = e.target.querySelector('input');
-    chat.messages = [...chat.messages, { id: crypto.randomUUID(), role: 'user', content: input.value }];
+    chat.messages = [...chat.messages, { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: input.value }] }];
     input.value = '';
   });
 </script>`,

@@ -4,33 +4,51 @@ Heavy reference for the `consumer-regression` skill. Exact commands, the test ma
 
 ## Conventions — resolve paths at runtime, NEVER hardcode
 
-The repo lives in a different place on every machine. Derive everything from the repo root:
+The repo lives in a different place on every machine, and this is a pnpm + NX workspace: the publishable package is `packages/ui`, not the repo root (the root package is `kitn-ai`, `private: true`). Derive everything at runtime:
 
 ```bash
-REPO="$(git rev-parse --show-toplevel)"           # the @kitn.ai/ui library repo root (run this from anywhere inside the repo)
-HARNESS="$(dirname "$REPO")/consumer-harness"     # a sibling dir, OUTSIDE the repo (keeps the repo's git clean)
+REPO="$(git rev-parse --show-toplevel)"           # the workspace root (run this from anywhere inside the repo)
+MAIN="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"  # the MAIN checkout, even from inside a worktree
+HARNESS="$(dirname "$MAIN")/consumer-harness"     # a sibling of the MAIN checkout, OUTSIDE every worktree (keeps git clean)
+PKG="$REPO/packages/ui"                           # the publishable @kitn.ai/ui package
 ```
 
-Every command + script below uses `$REPO` / `$HARNESS`. In Node scripts, derive them the same way (the gen script shows how). When you dispatch a `consumer-probe`, pass the resolved absolute paths in the prompt — the agent does not guess them.
+Running from a **git worktree** is supported and intentional: `$REPO` correctly resolves to the worktree you're testing (that's how you validate an unmerged branch), while `$MAIN`/`$HARNESS` walk through the main checkout's `.git` so the harness directory never lands inside any worktree's tree. In a normal (non-worktree) clone, `$MAIN` is just `$REPO`, so nothing changes.
+
+Every command + script below uses `$REPO` / `$MAIN` / `$HARNESS` / `$PKG`. In Node scripts, derive them the same way (the gen script shows how). When you dispatch a `consumer-probe`, pass the resolved absolute paths in the prompt. The agent does not guess them.
 
 ---
 
 ## Setup (Phase 0)
 
 ```bash
-REPO="$(git rev-parse --show-toplevel)"; HARNESS="$(dirname "$REPO")/consumer-harness"
-cd "$REPO"
-# 1. Build + pack the LOCAL package (so unmerged fixes are testable, NOT the published npm version)
-npm run build && git checkout -- src/components/component-meta.json && npm pack    # → kitn.ai-ui-<v>.tgz
+REPO="$(git rev-parse --show-toplevel)"
+MAIN="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
+HARNESS="$(dirname "$MAIN")/consumer-harness"
+PKG="$REPO/packages/ui"
+# 1. Build from the repo ROOT (nx is not on PATH, hence the pnpm exec prefix), then pack the
+#    LOCAL package from packages/ui (so unmerged fixes are testable, NOT the published npm version)
+cd "$REPO" && pnpm exec nx build ui
+cd "$PKG" && npm pack    # → kitn.ai-ui-<v>.tgz, written into packages/ui
 # 2. Stable copy the probes install from (a fix's re-pack can't race a reading probe)
 mkdir -p "$HARNESS" && cp kitn.ai-ui-*.tgz "$HARNESS/kitn-stable.tgz"
 ```
 
 After a **library** change: re-run the build + `npm pack` + refresh `$HARNESS/kitn-stable.tgz`, then re-probe.
-After a **scaffold.ts** change: rebuild ONLY the MCP bin (fast) before regenerating scaffolds:
+After a **scaffold.ts** change: rebuild ONLY the MCP bin (fast) before regenerating scaffolds, from `packages/ui`:
 ```bash
-npx vite build --config vite.config.mcp.ts
+cd "$PKG" && npx vite build --config vite.config.mcp.ts
 ```
+
+### Post-build churn
+
+`pnpm exec nx build ui` regenerates six checked-in files: `packages/ui/src/components/component-meta.json`, `packages/ui/src/elements/element-meta.json`, `packages/ui/src/elements/element-types.d.ts`, `packages/ui/frameworks/react/index.tsx`, `packages/ui/llms-full.txt`, and `docs/web-components.md`. Check `git status` after the build.
+
+Two cases:
+- **The shapes genuinely changed on this branch** (new/changed elements, props, or components): the regeneration is real and correct. Commit it as part of the branch's own change, don't discard it.
+- **You're just packing to test, mid-investigation, on a branch where nothing shape-relevant changed:** revert the churn so it doesn't pollute your diff: `git checkout -- <the six paths above>`.
+
+Don't reach for a blanket revert without checking which case you're in.
 
 ## Generating scaffolds from the live MCP bin
 
@@ -42,9 +60,11 @@ import { spawn, execSync } from 'node:child_process';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 const REPO = execSync('git rev-parse --show-toplevel').toString().trim();
-const HARNESS = join(dirname(REPO), 'consumer-harness');
+const MAIN = dirname(execSync('git rev-parse --path-format=absolute --git-common-dir').toString().trim());
+const HARNESS = join(dirname(MAIN), 'consumer-harness');
+const PKG = join(REPO, 'packages/ui');
 mkdirSync(join(HARNESS, 'scaffolds'), { recursive: true });
-const p = spawn('node', [join(REPO, 'bin/mcp.js')], { cwd: REPO, stdio: ['pipe','pipe','pipe'] });
+const p = spawn('node', [join(PKG, 'bin/mcp.js')], { cwd: PKG, stdio: ['pipe','pipe','pipe'] });
 let buf=''; const out=[];
 p.stdout.on('data',d=>{buf+=d;let i;while((i=buf.indexOf('\n'))>=0){const l=buf.slice(0,i);buf=buf.slice(i+1);if(l.trim()){try{out.push(JSON.parse(l))}catch{}}}});
 const s=o=>p.stdin.write(JSON.stringify(o)+'\n');
@@ -62,7 +82,7 @@ setTimeout(()=>{p.kill();cells.forEach(([n],i)=>{const t=out.find(m=>m.id===40+i
 
 The same client calls the other tools: `theme` (brand → token block), `component_reference` (the real API), `debug` (gotcha → fix).
 
-**Sanity:** the bin is `$REPO/bin/mcp.js` (built by `vite.config.mcp.ts` → `$REPO/dist/mcp.es.js`). If a generated `.md` comes out empty/tiny, the bin didn't run — `ls "$REPO/bin/mcp.js" "$REPO/dist/mcp.es.js"`, rebuild the bin, re-run. Always eyeball one generated scaffold (it should contain `kai-chat` / `<Chat`, the suggestions, and the backend block) before fanning out probes against it.
+**Sanity:** the bin is `$PKG/bin/mcp.js` (built by `vite.config.mcp.ts` → `$PKG/dist/mcp.es.js`). If a generated `.md` comes out empty/tiny, the bin didn't run: `ls "$PKG/bin/mcp.js" "$PKG/dist/mcp.es.js"`, rebuild the bin, re-run. Always eyeball one generated scaffold (it should contain `kai-chat` / `<Chat`, the suggestions, and the backend block) before fanning out probes against it.
 
 ## The test matrix
 
@@ -114,8 +134,8 @@ curl -N -X POST localhost:3000/api/chat -H 'content-type: application/json' \
 
 The elements bundle must not throw when imported with no DOM:
 ```bash
-REPO="$(git rev-parse --show-toplevel)"
-node --input-type=module -e "await import('$REPO/dist/kai.es.js'); console.log('SSR-OK')"   # no throw
+PKG="$(git rev-parse --show-toplevel)/packages/ui"
+node --input-type=module -e "await import('$PKG/dist/kai.es.js'); console.log('SSR-OK')"   # no throw
 ```
 For SSR frameworks (Next, TanStack Start, SvelteKit, Remix, Astro) the scaffold ALSO renders the chat client-only (`dynamic({ssr:false})` / `createFileRoute({ssr:false})`) to avoid hydration mismatch — confirm the server HTML omits `<kai-chat>`.
 

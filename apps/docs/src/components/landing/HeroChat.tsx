@@ -10,7 +10,6 @@
 import { createSignal, onMount, onCleanup } from 'solid-js';
 import { loadKit } from '../example/kit';
 
-interface Reasoning { text: string; label?: string }
 interface ToolPart {
   type: string;
   state: 'input-streaming' | 'input-available' | 'output-available' | 'output-error';
@@ -18,12 +17,16 @@ interface ToolPart {
   input?: Record<string, unknown>;
   output?: Record<string, unknown>;
 }
+interface MessagePart {
+  type: 'text' | 'reasoning' | 'tool';
+  text?: string;
+  label?: string;
+  tool?: ToolPart;
+}
 interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
-  content: string;
-  reasoning?: Reasoning;
-  tools?: ToolPart[];
+  parts: MessagePart[];
   actions?: string[];
 }
 
@@ -111,9 +114,12 @@ export default function HeroChat() {
   const wait = (ms: number) => new Promise<void>((r) => { timer = window.setTimeout(r, ms); });
 
   const assistantFinal = (): ChatMessage => ({
-    id: 'a1', role: 'assistant', content: ANSWER,
-    reasoning: { label: 'Thought for 4s', text: REASONING },
-    tools: [{ type: 'query_traces', state: 'output-available', toolCallId: 't1', input: TOOL_INPUT, output: TOOL_OUTPUT }],
+    id: 'a1', role: 'assistant',
+    parts: [
+      { type: 'reasoning', label: 'Thought for 4s', text: REASONING },
+      { type: 'tool', tool: { type: 'query_traces', state: 'output-available', toolCallId: 't1', input: TOOL_INPUT, output: TOOL_OUTPUT } },
+      { type: 'text', text: ANSWER },
+    ],
     actions: ['copy', 'like', 'dislike'],
   });
 
@@ -145,40 +151,53 @@ export default function HeroChat() {
     host.value = '';
     await wait(350); if (!alive()) return stop();
 
-    const user: ChatMessage = { id: 'u1', role: 'user', content: QUESTION };
+    const user: ChatMessage = { id: 'u1', role: 'user', parts: [{ type: 'text', text: QUESTION }] };
     host.messages = [user];
 
-    // Thinking — the reasoning trigger reads "Thinking…", then resolves.
+    // Thinking — the reasoning trigger reads "Thinking…", then resolves. Parts
+    // stay in order (reasoning -> tool -> text) as each one arrives/updates.
     await wait(650); if (!alive()) return stop();
     host.loading = true;
-    let a: ChatMessage = { id: 'a1', role: 'assistant', content: '', reasoning: { label: 'Thinking…', text: REASONING } };
+    let a: ChatMessage = { id: 'a1', role: 'assistant', parts: [{ type: 'reasoning', label: 'Thinking…', text: REASONING }] };
     host.messages = [user, { ...a }];
 
     await wait(1500); if (!alive()) return stop();
-    a = { ...a, reasoning: { label: 'Thought for 4s', text: REASONING } };
+    a = { ...a, parts: [{ type: 'reasoning', label: 'Thought for 4s', text: REASONING }] };
     host.messages = [user, { ...a }];
 
     // Tool call — running.
     await wait(520); if (!alive()) return stop();
-    a = { ...a, tools: [{ type: 'query_traces', state: 'input-available', toolCallId: 't1', input: TOOL_INPUT }] };
+    a = {
+      ...a,
+      parts: [
+        { type: 'reasoning', label: 'Thought for 4s', text: REASONING },
+        { type: 'tool', tool: { type: 'query_traces', state: 'input-available', toolCallId: 't1', input: TOOL_INPUT } },
+      ],
+    };
     host.messages = [user, { ...a }];
 
     // Tool call — structured result.
     await wait(1300); if (!alive()) return stop();
-    a = { ...a, tools: [{ type: 'query_traces', state: 'output-available', toolCallId: 't1', input: TOOL_INPUT, output: TOOL_OUTPUT }] };
+    a = {
+      ...a,
+      parts: [
+        { type: 'reasoning', label: 'Thought for 4s', text: REASONING },
+        { type: 'tool', tool: { type: 'query_traces', state: 'output-available', toolCallId: 't1', input: TOOL_INPUT, output: TOOL_OUTPUT } },
+      ],
+    };
     host.messages = [user, { ...a }];
 
-    // Stream the answer.
+    // Stream the answer: the text part is appended after reasoning + tool.
     await wait(560); if (!alive()) return stop();
     const words = ANSWER.split(/(\s+)/);
     for (let i = 2; i <= words.length; i += 2) {
       if (!alive()) return stop();
-      a = { ...a, content: words.slice(0, i).join('') };
+      a = { ...a, parts: [...a.parts.slice(0, 2), { type: 'text', text: words.slice(0, i).join('') }] };
       host.messages = [user, { ...a }];
       await wait(34);
     }
     if (!alive()) return stop();
-    a = { ...a, content: ANSWER }; // ensure the final word lands (odd word count)
+    a = { ...a, parts: [...a.parts.slice(0, 2), { type: 'text', text: ANSWER }] }; // ensure the final word lands (odd word count)
     host.messages = [user, { ...a }];
     host.loading = false;
 
@@ -193,15 +212,15 @@ export default function HeroChat() {
   }
 
   function renderFinal() {
-    host.messages = [{ id: 'u1', role: 'user', content: QUESTION }, assistantFinal()];
+    host.messages = [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: QUESTION }] }, assistantFinal()];
     showCard();
   }
 
   function applyCardAction(action: string) {
     clearCard();
     const cont: ChatMessage = action === 'apply'
-      ? { id: nextId(), role: 'assistant', content: 'Opened **PR #4827** — `fix(checkout): batch cart lookups + 250 ms timeout`. CI is green; p99 is back to **190 ms** in staging.', actions: ['copy', 'like', 'dislike'] }
-      : { id: nextId(), role: 'assistant', content: 'Here’s the change:\n\n```diff\n- for (const item of cart) {\n-   item.detail = await db.query(itemSql, item.id);   // N+1\n- }\n+ const rows = await db.query(batchSql, cart.map((i) => i.id));\n+ hydrate(cart, rows);\n```', actions: ['copy', 'like', 'dislike'] };
+      ? { id: nextId(), role: 'assistant', parts: [{ type: 'text', text: 'Opened **PR #4827** — `fix(checkout): batch cart lookups + 250 ms timeout`. CI is green; p99 is back to **190 ms** in staging.' }], actions: ['copy', 'like', 'dislike'] }
+      : { id: nextId(), role: 'assistant', parts: [{ type: 'text', text: 'Here’s the change:\n\n```diff\n- for (const item of cart) {\n-   item.detail = await db.query(itemSql, item.id);   // N+1\n- }\n+ const rows = await db.query(batchSql, cart.map((i) => i.id));\n+ hydrate(cart, rows);\n```' }], actions: ['copy', 'like', 'dislike'] };
     host.messages = [...(host.messages ?? []), cont];
   }
 
@@ -211,7 +230,11 @@ export default function HeroChat() {
     runToken++; // stop any autoplay in flight
     clearCard();
     const aId = nextId();
-    host.messages = [...(host.messages ?? []), { id: nextId(), role: 'user', content: text }, { id: aId, role: 'assistant', content: '' }];
+    host.messages = [
+      ...(host.messages ?? []),
+      { id: nextId(), role: 'user', parts: [{ type: 'text', text }] },
+      { id: aId, role: 'assistant', parts: [] },
+    ];
     host.loading = true;
     const words = FOLLOWUP.split(/(\s+)/);
     let i = 0;
@@ -221,7 +244,7 @@ export default function HeroChat() {
       const partial = words.slice(0, i).join('');
       const done = i >= words.length;
       host.messages = (host.messages ?? []).map((m: ChatMessage) =>
-        m.id === aId ? { ...m, content: partial, ...(done ? { actions: ['copy', 'like', 'dislike'] } : {}) } : m,
+        m.id === aId ? { ...m, parts: [{ type: 'text', text: partial }], ...(done ? { actions: ['copy', 'like', 'dislike'] } : {}) } : m,
       );
       if (!done) timer = window.setTimeout(tick, 36);
       else host.loading = false;

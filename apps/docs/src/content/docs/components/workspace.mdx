@@ -51,8 +51,8 @@ Set data in JavaScript and listen for **CustomEvents** on the element:
     },
   ];
   ws.messages = [
-    { id: 'm1', role: 'user', content: 'How do I drop the whole chat app in with one tag?' },
-    { id: 'm2', role: 'assistant', content: 'Use <kai-workspace> and set the three core properties.' },
+    { id: 'm1', role: 'user', parts: [{ type: 'text', text: 'How do I drop the whole chat app in with one tag?' }] },
+    { id: 'm2', role: 'assistant', parts: [{ type: 'text', text: 'Use <kai-workspace> and set the three core properties.' }] },
   ];
   ws.models = [{ id: 'claude-4-opus', name: 'Claude 4 Opus', provider: 'Anthropic' }];
   ws.activeId = '1';
@@ -64,8 +64,8 @@ Set data in JavaScript and listen for **CustomEvents** on the element:
 ```
 
 - **Properties vs attributes** — `groups`, `conversations`, `messages`, `models`, `suggestions`, `triggers`, `kindIcons`, and `context` are arrays and objects, so set them in JavaScript. Scalar props (`placeholder`, `loading`, sidebar dimensions, etc.) work as attributes or properties.
-- **Sidebar** — drag-resizable and collapsible. Constrain with `sidebarWidth` (percent, default `22`), `sidebarMinWidth`, and `sidebarMaxWidth`. Collapse is **uncontrolled by default** — the element manages it and fires `kai-sidebar-toggle`. Start collapsed with the `default-sidebar-collapsed` attribute, or **control** it by setting the `sidebarCollapsed` property and updating it from `kai-sidebar-toggle` (lets you persist the choice or collapse from outside the header).
-- **Conversation grouping** — pass a flat `conversations` array and the element auto-buckets by recency, or supply a `groups` array with `groupId` on each conversation for custom grouping.
+- **Sidebar** — drag-resizable and collapsible. Constrain with `sidebarWidth` (a percent of the workspace, default `26`), `sidebarMinWidth` and `sidebarMaxWidth` (both px, default `240` / `420`). Collapse is **uncontrolled by default** — the element manages it and fires `kai-sidebar-toggle`. Start collapsed with the `default-sidebar-collapsed` attribute, or **control** it by setting the `sidebarCollapsed` property and updating it from `kai-sidebar-toggle` (lets you persist the choice or collapse from outside the header).
+- **Conversation grouping** — `groups` supplies the section headers, `conversations` supplies the rows, and each row lands in the group whose `id` matches its `groupId`. Leave `groups` off and the whole list renders in one **Ungrouped** section.
 
 ## Examples
 

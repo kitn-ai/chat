@@ -69,15 +69,17 @@ import ModelContextDemo from '../../../components/ModelContextDemo.tsx';
     const aId = crypto.randomUUID();
     chat.messages = [
       ...chat.messages,
-      { id: crypto.randomUUID(), role: 'user', content: e.detail.value },
-      { id: aId, role: 'assistant', content: '' },
+      { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: e.detail.value }] },
+      { id: aId, role: 'assistant', parts: [] },
     ];
     chat.loading = true;
 
     // Stream the reply and grow usedTokens as output arrives.
+    let answer = '';
     for await (const token of streamReply(e.detail.value, modelId)) {
+      answer += token;
       chat.messages = chat.messages.map((m) =>
-        m.id === aId ? { ...m, content: m.content + token } : m,
+        m.id === aId ? { ...m, parts: [{ type: 'text', text: answer }] } : m,
       );
       usedTokens += estimateTokens(token);
       pushContext();

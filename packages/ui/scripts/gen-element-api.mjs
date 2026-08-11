@@ -38,6 +38,26 @@ const exportedTypeNames = new Set(entrySym ? checker.getExportsOfModule(entrySym
 
 const toAttr = (name) => name.replace(/([A-Z])/g, '-$1').toLowerCase();
 
+// Every member name `HTMLElement` already carries (own + inherited: Element,
+// Node, EventTarget, ARIAMixin, GlobalEventHandlers, …). A generated element
+// interface `extends HTMLElement`, so a prop whose NAME lands in here re-declares
+// a DOM member and must stay assignable to it — otherwise the interface is
+// formally invalid (TS2430) and, for members `Element` itself declares (`role`),
+// lib.dom's own `HTMLElementTagNameMap[K] extends Element` constraint fails too
+// (TS2344). Read from the checker rather than hand-listed, so a TypeScript/lib
+// upgrade that adds a member is picked up on the next build.
+// See writeTypes() in gen-element-types.mjs for what is done with this, and
+// tests/elements/element-types-lib-check.test.ts for the guard that proves it.
+const DOM_MEMBERS = new Set();
+for (const sf of program.getSourceFiles()) {
+  if (!sf.isDeclarationFile || !/[\\/]lib\.dom\.d\.ts$/.test(sf.fileName)) continue;
+  for (const st of sf.statements) {
+    if (!ts.isInterfaceDeclaration(st) || st.name.text !== 'HTMLElement') continue;
+    for (const p of checker.getPropertiesOfType(checker.getTypeAtLocation(st))) DOM_MEMBERS.add(p.name);
+  }
+}
+if (DOM_MEMBERS.size === 0) throw new Error('gen-element-api: could not resolve HTMLElement members from lib.dom.d.ts');
+
 // Generated types are FULLY SELF-CONTAINED: every named type is expanded inline
 // (no imports), so the type files don't drag the kit's Solid `.tsx` sources into
 // a consumer's (or React-JSX) compilation. Only lib types (Uint8Array, Blob,
@@ -48,11 +68,12 @@ const IMPORTABLE = new Set(Object.keys(IMPORTS));
 
 // renderType/membersOf/isScalar/jsdocOf live in _ts-helpers.mjs (shared with
 // gen-component-api.mjs); membersOf here reads a Props/Events *type node*.
-const { membersOfNode: membersOf } = createTsHelpers(program, checker, { importable: IMPORTABLE });
+const { membersOfNode: membersOf, renderType, isScalar, jsdocOf } = createTsHelpers(program, checker, { importable: IMPORTABLE });
 
 // Render a propDefaults object-literal property value to a short display string.
 function defaultText(initializer) {
   if (!initializer) return undefined;
+  if (ts.isAsExpression(initializer) || ts.isParenthesizedExpression(initializer)) return defaultText(initializer.expression);
   if (ts.isStringLiteralLike(initializer)) return `'${initializer.text}'`;
   if (initializer.kind === ts.SyntaxKind.TrueKeyword) return 'true';
   if (initializer.kind === ts.SyntaxKind.FalseKeyword) return 'false';
@@ -77,30 +98,138 @@ function defaultsFrom(objLiteralNode) {
 
 // Storybook toId: lowercase, non-alphanumerics → nothing (matches our story titles).
 const kebabId = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
-// Collect { name, group } for imports from ../components/ or ../ui/ in a facade file.
-// Skips `import type` declarations and inline `type` specifiers (type-only imports).
-const composedImports = (sourceFile) => {
+/** Does this module register its own custom element? Used to stop the recursion
+ *  below at a facade boundary — one element must not inherit another's parts. */
+const definesElement = (sourceFile) => {
+  let found = false;
+  const visit = (n) => {
+    if (found) return;
+    if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === 'defineWebComponent') found = true;
+    else ts.forEachChild(n, visit);
+  };
+  visit(sourceFile);
+  return found;
+};
+
+/** A same-directory relative import resolved to its SourceFile in the program. */
+const localModule = (sourceFile, spec) => {
+  const dir = dirname(sourceFile.fileName);
+  for (const ext of ['.tsx', '.ts']) {
+    const sf = program.getSourceFile(resolve(dir, spec + ext));
+    if (sf) return sf;
+  }
+  return null;
+};
+
+/** Is this imported binding a COMPONENT (something you can render), as opposed to
+ *  a constant, an enum-ish object or a plain value that merely starts with a
+ *  capital? `/^[A-Z]/` alone let `DEFAULT_WARN_THRESHOLD` / `DEFAULT_DANGER_THRESHOLD`
+ *  (two numbers from ../components/context) into kai-context's `composedFrom`,
+ *  where they got a `solid-advanced-elements-defaultwarnthreshold--docs` story id
+ *  that resolves to nothing. Ask the checker for the declaration instead. */
+const isComponentBinding = (node) => {
+  let sym = checker.getSymbolAtLocation(node);
+  if (!sym) return false;
+  try { if (sym.flags & ts.SymbolFlags.Alias) sym = checker.getAliasedSymbol(sym); } catch { /* unresolved */ }
+  const decl = sym.valueDeclaration ?? sym.declarations?.[0];
+  if (!decl) return false;
+  if (ts.isFunctionDeclaration(decl) || ts.isClassDeclaration(decl)) return true;
+  const init = ts.isVariableDeclaration(decl) ? decl.initializer : undefined;
+  if (!init) return false;
+  // `const Foo = (props) => …`, `const Foo = function (props) {…}`, and the
+  // `Object.assign(Base, { Sub })` / `createX(…)` component-factory forms.
+  return ts.isArrowFunction(init) || ts.isFunctionExpression(init) || ts.isCallExpression(init);
+};
+
+// Collect { name, group } for the kit components a facade renders: named value
+// imports from ../components/ or ../ui/. Skips `import type` declarations and
+// inline `type` specifiers, and non-component bindings (see isComponentBinding).
+//
+// Recurses through ELEMENT-LOCAL helper modules. `kai-prompt-input` composes its
+// whole UI in ./default-input (so `<kai-chat>` can render the same composer), and
+// with a facade-file-only walk it reported `composedFrom: []` — the one element
+// whose composition a consumer most wants to see. Recursion stops at any module
+// that registers an element of its own, so an element never inherits another's
+// parts.
+const composedImports = (sourceFile, seen = new Set([sourceFile.fileName])) => {
   const out = [];
   for (const st of sourceFile.statements) {
     if (!ts.isImportDeclaration(st) || !st.importClause?.namedBindings) continue;
     // Skip `import type { ... }` (the whole declaration is type-only)
     if (st.importClause.isTypeOnly) continue;
     const spec = st.moduleSpecifier.text;
+    const named = st.importClause.namedBindings;
+    if (!ts.isNamedImports(named)) continue;
     const group = spec.startsWith('../components/') ? 'Components'
                 : spec.startsWith('../ui/') ? 'UI' : null;
-    if (!group) continue;
-    const named = st.importClause.namedBindings;
-    if (ts.isNamedImports(named)) {
-      for (const el of named.elements) {
-        // Skip inline `type` specifiers e.g. `{ Foo, type Bar }`
-        if (el.isTypeOnly) continue;
-        const name = el.name.text;
-        if (/^[A-Z]/.test(name)) out.push({ name, group }); // components, not lowercase utils
-      }
+    if (!group) {
+      if (!spec.startsWith('./')) continue;
+      const local = localModule(sourceFile, spec);
+      if (!local || seen.has(local.fileName) || definesElement(local)) continue;
+      seen.add(local.fileName);
+      out.push(...composedImports(local, seen));
+      continue;
+    }
+    for (const el of named.elements) {
+      // Skip inline `type` specifiers e.g. `{ Foo, type Bar }`
+      if (el.isTypeOnly) continue;
+      const name = el.name.text;
+      if (!/^[A-Z]/.test(name)) continue; // components, not lowercase utils
+      if (!isComponentBinding(el.name)) continue;
+      if (!out.some((o) => o.name === name)) out.push({ name, group });
     }
   }
   return out;
 };
+
+// ---- the props EVERY element gets, injected by defineWebComponent -----------
+// `define.tsx` merges its own defaults over each facade's (`{ theme: 'auto',
+// ...propDefaults }`), so `theme` is a real property + attribute on all 79
+// elements — but it was declared nowhere in the model, and instead re-typed by
+// hand in three places (the .d.ts propBody, the CEM `attributes` list, the React
+// `propNames` array) and absent entirely from element-meta.json, llms-full.txt
+// and the CEM `members` list the kai MCP serves. Read it off the source literal
+// instead, with its type and doc comment from the checker.
+const UNIVERSAL_PROPS = (() => {
+  const sf = program.getSourceFile(resolve(elementsDir, 'define.tsx'));
+  let objLit = null;
+  const visit = (n) => {
+    if (objLit) return;
+    if (
+      ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.name.text === 'defaults' &&
+      n.initializer && ts.isObjectLiteralExpression(n.initializer) &&
+      n.initializer.properties.some((p) => ts.isSpreadAssignment(p) && p.expression.getText() === 'propDefaults')
+    ) objLit = n.initializer;
+    else ts.forEachChild(n, visit);
+  };
+  if (sf) visit(sf);
+  if (!objLit) {
+    throw new Error(
+      "gen-element-api: could not find defineWebComponent's injected `defaults` literal " +
+      '(`const defaults = { …, ...propDefaults }`) in src/elements/define.tsx — the universal ' +
+      'props would silently vanish from every generated artifact.',
+    );
+  }
+  const out = [];
+  for (const p of objLit.properties) {
+    if (!ts.isPropertyAssignment(p) || !(ts.isIdentifier(p.name) || ts.isStringLiteral(p.name))) continue;
+    const t = checker.getTypeAtLocation(p.initializer);
+    const sym = checker.getSymbolAtLocation(p.name);
+    out.push({
+      name: p.name.text,
+      type: renderType(t, p),
+      optional: true,
+      scalar: isScalar(t),
+      description: sym ? jsdocOf(sym) : '',
+      default: defaultText(p.initializer),
+      // Marks it as coming from define.tsx rather than the facade's own Props, so
+      // the React wrappers (whose WebComponentProps already declares it) can skip it.
+      universal: true,
+    });
+  }
+  if (!out.length) throw new Error('gen-element-api: the `defaults` literal in define.tsx declares no universal props');
+  return out;
+})();
 
 // The few elements with element-specific tokens; everything else is themed by
 // the global token set (see the Theming → Token Reference story).
@@ -110,7 +239,18 @@ const COMPONENT_TOKENS = {
   'kai-conversations': ['--color-sidebar', '--color-scrollbar-thumb'],
 };
 
-// collect dispatch('name') literals per source file
+// Collect the event names a facade file fires. Two channels, and BOTH are public:
+//
+//   dispatch('kai-x', detail)                        the ctx.dispatch helper
+//   el.dispatchEvent(new CustomEvent('kai-x', …))    raw, for the events that must
+//                                                    bubble/compose (the maximize
+//                                                    protocol between kai-artifact
+//                                                    and kai-resizable/-item)
+//
+// Only the first was collected, so `kai-maximize-intent` and `kai-maximize-state`
+// — the two a consumer has to listen for or re-emit to drive maximize from their
+// own chrome — appeared in no element's event list, in no generated .d.ts, and in
+// no MCP catalog entry, while the private `dispatch()` ones all did.
 const dispatchNames = (sourceFile) => {
   const names = new Set();
   const visit = (node) => {
@@ -118,10 +258,104 @@ const dispatchNames = (sourceFile) => {
       const arg = node.arguments[0];
       if (arg && ts.isStringLiteralLike(arg)) names.add(arg.text);
     }
+    if (ts.isNewExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'CustomEvent') {
+      const arg = node.arguments?.[0];
+      if (arg && ts.isStringLiteralLike(arg) && arg.text.startsWith('kai-')) names.add(arg.text);
+    }
     ts.forEachChild(node, visit);
   };
   visit(sourceFile);
   return names;
+};
+
+// ---- declarative light-DOM children -----------------------------------------
+// Several elements accept a "Route 2" child API next to their JS property —
+// `<kai-step>` inside `<kai-chain-of-thought>`, `<kai-model>` inside
+// `<kai-model-switcher>`, `<kai-action>`, `<kai-conversation>`, `<kai-skill>`,
+// `<kai-suggestion>`, `<kai-source>`. They are the only way to drive those
+// elements from plain HTML with no JS at all, they are unit-tested
+// (*.declarative.test.tsx) and documented in the facades' JSDoc — and they were in
+// NO generated artifact: not element-meta.json, not custom-elements.json, not
+// llms-full.txt. An agent reading the MCP catalog could not know they exist.
+//
+// Derived, not listed: find `element.querySelectorAll('kai-…')` inside the
+// element's own render callback, then the `.map(fn)` that turns those nodes into
+// data, then the attributes that `fn` actually reads.
+
+/** The `fn` in the nearest `<something>.map(fn)` in the same enclosing function. */
+const mapCallbackNear = (node) => {
+  let scope = node;
+  while (scope && !ts.isFunctionLike(scope)) scope = scope.parent;
+  if (!scope) return null;
+  let found = null;
+  const visit = (n) => {
+    if (found) return;
+    if (
+      ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) &&
+      n.expression.name.text === 'map' && n.arguments.length === 1
+    ) found = n.arguments[0];
+    else ts.forEachChild(n, visit);
+  };
+  visit(scope);
+  return found;
+};
+
+/** Resolve a `.map(parseKaiXElement)` identifier to its declaration node. */
+const resolveCallback = (fn) => {
+  if (!fn) return null;
+  if (ts.isArrowFunction(fn) || ts.isFunctionExpression(fn)) return { node: fn, sym: null };
+  if (!ts.isIdentifier(fn)) return null;
+  let sym = checker.getSymbolAtLocation(fn);
+  try { if (sym && sym.flags & ts.SymbolFlags.Alias) sym = checker.getAliasedSymbol(sym); } catch { /* unresolved */ }
+  const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+  if (!decl) return null;
+  if (ts.isFunctionDeclaration(decl)) return { node: decl, sym };
+  if (ts.isVariableDeclaration(decl) && decl.initializer) return { node: decl.initializer, sym };
+  return null;
+};
+
+/** Which HTML attributes (and the text content) a parse callback reads off a node. */
+const attributesRead = (fnNode) => {
+  const attributes = new Set();
+  let text = false;
+  const visit = (n) => {
+    if (
+      ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) &&
+      (n.expression.name.text === 'getAttribute' || n.expression.name.text === 'hasAttribute')
+    ) {
+      const a = n.arguments[0];
+      if (a && ts.isStringLiteralLike(a)) attributes.add(a.text);
+    }
+    if (ts.isPropertyAccessExpression(n)) {
+      if (n.name.text === 'textContent') text = true;
+      // `n.id` — the global `id` attribute, read as an IDL property.
+      if (n.name.text === 'id' && ts.isIdentifier(n.expression)) attributes.add('id');
+    }
+    ts.forEachChild(n, visit);
+  };
+  visit(fnNode);
+  return { attributes: [...attributes].sort(), text };
+};
+
+const declarativeChildren = (renderNode) => {
+  const out = [];
+  const visit = (node) => {
+    if (
+      ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) &&
+      node.expression.name.text === 'querySelectorAll'
+    ) {
+      const arg = node.arguments[0];
+      if (arg && ts.isStringLiteralLike(arg) && /^kai-[a-z0-9-]+$/.test(arg.text) && !out.some((o) => o.tag === arg.text)) {
+        const cb = resolveCallback(mapCallbackNear(node));
+        const read = cb ? attributesRead(cb.node) : { attributes: [], text: false };
+        const description = cb?.sym ? jsdocOf(cb.sym) : '';
+        out.push({ tag: arg.text, ...read, ...(description ? { description } : {}) });
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(renderNode);
+  return out;
 };
 
 // Methods contributed by shared helpers that call `expose()` internally (so the
@@ -206,7 +440,16 @@ for (const file of facadeFiles) {
       const composed = composedImports(sf);
       const tokens = COMPONENT_TOKENS[tag] ?? [];
       const className = tagToClass(tag);
-      const el = { tag, className, displayName: displayNameFromClass(className), props, events, methods: fileMethods, composedFrom: composed, tokens };
+      // Scoped to THIS element's render callback, not the file: source.tsx defines
+      // both kai-source and kai-sources, and only the latter reads <kai-source>
+      // children.
+      const children = node.arguments[2] ? declarativeChildren(node.arguments[2]) : [];
+      const el = {
+        tag, className, displayName: displayNameFromClass(className),
+        props: [...UNIVERSAL_PROPS, ...props],
+        events, methods: fileMethods, composedFrom: composed, tokens,
+        ...(children.length ? { declarativeChildren: children } : {}),
+      };
       // Source-module basename (e.g. confirm-card.tsx → "confirm-card"). The
       // per-element build (vite.config.elements.ts) names each emitted module after
       // its SOURCE FILE, not its tag, so the React wrappers must lazy-import
@@ -269,7 +512,15 @@ for (const el of elements) {
     for (const el of elements) {
       const comp = composition[el.tag];
       if (!comp) continue;
-      const slots = comp.slots ?? [];
+      // The DEFAULT (unnamed) slot, documented as `children` on the registry entry
+      // rather than as a `{ name: '' }` SlotDef — the SlotDef arrays are also read
+      // at runtime by readSlots(), which would then query a meaningless
+      // `[slot=""]`. Emitted here as a normal slot with the empty name, which is
+      // how the Custom Elements Manifest spells the default slot.
+      const slots = [
+        ...(comp.children ? [{ name: '', mode: 'inject', doc: comp.children }] : []),
+        ...(comp.slots ?? []),
+      ];
       // Slots flagged `part: true` are ALSO styleable parts.
       const slotParts = slots.filter((s) => s.part).map((s) => ({ name: s.name, doc: s.doc }));
       const parts = [...(comp.parts ?? []), ...slotParts];
@@ -315,18 +566,30 @@ const cem = {
           privacy: 'public',
         })),
       ],
-      attributes: [
-        { name: 'theme', type: { text: "'light' | 'dark' | 'auto'" }, description: 'Color mode (auto follows prefers-color-scheme).' },
-        ...el.props.filter((p) => p.scalar).map((p) => ({
-          name: toAttr(p.name), fieldName: p.name, type: { text: p.type }, description: p.description,
-        })),
-      ],
+      // `theme` is no longer special-cased here — it comes through el.props like
+      // every other scalar, from the one place define.tsx declares it.
+      attributes: el.props.filter((p) => p.scalar).map((p) => ({
+        name: toAttr(p.name), fieldName: p.name, type: { text: p.type }, description: p.description,
+      })),
       events: el.events.map((e) => ({
         name: e.name,
         type: { text: e.detail ? `CustomEvent<${e.detail}>` : 'CustomEvent' },
         description: e.description,
       })),
       cssProperties: el.tokens.map((name) => ({ name })),
+      // Our extension: the "Route 2" light-DOM child elements this one parses.
+      // Not a CEM-standard key (the manifest has no vocabulary for a child-element
+      // API), but it rides in the same file the kai MCP serves.
+      ...(el.declarativeChildren
+        ? {
+            declarativeChildren: el.declarativeChildren.map((c) => ({
+              tagName: c.tag,
+              attributes: c.attributes.map((name) => ({ name })),
+              textContent: c.text,
+              description: c.description ?? '',
+            })),
+          }
+        : {}),
       // Composition seams (CEM-standard `slots`/`cssParts`; `recipe` is our extension).
       ...(el.slots ? { slots: el.slots.map((s) => ({ name: s.name, description: s.doc })) } : {}),
       ...(el.parts
@@ -374,7 +637,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   for (const mod of ['./gen-element-types.mjs', './gen-element-react.mjs']) {
     try {
       const m = await import(mod);
-      if (m.writeTypes) m.writeTypes(root, elements, toAttr, IMPORTS);
+      if (m.writeTypes) m.writeTypes(root, elements, toAttr, IMPORTS, { domMembers: DOM_MEMBERS });
       if (m.writeReact) m.writeReact(root, elements, IMPORTS);
     } catch (e) {
       if (e.code !== 'ERR_MODULE_NOT_FOUND') throw e;

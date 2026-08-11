@@ -8,6 +8,7 @@ import Playground from '../../../components/Playground.tsx';
 import Example from '../../../components/Example.tsx';
 import PropTable from '../../../components/PropTable.astro';
 import EventTable from '../../../components/EventTable.astro';
+import DeclarativeChildrenTable from '../../../components/DeclarativeChildrenTable.astro';
 import ComposedFrom from '../../../components/ComposedFrom.astro';
 import Facts from '../../../components/Facts.astro';
 import NeedAHand from '../../../components/NeedAHand.astro';
@@ -66,6 +67,8 @@ Set `models` in JavaScript (arrays can't be HTML attributes) and reflect the sel
 ```
 
 Each `<kai-model>` carries `id` (required), `provider` (optional), and a text label. When you mix both approaches, property items render first.
+
+<DeclarativeChildrenTable tag="kai-model-switcher" />
 
 ## Examples
 

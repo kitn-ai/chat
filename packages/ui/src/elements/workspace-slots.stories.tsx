@@ -4,6 +4,7 @@ import { Sparkles } from 'lucide-solid';
 import './chat-workspace';
 import './card';
 import { attachKaiActions } from '../stories/docs/story-actions';
+import { textMessage } from '../state';
 import type { ChatMessage } from './chat-types';
 import type { ConversationSummary, ConversationGroup } from '../types';
 
@@ -54,8 +55,11 @@ const conversations: ConversationSummary[] = [
   { id: 'c3', title: 'Pricing page copy', groupId: 'earlier', scope, messageCount: 5, lastMessageAt: '2026-06-20T09:00:00Z', updatedAt: '2026-06-20T09:00:00Z' },
 ];
 const messages: ChatMessage[] = [
-  { id: '1', role: 'user', content: 'Can you summarize last quarter?' },
-  { id: '2', role: 'assistant', content: 'Revenue was up 18% QoQ, driven by the self-serve tier.', actions: ['copy', 'like'] },
+  textMessage('user', 'Can you summarize last quarter?', { id: '1' }),
+  textMessage('assistant', 'Revenue was up 18% QoQ, driven by the self-serve tier.', {
+    id: '2',
+    actions: ['copy', 'like'],
+  }),
 ];
 
 const meta = {

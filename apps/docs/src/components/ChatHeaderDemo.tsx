@@ -8,13 +8,19 @@ import { loadKit } from './example/kit';
 import IconPanelLeft from '~icons/lucide/panel-left';
 import IconSettings from '~icons/lucide/settings-2';
 
-interface ChatMessage { id: string; role: 'user' | 'assistant'; content: string; actions?: string[] }
+interface MessagePart { type: 'text'; text: string }
+interface ChatMessage { id: string; role: 'user' | 'assistant'; parts: MessagePart[]; actions?: string[] }
 
 const SEED: ChatMessage[] = [
-  { id: 'u1', role: 'user', content: 'Summarise the Q3 launch retro in three bullets.' },
+  { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'Summarise the Q3 launch retro in three bullets.' }] },
   {
     id: 'a1', role: 'assistant',
-    content: "Here's the retro in three:\n\n- **Shipped on time** — the staged rollout held; no Sev-1s.\n- **Onboarding lagged** — activation dropped 8% week one; the empty state was the culprit.\n- **Next** — invest in first-run guidance before the Q4 push.",
+    parts: [
+      {
+        type: 'text',
+        text: "Here's the retro in three:\n\n- **Shipped on time** — the staged rollout held; no Sev-1s.\n- **Onboarding lagged** — activation dropped 8% week one; the empty state was the culprit.\n- **Next** — invest in first-run guidance before the Q4 push.",
+      },
+    ],
     actions: ['copy', 'like'],
   },
 ];
@@ -48,7 +54,11 @@ export default function ChatHeaderDemo() {
     const text = (e as CustomEvent).detail?.value?.trim();
     if (!text || !chatEl) return;
     const aId = nid();
-    chatEl.messages = [...(chatEl.messages ?? []), { id: nid(), role: 'user', content: text }, { id: aId, role: 'assistant', content: '' }];
+    chatEl.messages = [
+      ...(chatEl.messages ?? []),
+      { id: nid(), role: 'user', parts: [{ type: 'text', text }] },
+      { id: aId, role: 'assistant', parts: [] },
+    ];
     (chatEl as any).loading = true;
     const reply = 'Noted. In a real app your backend streams the answer here — this demo just shows the composed header working: switch models on the left, open settings on the right, toggle the sidebar.';
     const words = reply.split(/(\s+)/);
@@ -57,7 +67,11 @@ export default function ChatHeaderDemo() {
     const tick = () => {
       i += 2;
       const done = i >= words.length;
-      chatEl!.messages = (chatEl!.messages ?? []).map((m) => (m.id === aId ? { ...m, content: words.slice(0, i).join(''), ...(done ? { actions: ['copy', 'like'] } : {}) } : m));
+      chatEl!.messages = (chatEl!.messages ?? []).map((m) =>
+        m.id === aId
+          ? { ...m, parts: [{ type: 'text', text: words.slice(0, i).join('') }], ...(done ? { actions: ['copy', 'like'] } : {}) }
+          : m,
+      );
       if (!done) timer = window.setTimeout(tick, 36); else (chatEl as any).loading = false;
     };
     timer = window.setTimeout(tick, 220);

@@ -51,8 +51,8 @@ When a chip is clicked, `<kai-suggestions>` fires `kai-select` with the chosen v
     // replace the empty block with a live chat, then stream the reply
     shell.innerHTML = '<kai-chat id="chat" style="height:100%"></kai-chat>';
     const chat = document.getElementById('chat');
-    chat.messages = [{ id: crypto.randomUUID(), role: 'user', content: prompt }];
-    // …append an assistant message and patch its content as tokens arrive
+    chat.messages = [{ id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: prompt }] }];
+    // …append an assistant message and patch its parts as tokens arrive
   });
 </script>
 ```
@@ -101,11 +101,11 @@ Pass an empty `messages` array and a `suggestions` property. `<kai-chat>` hides 
     const aId = crypto.randomUUID();
     chat.messages = [
       ...chat.messages,
-      { id: crypto.randomUUID(), role: 'user', content: prompt },
-      { id: aId, role: 'assistant', content: '' },
+      { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: prompt }] },
+      { id: aId, role: 'assistant', parts: [] },
     ];
     chat.loading = true;
-    // stream tokens into the assistant message…
+    // stream tokens into the assistant message's `parts`…
     chat.loading = false;
   });
 </script>

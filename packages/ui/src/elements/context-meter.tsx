@@ -16,27 +16,13 @@ import {
   DEFAULT_DANGER_THRESHOLD,
   type ContextSeverity,
 } from '../components/context';
-
-interface ContextUsage {
-  /** Tokens consumed so far in the context window (drives the meter fill). */
-  usedTokens: number;
-  /** The model's total context-window size in tokens. */
-  maxTokens: number;
-  /** Tokens attributed to the prompt/input, shown in the breakdown. */
-  inputTokens?: number;
-  /** Tokens attributed to the generated output, shown in the breakdown. */
-  outputTokens?: number;
-  /** Tokens attributed to reasoning/thinking, shown when present. */
-  reasoningTokens?: number;
-  /** Tokens served from prompt cache, shown when present. */
-  cacheTokens?: number;
-  /** Estimated cost in dollars for this usage, shown in the footer. */
-  estimatedCost?: number;
-}
+// Public shape of the `context` prop; lives in ./element-data-types so the ROOT
+// entry can re-export it (see that file's header).
+import type { KaiContextUsage } from './element-data-types';
 
 interface Props extends Record<string, unknown> {
   /** Token-usage data. Set as a JS property. */
-  context?: ContextUsage;
+  context?: KaiContextUsage;
   /**
    * Fraction (0–1) above which the meter turns yellow.
    * Defaults to `0.7` (70%).

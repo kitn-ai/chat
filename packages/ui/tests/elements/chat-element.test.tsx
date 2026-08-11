@@ -10,8 +10,8 @@ if (!Element.prototype.scrollTo) {
 }
 
 const messages: ChatMessage[] = [
-  { id: 'm1', role: 'user', content: 'Hi there' },
-  { id: 'm2', role: 'assistant', content: 'Hello! How can I help?', actions: ['copy'] },
+  { id: 'm1', role: 'user', parts: [{ type: 'text', text: 'Hi there' }] },
+  { id: 'm2', role: 'assistant', parts: [{ type: 'text', text: 'Hello! How can I help?' }], actions: ['copy'] },
 ];
 
 test('renders messages and emits submit', async () => {
@@ -54,7 +54,7 @@ test('codeHighlight={false} renders fenced code as plain text (no Shiki)', async
     messages: ChatMessage[]; codeHighlight: boolean;
   };
   el.codeHighlight = false;
-  el.messages = [{ id: 'm1', role: 'assistant', content: '```tsx\nconst answer = 42\n```' }];
+  el.messages = [{ id: 'm1', role: 'assistant', parts: [{ type: 'text', text: '```tsx\nconst answer = 42\n```' }] }];
   document.body.appendChild(el);
   await Promise.resolve();
 

@@ -52,7 +52,7 @@ type Story = StoryObj<typeof meta>;
 
 // `renderIcon` is a helper, not a component. The web-component equivalent is
 // `<kai-icon name="...">`, noted in the snippets below.
-const IMPORT = `import { renderIcon } from '@kitn.ai/ui';`;
+const IMPORT = `import { renderIcon } from '@kitn.ai/ui/solid';`;
 const src = (code: string) => ({
   parameters: { docs: { source: { code: `${IMPORT}\n\n${code}`, language: 'tsx' } } },
 });

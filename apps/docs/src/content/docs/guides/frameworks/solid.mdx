@@ -4,11 +4,16 @@ description: Use AI/UI's native SolidJS components from @kitn.ai/ui for full com
 ---
 
 import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+import SolidComponentIndex from '../../../../components/SolidComponentIndex.astro';
 
 Solid apps get an extra path the other frameworks don't: the components are authored in SolidJS, so you can import them straight into your JSX instead of going through the `kai-*` web components. Both paths ship in the package and mix freely:
 
-- **Native SolidJS components** (`@kitn.ai/ui`) — import `ChatContainer`, `Message`, `PromptInput`, and the rest directly into your JSX. Full compositional control, tree-shaken alongside your own code. Reach for this in a Solid app.
+- **Native SolidJS components** (`@kitn.ai/ui/solid`) — import `ChatThread`, `Message`, `PromptInput`, and the rest directly into your JSX. Full compositional control, tree-shaken alongside your own code. Reach for this in a Solid app.
 - **`kai-*` web components** (`@kitn.ai/ui/elements`) — the drop-in shells when you want batteries included or need to share UI across frameworks.
+
+<Aside type="note" title="`@kitn.ai/ui/solid` is the Solid entry point">
+Import Solid components from `@kitn.ai/ui/solid`, not from the root `@kitn.ai/ui`. The root entry is what every consumer resolves, including the React / Vue / Svelte / vanilla majority who only ever touch the web components, so it carries the shared layer: the chat components, the types, the state and card helpers. `@kitn.ai/ui/solid` is that entry plus the rest of the Solid catalog (`ChatThread`, `Dialog`, `Popover`, `Input`, `Nav`, `Tabs`, and the other primitives the elements are built from), compiled as its own bundle so a React consumer never pays for it. It is a superset, so one import covers everything.
+</Aside>
 
 ## Install
 
@@ -22,64 +27,76 @@ npm install @kitn.ai/ui
 npm install solid-js
 ```
 
-Import the design tokens once near your app entry:
+The native components are Tailwind v4 classes over the kit's `--color-*` tokens, so the Solid path needs Tailwind in the app. Three lines, all in your CSS entry:
 
-```ts
-import '@kitn.ai/ui/theme.css';
+```css
+/* src/styles.css */
+@import "tailwindcss";
+@import "@kitn.ai/ui/theme.css";       /* the --color-* design tokens */
+@source "../node_modules/@kitn.ai/ui"; /* let Tailwind see the kit's class names */
 ```
 
-<Aside type="tip" title="Ships as source">
-The `@kitn.ai/ui` entry point (`"."`) exports raw TSX. Your bundler compiles and tree-shakes it alongside your own Solid code — you only pay for what you import.
+<Aside type="caution" title="`@source` is not optional">
+Tailwind v4 only scans your own `src/` by default. Without the `@source` line it strips every kit utility class as unused and the components render unstyled. Point it at wherever `@kitn.ai/ui` resolves from your CSS file.
+</Aside>
+
+Add `tailwindcss` and `@tailwindcss/vite` to your dev dependencies and put `tailwindcss()` alongside `solidPlugin()` in `vite.config.ts`.
+
+The `kai-*` elements need none of this: they carry their own compiled styles inside Shadow DOM.
+
+<Aside type="note" title="What the Solid entry resolves to">
+The package ships **compiled**. `@kitn.ai/ui/solid` resolves to `dist/solid.js` in the browser and `dist/solid.server.js` under the `node` / `deno` / `worker` conditions; `@kitn.ai/ui` resolves to `dist/index.js` / `dist/index.server.js` the same way. All four are ESM, so your bundler still tree-shakes down to what you import, but it never compiles the kit's TSX. A stock `vite-plugin-solid()` is enough; nothing has to be told to transform `node_modules`.
 </Aside>
 
 ## Native components
 
 Compose directly in JSX. Size the layout with flex — `ChatContainer` fills its box, so give it a flex parent rather than a hard-coded viewport height.
 
+A message is an **ordered `parts` array**, not a string: text, reasoning, tool calls, generative-UI cards and file attachments interleaved in the order the model produced them. `MessageBody` walks that array and renders each kind in place, so render it rather than joining the parts into text.
+
 ```tsx
 import { createSignal, For } from 'solid-js';
 import {
+  Button,
   ChatConfig,
   ChatContainer,
   ChatContainerContent,
+  ChatContainerScrollAnchor,
   Message,
-  MessageContent,
+  MessageBody,
   PromptInput,
   PromptInputTextarea,
   PromptInputActions,
-} from '@kitn.ai/ui';
-import '@kitn.ai/ui/theme.css';
-
-type ChatMessage = { id: string; role: 'user' | 'assistant'; content: string };
+} from '@kitn.ai/ui/solid';
+import type { ChatMessage } from '@kitn.ai/ui/solid';
+import { appendTextPart } from '@kitn.ai/ui/state';
 
 export function Chat() {
   const [messages, setMessages] = createSignal<ChatMessage[]>([
-    { id: '1', role: 'assistant', content: 'How can I help?' },
+    { id: '1', role: 'assistant', parts: [{ type: 'text', text: 'How can I help?' }] },
   ]);
+  const [input, setInput] = createSignal('');
 
   const handleSubmit = async () => {
-    const userMsg: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: 'user',
-      content: input(),
-    };
-    const history = [...messages(), userMsg];
-    setMessages(history);
+    const text = input().trim();
+    if (!text) return;
+
+    const history: ChatMessage[] = [
+      ...messages(),
+      { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text }] },
+    ];
+    const replyId = crypto.randomUUID();
+    setMessages([...history, { id: replyId, role: 'assistant', parts: [] }]);
     setInput('');
 
-    const aid = crypto.randomUUID();
-    setMessages([...history, { id: aid, role: 'assistant', content: '' }]);
-
-    let answer = '';
     for await (const token of streamFromYourAPI(history)) {
-      answer += token;
+      // appendTextPart returns a NEW parts array. That reference is the re-render
+      // signal; mutating parts in place renders nothing.
       setMessages((prev) =>
-        prev.map((m) => (m.id === aid ? { ...m, content: answer } : m)),
+        prev.map((m) => (m.id === replyId ? { ...m, parts: appendTextPart(m.parts, token) } : m)),
       );
     }
   };
-
-  const [input, setInput] = createSignal('');
 
   return (
     <div class="flex flex-col h-full">
@@ -89,15 +106,22 @@ export function Chat() {
             <For each={messages()}>
               {(msg) => (
                 <Message>
-                  <MessageContent markdown>{msg.content}</MessageContent>
+                  <MessageBody
+                    parts={msg.parts}
+                    isUser={msg.role === 'user'}
+                    markdown={msg.role !== 'user'}
+                  />
                 </Message>
               )}
             </For>
+            <ChatContainerScrollAnchor />
           </ChatContainerContent>
         </ChatContainer>
         <PromptInput value={input()} onValueChange={setInput} onSubmit={handleSubmit}>
           <PromptInputTextarea placeholder="Ask anything..." />
-          <PromptInputActions />
+          <PromptInputActions>
+            <Button size="sm" disabled={!input()}>Send</Button>
+          </PromptInputActions>
         </PromptInput>
       </ChatConfig>
     </div>
@@ -107,13 +131,56 @@ export function Chat() {
 
 `ChatContainer` is **transport-agnostic** — it owns the conversation UI, you own the request. Render your message list inside `ChatContainerContent` and stream the assistant reply into your signal in `onSubmit`.
 
+`ChatMessage` is the kit's own public type, the same shape the `kai-*` elements take and the [wire adapter](/guides/recipes/wire-adapter/) produces from real provider SSE. `@kitn.ai/ui/state` holds the pure part folds: `appendTextPart`, `appendReasoningPart`, `upsertToolPart`, `partsToText`.
+
+<Aside type="caution" title="Don't flatten parts to a string">
+`<MessageContent>{msg.parts.map((p) => p.text).join('')}</MessageContent>` compiles and looks fine on a text-only thread, then silently drops every reasoning block, tool call and card the moment a model emits one. `MessageContent` renders one blob of content; `MessageBody` renders the whole message.
+</Aside>
+
+### The action bar
+
+`MessageBody` also owns the per-message action row. It holds no state of its own, so the app owns the vote and the transient copied flag:
+
+```tsx
+<MessageBody
+  parts={msg.parts}
+  isUser={msg.role === 'user'}
+  markdown={msg.role !== 'user'}
+  actions={['copy', 'like', 'dislike', 'regenerate']}
+  actionsReveal="hover"
+  activeFeedback={votes()[msg.id]}
+  copied={copiedId() === msg.id}
+  onAction={(id) => handleAction(msg, id)}
+/>
+```
+
+`actions` takes the built-in names (`copy`, `like`, `dislike`, `regenerate`, `edit`) and/or your own `{ id, label, icon }` descriptors; `onAction` fires with the name or id.
+
+## A whole thread in one component
+
+`Thread` is the message list as a single composable: the scrolling list, per-message rendering, stick-to-bottom with a scroll button, a typing indicator, and an empty state. It is the Solid component behind `<kai-thread>`, so you get the element's behavior without adopting the element.
+
+```tsx
+import { Thread } from '@kitn.ai/ui/solid';
+
+<Thread
+  messages={messages()}
+  loading={isLoading()}
+  actionsReveal="hover"
+  onMessageAction={(detail) => handleAction(detail)}
+  empty={<p>Ask me anything.</p>}
+/>
+```
+
+Action buttons come off each message's own `actions` field, so `onMessageAction` is the one handler for the whole list. Pair `Thread` with your own `PromptInput` and header. Reach for the `<For>` + `MessageBody` composition above when you need to control the row markup itself.
+
 ## Compose a split layout
 
 The same building blocks compose into any layout. Use `Resizable` with `ResizablePanel` to add a draggable divider between panes — handles are inserted automatically between visible panels.
 
 ```tsx
 import { createSignal } from 'solid-js';
-import { Resizable, ResizablePanel, ConversationList, ChatContainer, ChatContainerContent, PromptInput, PromptInputTextarea } from '@kitn.ai/ui';
+import { Resizable, ResizablePanel, ConversationList, ChatContainer, ChatContainerContent, PromptInput, PromptInputTextarea } from '@kitn.ai/ui/solid';
 
 function Workspace() {
   const [activeId, setActiveId] = createSignal<string | undefined>(undefined);
@@ -123,6 +190,7 @@ function Workspace() {
       <Resizable orientation="horizontal" onChange={(sizes) => persist(sizes)}>
         <ResizablePanel defaultSize="25%" minSize="200px">
           <ConversationList
+            groups={groups}
             conversations={conversations()}
             activeId={activeId()}
             onSelect={(id) => setActiveId(id)}
@@ -145,7 +213,9 @@ function Workspace() {
 }
 ```
 
-`ResizablePanel` accepts `defaultSize` (px or `%`) plus optional `minSize` / `maxSize`. `onChange` receives an array of percent sizes — persist it to restore the layout on reload.
+`ResizablePanel` accepts `defaultSize` (px or `%`) plus optional `minSize` / `maxSize`. `onChange` receives an array of percent sizes; persist it to restore the layout on reload. `ConversationList` requires both `groups` (the buckets: Today, Yesterday, …) and `conversations`. Pass `groups={[]}` and everything lands in one "Ungrouped" section, or bare rows with `compact`.
+
+Drop `Resizable` when you want the handles placed by hand: `ResizablePanelGroup` + `ResizablePanel` + an explicit `ResizableHandle` between them gives you the same layout with control over each divider (`handle="grip" | "line" | "none"`).
 
 ## Standalone feature components
 
@@ -154,7 +224,7 @@ Every feature component works standalone — drop them into any part of your UI 
 ```tsx
 import {
   Markdown, Reasoning, ReasoningTrigger, ReasoningContent, Tool, Artifact,
-} from '@kitn.ai/ui';
+} from '@kitn.ai/ui/solid';
 
 <Markdown content={assistantReply} />
 <Reasoning isStreaming={isStreaming}>
@@ -169,25 +239,36 @@ import {
 
 When you want a complete chat in one tag, register the `kai-*` elements and use `<kai-chat>`. In Solid, pass rich data with `prop:` (forces a DOM property assignment, not a stringified attribute) and listen for CustomEvents with Solid's `on:` namespace.
 
+A message is an **ordered `parts` array**, not a string — the same shape as the native components above. `ChatMessage` is the kit's own type, so import it rather than hand-rolling a text-only copy — the copy compiles and then hides every other part kind from you.
+
 ```tsx
 import '@kitn.ai/ui/elements';
 import { createSignal } from 'solid-js';
-
-type Message = { id: string; role: 'user' | 'assistant'; content: string };
+import type { ChatMessage } from '@kitn.ai/ui';
+import { appendTextPart } from '@kitn.ai/ui/state';
 
 function Shell() {
-  const [messages, setMessages] = createSignal<Message[]>([
-    { id: '1', role: 'assistant', content: 'Hello! How can I help?' },
+  const [messages, setMessages] = createSignal<ChatMessage[]>([
+    { id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello! How can I help?' }] },
   ]);
 
-  const handleSubmit = (e: CustomEvent<{ value: string }>) => {
-    const userMsg: Message = {
+  const handleSubmit = async (e: CustomEvent<{ value: string }>) => {
+    const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
       role: 'user',
-      content: e.detail.value,
+      parts: [{ type: 'text', text: e.detail.value }],
     };
-    setMessages((prev) => [...prev, userMsg]);
-    // …call your model, then append the assistant reply
+    const history = [...messages(), userMsg];
+    const aid = crypto.randomUUID();
+    setMessages([...history, { id: aid, role: 'assistant', parts: [] }]);
+
+    for await (const token of streamFromYourAPI(history)) {
+      // appendTextPart returns a NEW parts array and leaves any reasoning, tool
+      // or card parts alone. Replacing `parts` wholesale would drop them.
+      setMessages((prev) =>
+        prev.map((m) => (m.id === aid ? { ...m, parts: appendTextPart(m.parts, token) } : m)),
+      );
+    }
   };
 
   return (
@@ -206,22 +287,17 @@ function Shell() {
 Without `prop:`, Solid serializes objects to strings — breaking array props. Use `prop:messages` (not `messages`) for any prop that takes an array or object.
 </Aside>
 
-## Key exports from `@kitn.ai/ui`
+## Every element, in Solid
 
-| Category | Exports |
-|---|---|
-| **Config** | `ChatConfig`, `useChatConfig` |
-| **Chat layout** | `ChatContainer`, `ChatContainerContent`, `ChatContainerScrollAnchor` |
-| **Messages** | `Message`, `MessageAvatar`, `MessageContent`, `MessageActions`, `MessageCopyButton` |
-| **Prompt** | `PromptInput`, `PromptInputTextarea`, `PromptInputActions`, `PromptInputAction` |
-| **Content** | `Markdown`, `CodeBlock`, `Reasoning`, `Tool`, `Artifact` |
-| **Sidebar** | `ConversationList`, `ConversationItem` |
-| **Layout** | `Resizable`, `ResizablePanel` |
-| **Primitives** | `useTextStream`, `useStickToBottom`, `useAutoResize`, `useVoiceRecorder` |
+Nothing in the `kai-*` catalog is element-only. Each element is a thin facade over Solid components you can import from `@kitn.ai/ui/solid` and compose yourself, and every public component ships a matching `<Name>Props` type. This table is generated from the kit's element metadata at build time, so it is the whole catalog, not a curated slice:
+
+<SolidComponentIndex />
+
+Each element's own page carries the same mapping plus its full prop and event reference: start at [Components](/components/chat/).
 
 ## Which path to choose
 
-| | Native components (`@kitn.ai/ui`) | Web components (`@kitn.ai/ui/elements`) |
+| | Native components (`@kitn.ai/ui/solid`) | Web components (`@kitn.ai/ui/elements`) |
 |---|---|---|
 | **Recommended for** | Solid apps | Any framework, or sharing UI across frameworks |
 | **Bundle** | Tree-shaken with your own code | Pre-built, self-contained |

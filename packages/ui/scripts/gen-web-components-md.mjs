@@ -111,9 +111,19 @@ function tablesFor(el) {
 
   if (el.slots?.length) {
     const rows = el.slots
-      .map((s) => `| \`${s.name}\` | ${s.mode} | ${s.doc ?? ''} |`)
+      .map((s) => `| ${s.name ? `\`${s.name}\`` : '_(default)_'} | ${s.mode} | ${s.doc ?? ''} |`)
       .join('\n');
     out += `\n#### Slots\n\nProject your own markup with \`slot="name"\` on a light-DOM child.\n\n| Slot | Mode | Description |\n|------|------|-------------|\n${rows}\n`;
+  }
+
+  if (el.declarativeChildren?.length) {
+    const rows = el.declarativeChildren
+      .map((c) => {
+        const attrs = c.attributes.length ? c.attributes.map((a) => `\`${a}\``).join(', ') : '—';
+        return `| \`<${c.tag}>\` | ${attrs} | ${c.text ? 'yes' : '—'} | ${(c.description ?? '').replace(/\n/g, ' ')} |`;
+      })
+      .join('\n');
+    out += `\n#### Declarative children\n\nCompose these in light DOM instead of setting the JS property — the no-JS route.\n\n| Child element | Attributes | Text content | Notes |\n|---------------|------------|--------------|-------|\n${rows}\n`;
   }
 
   if (el.parts?.length) {

@@ -8,7 +8,7 @@ import DockedAssistantDemo from '../../../components/DockedAssistantDemo.tsx';
 <p class="kai-lede">Pin a help assistant to the side of your app as a permanent, full-height column — always open, no launcher to find. The panel sits beside the scrolling page; because `<kai-chat>` lives in its own Shadow DOM, the host's CSS stays out and the panel's styles stay in. Scroll the host below, toggle its light/dark, and ask about billing.</p>
 
 <DockedAssistantDemo client:only="solid" chatTitle="Support" suggestions={["How do I change my plan?", "Add a teammate to my workspace", "Where are my invoices?"]} messages={[
-  { id: 'd0', role: 'assistant', content: "Hi — I'm your support assistant. I'm docked here while you work, so ask anytime. What can I help with?" },
+  { id: 'd0', role: 'assistant', parts: [{ type: 'text', text: "Hi — I'm your support assistant. I'm docked here while you work, so ask anytime. What can I help with?" }] },
 ]} />
 
 ## When to dock instead of float

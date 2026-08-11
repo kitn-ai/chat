@@ -15,26 +15,35 @@ import { loadKit, syncKaiTheme } from './example/kit';
 
 type AnyEl = HTMLElement & Record<string, unknown>;
 
+interface MessagePart {
+  type: 'text' | 'reasoning';
+  text: string;
+  label?: string;
+}
+
 interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
-  content: string;
-  reasoning?: { text: string; label?: string };
+  parts: MessagePart[];
   actions?: string[];
 }
 
 const USER_MESSAGE: ChatMessage = {
   id: 'm-u',
   role: 'user',
-  content: 'Which model handled this, and what did it cost?',
+  parts: [{ type: 'text', text: 'Which model handled this, and what did it cost?' }],
 };
 
 const ASSISTANT_MESSAGE: ChatMessage = {
   id: 'm-a',
   role: 'assistant',
-  content:
-    'Here is the summary you asked for. I cross-checked two sources before answering, and the citation is below.',
-  reasoning: { text: 'Compare the two sources, reconcile the figures, then summarise.', label: 'Reasoning' },
+  parts: [
+    { type: 'reasoning', text: 'Compare the two sources, reconcile the figures, then summarise.', label: 'Reasoning' },
+    {
+      type: 'text',
+      text: 'Here is the summary you asked for. I cross-checked two sources before answering, and the citation is below.',
+    },
+  ],
   actions: ['copy', 'like', 'dislike', 'regenerate'],
 };
 

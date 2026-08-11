@@ -418,7 +418,11 @@ export const PerplexityPro: Story = {
 
                     {/* the user's query, a real kai-message (role=user, right-aligned bubble) */}
                     <kai-message
-                      ref={(el) => { const m = el as El; m.role = 'user'; m.content = QUERY; m.avatar = 'none'; }}
+                      ref={(el) => {
+                        const m = el as El;
+                        m.message = { id: 'pplx-query', role: 'user', parts: [{ type: 'text', text: QUERY }] };
+                        m.avatar = 'none';
+                      }}
                       style={{ display: 'block' }}
                     ></kai-message>
 
@@ -473,7 +477,11 @@ export const PerplexityPro: Story = {
 
                         {/* the comparison table - REAL GFM via kai-message */}
                         <kai-message
-                          ref={(el) => { const m = el as El; m.content = TABLE_MD; m.avatar = 'none'; }}
+                          ref={(el) => {
+                            const m = el as El;
+                            m.message = { id: 'pplx-table', role: 'assistant', parts: [{ type: 'text', text: TABLE_MD }] };
+                            m.avatar = 'none';
+                          }}
                           style={{ display: 'block' }}
                         ></kai-message>
 
@@ -488,7 +496,11 @@ export const PerplexityPro: Story = {
 
                         {/* closing prose - REAL markdown */}
                         <kai-message
-                          ref={(el) => { const m = el as El; m.content = CLOSING_MD; m.avatar = 'none'; }}
+                          ref={(el) => {
+                            const m = el as El;
+                            m.message = { id: 'pplx-closing', role: 'assistant', parts: [{ type: 'text', text: CLOSING_MD }] };
+                            m.avatar = 'none';
+                          }}
                           style={{ display: 'block' }}
                         ></kai-message>
                       </div>
@@ -613,7 +625,7 @@ export const PerplexityPro: Story = {
     <!-- ASSISTANT · ANSWER -->
     <kai-tabs variant="underline"></kai-tabs> <!-- Answer | Sources | Images (controlled; swaps the panel) -->
     <kai-button variant="outline" icon="share">Share</kai-button>
-    <kai-message><!-- role=user: the query bubble (content set as a property) --></kai-message>
+    <kai-message><!-- role=user: the query bubble (message set as a property) --></kai-message>
 
     <!-- ANSWER tab -->
     <kai-card appearance="outlined"> <!-- "Generated chart" artifact card -->
@@ -622,7 +634,7 @@ export const PerplexityPro: Story = {
     </kai-card>
     <kai-reasoning></kai-reasoning> <!-- "7 steps completed" disclosure (REAL; label set as a property) -->
     <p>… cited prose with inline <kai-source label="1" headline="…" description="…"></kai-source> chips …</p>
-    <kai-message><!-- the comparison table: GFM markdown set as a property --></kai-message>
+    <kai-message><!-- the comparison table: GFM markdown, message set as a property --></kai-message>
     <kai-image></kai-image> <!-- an embedded chart image + a caption -->
 
     <!-- SOURCES tab: the numbered source list (REAL) -->
@@ -647,7 +659,8 @@ export const PerplexityPro: Story = {
   ];
   document.querySelector('kai-tabs').block = true;
   document.querySelector('kai-nav').items = [/* recent sessions / projects (KaiNavItem[]) */];
-  document.querySelector('kai-message').content = '…'; // query / table / closing prose
+  // query / table / closing prose
+  document.querySelector('kai-message').message = { id: 'm1', role: 'assistant', parts: [{ type: 'text', text: '…' }] };
   document.querySelector('kai-reasoning').label = '7 steps completed';
   document.querySelector('kai-reasoning').text = '1. …';
   document.querySelector('kai-image').base64 = '<base64 SVG>';

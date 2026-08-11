@@ -6,8 +6,10 @@ type Item = string | { label: string; value?: string; icon?: string };
 
 interface Props extends Record<string, unknown> {
   /** The suggestions. Strings, or `{ label, value }` when the displayed text
-   *  and the emitted value differ. Set as a JS property. */
-  suggestions: Item[];
+   *  and the emitted value differ. Set as a JS property. Omit to supply them as
+   *  `<kai-suggestion>` light-DOM children instead; when both are present the
+   *  property's suggestions come first. */
+  suggestions?: Item[];
   /** Chip style: `'outline'` (default), `'ghost'`, or `'default'` (filled). */
   variant?: 'outline' | 'ghost' | 'default';
   /** Row height for `layout="list"`: `'md'` (default) or `'lg'` for taller rows.

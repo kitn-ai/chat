@@ -111,7 +111,7 @@ import { Chat } from '@kitn.ai/ui/react';
 
 <Chat
   messages={messages}
-  onSubmit={(e) => setMessages((m) => [...m, { id: crypto.randomUUID(), role: 'user', content: e.detail.value }])}
+  onSubmit={(e) => setMessages((m) => [...m, { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: e.detail.value }] }])}
   style={{ display: 'block', height: '600px' }}
 />;
 ```

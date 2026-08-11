@@ -1,0 +1,39 @@
+: fixture: openai/parallel-tools
+: capture: live
+: provider: openrouter
+: model: openai/gpt-4o-mini
+: captured: 2026-08-10
+: request: {"model":"openai/gpt-4o-mini","stream":true,"tools":[{"type":"function","function":{"name":"get_weather","description":"Current weather for a city.","parameters":{"type":"object","properties":{"city":{"type":"string"},"units":{"type":"string"}},"required":["city"]}}}],"messages":[{"role":"user","content":"Compare the weather in Paris and Tokyo. Call the tool once per city."}]}
+
+: OPENROUTER PROCESSING
+
+data: {"id":"gen-1786337601-LQvUk01FNgeujqtt7qUa","object":"chat.completion.chunk","created":1786337601,"model":"openai/gpt-4o-mini","provider":"OpenAI","system_fingerprint":"fp_9afcdcbeed","choices":[{"index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"index":0,"id":"call_ZEOZXw49bBR4z21Yocrqys91","type":"function","function":{"name":"get_weather","arguments":""}}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1786337601-LQvUk01FNgeujqtt7qUa","object":"chat.completion.chunk","created":1786337601,"model":"openai/gpt-4o-mini","provider":"OpenAI","system_fingerprint":"fp_9afcdcbeed","choices":[{"index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"index":0,"function":{"arguments":""}}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1786337601-LQvUk01FNgeujqtt7qUa","object":"chat.completion.chunk","created":1786337601,"model":"openai/gpt-4o-mini","provider":"OpenAI","system_fingerprint":"fp_9afcdcbeed","choices":[{"index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"index":0,"function":{"arguments":"{\"ci"}}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1786337601-LQvUk01FNgeujqtt7qUa","object":"chat.completion.chunk","created":1786337601,"model":"openai/gpt-4o-mini","provider":"OpenAI","system_fingerprint":"fp_9afcdcbeed","choices":[{"index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"index":0,"function":{"arguments":"ty\": "}}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1786337601-LQvUk01FNgeujqtt7qUa","object":"chat.completion.chunk","created":1786337601,"model":"openai/gpt-4o-mini","provider":"OpenAI","system_fingerprint":"fp_9afcdcbeed","choices":[{"index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"index":0,"function":{"arguments":"\"Paris"}}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1786337601-LQvUk01FNgeujqtt7qUa","object":"chat.completion.chunk","created":1786337601,"model":"openai/gpt-4o-mini","provider":"OpenAI","system_fingerprint":"fp_9afcdcbeed","choices":[{"index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"index":0,"function":{"arguments":"\"}"}}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1786337601-LQvUk01FNgeujqtt7qUa","object":"chat.completion.chunk","created":1786337601,"model":"openai/gpt-4o-mini","provider":"OpenAI","system_fingerprint":"fp_9afcdcbeed","choices":[{"index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"index":1,"id":"call_upaTKM45iFw9CZ7XVrNtXo8F","type":"function","function":{"name":"get_weather","arguments":""}}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1786337601-LQvUk01FNgeujqtt7qUa","object":"chat.completion.chunk","created":1786337601,"model":"openai/gpt-4o-mini","provider":"OpenAI","system_fingerprint":"fp_9afcdcbeed","choices":[{"index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"index":1,"function":{"arguments":""}}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1786337601-LQvUk01FNgeujqtt7qUa","object":"chat.completion.chunk","created":1786337601,"model":"openai/gpt-4o-mini","provider":"OpenAI","system_fingerprint":"fp_9afcdcbeed","choices":[{"index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"index":1,"function":{"arguments":"{\"ci"}}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1786337601-LQvUk01FNgeujqtt7qUa","object":"chat.completion.chunk","created":1786337601,"model":"openai/gpt-4o-mini","provider":"OpenAI","system_fingerprint":"fp_9afcdcbeed","choices":[{"index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"index":1,"function":{"arguments":"ty\": "}}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1786337601-LQvUk01FNgeujqtt7qUa","object":"chat.completion.chunk","created":1786337601,"model":"openai/gpt-4o-mini","provider":"OpenAI","system_fingerprint":"fp_9afcdcbeed","choices":[{"index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"index":1,"function":{"arguments":"\"Tokyo"}}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1786337601-LQvUk01FNgeujqtt7qUa","object":"chat.completion.chunk","created":1786337601,"model":"openai/gpt-4o-mini","provider":"OpenAI","system_fingerprint":"fp_9afcdcbeed","choices":[{"index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"index":1,"function":{"arguments":"\"}"}}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1786337601-LQvUk01FNgeujqtt7qUa","object":"chat.completion.chunk","created":1786337601,"model":"openai/gpt-4o-mini","provider":"OpenAI","system_fingerprint":"fp_9afcdcbeed","choices":[{"index":0,"delta":{"content":"","role":"assistant"},"finish_reason":"tool_calls","native_finish_reason":"tool_calls"}]}
+
+data: {"id":"gen-1786337601-LQvUk01FNgeujqtt7qUa","object":"chat.completion.chunk","created":1786337601,"model":"openai/gpt-4o-mini","provider":"OpenAI","system_fingerprint":"fp_9afcdcbeed","service_tier":null,"choices":[{"index":0,"delta":{"content":"","role":"assistant"},"finish_reason":"tool_calls","native_finish_reason":"tool_calls"}],"usage":{"prompt_tokens":62,"completion_tokens":44,"total_tokens":106,"cost":0.0000357,"is_byok":false,"prompt_tokens_details":{"cached_tokens":0,"cache_write_tokens":0,"audio_tokens":0,"video_tokens":0},"cost_details":{"upstream_inference_cost":0.0000357,"upstream_inference_prompt_cost":0.0000093,"upstream_inference_completions_cost":0.0000264},"completion_tokens_details":{"reasoning_tokens":0,"image_tokens":0,"audio_tokens":0}}}
+
+data: [DONE]
+

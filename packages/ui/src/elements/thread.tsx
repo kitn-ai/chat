@@ -2,12 +2,14 @@ import { createSignal, onMount, onCleanup } from 'solid-js';
 import { defineWebComponent } from './define';
 import { readSlots, THREAD_SLOTS } from './slots';
 import { Thread, type ThreadController } from '../components/thread';
+import { cardComponentsFromTags } from './message';
+import { createMessagesGuard } from './validate-messages';
 import type { ChatMessage } from './chat-types';
 import type { ProseSize } from '../primitives/chat-config';
 
 interface Props extends Record<string, unknown> {
   /** The full message thread to render, newest last. Each entry carries its role,
-   *  content, and optional reasoning/tools/attachments/actions/avatar. Set as a JS
+   *  ordered `parts`, and optional actions/avatar/feedback. Set as a JS
    *  property (`el.messages = [...]`); a NEW array reference per streaming chunk
    *  re-renders (mutating in place does not). */
   messages?: ChatMessage[];
@@ -30,6 +32,11 @@ interface Props extends Record<string, unknown> {
   scrollButton?: boolean;
   /** Extra classes applied to the thread's inner root. */
   class?: string;
+  /** Optional card type -> custom-element tag overrides/additions for `card`
+   *  parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a
+   *  plain string map (not the `CardTagMap` alias) so the generated React
+   *  wrapper inlines it instead of emitting an unresolved named type. */
+  cardTypes?: Record<string, string>;
 }
 
 /** Events fired by `<kai-thread>`. */
@@ -61,8 +68,15 @@ defineWebComponent<Props, Events>('kai-thread', {
   actionsReveal: 'always',
   scrollButton: true,
   class: undefined,
+  cardTypes: undefined,
 }, (props, { element, dispatch, flag, expose }) => {
   let controller: ThreadController | undefined;
+
+  // `messages` is an untyped boundary: a consumer can hand it anything at
+  // runtime (a pre-0.20.0 `{ id, role, content }` array, in particular). Skip
+  // the invalid entries rather than let `groupMessageParts` throw deep inside a
+  // render pass, which would blank the whole element instead of one message.
+  const validMessages = createMessagesGuard('kai-thread');
 
   // Detect whether the consumer projected `slot="empty"` content, so the built-in
   // default only renders when they did NOT.
@@ -89,13 +103,14 @@ defineWebComponent<Props, Events>('kai-thread', {
       <style>{':host{display:block;height:100%}'}</style>
       <Thread
         class={props.class as string | undefined}
-        messages={(props.messages as ChatMessage[] | undefined) ?? []}
+        messages={validMessages(props.messages)}
         loading={flag('loading')}
         proseSize={props.proseSize as ProseSize}
         codeTheme={props.codeTheme as string}
         codeHighlight={flag('codeHighlight')}
         actionsReveal={props.actionsReveal as 'always' | 'hover'}
         scrollButton={props.scrollButton !== false}
+        cardTypes={cardComponentsFromTags(props.cardTypes as Record<string, string> | undefined, (props as { theme?: string }).theme)}
         empty={slots()['empty'] ? <slot name="empty" /> : undefined}
         onMessageAction={(detail) => dispatch('kai-message-action', detail)}
         controllerRef={(c) => (controller = c)}

@@ -20,10 +20,10 @@ chat.messages = [
   {
     id: 'm2',
     role: 'assistant',
-    content: "Here's a landing page for Starboard…",
-    // the generated file, shown as a chip in the message
-    attachments: [
-      { id: 'starboard-html', type: 'file', filename: 'index.html', title: 'Starboard landing page' },
+    parts: [
+      // the generated file, shown as a chip in the message (a `file` part)
+      { type: 'file', attachment: { id: 'starboard-html', type: 'file', filename: 'index.html', title: 'Starboard landing page' } },
+      { type: 'text', text: "Here's a landing page for Starboard…" },
     ],
     // a custom action button that opens the canvas. Omit `icon` for a
     // label-only text button, or pass a curated icon name (e.g. 'link').

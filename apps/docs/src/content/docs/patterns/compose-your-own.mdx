@@ -48,8 +48,8 @@ Three real `kai-*` web components inside a `<kai-resizable>` layout:
   // Build a <kai-message> per turn — you control the thread array.
   const thread = document.getElementById('thread');
   let msgs = [
-    { id: 'u1', role: 'user', content: 'Hello!' },
-    { id: 'a1', role: 'assistant', content: 'Hi — how can I help?', actions: ['copy', 'like', 'dislike'] },
+    { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'Hello!' }] },
+    { id: 'a1', role: 'assistant', parts: [{ type: 'text', text: 'Hi — how can I help?' }], actions: ['copy', 'like', 'dislike'] },
   ];
 
   const render = () => {
@@ -76,15 +76,17 @@ Three real `kai-*` web components inside a `<kai-resizable>` layout:
 
     msgs = [
       ...msgs,
-      { id: crypto.randomUUID(), role: 'user', content: prompt },
-      { id: aId, role: 'assistant', content: '' },
+      { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: prompt }] },
+      { id: aId, role: 'assistant', parts: [] },
     ];
     input.loading = true;
     render();
 
+    let answer = '';
     for await (const token of streamFromYourModel(prompt)) {
+      answer += token;
       msgs = msgs.map((m) =>
-        m.id === aId ? { ...m, content: m.content + token } : m
+        m.id === aId ? { ...m, parts: [{ type: 'text', text: answer }] } : m
       );
       render();
     }
@@ -96,9 +98,9 @@ Three real `kai-*` web components inside a `<kai-resizable>` layout:
 **Key points:**
 
 - `kai-resizable` lays out panels horizontally (or vertically with `orientation="vertical"`). Each `kai-resizable-item` takes a `size`, `min`, and `max` — all as HTML attributes (scalar values).
-- `kai-conversations` accepts a `conversations` property (flat array; the element groups by recency automatically). Listen for `kai-conversation-select` to update `activeId`.
-- Create one `<kai-message>` per turn and set its `message` property to the full `ChatMessage` object — `{ id, role, content, actions?, reasoning?, tools?, attachments? }`.
-- `kai-prompt-input` fires `kai-submit` with `{ value, attachments }`. Set `loading` to `true` while streaming; the send button disables automatically.
+- `kai-conversations` accepts a `conversations` property (the rows) and an optional `groups` property (the section headers, matched against each row's `groupId`). With no `groups`, the whole list renders in one Ungrouped section. Listen for `kai-conversation-select` to update `activeId`.
+- Create one `<kai-message>` per turn and set its `message` property to the full `ChatMessage` object — `{ id, role, parts, actions?, avatar?, feedback? }`, where `parts` is an ordered array of `text` / `reasoning` / `tool` / `card` / `source` / `file` parts.
+- `kai-prompt-input` fires `kai-submit` with `{ value, doc, entities, attachments }` — `value` is the flattened text, `doc` and `entities` the structured pills. Set `loading` to `true` while streaming and the send button disables; add `stoppable` to swap it for a Stop button that fires `kai-stop`.
 
 ## Adding a third panel
 

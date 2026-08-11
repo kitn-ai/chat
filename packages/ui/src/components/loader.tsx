@@ -24,9 +24,36 @@ export interface LoaderProps {
   class?: string;
 }
 
+/** Props of the shape-only loader variants (no label). */
+export interface LoaderShapeProps {
+  class?: string;
+  size?: LoaderSize;
+}
+
+/** Props of the text-based loader variants, which also take the label. */
+export interface LoaderTextProps extends LoaderShapeProps {
+  text?: string;
+}
+
+// Every variant shortcut ships its own `<Name>Props` alias: a consumer typing a
+// wrapper around `<DotsLoader>` must be able to name its props without knowing
+// that nine components happen to share one shape.
+export type CircularLoaderProps = LoaderShapeProps;
+export type ClassicLoaderProps = LoaderShapeProps;
+export type PulseLoaderProps = LoaderShapeProps;
+export type PulseDotLoaderProps = LoaderShapeProps;
+export type DotsLoaderProps = LoaderShapeProps;
+export type TypingLoaderProps = LoaderShapeProps;
+export type WaveLoaderProps = LoaderShapeProps;
+export type BarsLoaderProps = LoaderShapeProps;
+export type TerminalLoaderProps = LoaderShapeProps;
+export type TextBlinkLoaderProps = LoaderTextProps;
+export type TextShimmerLoaderProps = LoaderTextProps;
+export type TextDotsLoaderProps = LoaderTextProps;
+
 // --- CircularLoader ---
 
-export function CircularLoader(props: { class?: string; size?: LoaderSize }) {
+export function CircularLoader(props: CircularLoaderProps) {
   const size = () => props.size ?? 'md';
   const sizeClasses = { sm: 'size-4', md: 'size-5', lg: 'size-6' };
   return (
@@ -44,7 +71,7 @@ export function CircularLoader(props: { class?: string; size?: LoaderSize }) {
 
 // --- ClassicLoader ---
 
-export function ClassicLoader(props: { class?: string; size?: LoaderSize }) {
+export function ClassicLoader(props: ClassicLoaderProps) {
   const size = () => props.size ?? 'md';
   const sizeClasses = { sm: 'size-4', md: 'size-5', lg: 'size-6' };
   const barSizes = {
@@ -81,7 +108,7 @@ export function ClassicLoader(props: { class?: string; size?: LoaderSize }) {
 
 // --- PulseLoader ---
 
-export function PulseLoader(props: { class?: string; size?: LoaderSize }) {
+export function PulseLoader(props: PulseLoaderProps) {
   const size = () => props.size ?? 'md';
   const sizeClasses = { sm: 'size-4', md: 'size-5', lg: 'size-6' };
   return (
@@ -94,7 +121,7 @@ export function PulseLoader(props: { class?: string; size?: LoaderSize }) {
 
 // --- PulseDotLoader ---
 
-export function PulseDotLoader(props: { class?: string; size?: LoaderSize }) {
+export function PulseDotLoader(props: PulseDotLoaderProps) {
   const size = () => props.size ?? 'md';
   const sizeClasses = { sm: 'size-1', md: 'size-2', lg: 'size-3' };
   return (
@@ -112,7 +139,7 @@ export function PulseDotLoader(props: { class?: string; size?: LoaderSize }) {
 
 // --- DotsLoader ---
 
-export function DotsLoader(props: { class?: string; size?: LoaderSize }) {
+export function DotsLoader(props: DotsLoaderProps) {
   const size = () => props.size ?? 'md';
   const dotSizes = { sm: 'h-1.5 w-1.5', md: 'h-2 w-2', lg: 'h-2.5 w-2.5' };
   const containerSizes = { sm: 'h-4', md: 'h-5', lg: 'h-6' };
@@ -136,7 +163,7 @@ export function DotsLoader(props: { class?: string; size?: LoaderSize }) {
 
 // --- TypingLoader ---
 
-export function TypingLoader(props: { class?: string; size?: LoaderSize }) {
+export function TypingLoader(props: TypingLoaderProps) {
   const size = () => props.size ?? 'md';
   const dotSizes = { sm: 'h-1 w-1', md: 'h-1.5 w-1.5', lg: 'h-2 w-2' };
   const containerSizes = { sm: 'h-4', md: 'h-5', lg: 'h-6' };
@@ -160,7 +187,7 @@ export function TypingLoader(props: { class?: string; size?: LoaderSize }) {
 
 // --- WaveLoader ---
 
-export function WaveLoader(props: { class?: string; size?: LoaderSize }) {
+export function WaveLoader(props: WaveLoaderProps) {
   const size = () => props.size ?? 'md';
   const barWidths = { sm: 'w-0.5', md: 'w-0.5', lg: 'w-1' };
   const containerSizes = { sm: 'h-4', md: 'h-5', lg: 'h-6' };
@@ -192,7 +219,7 @@ export function WaveLoader(props: { class?: string; size?: LoaderSize }) {
 
 // --- BarsLoader ---
 
-export function BarsLoader(props: { class?: string; size?: LoaderSize }) {
+export function BarsLoader(props: BarsLoaderProps) {
   const size = () => props.size ?? 'md';
   const barWidths = { sm: 'w-1', md: 'w-1.5', lg: 'w-2' };
   const containerSizes = { sm: 'h-4 gap-1', md: 'h-5 gap-1.5', lg: 'h-6 gap-2' };
@@ -216,7 +243,7 @@ export function BarsLoader(props: { class?: string; size?: LoaderSize }) {
 
 // --- TerminalLoader ---
 
-export function TerminalLoader(props: { class?: string; size?: LoaderSize }) {
+export function TerminalLoader(props: TerminalLoaderProps) {
   const size = () => props.size ?? 'md';
   const cursorSizes = { sm: 'h-3 w-1.5', md: 'h-4 w-2', lg: 'h-5 w-2.5' };
   const textSizes = { sm: 'text-xs', md: 'text-sm', lg: 'text-base' };
@@ -232,7 +259,7 @@ export function TerminalLoader(props: { class?: string; size?: LoaderSize }) {
 
 // --- TextBlinkLoader ---
 
-export function TextBlinkLoader(props: { text?: string; class?: string; size?: LoaderSize }) {
+export function TextBlinkLoader(props: TextBlinkLoaderProps) {
   const size = () => props.size ?? 'md';
   const textSizes = { sm: 'text-xs', md: 'text-sm', lg: 'text-base' };
   return (
@@ -250,7 +277,7 @@ export function TextBlinkLoader(props: { text?: string; class?: string; size?: L
 
 // --- TextShimmerLoader ---
 
-export function TextShimmerLoader(props: { text?: string; class?: string; size?: LoaderSize }) {
+export function TextShimmerLoader(props: TextShimmerLoaderProps) {
   const size = () => props.size ?? 'md';
   const textSizes = { sm: 'text-xs', md: 'text-sm', lg: 'text-base' };
   return (
@@ -270,7 +297,7 @@ export function TextShimmerLoader(props: { text?: string; class?: string; size?:
 
 // --- TextDotsLoader ---
 
-export function TextDotsLoader(props: { text?: string; class?: string; size?: LoaderSize }) {
+export function TextDotsLoader(props: TextDotsLoaderProps) {
   const size = () => props.size ?? 'md';
   const textSizes = { sm: 'text-xs', md: 'text-sm', lg: 'text-base' };
   return (

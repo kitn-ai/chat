@@ -55,7 +55,7 @@ describe('ChatThread header composition', () => {
 
 describe('ChatThread suggestions gating', () => {
   const SUGGESTIONS = ['What can you do?', 'Tell me a joke'];
-  const oneMessage = [{ id: '1', role: 'user' as const, content: 'hi' }];
+  const oneMessage = [{ id: '1', role: 'user' as const, parts: [{ type: 'text' as const, text: 'hi' }] }];
 
   it('renders suggestions when the thread is empty', () => {
     const { getByText } = render(() => <ChatThread messages={[]} suggestions={SUGGESTIONS} />);
@@ -84,8 +84,8 @@ describe('ChatThread action-row feedback', () => {
     writeText.mockClear();
   });
 
-  const assistant = (content: string): ChatMessage => ({
-    id: 'a1', role: 'assistant', content, actions: ['copy', 'like', 'dislike'],
+  const assistant = (text: string): ChatMessage => ({
+    id: 'a1', role: 'assistant', parts: [{ type: 'text', text }], actions: ['copy', 'like', 'dislike'],
   });
 
   it('marks the chosen vote, hides the other, and KEEPS it across a streaming re-render', async () => {
@@ -149,7 +149,7 @@ describe('ChatThread action-row feedback', () => {
 
   it('controlled m.feedback renders the vote marked (and collapses the other)', () => {
     const controlled: ChatMessage = {
-      id: 'a1', role: 'assistant', content: 'x', actions: ['like', 'dislike'], feedback: 'dislike',
+      id: 'a1', role: 'assistant', parts: [{ type: 'text', text: 'x' }], actions: ['like', 'dislike'], feedback: 'dislike',
     };
     const { getByLabelText } = render(() => <ChatThread messages={[controlled]} />);
     expect(getByLabelText('Dislike')).toHaveAttribute('aria-pressed', 'true');

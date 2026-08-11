@@ -155,7 +155,7 @@ An HTML attribute is always a string. Passing `messages`, `models`, `context`, `
 ```js
 // Works — set the property in JavaScript
 const chat = document.querySelector('kai-chat');
-chat.messages = [{ id: '1', role: 'assistant', content: 'Hello!' }];
+chat.messages = [{ id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello!' }] }];
 ```
 
 ```html
@@ -184,11 +184,11 @@ Mutating an existing message object in place does not trigger a re-render. Repla
 ```js
 // Triggers a re-render on every chunk
 chat.messages = chat.messages.map(
-  (m) => (m.id === assistantId ? { ...m, content: accumulated } : m)
+  (m) => (m.id === assistantId ? { ...m, parts: [{ type: 'text', text: accumulated }] } : m)
 );
 
 // Does NOT trigger a re-render
-chat.messages[i].content = accumulated;
+chat.messages[i].parts = [{ type: 'text', text: accumulated }];
 ```
 
 The same rule applies to every array/object property: always assign a new reference.
@@ -209,21 +209,21 @@ chat.addEventListener('kai-submit', async (e) => {
   // Append user message — new array
   const history = [
     ...chat.messages,
-    { id: crypto.randomUUID(), role: 'user', content: userText },
+    { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: userText }] },
   ];
   chat.messages = history;
   chat.loading = true;
 
   // Empty assistant placeholder to stream into
   const assistantId = crypto.randomUUID();
-  chat.messages = [...history, { id: assistantId, role: 'assistant', content: '' }];
+  chat.messages = [...history, { id: assistantId, role: 'assistant', parts: [] }];
 
   // Stream — replace with a new array + new object on every chunk
   let accumulated = '';
   for await (const token of streamFromYourAPI(history)) {
     accumulated += token;
     chat.messages = chat.messages.map((m) =>
-      m.id === assistantId ? { ...m, content: accumulated } : m
+      m.id === assistantId ? { ...m, parts: [{ type: 'text', text: accumulated }] } : m
     );
   }
   chat.loading = false;

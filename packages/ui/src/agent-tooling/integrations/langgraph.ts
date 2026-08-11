@@ -7,9 +7,10 @@ const langgraph: Integration = {
   language: 'ts',
   streamFormat: 'openai-sse',
   envVars: ['OPENAI_API_KEY'],
-  routeTemplates: {
-    next: `// POST /api/chat — stream a compiled LangGraph agent to the browser
-import { createReactAgent } from '@langchain/langgraph/prebuilt';
+  // No per-framework templates: the handler below is web-standard, so the
+  // scaffolder wraps it in the target framework's own route declaration.
+  routeTemplates: {},
+  webRoute: `import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import { ChatOpenAI } from '@langchain/openai';
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
@@ -28,10 +29,35 @@ const agent = createReactAgent({
   tools: [getWeather],
 });
 
-export async function POST(req: Request) {
-  const { messages } = await req.json();
+// Stream a compiled LangGraph agent to the browser as OpenAI-format SSE.
+async function chatHandler(request: Request): Promise<Response> {
+  const { messages } = await readChatRequest(request);
 
-  const stream = await agent.stream({ messages }, { streamMode: 'messages' });
+  // agent.stream() coerces plain {role, content} objects into BaseMessage
+  // instances itself, including OpenAI-shaped tool_calls, so the wire messages
+  // can be passed through almost as-is. The one incompatible bit is content:
+  // OpenAI represents a tool-calls-only assistant turn as content: null, and
+  // LangChain's MessageContent type (and runtime coercion) only accepts string.
+  const agentMessages = messages.map((m) => ({ ...m, content: m.content ?? '' }));
+
+  // Let TS infer the stream's element type from this call instead of hand
+  // writing it: the real type is a [BaseMessage, metadata] tuple, keyed off the
+  // streamMode: 'messages' literal, not the plain object shape it looks like.
+  const startStream = () => agent.stream({ messages: agentMessages }, { streamMode: 'messages' });
+
+  let stream: Awaited<ReturnType<typeof startStream>>;
+  try {
+    stream = await startStream();
+  } catch (err) {
+    // A REAL status, before a byte is streamed: a missing OPENAI_API_KEY fails
+    // here. Returning 200 would send this JSON out labelled text/event-stream,
+    // the SSE reader would find no frame, and the turn would resolve empty with
+    // nothing logged and no bubble.
+    return new Response(
+      JSON.stringify({ error: { message: err instanceof Error ? err.message : 'Agent failed to start' } }),
+      { status: 502, headers: { 'Content-Type': 'application/json' } },
+    );
+  }
 
   const encoder = new TextEncoder();
   const body = new ReadableStream({
@@ -39,22 +65,38 @@ export async function POST(req: Request) {
       const send = (obj: unknown) =>
         controller.enqueue(encoder.encode(\`data: \${JSON.stringify(obj)}\\n\\n\`));
 
-      for await (const [chunk] of stream) {
-        if (typeof chunk.content === 'string' && chunk.content) {
-          send({ choices: [{ delta: { content: chunk.content } }] });
+      try {
+        for await (const [chunk] of stream) {
+          if (typeof chunk.content === 'string' && chunk.content) {
+            send({ choices: [{ delta: { content: chunk.content } }] });
+          }
         }
+      } catch (err) {
+        // The status is spent once the stream started, so report IN BAND:
+        // readOpenAIStream lands this on turn.error and keeps what streamed.
+        send({ error: { message: err instanceof Error ? err.message : 'Agent stream failed' } });
       }
       controller.enqueue(encoder.encode('data: [DONE]\\n\\n'));
       controller.close();
     },
   });
 
-  return new Response(body, { headers: { 'Content-Type': 'text/event-stream' } });
+  return new Response(body, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      // no-transform stops a proxy buffering the stream into one blob.
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+    },
+  });
 }`,
-  },
-  streamMapping: "Use graph.stream(input, { streamMode: 'messages' }) to get [messageChunk, metadata] tuples. Extract chunk.content (string) and forward as OpenAI-format SSE frames: data: {choices:[{delta:{content}}]}. Close with data: [DONE]. The kai-chat reader handles it.",
+  streamMapping: "Use graph.stream(input, { streamMode: 'messages' }) to get [messageChunk, metadata] tuples. Extract chunk.content (string) and forward as OpenAI-format SSE frames: data: {choices:[{delta:{content}}]}. Close with data: [DONE]. readOpenAIStream from @kitn.ai/ui/wire parses tool calls and reasoning too, but the route template forwards chunk.content only, which is text: the same message chunks carry the tool-call fragments on chunk.tool_call_chunks, so re-frame those onto delta.tool_calls to fill kai-tool.",
   runNote: 'Set OPENAI_API_KEY (or the key for your chosen model provider). Install @langchain/langgraph, @langchain/openai, @langchain/core.',
   docsSlug: 'integrations/langgraph',
+  // Nothing. The agent owns both: ChatOpenAI({ model: 'gpt-4o' }) and the tools
+  // array passed to createReactAgent are server-side.
+  forwardsFromClient: [],
 };
 
 export default langgraph;

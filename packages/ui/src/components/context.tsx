@@ -306,7 +306,15 @@ export interface ContextUsageRowProps {
   children?: JSX.Element;
 }
 
-export function ContextInputUsage(props: ContextUsageRowProps) {
+// The four rows share one shape, but each still ships a `<Name>Props` alias: a
+// consumer typing a wrapper around one of them should not have to discover that
+// the shared name exists.
+export type ContextInputUsageProps = ContextUsageRowProps;
+export type ContextOutputUsageProps = ContextUsageRowProps;
+export type ContextReasoningUsageProps = ContextUsageRowProps;
+export type ContextCacheUsageProps = ContextUsageRowProps;
+
+export function ContextInputUsage(props: ContextInputUsageProps) {
   const ctx = useContextValue();
   return (
     <Show when={props.children || ctx.inputTokens}>
@@ -320,7 +328,7 @@ export function ContextInputUsage(props: ContextUsageRowProps) {
   );
 }
 
-export function ContextOutputUsage(props: ContextUsageRowProps) {
+export function ContextOutputUsage(props: ContextOutputUsageProps) {
   const ctx = useContextValue();
   return (
     <Show when={props.children || ctx.outputTokens}>
@@ -334,7 +342,7 @@ export function ContextOutputUsage(props: ContextUsageRowProps) {
   );
 }
 
-export function ContextReasoningUsage(props: ContextUsageRowProps) {
+export function ContextReasoningUsage(props: ContextReasoningUsageProps) {
   const ctx = useContextValue();
   return (
     <Show when={props.children || ctx.reasoningTokens}>
@@ -348,7 +356,7 @@ export function ContextReasoningUsage(props: ContextUsageRowProps) {
   );
 }
 
-export function ContextCacheUsage(props: ContextUsageRowProps) {
+export function ContextCacheUsage(props: ContextCacheUsageProps) {
   const ctx = useContextValue();
   return (
     <Show when={props.children || ctx.cacheTokens}>

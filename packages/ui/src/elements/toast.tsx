@@ -4,8 +4,9 @@ import { toast as toastStore, type ToastItem } from '../primitives/toast-store';
 
 interface Props extends Record<string, unknown> {
   /** The toasts to render. Newest is shown on top. Set as a JS property (array);
-   *  pass a new array reference to update. */
-  toasts: ToastItem[];
+   *  pass a new array reference to update. Omit for an empty region, which is
+   *  the normal resting state and how the imperative `toast()` API starts. */
+  toasts?: ToastItem[];
   /** Stack anchor: `'top-center'` (default), `'top-right'`, `'bottom-center'`, … */
   position?: ToastPosition;
   /** Max simultaneously-visible toasts; the rest queue. Defaults to `3`. */

@@ -11,10 +11,15 @@ interface Skill {
   name: string;
 }
 
+interface MessagePart {
+  type: 'text';
+  text: string;
+}
+
 interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
-  content: string;
+  parts: MessagePart[];
   actions?: string[];
 }
 
@@ -77,10 +82,15 @@ const SEED_MESSAGES: ChatMessage[] = [
   {
     id: 'a0',
     role: 'assistant',
-    content:
-      "I'm your workspace assistant. Type `/` to see what I can do — summarize a " +
-      'thread, translate text, review a diff, or search the docs. Each pick drops ' +
-      'an atomic pill into the composer.',
+    parts: [
+      {
+        type: 'text',
+        text:
+          "I'm your workspace assistant. Type `/` to see what I can do — summarize a " +
+          'thread, translate text, review a diff, or search the docs. Each pick drops ' +
+          'an atomic pill into the composer.',
+      },
+    ],
     actions: ['copy'],
   },
 ];
@@ -114,7 +124,7 @@ export default function SkillsAssistantDemo(props: Props) {
       const done = i >= words.length;
       host!.messages = (host!.messages ?? []).map((m) =>
         m.id === aId
-          ? { ...m, content: partial, ...(done ? { actions: ['copy', 'like', 'dislike'] } : {}) }
+          ? { ...m, parts: [{ type: 'text', text: partial }], ...(done ? { actions: ['copy', 'like', 'dislike'] } : {}) }
           : m,
       );
       if (!done) {
@@ -133,8 +143,8 @@ export default function SkillsAssistantDemo(props: Props) {
     const aId = nextId();
     host.messages = [
       ...(host.messages ?? []),
-      { id: nextId(), role: 'user', content: text },
-      { id: aId, role: 'assistant', content: '' },
+      { id: nextId(), role: 'user', parts: [{ type: 'text', text }] },
+      { id: aId, role: 'assistant', parts: [] },
     ];
     (host as any).loading = true;
 

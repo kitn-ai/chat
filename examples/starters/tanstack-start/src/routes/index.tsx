@@ -10,6 +10,7 @@ import { createFileRoute } from '@tanstack/react-router';
 // `conversation-list.js`, and the wrapper imports it under that name. It
 // resolves natively here — no consumer-side specifier shim needed.
 import { Button, Chat, Conversations } from '@kitn.ai/ui/react';
+import type { MessagePart } from '@kitn.ai/ui';
 
 export const Route = createFileRoute('/')({
   component: Home,
@@ -22,7 +23,7 @@ export const Route = createFileRoute('/')({
 type ChatMessage = {
   id: string;
   role: 'user' | 'assistant';
-  content: string;
+  parts: MessagePart[];
   actions?: ('copy' | 'like' | 'dislike' | 'regenerate' | 'edit')[];
 };
 
@@ -30,15 +31,20 @@ const MESSAGES: ChatMessage[] = [
   {
     id: 'm-1',
     role: 'user',
-    content: 'Does @kitn.ai/ui work with TanStack Start?',
+    parts: [{ type: 'text', text: 'Does @kitn.ai/ui work with TanStack Start?' }],
   },
   {
     id: 'm-2',
     role: 'assistant',
-    content:
-      'Yes — the `kai-*` web components server-render as bare tags and then ' +
-      'register + hydrate on the client. This thread is a `messages` **array** ' +
-      'prop set through the React wrapper.',
+    parts: [
+      {
+        type: 'text',
+        text:
+          'Yes — the `kai-*` web components server-render as bare tags and then ' +
+          'register + hydrate on the client. This thread is a `messages` **array** ' +
+          'prop set through the React wrapper.',
+      },
+    ],
     actions: ['copy', 'like'],
   },
 ];

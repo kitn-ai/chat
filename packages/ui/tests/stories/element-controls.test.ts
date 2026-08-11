@@ -67,9 +67,12 @@ describe('argTypesFor', () => {
       expect([...result['proseSize'].options].sort()).toEqual(['base', 'lg', 'sm', 'xs']);
     });
 
-    it('content → text control', () => {
+    it('codeTheme → text control', () => {
+      // `content` was the pre-parts-migration scalar prop (kai-message now takes
+      // a `message: ChatMessage` object, no standalone text prop); codeTheme is
+      // the current plain-string prop this case exercises instead.
       const result = argTypesFor('kai-message');
-      expect(result['content']).toEqual({ control: 'text' });
+      expect(result['codeTheme']).toEqual({ control: 'text' });
     });
   });
 

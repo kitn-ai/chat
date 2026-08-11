@@ -1,0 +1,129 @@
+/**
+ * GUARD — for a prop the element registers a real default for, PASSING it and
+ * READING it back are different contracts, and the generated types must say so.
+ *
+ * Three surfaces come out of one `Props` declaration per facade, and they are not
+ * interchangeable:
+ *
+ *   KaiChatElementProps      what a Vue template CONSTRUCTS with       → optional
+ *   ChatProps (React)        what a React consumer CONSTRUCTS with     → optional
+ *   KaiChatElement           what `document.querySelector` HANDS BACK  → required
+ *
+ * Optional on the construction side is the fix for "the wrapper forces
+ * `messages={[]}` on people". Optional on the READ side is a different claim, and
+ * a false one: `defineWebComponent` registers a non-`undefined` default, and the
+ * React runtime skips undefined props (frameworks/react/runtime.tsx —
+ * `if (name in p && p[name] !== undefined)`), so no supported path ever puts
+ * `undefined` on the element. Typing the read as possibly-undefined taxes every
+ * consumer who reads a property back:
+ *
+ *     chat.messages = fn(chat.messages)          // the streaming setter adapter
+ *     chat.toasts = [...chat.toasts, next]       // append to a live list
+ *     type M = KaiChatElement['messages'][number]  // derive the item type
+ *
+ * All three are patterns the `kai` MCP scaffolder emits into vanilla-TS consumer
+ * code. When these props were widened on BOTH sides, 54 of its 432 cells stopped
+ * compiling — the only reason the collapse was caught at all. This pins the split
+ * so it is not re-collapsed in either direction.
+ *
+ * Both files are GENERATED (scripts/gen-element-types.mjs, scripts/gen-element-react.mjs).
+ * Fix the generator, not the output.
+ */
+import { describe, expect, it } from 'vitest';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const pkgRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const SRC_TYPES = resolve(pkgRoot, 'src/elements/element-types.d.ts');
+const REACT_WRAPPERS = resolve(pkgRoot, 'frameworks/react/index.tsx');
+const META = resolve(pkgRoot, 'src/elements/element-meta.json');
+
+interface MetaProp {
+  name: string;
+  optional: boolean;
+  scalar: boolean;
+  default?: string;
+}
+interface MetaElement {
+  tag: string;
+  className: string;
+  displayName: string;
+  props: MetaProp[];
+}
+
+const elements: MetaElement[] = JSON.parse(readFileSync(META, 'utf8'));
+const types = readFileSync(SRC_TYPES, 'utf8');
+
+/** The body of one `export interface <name> …{ … }` block. */
+function block(source: string, name: string): string {
+  const start = source.indexOf(`export interface ${name} `);
+  expect(start, `interface ${name} not found`).toBeGreaterThan(-1);
+  const open = source.indexOf('{', start);
+  const close = source.indexOf('\n}', open);
+  return source.slice(open, close);
+}
+
+/** How a member is declared in an interface body: 'required' | 'optional' | 'absent'. */
+function declaredAs(body: string, prop: string): 'required' | 'optional' | 'absent' {
+  const line = body.split('\n').find((l) => new RegExp(`^  ${prop}\\??:`).test(l));
+  if (!line) return 'absent';
+  return line.startsWith(`  ${prop}?:`) ? 'optional' : 'required';
+}
+
+// The props this rule governs: declared optional by the facade (so CONSTRUCTION is
+// optional), non-scalar (arrays/objects are what gets read back and spread), and
+// registered with a default that is not `undefined` (so the read is total).
+const governed = elements.flatMap((el) =>
+  el.props
+    .filter((p) => p.optional && !p.scalar && p.default !== undefined)
+    .map((p) => ({ tag: el.tag, className: el.className, displayName: el.displayName, prop: p.name })),
+);
+
+describe('defaulted props: optional to pass, total to read', () => {
+  // Without this the whole suite passes vacuously the moment the meta shape or the
+  // filter drifts — the failure mode this repo keeps hitting.
+  it('the rule governs a non-empty, plausible set of props', () => {
+    expect(governed.length).toBeGreaterThanOrEqual(15);
+    const names = governed.map((g) => `${g.tag}.${g.prop}`);
+    // Spot-check the ones the scaffolder actually reads back.
+    expect(names).toContain('kai-chat.messages');
+    expect(names).toContain('kai-workspace.messages');
+    expect(names).toContain('kai-toast-region.toasts');
+    expect(names).toContain('kai-conversations.conversations');
+  });
+
+  it.each(governed)('$tag.$prop is REQUIRED on $className (the read side)', ({ className, prop }) => {
+    expect(declaredAs(block(types, `${className} extends HTMLElement`), prop)).toBe('required');
+  });
+
+  it.each(governed)('$tag.$prop is OPTIONAL on $className' + 'Props (Vue construction)', ({ className, prop }) => {
+    expect(declaredAs(block(types, `${className}Props`), prop)).toBe('optional');
+  });
+
+  it.each(governed)('$tag.$prop is OPTIONAL on the React $displayName' + 'Props', ({ displayName, prop }) => {
+    if (!existsSync(REACT_WRAPPERS)) return; // generated by build:api
+    const react = readFileSync(REACT_WRAPPERS, 'utf8');
+    expect(declaredAs(block(react, `${displayName}Props extends WebComponentProps`), prop)).toBe('optional');
+  });
+
+  it('the required read type carries no `undefined`', () => {
+    for (const { className, prop } of governed) {
+      const body = block(types, `${className} extends HTMLElement`);
+      const line = body.split('\n').find((l) => new RegExp(`^  ${prop}:`).test(l)) ?? '';
+      expect(line, `${className}.${prop}`).not.toMatch(/\bundefined\b/);
+    }
+  });
+
+  // The negative control. `<kai-thread>` registers `messages: undefined` — there is
+  // no default, so the read really can yield undefined and BOTH sides stay optional.
+  // If the rule ever keys off "is an array" instead of "has a default", this fails.
+  it('a prop whose registered default IS undefined stays optional on both sides', () => {
+    const thread = elements.find((e) => e.tag === 'kai-thread');
+    expect(thread, 'kai-thread missing from element-meta').toBeTruthy();
+    const messages = thread!.props.find((p) => p.name === 'messages');
+    expect(messages?.default, 'kai-thread.messages should register no default').toBeUndefined();
+    expect(declaredAs(block(types, 'KaiThreadElement extends HTMLElement'), 'messages')).toBe('optional');
+    expect(declaredAs(block(types, 'KaiThreadElementProps'), 'messages')).toBe('optional');
+  });
+});

@@ -69,7 +69,7 @@ export type MessageAction = 'copy' | 'like' | 'dislike' | 'regenerate' | 'edit';
 export interface SampleMessage {
   id: string;
   role: 'user' | 'assistant';
-  content: string;
+  parts: { type: 'text'; text: string }[];
   actions?: MessageAction[];
 }
 
@@ -119,34 +119,40 @@ export const SAMPLE_MESSAGES: Record<string, SampleMessage[]> = {
     {
       id: 'm1',
       role: 'user',
-      content: 'How do I use kai-chat web components inside a React app?',
+      parts: [{ type: 'text', text: 'How do I use kai-chat web components inside a React app?' }],
     },
     {
       id: 'm2',
       role: 'assistant',
       actions: ['copy', 'like', 'dislike'],
-      content:
-        "Just use the wrappers from `@kitn.ai/ui/react`:\n\n```tsx\nimport { Chat } from '@kitn.ai/ui/react';\n\n<Chat\n  messages={messages}\n  models={models}\n  onSubmit={(e) => console.log(e.detail)}\n  theme=\"auto\"\n/>\n```\n\nArrays/objects are passed as props and become live DOM properties; events arrive as `on<Event>` callbacks. No refs or `useEffect` needed.",
+      parts: [{
+        type: 'text',
+        text: "Just use the wrappers from `@kitn.ai/ui/react`:\n\n```tsx\nimport { Chat } from '@kitn.ai/ui/react';\n\n<Chat\n  messages={messages}\n  models={models}\n  onSubmit={(e) => console.log(e.detail)}\n  theme=\"auto\"\n/>\n```\n\nArrays/objects are passed as props and become live DOM properties; events arrive as `on<Event>` callbacks. No refs or `useEffect` needed.",
+      }],
     },
   ],
   'c-2': [
-    { id: 'm1', role: 'user', content: 'How do I center a div?' },
+    { id: 'm1', role: 'user', parts: [{ type: 'text', text: 'How do I center a div?' }] },
     {
       id: 'm2',
       role: 'assistant',
       actions: ['copy', 'like', 'dislike'],
-      content:
-        "The modern way is CSS Grid:\n\n```css\n.box {\n  display: grid;\n  place-items: center;\n}\n```\n\nThat centers the child on both axes with no magic numbers.",
+      parts: [{
+        type: 'text',
+        text: "The modern way is CSS Grid:\n\n```css\n.box {\n  display: grid;\n  place-items: center;\n}\n```\n\nThat centers the child on both axes with no magic numbers.",
+      }],
     },
   ],
   'c-3': [
-    { id: 'm1', role: 'user', content: 'Show a generic `identity` function in TypeScript.' },
+    { id: 'm1', role: 'user', parts: [{ type: 'text', text: 'Show a generic `identity` function in TypeScript.' }] },
     {
       id: 'm2',
       role: 'assistant',
       actions: ['copy', 'like', 'dislike'],
-      content:
-        "```typescript\nfunction identity<T>(value: T): T {\n  return value;\n}\n\nconst n = identity(42);    // number\nconst s = identity('hi'); // string\n```",
+      parts: [{
+        type: 'text',
+        text: "```typescript\nfunction identity<T>(value: T): T {\n  return value;\n}\n\nconst n = identity(42);    // number\nconst s = identity('hi'); // string\n```",
+      }],
     },
   ],
 };

@@ -26,6 +26,11 @@ export default defineConfig({
         'src/**/*.test.tsx',
         'src/agent-tooling/**',
         'src/stories/**',
+        // Captured SSE fixtures and their replay harness are TEST DATA. The
+        // `files` field already keeps src/wire/fixtures out of the tarball;
+        // without this the dts build still emitted type stubs for them into
+        // dist/wire/fixtures/, describing modules that do not ship.
+        'src/wire/fixtures/**',
       ],
       outDir: 'dist',
       entryRoot: 'src',

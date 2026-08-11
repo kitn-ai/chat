@@ -32,17 +32,22 @@ prompt.addEventListener('kai-submit', async (e) => {
     {
       id: crypto.randomUUID(),
       role: 'user',
-      content: value,
-      attachments, // pass straight through → shown inline on the message
+      parts: [
+        // one `file` part per attachment → shown inline on the message
+        ...attachments.map((a) => ({ type: 'file', attachment: a })),
+        ...(value ? [{ type: 'text', text: value }] : []),
+      ],
     },
-    { id: aId, role: 'assistant', content: '' },
+    { id: aId, role: 'assistant', parts: [] },
   ];
   chat.loading = true;
 
   // Forward value + attachments to your model API, then stream the reply.
+  let answer = '';
   for await (const token of streamFromModel({ value, attachments })) {
+    answer += token;
     chat.messages = chat.messages.map((m) =>
-      m.id === aId ? { ...m, content: m.content + token } : m,
+      m.id === aId ? { ...m, parts: [{ type: 'text', text: answer }] } : m,
     );
   }
   chat.loading = false;
@@ -53,17 +58,17 @@ prompt.addEventListener('kai-submit', async (e) => {
 
 **2 — Render attachments on the user message**
 
-Pass `attachments` in the `ChatMessage` object. `<kai-chat>` and `<kai-message>` render them inline beneath the message text — the same display the [`<kai-attachments>`](/components/attachments/) element uses — with no extra wiring:
+Add a `{ type: 'file', attachment }` part per file to the message's `parts` array. `<kai-chat>` and `<kai-message>` render consecutive `file` parts inline beneath the message text — the same display the [`<kai-attachments>`](/components/attachments/) element uses — with no extra wiring:
 
 ```js
-// The message shape — attachments is optional; omit it for text-only turns.
+// The message shape — file parts are optional; omit them for text-only turns.
 const userMsg = {
   id: crypto.randomUUID(),
   role: 'user',
-  content: value,
-  attachments: [
-    { id: 'a1', type: 'file', filename: 'design-spec.pdf', mediaType: 'application/pdf' },
-    { id: 'a2', type: 'file', filename: 'screenshot.png',  mediaType: 'image/png' },
+  parts: [
+    { type: 'file', attachment: { id: 'a1', type: 'file', filename: 'design-spec.pdf', mediaType: 'application/pdf' } },
+    { type: 'file', attachment: { id: 'a2', type: 'file', filename: 'screenshot.png',  mediaType: 'image/png' } },
+    { type: 'text', text: value },
   ],
 };
 ```
@@ -122,5 +127,5 @@ The drop zone and the paperclip stack: files from either path land in the same s
 - **[`kai-prompt-input` reference](/components/prompt-input/)** — `attachments` property, the built-in paperclip, `kai-submit` detail, `loading`, `stoppable`.
 - **[`kai-attachments` reference](/components/attachments/)** — standalone display of `AttachmentData[]` with `variant`, `hoverCard`, and `removable`.
 - **[`kai-file-upload` reference](/components/file-upload/)** — `accept`, `multiple`, `kai-files-added`.
-- **[`kai-message` reference](/components/message/)** — full `ChatMessage` shape including `attachments`.
+- **[`kai-message` reference](/components/message/)** — full `ChatMessage` shape, including `file` parts.
 - **[Drop-in chat](/examples/drop-in-chat/)** — the complete `kai-submit` streaming loop with `<kai-chat>`.

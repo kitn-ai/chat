@@ -9,11 +9,13 @@ Display each token as it arrives — no buffering, no flash of finished content.
 
 ## Stream into kai-chat
 
-`kai-chat` streams by appending an empty assistant message, then replacing its `content` as tokens arrive. Set `loading = true` during the request so the input is disabled and the loading state shows; set it back to `false` when the stream ends.
+`kai-chat` streams by appending an empty assistant message, then replacing its `parts` as tokens arrive. Set `loading = true` during the request so the input is disabled and the loading state shows; set it back to `false` when the stream ends.
 
 ```js
 import '@kitn.ai/ui/elements';
 import '@kitn.ai/ui/theme.css';
+import { createAssistantStream } from '@kitn.ai/ui/state';
+import { readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';
 
 const chat = document.querySelector('kai-chat');
 
@@ -24,62 +26,38 @@ chat.addEventListener('kai-submit', async (e) => {
   // Append the user message
   const history = [
     ...chat.messages,
-    { id: crypto.randomUUID(), role: 'user', content: text },
+    { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text }] },
   ];
   chat.messages = history;
   chat.loading = true;
 
-  // Seed an empty assistant placeholder to stream into
-  const assistantId = crypto.randomUUID();
-  chat.messages = [
-    ...history,
-    { id: assistantId, role: 'assistant', content: '' },
-  ];
-
-  // Point at your own backend in production — never expose an API key in the browser.
-  const res = await fetch('/api/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      messages: history.map((m) => ({ role: m.role, content: m.content })),
-    }),
+  // createAssistantStream appends the in-flight assistant message and folds each
+  // delta onto its parts, always through a new array reference.
+  const stream = createAssistantStream((update) => {
+    chat.messages = update(chat.messages);
   });
 
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let answer = '';
+  try {
+    // Point at your own backend in production. Never expose an API key in the
+    // browser. toOpenAIMessages encodes the thread for the OpenAI wire, tool
+    // calls and their results included.
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: toOpenAIMessages(history) }),
+    });
 
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-
-    const lines = buffer.split('\n');
-    buffer = lines.pop(); // carry the incomplete line forward
-
-    for (const line of lines) {
-      const s = line.trim();
-      if (!s.startsWith('data:')) continue;
-      const payload = s.slice(5).trim();
-      if (payload === '[DONE]') continue;
-      try {
-        const delta = JSON.parse(payload).choices?.[0]?.delta?.content;
-        if (!delta) continue;
-        answer += delta;
-        // Replace the assistant placeholder with the growing answer
-        chat.messages = chat.messages.map((m) =>
-          m.id === assistantId ? { ...m, content: answer } : m
-        );
-      } catch {
-        // Ignore non-JSON keep-alive lines
-      }
-    }
+    // readOpenAIStream parses the SSE: keep-alive comments, multi-line frames,
+    // codepoints split across a socket boundary, tool calls, reasoning.
+    await readOpenAIStream(res, stream);
+  } finally {
+    stream.done();
+    chat.loading = false;
   }
-
-  chat.loading = false;
 });
 ```
+
+Both imports come from the package: `createAssistantStream` owns the message, `readOpenAIStream` fills it. For the tool loop, `readAnthropicStream`, custom formats and the error model, see the [wire adapter recipe](/guides/recipes/wire-adapter/).
 
 <Aside type="caution" title="Keep API keys server-side">
 Never send your LLM provider key to the browser. Point `fetch` at your own backend endpoint that authenticates the user and proxies the request.
@@ -97,7 +75,7 @@ If you are proxying an [OpenRouter](https://openrouter.ai) request on your serve
 }
 ```
 
-The SSE response follows the OpenAI streaming format (`data: {...}` lines, terminated with `data: [DONE]`) — the reader loop above handles it as-is.
+The SSE response follows the OpenAI streaming format (`data: {...}` lines, terminated with `data: [DONE]`), so `readOpenAIStream` reads it as-is. Forward `upstream.body` from your route untouched.
 
 This recipe is the *mechanic*. For connecting a specific provider, gateway, agent framework, or harness — and switching models from the chat header — see [Integrations](/integrations/overview/).
 
@@ -116,36 +94,21 @@ This recipe is the *mechanic*. For connecting a specific provider, gateway, agen
 
 ### Feeding an AsyncIterable
 
+This element wants plain text deltas, not message parts, so reach past the readers for `sseJson`, the same SSE decoder they use, exported on its own.
+
 ```js
 import '@kitn.ai/ui/elements';
+import { sseJson } from '@kitn.ai/ui/wire';
 
 await customElements.whenDefined('kai-response-stream');
 
 const el = document.querySelector('kai-response-stream');
 
+// sseJson yields one decoded frame per SSE event and stops at [DONE].
 async function* tokenStream(res) {
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-
-    const lines = buffer.split('\n');
-    buffer = lines.pop();
-
-    for (const line of lines) {
-      const s = line.trim();
-      if (!s.startsWith('data:')) continue;
-      const payload = s.slice(5).trim();
-      if (payload === '[DONE]') continue;
-      try {
-        const delta = JSON.parse(payload).choices?.[0]?.delta?.content;
-        if (delta) yield delta;
-      } catch { /* skip keep-alives */ }
-    }
+  for await (const frame of sseJson(res.body)) {
+    const delta = frame.choices?.[0]?.delta?.content;
+    if (delta) yield delta;
   }
 }
 
@@ -171,3 +134,47 @@ el.text = 'The assistant response rendered with the typewriter effect.';
 | Render finished markdown | `kai-markdown` with a `content` string |
 
 `kai-markdown` accepts only a static `content` string and renders it immediately — use it when the full text is available, not for live streaming.
+
+## Without the adapter
+
+If you would rather not add the import, here is the whole thing by hand. It handles text and nothing else: no tool calls, no reasoning, no citations. It also treats every `data:` line as a complete frame, and the SSE spec joins the several `data:` lines of one frame into a single payload, so parsing them separately drops that frame entirely. And it replaces the message's `parts` wholesale, which deletes any reasoning or tool panel already on the message it is streaming into. `readOpenAIStream` gets all three right, which is why the rest of this page uses it.
+
+```js
+// Seed the assistant placeholder yourself, since nothing else will.
+const assistantId = crypto.randomUUID();
+chat.messages = [...chat.messages, { id: assistantId, role: 'assistant', parts: [] }];
+
+const res = await fetch('/api/chat', { method: 'POST', body: '...' });
+
+const reader = res.body.getReader();
+const decoder = new TextDecoder();
+let buffer = '';
+let answer = '';
+
+while (true) {
+  const { value, done } = await reader.read();
+  if (done) break;
+  buffer += decoder.decode(value, { stream: true });
+
+  const lines = buffer.split('\n');
+  buffer = lines.pop(); // carry the incomplete line forward
+
+  for (const line of lines) {
+    const s = line.trim();
+    if (!s.startsWith('data:')) continue;
+    const payload = s.slice(5).trim();
+    if (payload === '[DONE]') continue;
+    try {
+      const delta = JSON.parse(payload).choices?.[0]?.delta?.content;
+      if (!delta) continue;
+      answer += delta;
+      // A new array AND a new message object, or the row will not re-render.
+      chat.messages = chat.messages.map((m) =>
+        m.id === assistantId ? { ...m, parts: [{ type: 'text', text: answer }] } : m
+      );
+    } catch {
+      // Ignore non-JSON keep-alive lines
+    }
+  }
+}
+```

@@ -40,7 +40,7 @@ Every `kai-*` web component follows the same two rules:
 
 ```js
 // Arrays and objects — set the property in JavaScript, not as an attribute
-el.messages = [{ id: '1', role: 'assistant', content: 'Hi' }];
+el.messages = [{ id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hi' }] }];
 
 // Scalars — fine as attributes or properties
 el.setAttribute('theme', 'dark');
@@ -81,7 +81,7 @@ el.addEventListener('kai-submit', (e) => console.log(e.detail.value));
       {
         id: crypto.randomUUID(),
         role: 'assistant',
-        content: 'Hello! How can I help?',
+        parts: [{ type: 'text', text: 'Hello! How can I help?' }],
         actions: ['copy', 'like', 'dislike'],
       },
     ];
@@ -93,21 +93,21 @@ el.addEventListener('kai-submit', (e) => console.log(e.detail.value));
       // Append the user message — always assign a new array
       const history = [
         ...chat.messages,
-        { id: crypto.randomUUID(), role: 'user', content: text },
+        { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text }] },
       ];
       chat.messages = history;
       chat.loading = true;
 
       // Create an empty assistant placeholder to stream into
       const aid = crypto.randomUUID();
-      chat.messages = [...history, { id: aid, role: 'assistant', content: '' }];
+      chat.messages = [...history, { id: aid, role: 'assistant', parts: [] }];
 
       let answer = '';
       for await (const token of streamFromYourAPI(history)) {
         answer += token;
         // Replace only the placeholder — every other message stays the same
         chat.messages = chat.messages.map((m) =>
-          m.id === aid ? { ...m, content: answer } : m,
+          m.id === aid ? { ...m, parts: [{ type: 'text', text: answer }] } : m,
         );
       }
 

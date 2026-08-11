@@ -317,7 +317,11 @@ export const T3Code: Story = {
             <div class="min-h-0 flex-1 overflow-y-auto">
               <div class="mx-auto flex max-w-3xl flex-col gap-5 px-6 py-6">
                 <kai-message
-                  ref={(el) => { const m = el as El; m.content = OVERVIEW_MD; m.avatar = 'none'; }}
+                  ref={(el) => {
+                    const m = el as El;
+                    m.message = { id: 't3code-overview', role: 'assistant', parts: [{ type: 'text', text: OVERVIEW_MD }] };
+                    m.avatar = 'none';
+                  }}
                   style={{ display: 'block' }}
                 ></kai-message>
 
@@ -470,7 +474,7 @@ export const T3Code: Story = {
 
   <!-- thread + composer -->
   <div slot="main">
-    <kai-message><!-- content set as a property: markdown table + prose --></kai-message>
+    <kai-message><!-- message set as a property: markdown table + prose --></kai-message>
     <div><!-- Changed files: the file tree renders its own summary header -->
       <kai-file-tree summary></kai-file-tree>
       <span>2:40:02 PM · 10s</span>
@@ -515,7 +519,10 @@ export const T3Code: Story = {
   nav.defaultCollapsed = ['quickpic', 'azure-bench', 'dumb-harness', 't3code-1'];
   nav.addEventListener('kai-nav-select', (e) => setHeader(e.detail.id));
 
-  document.querySelector('kai-message').content = '| Change | File | Notes |\\n| --- | --- | --- |\\n...';
+  document.querySelector('kai-message').message = {
+    id: 'overview', role: 'assistant',
+    parts: [{ type: 'text', text: '| Change | File | Notes |\\n| --- | --- | --- |\\n...' }],
+  };
   // Per-file diff stats + a summary header (count + summed +/- + Collapse-all).
   document.querySelector('kai-file-tree').files = [
     { path: 'public/robots.txt', additions: 4, deletions: 0, status: 'added' },

@@ -1,0 +1,25 @@
+: fixture: openai/keepalive-comments
+: capture: synthetic
+: provider: openrouter
+: model: openai/gpt-4o-mini
+: captured: 2026-08-10
+: source: examples/internal/openrouter-spike/FINDINGS.md, "The existing SSE reader is not enough" -> "Keep-alive comments. OpenRouter sends `: OPENROUTER PROCESSING` lines." The comment lines below are copied byte for byte from the live captures in this directory.
+: note: SYNTHETIC only in its ARRANGEMENT. Every live capture here opens with a run of `: OPENROUTER PROCESSING` comments, so the leading case is covered by real bytes; what no capture happened to produce is a keep-alive INTERLEAVED BETWEEN two data frames, which is the boundary the sse decoder has to survive. The text deltas are trimmed to two words so the recording sink assertion reads as an exact list.
+: request: {"model":"openai/gpt-4o-mini","stream":true,"messages":[{"role":"user","content":"Say hello world."}]}
+
+: OPENROUTER PROCESSING
+
+: OPENROUTER PROCESSING
+
+data: {"id":"gen-keepalive-1","object":"chat.completion.chunk","created":1786337900,"model":"openai/gpt-4o-mini","provider":"OpenAI","choices":[{"index":0,"delta":{"content":"Hello","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+: OPENROUTER PROCESSING
+
+data: {"id":"gen-keepalive-1","object":"chat.completion.chunk","created":1786337900,"model":"openai/gpt-4o-mini","provider":"OpenAI","choices":[{"index":0,"delta":{"content":" world","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+: OPENROUTER PROCESSING
+
+data: {"id":"gen-keepalive-1","object":"chat.completion.chunk","created":1786337900,"model":"openai/gpt-4o-mini","provider":"OpenAI","choices":[{"index":0,"delta":{"content":"","role":"assistant"},"finish_reason":"stop","native_finish_reason":"stop"}]}
+
+data: [DONE]
+

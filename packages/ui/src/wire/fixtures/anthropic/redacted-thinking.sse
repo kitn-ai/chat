@@ -1,0 +1,33 @@
+: fixture: anthropic/redacted-thinking
+: capture: synthetic
+: provider: anthropic
+: model: claude-sonnet-4-5
+: captured: 2026-08-10
+: request: {"model":"claude-sonnet-4-5","stream":true,"max_tokens":1024,"thinking":{"type":"enabled","budget_tokens":1024},"messages":[{"role":"user","content":"Think about it, then answer."}]}
+: source: https://platform.claude.com/docs/en/build-with-claude/thinking#redacted-thinking-blocks. The block is the documented shape verbatim: "A redacted_thinking block contains encrypted thinking content in a data field, with no readable text: {"type": "redacted_thinking", "data": "..."}". The surrounding event envelope follows the documented stream on https://platform.claude.com/docs/en/build-with-claude/streaming.
+: note: SYNTHETIC and expected to stay that way. A redacted_thinking block appears only when Anthropic's safety systems redact internal reasoning, which is not something a request can ask for. The `data` value below is a placeholder, NOT a real encrypted payload; only its presence and opacity are asserted. Revisit this file after the first real one is observed.
+
+event: message_start
+data: {"type":"message_start","message":{"id":"msg_02","type":"message","role":"assistant","model":"claude-sonnet-4-5","content":[],"stop_reason":null,"usage":{"input_tokens":37,"output_tokens":1}}}
+
+event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"redacted_thinking","data":"EroBCkYIARgCIkDx1VzGxQvSREDACTEDBLOBaGVyZQ=="}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":0}
+
+event: content_block_start
+data: {"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"The answer is 42."}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":1}
+
+event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":9}}
+
+event: message_stop
+data: {"type":"message_stop"}
+

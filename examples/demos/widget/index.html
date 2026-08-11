@@ -103,36 +103,54 @@
 
       // A short showcase conversation so opening the widget immediately demonstrates
       // markdown, code highlighting, reasoning, and a tool call.
+      // A message's content is an ordered `parts` array; there is no `content` string.
       chat.messages = [
-        { id: 'w', role: 'assistant', content: "Hi! I'm the **kitn** demo assistant. I can render markdown, highlight code, show reasoning and tool calls, and take attachments. Try a suggestion below 👇" },
+        { id: 'w', role: 'assistant', parts: [{ type: 'text', text: "Hi! I'm the **kitn** demo assistant. I can render markdown, highlight code, show reasoning and tool calls, and take attachments. Try a suggestion below 👇" }] },
       ];
       chat.suggestions = ['Show me a code sample', 'What can you do?', 'Run a quick benchmark'];
 
       // Suggestion / message → canned rich reply (streamed).
+      // `lead` holds the parts that come BEFORE the answer text (reasoning, tool
+      // panels); the answer is folded onto a trailing text part as it streams.
       function replyFor(text) {
         const t = text.toLowerCase();
         if (t.includes('code') || t.includes('sample'))
-          return { content: "Sure — here's a Python one-liner to read JSON:\n\n```python\nimport json\ndata = json.load(open(\"config.json\"))\nprint(data[\"name\"])\n```" };
+          return { lead: [], text: "Sure — here's a Python one-liner to read JSON:\n\n```python\nimport json\ndata = json.load(open(\"config.json\"))\nprint(data[\"name\"])\n```" };
         if (t.includes('benchmark'))
           return {
-            reasoning: { label: 'Thought for 2 seconds', text: 'Render 10k rows in both frameworks and time it.' },
-            tools: [{ type: 'run_benchmark', state: 'output-available', input: { items: 10000 }, output: { solid: '12.4ms', react: '89.2ms' }, toolCallId: 'c1' }],
-            content: '**SolidJS** rendered 10k rows in **12.4ms** vs React **89.2ms** — ~7× faster.',
+            lead: [
+              { type: 'reasoning', label: 'Thought for 2 seconds', text: 'Render 10k rows in both frameworks and time it.' },
+              { type: 'tool', tool: { type: 'run_benchmark', state: 'output-available', input: { items: 10000 }, output: { solid: '12.4ms', react: '89.2ms' }, toolCallId: 'c1' } },
+            ],
+            text: '**SolidJS** rendered 10k rows in **12.4ms** vs React **89.2ms** — ~7× faster.',
           };
-        return { content: 'I can:\n\n- Render **markdown** (lists, tables, links)\n- **Highlight code** in many languages\n- Show **reasoning** and **tool calls**\n- Accept **attachments** via the 📎 button\n\nAll inside this floating window, straight from the CDN.' };
+        return { lead: [], text: 'I can:\n\n- Render **markdown** (lists, tables, links)\n- **Highlight code** in many languages\n- Show **reasoning** and **tool calls**\n- Accept **attachments** via the 📎 button\n\nAll inside this floating window, straight from the CDN.' };
+      }
+
+      // Fold a delta onto the message's TRAILING text part, opening a new one when
+      // the last part is not text. Same function as appendTextPart in
+      // @kitn.ai/ui/state. Never replace `parts` wholesale: that drops the lead parts.
+      function appendText(parts, delta) {
+        const last = parts[parts.length - 1];
+        return last && last.type === 'text'
+          ? [...parts.slice(0, -1), { ...last, text: last.text + delta }]
+          : [...parts, { type: 'text', text: delta }];
       }
 
       function stream(reply) {
-        const words = (reply.content || '').split(' ');
+        const words = reply.text.split(' ');
         const id = 'a' + Date.now();
         let i = 0;
-        const base = chat.messages;
-        chat.messages = [...base, { id, role: 'assistant', content: '', reasoning: reply.reasoning, tools: reply.tools }];
+        // Seed the reasoning + tool parts; the answer streams in after them.
+        chat.messages = [...chat.messages, { id, role: 'assistant', parts: [...reply.lead] }];
         const timer = setInterval(() => {
+          const done = i + 1 >= words.length;
+          const delta = (i === 0 ? '' : ' ') + words[i];
           i += 1;
-          const done = i >= words.length;
           chat.messages = chat.messages.map((m) =>
-            m.id === id ? { ...m, content: words.slice(0, i).join(' '), actions: done ? ['copy', 'like'] : undefined } : m
+            m.id === id
+              ? { ...m, parts: appendText(m.parts, delta), actions: done ? ['copy', 'like'] : undefined }
+              : m
           );
           if (done) { clearInterval(timer); chat.loading = false; }
         }, 45);
@@ -140,8 +158,15 @@
 
       chat.addEventListener('kai-submit', (e) => {
         const value = (e.detail.value || '').trim();
-        if (!value && !(e.detail.attachments || []).length) return;
-        chat.messages = [...chat.messages, { id: 'u' + Date.now(), role: 'user', content: value, attachments: (e.detail.attachments || []).length ? e.detail.attachments : undefined }];
+        const files = e.detail.attachments || [];
+        if (!value && !files.length) return;
+        chat.messages = [...chat.messages, {
+          id: 'u' + Date.now(), role: 'user',
+          parts: [
+            ...(value ? [{ type: 'text', text: value }] : []),
+            ...files.map((attachment) => ({ type: 'file', attachment })),
+          ],
+        }];
         chat.loading = true;
         setTimeout(() => stream(replyFor(value)), 400);
       });

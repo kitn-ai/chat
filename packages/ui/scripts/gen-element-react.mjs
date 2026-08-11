@@ -38,7 +38,11 @@ export function writeReact(root, elements, IMPORTS) {
     .join('\n');
 
   const blocks = elements.map((el) => {
-    const propLines = el.props.flatMap((p) => [
+    // `universal` props (theme, injected by define.tsx for every element) are
+    // already declared on WebComponentProps, which every wrapper extends — so they
+    // are skipped here but still listed in propNames below, which is what tells the
+    // runtime to assign them as DOM properties.
+    const propLines = el.props.filter((p) => !p.universal).flatMap((p) => [
       ...(p.description ? [`  /** ${p.description} */`] : []),
       `  ${p.name}${p.optional ? '?' : ''}: ${clean(p.type, p.optional)};`,
     ]);
@@ -46,7 +50,7 @@ export function writeReact(root, elements, IMPORTS) {
       ...(e.description ? [`  /** ${e.description} */`] : []),
       `  ${onName(e.name)}?: (event: CustomEvent${e.detail ? `<${clean(e.detail, false)}>` : ''}) => void;`,
     ]);
-    const propNames = JSON.stringify(['theme', ...el.props.map((p) => p.name)]);
+    const propNames = JSON.stringify(el.props.map((p) => p.name));
     const eventMap = `{ ${el.events.map((e) => `${onName(e.name)}: '${e.name}'`).join(', ')} }`;
 
     const name = el.displayName;
@@ -79,7 +83,13 @@ export const ${name} = /*#__PURE__*/ createWebComponent<${propsName}>(
 import { createWebComponent, registerAll, type WebComponentProps } from './runtime';
 export { registerAll };
 export { useKaiChat } from './use-kai-chat';
-export type { UseKaiChatOptions, KaiChatController, ChatMessage } from './use-kai-chat';
+export type { UseKaiChatOptions, KaiChatController } from './use-kai-chat';
+// The content-model types, re-exported so a consumer can annotate a \`parts\`
+// array or an \`addSource\` argument without reaching into the main entry.
+export type {
+  ChatMessage, ChatMessageAction, CustomAction, AvatarData, FeedbackVote, MessagePart,
+  MessageSource, RawOrigin, ToolPart, ToolKind, CardEnvelope, AttachmentData,
+} from './use-kai-chat';
 export { useVoiceInput } from './use-voice-input';
 ${importLines}
 

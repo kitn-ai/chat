@@ -10,7 +10,13 @@
 import { createWebComponent, registerAll, type WebComponentProps } from './runtime';
 export { registerAll };
 export { useKaiChat } from './use-kai-chat';
-export type { UseKaiChatOptions, KaiChatController, ChatMessage } from './use-kai-chat';
+export type { UseKaiChatOptions, KaiChatController } from './use-kai-chat';
+// The content-model types, re-exported so a consumer can annotate a `parts`
+// array or an `addSource` argument without reaching into the main entry.
+export type {
+  ChatMessage, ChatMessageAction, CustomAction, AvatarData, FeedbackVote, MessagePart,
+  MessageSource, RawOrigin, ToolPart, ToolKind, CardEnvelope, AttachmentData,
+} from './use-kai-chat';
 export { useVoiceInput } from './use-voice-input';
 
 
@@ -39,8 +45,8 @@ export const AgentCard = /*#__PURE__*/ createWebComponent<AgentCardProps>(
 export interface ArtifactProps extends WebComponentProps {
   /** URL the preview iframe frames. Consumer-controlled. */
   src?: string;
-  /** Files for the Code tab tree + each file's preview `url`. Set as a JS property (array). */
-  files: { path: string; url?: undefined | string; code?: undefined | string; language?: undefined | string; type?: undefined | "html" | "pdf" | "image" | "other"; additions?: undefined | number; deletions?: undefined | number; status?: undefined | "added" | "modified" | "deleted" | "renamed" | "untracked" }[];
+  /** Files for the Code tab tree + each file's preview `url`. Omit for a preview-only artifact (the Code tab then has nothing to show; pair it with `no-tabs` to hide the toggle). Set as a JS property (array). */
+  files?: { path: string; url?: string; code?: string; language?: string; type?: "html" | "pdf" | "image" | "other"; additions?: number; deletions?: number; status?: "added" | "modified" | "deleted" | "renamed" | "untracked" }[];
   /** Controlled active tab: `preview` or `code`. When set, the artifact follows it (re-asserted on change). Leave unset for an uncontrolled tab (see `defaultTab`). */
   tab?: "preview" | "code";
   /** Uncontrolled INITIAL tab (used only when `tab` is unset). Default `preview`. Seeds the starting tab; the user can then switch freely without the consumer re-asserting a controlled `tab`. */
@@ -77,6 +83,8 @@ export interface ArtifactProps extends WebComponentProps {
   onFileSelect?: (event: CustomEvent<{ path: string }>) => void;
   /** Artifact's own maximize button toggled (consumer-observable; non-bubbling). */
   onMaximizeChange?: (event: CustomEvent<{ maximized: boolean }>) => void;
+  /** The maximize PROTOCOL intent, raised as a raw bubbling + composed CustomEvent (not through `dispatch`) so an enclosing `<kai-resizable>` can catch it and maximize the containing panel. Declared here so it is typed and reaches the generated API — listen for it to drive maximize from your own chrome, or re-emit it to trigger one. */
+  onMaximizeIntent?: (event: CustomEvent<{ requested: boolean }>) => void;
   /** Fired when the preview navigates. `detail.url` = the new location. */
   onNavigate?: (event: CustomEvent<{ url: string }>) => void;
   /** Fired when the Preview|Code tab changes. `detail.tab`. */
@@ -86,13 +94,13 @@ export interface ArtifactProps extends WebComponentProps {
 export const Artifact = /*#__PURE__*/ createWebComponent<ArtifactProps>(
   'kai-artifact',
   ["theme","src","files","tab","defaultTab","activeFile","sandbox","iframeTitle","maximized","expandable","openInTab","noNav","noReload","noHome","noPathField","noTabs","standalone","readonlyPath","displayUrl"],
-  { onFileSelect: 'kai-file-select', onMaximizeChange: 'kai-maximize-change', onNavigate: 'kai-navigate', onTabChange: 'kai-tab-change' },
+  { onFileSelect: 'kai-file-select', onMaximizeChange: 'kai-maximize-change', onMaximizeIntent: 'kai-maximize-intent', onNavigate: 'kai-navigate', onTabChange: 'kai-tab-change' },
   () => import('@kitn.ai/ui/elements/artifact'),
 );
 
 export interface AttachmentsProps extends WebComponentProps {
-  /** The attachments to render. Set as a JS property (array). */
-  items: { id: string; type: "file" | "source-document"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[];
+  /** The attachments to render. Omit (or pass an empty array) for the empty state, which shows `emptyText` if set and nothing otherwise. Set as a JS property (array). */
+  items?: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }[];
   /** Layout: `grid` = visual tiles, `inline` = icon + label chips, `list` = rows. */
   variant?: "grid" | "inline" | "list";
   /** Wrap each item in a hover card that previews its details. */
@@ -267,8 +275,8 @@ export const Cards = /*#__PURE__*/ createWebComponent<CardsProps>(
 );
 
 export interface ChainOfThoughtProps extends WebComponentProps {
-  /** The reasoning steps. Set as a JS property. Compound sub-parts collapse to this one data model (Route 1). Each `{ label, content?, id? }`. */
-  steps: { label: string; content?: undefined | string; id?: undefined | string }[];
+  /** The reasoning steps. Set as a JS property. Compound sub-parts collapse to this one data model (Route 1). Each `{ label, content?, id? }`. Omit to supply the steps as `<kai-step>` light-DOM children instead; when both are present the property's steps come first. */
+  steps?: { label: string; content?: string; id?: string }[];
   /** Open mode: `'multiple'` (default — any number of steps open at once) or `'single'` (at most one open; opening a step closes the others). */
   type?: "single" | "multiple";
   /** Controlled open step key(s). When set, it WINS over user interaction (the consumer owns the open set). String in `single` mode, string[] in `multiple` mode. Set as a JS property. */
@@ -287,8 +295,8 @@ export const ChainOfThought = /*#__PURE__*/ createWebComponent<ChainOfThoughtPro
 );
 
 export interface ChatProps extends WebComponentProps {
-  /** The full message thread to render, newest last. Each entry carries its role, content, and optional reasoning/tools/attachments/actions. Set as a JS property (`el.messages = [...]`). */
-  messages: { id: string; role: "user" | "assistant"; content: string; reasoning?: undefined | { text: string; label?: undefined | string }; tools?: undefined | { type: string; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: undefined | Record<string, unknown>; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string }[]; attachments?: undefined | { id: string; type: "file" | "source-document"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[]; actions?: undefined | ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | "like" | "dislike" }[];
+  /** Show a Search (Globe) button in the input toolbar; fires a `search` event. */
+  search?: boolean;
   /** Value of the input. A **string** is controlled (the host owns the text and updates it on `kai-value-change`). A **ComposerDoc** is a one-time seed that pre-populates pills; the user then edits freely. Leave unset for uncontrolled. */
   value?: string | ({ type: "text"; text: string } | { type: "entity"; entity: { kind: string; id: string; label: string; icon?: string; promptText?: string; data?: Record<string, unknown> } })[];
   /** Placeholder text shown in the empty input. */
@@ -333,8 +341,6 @@ export interface ChatProps extends WebComponentProps {
   composerActions?: boolean;
   /** INJECT — footer row below the composer (disclaimers, token meter, …). */
   footer?: boolean;
-  /** Show a Search (Globe) button in the input toolbar; fires a `search` event. */
-  search?: boolean;
   /** Show a Voice (Mic) button in the input toolbar; fires a `voice` event. */
   voice?: boolean;
   /** Rich entity triggers — each `{ char, kind, items }` opens a caret-anchored menu that inserts an atomic pill (`/` skills, `@` agents/plugins). Set as a JS property; forwarded to the input. */
@@ -343,6 +349,10 @@ export interface ChatProps extends WebComponentProps {
   kindIcons?: Record<string, string>;
   /** Whether each message's action bar is always visible (`'always'`, default) or only revealed on hover of that message row (`'hover'`). */
   actionsReveal?: "always" | "hover";
+  /** The full message thread to render, newest last. Each entry carries its role, ordered `parts`, and optional actions/avatar/feedback. Set as a JS property (`el.messages = [...]`); a NEW array reference per streaming chunk re-renders (mutating in place does not). Omit for an empty thread. Re-declared here (rather than inherited from `ChatThreadProps`) because the ELEMENT registers a `[]` default and renders the empty state without it, while the SolidJS `<ChatThread>` component still requires it — the facade hands it a validated array either way. Matches `<kai-thread>`. */
+  messages?: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: string; index?: number; streamId?: string; signature?: string; raw?: { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: "image" | "command" | "file-change" | "search" | "fetch" | "mcp" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } }; raw?: { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }; raw?: { source: string; payload: unknown } } | { type: "source"; source: { id?: string; url?: string; title?: string; snippet?: string; index?: number }; raw?: { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }; raw?: { source: string; payload: unknown } })[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" }[];
+  /** Optional card type -> custom-element tag overrides/additions for `card` parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type. */
+  cardTypes?: Record<string, string>;
   /** The staged attachments changed (file added or removed). Carries the full current list so a consumer can react in real time. */
   onAttachmentsChange?: (event: CustomEvent<{ attachments: { id: string; type: "file" | "source-document"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[] }>) => void;
   /** An action button on a message was clicked. `action` is the built-in name or custom id. `state` is present only for the toggleable feedback votes: `'on'` when a like/dislike is set, `'off'` when re-tapped to clear. */
@@ -363,7 +373,7 @@ export interface ChatProps extends WebComponentProps {
 
 export const Chat = /*#__PURE__*/ createWebComponent<ChatProps>(
   'kai-chat',
-  ["theme","messages","value","placeholder","loading","suggestions","suggestionMode","persistSuggestions","proseSize","codeTheme","codeHighlight","chatTitle","models","currentModel","context","scrollButton","headerStart","headerEnd","headerFull","sidebar","empty","composer","composerActions","footer","search","voice","triggers","kindIcons","actionsReveal"],
+  ["theme","search","value","placeholder","loading","suggestions","suggestionMode","persistSuggestions","proseSize","codeTheme","codeHighlight","chatTitle","models","currentModel","context","scrollButton","headerStart","headerEnd","headerFull","sidebar","empty","composer","composerActions","footer","voice","triggers","kindIcons","actionsReveal","messages","cardTypes"],
   { onAttachmentsChange: 'kai-attachments-change', onMessageAction: 'kai-message-action', onModelChange: 'kai-model-change', onSearch: 'kai-search', onSubmit: 'kai-submit', onSuggestionClick: 'kai-suggestion-click', onValueChange: 'kai-value-change', onVoice: 'kai-voice' },
   () => import('@kitn.ai/ui/elements/chat'),
 );
@@ -597,10 +607,10 @@ export const Context = /*#__PURE__*/ createWebComponent<ContextProps>(
 );
 
 export interface ConversationsProps extends WebComponentProps {
-  /** Pre-bucketed conversation groups (e.g. "Today", "Yesterday"), each with its own conversations. Use this when you want to control the grouping/headers yourself; otherwise pass a flat `conversations` array. Set as a JS property. */
-  groups: { id: string; userId?: undefined | string; teamId?: undefined | string; name: string; sortOrder: number; createdAt: string }[];
-  /** A flat list of conversation summaries; the component buckets them by recency for you. Ignored when `groups` is provided. Set as a JS property. */
-  conversations: { id: string; title: string; groupId?: undefined | string; scope: { type: "document" | "collection"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | "transcript" | "markdown"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[];
+  /** The list's section headers (`{ id, name, sortOrder, createdAt }`), rendered in array order. A group carries no conversations of its own; it is matched against `conversations` by id, so the two props are complementary rather than alternatives. Omit for an ungrouped list. Set as a JS property. */
+  groups?: { id: string; userId?: string; teamId?: string; name: string; sortOrder: number; createdAt: string }[];
+  /** Every conversation the list renders, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId` — or with a `groupId` matching no entry in `groups` — falls into a trailing "Ungrouped" section, so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. Omit to supply them as `<kai-conversation>` light-DOM children instead, or for the empty state. */
+  conversations?: { id: string; title: string; groupId?: string; scope: { type: "document" | "collection"; documentId?: string; filters?: { tags?: string[]; authors?: string[]; contentType?: "transcript" | "markdown"; dateRange?: { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: string }[];
   /** The id of the currently-open conversation, highlighted in the list. */
   activeId?: string;
   /** Controlled collapsed state. Set as a JS property (`el.collapsed = true`) to drive the rail from your app, updating it in response to `kai-collapse-toggle`. Omit for uncontrolled (the element manages it). Collapsed shrinks the rail to a floating reopen button. */
@@ -668,7 +678,7 @@ export interface EmbedProps extends WebComponentProps {
   /** Stable card id correlating every emitted event. Set as an attribute or property. */
   cardId?: string;
   /** The embed payload (provider + id/url + options). Set as a JS **property** (object). */
-  data?: { provider: "youtube" | "vimeo" | "generic"; id?: string; url?: string; title?: string; poster?: string; start?: number; aspectRatio?: "16:9" | "4:3" | "1:1" | "9:16" };
+  data?: { provider: "generic" | "youtube" | "vimeo"; id?: string; url?: string; title?: string; poster?: string; start?: number; aspectRatio?: "16:9" | "4:3" | "1:1" | "9:16" };
 }
 
 export const Embed = /*#__PURE__*/ createWebComponent<EmbedProps>(
@@ -890,7 +900,7 @@ export interface KbdProps extends WebComponentProps {
   /** Shortcut spec — tokens joined by `+` (e.g. `Mod+Shift+K`). Omit it to show default-slot content instead. Display only; the element does not bind keys. */
   keys?: string;
   /** `mac` uses ⌘/⌥, `other` uses Ctrl. `auto` (default) sniffs the OS. */
-  platform?: "other" | "auto" | "mac";
+  platform?: "auto" | "other" | "mac";
   /** Cap size: `sm` or `md`. Defaults to `md`. */
   size?: "sm" | "md";
 }
@@ -984,11 +994,9 @@ export const Menu = /*#__PURE__*/ createWebComponent<MenuProps>(
 
 export interface MessageProps extends WebComponentProps {
   /** The full message object. Set as a JS property. */
-  message?: { id: string; role: "user" | "assistant"; content: string; reasoning?: { text: string; label?: string }; tools?: { type: string; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; output?: Record<string, unknown>; toolCallId?: string; errorText?: string }[]; attachments?: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" };
+  message?: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: string; index?: number; streamId?: string; signature?: string; raw?: { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: "image" | "command" | "file-change" | "search" | "fetch" | "mcp" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } }; raw?: { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }; raw?: { source: string; payload: unknown } } | { type: "source"; source: { id?: string; url?: string; title?: string; snippet?: string; index?: number }; raw?: { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }; raw?: { source: string; payload: unknown } })[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" };
   /** Convenience for simple cases when not passing a `message` object. */
   role?: "user" | "assistant";
-  /** Convenience content (used when `message` is not set). */
-  content?: string;
   /** Force markdown on/off. Defaults to on for assistant, off for user. */
   markdown?: boolean;
   /** Text/markdown sizing for the message body. */
@@ -1005,20 +1013,22 @@ export interface MessageProps extends WebComponentProps {
   avatarFallback?: string;
   /** Avatar rail mode. `'none'` omits the avatar rail entirely so the body spans the full row (predictable layout when you never show avatars). Any other value keeps the default behaviour: the built-in avatar when one resolves, or your `slot="avatar"` content when projected (which REPLACES the built-in). */
   avatar?: string;
+  /** Optional card type -> custom-element tag overrides/additions for `card` parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type. */
+  cardTypes?: Record<string, string>;
   /** An action button was clicked. `action` is the built-in name or custom id. `state` is present only for the toggleable feedback votes: `'on'` when a like/dislike is set, `'off'` when re-tapped to clear. */
   onMessageAction?: (event: CustomEvent<{ messageId: string; action: string; state?: undefined | "on" | "off" }>) => void;
 }
 
 export const Message = /*#__PURE__*/ createWebComponent<MessageProps>(
   'kai-message',
-  ["theme","message","role","content","markdown","proseSize","codeTheme","codeHighlight","actionsReveal","avatarSrc","avatarFallback","avatar"],
+  ["theme","message","role","markdown","proseSize","codeTheme","codeHighlight","actionsReveal","avatarSrc","avatarFallback","avatar","cardTypes"],
   { onMessageAction: 'kai-message-action' },
   () => import('@kitn.ai/ui/elements/message'),
 );
 
 export interface ModelSwitcherProps extends WebComponentProps {
-  /** The selectable models. Set as a JS property (array). */
-  models: { id: string; name: string; provider?: undefined | string; description?: undefined | string; group?: undefined | string }[];
+  /** The selectable models. Set as a JS property (array). Omit to supply them as `<kai-model>` light-DOM children instead; when both are present the property's models come first. */
+  models?: { id: string; name: string; provider?: string; description?: string; group?: string }[];
   /** The currently-selected model id. Defaults to the first model. */
   currentModel?: string;
   /** Drive/observe the dropdown's open state (Shoelace-style: settable + reflected to the `open` attribute, the dropdown still self-manages on click/keyboard). Set `el.open = true`, or `<kai-model-switcher open>`; listen for `kai-open-change`. */
@@ -1210,7 +1220,7 @@ export interface PromptInputProps extends WebComponentProps {
   /** When set and `loading` is true, the send button is replaced by a Stop button (square icon, "Stop" aria-label). Clicking it fires `kai-stop`. */
   stoppable?: boolean;
   /** Send-button visibility. `'always'` (default) always shows it; `'auto'` shows it only when there's text/attachments (an empty composer hides it — Enter still submits). To hide it entirely (Enter-only), it's pure CSS: `::part(send){display:none}` — no prop needed. Restyle via `::part(send)`. The Stop button (`stoppable` + `loading`) is unaffected. */
-  submit?: "always" | "auto";
+  submit?: "auto" | "always";
   /** When `false`, hides the built-in paperclip attach button even though the element otherwise supports attachments. Use this when a `+` menu in `toolbar-start` already exposes "Add files", to avoid a duplicate control. Defaults to `true`. */
   attach?: boolean;
   /** Attachments to seed the input with (so a consumer can pre-populate staged files without an upload). Set as a JS property; the element then manages its own attachment state from there (add via the paperclip, remove per chip). */
@@ -1299,12 +1309,14 @@ export interface ResizableProps extends WebComponentProps {
   onChange?: (event: CustomEvent<{ sizes: number[] }>) => void;
   /** Observe layout maximize state. */
   onMaximizeChange?: (event: CustomEvent<{ maximized: boolean; index: null | number }>) => void;
+  /** Authoritative maximize state, dispatched as a raw composed CustomEvent (not through `dispatch`) onto the affected `<kai-resizable-item>` and, on restore, onto the group host. A nested element (e.g. `<kai-artifact>`) listens for it to reconcile its own toggle. */
+  onMaximizeState?: (event: CustomEvent<{ maximized: boolean }>) => void;
 }
 
 export const Resizable = /*#__PURE__*/ createWebComponent<ResizableProps>(
   'kai-resizable',
   ["theme","orientation","maximizedIndex","handle"],
-  { onChange: 'kai-change', onMaximizeChange: 'kai-maximize-change' },
+  { onChange: 'kai-change', onMaximizeChange: 'kai-maximize-change', onMaximizeState: 'kai-maximize-state' },
   () => import('@kitn.ai/ui/elements/resizable'),
 );
 
@@ -1323,12 +1335,13 @@ export interface ResizableItemProps extends WebComponentProps {
   collapsed?: boolean;
   onChange?: (event: CustomEvent<unknown>) => void;
   onMaximizeChange?: (event: CustomEvent<unknown>) => void;
+  onMaximizeState?: (event: CustomEvent<unknown>) => void;
 }
 
 export const ResizableItem = /*#__PURE__*/ createWebComponent<ResizableItemProps>(
   'kai-resizable-item',
   ["theme","size","min","max","locked","hidden","collapsed"],
-  { onChange: 'kai-change', onMaximizeChange: 'kai-maximize-change' },
+  { onChange: 'kai-change', onMaximizeChange: 'kai-maximize-change', onMaximizeState: 'kai-maximize-state' },
   () => import('@kitn.ai/ui/elements/resizable'),
 );
 
@@ -1353,10 +1366,10 @@ export const ResponseStream = /*#__PURE__*/ createWebComponent<ResponseStreamPro
 );
 
 export interface ScopePickerProps extends WebComponentProps {
-  /** Authors to offer as scope filters. Set as a JS property. */
-  availableAuthors: string[];
-  /** Tags to offer as scope filters. Set as a JS property. */
-  availableTags: string[];
+  /** Authors to offer as scope filters. Omit to drop the Authors section (for a tag-only picker). Set as a JS property. */
+  availableAuthors?: string[];
+  /** Tags to offer as scope filters. Omit to drop the Tags section (for an author-only picker). Set as a JS property. */
+  availableTags?: string[];
   /** The label shown on the trigger for the active scope. */
   currentLabel?: string;
   /** Drive/observe the dropdown's open state (Shoelace-style: settable + reflected to the `open` attribute, the dropdown still self-manages on click/keyboard). Set `el.open = true`, or `<kai-scope-picker open>`; listen for `kai-open-change`. */
@@ -1537,8 +1550,8 @@ export const Skeleton = /*#__PURE__*/ createWebComponent<SkeletonProps>(
 );
 
 export interface SkillsProps extends WebComponentProps {
-  /** The active skills to badge. Set as a JS property. */
-  skills: { id: string; name: string }[];
+  /** The active skills to badge. Set as a JS property. Omit to supply them as `<kai-skill>` light-DOM children instead; when both are present the property's skills come first. Nothing renders when there are none. */
+  skills?: { id: string; name: string }[];
 }
 
 export const Skills = /*#__PURE__*/ createWebComponent<SkillsProps>(
@@ -1569,8 +1582,8 @@ export const Source = /*#__PURE__*/ createWebComponent<SourceProps>(
 );
 
 export interface SourcesProps extends WebComponentProps {
-  /** The sources to render. Set as a JS property. */
-  sources: { href: string; title?: undefined | string; description?: undefined | string; label?: undefined | string; showFavicon?: undefined | boolean }[];
+  /** The sources to render. Set as a JS property. Omit to supply them as `<kai-source>` light-DOM children instead; when both are present the property's sources come first. */
+  sources?: { href: string; title?: string; description?: string; label?: string; showFavicon?: boolean }[];
   /** Show favicons on all items (per-item `showFavicon` overrides). */
   showFavicon?: boolean;
   /** When true, each citation chip is labelled with its 1-based index in the merged (prop + declarative-children) list (`[1]`, `[2]`, …) instead of the per-item `label` or domain fallback. HTML attribute: `numbered` (boolean — bare attribute or `numbered="true"`). JS property: `el.numbered = true`. */
@@ -1603,8 +1616,8 @@ export const Status = /*#__PURE__*/ createWebComponent<StatusProps>(
 );
 
 export interface SuggestionsProps extends WebComponentProps {
-  /** The suggestions. Strings, or `{ label, value }` when the displayed text and the emitted value differ. Set as a JS property. */
-  suggestions: (string | { label: string; value?: undefined | string; icon?: undefined | string })[];
+  /** The suggestions. Strings, or `{ label, value }` when the displayed text and the emitted value differ. Set as a JS property. Omit to supply them as `<kai-suggestion>` light-DOM children instead; when both are present the property's suggestions come first. */
+  suggestions?: (string | { label: string; value?: string; icon?: string })[];
   /** Chip style: `'outline'` (default), `'ghost'`, or `'default'` (filled). */
   variant?: "default" | "ghost" | "outline";
   /** Row height for `layout="list"`: `'md'` (default) or `'lg'` for taller rows. Chips are unaffected. */
@@ -1739,8 +1752,8 @@ export const ThinkingBar = /*#__PURE__*/ createWebComponent<ThinkingBarProps>(
 );
 
 export interface ThreadProps extends WebComponentProps {
-  /** The full message thread to render, newest last. Each entry carries its role, content, and optional reasoning/tools/attachments/actions/avatar. Set as a JS property (`el.messages = [...]`); a NEW array reference per streaming chunk re-renders (mutating in place does not). */
-  messages?: { id: string; role: "user" | "assistant"; content: string; reasoning?: { text: string; label?: string }; tools?: { type: string; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; output?: Record<string, unknown>; toolCallId?: string; errorText?: string }[]; attachments?: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" }[];
+  /** The full message thread to render, newest last. Each entry carries its role, ordered `parts`, and optional actions/avatar/feedback. Set as a JS property (`el.messages = [...]`); a NEW array reference per streaming chunk re-renders (mutating in place does not). */
+  messages?: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: string; index?: number; streamId?: string; signature?: string; raw?: { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: "image" | "command" | "file-change" | "search" | "fetch" | "mcp" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } }; raw?: { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }; raw?: { source: string; payload: unknown } } | { type: "source"; source: { id?: string; url?: string; title?: string; snippet?: string; index?: number }; raw?: { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }; raw?: { source: string; payload: unknown } })[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" }[];
   /** Show a typing indicator on the pending assistant turn — set while awaiting the assistant's reply. */
   loading?: boolean;
   /** Body/prose font scale for rendered markdown (`'xs' | 'sm' | 'base' | 'lg'`). Defaults to `'sm'`. */
@@ -1755,20 +1768,22 @@ export interface ThreadProps extends WebComponentProps {
   scrollButton?: boolean;
   /** Extra classes applied to the thread's inner root. */
   class?: string;
+  /** Optional card type -> custom-element tag overrides/additions for `card` parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type. */
+  cardTypes?: Record<string, string>;
   /** A message's action button was clicked. `action` is the built-in name (`copy` / `like` / `dislike` / `regenerate` / `edit`) or a custom id. `state` is present only for the toggleable feedback votes: `'on'` when a like/dislike is set, `'off'` when re-tapped to clear. */
   onMessageAction?: (event: CustomEvent<{ messageId: string; action: string; state?: undefined | "on" | "off" }>) => void;
 }
 
 export const Thread = /*#__PURE__*/ createWebComponent<ThreadProps>(
   'kai-thread',
-  ["theme","messages","loading","proseSize","codeTheme","codeHighlight","actionsReveal","scrollButton","class"],
+  ["theme","messages","loading","proseSize","codeTheme","codeHighlight","actionsReveal","scrollButton","class","cardTypes"],
   { onMessageAction: 'kai-message-action' },
   () => import('@kitn.ai/ui/elements/thread'),
 );
 
 export interface ToastRegionProps extends WebComponentProps {
-  /** The toasts to render. Newest is shown on top. Set as a JS property (array); pass a new array reference to update. */
-  toasts: { id: string; message: string; variant?: undefined | "error" | "info" | "success" | "warning" | "neutral"; appearance?: undefined | "pill" | "card"; inverse?: undefined | boolean; description?: undefined | string; action?: undefined | { label: string; onAction: () => void | false }; duration?: undefined | number; dismissible?: undefined | boolean; target?: undefined | HTMLElement }[];
+  /** The toasts to render. Newest is shown on top. Set as a JS property (array); pass a new array reference to update. Omit for an empty region, which is the normal resting state and how the imperative `toast()` API starts. */
+  toasts?: { id: string; message: string; variant?: "error" | "info" | "success" | "warning" | "neutral"; appearance?: "card" | "pill"; inverse?: boolean; description?: string; action?: { label: string; onAction: () => void | false }; duration?: number; dismissible?: boolean; target?: HTMLElement }[];
   /** Stack anchor: `'top-center'` (default), `'top-right'`, `'bottom-center'`, … */
   position?: "top-center" | "top-right" | "top-left" | "bottom-center" | "bottom-right" | "bottom-left";
   /** Max simultaneously-visible toasts; the rest queue. Defaults to `3`. */
@@ -1776,7 +1791,7 @@ export interface ToastRegionProps extends WebComponentProps {
   /** Stacking: 'expanded' (default, full column) | 'collapsed' (Sonner-style pile that expands on hover/focus). Attribute: stack. */
   stack?: "expanded" | "collapsed";
   /** Default appearance for this region's toasts: `'pill'` (default, compact) | `'card'` (richer, with a description line). A per-toast `appearance` wins. Attribute: `appearance`. */
-  appearance?: "pill" | "card";
+  appearance?: "card" | "pill";
   /** Default high-contrast inverse treatment for this region's toasts. A per-toast `inverse` wins. Off by default. Attribute: `inverse`. */
   inverse?: boolean;
   /** Container element to anchor this region to (JS property). Set by the store for a scoped region; unset = the global viewport region. */
@@ -1796,7 +1811,7 @@ export const ToastRegion = /*#__PURE__*/ createWebComponent<ToastRegionProps>(
 
 export interface ToolProps extends WebComponentProps {
   /** The tool-call to display. Set as a JS property. */
-  tool?: { type: string; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; output?: Record<string, unknown>; toolCallId?: string; errorText?: string };
+  tool?: { type: string; kind?: "image" | "command" | "file-change" | "search" | "fetch" | "mcp" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } };
   /** Drive/observe open state (Shoelace-style: settable + reflected to the `open` attribute; the element still self-manages on trigger click). Set `el.open = true`, or `<kai-tool open>`; listen for `kai-open-change`. */
   open?: boolean;
   /** Initial open state on mount (uncontrolled seed). */
@@ -1889,14 +1904,14 @@ export const VoiceOutput = /*#__PURE__*/ createWebComponent<VoiceOutputProps>(
 );
 
 export interface WorkspaceProps extends WebComponentProps {
-  /** Pre-bucketed conversation groups for the sidebar. Set as a JS property. */
-  groups: { id: string; userId?: undefined | string; teamId?: undefined | string; name: string; sortOrder: number; createdAt: string }[];
-  /** Flat conversation list (auto-bucketed if `groups` is empty). Set as a JS property. */
-  conversations: { id: string; title: string; groupId?: undefined | string; scope: { type: "document" | "collection"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | "transcript" | "markdown"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[];
+  /** The sidebar's section headers, rendered in array order. A group carries no conversations of its own; it is matched against `conversations` by id, so the two props are complementary rather than alternatives. Omit for an ungrouped sidebar. Set as a JS property. */
+  groups?: { id: string; userId?: string; teamId?: string; name: string; sortOrder: number; createdAt: string }[];
+  /** Every conversation in the sidebar, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId` — or with a `groupId` matching no entry in `groups` — falls into a trailing ungrouped section (headerless when `compact`), so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. Omit for an empty sidebar, or when `no-conversations` replaces the built-in list with your own `sidebar-header` content. */
+  conversations?: { id: string; title: string; groupId?: string; scope: { type: "document" | "collection"; documentId?: string; filters?: { tags?: string[]; authors?: string[]; contentType?: "transcript" | "markdown"; dateRange?: { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: string }[];
   /** Id of the open conversation, highlighted in the sidebar. */
   activeId?: string;
-  /** The active conversation's message thread, newest last. Set as a JS property. */
-  messages: { id: string; role: "user" | "assistant"; content: string; reasoning?: undefined | { text: string; label?: undefined | string }; tools?: undefined | { type: string; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: undefined | Record<string, unknown>; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string }[]; attachments?: undefined | { id: string; type: "file" | "source-document"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[]; actions?: undefined | ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | "like" | "dislike" }[];
+  /** The active conversation's message thread, newest last. Set as a JS property (`el.messages = [...]`); a NEW array reference per streaming chunk re-renders (mutating in place does not). Omit for an empty thread. */
+  messages?: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: string; index?: number; streamId?: string; signature?: string; raw?: { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: "image" | "command" | "file-change" | "search" | "fetch" | "mcp" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } }; raw?: { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }; raw?: { source: string; payload: unknown } } | { type: "source"; source: { id?: string; url?: string; title?: string; snippet?: string; index?: number }; raw?: { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }; raw?: { source: string; payload: unknown } })[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" }[];
   value?: string;
   placeholder?: string;
   loading?: boolean;
@@ -1932,6 +1947,8 @@ export interface WorkspaceProps extends WebComponentProps {
   compact?: boolean;
   /** Suppress the built-in ConversationList so the `sidebar-header` slot owns the whole rail flex region (for apps that supply their own rail nav). Default false. Attribute: `no-conversations`. */
   noConversations?: boolean;
+  /** Optional card type -> custom-element tag overrides/additions for `card` parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type. */
+  cardTypes?: Record<string, string>;
   /** A conversation was selected in the sidebar. */
   onConversationSelect?: (event: CustomEvent<{ id: string }>) => void;
   /** An action button on a message was clicked. `state` is present only for the toggleable feedback votes: `'on'` when a like/dislike is set, `'off'` when re-tapped to clear. */
@@ -1956,7 +1973,7 @@ export interface WorkspaceProps extends WebComponentProps {
 
 export const Workspace = /*#__PURE__*/ createWebComponent<WorkspaceProps>(
   'kai-workspace',
-  ["theme","groups","conversations","activeId","messages","value","placeholder","loading","suggestions","suggestionMode","proseSize","codeTheme","codeHighlight","chatTitle","models","currentModel","context","scrollButton","search","voice","triggers","kindIcons","sidebarWidth","sidebarMinWidth","sidebarMaxWidth","sidebarCollapsed","defaultSidebarCollapsed","collapseBelow","compact","noConversations"],
+  ["theme","groups","conversations","activeId","messages","value","placeholder","loading","suggestions","suggestionMode","proseSize","codeTheme","codeHighlight","chatTitle","models","currentModel","context","scrollButton","search","voice","triggers","kindIcons","sidebarWidth","sidebarMinWidth","sidebarMaxWidth","sidebarCollapsed","defaultSidebarCollapsed","collapseBelow","compact","noConversations","cardTypes"],
   { onConversationSelect: 'kai-conversation-select', onMessageAction: 'kai-message-action', onModelChange: 'kai-model-change', onNewChat: 'kai-new-chat', onSearch: 'kai-search', onSidebarToggle: 'kai-sidebar-toggle', onSubmit: 'kai-submit', onSuggestionClick: 'kai-suggestion-click', onValueChange: 'kai-value-change', onVoice: 'kai-voice' },
   () => import('@kitn.ai/ui/elements/chat-workspace'),
 );

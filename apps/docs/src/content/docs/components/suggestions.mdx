@@ -8,6 +8,7 @@ import Playground from '../../../components/Playground.tsx';
 import Example from '../../../components/Example.tsx';
 import PropTable from '../../../components/PropTable.astro';
 import EventTable from '../../../components/EventTable.astro';
+import DeclarativeChildrenTable from '../../../components/DeclarativeChildrenTable.astro';
 import ComposedFrom from '../../../components/ComposedFrom.astro';
 import Facts from '../../../components/Facts.astro';
 import NeedAHand from '../../../components/NeedAHand.astro';
@@ -44,6 +45,8 @@ Assign the `suggestions` property and listen for `kai-select`:
 ```
 
 For the declarative path, use `<kai-suggestion>` children — `value` sets the emitted value, text content is the label. Prop items render first; declarative children are appended after.
+
+<DeclarativeChildrenTable tag="kai-suggestions" />
 
 ## Examples
 

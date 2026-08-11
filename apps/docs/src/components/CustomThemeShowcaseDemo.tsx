@@ -13,10 +13,15 @@
 import { createSignal, onMount, onCleanup } from 'solid-js';
 import { loadKit } from './example/kit';
 
+interface MessagePart {
+  type: 'text';
+  text: string;
+}
+
 interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
-  content: string;
+  parts: MessagePart[];
   actions?: string[];
 }
 
@@ -92,13 +97,17 @@ const SEED_MESSAGES: ChatMessage[] = [
   {
     id: 'u1',
     role: 'user',
-    content: "This is the exact same `<kai-chat>` from the other examples — how is it this different?",
+    parts: [{ type: 'text', text: "This is the exact same `<kai-chat>` from the other examples — how is it this different?" }],
   },
   {
     id: 'a1',
     role: 'assistant',
-    content:
-      "Pure tokens. Nothing here pierces the Shadow DOM — every surface, the magenta accent, the cyan focus ring, the sharp corners and the `inline code` tint all come from a `--kai-*` override map set on the host.\n\n```css\nkai-chat {\n  --kai-color-primary: hsl(322 90% 58%);   /* magenta accent  */\n  --kai-color-ring:    hsl(186 95% 56%);   /* cyan focus glow */\n  --kai-radius:        0.25rem;            /* sharp corners   */\n}\n```\n\nThe aurora glow and the framed shell around me are **host-side chrome** — plain CSS on a wrapper, sitting entirely outside the element. Flip the site's theme and a second, matched token map takes over so it stays intentional in both modes.",
+    parts: [
+      {
+        type: 'text',
+        text: "Pure tokens. Nothing here pierces the Shadow DOM — every surface, the magenta accent, the cyan focus ring, the sharp corners and the `inline code` tint all come from a `--kai-*` override map set on the host.\n\n```css\nkai-chat {\n  --kai-color-primary: hsl(322 90% 58%);   /* magenta accent  */\n  --kai-color-ring:    hsl(186 95% 56%);   /* cyan focus glow */\n  --kai-radius:        0.25rem;            /* sharp corners   */\n}\n```\n\nThe aurora glow and the framed shell around me are **host-side chrome** — plain CSS on a wrapper, sitting entirely outside the element. Flip the site's theme and a second, matched token map takes over so it stays intentional in both modes.",
+      },
+    ],
     actions: ['copy', 'like', 'dislike'],
   },
 ];
@@ -131,8 +140,8 @@ export default function CustomThemeShowcaseDemo() {
     const aId = nextId();
     host.messages = [
       ...(host.messages ?? []),
-      { id: nextId(), role: 'user', content: text },
-      { id: aId, role: 'assistant', content: '' },
+      { id: nextId(), role: 'user', parts: [{ type: 'text', text }] },
+      { id: aId, role: 'assistant', parts: [] },
     ];
     (host as any).loading = true;
     const words = REPLY.split(/(\s+)/);
@@ -143,7 +152,7 @@ export default function CustomThemeShowcaseDemo() {
       const partial = words.slice(0, i).join('');
       const done = i >= words.length;
       host!.messages = (host!.messages ?? []).map((msg) =>
-        msg.id === aId ? { ...msg, content: partial, ...(done ? { actions: ['copy', 'like', 'dislike'] } : {}) } : msg,
+        msg.id === aId ? { ...msg, parts: [{ type: 'text', text: partial }], ...(done ? { actions: ['copy', 'like', 'dislike'] } : {}) } : msg,
       );
       if (!done) timer = window.setTimeout(tick, 38);
       else (host as any).loading = false;

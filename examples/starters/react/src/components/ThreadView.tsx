@@ -1,5 +1,6 @@
 import { Thread } from '@kitn.ai/ui/react';
 import type { ChatMessage } from '@kitn.ai/ui/react';
+import { partsToText } from '@kitn.ai/ui/state';
 import type { Theme } from '../App';
 
 interface ThreadViewProps {
@@ -31,7 +32,7 @@ export function ThreadView({ theme, messages }: ThreadViewProps) {
           const m = messages.find((x) => x.id === e.detail.messageId);
           if (!m) return;
           window.speechSynthesis.cancel();
-          window.speechSynthesis.speak(new SpeechSynthesisUtterance(m.content));
+          window.speechSynthesis.speak(new SpeechSynthesisUtterance(partsToText(m.parts)));
         }
       }}
     />

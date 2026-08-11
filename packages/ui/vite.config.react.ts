@@ -1,6 +1,55 @@
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
-import { resolve } from 'node:path';
+import { existsSync } from 'node:fs';
+import { dirname, relative, resolve, sep } from 'node:path';
+
+const distRoot = resolve(__dirname, 'dist');
+const srcRoot = resolve(__dirname, 'src');
+
+/**
+ * Rewrite `'../../src/x'` specifiers in the EMITTED declarations to the compiled
+ * `dist/` declaration that corresponds to them.
+ *
+ * The wrappers must import their types from `src/` in SOURCE: the leaf type modules
+ * (chat-types, tool-types, card-contract, …) are the only ones that typecheck under
+ * this config's `jsx: react-jsx`, since the `@kitn.ai/ui` barrel drags the whole
+ * SolidJS component tree in and every Solid `JSX.Element` then fails against React's.
+ *
+ * But tsc copies those specifiers into the OUTPUT verbatim, and `dist/react/` sits at
+ * the same depth under the package root as `frameworks/react/`, so `../../src/x` kept
+ * resolving — purely because the tarball still ships raw `src/`. Drop `src` from
+ * "files" (a reasonable size win) and every React type silently dies, which is the
+ * same defect that left `@kitn.ai/ui/provider` unable to typecheck at all.
+ *
+ * So: source imports source, output points at output. `scripts/verify-dts-boundaries.mjs`
+ * runs in postbuild and fails the build if any emitted .d.ts still reaches outside
+ * dist/ or names a dist path that does not exist.
+ */
+function srcSpecifiersToDist(filePath: string, content: string): string {
+  const outDir = dirname(filePath);
+  return content.replace(
+    /(['"])(?:\.\.\/)+src\/([^'"]+)\1/g,
+    (whole, quote: string, subpath: string) => {
+      // Probe the SOURCE tree, not dist/: vite.config.barrel.ts emits the dist
+      // declaration tree with `entryRoot: 'src'` (so src/a/b.ts -> dist/a/b.d.ts) and
+      // it runs AFTER this build, against a dist/ the main build just emptied. Source
+      // layout is what barrel will mirror, and it is available at any point in the chain.
+      // Resolve a directory to its explicit `/index` rather than leaving a bare
+      // directory import, which `moduleResolution: node16` consumers cannot resolve.
+      let target = subpath;
+      if (!['.ts', '.tsx'].some((ext) => existsSync(resolve(srcRoot, `${subpath}${ext}`)))) {
+        if (['.ts', '.tsx'].some((ext) => existsSync(resolve(srcRoot, subpath, `index${ext}`)))) {
+          target = `${subpath}/index`;
+        } else {
+          return whole; // let the boundary guard report it rather than inventing a path
+        }
+      }
+      let rel = relative(outDir, resolve(distRoot, target)).split(sep).join('/');
+      if (!rel.startsWith('.')) rel = `./${rel}`;
+      return `${quote}${rel}${quote}`;
+    },
+  );
+}
 
 // Fourth build (after main + provider; the MCP build can follow). Compiles the
 // React subpath entry (frameworks/react/index.tsx + its ./runtime) to a compiled
@@ -31,6 +80,11 @@ export default defineConfig({
       include: ['frameworks/react/**'],
       outDir: 'dist/react',
       entryRoot: 'frameworks/react',
+      // Keep the emitted declarations inside dist/ — see srcSpecifiersToDist above.
+      beforeWriteFile: (filePath, content) => ({
+        filePath,
+        content: srcSpecifiersToDist(filePath, content),
+      }),
     }),
   ],
   build: {

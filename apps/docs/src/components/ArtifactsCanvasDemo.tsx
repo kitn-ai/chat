@@ -6,6 +6,7 @@
  *  JS PROPERTIES, and the same-origin fixtures in public/artifact-demo/ frame
  *  live in the preview iframe. */
 import { onMount, onCleanup } from 'solid-js';
+import type { ChatMessage } from '@kitn.ai/ui';
 import { loadKit } from './example/kit';
 
 // Same-origin fixtures served from public/artifact-demo/ — BASE_URL is '/' (root);
@@ -115,15 +116,25 @@ const FILES: ProjectFile[] = [
   { path: 'src/store.ts', type: 'other', language: 'ts', code: STORE_TS },
 ];
 
-type ChatMsg = { id: string; role: 'user' | 'assistant'; content: string; actions?: string[] };
+// The kit's own message shape — an ordered `parts` array (text, reasoning, tool,
+// card, source, file), not a text-only stand-in. See @kitn.ai/ui's MessagePart.
+type ChatMsg = ChatMessage;
 
 const SEED_MESSAGES: ChatMsg[] = [
-  { id: 'm1', role: 'user', content: 'Scaffold a small landing page for Starboard with a light/dark theme toggle.' },
+  {
+    id: 'm1',
+    role: 'user',
+    parts: [{ type: 'text', text: 'Scaffold a small landing page for Starboard with a light/dark theme toggle.' }],
+  },
   {
     id: 'm2',
     role: 'assistant',
-    content:
-      'Done — the project is on the right. `index.html` and `about.html` share `styles.css`, and `src/theme.ts` persists the choice in `localStorage` via a tiny `writable` store. Click any file in the tree to open it in the canvas; HTML pages render live in the preview.',
+    parts: [
+      {
+        type: 'text',
+        text: 'Done — the project is on the right. `index.html` and `about.html` share `styles.css`, and `src/theme.ts` persists the choice in `localStorage` via a tiny `writable` store. Click any file in the tree to open it in the canvas; HTML pages render live in the preview.',
+      },
+    ],
     actions: ['copy', 'like', 'dislike'],
   },
 ];
@@ -181,8 +192,8 @@ export default function ArtifactsCanvasDemo(props: Props) {
     const aId = nextId();
     chatEl.messages = [
       ...(chatEl.messages ?? []),
-      { id: nextId(), role: 'user' as const, content: text },
-      { id: aId, role: 'assistant' as const, content: '' },
+      { id: nextId(), role: 'user' as const, parts: [{ type: 'text', text }] },
+      { id: aId, role: 'assistant' as const, parts: [] },
     ];
     (chatEl as any).loading = true;
     const words = REPLY.split(/(\s+)/);
@@ -194,7 +205,7 @@ export default function ArtifactsCanvasDemo(props: Props) {
       const done = i >= words.length;
       chatEl!.messages = (chatEl!.messages ?? []).map((m) =>
         m.id === aId
-          ? { ...m, content: partial, ...(done ? { actions: ['copy', 'like', 'dislike'] } : {}) }
+          ? { ...m, parts: [{ type: 'text', text: partial }], ...(done ? { actions: ['copy', 'like', 'dislike'] } : {}) }
           : m,
       );
       if (!done) timer = window.setTimeout(tick, 38);

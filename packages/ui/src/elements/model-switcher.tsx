@@ -6,8 +6,10 @@ import type { DropdownController } from '../ui/dropdown';
 import type { ModelOption } from '../types';
 
 interface Props extends Record<string, unknown> {
-  /** The selectable models. Set as a JS property (array). */
-  models: ModelOption[];
+  /** The selectable models. Set as a JS property (array). Omit to supply them as
+   *  `<kai-model>` light-DOM children instead; when both are present the
+   *  property's models come first. */
+  models?: ModelOption[];
   /** The currently-selected model id. Defaults to the first model. */
   currentModel?: string;
   /** Drive/observe the dropdown's open state (Shoelace-style: settable + reflected

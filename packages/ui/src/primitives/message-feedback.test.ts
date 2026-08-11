@@ -30,7 +30,7 @@ Object.assign(globalThis, { navigator: { ...globalThis.navigator, clipboard: { w
 import { createMessageFeedback } from './message-feedback';
 
 const msg = (over: Partial<ChatMessage> = {}): ChatMessage =>
-  ({ id: 'm1', role: 'assistant', content: 'Hello', ...over });
+  ({ id: 'm1', role: 'assistant', parts: [{ type: 'text', text: 'Hello' }], ...over });
 
 describe('createMessageFeedback', () => {
   beforeEach(() => { toastSpy.mockClear(); writeText.mockClear(); });
@@ -69,7 +69,7 @@ describe('createMessageFeedback', () => {
       const fb = createMessageFeedback({ emit: vi.fn() });
       const controlled = msg({ feedback: 'like' });
       // even after an internal dislike, the controlled value wins
-      fb.handleAction({ id: 'm1', content: 'x' }, 'dislike');
+      fb.handleAction({ id: 'm1', parts: [{ type: 'text', text: 'x' }] }, 'dislike');
       expect(fb.resolveFeedback(controlled)).toBe('like');
       dispose();
     });
@@ -80,7 +80,7 @@ describe('createMessageFeedback', () => {
     createRoot((dispose) => {
       const emit = vi.fn();
       const fb = createMessageFeedback({ emit });
-      const m = msg({ content: 'Copy me' });
+      const m = msg({ parts: [{ type: 'text', text: 'Copy me' }] });
 
       fb.handleAction(m, 'copy');
       expect(writeText).toHaveBeenCalledWith('Copy me');
@@ -90,6 +90,25 @@ describe('createMessageFeedback', () => {
 
       vi.advanceTimersByTime(2000);
       expect(fb.isCopied('m1')).toBe(false);
+      dispose();
+    });
+  });
+
+  it('copy concatenates only text parts, skipping reasoning/tool/card parts', () => {
+    createRoot((dispose) => {
+      const fb = createMessageFeedback({ emit: vi.fn() });
+      const m = msg({
+        parts: [
+          { type: 'text', text: 'A' },
+          { type: 'reasoning', text: 'thinking...' },
+          { type: 'tool', tool: { type: 'get_weather', state: 'output-available' } },
+          { type: 'card', envelope: { type: 'weather-card', id: 'c1', data: {} } },
+          { type: 'text', text: 'B' },
+        ],
+      });
+
+      fb.handleAction(m, 'copy');
+      expect(writeText).toHaveBeenCalledWith('AB');
       dispose();
     });
   });

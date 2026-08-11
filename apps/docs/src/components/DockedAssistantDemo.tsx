@@ -32,7 +32,11 @@ export default function DockedAssistantDemo(props: Props) {
     const text = (e as CustomEvent).detail?.value?.trim();
     if (!text || !host) return;
     const aId = nid();
-    host.messages = [...(host.messages ?? []), { id: nid(), role: 'user', content: text }, { id: aId, role: 'assistant', content: '' }];
+    host.messages = [
+      ...(host.messages ?? []),
+      { id: nid(), role: 'user', parts: [{ type: 'text', text }] },
+      { id: aId, role: 'assistant', parts: [] },
+    ];
     (host as any).loading = true;
     const words = reply(text).split(/(\s+)/);
     let i = 0;
@@ -41,7 +45,9 @@ export default function DockedAssistantDemo(props: Props) {
       i += 2;
       const done = i >= words.length;
       host!.messages = (host!.messages ?? []).map((m) =>
-        m.id === aId ? { ...m, content: words.slice(0, i).join(''), ...(done ? { actions: ['copy', 'like', 'dislike'] } : {}) } : m,
+        m.id === aId
+          ? { ...m, parts: [{ type: 'text', text: words.slice(0, i).join('') }], ...(done ? { actions: ['copy', 'like', 'dislike'] } : {}) }
+          : m,
       );
       if (!done) timer = window.setTimeout(tick, 38);
       else (host as any).loading = false;

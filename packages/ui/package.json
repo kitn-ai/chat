@@ -100,12 +100,24 @@
       "types": "./dist/react/index.d.ts",
       "default": "./dist/react.js"
     },
+    "./solid": {
+      "types": "./dist/solid.d.ts",
+      "worker": "./dist/solid.server.js",
+      "browser": "./dist/solid.js",
+      "deno": "./dist/solid.server.js",
+      "node": "./dist/solid.server.js",
+      "default": "./dist/solid.js"
+    },
     "./state": {
       "types": "./dist/state/index.d.ts",
       "default": "./dist/state.js"
     },
+    "./wire": {
+      "types": "./dist/wire/index.d.ts",
+      "default": "./dist/wire.js"
+    },
     "./provider": {
-      "types": "./dist/kai-provider.d.ts",
+      "types": "./dist/remote/provider.d.ts",
       "default": "./dist/kai-provider.es.js"
     }
   },
@@ -118,6 +130,7 @@
     "!src/**/*.test.tsx",
     "!src/**/*.mdx",
     "!src/stories",
+    "!src/wire/fixtures",
     "!src/elements/logos",
     "frameworks",
     "theme.css",
@@ -128,13 +141,18 @@
   "scripts": {
     "prepublishOnly": "npm run build",
     "prebuild": "npm run build:css",
-    "build": "vite build --config vite.config.ts && vite build --config vite.config.provider.ts && vite build --config vite.config.react.ts && vite build --config vite.config.barrel.ts && vite build --config vite.config.barrel.server.ts && vite build --config vite.config.state.ts && vite build --config vite.config.mcp.ts && npm run build:elements && node scripts/verify-elements-bundle.mjs && node scripts/verify-react-wrappers.mjs && node scripts/verify-shader-lazy.mjs",
+    "build": "vite build --config vite.config.ts && vite build --config vite.config.provider.ts && vite build --config vite.config.react.ts && vite build --config vite.config.barrel.ts && vite build --config vite.config.barrel.server.ts && vite build --config vite.config.solid.ts && vite build --config vite.config.solid.server.ts && vite build --config vite.config.state.ts && vite build --config vite.config.wire.ts && vite build --config vite.config.mcp.ts && npm run build:elements && node scripts/verify-elements-bundle.mjs && node scripts/verify-react-wrappers.mjs && node scripts/verify-shader-lazy.mjs",
     "build:elements": "node scripts/gen-elements-manifest.mjs && vite build --config vite.config.elements.ts && node scripts/gen-element-dts.mjs",
-    "postbuild": "npm run build:theme && npm run build:api && npm run build:schemas",
+    "postbuild": "npm run build:theme && npm run build:api && npm run build:schemas && npm run build:subpath-dts && npm run verify:dts",
     "build:theme": "node scripts/build-theme-tokens.mjs",
     "build:api": "node scripts/gen-element-api.mjs",
     "build:schemas": "node scripts/copy-card-schemas.mjs",
+    "build:subpath-dts": "node scripts/emit-subpath-dts.mjs",
     "verify:consumer": "node scripts/verify-consumer-sideeffects.mjs",
+    "verify:dts": "node scripts/verify-dts-boundaries.mjs",
+    "verify:dts:consumer": "node scripts/verify-dts-consumer.mjs",
+    "verify:scaffold": "node scripts/verify-scaffold-compiles.mjs",
+    "verify:solid-coverage": "node scripts/verify-solid-coverage.mjs",
     "verify:ssr": "node scripts/verify-ssr-imports.mjs",
     "test": "vitest run",
     "test:react": "vitest run --config vitest.react.config.ts",
@@ -169,6 +187,12 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@angular/ssr": "^22.0.0",
+    "@cloudflare/workers-types": "^5.20260810.1",
+    "@langchain/core": "^1.2.5",
+    "@langchain/langgraph": "^1.4.9",
+    "@langchain/openai": "^1.5.6",
+    "@mastra/client-js": "^1.38.0",
     "@playwright/test": "^1.60.0",
     "@shikijs/langs": "^4.2.0",
     "@shikijs/themes": "^4.2.0",
@@ -177,19 +201,25 @@
     "@storybook/addon-docs": "^10.3.5",
     "@storybook/addon-themes": "^10.3.5",
     "@storybook/addon-vitest": "^10.3.5",
+    "@sveltejs/kit": "^2.70.2",
     "@tailwindcss/cli": "^4.3.0",
     "@tailwindcss/postcss": "^4.2.2",
     "@tailwindcss/typography": "^0.5.19",
+    "@tanstack/react-router": "^1.170.25",
+    "@tanstack/react-start": "^1.168.42",
     "@testing-library/jest-dom": "^6.0.0",
     "@testing-library/react": "^16.3.2",
+    "@types/express": "^5.0.6",
     "@types/node": "^26.0.0",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.7.0",
     "@vitest/browser-playwright": "4.1.2",
     "@vitest/coverage-v8": "4.1.2",
+    "ai": "^7.0.59",
     "axe-core": "^4.12.1",
     "concurrently": "^10.0.3",
+    "express": "^5.2.1",
     "http-server": "^14.1.1",
     "jsdom": "^24.0.0",
     "playwright": "^1.59.1",

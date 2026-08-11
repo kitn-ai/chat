@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { scaffold } from './tools/scaffold';
+import { getIntegration, listIntegrations } from '../registry';
+// The real encoders, used to prove WHY the fabricated sample seed had to go:
+// one of them throws on it, the other quietly sends it.
+import { toAnthropicMessages, toOpenAIMessages, WireEncodeError } from '../../wire/encode';
+import type { ChatMessage } from '../../elements/chat-types';
 
 /**
  * scaffold composes a working chat surface from four axes:
@@ -21,7 +26,8 @@ describe('scaffold', () => {
     // React branch now uses the @kitn.ai/ui/react wrapper (<Chat />) — no raw kai-chat tag.
     expect(text).toMatch(/<Chat\b|<kai-chat/);
     expect(text).toMatch(/openrouter\.ai\/api\/v1\/chat\/completions/);
-    expect(text).toMatch(/Streaming recipe/);
+    // The stream note points at the adapter that actually reads it.
+    expect(text).toMatch(/readOpenAIStream/);
   });
 
   it('pydantic-ai emits a Python (FastAPI) route', async () => {
@@ -75,6 +81,256 @@ describe('scaffold', () => {
     expect(text).toMatch(/width:\s*\d/);
     expect(text).toMatch(/height:\s*\d/);
     expect(text).not.toMatch(/height:\s*100dvh/);
+  });
+
+  /**
+   * full-page has to be full-page in a STOCK starter, not just in an empty page.
+   *
+   * `height: 100dvh` was full-page only when nothing above it interfered, and in
+   * the templates consumers actually run something always did: Vite's `react-ts`
+   * caps and centres `#root` (measured: chat at x=78, 1124px wide, text-align
+   * computed `center`), and the official TanStack Start starter wraps every route
+   * in a Header + Footer (measured: composer bottom 813px against an 800px
+   * viewport — 13px below the fold). Both are fixed at once by taking the surface
+   * out of flow, which is why this asserts the mechanism and not just the numbers.
+   *
+   * Every framework, because the whole point of the fix is that it is NOT a
+   * per-framework patch.
+   */
+  it('full-page escapes the stock starter chrome in every framework (fixed + inset + z-index + text-align)', async () => {
+    /**
+     * Asserted against the emitted STYLE DECLARATION, never the whole scaffold.
+     *
+     * The first draft of this test matched `position:\s*fixed` (and inset, and
+     * text-align, and `placement: "inline"`) anywhere in the output — and every
+     * one of those passed against the UNFIXED scaffolder, because the comment
+     * this fix also adds talks about all four. Four assertions out of six were
+     * reading the prose that describes the fix instead of the fix. Pinning the
+     * exact declaration per syntax family is what makes this discriminate.
+     */
+    const EXPECTED: Record<string, string> = {
+      // html / vue / svelte / angular emit a CSS string.
+      css: 'position: fixed; inset: 0; display: flex; flex-direction: column; text-align: start; z-index: 1000;',
+      // react / next / tanstack-start emit a camelCased React style object.
+      jsx: "position: 'fixed', inset: '0', display: 'flex', flexDirection: 'column', textAlign: 'start', zIndex: '1000'",
+      // solid's style prop is csstype's HYPHENATED set, applied via setProperty.
+      solid:
+        "'position': 'fixed', 'inset': '0', 'display': 'flex', 'flex-direction': 'column', 'text-align': 'start', 'z-index': '1000'",
+    };
+    const FAMILY: Record<string, keyof typeof EXPECTED> = {
+      html: 'css', vue: 'css', svelte: 'css', angular: 'css',
+      react: 'jsx', next: 'jsx', 'tanstack-start': 'jsx',
+      solid: 'solid',
+    };
+
+    for (const framework of Object.keys(FAMILY)) {
+      const out = await scaffold.handler({
+        useCase: 'drop-in-chat',
+        integration: 'mock',
+        placement: 'full-page',
+        framework,
+      });
+      const text = (out.content as { type: string; text: string }[])[0].text;
+      const decl = EXPECTED[FAMILY[framework]];
+
+      // Out of flow (an ancestor's width cap, padding and flex centring stop
+      // applying, and a sibling header/footer stops consuming height), pinned to
+      // all four edges, un-centred (text-align INHERITS through the shadow
+      // boundary regardless of positioning), and stacked above a sticky header
+      // (TanStack's is `sticky top-0 z-50`).
+      expect(text, `${framework}: full-page container style must be exactly \`${decl}\``).toContain(decl);
+
+      // The old value is GONE from the code, not merely supplemented. Scoped to
+      // the emitted style attributes/objects: the explanatory comment names
+      // `height: 100dvh` on purpose, and must not satisfy this.
+      const styles = [
+        ...text.matchAll(/style=(?:"([^"]*)"|\{\{([^}]*)\}\})/g),
+      ].map((m) => m[1] ?? m[2]);
+      expect(styles.length, `${framework}: no style declaration found to check`).toBeGreaterThan(0);
+      for (const s of styles) {
+        expect(s, `${framework}: 100dvh is the defect, not the fix`).not.toMatch(/100dvh/);
+      }
+
+      // And it has to SAY so, because the trade (it covers your nav) is real.
+      expect(text, `${framework}: must state the trade and point at 'inline'`).toContain(
+        'Want the chat to sit INSIDE your own layout instead? Use placement: "inline".',
+      );
+    }
+  });
+
+  /**
+   * Svelte 5 RUNES, not Svelte 4.
+   *
+   * The scaffold used to emit `$:` and `on:kai-submit` and claim in a comment that
+   * it "works in Svelte 5 via legacy mode". That claim expired: `sv create` writes
+   * `runes: true` project-wide into its vite.config.ts, where `$:` is a hard error
+   * in BOTH svelte-check and vite build — measured on a fresh app:
+   *   "`$:` is not allowed in runes mode, use `$derived` or `$effect` instead".
+   *
+   * Every archetype, because the sources companion carried its own `$:` block.
+   */
+  it('svelte emits Svelte 5 runes, never Svelte 4 syntax (sv create forces runes mode)', async () => {
+    for (const useCase of ['drop-in-chat', 'knowledge-base', 'agentic', 'workspace'] as const) {
+      for (const integration of ['mock', 'openrouter'] as const) {
+        const out = await scaffold.handler({ useCase, integration, placement: 'full-page', framework: 'svelte' });
+        const text = (out.content as { type: string; text: string }[])[0].text;
+        const front = text.split('=== (2) BACKEND ROUTE ===')[0];
+        const label = `${useCase}/${integration}`;
+
+        // No legacy reactive statement anywhere, including the sources block.
+        expect(front, `${label}: \`$:\` is a hard error in runes mode`).not.toMatch(/^\s*\$:/m);
+        // No legacy event directive: `on:` is deprecated in runes mode and warns.
+        expect(front, `${label}: on: directive is deprecated in runes mode`).not.toMatch(/\son:[a-z-]+=\{/);
+        expect(front, `${label}: the submit listener must be an on* attribute`).toContain(
+          'onkai-submit={onSubmit}',
+        );
+        // Runes for every binding that is written to.
+        expect(front, `${label}: reactivity must be $effect`).toMatch(/\$effect\(\(\) => \{/);
+        expect(front, `${label}: messages must be raw state (new array per chunk)`).toContain(
+          'let messages = $state.raw<ChatMessage[]>(',
+        );
+        expect(front, `${label}: bind:this target must be $state under runes`).toContain(
+          'let chatEl = $state<KaiChatElement | undefined>(undefined)',
+        );
+        expect(front, `${label}: loading is reassigned, so it must be $state`).toContain(
+          'let loading = $state(false)',
+        );
+        // And the stale claim must be gone.
+        expect(front, `${label}: still claims legacy mode works`).not.toMatch(/legacy mode/i);
+      }
+    }
+  });
+
+  /**
+   * SvelteKit reads secrets through `$env/dynamic/private`, not `process.env`.
+   *
+   * A fresh `sv create` app installs no `@types/node`, so `process` is not a name
+   * that exists. Measured on that app: `svelte-check` reports
+   * "Cannot find name 'process'. Do you need to install type definitions for
+   * node?" — 1 error before, 0 after.
+   *
+   * (That reproduction needs care: a `node_modules` symlink anywhere ABOVE the app
+   * puts @types/node back in scope, because TypeScript walks up for @types, and
+   * the error silently disappears.)
+   */
+  it('the svelte route reads env through $env/dynamic/private, not process.env', async () => {
+    // Every integration whose portable handler reads an env var.
+    for (const integration of ['openrouter', 'cloudflare', 'mastra'] as const) {
+      const out = await scaffold.handler({
+        useCase: 'drop-in-chat', integration, placement: 'full-page', framework: 'svelte',
+      });
+      const text = (out.content as { type: string; text: string }[])[0].text;
+      const route = text.split('=== (2) BACKEND ROUTE ===')[1].split('=== (3)')[0];
+      const code = route.split('\n').filter((l) => !l.startsWith('#')).join('\n');
+
+      expect(code, `${integration}: missing the $env import`).toContain(
+        "import { env } from '$env/dynamic/private';",
+      );
+      expect(code, `${integration}: still reads process.env — TS2580 without @types/node`).not.toMatch(
+        /\bprocess\.env\./,
+      );
+    }
+  });
+
+  /**
+   * ...and ONLY svelte. `process.env` is correct for every other host: Next, the
+   * Vite middleware and Express all run on Node with @types/node installed, and
+   * the Worker route's own comment prescribes nodejs_compat. Rewriting those would
+   * be a regression, so the rewrite has to be scoped to the framework that needs it.
+   */
+  it('the $env rewrite does not leak into the other hosts', async () => {
+    for (const framework of ['next', 'react', 'express', 'worker'] as const) {
+      const out = await scaffold.handler({
+        useCase: 'drop-in-chat', integration: 'openrouter', placement: 'full-page', framework,
+      });
+      const text = (out.content as { type: string; text: string }[])[0].text;
+      const route = text.split('=== (2) BACKEND ROUTE ===')[1].split('=== (3)')[0];
+      expect(route, `${framework}: got SvelteKit's $env import`).not.toContain('$env/dynamic/private');
+      expect(route, `${framework}: lost its process.env access`).toMatch(/\bprocess\.env\./);
+    }
+  });
+
+  /**
+   * SCAF-3: Vue's isCustomElement is its own emitted STEP, not a buried comment.
+   *
+   * It used to be an HTML comment above the `<script setup>` block — and block (1)
+   * IS a `<script setup>` + `<template>` pair, so anyone copying "the component"
+   * copies past it. Verified in a stock `create-vite vue-ts` app: skipping it logs
+   * `[Vue warn]: Failed to resolve component: kai-chat`, and applying block (0)
+   * clears it.
+   *
+   * (Measured honestly: the app still RENDERS without it — Vue falls back to a
+   * native element — so this asserts the warning and the step, not a blank page.)
+   */
+  it('vue emits isCustomElement as its own setup block, ahead of the component', async () => {
+    const out = await scaffold.handler({
+      useCase: 'drop-in-chat', integration: 'mock', placement: 'full-page', framework: 'vue',
+    });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+
+    expect(text).toContain('=== (0) REQUIRED SETUP — do this FIRST ===');
+    // It has to come BEFORE the front end, or it is the same buried note again.
+    expect(text.indexOf('=== (0) REQUIRED SETUP')).toBeLessThan(text.indexOf('=== (1) FRONT-END'));
+
+    const setup = text.split('=== (0) REQUIRED SETUP — do this FIRST ===')[1].split('=== (1) FRONT-END')[0];
+    // A real, complete, pasteable vite.config.ts — not a prose fragment.
+    expect(setup).toContain("import vue from '@vitejs/plugin-vue';");
+    expect(setup).toContain("import { defineConfig } from 'vite';");
+    expect(setup).toContain("isCustomElement: (tag) => tag.startsWith('kai-'),");
+    // And it must name the warning it removes, in Vue's own words.
+    expect(setup).toContain('[Vue warn]: Failed to resolve component: kai-chat');
+
+    // No other framework gets a block (0) it does not need.
+    for (const framework of ['react', 'svelte', 'html', 'angular', 'solid', 'next'] as const) {
+      const other = await scaffold.handler({
+        useCase: 'drop-in-chat', integration: 'mock', placement: 'full-page', framework,
+      });
+      const otherText = (other.content as { type: string; text: string }[])[0].text;
+      expect(otherText, `${framework}: unexpected block (0)`).not.toContain('=== (0) REQUIRED SETUP');
+    }
+  });
+
+  /**
+   * TS2835: relative imports in the emitted Vite-middleware route need explicit
+   * extensions, because the stock `tsconfig.node.json` is `"module": "nodenext"`.
+   *
+   * Measured in stock create-vite react-ts AND vue-ts apps:
+   *   vite.config.ts(1,31): error TS2835: Relative import paths need explicit
+   *   file extensions ... Did you mean './vite-chat-api.js'?
+   * `.js` is the correct form even though the file is `.ts` — tsc maps it, and so
+   * does Vite's config loader (proved by POST /api/chat answering 401 from the
+   * provider rather than 404).
+   *
+   * The handler also moves OUT of `src/`: a create-vite app's tsconfig.app.json is
+   * `"include": ["src"]` with no node types, so `src/server/chat.ts` was compiled
+   * by the BROWSER project too and failed TS2591 on `process`.
+   */
+  it('the vite-middleware route uses extensioned imports and keeps the handler out of src/', async () => {
+    for (const framework of ['react', 'vue', 'solid'] as const) {
+      const out = await scaffold.handler({
+        useCase: 'drop-in-chat', integration: 'openrouter', placement: 'full-page', framework,
+      });
+      const text = (out.content as { type: string; text: string }[])[0].text;
+      const route = text.split('=== (2) BACKEND ROUTE ===')[1].split('=== (3)')[0];
+
+      // Explicit extensions, in the live import AND in the commented vite.config
+      // guidance a consumer uncomments.
+      expect(route, `${framework}: live handler import needs an extension`).toContain(
+        "import { chatHandler } from './server/chat.js';",
+      );
+      expect(route, `${framework}: vite.config guidance needs an extension`).toContain(
+        "// import { chatApiPlugin } from './vite-chat-api.js';",
+      );
+      expect(route, `${framework}: extensionless import is TS2835 under nodenext`).not.toMatch(
+        /from '\.\/(vite-chat-api|server\/chat)'/,
+      );
+
+      // The handler must not live under src/, where the browser tsconfig claims it.
+      expect(route, `${framework}: handler under src/ is TS2591 on process`).not.toContain(
+        'src/server/chat',
+      );
+      expect(route, `${framework}: handler file path`).toContain('// server/chat.ts');
+    }
   });
 
   it('falls back to a usable route when the framework has no exact template', async () => {
@@ -288,7 +544,9 @@ describe('scaffold', () => {
   });
 
   // SCAF-6: next uses next/dynamic { ssr: false } — no top-level @kitn.ai/ui/elements or
-  // @kitn.ai/ui/react import (they'd run on the server and crash with "window is not defined").
+  // @kitn.ai/ui/react import. NOT because importing them on the server crashes (both
+  // entries are SSR-import-safe): <kai-*> are client-only custom elements, so a
+  // server-rendered tag never upgrades and mismatches on hydration.
   it('next scaffold uses next/dynamic with ssr:false and has NO top-level elements/react import (SCAF-6)', async () => {
     const out = await scaffold.handler({
       useCase: 'drop-in-chat',
@@ -374,12 +632,22 @@ describe('scaffold', () => {
     // Must import the typed element interface from the library
     expect(text).toContain("import type { KaiChatElement } from '@kitn.ai/ui/elements'");
     // Must use KaiChatElement, not bare HTMLElement, so property access is typed
-    expect(text).toContain('let chatEl: KaiChatElement | undefined');
-    expect(text).not.toContain('let chatEl: HTMLElement | undefined');
+    // Runes: `bind:this` writes to the binding, so it must be $state — but it still
+    // has to be the kit's ELEMENT type, not a bare HTMLElement, or `chatEl.messages`
+    // is TS2339 under svelte-check.
+    expect(text).toContain('let chatEl = $state<KaiChatElement | undefined>(undefined)');
+    expect(text).not.toContain('$state<HTMLElement | undefined>');
   });
 
-  // SCAF-7: html mock output must NOT emit `as const` (TS syntax invalid in plain JS)
-  it('html mock scaffold does NOT emit as const on role literals (plain JS, SCAF-7)', async () => {
+  /**
+   * SCAF-7 inverted. The html target used to be plain JS in an inline script, so
+   * `as const` was a syntax error and this test asserted its absence. The logic is
+   * a real `src/main.ts` now — the whole point being that the consumer's own
+   * `tsc && vite build` checks it — so the strict-TS narrowing is REQUIRED, and
+   * its absence is the defect: without it `role: 'user'` widens to `string` and
+   * the assignment to `chat.messages` fails TS2322.
+   */
+  it('html mock scaffold emits `as const` on role literals — src/main.ts is TypeScript (SCAF-7)', async () => {
     const out = await scaffold.handler({
       useCase: 'drop-in-chat',
       integration: 'mock',
@@ -387,7 +655,8 @@ describe('scaffold', () => {
       framework: 'html',
     });
     const text = (out.content as { type: string; text: string }[])[0].text;
-    expect(text).not.toContain('as const');
+    expect(text).toContain("role: 'user' as const");
+    expect(text).toContain("role: 'assistant' as const");
   });
 
   // Issue 4 — mock integration streams client-side with zero config.
@@ -557,7 +826,7 @@ describe('scaffold', () => {
     expect(text).not.toMatch(/<kai-tool\s*>/);
   });
 
-  it('SCAF-9: agentic (react) seeds a sample assistant message with tool + reasoning embedded', async () => {
+  it('SCAF-9: agentic (react) explains where tool + reasoning parts come from', async () => {
     const out = await scaffold.handler({
       useCase: 'agentic',
       integration: 'openrouter',
@@ -565,10 +834,8 @@ describe('scaffold', () => {
       framework: 'react',
     });
     const text = (out.content as { type: string; text: string }[])[0].text;
-    // Must embed tool+reasoning in the sample message — not as siblings
+    // Must say tool/reasoning are PARTS on a message, not sibling elements
     expect(text).toMatch(/tools|reasoning/i);
-    // The sample message must be seeded (not an empty array)
-    expect(text).toMatch(/sampleMessages|SCAF-9/);
     // Must still render kai-chat (the root component)
     expect(text).toMatch(/<Chat\b/);
   });
@@ -623,45 +890,55 @@ describe('scaffold', () => {
     // Must emit a ChatMessage type
     expect(text).toContain('type ChatMessage');
     // Must declare messages with explicit type
-    expect(text).toContain('let messages: ChatMessage[]');
+    expect(text).toContain('let messages = $state.raw<ChatMessage[]>([])');
     // Must type the onSubmit handler
     expect(text).toContain('onSubmit(e: CustomEvent<{ value: string }>)');
   });
 
-  it('SCAF-10: html output wraps element access in DOMContentLoaded/readyState guard', async () => {
-    const out = await scaffold.handler({
-      useCase: 'drop-in-chat',
-      integration: 'mock',
-      placement: 'full-page',
-      framework: 'html',
+  /**
+   * SCAF-10 restated for a module.
+   *
+   * The DOMContentLoaded / readyState dance existed because an inline
+   * `<script type="module">` could be pasted into `<head>` and run before the
+   * body was parsed. An EXTERNAL `<script type="module" src=…>` is deferred by
+   * spec, so the DOM is always parsed by the time it runs and that guard is dead
+   * code with a comment that is no longer true. What still has to hold is the
+   * thing the guard was protecting: the element lookup happens inside a function,
+   * after the custom-element upgrade, and the listener is wired.
+   */
+  for (const integration of ['mock', 'openrouter'] as const) {
+    it(`SCAF-10: html (${integration}) defers element access into init(), loaded as a deferred module`, async () => {
+      const out = await scaffold.handler({
+        useCase: 'drop-in-chat',
+        integration,
+        placement: 'full-page',
+        framework: 'html',
+      });
+      const text = (out.content as { type: string; text: string }[])[0].text;
+      expect(text).toContain('async function init()');
+      // The upgrade wait is the real protection — a property set on a
+      // not-yet-upgraded element is dropped.
+      expect(text).toContain("await customElements.whenDefined('kai-chat')");
+      expect(text).toContain("addEventListener('kai-submit'");
+      // The dead guard must be gone, not kept "just in case": its comment claimed
+      // module scripts can run before the DOM is ready, which is false for a
+      // deferred external module.
+      expect(text).not.toMatch(/document\.readyState/);
+      expect(text).not.toMatch(/addEventListener\('DOMContentLoaded'/);
     });
-    const text = (out.content as { type: string; text: string }[])[0].text;
-    // Must use a readyState guard so element access is safe from <head>
-    expect(text).toMatch(/document\.readyState|DOMContentLoaded/);
-    // The element lookup must be inside a function, not at module top-level
-    expect(text).toContain('function init()');
-    // Must still wire the event listener
-    expect(text).toContain("addEventListener('kai-submit'");
-  });
-
-  it('SCAF-10: html real-backend output also has DOMContentLoaded guard', async () => {
-    const out = await scaffold.handler({
-      useCase: 'drop-in-chat',
-      integration: 'openrouter',
-      placement: 'full-page',
-      framework: 'html',
-    });
-    const text = (out.content as { type: string; text: string }[])[0].text;
-    expect(text).toMatch(/document\.readyState|DOMContentLoaded/);
-    expect(text).toContain('function init()');
-  });
+  }
 
   // ── SCAF-11: emitted ChatMessage type must use the library's strict state union ──
+  //
+  // The LOCAL type is emitted by the `mock` scaffold only. A real backend now
+  // imports the kit's own ChatMessage (it hands messages to toOpenAIMessages, and
+  // the local subset would reject a message the kit produced). These three keep
+  // the local declaration honest; the sibling test below covers the real path.
 
-  it('SCAF-11: agentic (react) ChatMessage type uses strict state union, not bare string', async () => {
+  it('SCAF-11: agentic (react, mock) ChatMessage type uses strict state union, not bare string', async () => {
     const out = await scaffold.handler({
       useCase: 'agentic',
-      integration: 'openrouter',
+      integration: 'mock',
       placement: 'side',
       framework: 'react',
     });
@@ -677,7 +954,7 @@ describe('scaffold', () => {
   it('SCAF-11: agentic sample message state value is a valid union member (output-available)', async () => {
     const out = await scaffold.handler({
       useCase: 'agentic',
-      integration: 'openrouter',
+      integration: 'mock',
       placement: 'side',
       framework: 'react',
     });
@@ -686,16 +963,41 @@ describe('scaffold', () => {
     expect(text).toContain("'output-available'");
   });
 
-  it('SCAF-11: knowledge-base (react) ChatMessage type also uses strict state union', async () => {
+  it('SCAF-11: knowledge-base (react, mock) ChatMessage type also uses strict state union', async () => {
     const out = await scaffold.handler({
       useCase: 'knowledge-base',
-      integration: 'openrouter',
+      integration: 'mock',
       placement: 'full-page',
       framework: 'react',
     });
     const text = (out.content as { type: string; text: string }[])[0].text;
     expect(text).toContain("'input-streaming' | 'input-available' | 'output-available' | 'output-error'");
     expect(text).not.toMatch(/state:\s*string/);
+  });
+
+  it('SCAF-11: a real backend imports the kit ChatMessage instead of re-declaring a subset', async () => {
+    for (const framework of ['react', 'next', 'vue', 'svelte', 'tanstack-start'] as const) {
+      const out = await scaffold.handler({
+        useCase: 'agentic',
+        integration: 'openrouter',
+        placement: 'full-page',
+        framework,
+      });
+      const text = (out.content as { type: string; text: string }[])[0].text;
+      // React-family scaffolds also import `type SetMessages` — the tool loop's
+      // thread setter is annotated with it — so this pins the two names that must
+      // always be there rather than the whole line.
+      expect(text, `${framework}: missing the kit ChatMessage import`).toMatch(
+        /^\s*import \{ createAssistantStream, type ChatMessage(?:, type SetMessages)? \} from '@kitn\.ai\/ui\/state';$/m,
+      );
+      // The local subset type is gone: it has no rawInput/raw/signature/index on a
+      // tool and no source/file part variants, so it would reject a message the
+      // kit itself produced on the way into toOpenAIMessages.
+      expect(text, `${framework}: still re-declares a local ChatMessage`).not.toContain(
+        'type ChatMessage = { id: string;',
+      );
+      expect(text, `${framework}: loose state: string`).not.toMatch(/state:\s*string/);
+    }
   });
 
   it('SCAF-9: knowledge-base (react) emits <Sources> with real sample sources data', async () => {
@@ -712,6 +1014,41 @@ describe('scaffold', () => {
     expect(text).toMatch(/sampleSources/);
     // Must NOT emit bare <Sources /> with no props
     expect(text).not.toMatch(/<Sources\s*\/>/);
+  });
+
+  // Regression guard for a pre-existing tsc --strict failure (TS2339): the svelte
+  // sources ref used to be typed as bare HTMLElement, which has no `sources`
+  // property, so the `.sources = sampleSources` assignment below it failed to
+  // compile. Typed through the kit's own KaiSourcesElement interface instead
+  // (the same fix chatEl already got under SCAF-13B), so the assignment
+  // typechecks honestly. Confirmed against a real tsc --strict compile of the
+  // emitted output, not just this string assertion.
+  it('SCAF-9: knowledge-base (svelte) types sourcesEl as KaiSourcesElement, not bare HTMLElement (tsc --strict TS2339 guard)', async () => {
+    const out = await scaffold.handler({
+      useCase: 'knowledge-base',
+      integration: 'openrouter',
+      placement: 'full-page',
+      framework: 'svelte',
+    });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+    expect(text).toContain("import type { KaiChatElement, KaiSourcesElement } from '@kitn.ai/ui/elements'");
+    expect(text).toContain('let sourcesEl = $state<KaiSourcesElement | undefined>(undefined)');
+    expect(text).not.toContain('$state<HTMLElement | undefined>');
+  });
+
+  // The KaiSourcesElement import must be conditional: an archetype with no
+  // kai-sources companion must not carry an unused import, or it fails
+  // noUnusedLocals instead (a different tsc error, same broken build).
+  it('SCAF-9: an archetype without kai-sources does not import KaiSourcesElement (svelte, noUnusedLocals guard)', async () => {
+    const out = await scaffold.handler({
+      useCase: 'agentic',
+      integration: 'openrouter',
+      placement: 'full-page',
+      framework: 'svelte',
+    });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+    expect(text).toContain("import type { KaiChatElement } from '@kitn.ai/ui/elements'");
+    expect(text).not.toContain('KaiSourcesElement');
   });
 
   // ── SCAF-14: workspace archetype must emit a runnable resizable split layout ──
@@ -761,6 +1098,31 @@ describe('scaffold', () => {
     expect(text).toContain("m.ResizableItem");
     expect(text).toContain("m.Artifact");
   });
+
+  // Regression guard for a pre-existing tsc --strict failure (TS2741): `files`
+  // is a required prop on the React Artifact wrapper (array/object props are
+  // never optional attributes on a kai-* element, even though the underlying
+  // Solid component defaults it to []), so a bare `<Artifact src="..." />`
+  // failed to compile with "Property 'files' is missing". Confirmed against a
+  // real tsc --strict compile of the emitted output, not just this string
+  // assertion. Covers all three JSX emit sites (react, next, tanstack-start).
+  it.each(['react', 'next', 'tanstack-start'] as const)(
+    'SCAF-14: workspace (%s) emits Artifact with a files prop (tsc --strict TS2741 guard)',
+    async (framework) => {
+      const out = await scaffold.handler({
+        useCase: 'workspace',
+        integration: 'openrouter',
+        placement: 'full-page',
+        framework,
+      });
+      const text = (out.content as { type: string; text: string }[])[0].text;
+      // A real, non-empty array literal, not a bare `files={[]}` that would
+      // dodge the type error without giving the scaffold user anything useful.
+      expect(text).toMatch(/<Artifact\s[^>]*files=\{\[\{[^}]*path:/);
+      // Still carries src, tied to the same demo url the file entry mirrors.
+      expect(text).toMatch(/<Artifact\s[^>]*src="https:\/\/example\.com"/);
+    },
+  );
 
   // ── tanstack-start scaffold ───────────────────────────────────────────────
 
@@ -1007,7 +1369,11 @@ describe('scaffold', () => {
     expect(text).toContain("customElements.whenDefined('kai-chat')");
     expect(text).toContain("import { onMount } from 'svelte'");
     // the reactive property block must be gated on `defined` so it re-applies post-upgrade
-    expect(text).toMatch(/\$:\s*if\s*\(chatEl\s*&&\s*defined\)/);
+    // `$effect`, not `$:` — `sv create` forces runes mode project-wide, where `$:`
+    // is a hard error in svelte-check AND vite build.
+    expect(text).toMatch(/\$effect\(\(\) => \{/);
+    expect(text).toMatch(/if\s*\(chatEl\s*&&\s*defined\)/);
+    expect(text, 'legacy reactive statement is a runes-mode error').not.toMatch(/^\s*\$:/m);
   });
 
   it('SCAF-15: vue output re-applies props in onMounted after the element upgrade', async () => {
@@ -1065,6 +1431,49 @@ describe('scaffold', () => {
     // autoloader — positioned as a CDN/<script> tool (dist/elements/autoloader.js), NOT a bundler import
     expect(text).toMatch(/autoloader\.js/);
     expect(text).toMatch(/CDN|not importable through a bundler/i);
+  });
+
+  // SCAF-16: the note must describe what the scaffold ACTUALLY emits. `next` emits no
+  // `import '@kitn.ai/ui/elements'` (the dynamic-imported wrappers self-register), so
+  // claiming "the scaffold uses import '@kitn.ai/ui/elements'" there is simply false.
+  it('SCAF-16: loading-options note matches the elements import the output really emits', async () => {
+    for (const framework of ['html', 'react', 'next', 'vue', 'svelte', 'tanstack-start'] as const) {
+      const out = await scaffold.handler({
+        useCase: 'drop-in-chat',
+        integration: 'openrouter',
+        placement: 'full-page',
+        framework,
+      });
+      const text = (out.content as { type: string; text: string }[])[0].text;
+      const frontend = text.split('=== LOADING OPTIONS ===')[0];
+      const note = text.split('=== LOADING OPTIONS ===')[1] ?? '';
+      const emitsRegisterAll = /import '@kitn\.ai\/ui\/elements';/.test(frontend);
+      if (emitsRegisterAll) {
+        expect(note, `${framework}: emits register-all but the note denies it`).toContain(
+          "The scaffold uses `import '@kitn.ai/ui/elements'` (register-all)",
+        );
+      } else {
+        expect(note, `${framework}: emits no register-all but the note claims it`).toContain(
+          "The scaffold emits NO `import '@kitn.ai/ui/elements'`",
+        );
+      }
+    }
+  });
+
+  // The next island exists for hydration, not for a prerender crash — a server
+  // component that statically imports the package prerenders clean.
+  it('SCAF-6: next scaffold explains ssr:false as client-only elements, not a crash', async () => {
+    const out = await scaffold.handler({
+      useCase: 'drop-in-chat',
+      integration: 'openrouter',
+      placement: 'full-page',
+      framework: 'next',
+    });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+    const frontend = text.split('=== LOADING OPTIONS ===')[0];
+    expect(frontend).toMatch(/client-only custom elements/);
+    expect(frontend).toMatch(/hydration/);
+    expect(frontend).not.toMatch(/doesn't crash|is not defined/);
   });
 
   it('SCAF-16: loading-options note appears across every framework', async () => {
@@ -1250,6 +1659,1238 @@ describe('scaffold', () => {
       expect(text, `${framework}: missing createAssistantStream`).toContain('createAssistantStream');
       expect(text, `${framework}: missing useKaiChat`).toContain('useKaiChat');
       expect(text, `${framework}: missing createKaiChat`).toContain('createKaiChat');
+    }
+  });
+
+  /**
+   * SCAF-19, reversed: the html target's logic is a module the consumer's build
+   * can SEE.
+   *
+   * It used to be an inline `<script type="module">` in index.html, and being
+   * invisible to tsc was written up as the benefit. It was the defect. A stock
+   * `npm create vite -- --template vanilla-ts` app builds with `tsc && vite build`
+   * and scopes its tsconfig to `"include": ["src"]`, so none of the scaffold's
+   * code was checked by anything: measured in a real app, injecting a call to a
+   * function that exists nowhere still left `npm run build` exiting 0. With the
+   * logic in `src/main.ts` the same injection fails with TS2304 and exit 2.
+   *
+   * This also retires the vite-env.d.ts workaround that used to be emitted here.
+   * TS18003 ("No inputs were found") could only happen because deleting the
+   * template's `src/main.ts` left `src/` with no `.ts` files at all — and this
+   * scaffold now IS `src/main.ts`. Verified: the clean build succeeds with no
+   * vite-env.d.ts present.
+   */
+  it('SCAF-19: html emits its logic as src/main.ts, loaded from index.html', async () => {
+    const out = await scaffold.handler({
+      useCase: 'drop-in-chat',
+      integration: 'mock',
+      placement: 'full-page',
+      framework: 'html',
+    });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+    const front = text.split('=== (2) BACKEND ROUTE ===')[0];
+    const [markup, mod] = front.split('// ── src/main.ts ──');
+    expect(mod, 'no src/main.ts section emitted').toBeDefined();
+
+    // index.html LOADS the module and does not carry the logic itself.
+    expect(markup).toContain('<script type="module" src="/src/main.ts"></script>');
+    expect(markup, 'the logic is inline again, where the tsconfig cannot reach it').not.toMatch(
+      /<script type="module">/,
+    );
+    expect(markup, 'the element lookup belongs in the module, not the markup').not.toContain(
+      'getElementById',
+    );
+
+    // The module is the TypeScript half: typed element handle, typed message type.
+    expect(mod).toContain("import type { KaiChatElement } from '@kitn.ai/ui/elements'");
+    expect(mod).toContain("document.getElementById('chat') as KaiChatElement");
+    expect(mod).toContain("type ChatMessage = KaiChatElement['messages'][number]");
+
+    // The TS18003 workaround is obsolete — src/main.ts is itself the tsc input.
+    expect(text, 'vite-env.d.ts is no longer needed').not.toMatch(/vite-env\.d\.ts/);
+    expect(text, 'TS18003 cannot happen once the scaffold IS a src/*.ts file').not.toMatch(
+      /TS18003|No inputs were found/,
+    );
+  });
+
+  it('the backend-only frameworks get the same module split, without the vanilla-ts note', async () => {
+    // fastapi/express/worker fall back to the same framework-agnostic renderHtml
+    // as `html` for their browser side. A module their build can see is right for
+    // them too; only the "delete the template's src/main.ts" line is Vite-specific.
+    for (const framework of ['fastapi', 'express', 'worker'] as const) {
+      const out = await scaffold.handler({
+        useCase: 'drop-in-chat',
+        integration: 'mock',
+        placement: 'full-page',
+        framework,
+      });
+      const text = (out.content as { type: string; text: string }[])[0].text;
+      expect(text, `${framework}: should still split out src/main.ts`).toContain('// ── src/main.ts ──');
+      expect(text, `${framework}: emitted the Vite-template-specific note`).not.toMatch(
+        /template's src\/main\.ts/,
+      );
+      expect(text, `${framework}: unexpectedly emitted the vite-env.d.ts note`).not.toMatch(/vite-env\.d\.ts/);
+    }
+  });
+
+  // ── message-parts migration: the scaffolder must emit `parts`, never `content` ──
+
+  it('emits parts-shaped messages, never a content string', async () => {
+    for (const framework of ['react', 'vue', 'svelte', 'html', 'next', 'tanstack-start'] as const) {
+      const out = await scaffold.handler({
+        framework, useCase: 'drop-in-chat', integration: 'mock', placement: 'full-page',
+      });
+      const emitted = JSON.stringify(out);
+      // The INTERACTION PATTERNS reference block (appended to every scaffold)
+      // legitimately shows kai-compare's `CompareCandidate.content`, an
+      // independent type from `ChatMessage`, unaffected by the parts migration
+      // (see response-compare-types.ts). Scope the content-string ban to the
+      // scaffolder's OWN emitted code (blocks 1-4), not that reference snippet.
+      const ownCode = emitted.split('=== INTERACTION PATTERNS ===')[0];
+      expect(ownCode).not.toMatch(/content:\s*\\?'\\?'/);
+      expect(emitted).toContain('parts:');
+    }
+  });
+
+  // Round-1 fix review found a real bug (integrations/ollama.ts's `html` route
+  // template still built a `role, content` ChatMessage literal) that this suite
+  // never caught, because every test above only ever passes `integration: 'mock'`,
+  // the one integration with no route template to sweep. Every integration's
+  // templates are static strings baked into its catalog file, so a bad one is a
+  // silent, permanent bug: fix the systemic gap by exercising every registered
+  // integration here, not just the one the earlier tests happened to use.
+  it('every registered integration emits parts-shaped ChatMessage literals (no role+content, no stale stream API)', async () => {
+    for (const integration of listIntegrations()) {
+      // 'html' is the framework-agnostic front end every integration's route
+      // falls back to (per chooseRoute), so one call exercises both the
+      // client-side seed/submit code AND that integration's own backend
+      // route template (the exact class of bug ollama.ts had).
+      const out = await scaffold.handler({
+        framework: 'html', useCase: 'drop-in-chat', integration: integration.id, placement: 'full-page',
+      });
+      const emitted = JSON.stringify(out);
+      const label = integration.id;
+
+      // The old removed shape: a role literal directly followed by `content:`.
+      //
+      // Scoped to the FRONT END. `role`/`content` is the kit's removed
+      // ChatMessage shape only in block (1); in block (2) it is the PROVIDER's
+      // wire format, and every provider on earth spells a message that way — the
+      // AI SDK's own ModelMessage does. Scanning the whole response made this
+      // assertion fire on correct backend code, which is a test that punishes the
+      // right answer.
+      expect(frontEnd(out), `${label}: emits role:'user', content: (removed ChatMessage shape)`).not.toMatch(
+        /role:\s*'user'(?:\s+as\s+const)?,\s*content:/,
+      );
+      expect(frontEnd(out), `${label}: emits role:'assistant', content: (removed ChatMessage shape)`).not.toMatch(
+        /role:\s*'assistant'(?:\s+as\s+const)?,\s*content:/,
+      );
+      expect(emitted, `${label}: missing parts:`).toContain('parts:');
+
+      // Stale @kitn.ai/ui/state API removed earlier in this migration.
+      expect(emitted, `${label}: stale addTool`).not.toContain('addTool');
+      expect(emitted, `${label}: stale updateTool`).not.toContain('updateTool');
+      expect(emitted, `${label}: stale appendContent`).not.toContain('appendContent');
+    }
+  });
+
+  // Same integration sweep, on a strict-TS framework: catches a bad route
+  // template that only shows up once TypeScript output (not plain JS) is involved.
+  it('every registered integration emits parts-shaped ChatMessage literals on a TS framework (react)', async () => {
+    for (const integration of listIntegrations()) {
+      const out = await scaffold.handler({
+        framework: 'react', useCase: 'drop-in-chat', integration: integration.id, placement: 'full-page',
+      });
+      const emitted = JSON.stringify(out);
+      const label = integration.id;
+      // Front-end only, for the reason given on the sweep above: in block (2)
+      // `role`/`content` is the provider's wire format, not the kit's old shape.
+      expect(frontEnd(out), `${label}: emits role:'user', content:`).not.toMatch(
+        /role:\s*'user'(?:\s+as\s+const)?,\s*content:/,
+      );
+      expect(frontEnd(out), `${label}: emits role:'assistant', content:`).not.toMatch(
+        /role:\s*'assistant'(?:\s+as\s+const)?,\s*content:/,
+      );
+      expect(emitted, `${label}: missing parts:`).toContain('parts:');
+    }
+  });
+
+  // The streamed fold must APPEND onto the trailing text part, not replace
+  // `parts` wholesale. The wholesale form is the old flat-string fold wearing
+  // parts clothing: harmless into a fresh `parts: []`, but it deletes the
+  // reasoning + tool parts SAMPLE_AGENTIC_MESSAGE seeds, so the first consumer
+  // to stream into a seeded message loses them silently.
+  //
+  // The `mock` path still inlines the fold (it must add no imports). A real
+  // backend gets the same guarantee from createAssistantStream, which folds
+  // through appendTextPart, the function this inline copy was copied FROM.
+  it('every mock streaming path folds onto the trailing text part, never replacing parts wholesale', async () => {
+    for (const framework of ['react', 'vue', 'svelte', 'html', 'next', 'tanstack-start'] as const) {
+      const out = await scaffold.handler({
+        framework, useCase: 'drop-in-chat', integration: 'mock', placement: 'full-page',
+      });
+      const ownCode = JSON.stringify(out).split('=== INTERACTION PATTERNS ===')[0];
+      const label = `${framework}/mock`;
+
+      // The wholesale replacement, in any of its per-framework spellings.
+      expect(ownCode, `${label}: streams by replacing parts wholesale`).not.toMatch(
+        /\.\.\.m, parts: \[\{ type: .text., text: (answer|accumulated)/,
+      );
+      // The fold itself, plus the helper it calls.
+      expect(ownCode, `${label}: missing the appendText fold`).toMatch(
+        /\.\.\.m, parts: appendText\(m\.parts, (tok|delta)\)/,
+      );
+      expect(ownCode, `${label}: missing the appendText helper definition`).toContain(
+        'const appendText =',
+      );
+      // The helper must open a NEW text part when the last part is not text,
+      // which is what keeps a post-tool answer out of the pre-tool text.
+      expect(ownCode, `${label}: fold does not open a new trailing text part`).toContain(
+        "[...parts, { type: 'text', text: delta }]",
+      );
+    }
+  });
+
+  // Regression test for the exact TS2322 defect the reviewer reproduced with
+  // `tsc --strict`: an un-annotated `const history = [...]` widens the part's
+  // `type` field to `string`, so `setMessages([...history, …])` no longer
+  // satisfies `ChatMessage[]`. This is a string-level proxy for "would compile
+  // under strict", not a real compiler run (a temp-file + tsc/ts-morph harness
+  // was judged too heavy for this suite; flagged to the coordinator as a
+  // possible follow-up), but it pins the exact annotation every prior fix
+  // relied on, on every strict-TS framework this bug hit.
+  it('every strict-TS framework annotates the mock-path `history` const as ChatMessage[]', async () => {
+    for (const framework of ['react', 'next', 'vue', 'svelte', 'tanstack-start'] as const) {
+      const out = await scaffold.handler({
+        framework, useCase: 'drop-in-chat', integration: 'mock', placement: 'full-page',
+      });
+      const emitted = JSON.stringify(out);
+      expect(emitted, `${framework}: mock-path history is missing : ChatMessage[]`).toMatch(
+        /const history: ChatMessage\[\] = \[/,
+      );
+    }
+  });
+
+  it('svelte real-backend `history` const is annotated ChatMessage[] (matches its react/vue/tanstack siblings)', async () => {
+    const out = await scaffold.handler({
+      framework: 'svelte', useCase: 'drop-in-chat', integration: 'openrouter', placement: 'full-page',
+    });
+    const emitted = JSON.stringify(out);
+    expect(emitted).toMatch(/const history: ChatMessage\[\] = \[/);
+  });
+});
+
+// ── the wire adapter replaces the hand-rolled reader ─────────────────────────
+//
+// scaffold.ts used to inline ~25 lines of SSE reader per framework so the output
+// stayed copy-paste readable. That policy is reversed for real backends: the
+// inline reader split on '\n' and treated each `data:` line as a whole frame
+// (wrong for a multi-line frame), and it could only ever produce text, which is
+// why a scaffold with kai-tool in its archetype rendered a panel no code path
+// could fill. `mock` keeps the inline form: a zero-backend preview adds zero
+// imports.
+
+const REAL_FRAMEWORKS = ['react', 'vue', 'svelte', 'html', 'next', 'tanstack-start'] as const;
+
+/**
+ * The expression a TOOL-LOOP scaffold re-encodes every round.
+ *
+ * A single-round scaffold posts a `history` const built once. A loop has to read
+ * the thread BACK between rounds, including the assistant message the stream
+ * appended, so each framework names whatever it can read synchronously: the live
+ * element property, the live ref/local, or — for React, whose state cannot be
+ * read back inside the async turn writing it — a turn-owned `thread`.
+ */
+const THREAD_EXPR: Record<(typeof REAL_FRAMEWORKS)[number], string> = {
+  react: 'thread',
+  next: 'thread',
+  'tanstack-start': 'thread',
+  vue: 'messages.value',
+  svelte: 'messages',
+  html: 'chat.messages',
+};
+
+/** Block 1 ONLY: the scaffolder's own front-end CODE. Excludes the backend route
+ *  template (a route may legitimately hand-roll a re-framing reader; the
+ *  cloudflare worker template does), the reference snippets, and the header,
+ *  whose `stream:` line is the integration's streamMapping PROSE. That prose
+ *  names readOpenAIStream for every integration including mock, so asserting
+ *  over the whole response would confuse a sentence about the adapter with an
+ *  import of it. */
+function frontEnd(out: unknown): string {
+  const text = ((out as { content: { type: string; text: string }[] }).content)[0].text;
+  const body = text.split('=== (2) BACKEND ROUTE ===')[0];
+  const start = body.indexOf('=== (1) FRONT-END');
+  return start < 0 ? body : body.slice(start);
+}
+
+/**
+ * The EXACT import STATEMENTS each framework must emit.
+ *
+ * Every entry is wrapped in newlines so it can only be satisfied by a whole
+ * emitted line at that framework's own indentation. A bare
+ * `toContain('@kitn.ai/ui/wire')` is not a test of this: the specifier also
+ * appears in the header's streamMapping prose and in the reference snippets, so
+ * that assertion stays green with every import line deleted. These do not.
+ *
+ * html used to be the odd one — plain JS inside `<script type="module">` at a
+ * four-space indent, with no type import, because `type ChatMessage` is a syntax
+ * error in plain JS. Its logic is a real `src/main.ts` now, so it sits at column
+ * zero like the rest AND carries the type import: this drop-in-chat cell is the
+ * single-round shape, whose `const history: ChatMessage[]` references it. The
+ * TOOL-LOOP shape does not (its thread is `chat.messages`, already typed by
+ * KaiChatElement), and importing the type there is a TS6133 that fails a stock
+ * `npm run build` — covered by its own case below.
+ */
+const WIRE_IMPORT_LINES: Record<(typeof REAL_FRAMEWORKS)[number], string[]> = {
+  react: [
+    "\nimport { createAssistantStream, type ChatMessage } from '@kitn.ai/ui/state';\n",
+    "\nimport { readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';\n",
+  ],
+  next: [
+    "\nimport { createAssistantStream, type ChatMessage } from '@kitn.ai/ui/state';\n",
+    "\nimport { readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';\n",
+  ],
+  'tanstack-start': [
+    "\nimport { createAssistantStream, type ChatMessage } from '@kitn.ai/ui/state';\n",
+    "\nimport { readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';\n",
+  ],
+  vue: [
+    "\nimport { createAssistantStream, type ChatMessage } from '@kitn.ai/ui/state';\n",
+    "\nimport { readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';\n",
+  ],
+  svelte: [
+    "\n  import { createAssistantStream, type ChatMessage } from '@kitn.ai/ui/state';\n",
+    "\n  import { readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';\n",
+  ],
+  html: [
+    "\nimport { createAssistantStream, type ChatMessage } from '@kitn.ai/ui/state';\n",
+    "\nimport { readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';\n",
+  ],
+};
+
+describe('scaffolds import the wire adapter for real backends', () => {
+  // Pins the import STATEMENT, not a mention of the specifier. Proved by
+  // deleting the emitted line from wireImportLines and watching all six fail.
+  it.each(REAL_FRAMEWORKS)('%s emits the state + wire import lines themselves', async (framework) => {
+    const code = frontEnd(
+      await scaffold.handler({
+        framework,
+        useCase: 'drop-in-chat',
+        integration: 'openrouter',
+        placement: 'full-page',
+      }),
+    );
+    for (const line of WIRE_IMPORT_LINES[framework]) {
+      expect(code, `${framework}: missing emitted import line ${JSON.stringify(line)}`).toContain(line);
+    }
+  });
+
+  /**
+   * `type ChatMessage` must only be imported where the emitted code annotates
+   * something with it. A stock vanilla-ts / create-vite tsconfig sets
+   * `noUnusedLocals`, so an unreferenced type import is TS6133 and a failed
+   * `npm run build` on the consumer's first try — the same class of defect that
+   * once shipped `applyToolOutput` beside a commented-out tool loop.
+   *
+   * html is the only framework where this bites: vue and svelte always declare
+   * `ref<ChatMessage[]>` / `let messages: ChatMessage[]`, but html keeps the
+   * thread on the element, so the name is used only by the single-round shape's
+   * `const history: ChatMessage[]`. Caught by verify:scaffold on all 8 agentic
+   * html cells.
+   */
+  it('html tool-loop scaffolds do NOT import the unused ChatMessage type (TS6133)', async () => {
+    const code = frontEnd(
+      await scaffold.handler({
+        framework: 'html',
+        useCase: 'agentic', // the archetype that renders kai-tool → tool loop
+        integration: 'openrouter',
+        placement: 'full-page',
+      }),
+    );
+    // The loop's thread IS chat.messages, typed by KaiChatElement — nothing
+    // annotates with the kit's ChatMessage, so importing it is dead weight.
+    expect(code).toContain("import { createAssistantStream } from '@kitn.ai/ui/state';");
+    expect(code, 'unused type import — TS6133 under a stock noUnusedLocals build').not.toContain(
+      "createAssistantStream, type ChatMessage",
+    );
+    // And the loop's own names ARE imported, because it does call them.
+    expect(code).toContain('applyToolOutput');
+  });
+
+  it.each(REAL_FRAMEWORKS)('%s mock emits NONE of those import lines', async (framework) => {
+    const code = frontEnd(
+      await scaffold.handler({
+        framework,
+        useCase: 'drop-in-chat',
+        integration: 'mock',
+        placement: 'full-page',
+      }),
+    );
+    for (const line of WIRE_IMPORT_LINES[framework]) {
+      expect(code, `${framework}: mock emitted ${JSON.stringify(line)}`).not.toContain(line);
+    }
+  });
+
+  it.each(REAL_FRAMEWORKS)('%s uses readOpenAIStream instead of a hand-rolled reader', async (framework) => {
+    const out = await scaffold.handler({
+      framework,
+      useCase: 'drop-in-chat',
+      integration: 'openrouter',
+      placement: 'full-page',
+    });
+    // Scoped to block 1: the header's streamMapping prose names the adapter for
+    // every integration, and the reference snippets mention createAssistantStream,
+    // so asserting over the whole response would pass with no emitted call sites.
+    const code = frontEnd(out);
+    expect(code).toContain('await readOpenAIStream(res, stream);');
+    expect(code).toContain('const stream = createAssistantStream(');
+    expect(code).toContain('toOpenAIMessages(history)');
+    // The hand-rolled reader is GONE.
+    expect(code).not.toContain('getReader()');
+    expect(code).not.toContain("startsWith('data:')");
+    expect(code).not.toContain('[DONE]');
+  });
+
+  it.each(REAL_FRAMEWORKS)('%s no longer flattens history to a content string', async (framework) => {
+    const out = await scaffold.handler({
+      framework,
+      useCase: 'drop-in-chat',
+      integration: 'openrouter',
+      placement: 'full-page',
+    });
+    const emitted = JSON.stringify(out);
+    // PARTS_TO_CONTENT threw away every tool call and result on the way back,
+    // which made a multi-round loop impossible.
+    expect(emitted).not.toContain("p.type === 'text' ? p.text");
+  });
+
+  it.each(REAL_FRAMEWORKS)('%s mock scaffolds stay import-free and inline', async (framework) => {
+    const out = await scaffold.handler({
+      framework,
+      useCase: 'drop-in-chat',
+      integration: 'mock',
+      placement: 'full-page',
+    });
+    // Scoped to the emitted CODE. mock's streamMapping now names the adapter as
+    // what takes over on the swap to a real backend, and that sentence is not an
+    // import.
+    const code = frontEnd(out);
+    expect(code).not.toContain('@kitn.ai/ui/wire');
+    expect(code).not.toContain('readOpenAIStream');
+    // The inlined appendTextPart is still what folds the canned reply.
+    expect(code).toContain('const appendText =');
+    expect(code).toContain('parts:');
+  });
+
+  it('emits the multi-round tool loop LIVE, with a runner it actually defines', async () => {
+    const code = frontEnd(
+      await scaffold.handler({
+        framework: 'react',
+        useCase: 'agentic',
+        integration: 'openrouter',
+        placement: 'full-page',
+      }),
+    );
+    // The turn is read into the same stream every round.
+    expect(code).toContain('const turn = await readOpenAIStream(res, stream);');
+    expect(code.match(/readOpenAIStream\(res, stream\)/g)).toHaveLength(1);
+    // The in-band error channel is not silently dropped either.
+    expect(code).toContain('if (turn.error)');
+    // The loop is LIVE, at column > 0, not inside a comment. The version this
+    // replaces emitted it commented out, named an undefined `runYourTool`, and
+    // described round two in prose over a thread the consumer had no way to
+    // obtain — so the archetype's headline capability could not be completed by
+    // uncommenting or by any amount of local editing.
+    expect(code).toMatch(/^\s*for \(let round = 0; round < MAX_TOOL_ROUNDS; round\+\+\) \{$/m);
+    expect(code).toMatch(/^\s*const pending = turn\.toolCalls\.filter\(/m);
+    expect(code).toMatch(/^\s*applyToolOutput\(stream, call\.id, await runTool\(/m);
+    expect(code).toMatch(/^\s*applyToolFailure\(stream, call\.id, /m);
+    // Every function the loop calls is DEFINED in the same emitted file.
+    expect(code).toMatch(/^\s*async function runTool\(/m);
+    expect(code).not.toContain('runYourTool');
+    // Round two is code, not prose: the fetch is INSIDE the loop body.
+    const loopAt = code.indexOf('for (let round = 0;');
+    const fetchAt = code.indexOf("await fetch('/api/chat'");
+    expect(loopAt, 'the loop opens before the request it repeats').toBeGreaterThan(-1);
+    expect(fetchAt, 'the request is not inside the loop').toBeGreaterThan(loopAt);
+    // And the whole loop runs BEFORE done(): done() settles the message, so a
+    // tool result reported after it is dropped and the panel spins forever.
+    expect(code.indexOf('stream.done();')).toBeGreaterThan(fetchAt);
+  });
+
+  // The mirror of the guard this replaces. applyToolOutput/applyToolFailure used
+  // to be BANNED from the live import because only a commented block called
+  // them, and every starter here (plus create-vite's own TS template) sets
+  // noUnusedLocals, so importing an unreferenced name fails `npm run build` with
+  // TS6133. The loop is live now, so the rule is unchanged and the expectation
+  // flips: an import may name exactly what live code references.
+  it.each(REAL_FRAMEWORKS)(
+    '%s tool archetype imports applyToolOutput/applyToolFailure because the live loop calls them',
+    async (framework) => {
+      const code = frontEnd(
+        await scaffold.handler({
+          framework,
+          useCase: 'agentic',
+          integration: 'openrouter',
+          placement: 'full-page',
+        }),
+      );
+      expect(code, `${framework}: live wire import changed shape`).toMatch(
+        /^\s*import \{ readOpenAIStream, toOpenAIMessages, applyToolOutput, applyToolFailure \} from '@kitn\.ai\/ui\/wire';$/m,
+      );
+      // Both names are referenced by live code, which is what makes the import legal.
+      expect(code, `${framework}: applyToolOutput imported but never called`).toMatch(
+        /^\s*applyToolOutput\(stream, /m,
+      );
+      expect(code, `${framework}: applyToolFailure imported but never called`).toMatch(
+        /^\s*applyToolFailure\(stream, /m,
+      );
+    },
+  );
+
+  // A NON-tool archetype must not pay for any of it: no loop, no runner, and an
+  // import naming only the two functions its single-round body calls.
+  it.each(REAL_FRAMEWORKS)(
+    '%s non-tool archetype keeps the loop imports out (noUnusedLocals)',
+    async (framework) => {
+      const code = frontEnd(
+        await scaffold.handler({
+          framework,
+          useCase: 'drop-in-chat',
+          integration: 'openrouter',
+          placement: 'full-page',
+        }),
+      );
+      expect(code, `${framework}: live wire import changed shape`).toMatch(
+        /^\s*import \{ readOpenAIStream, toOpenAIMessages \} from '@kitn\.ai\/ui\/wire';$/m,
+      );
+      expect(code, `${framework}: applyToolOutput on a non-tool archetype`).not.toContain(
+        'applyToolOutput',
+      );
+      expect(code, `${framework}: runTool on a non-tool archetype`).not.toContain('runTool');
+    },
+  );
+
+  // ── the fabricated sample seed ────────────────────────────────────────────
+  //
+  // The agentic archetype used to seed `sampleMessages` with an assistant turn
+  // that announced tool call `tc_001` and answered it. Three consequences, all
+  // real, none visible in a screenshot:
+  //   1. turn one POSTs it, so the very first request claims the model made a
+  //      call it never made;
+  //   2. `toAnthropicMessages` THROWS on it (a reasoning part with no verbatim
+  //      `raw` cannot be echoed back as a thinking block) — asserted below
+  //      against the encoder itself, not against a string;
+  //   3. a non-empty thread has no empty state, so the `suggestions` argument
+  //      this very tool takes never rendered.
+
+  it.each(REAL_FRAMEWORKS)(
+    '%s agentic scaffold seeds NO fabricated assistant turn',
+    async (framework) => {
+      const code = frontEnd(
+        await scaffold.handler({
+          framework,
+          useCase: 'agentic',
+          integration: 'openrouter',
+          placement: 'full-page',
+          suggestions: ['Find the current pricing'],
+        }),
+      );
+      expect(code, `${framework}: fabricated tool call id still seeded`).not.toContain('tc_001');
+      expect(code, `${framework}: fabricated assistant message still seeded`).not.toContain(
+        'sample-assistant',
+      );
+      // Not even commented: on a real backend the fixture is unsafe at any level
+      // of commenting-out, because uncommenting it is what sends it.
+      expect(code, `${framework}: fixture offered on a real backend`).not.toContain(
+        'sampleMessages',
+      );
+      // The thread starts EMPTY, in this framework's own spelling.
+      const emptyInit: Record<(typeof REAL_FRAMEWORKS)[number], RegExp> = {
+        react: /const \[messages, setMessages\] = useState<ChatMessage\[\]>\(\[\]\);/,
+        next: /const \[messages, setMessages\] = useState<ChatMessage\[\]>\(\[\]\);/,
+        'tanstack-start': /const \[messages, setMessages\] = useState<ChatMessage\[\]>\(\[\]\);/,
+        vue: /const messages = ref<ChatMessage\[\]>\(\[\]\);/,
+        svelte: /let messages = \$state\.raw<ChatMessage\[\]>\(\[\]\);/,
+        // html never assigns chat.messages at startup at all; the first submit
+        // reads it through `?? []` because an un-upgraded element has none.
+        html: /chat\.messages = \[\.\.\.chat\.messages \?\? \[\], /,
+      };
+      expect(code, `${framework}: thread does not start empty`).toMatch(emptyInit[framework]);
+      // And the suggestions the caller passed are still wired, which is the
+      // thing an empty state is needed for.
+      expect(code, `${framework}: caller suggestions dropped`).toContain('Find the current pricing');
+    },
+  );
+
+  it('the seed that was removed is exactly what toAnthropicMessages refuses', () => {
+    // The historical seed, verbatim. This is the WHY behind the test above: not
+    // a style preference, an encoder that throws before the request is built.
+    const historicalSeed: ChatMessage[] = [
+      {
+        id: 'sample-assistant',
+        role: 'assistant',
+        parts: [
+          { type: 'reasoning', text: 'I should call the search tool to get up-to-date data.' },
+          {
+            type: 'tool',
+            tool: {
+              type: 'search',
+              state: 'output-available',
+              input: { query: 'current pricing' },
+              output: { results: ['Result A', 'Result B'] },
+              toolCallId: 'tc_001',
+            },
+          },
+          { type: 'text', text: 'Searched the web for current pricing.' },
+        ],
+      },
+    ];
+    expect(() => toAnthropicMessages(historicalSeed)).toThrow(WireEncodeError);
+    // And on the OpenAI wire it does not throw — it lies, which is worse: turn
+    // one carries an assistant tool_call plus its result as conversation history.
+    const wire = toOpenAIMessages(historicalSeed);
+    expect(wire.some((m) => m.role === 'tool' && m.tool_call_id === 'tc_001')).toBe(true);
+  });
+
+  it('only the mock preview offers the fixture, and only commented out', async () => {
+    const code = frontEnd(
+      await scaffold.handler({
+        framework: 'react',
+        useCase: 'agentic',
+        integration: 'mock',
+        placement: 'full-page',
+      }),
+    );
+    // Offered...
+    expect(code).toContain('tc_001');
+    // ...but every line mentioning it is a comment, and the live initializer is empty.
+    for (const line of code.split('\n')) {
+      if (line.includes('tc_001') || line.includes('sampleMessages')) {
+        expect(line.trim().startsWith('//'), `live fixture line: ${line}`).toBe(true);
+      }
+    }
+    expect(code).toContain('const [messages, setMessages] = useState<ChatMessage[]>([]);');
+    // The commented block must uncomment COMPLETELY: a fixture const with no
+    // consumer is TS6133 the moment someone takes the offer.
+    expect(code).toContain(
+      '// const [messages, setMessages] = useState<ChatMessage[]>(sampleMessages);',
+    );
+  });
+
+  it('a non-tool archetype gets no tool-loop block and no applyToolOutput import', async () => {
+    const out = await scaffold.handler({
+      framework: 'react',
+      useCase: 'drop-in-chat',
+      integration: 'openrouter',
+      placement: 'full-page',
+    });
+    const emitted = JSON.stringify(out);
+    expect(emitted).not.toContain('turn.toolCalls');
+    expect(emitted).not.toContain('applyToolOutput');
+  });
+
+  // Same systemic gap the parts sweep closed: every integration's front end is a
+  // static string, so one stale template is a silent permanent bug. Scoped to the
+  // front-end block because a BACKEND route may legitimately hand-roll a reader
+  // to re-frame a native stream (cloudflare's worker template does exactly that).
+  it('every real integration, on every framework, emits an adapter-based front end', async () => {
+    for (const integration of listIntegrations()) {
+      if (integration.id === 'mock') continue;
+      for (const framework of REAL_FRAMEWORKS) {
+        const code = frontEnd(
+          await scaffold.handler({
+            framework, useCase: 'agentic', integration: integration.id, placement: 'full-page',
+          }),
+        );
+        const label = `${integration.id}/${framework}`;
+        expect(code, `${label}: missing readOpenAIStream`).toContain('await readOpenAIStream(res, stream);');
+        // agentic is a tool archetype, so the request re-encodes the LIVE thread.
+        expect(code, `${label}: missing toOpenAIMessages`).toContain(
+          `toOpenAIMessages(${THREAD_EXPR[framework]})`,
+        );
+        expect(code, `${label}: hand-rolled reader survived`).not.toContain('getReader()');
+        expect(code, `${label}: hand-rolled frame split survived`).not.toContain("startsWith('data:')");
+        expect(code, `${label}: hand-rolled delta walk survived`).not.toContain('choices?.[0]?.delta');
+        expect(code, `${label}: flattens parts to a content string`).not.toContain("p.type === 'text' ? p.text");
+        // Stale @kitn.ai/ui/state API removed earlier in this migration.
+        expect(code, `${label}: stale addTool`).not.toContain('addTool');
+        expect(code, `${label}: stale updateTool`).not.toContain('updateTool');
+        expect(code, `${label}: stale appendContent`).not.toContain('appendContent');
+      }
+    }
+  });
+});
+
+// ── the request body, and what happens when the request fails ────────────────
+
+describe('real-backend scaffolds send what the panel needs and survive a failure', () => {
+  // A kai-tool archetype with no `tools` array in the request is a panel no code
+  // path can populate: the model never emits a tool call, so the element renders
+  // nothing, forever, with nothing to debug.
+  it.each(REAL_FRAMEWORKS)('%s tool archetype declares tool schemas and sends them', async (framework) => {
+    const code = frontEnd(
+      await scaffold.handler({
+        framework,
+        useCase: 'agentic',
+        integration: 'openrouter',
+        placement: 'full-page',
+      }),
+    );
+    expect(code, `${framework}: no tools declaration`).toMatch(/^\s*const tools = \[$/m);
+    expect(code, `${framework}: tools missing from the POST body`).toContain(
+      `toOpenAIMessages(${THREAD_EXPR[framework]}), tools }`,
+    );
+  });
+
+  // The other half of the contract: a tools array the ROUTE drops is no better
+  // than no tools array at all. Asserted for every integration that declares it
+  // forwards the field, so the two halves can never drift apart.
+  it.each(listIntegrations().filter((i) => i.forwardsFromClient.includes('tools')).map((i) => i.id))(
+    '%s route destructures tools and forwards it upstream',
+    async (integration) => {
+      const out = await scaffold.handler({
+        framework: 'next',
+        useCase: 'agentic',
+        integration,
+        placement: 'full-page',
+      });
+      const route = (out.content as { type: string; text: string }[])[0].text.split(
+        '=== (2) BACKEND ROUTE ===',
+      )[1];
+      // Read through the shared `readChatRequest` preamble, not an inline
+      // `request.json()`: `json()` hands back `unknown`, so destructuring it
+      // directly is TS2339 on every field under a server tsconfig.
+      expect(route, `${integration}: route never reads tools`).toMatch(
+        /const \{[^}]*\btools\b[^}]*\} = await readChatRequest\(request\);/,
+      );
+      expect(route, `${integration}: route never sends tools`).toMatch(
+        /JSON\.stringify\(\{[^}]*\btools\b[^}]*\}\)/,
+      );
+    },
+  );
+
+  /**
+   * No emitted route destructures a raw `.json()`.
+   *
+   * `Request.json()` returns `Promise<unknown>` under undici's typings and
+   * `Promise<any>` under the DOM lib, so `const { messages } = await
+   * request.json()` compiles in Next and is a hard TS2339 in a stock Vite app,
+   * whose `tsc -b` walks vite.config.ts -> vite-chat-api.ts -> server/chat.ts
+   * with no DOM. Every route narrows the body once through the injected
+   * `ChatRequestBody` instead.
+   *
+   * verify:scaffold proves this properly by COMPILING the routes; this is the
+   * cheap version that runs in `npm test`, where there is no tsc.
+   */
+  it.each(listIntegrations().filter((i) => i.language === 'ts' && i.id !== 'mock').map((i) => i.id))(
+    '%s route never destructures an untyped .json()',
+    async (integration) => {
+      for (const framework of ['next', 'react', 'svelte', 'worker', 'express'] as const) {
+        const out = await scaffold.handler({
+          framework,
+          useCase: 'agentic',
+          integration,
+          placement: 'full-page',
+        });
+        const route = (out.content as { type: string; text: string }[])[0].text.split(
+          '=== (2) BACKEND ROUTE ===',
+        )[1];
+        expect(route, `${integration}/${framework}: destructures an unknown body`).not.toMatch(
+          /const \{[^}]*\} = await (?:req|request)\.json\(\);/,
+        );
+      }
+    },
+  );
+
+  it('a non-tool archetype declares no tools and sends none', async () => {
+    const code = frontEnd(
+      await scaffold.handler({
+        framework: 'react',
+        useCase: 'drop-in-chat',
+        integration: 'openrouter',
+        placement: 'full-page',
+      }),
+    );
+    expect(code).not.toContain('const tools = [');
+    expect(code).toContain('toOpenAIMessages(history) }');
+  });
+
+  // A field the route does not read must never be declared in the front end. The
+  // detection this replaced was `routeSrc.includes('model')`, true of any template
+  // that so much as writes `model: 'llama3.2'`, so ollama, langgraph,
+  // vercel-ai-sdk and cloudflare all shipped an editable model const their route
+  // threw away, cloudflare's not even a valid Workers AI id.
+  it.each(listIntegrations().filter((i) => i.id !== 'mock').map((i) => i.id))(
+    '%s declares only the request fields its route actually forwards',
+    async (integration) => {
+      const forwards = getIntegration(integration)!.forwardsFromClient;
+      const code = frontEnd(
+        await scaffold.handler({
+          framework: 'react',
+          useCase: 'agentic',
+          integration,
+          placement: 'full-page',
+        }),
+      );
+      const hasModel = /^\s*const model = /m.test(code);
+      const hasTools = code.includes('const tools = [');
+      expect(hasModel, `${integration}: model const vs forwardsFromClient`).toBe(
+        forwards.includes('model'),
+      );
+      expect(hasTools, `${integration}: tools const vs forwardsFromClient`).toBe(
+        forwards.includes('tools'),
+      );
+      // And what is declared is what is sent, in both directions.
+      expect(code.includes('{ model, messages:'), `${integration}: model in body`).toBe(
+        forwards.includes('model'),
+      );
+      expect(
+        code.includes(`toOpenAIMessages(${THREAD_EXPR.react}), tools }`),
+        `${integration}: tools in body`,
+      ).toBe(forwards.includes('tools'));
+    },
+  );
+
+  // Without a catch, a bad key is a permanently blank assistant bubble plus an
+  // unhandled promise rejection, and any tool panel mid-flight spins forever.
+  it.each(REAL_FRAMEWORKS)('%s catches the failure and aborts the stream', async (framework) => {
+    const code = frontEnd(
+      await scaffold.handler({
+        framework,
+        useCase: 'agentic',
+        integration: 'openrouter',
+        placement: 'full-page',
+      }),
+    );
+    expect(code, `${framework}: no catch`).toMatch(/^\s*\} catch \(err\) \{$/m);
+    expect(code, `${framework}: never aborts`).toContain(
+      "stream.abort(err instanceof Error ? err.message : 'Request failed');",
+    );
+    // abort() lives INSIDE the catch, ahead of the finally: done() on its own
+    // settles the message but leaves an in-flight tool panel on input-available.
+    const catchAt = code.indexOf('} catch (err) {');
+    const finallyAt = code.indexOf('} finally {', catchAt);
+    const abortAt = code.indexOf('stream.abort(');
+    expect(abortAt, `${framework}: abort outside the catch`).toBeGreaterThan(catchAt);
+    expect(abortAt, `${framework}: abort after the finally`).toBeLessThan(finallyAt);
+  });
+
+  it('mock scaffolds stay catch-free: there is no request to fail', async () => {
+    const code = frontEnd(
+      await scaffold.handler({
+        framework: 'react',
+        useCase: 'agentic',
+        integration: 'mock',
+        placement: 'full-page',
+      }),
+    );
+    expect(code).not.toContain('stream.abort(');
+  });
+});
+
+// ── the backend block is a BACKEND route ─────────────────────────────────────
+
+describe('framework: html gets a server route, never a second front end', () => {
+  // routeTemplates keyed by 'html' can only hold a browser snippet, and block (1)
+  // already emits the browser side. ollama shipped one, so `framework: 'html'`
+  // printed a SECOND <kai-chat id="chat"> with its own kai-submit listener under
+  // the BACKEND ROUTE heading: a duplicate element id and two fetches per submit.
+  it.each(listIntegrations().map((i) => i.id))('%s emits exactly one kai-chat element', async (integration) => {
+    const out = await scaffold.handler({
+      framework: 'html',
+      useCase: 'drop-in-chat',
+      integration,
+      placement: 'full-page',
+    });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+    expect(text.match(/<kai-chat id="chat"/g) ?? [], `${integration}: duplicate kai-chat`).toHaveLength(1);
+    expect(
+      text.match(/addEventListener\('kai-submit'/g) ?? [],
+      `${integration}: competing kai-submit listeners`,
+    ).toHaveLength(1);
+  });
+
+  it('no integration ships an html routeTemplate', () => {
+    for (const integration of listIntegrations()) {
+      expect(Object.keys(integration.routeTemplates), `${integration.id}`).not.toContain('html');
+    }
+  });
+});
+
+/**
+ * DEFECT (1): every non-next framework used to be handed the Next.js route.
+ *
+ * It compiled — `export async function POST(req: Request)` is valid TypeScript
+ * anywhere — and then failed at runtime, differently per framework: SvelteKit
+ * calls POST(event) and threw `req.json is not a function` on the first submit;
+ * TanStack Start never routes a bare POST export; a Vite SPA has no server to
+ * paste it into at all. Compiling was never the property that mattered, which is
+ * why these assert the framework's own DECLARATION, not the handler body.
+ */
+describe('the backend route matches the framework that asked for it', () => {
+  const routeOf = async (framework: string, integration = 'openrouter') => {
+    const out = await scaffold.handler({ framework, useCase: 'drop-in-chat', integration, placement: 'full-page' });
+    return (out.content as { type: string; text: string }[])[0].text.split('=== (2) BACKEND ROUTE ===')[1];
+  };
+
+  it.each([
+    ['next', 'app/api/chat/route.ts', /export async function POST\(req: Request\)/],
+    ['svelte', 'src/routes/api/chat/+server.ts', /export const POST: RequestHandler = \(\{ request \}\) => chatHandler\(request\)/],
+    ['tanstack-start', 'src/routes/api/chat.ts', /createFileRoute\('\/api\/chat'\)\(\{\n\s*server: \{ handlers: \{ POST/],
+    // Outside src/: a create-vite tsconfig.app.json is `"include": ["src"]` with no
+    // node types, so a handler under src/ is TS2591 on `process` in a stock build.
+    ['vue', '// server/chat.ts', /server\.middlewares\.use\('\/api\/chat'/],
+    ['react', '// server/chat.ts', /server\.middlewares\.use\('\/api\/chat'/],
+    ['worker', 'src/index.ts', /export default \{\n\s*fetch\(request: Request\)/],
+    ['express', 'server.ts', /app\.post\('\/api\/chat'/],
+  ])('%s declares its own route in %s', async (framework, file, declaration) => {
+    const route = await routeOf(framework);
+    expect(route, `${framework}: no file path`).toContain(file);
+    expect(route, `${framework}: not declared the way ${framework} routes`).toMatch(declaration);
+    // The portable handler is shared; the DECLARATION is what differs.
+    expect(route).toContain('async function chatHandler(request: Request)');
+  });
+
+  it('svelte does not get a bare Next-shaped POST(req)', async () => {
+    // CODE only: the emitted svelte route explains the difference in a comment,
+    // and that comment quotes the very line it is warning about.
+    const code = (await routeOf('svelte'))
+      .split('\n')
+      .filter((l) => !l.trim().startsWith('//') && !l.trim().startsWith('#'))
+      .join('\n');
+    // This exact declaration is what threw `req.json is not a function`.
+    expect(code).not.toMatch(/export async function POST\(req: Request\)/);
+  });
+
+  it('tanstack-start imports @tanstack/react-start so `server` typechecks', async () => {
+    // The augmentation that adds `server` to the route options ships with
+    // @tanstack/react-start. Nothing else in a scaffolded src/ imports it, so
+    // without this line the emitted block fails with TS2353 then TS7031.
+    expect(await routeOf('tanstack-start')).toContain("import '@tanstack/react-start'");
+  });
+
+  it('warns for EVERY framework that cannot host the route, not just react', async () => {
+    // pi ships an Express-only bridge (a Node child_process), so every other
+    // framework has to be told. The warning used to be gated on react.
+    for (const framework of ['html', 'react', 'vue', 'svelte', 'tanstack-start', 'next']) {
+      const route = await routeOf(framework, 'pi');
+      expect(route, `${framework}: no warning`).toContain('WARNING');
+      expect(route, `${framework}: warning does not name the target`).toMatch(/will NOT run/);
+    }
+  });
+
+  it('html says there is no server, and still shows the handler to deploy', async () => {
+    const route = await routeOf('html');
+    expect(route).toMatch(/static page has no server/);
+    expect(route).toContain('async function chatHandler(request: Request)');
+  });
+});
+
+/**
+ * DEFECT (2): the emitted route dropped the upstream status, so a 401 — the
+ * no-key first run — reached the browser as a 200 whose body was a JSON error
+ * labelled text/event-stream. Nothing rendered and nothing logged.
+ */
+describe('the backend route forwards the upstream status', () => {
+  it.each(['next', 'svelte', 'tanstack-start', 'vue', 'react', 'worker', 'express', 'html'])(
+    '%s forwards it',
+    async (framework) => {
+      const out = await scaffold.handler({
+        framework,
+        useCase: 'drop-in-chat',
+        integration: 'openrouter',
+        placement: 'full-page',
+      });
+      const route = (out.content as { type: string; text: string }[])[0].text.split('=== (2) BACKEND ROUTE ===')[1];
+      expect(route, `${framework}: never checks upstream.ok`).toMatch(/if \(!upstream\.ok\)/);
+      expect(route, `${framework}: drops the upstream status`).toMatch(/status: upstream\.status/);
+      // and does not relabel the error body as a stream
+      expect(route).toMatch(/'Content-Type': upstream\.headers\.get\('content-type'\)/);
+    },
+  );
+
+  it('the bridging routes carry the status across the bridge', async () => {
+    for (const [framework, expected] of [
+      ['vue', /res\.statusCode = response\.status/],
+      ['react', /res\.statusCode = response\.status/],
+      ['express', /res\.status\(response\.status\)/],
+    ] as const) {
+      const out = await scaffold.handler({
+        framework,
+        useCase: 'drop-in-chat',
+        integration: 'openrouter',
+        placement: 'full-page',
+      });
+      const route = (out.content as { type: string; text: string }[])[0].text.split('=== (2) BACKEND ROUTE ===')[1];
+      expect(route, `${framework}: the bridge drops the status`).toMatch(expected);
+    }
+  });
+});
+
+/**
+ * angular + solid: the two frameworks the scaffolder could not target at all.
+ *
+ * They are grouped together because the interesting thing about them is that
+ * they are NOT the same kind of target:
+ *   · angular consumes the `kai-*` custom elements, like vue/svelte/html.
+ *   · solid consumes the SolidJS components DIRECTLY from the root entry —
+ *     the kit is authored in Solid, so the facade would ship the runtime twice.
+ *
+ * The last describe in this file is the consistency guard: whatever the two
+ * targets do differently in SYNTAX, they must offer the same CAPABILITIES as
+ * every other framework.
+ */
+describe('scaffold — angular', () => {
+  const emit = async (useCase = 'agentic', integration = 'openrouter') => {
+    const out = await scaffold.handler({ useCase, integration, placement: 'full-page', framework: 'angular' });
+    return (out.content as { type: string; text: string }[])[0].text;
+  };
+  const front = (text: string) => text.split('=== (2) BACKEND ROUTE ===')[0];
+  const route = (text: string) => text.split('=== (2) BACKEND ROUTE ===')[1].split('=== (3) RUN NOTE ===')[0];
+
+  it('declares CUSTOM_ELEMENTS_SCHEMA — without it every <kai-*> fails the template compiler', async () => {
+    const f = front(await emit());
+    expect(f).toContain('schemas: [CUSTOM_ELEMENTS_SCHEMA]');
+    expect(f).toMatch(/import \{[^}]*CUSTOM_ELEMENTS_SCHEMA[^}]*\} from '@angular\/core';/);
+  });
+
+  it('binds arrays as DOM PROPERTIES, never as attributes', async () => {
+    const f = front(await emit());
+    expect(f).toContain('[messages]="messages()"');
+    expect(f).toContain('[suggestions]="suggestions"');
+    // `messages="…"` would be an attribute: the array stringifies to "[object Object]".
+    expect(f).not.toMatch(/(?:^|\s)messages="/m);
+    expect(f).not.toMatch(/(?:^|\s)suggestions="/m);
+  });
+
+  it('listens for kai-submit and narrows the event inside the handler', async () => {
+    const f = front(await emit());
+    expect(f).toContain('(kai-submit)="onSubmit($event)"');
+    // Under strictTemplates Angular types `$event` on an unknown custom-element
+    // event as Event, so a CustomEvent-typed parameter would not compile.
+    expect(f).toContain('async onSubmit(event: Event) {');
+    expect(f).toContain('const e = event as CustomEvent<{ value: string }>;');
+  });
+
+  it('puts the theme in angular.json, not in a TS css import (the builder takes neither)', async () => {
+    const f = front(await emit());
+    expect(f).toContain('node_modules/@kitn.ai/ui/dist/theme.tokens.css');
+    expect(f).not.toMatch(/import ['"]@kitn\.ai\/ui\/theme(\.tokens)?\.css['"]/);
+  });
+
+  it('re-applies the properties after the element upgrades (the SCAF-15 race)', async () => {
+    const f = front(await emit());
+    expect(f).toContain("await customElements.whenDefined('kai-chat')");
+    expect(f).toContain('afterNextRender(');
+    expect(f).toContain('viewChild.required<ElementRef<KaiChatElement>>(');
+  });
+
+  it('reads the thread off the signal — no React-style turn-scoped copy', async () => {
+    const f = front(await emit());
+    expect(f).toContain('this.messages.set([...this.messages()');
+    expect(f).toContain('toOpenAIMessages(this.messages())');
+    expect(f).not.toContain('let thread: ChatMessage[]');
+  });
+
+  it('emits src/server.ts with /api/chat registered BEFORE the Angular catch-all', async () => {
+    const r = route(await emit());
+    expect(r).toContain('// src/server.ts');
+    expect(r).toContain('ng add @angular/ssr');
+    expect(r).toContain("app.post('/api/chat', express.json()");
+    expect(r).toContain('export const reqHandler = createNodeRequestHandler(app);');
+    // Order is the whole point: the renderer would answer /api/chat with HTML.
+    expect(r.indexOf("app.post('/api/chat'")).toBeLessThan(r.indexOf('angularApp\n'));
+    // and the status has to survive the (req, res) bridge
+    expect(r).toContain('res.status(response.status);');
+  });
+
+  it('does not silently claim a non-SSR Angular app can host the route', async () => {
+    const r = route(await emit());
+    expect(r).toMatch(/non-SSR Angular app cannot host \/api\/chat/);
+  });
+});
+
+describe('scaffold — solid', () => {
+  const emit = async (useCase = 'agentic', integration = 'openrouter') => {
+    const out = await scaffold.handler({ useCase, integration, placement: 'full-page', framework: 'solid' });
+    return (out.content as { type: string; text: string }[])[0].text;
+  };
+  const front = (text: string) => text.split('=== (2) BACKEND ROUTE ===')[0];
+  const route = (text: string) => text.split('=== (2) BACKEND ROUTE ===')[1].split('=== (3) RUN NOTE ===')[0];
+
+  it('renders the SolidJS components from the root entry — no kai-* anywhere', async () => {
+    const f = front(await emit());
+    expect(f).toMatch(/\} from '@kitn\.ai\/ui';/);
+    expect(f).toContain('<ChatContainer');
+    expect(f).toContain('<PromptInput');
+    // The architectural claim, asserted: no element tags, no element registration.
+    // Comment lines are stripped first — the emitted prose TALKS about <kai-chat>
+    // to explain why it is absent, and counting that as markup would make this
+    // assertion fail for the very sentence that documents it.
+    const code = f.replace(/^[ \t]*\/\/.*$/gm, '');
+    expect(code).not.toMatch(/<kai-[a-z-]+/);
+    expect(code).not.toContain("import '@kitn.ai/ui/elements'");
+  });
+
+  it('and the LOADING OPTIONS note says so rather than claiming a register-all import', async () => {
+    const text = await emit();
+    const note = text.split('=== LOADING OPTIONS ===')[1] ?? '';
+    expect(note).toContain("The scaffold emits NO `import '@kitn.ai/ui/elements'`");
+  });
+
+  it('renders EVERY part kind, not just text — the coarse element did that for free', async () => {
+    const f = front(await emit());
+    expect(f).toContain('function renderPart(part: MessagePart');
+    expect(f).toContain("case 'text':");
+    expect(f).toContain("case 'reasoning':");
+    expect(f).toContain("case 'tool':");
+    expect(f).toContain('<Tool toolPart={part.tool} />');
+  });
+
+  it('uses HYPHENATED style keys — Solid applies style via setProperty, not camelCase', async () => {
+    const f = front(await emit());
+    expect(f).toMatch(/'flex-direction': 'column'/);
+    expect(f).not.toMatch(/flexDirection:/);
+  });
+
+  it('carries the Tailwind setup the components actually need', async () => {
+    const f = front(await emit());
+    expect(f).toContain('@import "tailwindcss"');
+    expect(f).toContain('@import "@kitn.ai/ui/theme.css"');
+    expect(f).toContain('@source "../node_modules/@kitn.ai/ui"');
+  });
+
+  it('takes the submitted text from the controlled input signal, not a kai-submit event', async () => {
+    const f = front(await emit());
+    expect(f).toContain('const value = input().trim();');
+    expect(f).toContain("setInput('');");
+    expect(f).not.toContain('e.detail.value');
+  });
+
+  it('reads the thread off the signal — no React-style turn-scoped copy', async () => {
+    const f = front(await emit());
+    expect(f).toContain('setMessages([...messages()');
+    expect(f).toContain('toOpenAIMessages(messages())');
+    expect(f).not.toContain('let thread: ChatMessage[]');
+  });
+
+  it('hosts the route the way any Vite SPA does, and says it is dev-only', async () => {
+    const r = route(await emit());
+    expect(r).toContain('// server/chat.ts');
+    expect(r).toContain('configureServer(server)');
+    expect(r).toContain("server.middlewares.use('/api/chat'");
+    expect(r).toMatch(/DEV ONLY/);
+    expect(r).toContain('plugins: [solid(), tailwindcss(), chatApiPlugin()]');
+    expect(r).toContain('res.statusCode = response.status;');
+  });
+});
+
+/**
+ * The product constraint, as a test: a developer moving between frameworks finds
+ * the same components and the same concepts, with only the syntax differing.
+ * angular and solid are in every list here — that is the point.
+ */
+describe('scaffold — capability parity across every front-end framework', () => {
+  const FRONTENDS = ['html', 'react', 'next', 'vue', 'svelte', 'angular', 'solid', 'tanstack-start'] as const;
+
+  it('every framework gets the LIVE two-round tool loop for the agentic archetype', async () => {
+    for (const framework of FRONTENDS) {
+      const out = await scaffold.handler({
+        useCase: 'agentic',
+        integration: 'openrouter',
+        placement: 'full-page',
+        framework,
+      });
+      const front = (out.content as { type: string; text: string }[])[0].text.split('=== (2) BACKEND ROUTE ===')[0];
+      for (const marker of [
+        'MAX_TOOL_ROUNDS',
+        'applyToolOutput(',
+        'applyToolFailure(',
+        'createAssistantStream(',
+        'readOpenAIStream(',
+        'toOpenAIMessages(',
+        'function runTool(',
+      ]) {
+        expect(front, `${framework}: missing ${marker}`).toContain(marker);
+      }
+    }
+  });
+
+  it('every framework declares the tool schemas that make a first tool call possible', async () => {
+    for (const framework of FRONTENDS) {
+      const out = await scaffold.handler({
+        useCase: 'agentic',
+        integration: 'openrouter',
+        placement: 'full-page',
+        framework,
+      });
+      const front = (out.content as { type: string; text: string }[])[0].text.split('=== (2) BACKEND ROUTE ===')[0];
+      expect(front, `${framework}: no tools array`).toContain("name: 'search'");
+      // The thread expression varies per framework (`thread`, `messages()`,
+      // `this.messages()`, `chat.messages`), so match across its own parens.
+      expect(front, `${framework}: tools not sent`).toMatch(/messages: toOpenAIMessages\([\s\S]*?\), tools/);
+    }
+  });
+
+  it('every framework aborts the stream on a failed request instead of hanging the bubble', async () => {
+    for (const framework of FRONTENDS) {
+      const out = await scaffold.handler({
+        useCase: 'drop-in-chat',
+        integration: 'openrouter',
+        placement: 'full-page',
+        framework,
+      });
+      const front = (out.content as { type: string; text: string }[])[0].text.split('=== (2) BACKEND ROUTE ===')[0];
+      expect(front, `${framework}: no abort`).toContain('stream.abort(');
+      expect(front, `${framework}: no done`).toContain('stream.done()');
+    }
+  });
+
+  it('every framework offers the starter suggestions and the LOADING OPTIONS + INTERACTION PATTERNS sections', async () => {
+    for (const framework of FRONTENDS) {
+      const out = await scaffold.handler({
+        useCase: 'drop-in-chat',
+        integration: 'openrouter',
+        placement: 'full-page',
+        framework,
+      });
+      const text = (out.content as { type: string; text: string }[])[0].text;
+      expect(text, `${framework}: no suggestions`).toContain("What's new?");
+      expect(text, `${framework}: missing LOADING OPTIONS`).toContain('=== LOADING OPTIONS ===');
+      expect(text, `${framework}: missing INTERACTION PATTERNS`).toContain('=== INTERACTION PATTERNS ===');
+    }
+  });
+
+  it('angular and solid both get a REAL route, not a cannot-host warning', async () => {
+    for (const framework of ['angular', 'solid'] as const) {
+      const out = await scaffold.handler({
+        useCase: 'drop-in-chat',
+        integration: 'openrouter',
+        placement: 'full-page',
+        framework,
+      });
+      const route = (out.content as { type: string; text: string }[])[0].text
+        .split('=== (2) BACKEND ROUTE ===')[1]
+        .split('=== (3) RUN NOTE ===')[0];
+      expect(route, `${framework}: emitted a cannot-host warning`).not.toContain('will NOT run');
+      expect(route, `${framework}: no chatHandler`).toContain('async function chatHandler(request: Request)');
+    }
+  });
+
+  it('a python integration still warns honestly on both new frameworks', async () => {
+    for (const framework of ['angular', 'solid'] as const) {
+      const out = await scaffold.handler({
+        useCase: 'drop-in-chat',
+        integration: 'pydantic-ai',
+        placement: 'full-page',
+        framework,
+      });
+      const route = (out.content as { type: string; text: string }[])[0].text
+        .split('=== (2) BACKEND ROUTE ===')[1]
+        .split('=== (3) RUN NOTE ===')[0];
+      expect(route, `${framework}: no warning for a Python service`).toContain('will NOT run');
     }
   });
 });

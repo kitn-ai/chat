@@ -300,12 +300,16 @@ function matchFont(stack: string | undefined, list: { value: string }[]): string
 }
 
 const SEED_MESSAGES = [
-  { id: 'm1', role: 'user', content: 'Can I match the chat to my brand?' },
+  { id: 'm1', role: 'user', parts: [{ type: 'text', text: 'Can I match the chat to my brand?' }] },
   {
     id: 'm2',
     role: 'assistant',
-    content:
-      'Every color is a `--kai-color-*` token, so a handful of overrides reskins the whole UI. Set `--kai-color-primary` for your accent and `--kai-color-ring` for the focus outline, then drag the radius. Watch it all reskin live.',
+    parts: [
+      {
+        type: 'text',
+        text: 'Every color is a `--kai-color-*` token, so a handful of overrides reskins the whole UI. Set `--kai-color-primary` for your accent and `--kai-color-ring` for the focus outline, then drag the radius. Watch it all reskin live.',
+      },
+    ],
     actions: ['copy', 'like'],
   },
 ];
@@ -528,8 +532,8 @@ export default function ThemeStudio() {
     const aId = nextId();
     chatHost.messages = [
       ...((chatHost.messages as unknown[]) ?? []),
-      { id: nextId(), role: 'user', content: text },
-      { id: aId, role: 'assistant', content: '' },
+      { id: nextId(), role: 'user', parts: [{ type: 'text', text }] },
+      { id: aId, role: 'assistant', parts: [] },
     ];
     chatHost.loading = true;
     const words = REPLY.split(/(\s+)/);
@@ -539,7 +543,7 @@ export default function ThemeStudio() {
       const partial = words.slice(0, i).join('');
       const done = i >= words.length;
       chatHost!.messages = ((chatHost!.messages as { id: string }[]) ?? []).map((m) =>
-        m.id === aId ? { ...m, content: partial, ...(done ? { actions: ['copy', 'like'] } : {}) } : m,
+        m.id === aId ? { ...m, parts: [{ type: 'text', text: partial }], ...(done ? { actions: ['copy', 'like'] } : {}) } : m,
       );
       if (!done) streamTimer = window.setTimeout(tick, 38);
       else chatHost!.loading = false;

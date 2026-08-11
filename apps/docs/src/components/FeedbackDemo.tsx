@@ -9,14 +9,18 @@ import { loadKit, syncKaiTheme, syncToastRegionTheme } from './example/kit';
 type AnyEl = HTMLElement & Record<string, unknown>;
 
 // Shape mirrors apps/docs/src/data/samples/kai-message.ts (ASSISTANT_MESSAGE) and the
-// ChatMessage interface in src/elements/chat-types.ts: { id, role, content: string, actions }.
+// ChatMessage interface in src/elements/chat-types.ts: { id, role, parts: MessagePart[], actions }.
 // `actions` is REQUIRED — MessageBody only renders the bar when actions.length > 0,
 // so without it there is no copy/thumbs row to demo.
 const MESSAGE = {
   id: 'm-feedback',
   role: 'assistant',
-  content:
-    'A closure is a function bundled with the variables in scope where it was defined — it keeps reading and writing those variables even after the outer function has returned.',
+  parts: [
+    {
+      type: 'text',
+      text: 'A closure is a function bundled with the variables in scope where it was defined — it keeps reading and writing those variables even after the outer function has returned.',
+    },
+  ],
   actions: ['copy', 'like', 'dislike'],
 };
 

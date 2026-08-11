@@ -9,7 +9,7 @@ import { Aside } from '@astrojs/starlight/components';
 
 ## The route
 
-`streamText({ model, messages })` runs the model and returns a result that streams lazily. `kai-chat` posts its messages as `{ role, content }` pairs, which `streamText` takes directly — no conversion needed. The result exposes `textStream`, an async iterable of string deltas, and that's the primitive you re-frame into SSE.
+`streamText({ model, messages })` runs the model and returns a result that streams lazily. `<kai-chat>` messages carry ordered `parts`, not a `content` string, so encode the thread with `toOpenAIMessages(history)` (from `@kitn.ai/ui/wire`) before posting — the result is `{ role, content }` pairs, which `streamText` takes directly. The result exposes `textStream`, an async iterable of string deltas, and that's the primitive you re-frame into SSE.
 
 AI/UI reads OpenAI-format SSE: lines of `data: {choices:[{delta:{content}}]}` ending with `data: [DONE]`. The SDK's own `toUIMessageStreamResponse()` emits a different protocol, so wrap `textStream` into OpenAI frames yourself:
 
@@ -76,7 +76,7 @@ const result = streamText({
 
 ## Tool calls and reasoning
 
-`streamText` also surfaces tool calls (`result.fullStream`) and reasoning. They map onto the message contract: a tool call becomes an entry in a message's `tools[]` whose `state` advances `input-streaming` → `input-available` → `output-available` (or `output-error`), and reasoning sets `reasoning.text`. The text-only SSE bridge above doesn't carry them — to render them, emit extra frames from `fullStream` and read them on the browser. See the [tool](/components/tool/) and [reasoning](/components/reasoning/) components for what AI/UI draws.
+`streamText` also surfaces tool calls (`result.fullStream`) and reasoning. They map onto the message contract: a tool call becomes a `{ type: 'tool' }` part in the message's `parts` array whose `tool.state` advances `input-streaming` → `input-available` → `output-available` (or `output-error`), and reasoning becomes a `{ type: 'reasoning' }` part with its `text` set. The text-only SSE bridge above doesn't carry them — to render them, emit extra frames from `fullStream` and read them on the browser. See the [tool](/components/tool/) and [reasoning](/components/reasoning/) components for what AI/UI draws.
 
 ## Next steps
 

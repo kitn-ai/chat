@@ -4,6 +4,7 @@
  *  A segmented toggle swaps the sidebar to the left or right by
  *  re-ordering the two <kai-resizable-item> elements in the DOM. */
 import { createSignal, onMount, onCleanup } from 'solid-js';
+import type { ChatMessage } from '@kitn.ai/ui';
 import { loadKit } from './example/kit';
 
 // ConversationSummary shape (verified against element-meta.json)
@@ -52,15 +53,20 @@ const GROUPS = [
   { id: 'yesterday', name: 'Yesterday', sortOrder: 1, createdAt: '2026-06-16T00:00:00.000Z' },
 ];
 
-// ChatMessage seed (verified against element-meta.json kai-chat.messages shape)
-type ChatMsg = { id: string; role: 'user' | 'assistant'; content: string; actions?: string[] };
+// The kit's own message shape — an ordered `parts` array (text, reasoning, tool,
+// card, source, file), not a text-only stand-in. See @kitn.ai/ui's MessagePart.
+type ChatMsg = ChatMessage;
 const SEED_MESSAGES: ChatMsg[] = [
-  { id: 'm1', role: 'user', content: 'How does the resizable layout work?' },
+  { id: 'm1', role: 'user', parts: [{ type: 'text', text: 'How does the resizable layout work?' }] },
   {
     id: 'm2',
     role: 'assistant',
-    content:
-      'Wrap `<kai-resizable-item>` children inside `<kai-resizable>`. Set `size`, `min`, and `max` on each item — a draggable divider appears automatically between them. Use the toggle above to swap the sidebar to either side.',
+    parts: [
+      {
+        type: 'text',
+        text: 'Wrap `<kai-resizable-item>` children inside `<kai-resizable>`. Set `size`, `min`, and `max` on each item — a draggable divider appears automatically between them. Use the toggle above to swap the sidebar to either side.',
+      },
+    ],
     actions: ['copy', 'like', 'dislike'],
   },
 ];
@@ -92,8 +98,8 @@ export default function ResizableSplitDemo() {
     const aId = nextId();
     chatEl.messages = [
       ...(chatEl.messages ?? []),
-      { id: nextId(), role: 'user' as const, content: text },
-      { id: aId, role: 'assistant' as const, content: '' },
+      { id: nextId(), role: 'user' as const, parts: [{ type: 'text', text }] },
+      { id: aId, role: 'assistant' as const, parts: [] },
     ];
     (chatEl as any).loading = true;
     const words = REPLY.split(/(\s+)/);
@@ -105,7 +111,7 @@ export default function ResizableSplitDemo() {
       const done = i >= words.length;
       chatEl!.messages = (chatEl!.messages ?? []).map((m) =>
         m.id === aId
-          ? { ...m, content: partial, ...(done ? { actions: ['copy', 'like', 'dislike'] } : {}) }
+          ? { ...m, parts: [{ type: 'text', text: partial }], ...(done ? { actions: ['copy', 'like', 'dislike'] } : {}) }
           : m,
       );
       if (!done) timer = window.setTimeout(tick, 38);

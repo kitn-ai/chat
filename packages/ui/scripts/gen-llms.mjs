@@ -52,7 +52,7 @@ This is the single most common mistake. Arrays and objects (\`messages\`, \`mode
 
 \`\`\`js
 const chat = document.querySelector('kai-chat');
-chat.messages = [{ id: '1', role: 'assistant', content: 'Hi!' }]; // ✅ property
+chat.messages = [{ id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hi!' }] }]; // ✅ property
 \`\`\`
 \`\`\`html
 <kai-chat messages="[...]"></kai-chat>  <!-- ❌ never works -->
@@ -82,17 +82,69 @@ All ${count} elements are also exported individually. Use them for custom layout
 
 ## ChatMessage schema (required for \`<kai-chat>\`)
 
+A message's content is an **ordered \`parts\` array**. There is no \`content\` string: it was removed in 0.20.0. Text, reasoning, tool calls, generative-UI cards, citations and file attachments all live in \`parts\`, in the order the model produced them, so a post-tool answer renders below its tool panel instead of being glued onto the pre-tool text.
+
 \`\`\`ts
 interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
-  content: string;
-  reasoning?: { text: string; label?: string };
-  tools?: ToolPart[];
-  attachments?: AttachmentData[];
+  /** The ONLY content channel. Ordered. */
+  parts: MessagePart[];
+  /** Action buttons under the message. Chrome, not content. */
   actions?: ('copy' | 'like' | 'dislike' | 'regenerate' | 'edit')[];
+  avatar?: { src?: string; fallback?: string; alt?: string };
+  feedback?: 'like' | 'dislike';
+}
+
+/** Six variants, one per kind of content. Every variant may also carry \`raw\`
+ *  (\`{ source, payload }\`), the untranslated provider block the part was
+ *  normalized from, for echoing a turn back to the model verbatim. */
+type MessagePart =
+  | { type: 'text'; text: string; raw?: RawOrigin }
+  | { type: 'reasoning'; text: string; label?: string; index?: number; signature?: string; raw?: RawOrigin }
+  | { type: 'tool'; tool: ToolPart; raw?: RawOrigin }
+  | { type: 'card'; envelope: CardEnvelope; raw?: RawOrigin }
+  | { type: 'source'; source: MessageSource; raw?: RawOrigin }
+  | { type: 'file'; attachment: AttachmentData; raw?: RawOrigin };
+
+interface ToolPart {
+  type: string;
+  /** Rendering classification. Derived from \`type\` when you omit it; an explicit
+   *  value you set is preserved across later patches. */
+  kind?: 'command' | 'file-change' | 'search' | 'fetch' | 'mcp' | 'image' | 'generic';
+  state: 'input-streaming' | 'input-available' | 'output-available' | 'output-error';
+  input?: Record<string, unknown>;
+  /** Raw accumulated argument fragments, for character-level streaming. */
+  rawInput?: string;
+  output?: Record<string, unknown>;
+  toolCallId?: string;
+  errorText?: string;
+  raw?: RawOrigin;
+}
+
+/** A citation. Exported as \`MessageSource\` (the bare \`Source\` name belongs to
+ *  the citation-chip component). */
+interface MessageSource { id?: string; url?: string; title?: string; snippet?: string; index?: number }
+\`\`\`
+
+The simplest possible message, and one with reasoning + a tool call before its answer:
+
+\`\`\`js
+{ id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hi!' }] }
+
+{
+  id: '2',
+  role: 'assistant',
+  parts: [
+    { type: 'reasoning', text: 'I should search for current pricing.' },
+    { type: 'tool', tool: { type: 'search', state: 'output-available', toolCallId: 'tc_1',
+        input: { query: 'current pricing' }, output: { results: ['A', 'B'] } } },
+    { type: 'text', text: 'Here is what I found.' },
+  ],
 }
 \`\`\`
+
+Types are importable: \`import type { ChatMessage, MessagePart, MessageSource } from '@kitn.ai/ui'\` (also from \`'@kitn.ai/ui/react'\` and \`'@kitn.ai/ui/state'\`).
 
 ## Framework wiring
 
@@ -189,7 +241,27 @@ function renderElement(el) {
         '',
         '| Slot | Mode | Description |',
         '|---|---|---|',
-        el.slots.map((s) => `| \`${s.name}\` | ${s.mode ?? '—'} | ${escapeCell(s.doc)} |`).join('\n'),
+        el.slots
+          .map((s) => `| ${s.name ? `\`${s.name}\`` : '_(default)_'} | ${s.mode ?? '—'} | ${escapeCell(s.doc)} |`)
+          .join('\n'),
+      ].join('\n'),
+    );
+  }
+
+  // "Route 2": the light-DOM child elements this element parses. The only way to
+  // drive some elements from plain HTML with no JS, and previously in no generated
+  // artifact at all — so an agent reading this file could not know they exist.
+  if (el.declarativeChildren?.length) {
+    out.push('');
+    out.push(
+      [
+        '**Declarative children** (compose these in light DOM instead of setting the JS property):',
+        '',
+        '| Child element | Attributes | Text content | Notes |',
+        '|---|---|---|---|',
+        el.declarativeChildren
+          .map((c) => `| \`<${c.tag}>\` | ${c.attributes.length ? c.attributes.map((a) => `\`${a}\``).join(', ') : '—'} | ${c.text ? 'yes' : '—'} | ${escapeCell(c.description ?? '')} |`)
+          .join('\n'),
       ].join('\n'),
     );
   }
@@ -228,33 +300,38 @@ Composable: combine \`<kai-message>\`, \`<kai-prompt-input>\`, \`<kai-reasoning>
 ### 3 — Handle \`submit\` and stream
 \`\`\`js
 import '@kitn.ai/ui/elements';
+// The streaming fold. It is 5 lines if you would rather inline it: see the
+// Streaming recipe below.
+import { appendTextPart } from '@kitn.ai/ui/state';
+
 const chat = document.querySelector('kai-chat');
 chat.messages = [];
 
 chat.addEventListener('kai-submit', async (e) => {
   const userText = e.detail.value;
 
-  // Append the user message (new array — see streaming note)
-  const history = [...chat.messages, { id: crypto.randomUUID(), role: 'user', content: userText }];
+  // Append the user message (new array, see the streaming note)
+  const history = [...chat.messages, { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: userText }] }];
   chat.messages = history;
   chat.loading = true;
 
   // Add an empty assistant placeholder to stream into
   const aid = crypto.randomUUID();
-  chat.messages = [...history, { id: aid, role: 'assistant', content: '' }];
+  chat.messages = [...history, { id: aid, role: 'assistant', parts: [] }];
 
-  let answer = '';
   for await (const token of streamFromYourAPI(history)) {
-    answer += token;
-    chat.messages = chat.messages.map((m) => (m.id === aid ? { ...m, content: answer } : m));
+    // Fold each delta onto the message's TRAILING text part. Do NOT replace
+    // \`parts\` wholesale: that drops reasoning/tool/card parts already on it.
+    chat.messages = chat.messages.map((m) =>
+      m.id === aid ? { ...m, parts: appendTextPart(m.parts, token) } : m);
   }
   chat.loading = false;
 });
 \`\`\`
 
 ### 4 — Wire optional features
-- Reasoning: add \`reasoning: { text: '…' }\` to an assistant message.
-- Tool calls: add \`tools: [{ type: 'search', state: 'output-available', input: {…}, output: {…} }]\`.
+- Reasoning: push \`{ type: 'reasoning', text: '…' }\` onto the message's \`parts\`.
+- Tool calls: push \`{ type: 'tool', tool: { type: 'search', state: 'output-available', input: {…}, output: {…} } }\`.
 - Model switcher: \`chat.models = [{ id: 'gpt-4o', name: 'GPT-4o' }]; chat.currentModel = 'gpt-4o';\` — listen for \`modelchange\`.
 - Token meter: \`chat.context = { usedTokens: 1200, maxTokens: 128000 };\`.
 - History sidebar: add \`<kai-conversations>\`; listen for \`select\` and \`newchat\`.
@@ -264,17 +341,35 @@ Override \`--kai-color-*\` tokens on \`:root\` (they pierce Shadow DOM).`;
 
 const STREAMING_RECIPE = `## Streaming recipe (critical)
 
-To update messages while streaming, **reassign a NEW array containing a NEW message object** on every chunk. Mutating an existing message object in place will NOT trigger a re-render:
+Two rules, and both bite:
+
+1. **Reassign a NEW array containing a NEW message object on every chunk.** Mutating an existing message object in place will NOT trigger a re-render.
+2. **Fold the delta onto the message's TRAILING text part.** Replacing \`parts\` with a fresh single-text array re-renders fine but silently deletes any reasoning / tool / card parts the turn already produced.
 
 \`\`\`js
-// ✅ re-renders
-chat.messages = chat.messages.map((m) => (m.id === id ? { ...m, content: next } : m));
+// The fold. \`@kitn.ai/ui/state\` exports exactly this as \`appendTextPart\`.
+const appendText = (parts, delta) => {
+  const last = parts[parts.length - 1];
+  return last?.type === 'text'
+    ? [...parts.slice(0, -1), { ...last, text: last.text + delta }]
+    : [...parts, { type: 'text', text: delta }];
+};
 
-// ❌ does NOT re-render
-chat.messages[i].content = next;
+// ✅ re-renders, and keeps every part already on the message
+chat.messages = chat.messages.map((m) =>
+  m.id === id ? { ...m, parts: appendText(m.parts, delta) } : m);
+
+// ❌ does NOT re-render (same array, same object)
+chat.messages[i].parts = appendText(chat.messages[i].parts, delta);
+
+// ❌ re-renders, but drops the message's reasoning/tool/card parts
+chat.messages = chat.messages.map((m) =>
+  m.id === id ? { ...m, parts: [{ type: 'text', text: answer }] } : m);
 \`\`\`
 
-The same rule applies to every array/object property (\`models\`, \`context\`, \`suggestions\`, …): replace, don't mutate.`;
+Opening a new text part when the last part is not text is what stops a post-tool answer being glued onto the pre-tool text.
+
+The same reassign rule applies to every array/object property (\`models\`, \`context\`, \`suggestions\`, …): replace, don't mutate.`;
 
 // ---------------------------------------------------------------------------
 // Normalize the data model: accept either the in-memory `elements` array from
@@ -297,6 +392,7 @@ function fromElements(elements) {
     })),
     slots: el.slots,
     parts: el.parts,
+    declarativeChildren: el.declarativeChildren,
   }));
 }
 
@@ -324,6 +420,12 @@ function fromManifest(cem) {
       })),
       slots: (d.slots || []).map((s) => ({ name: s.name, doc: s.description ?? '' })),
       parts: (d.cssParts || []).map((p) => ({ name: p.name, doc: p.description ?? '', recipe: p.recipe })),
+      declarativeChildren: (d.declarativeChildren || []).map((c) => ({
+        tag: c.tagName,
+        attributes: (c.attributes || []).map((a) => a.name),
+        text: !!c.textContent,
+        description: c.description ?? '',
+      })),
     };
   });
 }

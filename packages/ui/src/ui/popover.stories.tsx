@@ -45,7 +45,7 @@ type Story = StoryObj<typeof meta>;
  * so attach a real, paste-ready snippet with its imports. `imports` defaults to
  * the common set; richer stories pass their own. `language: 'tsx'` labels SolidJS.
  */
-const IMPORT = `import { Popover, Button } from '@kitn.ai/ui';`;
+const IMPORT = `import { Popover, Button } from '@kitn.ai/ui/solid';`;
 const src = (code: string, imports = IMPORT) => ({
   parameters: { docs: { source: { code: `${imports}\n\n${code}`, language: 'tsx' } } },
 });
@@ -107,7 +107,7 @@ export const ModelMenu: Story = {
     </Popover>
   );
 }`,
-    `import { createSignal, Show, For } from 'solid-js';\nimport { Popover, Switch, Button } from '@kitn.ai/ui';`,
+    `import { createSignal, Show, For } from 'solid-js';\nimport { Popover, Switch, Button } from '@kitn.ai/ui/solid';`,
   ),
 };
 

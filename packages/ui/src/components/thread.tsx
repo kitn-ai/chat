@@ -7,6 +7,7 @@ import { ScrollButton } from './scroll-button';
 import { Loader } from './loader';
 import type { ChatMessage } from '../elements/chat-types';
 import type { ProseSize } from '../primitives/chat-config';
+import type { CardComponentMap } from '../primitives/card-registry';
 
 /** Imperative handle exposed via `controllerRef` — the thread's scroll control,
  *  forwarded onto `<kai-thread>` as the `scrollToBottom()` instance method. */
@@ -19,9 +20,12 @@ export interface ThreadProps {
   /** Extra classes for the thread root (e.g. `rounded-xl`). */
   class?: string;
   /** The full message thread to render, newest last. Each entry carries its role,
-   *  content, and optional reasoning/tools/attachments/actions/avatar. A new array
-   *  reference per streaming chunk re-renders (mutating in place does not). */
+   *  ordered `parts`, and optional actions/avatar/feedback. A new array reference
+   *  per streaming chunk re-renders (mutating in place does not). */
   messages: ChatMessage[];
+  /** Add/override card type -> component entries, forwarded to `CardRenderer`
+   *  for `card` parts. */
+  cardTypes?: CardComponentMap;
   /** Show a typing indicator on the pending assistant turn — use while awaiting
    *  the assistant's reply. */
   loading?: boolean;
@@ -120,10 +124,8 @@ export function Thread(props: ThreadProps) {
               {(m) => {
                 const body = (
                   <MessageBody
-                    content={m.content}
-                    reasoning={m.reasoning}
-                    tools={m.tools}
-                    attachments={m.attachments}
+                    parts={m.parts}
+                    cardTypes={props.cardTypes}
                     isUser={m.role === 'user'}
                     markdown={m.role === 'assistant'}
                     actions={m.actions}

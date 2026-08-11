@@ -13,7 +13,8 @@ The `kai-*` web components drop into React, Vue, Angular, Svelte, or plain HTML 
 |---|---|
 | `@kitn.ai/ui/elements` | Any framework — registers every `kai-*` element |
 | `@kitn.ai/ui/react` | React — typed wrappers with camelCase props and event handlers |
-| `@kitn.ai/ui` | SolidJS — native Solid components for full compositional control |
+| `@kitn.ai/ui/solid` | SolidJS — native Solid components for full compositional control |
+| `@kitn.ai/ui` | The shared layer every framework uses — types, state and card helpers |
 
 ## Any framework: the web components
 
@@ -21,6 +22,14 @@ Import `@kitn.ai/ui/elements` once for its side effect. It registers every `kai-
 
 ```ts
 import '@kitn.ai/ui/elements';
+```
+
+Registration is **async**. If your framework sets array or object properties as it mounts (Vue, Angular, Svelte all do), mount behind the `elementsReady` promise the same entry exports. A property written before the element upgrades is lost.
+
+```ts
+import { elementsReady } from '@kitn.ai/ui/elements';
+
+elementsReady.then(() => mountYourApp());
 ```
 
 Then use them in your templates:
@@ -36,7 +45,7 @@ Then use them in your templates:
       await customElements.whenDefined('kai-chat');
 
       const chat = document.querySelector('kai-chat');
-      chat.messages = [{ id: '1', role: 'assistant', content: 'Hello!' }];
+      chat.messages = [{ id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello!' }] }];
       chat.addEventListener('kai-submit', (e) => console.log(e.detail));
     </script>
     ```
@@ -45,7 +54,7 @@ Then use them in your templates:
     ```vue
     <script setup>
     import '@kitn.ai/ui/elements';
-    const messages = ref([{ id: '1', role: 'assistant', content: 'Hello!' }]);
+    const messages = ref([{ id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello!' }] }]);
     </script>
 
     <template>
@@ -60,7 +69,7 @@ Then use them in your templates:
     ```svelte
     <script>
     import '@kitn.ai/ui/elements';
-    let messages = [{ id: '1', role: 'assistant', content: 'Hello!' }];
+    let messages = [{ id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello!' }] }];
     </script>
 
     <kai-chat
@@ -71,8 +80,15 @@ Then use them in your templates:
   </TabItem>
   <TabItem label="Angular">
     ```ts
-    // app.module.ts
-    import '@kitn.ai/ui/elements';
+    // main.ts
+    import { elementsReady } from '@kitn.ai/ui/elements';
+    elementsReady.then(() => bootstrapApplication(AppComponent, appConfig));
+    ```
+
+    ```ts
+    // the component using kai-* tags
+    @Component({ /* … */ schemas: [CUSTOM_ELEMENTS_SCHEMA] })
+    export class AppComponent {}
     ```
 
     ```html
@@ -93,7 +109,7 @@ The one thing to get right: Arrays and objects must be set in JavaScript, not as
 const chat = document.querySelector('kai-chat');
 
 // Right: set the array in JavaScript.
-chat.messages = [{ id: '1', role: 'assistant', content: 'Hello!' }];
+chat.messages = [{ id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello!' }] }];
 
 // Wrong: an attribute is a string, so the element never gets the array.
 // <kai-chat messages="[...]"></kai-chat>
@@ -138,11 +154,12 @@ The React adapter ships full types for every prop and event, including the `Chat
 
 ## SolidJS native components
 
-Writing Solid? Skip the element wrapper and compose the kit's native components from `@kitn.ai/ui`. They tree-shake to exactly what you import and mix freely with your own primitives.
+Writing Solid? Skip the element wrapper and compose the kit's native components from `@kitn.ai/ui/solid`. That entry is the complete Solid catalog, compiled as its own bundle so the other frameworks never pay for it. It tree-shakes to exactly what you import and mixes freely with your own primitives.
 
 ```tsx
 import { createSignal } from 'solid-js';
 import {
+  Button,
   ChatConfig,
   ChatContainer,
   ChatContainerContent,
@@ -151,8 +168,7 @@ import {
   PromptInput,
   PromptInputTextarea,
   PromptInputActions,
-} from '@kitn.ai/ui';
-import '@kitn.ai/ui/theme.css';
+} from '@kitn.ai/ui/solid';
 
 export function App() {
   const [input, setInput] = createSignal('');
@@ -175,7 +191,9 @@ export function App() {
         }}
       >
         <PromptInputTextarea placeholder="Ask anything…" />
-        <PromptInputActions />
+        <PromptInputActions>
+          <Button size="sm" disabled={!input()}>Send</Button>
+        </PromptInputActions>
       </PromptInput>
     </ChatConfig>
   );
@@ -187,6 +205,8 @@ Solid usage also needs `solid-js` as a peer dependency:
 ```bash
 npm install solid-js
 ```
+
+Unlike the elements, the native components are Tailwind v4 classes, so this path also needs Tailwind in the app plus an `@source` line pointing at the package. Rendering a real thread means `MessageBody` over each message's ordered `parts`, or `Thread` for the whole list at once. Both are covered in the [SolidJS guide](/guides/frameworks/solid/).
 
 ## Per-framework guides
 

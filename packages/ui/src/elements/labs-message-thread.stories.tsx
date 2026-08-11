@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from 'storybook-solidjs-vite';
 import { onMount, onCleanup } from 'solid-js';
 import './register'; // side effect: registers <kai-message>, <kai-source>, …
 import { attachKaiActions } from '../stories/docs/story-actions';
+import { textMessage } from '../state';
 import type { ChatMessage } from './chat-types';
 
 // The web components are custom DOM elements, so declare the tags for JSX.
@@ -17,18 +18,22 @@ declare module 'solid-js' {
 
 // --- Sample data ----------------------------------------------------------
 
-const userMessage: ChatMessage = {
-  id: 'm-u',
-  role: 'user',
-  content: 'Which model handled this, and what did it cost?',
-};
+const userMessage: ChatMessage = textMessage(
+  'user',
+  'Which model handled this, and what did it cost?',
+  { id: 'm-u' },
+);
 
 const assistantMessage: ChatMessage = {
   id: 'm-a',
   role: 'assistant',
-  content:
-    'Here is the summary you asked for. I cross-checked two sources before answering, and the citations are below.',
-  reasoning: { text: 'Compare the two sources, reconcile the figures, then summarise.', label: 'Reasoning' },
+  parts: [
+    { type: 'reasoning', text: 'Compare the two sources, reconcile the figures, then summarise.', label: 'Reasoning' },
+    {
+      type: 'text',
+      text: 'Here is the summary you asked for. I cross-checked two sources before answering, and the citations are below.',
+    },
+  ],
   actions: ['copy', 'like', 'dislike', 'regenerate'],
 };
 
@@ -129,7 +134,7 @@ const HTML_SNIPPET = `<!-- Compose your own message list: one <kai-message> per 
   const turn = document.getElementById('turn');
   turn.message = {
     id: 'm-a', role: 'assistant',
-    content: 'Here is the summary you asked for.',
+    parts: [{ type: 'text', text: 'Here is the summary you asked for.' }],
     actions: ['copy', 'like', 'regenerate'],
   };
   // The action bar emits a non-bubbling CustomEvent on the element.

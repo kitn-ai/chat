@@ -113,6 +113,7 @@ export default defineConfig({
                 label: 'Recipes',
                 items: [
                   { label: 'Streaming', slug: 'guides/recipes/streaming' },
+                  { label: 'Wire adapter', slug: 'guides/recipes/wire-adapter' },
                   { label: 'Text to Speech', slug: 'guides/recipes/text-to-speech' },
                   { label: 'Speech to Text', slug: 'guides/recipes/speech-to-text' },
                 ],

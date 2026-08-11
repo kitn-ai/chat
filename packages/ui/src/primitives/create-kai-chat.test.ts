@@ -2,15 +2,16 @@
 import { describe, it, expect } from 'vitest';
 import { createRoot } from 'solid-js';
 import { createKaiChat } from './create-kai-chat';
+import { partsToText } from '../state';
 
 describe('createKaiChat (Solid)', () => {
   it('append/update/remove drive the messages accessor', () => {
     createRoot((dispose) => {
       const chat = createKaiChat();
-      chat.append({ id: '1', role: 'user', content: 'hi' });
+      chat.append({ id: '1', role: 'user', parts: [{ type: 'text', text: 'hi' }] });
       expect(chat.messages().map((m) => m.id)).toEqual(['1']);
-      chat.update('1', { content: 'edited' });
-      expect(chat.messages()[0].content).toBe('edited');
+      chat.update('1', { parts: [{ type: 'text', text: 'edited' }] });
+      expect(partsToText(chat.messages()[0].parts)).toBe('edited');
       chat.remove('1');
       expect(chat.messages()).toEqual([]);
       dispose();
@@ -23,7 +24,7 @@ describe('createKaiChat (Solid)', () => {
       const s = chat.streamAssistant({ id: 'a1' });
       expect(chat.loading()).toBe(true);
       s.appendText('hello');
-      expect(chat.messages()[0].content).toBe('hello');
+      expect(partsToText(chat.messages()[0].parts)).toBe('hello');
       s.done();
       expect(chat.loading()).toBe(false);
       dispose();
@@ -56,7 +57,7 @@ describe('createKaiChat (Solid)', () => {
     createRoot((dispose) => {
       const a = createKaiChat();
       const b = createKaiChat();
-      a.append({ id: 'x', role: 'user', content: '1' });
+      a.append({ id: 'x', role: 'user', parts: [{ type: 'text', text: '1' }] });
       expect(b.messages()).toEqual([]);
       dispose();
     });

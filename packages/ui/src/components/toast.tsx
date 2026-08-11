@@ -59,7 +59,7 @@ function usePrefersReducedMotion() {
 
 // ── Single toast pill ────────────────────────────────────────────────────────
 
-interface ToastProps {
+export interface ToastProps {
   item: ToastItem;
   onDismiss: (reason: ToastDismissReason) => void;
   onAction?: (label: string) => void;

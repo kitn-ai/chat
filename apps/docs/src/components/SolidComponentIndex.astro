@@ -1,0 +1,76 @@
+---
+// Every registered kai-* element mapped to the SolidJS components it wraps.
+// Derived at build time from the kit's generated element-meta.json (same source
+// as PropTable / ComposedFrom), so a new element or a facade that starts
+// composing something different changes this table on the next build. There is
+// no hand-written name list here on purpose: the previous hand-maintained
+// "key exports" table listed ~30 of 251 public exports and drifted.
+import meta from '@kitn.ai/ui/element-meta.json';
+import * as solid from '@kitn.ai/ui/solid';
+
+// The public Solid surface, read off the BUILT package rather than a list here:
+// a name that does not survive the build is not something a consumer can import,
+// so it has no business in this table.
+//
+// Read from `./solid`, not from `.`. The root entry carries the shared layer the
+// React/Vue/Svelte/vanilla majority resolve; `./solid` is `export * from './index'`
+// plus the rest of the Solid catalog, so it is a compiler-enforced superset and
+// the one entry a Solid consumer imports from. Reading `.` here silently blanked
+// 27 of the 79 rows.
+const publicExports = new Set(Object.keys(solid));
+const isComponent = (n: string) => /^[A-Z]/.test(n) && publicExports.has(n);
+
+// composedFrom carries the facade's value imports from ../components and ../ui.
+// When a facade lists none (it renders the component through a helper, or its
+// Solid surface is a plain function), fall back to the element's own display
+// name if the package actually exports it.
+const rows = (meta as any[])
+  .map((el) => {
+    const composed = [
+      ...new Set(((el.composedFrom ?? []) as { name: string }[]).map((c) => c.name)),
+    ].filter(isComponent);
+    return {
+      tag: el.tag as string,
+      parts: composed.length ? composed : [el.displayName as string].filter(isComponent),
+    };
+  })
+  .sort((a, b) => a.tag.localeCompare(b.tag));
+
+const withComponents = rows.filter((r) => r.parts.length);
+const functionOnly = rows.length - withComponents.length;
+
+const th =
+  'text-left text-xs font-semibold uppercase tracking-wide text-ink-3 bg-surface px-4 py-2.5 border-b border-line';
+---
+
+<p class="not-content my-4 text-sm text-ink-2">
+  {rows.length} registered elements. {withComponents.length} wrap SolidJS components you can import
+  from <code>@kitn.ai/ui/solid</code> and compose yourself; the other {functionOnly} expose a
+  function API rather than a component, so their row is blank. Every name below is cross-checked
+  against the built package's exports.
+</p>
+
+<div class="not-content my-4 overflow-x-auto rounded-xl border border-line">
+  <table class="w-full border-collapse text-sm">
+    <thead>
+      <tr>
+        <th class={th}>Element</th>
+        <th class={th}>SolidJS components</th>
+      </tr>
+    </thead>
+    <tbody>
+      {
+        rows.map((r) => (
+          <tr class="border-b border-line last:[&>td]:border-0">
+            <td class="px-4 py-3 align-top font-mono text-sm font-semibold text-ink border-b border-line whitespace-nowrap">
+              {r.tag}
+            </td>
+            <td class="px-4 py-3 align-top font-mono text-sm text-ink-2 border-b border-line">
+              {r.parts.join(', ')}
+            </td>
+          </tr>
+        ))
+      }
+    </tbody>
+  </table>
+</div>

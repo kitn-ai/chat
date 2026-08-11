@@ -16,7 +16,9 @@ import type { ConversationSummary, ConversationGroup } from '../types';
  * surrounding region (the workspace puts the thread beside it, the standalone
  * element stands alone). `onExpand` reopens the rail.
  */
-export function CollapsedRail(props: { onExpand: () => void; class?: string }) {
+export interface CollapsedRailProps { onExpand: () => void; class?: string }
+
+export function CollapsedRail(props: CollapsedRailProps) {
   return (
     <Button
       variant="ghost" size="icon-sm" aria-label="Open sidebar"
@@ -94,7 +96,21 @@ export function ConversationList(props: ConversationListProps) {
     return grouped;
   });
 
-  const ungrouped = createMemo(() => groupedConversations().get(undefined) ?? []);
+  /**
+   * Everything that is NOT filed under a rendered group heading: no `groupId` at
+   * all, OR a `groupId` that matches no entry in `groups`.
+   *
+   * The second half used to be dropped on the floor. `groups` drives the render
+   * loop, so a conversation pointing at a group the consumer had not declared
+   * (a stale id, a group removed from the array, a filtered/paginated `groups`
+   * response) vanished from the sidebar with no error and no empty state — the
+   * list just silently held fewer rows than the data it was given. Falling through
+   * to "Ungrouped" keeps every conversation the consumer passed in reachable.
+   */
+  const ungrouped = createMemo(() => {
+    const known = new Set((local.groups ?? []).map((g) => g.id));
+    return filteredConversations().filter((c) => c.groupId == null || !known.has(c.groupId));
+  });
 
   return (
     <div class={cn('flex flex-col h-full bg-sidebar', local.class)}>

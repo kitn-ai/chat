@@ -43,8 +43,8 @@ Set rich data (arrays, objects) in JavaScript; scalar props work as attributes o
   const chat = document.getElementById('chat');
 
   chat.messages = [
-    { id: '1', role: 'user', content: 'How do I center a div?' },
-    { id: '2', role: 'assistant', content: 'Use `display: grid; place-items: center;`',
+    { id: '1', role: 'user', parts: [{ type: 'text', text: 'How do I center a div?' }] },
+    { id: '2', role: 'assistant', parts: [{ type: 'text', text: 'Use `display: grid; place-items: center;`' }],
       actions: ['copy', 'like', 'dislike'] },
   ];
 
@@ -57,7 +57,7 @@ Set rich data (arrays, objects) in JavaScript; scalar props work as attributes o
 </script>
 ```
 
-- **`messages`** — each entry: `id`, `role` (`'user' | 'assistant'`), `content` (markdown for assistant), plus optional `actions`, `attachments`, `reasoning`, `tools`, `avatar`, and `feedback`.
+- **`messages`** — each entry: `id`, `role` (`'user' | 'assistant'`), an ordered `parts` array (`text` rendered as markdown for assistant, plus `reasoning`, `tool`, `card`, `source`, `file`), and optional `actions`, `avatar`, and `feedback`.
 - **`loading`** — flip to `true` while awaiting a reply; the input disables and a typing indicator appears.
 
 ### Message actions

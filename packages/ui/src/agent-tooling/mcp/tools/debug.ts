@@ -39,7 +39,7 @@ const RULES: Rule[] = [
       '```js\n' +
       "// ✅ Works — set messages in JavaScript as a property\n" +
       "const chat = document.querySelector('kai-chat');\n" +
-      "chat.messages = [{ id: '1', role: 'assistant', content: 'Hello!' }];\n" +
+      "chat.messages = [{ id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello!' }] }];\n" +
       '```\n\n' +
       '```html\n' +
       '<!-- ❌ Fails — messages cannot be an HTML attribute -->\n' +
@@ -55,7 +55,7 @@ const RULES: Rule[] = [
     title: 'In-place mutation does not trigger a re-render',
     cause:
       'Mutating an existing message object or array in place (e.g. `chat.messages.push(…)` ' +
-      'or `chat.messages[i].content = …`) does not trigger a re-render. ' +
+      'or `chat.messages[i].parts = […]`) does not trigger a re-render. ' +
       'The element only reacts when it detects a new array/object reference.',
     fix:
       'Assign a NEW array (and a new object) on every change — never mutate in place.\n\n' +
@@ -63,17 +63,23 @@ const RULES: Rule[] = [
       '// ✅ Triggers re-render — new array + new object reference\n' +
       'chat.messages = [\n' +
       '  ...chat.messages,\n' +
-      "  { id: crypto.randomUUID(), role: 'user', content: userText },\n" +
+      "  { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: userText }] },\n" +
       '];\n\n' +
-      '// ✅ During streaming — replace with a new array + new object on every chunk\n' +
+      '// ✅ During streaming: new array + new object per chunk, and FOLD the delta\n' +
+      "//    onto the trailing text part so reasoning/tool/card parts survive.\n" +
+      "import { appendTextPart } from '@kitn.ai/ui/state';\n" +
       'chat.messages = chat.messages.map((m) =>\n' +
-      '  m.id === assistantId ? { ...m, content: accumulated } : m\n' +
+      '  m.id === assistantId ? { ...m, parts: appendTextPart(m.parts, delta) } : m\n' +
       ');\n\n' +
       '// ❌ Does NOT trigger re-render\n' +
       'chat.messages.push(newMsg);\n' +
-      'chat.messages[i].content = accumulated;\n' +
+      'chat.messages[i].parts = appendTextPart(chat.messages[i].parts, delta);\n\n' +
+      '// ❌ Re-renders, but DROPS the reasoning/tool/card parts already on the message\n' +
+      'chat.messages = chat.messages.map((m) =>\n' +
+      "  m.id === assistantId ? { ...m, parts: [{ type: 'text', text: accumulated }] } : m\n" +
+      ');\n' +
       '```\n\n' +
-      'The ergonomic path: helpers in `@kitn.ai/ui/state` (`appendMessage`, `updateMessage`, `appendContent`) ' +
+      'The ergonomic path: helpers in `@kitn.ai/ui/state` (`appendMessage`, `updateMessage`, `appendText`) ' +
       'and `createAssistantStream` handle the new-reference contract for you. ' +
       '`useKaiChat` (React) and `createKaiChat` (Solid) own state entirely so mutation is never an option.\n\n' +
       '// setMessages((m) => appendMessage(m, msg)) // new array, no footgun',

@@ -34,11 +34,11 @@ This guide assumes you've installed the package and registered the elements. If 
 
   // Seed the thread. Arrays can't be attributes, so this lives in JavaScript.
   chat.messages = [
-    { id: '1', role: 'assistant', content: 'Hello! How can I help?' },
+    { id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello! How can I help?' }] },
   ];
 
   chat.addEventListener('kai-submit', (e) => {
-    const userMessage = { id: crypto.randomUUID(), role: 'user', content: e.detail.value };
+    const userMessage = { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: e.detail.value }] };
     chat.messages = [...chat.messages, userMessage];
     // Call your model here, then append an assistant message.
   });
@@ -47,7 +47,7 @@ This guide assumes you've installed the package and registered the elements. If 
 
 A few things that pay off everywhere:
 
-- `messages` is an array of `{ id, role, content }`. Every entry needs a stable `id` (it keys the render and message actions); `role` is `'user'` or `'assistant'`. Optional fields — `reasoning`, `tools`, `attachments`, `actions`, `avatar` — light up the matching UI when present.
+- `messages` is an array of `{ id, role, parts }`. Every entry needs a stable `id` (it keys the render and message actions); `role` is `'user'` or `'assistant'`; `parts` is an ordered array of `text` / `reasoning` / `tool` / `card` / `source` / `file` parts. Optional fields — `actions`, `avatar` — light up the matching UI when present.
 - Assign a **new array** to re-render. Pushing into the existing one won't trigger an update.
 - `kai-submit` carries the input on `e.detail.value` and any staged files on `e.detail.attachments`.
 - Give the element an explicit height. It fills its block and owns its own scrolling.
@@ -58,48 +58,45 @@ Arrays and objects — `messages`, `models`, `suggestions`, `context` — are se
 
 ## Stream a reply
 
-`<kai-chat>` is transport-agnostic — it renders whatever you hand it, so it doesn't care whether tokens come from your own backend, a proxy, or a mock. The pattern: append an empty assistant message, then replace it with a fresh object on every chunk.
+`<kai-chat>` is transport-agnostic: it renders whatever you hand it, so it doesn't care whether tokens come from your own backend, a proxy, or a mock. You own the `fetch`; the kit parses what comes back.
 
 ```js
+import { createAssistantStream } from '@kitn.ai/ui/state';
+import { readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';
+
 chat.addEventListener('kai-submit', async (e) => {
   const prompt = e.detail.value.trim();
   if (!prompt) return;
 
-  // 1. Show the user's turn and an empty assistant placeholder.
-  const assistantId = crypto.randomUUID();
-  chat.messages = [
+  // 1. Show the user's turn.
+  const history = [
     ...chat.messages,
-    { id: crypto.randomUUID(), role: 'user', content: prompt },
-    { id: assistantId, role: 'assistant', content: '' },
+    { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: prompt }] },
   ];
+  chat.messages = history;
   chat.loading = true;
 
-  // 2. Stream from your endpoint and grow the assistant message.
-  const res = await fetch('/api/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: prompt }),
+  // 2. Stream from your endpoint. createAssistantStream appends the assistant
+  //    message and hands readOpenAIStream a sink to fold deltas onto.
+  const stream = createAssistantStream((update) => {
+    chat.messages = update(chat.messages);
   });
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let answer = '';
 
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    answer += decoder.decode(value, { stream: true });
-
-    // New object per chunk — mutating in place won't re-render.
-    chat.messages = chat.messages.map((m) =>
-      m.id === assistantId ? { ...m, content: answer } : m,
-    );
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: toOpenAIMessages(history) }),
+    });
+    await readOpenAIStream(res, stream);
+  } finally {
+    stream.done();
+    chat.loading = false;
   }
-
-  chat.loading = false;
 });
 ```
 
-`loading` toggles the streaming indicator and disables submit while the reply is in flight. Set it back to `false` when the stream ends. For a full backend recipe — parsing SSE, error handling, the abort path — see the [streaming recipe](/guides/recipes/streaming/).
+`loading` toggles the streaming indicator and disables submit while the reply is in flight. Set it back to `false` when the stream ends. For the tool loop, Anthropic streams and the error model, see the [wire adapter recipe](/guides/recipes/wire-adapter/); for `kai-response-stream` and the raw-frames path, the [streaming recipe](/guides/recipes/streaming/).
 
 ## Offer models
 
@@ -159,11 +156,12 @@ The element is identical under React; the wrapper just gives you typed props and
 
 ```tsx
 import { Chat } from '@kitn.ai/ui/react';
+import type { ChatMessage } from '@kitn.ai/ui/react';
 import { useState } from 'react';
 
 export function App() {
-  const [messages, setMessages] = useState([
-    { id: '1', role: 'assistant', content: 'Hello! How can I help?' },
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    { id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello! How can I help?' }] },
   ]);
 
   return (
@@ -171,7 +169,7 @@ export function App() {
       messages={messages}
       style={{ display: 'block', height: '100dvh' }}
       onSubmit={(e) => {
-        const turn = { id: crypto.randomUUID(), role: 'user', content: e.detail.value };
+        const turn: ChatMessage = { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: e.detail.value }] };
         setMessages((prev) => [...prev, turn]);
         // …call your model, then append an assistant message.
       }}

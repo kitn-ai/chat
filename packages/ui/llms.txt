@@ -17,7 +17,7 @@ This is the single most common mistake. Arrays and objects (`messages`, `models`
 
 ```js
 const chat = document.querySelector('kai-chat');
-chat.messages = [{ id: '1', role: 'assistant', content: 'Hi!' }]; // ✅ property
+chat.messages = [{ id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hi!' }] }]; // ✅ property
 ```
 ```html
 <kai-chat messages="[...]"></kai-chat>  <!-- ❌ never works -->
@@ -47,17 +47,69 @@ All 80 elements are also exported individually. Use them for custom layouts or f
 
 ## ChatMessage schema (required for `<kai-chat>`)
 
+A message's content is an **ordered `parts` array**. There is no `content` string: it was removed in 0.20.0. Text, reasoning, tool calls, generative-UI cards, citations and file attachments all live in `parts`, in the order the model produced them, so a post-tool answer renders below its tool panel instead of being glued onto the pre-tool text.
+
 ```ts
 interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
-  content: string;
-  reasoning?: { text: string; label?: string };
-  tools?: ToolPart[];
-  attachments?: AttachmentData[];
+  /** The ONLY content channel. Ordered. */
+  parts: MessagePart[];
+  /** Action buttons under the message. Chrome, not content. */
   actions?: ('copy' | 'like' | 'dislike' | 'regenerate' | 'edit')[];
+  avatar?: { src?: string; fallback?: string; alt?: string };
+  feedback?: 'like' | 'dislike';
+}
+
+/** Six variants, one per kind of content. Every variant may also carry `raw`
+ *  (`{ source, payload }`), the untranslated provider block the part was
+ *  normalized from, for echoing a turn back to the model verbatim. */
+type MessagePart =
+  | { type: 'text'; text: string; raw?: RawOrigin }
+  | { type: 'reasoning'; text: string; label?: string; index?: number; signature?: string; raw?: RawOrigin }
+  | { type: 'tool'; tool: ToolPart; raw?: RawOrigin }
+  | { type: 'card'; envelope: CardEnvelope; raw?: RawOrigin }
+  | { type: 'source'; source: MessageSource; raw?: RawOrigin }
+  | { type: 'file'; attachment: AttachmentData; raw?: RawOrigin };
+
+interface ToolPart {
+  type: string;
+  /** Rendering classification. Derived from `type` when you omit it; an explicit
+   *  value you set is preserved across later patches. */
+  kind?: 'command' | 'file-change' | 'search' | 'fetch' | 'mcp' | 'image' | 'generic';
+  state: 'input-streaming' | 'input-available' | 'output-available' | 'output-error';
+  input?: Record<string, unknown>;
+  /** Raw accumulated argument fragments, for character-level streaming. */
+  rawInput?: string;
+  output?: Record<string, unknown>;
+  toolCallId?: string;
+  errorText?: string;
+  raw?: RawOrigin;
+}
+
+/** A citation. Exported as `MessageSource` (the bare `Source` name belongs to
+ *  the citation-chip component). */
+interface MessageSource { id?: string; url?: string; title?: string; snippet?: string; index?: number }
+```
+
+The simplest possible message, and one with reasoning + a tool call before its answer:
+
+```js
+{ id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hi!' }] }
+
+{
+  id: '2',
+  role: 'assistant',
+  parts: [
+    { type: 'reasoning', text: 'I should search for current pricing.' },
+    { type: 'tool', tool: { type: 'search', state: 'output-available', toolCallId: 'tc_1',
+        input: { query: 'current pricing' }, output: { results: ['A', 'B'] } } },
+    { type: 'text', text: 'Here is what I found.' },
+  ],
 }
 ```
+
+Types are importable: `import type { ChatMessage, MessagePart, MessageSource } from '@kitn.ai/ui'` (also from `'@kitn.ai/ui/react'` and `'@kitn.ai/ui/state'`).
 
 ## Framework wiring
 

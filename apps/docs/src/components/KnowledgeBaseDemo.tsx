@@ -8,11 +8,14 @@
  *  All kai-* elements are real, prop-driven, and upgraded after loadKit(); arrays
  *  and objects are set as JS PROPERTIES, never serialized to attributes. */
 import { onMount, onCleanup } from 'solid-js';
+import type { ChatMessage } from '@kitn.ai/ui';
 import { loadKit } from './example/kit';
 
 // --- Shapes (verified against element-meta.json) -------------------------
 
-type ChatMsg = { id: string; role: 'user' | 'assistant'; content: string; actions?: string[] };
+// The kit's own message shape — an ordered `parts` array (text, reasoning, tool,
+// card, source, file), not a text-only stand-in. See @kitn.ai/ui's MessagePart.
+type ChatMsg = ChatMessage;
 
 interface SourceItem {
   href: string;
@@ -127,8 +130,12 @@ const CONTENT: Record<ScopeId, ScopeContent> = {
     greeting: {
       id: 'g-all',
       role: 'assistant',
-      content:
-        'Pick a knowledge scope from the dropdown to narrow your search, or ask across everything. Answers cite the documents they came from.',
+      parts: [
+        {
+          type: 'text',
+          text: 'Pick a knowledge scope from the dropdown to narrow your search, or ask across everything. Answers cite the documents they came from.',
+        },
+      ],
     },
     reply:
       'Searching across all knowledge bases. Webhook retries are configured under **Settings → Webhooks** with an exponential backoff capped at 24 hours [1]. The retry budget counts against your account rate limits, so high-volume endpoints should return `2xx` quickly and process asynchronously [2].',
@@ -156,7 +163,7 @@ const CONTENT: Record<ScopeId, ScopeContent> = {
     greeting: {
       id: 'g-product',
       role: 'assistant',
-      content: 'Scoped to **Product Docs**. Ask about features, configuration, and account settings.',
+      parts: [{ type: 'text', text: 'Scoped to **Product Docs**. Ask about features, configuration, and account settings.' }],
     },
     reply:
       'In **Product Docs**: open **Settings → Webhooks**, select an endpoint, and enable **Automatic retries**. Failed deliveries retry with exponential backoff — 1 min, 5 min, 30 min, then hourly up to 24 hours [1]. Once SSO is enabled, webhook settings inherit your SAML-mapped role permissions [2].',
@@ -184,7 +191,7 @@ const CONTENT: Record<ScopeId, ScopeContent> = {
     greeting: {
       id: 'g-api',
       role: 'assistant',
-      content: 'Scoped to the **API Reference**. Ask about endpoints, parameters, and limits.',
+      parts: [{ type: 'text', text: 'Scoped to the **API Reference**. Ask about endpoints, parameters, and limits.' }],
     },
     reply:
       'In the **API Reference**: list endpoints use **cursor pagination**. Pass `limit` (max 100) and follow the `next_cursor` returned in each response until it is `null` [1]. List requests are metered at 600 requests/minute per token, with a short burst allowance above that ceiling [2].',
@@ -212,7 +219,7 @@ const CONTENT: Record<ScopeId, ScopeContent> = {
     greeting: {
       id: 'g-eng',
       role: 'assistant',
-      content: 'Scoped to the **Engineering Wiki**. Ask about runbooks, on-call, and internal process.',
+      parts: [{ type: 'text', text: 'Scoped to the **Engineering Wiki**. Ask about runbooks, on-call, and internal process.' }],
     },
     reply:
       'In the **Engineering Wiki**: the primary on-call ack window is 5 minutes. An unacknowledged page escalates to the secondary, then to the engineering manager after 15 minutes [1]. SEV-1 incidents open a dedicated channel and notify the incident commander immediately [2].',
@@ -290,8 +297,8 @@ export default function KnowledgeBaseDemo() {
     const aId = nextId();
     chatEl.messages = [
       ...(chatEl.messages ?? []),
-      { id: nextId(), role: 'user', content: text },
-      { id: aId, role: 'assistant', content: '' },
+      { id: nextId(), role: 'user', parts: [{ type: 'text', text }] },
+      { id: aId, role: 'assistant', parts: [] },
     ];
     chatEl.loading = true;
 
@@ -304,7 +311,7 @@ export default function KnowledgeBaseDemo() {
       const done = i >= words.length;
       chatEl!.messages = (chatEl!.messages ?? []).map((m) =>
         m.id === aId
-          ? { ...m, content: partial, ...(done ? { actions: ['copy', 'like', 'dislike'] } : {}) }
+          ? { ...m, parts: [{ type: 'text', text: partial }], ...(done ? { actions: ['copy', 'like', 'dislike'] } : {}) }
           : m,
       );
       if (!done) {

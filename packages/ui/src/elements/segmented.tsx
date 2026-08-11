@@ -2,19 +2,13 @@ import { createEffect, createSignal, untrack } from 'solid-js';
 import { defineWebComponent } from './define';
 import { Segmented, type SegmentedOption } from '../ui/segmented';
 import { renderIcon } from '../ui/icon';
-
-/** A single segment. `icon` is an icon-NAME string (web-component-friendly) —
- *  a curated name (e.g. `"code"`), a URL/data-URI, or plain text — resolved to a
- *  glyph via the kit's icon renderer (the same path `kai-button`'s `icon` uses). */
-interface Option {
-  value: string;
-  label: string;
-  icon?: string;
-}
+// Public shape of the `options` prop; lives in ./element-data-types so the ROOT
+// entry can re-export it (see that file's header).
+import type { KaiSegmentedOption } from './element-data-types';
 
 interface Props extends Record<string, unknown> {
   /** The selectable segments, left to right. Set as a JS property (array). */
-  options: Option[];
+  options: KaiSegmentedOption[];
   /** Controlled selected `value` — settable and reflected to the `value`
    *  attribute. `el.value = 'preview'` drives it; choosing a segment updates it
    *  and fires `kai-change`. Read `el.value` for live state. */

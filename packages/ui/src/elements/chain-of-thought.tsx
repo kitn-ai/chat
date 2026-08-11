@@ -19,8 +19,10 @@ type Step = ChainOfThoughtStepData;
 
 interface Props extends Record<string, unknown> {
   /** The reasoning steps. Set as a JS property. Compound sub-parts collapse to
-   *  this one data model (Route 1). Each `{ label, content?, id? }`. */
-  steps: Step[];
+   *  this one data model (Route 1). Each `{ label, content?, id? }`. Omit to
+   *  supply the steps as `<kai-step>` light-DOM children instead; when both are
+   *  present the property's steps come first. */
+  steps?: Step[];
   /** Open mode: `'multiple'` (default — any number of steps open at once) or
    *  `'single'` (at most one open; opening a step closes the others). */
   type?: ChainOfThoughtType;
@@ -99,7 +101,7 @@ defineWebComponent<Props, Events>('kai-chain-of-thought', {
   });
 
   // Prop steps first; declarative children appended after.
-  const allSteps = () => [...props.steps, ...slottedSteps()];
+  const allSteps = () => [...(props.steps ?? []), ...slottedSteps()];
 
   // ── Imperative API (instance methods on the host) ──────────────────────────
   // Pattern C: the Accordion component owns the open-set; the facade captures its

@@ -1,0 +1,76 @@
+: fixture: anthropic/empty-thinking
+: capture: live
+: provider: openrouter-anthropic
+: model: anthropic/claude-haiku-4.5
+: captured: 2026-08-10
+: request: {"model":"anthropic/claude-haiku-4.5","stream":true,"max_tokens":2048,"thinking":{"type":"enabled","budget_tokens":1024,"display":"omitted"},"messages":[{"role":"user","content":"Think about it, then answer: what is 17 * 23?"}]}
+
+event: message_start
+data: {"type":"message_start","message":{"id":"gen-1786338249-tLo7J0c67FErDVaI6Kfi","type":"message","role":"assistant","container":null,"content":[],"model":"anthropic/claude-haiku-4.5","stop_reason":null,"stop_details":null,"stop_sequence":null,"usage":{"input_tokens":0,"output_tokens":0,"cache_creation_input_tokens":null,"cache_read_input_tokens":null,"cache_creation":null,"inference_geo":null,"server_tool_use":null,"service_tier":null,"speed":"standard"},"provider":"Amazon Bedrock"}}
+
+event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"EsIDCkgIEBABGAIqQAlQ/3LxAqQaiUPqj2+Q9ioeiUxoxAgmEyjABqpZs5pLMzy9mqpEKOAeEqh+wDsuwooq6Bjkt6XTah/PEYYPbykSDMU8CW2VOxBt4gXkFhoMUOJwTGGUtGcRIfalIjD1foD3B8u4rjS1jMPe2hAQIYEy/NRVYfski8VipzfakUp3slgCqOKNHDrOLKlnU6QqpwIBHUr7hZf07z9B2qVh5mxu5BwBbwbV+zxrot2HRBISAB4pbtp9ydo2Ok89spjq4x/rZgzXJqjTZCosYicW1hHZ3jnlIYj4MN2t6r2z/conjj51h/IYqkRQ9G11yLROk4OwMYEZ4+u4EDJtun0HPSPKw2bVXlcUZCubtX4xl2gY3JI0p5f7mCL+ZBaqx3SycPpBzmmS3Gcu5YOwdwrxgqSWLEj7N7j5wSjQpR7a+KZ3+st9fSOIFVpzy20O0TkQ2GN1cvEqXp+Z4nn6ddVEtnACnrCuyxKFrcLkOAlXu4FXr66W21B1EhAK0leGprR54VBdcPb4wAtuVkWVX1pE6T3TL5fbEWsI3dRdTGxxJnmun+WAHelqCZlotnTfz99QsyRh0sPhYkPpGAE="}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":0}
+
+event: content_block_start
+data: {"type":"content_block_start","index":1,"content_block":{"type":"text","text":"","citations":[]}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"17"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" * 23 = **"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"391**\n\nHere"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"'s how I worke"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"d it out:\n- 17 "}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"*"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" 23 = 17 *"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" (20 + 3)"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"\n- ="}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" ("}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"17 * 20) + ("}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"17 * 3)\n-"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" = 340 + 51"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"\n- = 391"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":1}
+
+event: message_delta
+data: {"type":"message_delta","delta":{"container":null,"stop_details":null,"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":52,"output_tokens":254,"output_tokens_details":{"thinking_tokens":0},"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"server_tool_use":null,"service_tier":null,"speed":"standard","cost":0.001322,"is_byok":false,"cost_details":{"upstream_inference_cost":0.001322,"upstream_inference_prompt_cost":0.000052,"upstream_inference_completions_cost":0.00127}},"context_management":null}
+
+event: message_stop
+data: {"type":"message_stop"}
+
+event: data
+data: [DONE]
+

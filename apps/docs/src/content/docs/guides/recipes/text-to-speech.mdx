@@ -13,6 +13,8 @@ The [Web Speech API](https://developer.mozilla.org/en-US/docs/Web/API/SpeechSynt
 
 ```js
 import '@kitn.ai/ui/elements';
+import { createAssistantStream } from '@kitn.ai/ui/state';
+import { readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';
 
 function speak(text) {
   if (!('speechSynthesis' in window)) return;
@@ -28,35 +30,32 @@ chat.addEventListener('kai-submit', async (e) => {
   const userText = e.detail.value.trim();
   if (!userText) return;
 
-  const assistantId = crypto.randomUUID();
-  chat.messages = [
+  const history = [
     ...chat.messages,
-    { id: crypto.randomUUID(), role: 'user', content: userText },
-    { id: assistantId, role: 'assistant', content: '' },
+    { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: userText }] },
   ];
+  chat.messages = history;
   chat.loading = true;
 
-  const res = await fetch('/api/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: userText }),
-  });
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let answer = '';
-
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    answer += decoder.decode(value, { stream: true });
-    chat.messages = chat.messages.map((m) =>
-      m.id === assistantId ? { ...m, content: answer } : m
-    );
+  // createAssistantStream appends the in-flight assistant message and folds each
+  // delta onto its parts, so nothing here hand-builds a placeholder.
+  const stream = createAssistantStream((fn) => { chat.messages = fn(chat.messages); });
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: toOpenAIMessages(history) }),
+    });
+    // readOpenAIStream parses the SSE and resolves with the finished turn, so
+    // turn.text is the whole reply with no accumulator of your own. A non-ok
+    // response throws WireError before a chunk is read, so there is no res.ok
+    // check to forget.
+    const turn = await readOpenAIStream(res, stream);
+    speak(turn.text); // speak the completed reply
+  } finally {
+    stream.done();
+    chat.loading = false;
   }
-
-  speak(answer); // speak the completed reply
-  chat.loading = false;
 });
 ```
 
@@ -81,7 +80,7 @@ async function speakCloud(text) {
 }
 ```
 
-Replace `speak(answer)` in the streaming handler above with `speakCloud(answer)`.
+Replace `speak(turn.text)` in the streaming handler above with `speakCloud(turn.text)`.
 
 ### Example `/api/tts` route (Node.js / Express)
 

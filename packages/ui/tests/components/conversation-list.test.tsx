@@ -16,6 +16,59 @@ describe('ConversationList', () => {
     render(() => <ConversationList groups={groups} conversations={conversations} activeId="c1" onSelect={() => {}} onNewChat={() => {}} />);
     expect(screen.getByText('Research')).toBeTruthy();
   });
+
+  // `groups` drives the render loop, so a conversation pointing at a group the
+  // consumer never declared used to be dropped on the floor: no row, no error, no
+  // empty state — the list just showed fewer conversations than it was given.
+  // A stale id, a group removed from the array, or a filtered/paginated `groups`
+  // response all produce exactly that. Now it falls through to "Ungrouped".
+  it('renders a conversation whose groupId matches no group, under Ungrouped', () => {
+    const orphan: ConversationSummary = {
+      id: 'c3', title: 'Orphaned thread', groupId: 'gone', scope: { type: 'collection' },
+      messageCount: 1, lastMessageAt: '2026-04-08', updatedAt: '2026-04-08',
+    };
+    render(() => (
+      <ConversationList
+        groups={groups}
+        conversations={[...conversations, orphan]}
+        activeId="c1"
+        onSelect={() => {}}
+        onNewChat={() => {}}
+      />
+    ));
+    expect(screen.getByText('Orphaned thread')).toBeTruthy();
+    expect(screen.getByText('Ungrouped')).toBeTruthy();
+    // …and it does NOT leak into the group it names but does not belong to.
+    expect(screen.getByText('Research')).toBeTruthy();
+    expect(screen.getByText('Database options')).toBeTruthy();
+  });
+
+  it('still renders every conversation when `groups` is empty', () => {
+    render(() => (
+      <ConversationList
+        groups={[]}
+        conversations={conversations}
+        activeId="c1"
+        onSelect={() => {}}
+        onNewChat={() => {}}
+      />
+    ));
+    expect(screen.getByText('Database options')).toBeTruthy(); // groupId 'g1', no groups declared
+    expect(screen.getByText('Quick question')).toBeTruthy();
+  });
+
+  it('keeps the search filter applied to the ungrouped fallthrough', () => {
+    const orphan: ConversationSummary = {
+      id: 'c3', title: 'Orphaned thread', groupId: 'gone', scope: { type: 'collection' },
+      messageCount: 1, lastMessageAt: '2026-04-08', updatedAt: '2026-04-08',
+    };
+    render(() => (
+      <ConversationList groups={groups} conversations={[...conversations, orphan]} onSelect={() => {}} onNewChat={() => {}} />
+    ));
+    fireEvent.input(screen.getByLabelText('Search chats'), { target: { value: 'orphan' } });
+    expect(screen.getByText('Orphaned thread')).toBeTruthy();
+    expect(screen.queryByText('Quick question')).toBeNull();
+  });
 });
 
 // The collapsed-rail fallback is shared by kai-workspace and the standalone

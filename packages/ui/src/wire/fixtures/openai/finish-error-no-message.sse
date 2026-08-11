@@ -1,0 +1,13 @@
+: fixture: openai/finish-error-no-message
+: capture: live
+: provider: openrouter
+: model: google/gemini-2.5-flash
+: captured: 2026-08-10
+: request: {"model":"google/gemini-2.5-flash","stream":true,"max_tokens":12,"tools":[{"type":"function","function":{"name":"get_weather","description":"Current weather for a city.","parameters":{"type":"object","properties":{"city":{"type":"string"},"units":{"type":"string"}},"required":["city"]}}}],"messages":[{"role":"user","content":"Call get_weather for San Francisco with a very long units string."}]}
+
+: OPENROUTER PROCESSING
+
+data: {"id":"gen-1786337812-vBpVjYGhDYVbCWW9giOD","object":"chat.completion.chunk","created":1786337812,"model":"google/gemini-2.5-flash","provider":"Google","choices":[{"index":0,"delta":{"content":"","role":"assistant"},"finish_reason":"error","native_finish_reason":"MALFORMED_FUNCTION_CALL"}]}
+
+data: [DONE]
+

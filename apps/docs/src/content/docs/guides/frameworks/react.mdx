@@ -37,39 +37,37 @@ Every element is styled inside its own Shadow DOM. Import `@kitn.ai/ui/theme.css
 
 `<Chat>` renders a complete thread — message list, prompt input, suggestions, and header chrome — in a single element. It is **transport-agnostic**: pass a `messages` array, handle `onSubmit`, and stream the reply back into state.
 
+A message is an **ordered `parts` array**, not a string: text, reasoning, tool calls, generative-UI cards and file attachments, in the order the model produced them. `ChatMessage` is the kit's own type, so import it rather than hand-rolling a text-only copy — the copy compiles and then hides every other part kind from you.
+
 ```tsx
 import '@kitn.ai/ui/elements';
 import { Chat } from '@kitn.ai/ui/react';
+import type { ChatMessage } from '@kitn.ai/ui/react';
+import { appendTextPart } from '@kitn.ai/ui/state';
 import { useState } from 'react';
 
-type Message = {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-};
-
 export function App() {
-  const [messages, setMessages] = useState<Message[]>([
-    { id: '1', role: 'assistant', content: 'How can I help?' },
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    { id: '1', role: 'assistant', parts: [{ type: 'text', text: 'How can I help?' }] },
   ]);
 
   const handleSubmit = async (e: CustomEvent<{ value: string }>) => {
-    const userMsg: Message = {
+    const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
       role: 'user',
-      content: e.detail.value,
+      parts: [{ type: 'text', text: e.detail.value }],
     };
     const history = [...messages, userMsg];
     setMessages(history);
 
     const aid = crypto.randomUUID();
-    setMessages([...history, { id: aid, role: 'assistant', content: '' }]);
+    setMessages([...history, { id: aid, role: 'assistant', parts: [] }]);
 
-    let answer = '';
     for await (const token of streamFromYourAPI(history)) {
-      answer += token;
+      // appendTextPart returns a NEW parts array and leaves any reasoning, tool
+      // or card parts alone. Replacing `parts` wholesale would drop them.
       setMessages((prev) =>
-        prev.map((m) => (m.id === aid ? { ...m, content: answer } : m)),
+        prev.map((m) => (m.id === aid ? { ...m, parts: appendTextPart(m.parts, token) } : m)),
       );
     }
   };
@@ -91,7 +89,7 @@ export function App() {
 
 ## Compose individual elements
 
-Every element has its own wrapper, so you can assemble your own layout. This example pairs a `<Conversations>` sidebar with a `<Chat>` thread:
+Every element has its own wrapper, so you can assemble your own layout. This example pairs a `<Conversations>` sidebar with a `<Chat>` thread. `groups` carries the section headers and `conversations` the rows; pass `groups={[]}` and everything lands in one Ungrouped section.
 
 ```tsx
 import '@kitn.ai/ui/elements';
@@ -105,6 +103,7 @@ export function Workspace() {
   return (
     <div style={{ display: 'flex', height: '100dvh' }}>
       <Conversations
+        groups={[]}
         conversations={myConversations}
         activeId={activeId}
         onConversationSelect={(e) => {
@@ -134,6 +133,7 @@ import { Chat, Conversations, Resizable, ResizableItem } from '@kitn.ai/ui/react
 <Resizable orientation="horizontal" style={{ flex: 1, minHeight: 0 }}>
   <ResizableItem size="25%" min="200px">
     <Conversations
+      groups={groups}
       conversations={conversations}
       activeId={activeId}
       onConversationSelect={handleSelect}
@@ -205,7 +205,7 @@ import '@kitn.ai/ui/elements';
 export function RawChat() {
   const ref = useRef<HTMLElement>(null);
   const [messages, setMessages] = useState([
-    { id: '1', role: 'assistant', content: 'Hello!' },
+    { id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello!' }] },
   ]);
 
   useEffect(() => {
@@ -222,7 +222,7 @@ export function RawChat() {
       const { value } = (e as CustomEvent<{ value: string }>).detail;
       setMessages((prev) => [
         ...prev,
-        { id: crypto.randomUUID(), role: 'user', content: value },
+        { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: value }] },
       ]);
     };
     el.addEventListener('kai-submit', onSubmit);

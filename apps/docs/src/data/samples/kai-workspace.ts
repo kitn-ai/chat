@@ -65,13 +65,17 @@ const BASE_MESSAGES = [
   {
     id: 'm-1',
     role: 'user',
-    content: 'How do I drop the whole chat app in with one tag?',
+    parts: [{ type: 'text', text: 'How do I drop the whole chat app in with one tag?' }],
   },
   {
     id: 'm-2',
     role: 'assistant',
-    content:
-      'Use `<kai-workspace>` — set `conversations`, `messages`, and `models` as JS properties and listen for `kai-conversation-select` and `kai-submit`.\n\n```html\n<kai-workspace id="workspace" style="display:block; height:100vh;"></kai-workspace>\n\n<script type="module">\n  import \'@kitn.ai/ui/elements\';\n  const ws = document.getElementById(\'workspace\');\n  ws.conversations = [...];\n  ws.messages = [...];\n  ws.addEventListener(\'kai-submit\', (e) => console.log(e.detail.value));\n</script>\n```\n\nThat\'s the whole setup. The sidebar, thread, and prompt composer are all wired up internally.',
+    parts: [
+      {
+        type: 'text',
+        text: 'Use `<kai-workspace>` — set `conversations`, `messages`, and `models` as JS properties and listen for `kai-conversation-select` and `kai-submit`.\n\n```html\n<kai-workspace id="workspace" style="display:block; height:100vh;"></kai-workspace>\n\n<script type="module">\n  import \'@kitn.ai/ui/elements\';\n  const ws = document.getElementById(\'workspace\');\n  ws.conversations = [...];\n  ws.messages = [...];\n  ws.addEventListener(\'kai-submit\', (e) => console.log(e.detail.value));\n</script>\n```\n\nThat\'s the whole setup. The sidebar, thread, and prompt composer are all wired up internally.',
+      },
+    ],
     actions: ['copy', 'like', 'dislike'],
   },
 ];
@@ -82,7 +86,7 @@ const LOADING_MESSAGES = [
   {
     id: 'm-1',
     role: 'user',
-    content: 'Can you summarise the publishing pipeline document?',
+    parts: [{ type: 'text', text: 'Can you summarise the publishing pipeline document?' }],
   },
 ];
 
@@ -99,13 +103,17 @@ const MODEL_MESSAGES = [
   {
     id: 'm-1',
     role: 'user',
-    content: 'Which model should I use for code generation?',
+    parts: [{ type: 'text', text: 'Which model should I use for code generation?' }],
   },
   {
     id: 'm-2',
     role: 'assistant',
-    content:
-      'Each has its strength:\n\n- **Claude 4 Opus** — best for complex, multi-step reasoning and long-context editing.\n- **Claude 3.5 Sonnet** — fast, nuanced, excellent at following detailed instructions.\n- **GPT-4o** — broad language support, strong at refactoring.\n- **Gemini 1.5 Pro** — very large context window, great for repo-wide analysis.',
+    parts: [
+      {
+        type: 'text',
+        text: 'Each has its strength:\n\n- **Claude 4 Opus** — best for complex, multi-step reasoning and long-context editing.\n- **Claude 3.5 Sonnet** — fast, nuanced, excellent at following detailed instructions.\n- **GPT-4o** — broad language support, strong at refactoring.\n- **Gemini 1.5 Pro** — very large context window, great for repo-wide analysis.',
+      },
+    ],
     actions: ['copy', 'like', 'dislike'],
   },
 ];
@@ -138,12 +146,14 @@ const TRIGGER_MESSAGES = [
   {
     id: 'm-1',
     role: 'user',
-    content: 'Review the checkout path',
+    parts: [{ type: 'text', text: 'Review the checkout path' }],
   },
   {
     id: 'm-2',
     role: 'assistant',
-    content: 'Type `/` for a skill or `@` for an agent or plugin — each selection drops an atomic pill into the prompt below.',
+    parts: [
+      { type: 'text', text: 'Type `/` for a skill or `@` for an agent or plugin — each selection drops an atomic pill into the prompt below.' },
+    ],
     actions: ['copy'],
   },
 ];

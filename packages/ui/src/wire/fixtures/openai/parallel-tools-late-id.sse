@@ -1,0 +1,25 @@
+: fixture: openai/parallel-tools-late-id
+: capture: synthetic
+: provider: openrouter
+: model: openai/gpt-4o-mini
+: captured: 2026-08-10
+: request: {"model":"openai/gpt-4o-mini","stream":true,"tools":[{"type":"function","function":{"name":"get_weather","description":"Current weather for a city.","parameters":{"type":"object","properties":{"city":{"type":"string"},"units":{"type":"string"}},"required":["city"]}}}],"messages":[{"role":"user","content":"Compare the weather in Paris and Tokyo. Call the tool once per city."}]}
+: source: openai/parallel-tools.sse (the live capture beside this file), edited so the SECOND call's `id` and `name` arrive AFTER its argument fragments instead of before them. Frame envelope, ids and argument fragmentation are otherwise the live bytes.
+: note: SYNTHETIC because gpt-4o-mini sends the id on the first fragment of every call, so the live capture cannot exercise this. The path is real: consume.ts announces a ToolPart only once a call has BOTH an id and a name, buffers everything that arrives first, and flushes the buffer at announce. Without a fixture the buffer-then-flush branch is only covered by hand-built unit chunks.
+
+data: {"id":"gen-lateid-1","object":"chat.completion.chunk","created":1786337700,"model":"openai/gpt-4o-mini","provider":"OpenAI","choices":[{"index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"index":0,"id":"call_ZEOZXw49bBR4z21Yocrqys91","type":"function","function":{"name":"get_weather","arguments":""}}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-lateid-1","object":"chat.completion.chunk","created":1786337700,"model":"openai/gpt-4o-mini","provider":"OpenAI","choices":[{"index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"index":0,"function":{"arguments":"{\"ci"}}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-lateid-1","object":"chat.completion.chunk","created":1786337700,"model":"openai/gpt-4o-mini","provider":"OpenAI","choices":[{"index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"index":0,"function":{"arguments":"ty\": \"Paris\"}"}}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-lateid-1","object":"chat.completion.chunk","created":1786337700,"model":"openai/gpt-4o-mini","provider":"OpenAI","choices":[{"index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"index":1,"type":"function","function":{"arguments":"{\"ci"}}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-lateid-1","object":"chat.completion.chunk","created":1786337700,"model":"openai/gpt-4o-mini","provider":"OpenAI","choices":[{"index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"index":1,"function":{"arguments":"ty\": \"Tokyo"}}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-lateid-1","object":"chat.completion.chunk","created":1786337700,"model":"openai/gpt-4o-mini","provider":"OpenAI","choices":[{"index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"index":1,"id":"call_upaTKM45iFw9CZ7XVrNtXo8F","type":"function","function":{"name":"get_weather","arguments":"\"}"}}]},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-lateid-1","object":"chat.completion.chunk","created":1786337700,"model":"openai/gpt-4o-mini","provider":"OpenAI","choices":[{"index":0,"delta":{"content":"","role":"assistant"},"finish_reason":"tool_calls","native_finish_reason":"tool_calls"}]}
+
+data: [DONE]
+

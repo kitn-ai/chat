@@ -5,10 +5,12 @@ import type { DropdownController } from '../ui/dropdown';
 import type { SearchFilters } from '../types';
 
 interface Props extends Record<string, unknown> {
-  /** Authors to offer as scope filters. Set as a JS property. */
-  availableAuthors: string[];
-  /** Tags to offer as scope filters. Set as a JS property. */
-  availableTags: string[];
+  /** Authors to offer as scope filters. Omit to drop the Authors section (for a
+   *  tag-only picker). Set as a JS property. */
+  availableAuthors?: string[];
+  /** Tags to offer as scope filters. Omit to drop the Tags section (for an
+   *  author-only picker). Set as a JS property. */
+  availableTags?: string[];
   /** The label shown on the trigger for the active scope. */
   currentLabel?: string;
   /** Drive/observe the dropdown's open state (Shoelace-style: settable + reflected
@@ -52,8 +54,8 @@ defineWebComponent<Props, Events>('kai-scope-picker', {
   return (
     <ChatScopePicker
       currentLabel={props.currentLabel ?? 'All Content'}
-      availableAuthors={props.availableAuthors}
-      availableTags={props.availableTags}
+      availableAuthors={props.availableAuthors ?? []}
+      availableTags={props.availableTags ?? []}
       onScopeChange={(filters) => dispatch('kai-scope-change', { filters })}
       defaultOpen={flag('defaultOpen')}
       disabled={flag('disabled')}

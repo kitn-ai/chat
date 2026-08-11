@@ -53,6 +53,8 @@ On the front end, the switcher is built into `<kai-chat>`: set `models`, listen 
 
 <script type="module">
   import '@kitn.ai/ui/elements';
+  import { createAssistantStream } from '@kitn.ai/ui/state';
+  import { readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';
 
   await customElements.whenDefined('kai-chat');
 
@@ -69,13 +71,26 @@ On the front end, the switcher is built into `<kai-chat>`: set `models`, listen 
   chat.addEventListener('kai-model-change', (e) => { model = e.detail.modelId; });
 
   chat.addEventListener('kai-submit', async (e) => {
-    // append the user + empty assistant message, then call your route with `model`
-    await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, messages: chat.messages }),
-    });
-    // stream the reply into messages — see the Streaming recipe
+    const history = [
+      ...chat.messages,
+      { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: e.detail.value }] },
+    ];
+    chat.messages = history;
+
+    // createAssistantStream appends the in-flight assistant message and folds each
+    // delta onto its parts. toOpenAIMessages encodes the thread for the wire:
+    // chat.messages carries the kit's parts, which no provider endpoint accepts.
+    const stream = createAssistantStream((fn) => { chat.messages = fn(chat.messages); });
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, messages: toOpenAIMessages(history) }),
+      });
+      await readOpenAIStream(res, stream);
+    } finally {
+      stream.done();
+    }
   });
 </script>
 ```

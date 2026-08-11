@@ -74,6 +74,10 @@ function ChatContainerScrollAnchor(props: ChatContainerScrollAnchorProps) {
   );
 }
 
+/** `ChatContainer` is the exported alias of `ChatContainerRoot`; its props type
+ *  is aliased too, so the name a consumer imports always has a matching Props. */
+export type ChatContainerProps = ChatContainerRootProps;
+
 export {
   ChatContainerRoot as ChatContainer,
   ChatContainerRoot,
