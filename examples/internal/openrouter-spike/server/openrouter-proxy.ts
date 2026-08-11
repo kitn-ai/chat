@@ -19,8 +19,8 @@
 // what parses them.
 import { loadEnv, type Plugin } from 'vite';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { isAbsolute, join, resolve, sep } from 'node:path';
 import type { AnthropicWireMessage, OpenAIWireMessage } from '@kitn.ai/ui/wire';
 import type { ToolSpec } from '../src/tools';
 import { REPLY_WITH_CARD_FORMAT } from '../src/card-schema';
@@ -117,21 +117,28 @@ export function isAnthropicFamily(model: string): boolean {
   return /^~?anthropic\//.test(model);
 }
 
-/** A filesystem-safe slug for a model id, used as a fixture directory name.
+/** One inert path segment: a NAME, never a place.
  *
  *  The dot-run collapse is not decoration: `.` has to stay legal (`gpt-5.2` is a
  *  real model id) and the moment it is legal, `..` is legal, and a fixture
- *  directory named `..` writes somewhere other than `fixtures/`. The model id
- *  comes from server-side env rather than from the page, so this is depth rather
- *  than a live hole — but a recorder that can be pointed at an arbitrary
- *  directory by a typo in `.env.local` is not worth keeping. */
+ *  directory named `..` writes somewhere other than `fixtures/`.
+ *
+ *  Collapsing `..` to `.` is not enough on its own, which cost a red test to
+ *  learn: a segment that is ALL dots is still a directory rather than a name, and
+ *  `join(root, 'live', model, '.')` is the model directory — which round 1 now
+ *  deletes recursively. So an all-dots segment is replaced outright. */
+function pathSegment(value: string, fallback: string): string {
+  const slug = value.replace(/[^a-z0-9._-]+/gi, '-').replace(/\.{2,}/g, '.');
+  return slug === '' || /^\.+$/.test(slug) ? fallback : slug;
+}
+
+/** A filesystem-safe slug for a model id, used as a fixture directory name.
+ *
+ *  The model id comes from server-side env rather than from the page, so this is
+ *  depth rather than a live hole — but a recorder that can be pointed at an
+ *  arbitrary directory by a typo in `.env.local` is not worth keeping. */
 export function modelSlug(model: string): string {
-  const slug = model
-    .replace(/^~/, '')
-    .replace(/[^a-z0-9._-]+/gi, '-')
-    .replace(/\.{2,}/g, '.')
-    .toLowerCase();
-  return slug || 'unknown-model';
+  return pathSegment(model.replace(/^~/, ''), 'unknown-model').toLowerCase();
 }
 
 /** The fixture directory name for a (model, wire) pair.
@@ -463,24 +470,89 @@ export function buildUpstreamRequest(
   };
 }
 
-/** Write one captured round to `fixtures/live/<model>/<scenario>/round-N.sse`. */
-async function recordFixture(
+/** The scenario id as a directory name.
+ *
+ *  Case is PRESERVED: the recorded directories are `S12-citations`, not
+ *  `s12-citations`, and lowercasing here would orphan all 136 of them.
+ *
+ *  The dot-run collapse is the same rule `modelSlug` applies and for a sharper
+ *  reason: this segment comes off the request body, and `..` survives a
+ *  character-class filter untouched because dots are legal in a scenario name.
+ *  `live/<model>/..` is `live/`, and round 1 now DELETES this directory
+ *  recursively — so the sanitiser is what stands between a typo'd harness label
+ *  and the whole fixture tree. */
+export function scenarioSlug(scenario: string): string {
+  return pathSegment(scenario, 'unknown-scenario');
+}
+
+/** The frame that ends a clean stream on all three dialects the spike records —
+ *  the OpenAI-compatible endpoint, the Anthropic Skin and DeepSeek. Checked
+ *  against every recording in fixtures/live: 136 of 136 end with it. */
+const SSE_TERMINATOR = 'data: [DONE]';
+
+/**
+ * Whether a captured stream ran to completion.
+ *
+ * `recordFixture` is called from a `finally`, so it runs on the error path too,
+ * and the error frame that path emits goes to `res.write` without ever reaching
+ * the capture buffer. A stream that died mid-flight therefore arrives here as a
+ * short, well-formed, entirely unmarked SSE file — one that reads as a clean
+ * stream that simply ended early.
+ *
+ * Only the tail is examined: the terminator is the last frame by definition, and
+ * a fixture can be 60KB.
+ */
+export function isCompleteCapture(bytes: Buffer): boolean {
+  const tail = bytes.subarray(Math.max(0, bytes.length - 64)).toString('utf8');
+  return tail.trimEnd().endsWith(SSE_TERMINATOR);
+}
+
+/**
+ * Write one captured round to `fixtures/live/<model>/<scenario>/round-N.sse`.
+ *
+ * Two things this refuses to do, both of which shipped:
+ *
+ *  · WRITE A TRUNCATED STREAM UNDER A REPLAYABLE NAME. A missing fixture 404s on
+ *    the replay path and the matrix runner reports the cell as `skip` — a MISSING
+ *    measurement, which is exactly what a failed recording is. A truncated one
+ *    replays as a real stream and can go GREEN if the partial content happens to
+ *    satisfy the assertion, and reads downstream as zero reasoning tokens and a
+ *    smaller cost, because the usage frame is the LAST thing in a stream. So the
+ *    bytes are parked at `.partial` instead: kept for diagnosis, but unreachable
+ *    by construction rather than by convention, because `fixturePath` only ever
+ *    builds `round-N.sse`. An in-file failure marker was the other option and is
+ *    weaker — it leaves the bad bytes at the replayable path and trusts every
+ *    downstream reader to honour a marker none of them currently read.
+ *
+ *  · LET A SHORT RUN INHERIT A LONG RUN'S TAIL. Round 1 starts a new recording of
+ *    this scenario, so the directory is emptied first. Without this, a re-run that
+ *    settled in two rounds left the previous run's round-3 in place — recorded
+ *    against a conversation that no longer exists. Two of those shipped in
+ *    e352545 and inflated that sweep's measured cost by $0.002437.
+ */
+export async function recordFixture(
   env: ProxyEnv,
   scenario: string,
   round: number,
   bytes: Buffer,
 ): Promise<void> {
-  const safeScenario = scenario.replace(/[^a-z0-9._-]+/gi, '-');
-  const file = join(
-    env.fixtureDir,
-    'live',
-    fixtureSlug(env.model, env.wire),
-    safeScenario,
-    `round-${round}.sse`,
-  );
+  const dir = join(env.fixtureDir, 'live', fixtureSlug(env.model, env.wire), scenarioSlug(scenario));
+  const file = join(dir, `round-${round}.sse`);
+  const complete = isCompleteCapture(bytes);
   try {
-    await mkdir(dirname(file), { recursive: true });
-    await writeFile(file, bytes);
+    if (round === 1) await rm(dir, { recursive: true, force: true });
+    await mkdir(dir, { recursive: true });
+    if (complete) {
+      await writeFile(file, bytes);
+      return;
+    }
+    await writeFile(`${file}.partial`, bytes);
+    console.warn(
+      `[spike] ${scenario} round ${round}: the stream ended without \`${SSE_TERMINATOR}\`, so this ` +
+        `is a PARTIAL recording (${bytes.length} bytes) and was NOT written as a fixture. ` +
+        `Kept at ${file}.partial for diagnosis; the scenario will replay as a missing measurement ` +
+        `until it is re-recorded.`,
+    );
   } catch (e) {
     // A recording failure must never fail the turn the user is watching.
     console.warn(`[spike] could not record ${file}: ${errorText(e)}`);
