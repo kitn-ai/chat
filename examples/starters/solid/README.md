@@ -10,12 +10,16 @@ Storybook stories.
 - `ResizablePanelGroup` / `ResizablePanel` / `ResizableHandle` sidebar layout
 - `ConversationList` with grouped conversations + active-highlight
 - `ChatContainer` / `ChatContainerContent` / `ChatContainerScrollAnchor` for the scrollable thread
-- `Message` / `MessageContent` (with `markdown` prop — renders markdown + code blocks)
-- `MessageActions` (copy, thumbs up/down, refresh — hover-reveal)
+- `Message` / `MessageBody` — walks a message's ordered `parts` and renders each kind in place: text as markdown + code blocks, reasoning as a collapsible block, tool calls as a panel
+- `MessageBody`'s built-in action row (copy, thumbs up/down, regenerate — hover-reveal)
 - `PromptInput` / `PromptInputTextarea` / `PromptInputActions` for the text input
 - `PromptSuggestion` quick-fill chips
 - `ScrollButton` scroll-to-bottom affordance
-- Word-by-word streamed reply simulation via `setInterval`
+- A simulated model turn streamed as ordered parts — reasoning, then a tool call
+  as it settles, then the answer — folded in with `appendReasoningPart` /
+  `upsertToolPart` / `appendTextPart` from `@kitn.ai/ui/state`
+- The message list keyed by `message.id`, so a tool or reasoning panel opened
+  mid-stream survives the next delta instead of being torn down with its row
 
 ## Tailwind v4 + theme setup (the key part)
 
