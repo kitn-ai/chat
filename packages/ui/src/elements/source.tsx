@@ -47,8 +47,10 @@ defineWebComponent<SourceProps>('kai-source', {
 
 
 interface SourceListProps extends Record<string, unknown> {
-  /** The sources to render. Set as a JS property. */
-  sources: KaiSourceItem[];
+  /** The sources to render. Set as a JS property. Omit to supply them as
+   *  `<kai-source>` light-DOM children instead; when both are present the
+   *  property's sources come first. */
+  sources?: KaiSourceItem[];
   /** Show favicons on all items (per-item `showFavicon` overrides). */
   showFavicon?: boolean;
   /**
@@ -101,7 +103,7 @@ defineWebComponent<SourceListProps>('kai-sources', {
   });
 
   // Prop sources take precedence; slotted children are appended after.
-  const allSources = () => [...props.sources, ...slottedSources()];
+  const allSources = () => [...(props.sources ?? []), ...slottedSources()];
 
   const isNumbered = () => flag('numbered');
 

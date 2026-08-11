@@ -141,8 +141,8 @@ export interface KaiArtifactElement extends HTMLElement {
   theme?: "light" | "dark" | "auto";
   /** URL the preview iframe frames. Consumer-controlled. */
   src?: string;
-  /** Files for the Code tab tree + each file's preview `url`. Set as a JS property (array). */
-  files: { path: string; url?: undefined | string; code?: undefined | string; language?: undefined | string; type?: undefined | "html" | "pdf" | "image" | "other"; additions?: undefined | number; deletions?: undefined | number; status?: undefined | "added" | "modified" | "deleted" | "renamed" | "untracked" }[];
+  /** Files for the Code tab tree + each file's preview `url`. Omit for a preview-only artifact (the Code tab then has nothing to show; pair it with `no-tabs` to hide the toggle). Set as a JS property (array). */
+  files: { path: string; url?: string; code?: string; language?: string; type?: "html" | "pdf" | "image" | "other"; additions?: number; deletions?: number; status?: "added" | "modified" | "deleted" | "renamed" | "untracked" }[];
   /** Controlled active tab: `preview` or `code`. When set, the artifact follows it (re-asserted on change). Leave unset for an uncontrolled tab (see `defaultTab`). */
   tab?: "preview" | "code";
   /** Uncontrolled INITIAL tab (used only when `tab` is unset). Default `preview`. Seeds the starting tab; the user can then switch freely without the consumer re-asserting a controlled `tab`. */
@@ -180,8 +180,8 @@ export interface KaiArtifactElement extends HTMLElement {
 export interface KaiAttachmentsElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
-  /** The attachments to render. Set as a JS property (array). */
-  items: { id: string; type: "file" | "source-document"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[];
+  /** The attachments to render. Omit (or pass an empty array) for the empty state, which shows `emptyText` if set and nothing otherwise. Set as a JS property (array). */
+  items: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }[];
   /** Layout: `grid` = visual tiles, `inline` = icon + label chips, `list` = rows. */
   variant?: "grid" | "inline" | "list";
   /** Wrap each item in a hover card that previews its details. */
@@ -274,8 +274,8 @@ export interface KaiCardsElement extends HTMLElement {
 export interface KaiChainOfThoughtElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
-  /** The reasoning steps. Set as a JS property. Compound sub-parts collapse to this one data model (Route 1). Each `{ label, content?, id? }`. */
-  steps: { label: string; content?: undefined | string; id?: undefined | string }[];
+  /** The reasoning steps. Set as a JS property. Compound sub-parts collapse to this one data model (Route 1). Each `{ label, content?, id? }`. Omit to supply the steps as `<kai-step>` light-DOM children instead; when both are present the property's steps come first. */
+  steps: { label: string; content?: string; id?: string }[];
   /** Open mode: `'multiple'` (default — any number of steps open at once) or `'single'` (at most one open; opening a step closes the others). */
   type?: "single" | "multiple";
   /** Controlled open step key(s). When set, it WINS over user interaction (the consumer owns the open set). String in `single` mode, string[] in `multiple` mode. Set as a JS property. */
@@ -289,8 +289,6 @@ export interface KaiChatElement extends HTMLElement {
   theme?: "light" | "dark" | "auto";
   /** Show a Search (Globe) button in the input toolbar; fires a `search` event. */
   search?: boolean;
-  /** The full message thread to render, newest last. Each entry carries its role, ordered `parts`, and optional actions/avatar/feedback. Set as a JS property (`el.messages = [...]`). */
-  messages: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: undefined | "image" | "command" | "file-change" | "search" | "fetch" | "mcp" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: "action"; action: string; payload?: unknown; at?: undefined | string } | { kind: "submit"; data: unknown; at?: undefined | string } | { kind: "dismissed"; at?: undefined | string } | { kind: "expired"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: "source"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | "like" | "dislike" }[];
   /** Value of the input. A **string** is controlled (the host owns the text and updates it on `kai-value-change`). A **ComposerDoc** is a one-time seed that pre-populates pills; the user then edits freely. Leave unset for uncontrolled. */
   value?: string | ({ type: "text"; text: string } | { type: "entity"; entity: { kind: string; id: string; label: string; icon?: string; promptText?: string; data?: Record<string, unknown> } })[];
   /** Placeholder text shown in the empty input. */
@@ -343,6 +341,8 @@ export interface KaiChatElement extends HTMLElement {
   kindIcons?: Record<string, string>;
   /** Whether each message's action bar is always visible (`'always'`, default) or only revealed on hover of that message row (`'hover'`). */
   actionsReveal?: "always" | "hover";
+  /** The full message thread to render, newest last. Each entry carries its role, ordered `parts`, and optional actions/avatar/feedback. Set as a JS property (`el.messages = [...]`); a NEW array reference per streaming chunk re-renders (mutating in place does not). Omit for an empty thread. Re-declared here (rather than inherited from `ChatThreadProps`) because the ELEMENT registers a `[]` default and renders the empty state without it, while the SolidJS `<ChatThread>` component still requires it — the facade hands it a validated array either way. Matches `<kai-thread>`. */
+  messages: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: string; index?: number; streamId?: string; signature?: string; raw?: { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: "image" | "command" | "file-change" | "search" | "fetch" | "mcp" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } }; raw?: { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }; raw?: { source: string; payload: unknown } } | { type: "source"; source: { id?: string; url?: string; title?: string; snippet?: string; index?: number }; raw?: { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }; raw?: { source: string; payload: unknown } })[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" }[];
   /** Optional card type -> custom-element tag overrides/additions for `card` parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type. */
   cardTypes?: Record<string, string>;
 }
@@ -496,9 +496,9 @@ export interface KaiConversationsElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
   /** The list's section headers (`{ id, name, sortOrder, createdAt }`), rendered in array order. A group carries no conversations of its own; it is matched against `conversations` by id, so the two props are complementary rather than alternatives. Omit for an ungrouped list. Set as a JS property. */
-  groups?: { id: string; userId?: string; teamId?: string; name: string; sortOrder: number; createdAt: string }[];
-  /** Every conversation the list renders, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId` — or with a `groupId` matching no entry in `groups` — falls into a trailing "Ungrouped" section, so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. */
-  conversations: { id: string; title: string; groupId?: undefined | string; scope: { type: "document" | "collection"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | "transcript" | "markdown"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[];
+  groups: { id: string; userId?: string; teamId?: string; name: string; sortOrder: number; createdAt: string }[];
+  /** Every conversation the list renders, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId` — or with a `groupId` matching no entry in `groups` — falls into a trailing "Ungrouped" section, so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. Omit to supply them as `<kai-conversation>` light-DOM children instead, or for the empty state. */
+  conversations: { id: string; title: string; groupId?: string; scope: { type: "document" | "collection"; documentId?: string; filters?: { tags?: string[]; authors?: string[]; contentType?: "transcript" | "markdown"; dateRange?: { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: string }[];
   /** The id of the currently-open conversation, highlighted in the list. */
   activeId?: string;
   /** Controlled collapsed state. Set as a JS property (`el.collapsed = true`) to drive the rail from your app, updating it in response to `kai-collapse-toggle`. Omit for uncontrolled (the element manages it). Collapsed shrinks the rail to a floating reopen button. */
@@ -780,8 +780,8 @@ export interface KaiMessageElement extends HTMLElement {
 export interface KaiModelSwitcherElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
-  /** The selectable models. Set as a JS property (array). */
-  models: { id: string; name: string; provider?: undefined | string; description?: undefined | string; group?: undefined | string }[];
+  /** The selectable models. Set as a JS property (array). Omit to supply them as `<kai-model>` light-DOM children instead; when both are present the property's models come first. */
+  models: { id: string; name: string; provider?: string; description?: string; group?: string }[];
   /** The currently-selected model id. Defaults to the first model. */
   currentModel?: string;
   /** Drive/observe the dropdown's open state (Shoelace-style: settable + reflected to the `open` attribute, the dropdown still self-manages on click/keyboard). Set `el.open = true`, or `<kai-model-switcher open>`; listen for `kai-open-change`. */
@@ -954,7 +954,7 @@ export interface KaiResizableElement extends HTMLElement {
   /** Layout axis: `horizontal` (row, default) or `vertical` (column). */
   orientation?: "vertical" | "horizontal";
   /** Which item index is maximized (null = none). Declarative source of truth. */
-  maximizedIndex?: null | number;
+  maximizedIndex: null | number;
   /** Divider affordance drawn inside each draggable handle's 8px grab zone: - `line` (default) — a 1px hairline, transparent at rest, tinting on hover/drag. - `grip` — a dotted grip handle. - `none` — no visible divider, just the invisible hit-area. The full grab zone and keyboard/ARIA behavior are identical for all three. */
   handle?: "none" | "line" | "grip";
 }
@@ -980,7 +980,7 @@ export interface KaiResponseStreamElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
   /** Text to stream. A string, or an `AsyncIterable<string>` (set as a JS property — async iterables can't be HTML attributes). */
-  text?: string | AsyncIterable<string>;
+  text: string | AsyncIterable<string>;
   /** Reveal animation. */
   mode?: "typewriter" | "fade";
   /** Characters/segments per tick. */
@@ -992,9 +992,9 @@ export interface KaiResponseStreamElement extends HTMLElement {
 export interface KaiScopePickerElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
-  /** Authors to offer as scope filters. Set as a JS property. */
+  /** Authors to offer as scope filters. Omit to drop the Authors section (for a tag-only picker). Set as a JS property. */
   availableAuthors: string[];
-  /** Tags to offer as scope filters. Set as a JS property. */
+  /** Tags to offer as scope filters. Omit to drop the Tags section (for an author-only picker). Set as a JS property. */
   availableTags: string[];
   /** The label shown on the trigger for the active scope. */
   currentLabel?: string;
@@ -1108,7 +1108,7 @@ export interface KaiSkeletonElement extends HTMLElement {
 export interface KaiSkillsElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
-  /** The active skills to badge. Set as a JS property. */
+  /** The active skills to badge. Set as a JS property. Omit to supply them as `<kai-skill>` light-DOM children instead; when both are present the property's skills come first. Nothing renders when there are none. */
   skills: { id: string; name: string }[];
 }
 
@@ -1130,8 +1130,8 @@ export interface KaiSourceElement extends HTMLElement {
 export interface KaiSourcesElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
-  /** The sources to render. Set as a JS property. */
-  sources: { href: string; title?: undefined | string; description?: undefined | string; label?: undefined | string; showFavicon?: undefined | boolean }[];
+  /** The sources to render. Set as a JS property. Omit to supply them as `<kai-source>` light-DOM children instead; when both are present the property's sources come first. */
+  sources: { href: string; title?: string; description?: string; label?: string; showFavicon?: boolean }[];
   /** Show favicons on all items (per-item `showFavicon` overrides). */
   showFavicon?: boolean;
   /** When true, each citation chip is labelled with its 1-based index in the merged (prop + declarative-children) list (`[1]`, `[2]`, …) instead of the per-item `label` or domain fallback. HTML attribute: `numbered` (boolean — bare attribute or `numbered="true"`). JS property: `el.numbered = true`. */
@@ -1154,8 +1154,8 @@ export interface KaiStatusElement extends HTMLElement {
 export interface KaiSuggestionsElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
-  /** The suggestions. Strings, or `{ label, value }` when the displayed text and the emitted value differ. Set as a JS property. */
-  suggestions: (string | { label: string; value?: undefined | string; icon?: undefined | string })[];
+  /** The suggestions. Strings, or `{ label, value }` when the displayed text and the emitted value differ. Set as a JS property. Omit to supply them as `<kai-suggestion>` light-DOM children instead; when both are present the property's suggestions come first. */
+  suggestions: (string | { label: string; value?: string; icon?: string })[];
   /** Chip style: `'outline'` (default), `'ghost'`, or `'default'` (filled). */
   variant?: "default" | "ghost" | "outline";
   /** Row height for `layout="list"`: `'md'` (default) or `'lg'` for taller rows. Chips are unaffected. */
@@ -1273,8 +1273,8 @@ export interface KaiThreadElement extends HTMLElement {
 export interface KaiToastRegionElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
-  /** The toasts to render. Newest is shown on top. Set as a JS property (array); pass a new array reference to update. */
-  toasts: { id: string; message: string; variant?: undefined | "error" | "info" | "success" | "warning" | "neutral"; appearance?: undefined | "card" | "pill"; inverse?: undefined | boolean; description?: undefined | string; action?: undefined | { label: string; onAction: () => void | false }; duration?: undefined | number; dismissible?: undefined | boolean; target?: undefined | HTMLElement }[];
+  /** The toasts to render. Newest is shown on top. Set as a JS property (array); pass a new array reference to update. Omit for an empty region, which is the normal resting state and how the imperative `toast()` API starts. */
+  toasts: { id: string; message: string; variant?: "error" | "info" | "success" | "warning" | "neutral"; appearance?: "card" | "pill"; inverse?: boolean; description?: string; action?: { label: string; onAction: () => void | false }; duration?: number; dismissible?: boolean; target?: HTMLElement }[];
   /** Stack anchor: `'top-center'` (default), `'top-right'`, `'bottom-center'`, … */
   position?: "top-center" | "top-right" | "top-left" | "bottom-center" | "bottom-right" | "bottom-left";
   /** Max simultaneously-visible toasts; the rest queue. Defaults to `3`. */
@@ -1351,13 +1351,13 @@ export interface KaiWorkspaceElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
   /** The sidebar's section headers, rendered in array order. A group carries no conversations of its own; it is matched against `conversations` by id, so the two props are complementary rather than alternatives. Omit for an ungrouped sidebar. Set as a JS property. */
-  groups?: { id: string; userId?: string; teamId?: string; name: string; sortOrder: number; createdAt: string }[];
-  /** Every conversation in the sidebar, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId` — or with a `groupId` matching no entry in `groups` — falls into a trailing ungrouped section (headerless when `compact`), so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. */
-  conversations: { id: string; title: string; groupId?: undefined | string; scope: { type: "document" | "collection"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | "transcript" | "markdown"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[];
+  groups: { id: string; userId?: string; teamId?: string; name: string; sortOrder: number; createdAt: string }[];
+  /** Every conversation in the sidebar, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId` — or with a `groupId` matching no entry in `groups` — falls into a trailing ungrouped section (headerless when `compact`), so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. Omit for an empty sidebar, or when `no-conversations` replaces the built-in list with your own `sidebar-header` content. */
+  conversations: { id: string; title: string; groupId?: string; scope: { type: "document" | "collection"; documentId?: string; filters?: { tags?: string[]; authors?: string[]; contentType?: "transcript" | "markdown"; dateRange?: { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: string }[];
   /** Id of the open conversation, highlighted in the sidebar. */
   activeId?: string;
-  /** The active conversation's message thread, newest last. Set as a JS property. */
-  messages: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: undefined | "image" | "command" | "file-change" | "search" | "fetch" | "mcp" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: "action"; action: string; payload?: unknown; at?: undefined | string } | { kind: "submit"; data: unknown; at?: undefined | string } | { kind: "dismissed"; at?: undefined | string } | { kind: "expired"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: "source"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | "like" | "dislike" }[];
+  /** The active conversation's message thread, newest last. Set as a JS property (`el.messages = [...]`); a NEW array reference per streaming chunk re-renders (mutating in place does not). Omit for an empty thread. */
+  messages: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: string; index?: number; streamId?: string; signature?: string; raw?: { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: "image" | "command" | "file-change" | "search" | "fetch" | "mcp" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } }; raw?: { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }; raw?: { source: string; payload: unknown } } | { type: "source"; source: { id?: string; url?: string; title?: string; snippet?: string; index?: number }; raw?: { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }; raw?: { source: string; payload: unknown } })[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" }[];
   value?: string;
   placeholder?: string;
   loading?: boolean;
@@ -1597,8 +1597,8 @@ export interface KaiArtifactElementProps {
   theme?: "light" | "dark" | "auto";
   /** URL the preview iframe frames. Consumer-controlled. */
   src?: string;
-  /** Files for the Code tab tree + each file's preview `url`. Set as a JS property (array). */
-  files: { path: string; url?: undefined | string; code?: undefined | string; language?: undefined | string; type?: undefined | "html" | "pdf" | "image" | "other"; additions?: undefined | number; deletions?: undefined | number; status?: undefined | "added" | "modified" | "deleted" | "renamed" | "untracked" }[];
+  /** Files for the Code tab tree + each file's preview `url`. Omit for a preview-only artifact (the Code tab then has nothing to show; pair it with `no-tabs` to hide the toggle). Set as a JS property (array). */
+  files?: { path: string; url?: string; code?: string; language?: string; type?: "html" | "pdf" | "image" | "other"; additions?: number; deletions?: number; status?: "added" | "modified" | "deleted" | "renamed" | "untracked" }[];
   /** Controlled active tab: `preview` or `code`. When set, the artifact follows it (re-asserted on change). Leave unset for an uncontrolled tab (see `defaultTab`). */
   tab?: "preview" | "code";
   /** Uncontrolled INITIAL tab (used only when `tab` is unset). Default `preview`. Seeds the starting tab; the user can then switch freely without the consumer re-asserting a controlled `tab`. */
@@ -1636,8 +1636,8 @@ export interface KaiArtifactElementProps {
 export interface KaiAttachmentsElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
-  /** The attachments to render. Set as a JS property (array). */
-  items: { id: string; type: "file" | "source-document"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[];
+  /** The attachments to render. Omit (or pass an empty array) for the empty state, which shows `emptyText` if set and nothing otherwise. Set as a JS property (array). */
+  items?: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }[];
   /** Layout: `grid` = visual tiles, `inline` = icon + label chips, `list` = rows. */
   variant?: "grid" | "inline" | "list";
   /** Wrap each item in a hover card that previews its details. */
@@ -1730,8 +1730,8 @@ export interface KaiCardsElementProps {
 export interface KaiChainOfThoughtElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
-  /** The reasoning steps. Set as a JS property. Compound sub-parts collapse to this one data model (Route 1). Each `{ label, content?, id? }`. */
-  steps: { label: string; content?: undefined | string; id?: undefined | string }[];
+  /** The reasoning steps. Set as a JS property. Compound sub-parts collapse to this one data model (Route 1). Each `{ label, content?, id? }`. Omit to supply the steps as `<kai-step>` light-DOM children instead; when both are present the property's steps come first. */
+  steps?: { label: string; content?: string; id?: string }[];
   /** Open mode: `'multiple'` (default — any number of steps open at once) or `'single'` (at most one open; opening a step closes the others). */
   type?: "single" | "multiple";
   /** Controlled open step key(s). When set, it WINS over user interaction (the consumer owns the open set). String in `single` mode, string[] in `multiple` mode. Set as a JS property. */
@@ -1745,8 +1745,6 @@ export interface KaiChatElementProps {
   theme?: "light" | "dark" | "auto";
   /** Show a Search (Globe) button in the input toolbar; fires a `search` event. */
   search?: boolean;
-  /** The full message thread to render, newest last. Each entry carries its role, ordered `parts`, and optional actions/avatar/feedback. Set as a JS property (`el.messages = [...]`). */
-  messages: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: undefined | "image" | "command" | "file-change" | "search" | "fetch" | "mcp" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: "action"; action: string; payload?: unknown; at?: undefined | string } | { kind: "submit"; data: unknown; at?: undefined | string } | { kind: "dismissed"; at?: undefined | string } | { kind: "expired"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: "source"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | "like" | "dislike" }[];
   /** Value of the input. A **string** is controlled (the host owns the text and updates it on `kai-value-change`). A **ComposerDoc** is a one-time seed that pre-populates pills; the user then edits freely. Leave unset for uncontrolled. */
   value?: string | ({ type: "text"; text: string } | { type: "entity"; entity: { kind: string; id: string; label: string; icon?: string; promptText?: string; data?: Record<string, unknown> } })[];
   /** Placeholder text shown in the empty input. */
@@ -1799,6 +1797,8 @@ export interface KaiChatElementProps {
   kindIcons?: Record<string, string>;
   /** Whether each message's action bar is always visible (`'always'`, default) or only revealed on hover of that message row (`'hover'`). */
   actionsReveal?: "always" | "hover";
+  /** The full message thread to render, newest last. Each entry carries its role, ordered `parts`, and optional actions/avatar/feedback. Set as a JS property (`el.messages = [...]`); a NEW array reference per streaming chunk re-renders (mutating in place does not). Omit for an empty thread. Re-declared here (rather than inherited from `ChatThreadProps`) because the ELEMENT registers a `[]` default and renders the empty state without it, while the SolidJS `<ChatThread>` component still requires it — the facade hands it a validated array either way. Matches `<kai-thread>`. */
+  messages?: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: string; index?: number; streamId?: string; signature?: string; raw?: { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: "image" | "command" | "file-change" | "search" | "fetch" | "mcp" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } }; raw?: { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }; raw?: { source: string; payload: unknown } } | { type: "source"; source: { id?: string; url?: string; title?: string; snippet?: string; index?: number }; raw?: { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }; raw?: { source: string; payload: unknown } })[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" }[];
   /** Optional card type -> custom-element tag overrides/additions for `card` parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type. */
   cardTypes?: Record<string, string>;
 }
@@ -1953,8 +1953,8 @@ export interface KaiConversationsElementProps {
   theme?: "light" | "dark" | "auto";
   /** The list's section headers (`{ id, name, sortOrder, createdAt }`), rendered in array order. A group carries no conversations of its own; it is matched against `conversations` by id, so the two props are complementary rather than alternatives. Omit for an ungrouped list. Set as a JS property. */
   groups?: { id: string; userId?: string; teamId?: string; name: string; sortOrder: number; createdAt: string }[];
-  /** Every conversation the list renders, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId` — or with a `groupId` matching no entry in `groups` — falls into a trailing "Ungrouped" section, so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. */
-  conversations: { id: string; title: string; groupId?: undefined | string; scope: { type: "document" | "collection"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | "transcript" | "markdown"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[];
+  /** Every conversation the list renders, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId` — or with a `groupId` matching no entry in `groups` — falls into a trailing "Ungrouped" section, so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. Omit to supply them as `<kai-conversation>` light-DOM children instead, or for the empty state. */
+  conversations?: { id: string; title: string; groupId?: string; scope: { type: "document" | "collection"; documentId?: string; filters?: { tags?: string[]; authors?: string[]; contentType?: "transcript" | "markdown"; dateRange?: { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: string }[];
   /** The id of the currently-open conversation, highlighted in the list. */
   activeId?: string;
   /** Controlled collapsed state. Set as a JS property (`el.collapsed = true`) to drive the rail from your app, updating it in response to `kai-collapse-toggle`. Omit for uncontrolled (the element manages it). Collapsed shrinks the rail to a floating reopen button. */
@@ -2236,8 +2236,8 @@ export interface KaiMessageElementProps {
 export interface KaiModelSwitcherElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
-  /** The selectable models. Set as a JS property (array). */
-  models: { id: string; name: string; provider?: undefined | string; description?: undefined | string; group?: undefined | string }[];
+  /** The selectable models. Set as a JS property (array). Omit to supply them as `<kai-model>` light-DOM children instead; when both are present the property's models come first. */
+  models?: { id: string; name: string; provider?: string; description?: string; group?: string }[];
   /** The currently-selected model id. Defaults to the first model. */
   currentModel?: string;
   /** Drive/observe the dropdown's open state (Shoelace-style: settable + reflected to the `open` attribute, the dropdown still self-manages on click/keyboard). Set `el.open = true`, or `<kai-model-switcher open>`; listen for `kai-open-change`. */
@@ -2448,10 +2448,10 @@ export interface KaiResponseStreamElementProps {
 export interface KaiScopePickerElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
-  /** Authors to offer as scope filters. Set as a JS property. */
-  availableAuthors: string[];
-  /** Tags to offer as scope filters. Set as a JS property. */
-  availableTags: string[];
+  /** Authors to offer as scope filters. Omit to drop the Authors section (for a tag-only picker). Set as a JS property. */
+  availableAuthors?: string[];
+  /** Tags to offer as scope filters. Omit to drop the Tags section (for an author-only picker). Set as a JS property. */
+  availableTags?: string[];
   /** The label shown on the trigger for the active scope. */
   currentLabel?: string;
   /** Drive/observe the dropdown's open state (Shoelace-style: settable + reflected to the `open` attribute, the dropdown still self-manages on click/keyboard). Set `el.open = true`, or `<kai-scope-picker open>`; listen for `kai-open-change`. */
@@ -2564,8 +2564,8 @@ export interface KaiSkeletonElementProps {
 export interface KaiSkillsElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
-  /** The active skills to badge. Set as a JS property. */
-  skills: { id: string; name: string }[];
+  /** The active skills to badge. Set as a JS property. Omit to supply them as `<kai-skill>` light-DOM children instead; when both are present the property's skills come first. Nothing renders when there are none. */
+  skills?: { id: string; name: string }[];
 }
 
 export interface KaiSourceElementProps {
@@ -2586,8 +2586,8 @@ export interface KaiSourceElementProps {
 export interface KaiSourcesElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
-  /** The sources to render. Set as a JS property. */
-  sources: { href: string; title?: undefined | string; description?: undefined | string; label?: undefined | string; showFavicon?: undefined | boolean }[];
+  /** The sources to render. Set as a JS property. Omit to supply them as `<kai-source>` light-DOM children instead; when both are present the property's sources come first. */
+  sources?: { href: string; title?: string; description?: string; label?: string; showFavicon?: boolean }[];
   /** Show favicons on all items (per-item `showFavicon` overrides). */
   showFavicon?: boolean;
   /** When true, each citation chip is labelled with its 1-based index in the merged (prop + declarative-children) list (`[1]`, `[2]`, …) instead of the per-item `label` or domain fallback. HTML attribute: `numbered` (boolean — bare attribute or `numbered="true"`). JS property: `el.numbered = true`. */
@@ -2610,8 +2610,8 @@ export interface KaiStatusElementProps {
 export interface KaiSuggestionsElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
-  /** The suggestions. Strings, or `{ label, value }` when the displayed text and the emitted value differ. Set as a JS property. */
-  suggestions: (string | { label: string; value?: undefined | string; icon?: undefined | string })[];
+  /** The suggestions. Strings, or `{ label, value }` when the displayed text and the emitted value differ. Set as a JS property. Omit to supply them as `<kai-suggestion>` light-DOM children instead; when both are present the property's suggestions come first. */
+  suggestions?: (string | { label: string; value?: string; icon?: string })[];
   /** Chip style: `'outline'` (default), `'ghost'`, or `'default'` (filled). */
   variant?: "default" | "ghost" | "outline";
   /** Row height for `layout="list"`: `'md'` (default) or `'lg'` for taller rows. Chips are unaffected. */
@@ -2729,8 +2729,8 @@ export interface KaiThreadElementProps {
 export interface KaiToastRegionElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
-  /** The toasts to render. Newest is shown on top. Set as a JS property (array); pass a new array reference to update. */
-  toasts: { id: string; message: string; variant?: undefined | "error" | "info" | "success" | "warning" | "neutral"; appearance?: undefined | "card" | "pill"; inverse?: undefined | boolean; description?: undefined | string; action?: undefined | { label: string; onAction: () => void | false }; duration?: undefined | number; dismissible?: undefined | boolean; target?: undefined | HTMLElement }[];
+  /** The toasts to render. Newest is shown on top. Set as a JS property (array); pass a new array reference to update. Omit for an empty region, which is the normal resting state and how the imperative `toast()` API starts. */
+  toasts?: { id: string; message: string; variant?: "error" | "info" | "success" | "warning" | "neutral"; appearance?: "card" | "pill"; inverse?: boolean; description?: string; action?: { label: string; onAction: () => void | false }; duration?: number; dismissible?: boolean; target?: HTMLElement }[];
   /** Stack anchor: `'top-center'` (default), `'top-right'`, `'bottom-center'`, … */
   position?: "top-center" | "top-right" | "top-left" | "bottom-center" | "bottom-right" | "bottom-left";
   /** Max simultaneously-visible toasts; the rest queue. Defaults to `3`. */
@@ -2808,12 +2808,12 @@ export interface KaiWorkspaceElementProps {
   theme?: "light" | "dark" | "auto";
   /** The sidebar's section headers, rendered in array order. A group carries no conversations of its own; it is matched against `conversations` by id, so the two props are complementary rather than alternatives. Omit for an ungrouped sidebar. Set as a JS property. */
   groups?: { id: string; userId?: string; teamId?: string; name: string; sortOrder: number; createdAt: string }[];
-  /** Every conversation in the sidebar, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId` — or with a `groupId` matching no entry in `groups` — falls into a trailing ungrouped section (headerless when `compact`), so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. */
-  conversations: { id: string; title: string; groupId?: undefined | string; scope: { type: "document" | "collection"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | "transcript" | "markdown"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[];
+  /** Every conversation in the sidebar, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId` — or with a `groupId` matching no entry in `groups` — falls into a trailing ungrouped section (headerless when `compact`), so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. Omit for an empty sidebar, or when `no-conversations` replaces the built-in list with your own `sidebar-header` content. */
+  conversations?: { id: string; title: string; groupId?: string; scope: { type: "document" | "collection"; documentId?: string; filters?: { tags?: string[]; authors?: string[]; contentType?: "transcript" | "markdown"; dateRange?: { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: string }[];
   /** Id of the open conversation, highlighted in the sidebar. */
   activeId?: string;
-  /** The active conversation's message thread, newest last. Set as a JS property. */
-  messages: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: undefined | "image" | "command" | "file-change" | "search" | "fetch" | "mcp" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: "action"; action: string; payload?: unknown; at?: undefined | string } | { kind: "submit"; data: unknown; at?: undefined | string } | { kind: "dismissed"; at?: undefined | string } | { kind: "expired"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: "source"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | "like" | "dislike" }[];
+  /** The active conversation's message thread, newest last. Set as a JS property (`el.messages = [...]`); a NEW array reference per streaming chunk re-renders (mutating in place does not). Omit for an empty thread. */
+  messages?: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: string; index?: number; streamId?: string; signature?: string; raw?: { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: "image" | "command" | "file-change" | "search" | "fetch" | "mcp" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } }; raw?: { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }; raw?: { source: string; payload: unknown } } | { type: "source"; source: { id?: string; url?: string; title?: string; snippet?: string; index?: number }; raw?: { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }; raw?: { source: string; payload: unknown } })[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" }[];
   value?: string;
   placeholder?: string;
   loading?: boolean;

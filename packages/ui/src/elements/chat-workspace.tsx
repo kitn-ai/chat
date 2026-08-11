@@ -23,12 +23,16 @@ interface Props extends Record<string, unknown> {
    *  whose `id` equals its `groupId`; one with no `groupId` — or with a `groupId`
    *  matching no entry in `groups` — falls into a trailing ungrouped section
    *  (headerless when `compact`), so nothing you pass in is ever dropped. There is
-   *  no recency bucketing. Set as a JS property. */
-  conversations: ConversationSummary[];
+   *  no recency bucketing. Set as a JS property. Omit for an empty sidebar, or
+   *  when `no-conversations` replaces the built-in list with your own
+   *  `sidebar-header` content. */
+  conversations?: ConversationSummary[];
   /** Id of the open conversation, highlighted in the sidebar. */
   activeId?: string;
-  /** The active conversation's message thread, newest last. Set as a JS property. */
-  messages: ChatMessage[];
+  /** The active conversation's message thread, newest last. Set as a JS property
+   *  (`el.messages = [...]`); a NEW array reference per streaming chunk
+   *  re-renders (mutating in place does not). Omit for an empty thread. */
+  messages?: ChatMessage[];
   value?: string;
   placeholder?: string;
   loading?: boolean;
@@ -274,7 +278,7 @@ defineWebComponent<Props, Events>('kai-workspace', {
                 <div class="min-h-0 flex-1">
                   <ConversationList
                     class="bg-transparent"
-                    groups={props.groups ?? []} conversations={props.conversations} activeId={props.activeId as string | undefined}
+                    groups={props.groups ?? []} conversations={props.conversations ?? []} activeId={props.activeId as string | undefined}
                     compact={flag('compact')}
                     onSelect={(id) => dispatch('kai-conversation-select', { id })}
                     onNewChat={() => dispatch('kai-new-chat', {})}

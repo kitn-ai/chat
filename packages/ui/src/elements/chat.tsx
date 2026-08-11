@@ -5,6 +5,7 @@ import { ChatThread, type ChatThreadProps, type ChatThreadContextUsage, type Cha
 import { cardComponentsFromTags } from './message';
 import { createMessagesGuard } from './validate-messages';
 import type { AttachmentData } from '../components/attachments';
+import type { ChatMessage } from './chat-types';
 import type { TriggerDef } from '../components/composer';
 import type { ComposerDoc } from '../primitives/composer-model';
 import type { ProseSize } from '../primitives/chat-config';
@@ -12,7 +13,17 @@ import type { ModelOption } from '../types';
 
 type Props = Omit<ChatThreadProps,
   'class' | 'onValueChange' | 'onSubmit' | 'onAttachmentsChange' | 'onSuggestionClick' | 'onModelChange'
-  | 'onMessageAction' | 'onSearch' | 'onVoice' | 'controllerRef' | 'cardTypes'> & Record<string, unknown> & {
+  | 'onMessageAction' | 'onSearch' | 'onVoice' | 'controllerRef' | 'cardTypes' | 'messages'> & Record<string, unknown> & {
+    /** The full message thread to render, newest last. Each entry carries its
+     *  role, ordered `parts`, and optional actions/avatar/feedback. Set as a JS
+     *  property (`el.messages = [...]`); a NEW array reference per streaming
+     *  chunk re-renders (mutating in place does not). Omit for an empty thread.
+     *
+     *  Re-declared here (rather than inherited from `ChatThreadProps`) because
+     *  the ELEMENT registers a `[]` default and renders the empty state without
+     *  it, while the SolidJS `<ChatThread>` component still requires it — the
+     *  facade hands it a validated array either way. Matches `<kai-thread>`. */
+    messages?: ChatMessage[];
     /** Optional card type -> custom-element tag overrides/additions for `card`
      *  parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a
      *  plain string map (not the `CardTagMap` alias) so the generated React

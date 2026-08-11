@@ -111,15 +111,15 @@
       },
       {
         "name": "files",
-        "type": "{ path: string; url?: undefined | string; code?: undefined | string; language?: undefined | string; type?: undefined | \"html\" | \"pdf\" | \"image\" | \"other\"; additions?: undefined | number; deletions?: undefined | number; status?: undefined | \"added\" | \"modified\" | \"deleted\" | \"renamed\" | \"untracked\" }[]",
-        "optional": false,
+        "type": "undefined | { path: string; url?: undefined | string; code?: undefined | string; language?: undefined | string; type?: undefined | \"html\" | \"pdf\" | \"image\" | \"other\"; additions?: undefined | number; deletions?: undefined | number; status?: undefined | \"added\" | \"modified\" | \"deleted\" | \"renamed\" | \"untracked\" }[]",
+        "optional": true,
         "scalar": false,
-        "description": "Files for the Code tab tree + each file's preview `url`. Set as a JS property (array).",
+        "description": "Files for the Code tab tree + each file's preview `url`. Omit for a preview-only artifact (the Code tab then has nothing to show; pair it with `no-tabs` to hide the toggle). Set as a JS property (array).",
         "typeName": "FileTreeFile[]",
         "typeShape": "{ path: string; url?: undefined | string; code?: undefined | string; language?: undefined | string; type?: undefined | \"html\" | \"pdf\" | \"image\" | \"other\"; additions?: undefined | number; deletions?: undefined | number; status?: undefined | \"added\" | \"modified\" | \"deleted\" | \"renamed\" | \"untracked\" }[]",
         "default": "[]",
         "typeImport": "FileTreeFile",
-        "displayType": "{ path: string; url?: undefined | string; code?: undefined | string; language?: undefined | string; type?: undefined | \"html\" | \"pdf\" | \"image\" | \"other\"; additions?: undefined | number; deletions?: undefined | number; status?: undefined | \"added\" | \"modified\" | \"deleted\" | \"renamed\" | \"untracked\" }[]"
+        "displayType": "undefined | { path: string; url?: undefined | string; code?: undefined | string; language?: undefined | string; type?: undefined | \"html\" | \"pdf\" | \"image\" | \"other\"; additions?: undefined | number; deletions?: undefined | number; status?: undefined | \"added\" | \"modified\" | \"deleted\" | \"renamed\" | \"untracked\" }[]"
       },
       {
         "name": "tab",
@@ -375,15 +375,15 @@
       },
       {
         "name": "items",
-        "type": "{ id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[]",
-        "optional": false,
+        "type": "undefined | { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[]",
+        "optional": true,
         "scalar": false,
-        "description": "The attachments to render. Set as a JS property (array).",
+        "description": "The attachments to render. Omit (or pass an empty array) for the empty state, which shows `emptyText` if set and nothing otherwise. Set as a JS property (array).",
         "typeName": "AttachmentData[]",
         "typeShape": "{ id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[]",
         "default": "[]",
         "typeImport": "AttachmentData",
-        "displayType": "AttachmentData[]"
+        "displayType": "AttachmentData[] | undefined"
       },
       {
         "name": "variant",
@@ -1038,15 +1038,15 @@
       },
       {
         "name": "steps",
-        "type": "{ label: string; content?: undefined | string; id?: undefined | string }[]",
-        "optional": false,
+        "type": "undefined | { label: string; content?: undefined | string; id?: undefined | string }[]",
+        "optional": true,
         "scalar": false,
-        "description": "The reasoning steps. Set as a JS property. Compound sub-parts collapse to this one data model (Route 1). Each `{ label, content?, id? }`.",
+        "description": "The reasoning steps. Set as a JS property. Compound sub-parts collapse to this one data model (Route 1). Each `{ label, content?, id? }`. Omit to supply the steps as `<kai-step>` light-DOM children instead; when both are present the property's steps come first.",
         "typeName": "ChainOfThoughtStepData[]",
         "typeShape": "{ label: string; content?: undefined | string; id?: undefined | string }[]",
         "default": "[]",
         "typeImport": "ChainOfThoughtStepData",
-        "displayType": "{ label: string; content?: undefined | string; id?: undefined | string }[]"
+        "displayType": "undefined | { label: string; content?: undefined | string; id?: undefined | string }[]"
       },
       {
         "name": "type",
@@ -1144,18 +1144,6 @@
         "description": "Show a Search (Globe) button in the input toolbar; fires a `search` event.",
         "default": "false",
         "displayType": "undefined | false | true"
-      },
-      {
-        "name": "messages",
-        "type": "{ id: string; role: \"user\" | \"assistant\"; parts: ({ type: \"text\"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: \"reasoning\"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: \"tool\"; tool: { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"card\"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"source\"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: \"file\"; attachment: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]",
-        "optional": false,
-        "scalar": false,
-        "description": "The full message thread to render, newest last. Each entry carries its role, ordered `parts`, and optional actions/avatar/feedback. Set as a JS property (`el.messages = [...]`).",
-        "typeName": "ChatMessage[]",
-        "typeShape": "{ id: string; role: \"user\" | \"assistant\"; parts: ({ type: \"text\"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: \"reasoning\"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: \"tool\"; tool: { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"card\"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"source\"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: \"file\"; attachment: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]",
-        "default": "[]",
-        "typeImport": "ChatMessage",
-        "displayType": "{ id: string; role: \"user\" | \"assistant\"; parts: ({ type: \"text\"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: \"reasoning\"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: \"tool\"; tool: { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"card\"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"source\"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: \"file\"; attachment: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]"
       },
       {
         "name": "value",
@@ -1383,6 +1371,18 @@
         "description": "Whether each message's action bar is always visible (`'always'`, default) or only revealed on hover of that message row (`'hover'`).",
         "default": "'always'",
         "displayType": "undefined | \"always\" | \"hover\""
+      },
+      {
+        "name": "messages",
+        "type": "undefined | { id: string; role: \"user\" | \"assistant\"; parts: ({ type: \"text\"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: \"reasoning\"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: \"tool\"; tool: { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"card\"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"source\"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: \"file\"; attachment: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]",
+        "optional": true,
+        "scalar": false,
+        "description": "The full message thread to render, newest last. Each entry carries its role, ordered `parts`, and optional actions/avatar/feedback. Set as a JS property (`el.messages = [...]`); a NEW array reference per streaming chunk re-renders (mutating in place does not). Omit for an empty thread. Re-declared here (rather than inherited from `ChatThreadProps`) because the ELEMENT registers a `[]` default and renders the empty state without it, while the SolidJS `<ChatThread>` component still requires it — the facade hands it a validated array either way. Matches `<kai-thread>`.",
+        "typeName": "ChatMessage[]",
+        "typeShape": "{ id: string; role: \"user\" | \"assistant\"; parts: ({ type: \"text\"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: \"reasoning\"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: \"tool\"; tool: { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"card\"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"source\"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: \"file\"; attachment: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]",
+        "default": "[]",
+        "typeImport": "ChatMessage",
+        "displayType": "undefined | { id: string; role: \"user\" | \"assistant\"; parts: ({ type: \"text\"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: \"reasoning\"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: \"tool\"; tool: { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"card\"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"source\"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: \"file\"; attachment: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]"
       },
       {
         "name": "cardTypes",
@@ -2609,15 +2609,15 @@
       },
       {
         "name": "conversations",
-        "type": "{ id: string; title: string; groupId?: undefined | string; scope: { type: \"document\" | \"collection\"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | \"transcript\" | \"markdown\"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[]",
-        "optional": false,
+        "type": "undefined | { id: string; title: string; groupId?: undefined | string; scope: { type: \"document\" | \"collection\"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | \"transcript\" | \"markdown\"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[]",
+        "optional": true,
         "scalar": false,
-        "description": "Every conversation the list renders, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId` — or with a `groupId` matching no entry in `groups` — falls into a trailing \"Ungrouped\" section, so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property.",
+        "description": "Every conversation the list renders, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId` — or with a `groupId` matching no entry in `groups` — falls into a trailing \"Ungrouped\" section, so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. Omit to supply them as `<kai-conversation>` light-DOM children instead, or for the empty state.",
         "typeName": "ConversationSummary[]",
         "typeShape": "{ id: string; title: string; groupId?: undefined | string; scope: { type: \"document\" | \"collection\"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | \"transcript\" | \"markdown\"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[]",
         "default": "[]",
         "typeImport": "ConversationSummary",
-        "displayType": "{ id: string; title: string; groupId?: undefined | string; scope: { type: \"document\" | \"collection\"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | \"transcript\" | \"markdown\"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[]"
+        "displayType": "undefined | { id: string; title: string; groupId?: undefined | string; scope: { type: \"document\" | \"collection\"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | \"transcript\" | \"markdown\"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[]"
       },
       {
         "name": "activeId",
@@ -4605,15 +4605,15 @@
       },
       {
         "name": "models",
-        "type": "{ id: string; name: string; provider?: undefined | string; description?: undefined | string; group?: undefined | string }[]",
-        "optional": false,
+        "type": "undefined | { id: string; name: string; provider?: undefined | string; description?: undefined | string; group?: undefined | string }[]",
+        "optional": true,
         "scalar": false,
-        "description": "The selectable models. Set as a JS property (array).",
+        "description": "The selectable models. Set as a JS property (array). Omit to supply them as `<kai-model>` light-DOM children instead; when both are present the property's models come first.",
         "typeName": "ModelOption[]",
         "typeShape": "{ id: string; name: string; provider?: undefined | string; description?: undefined | string; group?: undefined | string }[]",
         "default": "[]",
         "typeImport": "ModelOption",
-        "displayType": "{ id: string; name: string; provider?: undefined | string; description?: undefined | string; group?: undefined | string }[]"
+        "displayType": "undefined | { id: string; name: string; provider?: undefined | string; description?: undefined | string; group?: undefined | string }[]"
       },
       {
         "name": "currentModel",
@@ -6206,21 +6206,21 @@
       },
       {
         "name": "availableAuthors",
-        "type": "string[]",
-        "optional": false,
+        "type": "undefined | string[]",
+        "optional": true,
         "scalar": false,
-        "description": "Authors to offer as scope filters. Set as a JS property.",
+        "description": "Authors to offer as scope filters. Omit to drop the Authors section (for a tag-only picker). Set as a JS property.",
         "default": "[]",
-        "displayType": "string[]"
+        "displayType": "undefined | string[]"
       },
       {
         "name": "availableTags",
-        "type": "string[]",
-        "optional": false,
+        "type": "undefined | string[]",
+        "optional": true,
         "scalar": false,
-        "description": "Tags to offer as scope filters. Set as a JS property.",
+        "description": "Tags to offer as scope filters. Omit to drop the Tags section (for an author-only picker). Set as a JS property.",
         "default": "[]",
-        "displayType": "string[]"
+        "displayType": "undefined | string[]"
       },
       {
         "name": "currentLabel",
@@ -7013,15 +7013,15 @@
       },
       {
         "name": "skills",
-        "type": "{ id: string; name: string }[]",
-        "optional": false,
+        "type": "undefined | { id: string; name: string }[]",
+        "optional": true,
         "scalar": false,
-        "description": "The active skills to badge. Set as a JS property.",
+        "description": "The active skills to badge. Set as a JS property. Omit to supply them as `<kai-skill>` light-DOM children instead; when both are present the property's skills come first. Nothing renders when there are none.",
         "typeName": "Skill[]",
         "typeShape": "{ id: string; name: string }[]",
         "default": "[]",
         "typeImport": "Skill",
-        "displayType": "{ id: string; name: string }[]"
+        "displayType": "undefined | { id: string; name: string }[]"
       }
     ],
     "events": [],
@@ -7148,15 +7148,15 @@
       },
       {
         "name": "sources",
-        "type": "{ href: string; title?: undefined | string; description?: undefined | string; label?: undefined | string; showFavicon?: undefined | false | true }[]",
-        "optional": false,
+        "type": "undefined | { href: string; title?: undefined | string; description?: undefined | string; label?: undefined | string; showFavicon?: undefined | false | true }[]",
+        "optional": true,
         "scalar": false,
-        "description": "The sources to render. Set as a JS property.",
+        "description": "The sources to render. Set as a JS property. Omit to supply them as `<kai-source>` light-DOM children instead; when both are present the property's sources come first.",
         "typeName": "KaiSourceItem[]",
         "typeShape": "{ href: string; title?: undefined | string; description?: undefined | string; label?: undefined | string; showFavicon?: undefined | false | true }[]",
         "default": "[]",
         "typeImport": "KaiSourceItem",
-        "displayType": "SourceItem[]"
+        "displayType": "undefined | { href: string; title?: undefined | string; description?: undefined | string; label?: undefined | string; showFavicon?: undefined | false | true }[]"
       },
       {
         "name": "showFavicon",
@@ -7303,12 +7303,12 @@
       },
       {
         "name": "suggestions",
-        "type": "(string | { label: string; value?: undefined | string; icon?: undefined | string })[]",
-        "optional": false,
+        "type": "undefined | (string | { label: string; value?: undefined | string; icon?: undefined | string })[]",
+        "optional": true,
         "scalar": false,
-        "description": "The suggestions. Strings, or `{ label, value }` when the displayed text and the emitted value differ. Set as a JS property.",
+        "description": "The suggestions. Strings, or `{ label, value }` when the displayed text and the emitted value differ. Set as a JS property. Omit to supply them as `<kai-suggestion>` light-DOM children instead; when both are present the property's suggestions come first.",
         "default": "[]",
-        "displayType": "(string | { label: string; value?: undefined | string; icon?: undefined | string })[]"
+        "displayType": "undefined | (string | { label: string; value?: undefined | string; icon?: undefined | string })[]"
       },
       {
         "name": "variant",
@@ -7997,15 +7997,15 @@
       },
       {
         "name": "toasts",
-        "type": "{ id: string; message: string; variant?: undefined | \"error\" | \"info\" | \"success\" | \"warning\" | \"neutral\"; appearance?: undefined | \"card\" | \"pill\"; inverse?: undefined | false | true; description?: undefined | string; action?: undefined | { label: string; onAction: () => void | false }; duration?: undefined | number; dismissible?: undefined | false | true; target?: undefined | HTMLElement }[]",
-        "optional": false,
+        "type": "undefined | { id: string; message: string; variant?: undefined | \"error\" | \"info\" | \"success\" | \"warning\" | \"neutral\"; appearance?: undefined | \"card\" | \"pill\"; inverse?: undefined | false | true; description?: undefined | string; action?: undefined | { label: string; onAction: () => void | false }; duration?: undefined | number; dismissible?: undefined | false | true; target?: undefined | HTMLElement }[]",
+        "optional": true,
         "scalar": false,
-        "description": "The toasts to render. Newest is shown on top. Set as a JS property (array); pass a new array reference to update.",
+        "description": "The toasts to render. Newest is shown on top. Set as a JS property (array); pass a new array reference to update. Omit for an empty region, which is the normal resting state and how the imperative `toast()` API starts.",
         "typeName": "ToastItem[]",
         "typeShape": "{ id: string; message: string; variant?: undefined | \"error\" | \"info\" | \"success\" | \"warning\" | \"neutral\"; appearance?: undefined | \"card\" | \"pill\"; inverse?: undefined | false | true; description?: undefined | string; action?: undefined | { label: string; onAction: () => void | false }; duration?: undefined | number; dismissible?: undefined | false | true; target?: undefined | HTMLElement }[]",
         "default": "[]",
         "typeImport": "ToastItem",
-        "displayType": "{ id: string; message: string; variant?: undefined | \"error\" | \"info\" | \"success\" | \"warning\" | \"neutral\"; appearance?: undefined | \"card\" | \"pill\"; inverse?: undefined | false | true; description?: undefined | string; action?: undefined | { label: string; onAction: () => void | false }; duration?: undefined | number; dismissible?: undefined | false | true; target?: undefined | HTMLElement }[]"
+        "displayType": "undefined | { id: string; message: string; variant?: undefined | \"error\" | \"info\" | \"success\" | \"warning\" | \"neutral\"; appearance?: undefined | \"card\" | \"pill\"; inverse?: undefined | false | true; description?: undefined | string; action?: undefined | { label: string; onAction: () => void | false }; duration?: undefined | number; dismissible?: undefined | false | true; target?: undefined | HTMLElement }[]"
       },
       {
         "name": "position",
@@ -8530,15 +8530,15 @@
       },
       {
         "name": "conversations",
-        "type": "{ id: string; title: string; groupId?: undefined | string; scope: { type: \"document\" | \"collection\"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | \"transcript\" | \"markdown\"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[]",
-        "optional": false,
+        "type": "undefined | { id: string; title: string; groupId?: undefined | string; scope: { type: \"document\" | \"collection\"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | \"transcript\" | \"markdown\"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[]",
+        "optional": true,
         "scalar": false,
-        "description": "Every conversation in the sidebar, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId` — or with a `groupId` matching no entry in `groups` — falls into a trailing ungrouped section (headerless when `compact`), so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property.",
+        "description": "Every conversation in the sidebar, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId` — or with a `groupId` matching no entry in `groups` — falls into a trailing ungrouped section (headerless when `compact`), so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. Omit for an empty sidebar, or when `no-conversations` replaces the built-in list with your own `sidebar-header` content.",
         "typeName": "ConversationSummary[]",
         "typeShape": "{ id: string; title: string; groupId?: undefined | string; scope: { type: \"document\" | \"collection\"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | \"transcript\" | \"markdown\"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[]",
         "default": "[]",
         "typeImport": "ConversationSummary",
-        "displayType": "{ id: string; title: string; groupId?: undefined | string; scope: { type: \"document\" | \"collection\"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | \"transcript\" | \"markdown\"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[]"
+        "displayType": "undefined | { id: string; title: string; groupId?: undefined | string; scope: { type: \"document\" | \"collection\"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | \"transcript\" | \"markdown\"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[]"
       },
       {
         "name": "activeId",
@@ -8550,15 +8550,15 @@
       },
       {
         "name": "messages",
-        "type": "{ id: string; role: \"user\" | \"assistant\"; parts: ({ type: \"text\"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: \"reasoning\"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: \"tool\"; tool: { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"card\"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"source\"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: \"file\"; attachment: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]",
-        "optional": false,
+        "type": "undefined | { id: string; role: \"user\" | \"assistant\"; parts: ({ type: \"text\"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: \"reasoning\"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: \"tool\"; tool: { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"card\"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"source\"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: \"file\"; attachment: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]",
+        "optional": true,
         "scalar": false,
-        "description": "The active conversation's message thread, newest last. Set as a JS property.",
+        "description": "The active conversation's message thread, newest last. Set as a JS property (`el.messages = [...]`); a NEW array reference per streaming chunk re-renders (mutating in place does not). Omit for an empty thread.",
         "typeName": "ChatMessage[]",
         "typeShape": "{ id: string; role: \"user\" | \"assistant\"; parts: ({ type: \"text\"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: \"reasoning\"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: \"tool\"; tool: { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"card\"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"source\"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: \"file\"; attachment: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]",
         "default": "[]",
         "typeImport": "ChatMessage",
-        "displayType": "{ id: string; role: \"user\" | \"assistant\"; parts: ({ type: \"text\"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: \"reasoning\"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: \"tool\"; tool: { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"card\"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"source\"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: \"file\"; attachment: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]"
+        "displayType": "undefined | { id: string; role: \"user\" | \"assistant\"; parts: ({ type: \"text\"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: \"reasoning\"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: \"tool\"; tool: { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"card\"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"source\"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: \"file\"; attachment: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]"
       },
       {
         "name": "value",

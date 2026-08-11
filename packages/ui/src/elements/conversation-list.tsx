@@ -15,8 +15,9 @@ interface Props extends Record<string, unknown> {
    *  whose `id` equals its `groupId`; one with no `groupId` — or with a `groupId`
    *  matching no entry in `groups` — falls into a trailing "Ungrouped" section, so
    *  nothing you pass in is ever dropped. There is no recency bucketing. Set as a
-   *  JS property. */
-  conversations: ConversationSummary[];
+   *  JS property. Omit to supply them as `<kai-conversation>` light-DOM children
+   *  instead, or for the empty state. */
+  conversations?: ConversationSummary[];
   /** The id of the currently-open conversation, highlighted in the list. */
   activeId?: string;
   /** Controlled collapsed state. Set as a JS property (`el.collapsed = true`) to

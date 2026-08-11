@@ -5,8 +5,10 @@ import { Artifact, type ArtifactController, type ArtifactFile, type ArtifactTab 
 interface Props extends Record<string, unknown> {
   /** URL the preview iframe frames. Consumer-controlled. */
   src?: string;
-  /** Files for the Code tab tree + each file's preview `url`. Set as a JS property (array). */
-  files: ArtifactFile[];
+  /** Files for the Code tab tree + each file's preview `url`. Omit for a
+   *  preview-only artifact (the Code tab then has nothing to show; pair it with
+   *  `no-tabs` to hide the toggle). Set as a JS property (array). */
+  files?: ArtifactFile[];
   /** Controlled active tab: `preview` or `code`. When set, the artifact follows it
    *  (re-asserted on change). Leave unset for an uncontrolled tab (see `defaultTab`). */
   tab?: ArtifactTab;
@@ -163,7 +165,7 @@ defineWebComponent<Props, Events>('kai-artifact', {
       >
         <Artifact
           src={props.src}
-          files={props.files}
+          files={props.files ?? []}
           tab={props.tab}
           defaultTab={props.defaultTab}
           activeFile={props.activeFile}

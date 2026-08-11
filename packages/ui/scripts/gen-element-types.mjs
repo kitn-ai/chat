@@ -293,12 +293,37 @@ export function writeTypes(root, elements, _toAttr, IMPORTS, { domMembers = new 
   // don't extend HTMLElement and keep the prop optional (a Vue template legitimately
   // omits it). Guarded by tests/elements/element-types-lib-check.test.ts, which
   // compiles this file with `skipLibCheck: false`.
+  //
+  // `defaulted` generalises that same runtime fact to a second case. PASSING a
+  // prop and READING one back are different contracts, and only the element
+  // interfaces are the read side:
+  //   - KaiChatElementProps (Vue, and the React wrapper in gen-element-react.mjs)
+  //     is what a consumer CONSTRUCTS with. `messages` there is optional, because
+  //     the element supplies `[]` — that is the whole point of the widening.
+  //   - KaiChatElement is what `document.querySelector` hands back. The element
+  //     registered a non-`undefined` default, and the React wrapper skips
+  //     undefined props (frameworks/react/runtime.tsx: `p[name] !== undefined`),
+  //     so nothing in the supported surface ever puts `undefined` there. Typing
+  //     the READ as possibly-undefined taxes every consumer who reads a property
+  //     back — `chat.messages = fn(chat.messages)`, `[...chat.toasts, next]`,
+  //     `KaiChatElement['messages'][number]` — which is precisely the vanilla-TS
+  //     pattern the MCP scaffolder emits (54 of its cells stopped compiling when
+  //     these went optional on both sides).
+  // Scoped to NON-scalar props so it only covers the array/object properties that
+  // get read back and spread; scalars are attributes and read as strings anyway.
+  // A prop whose registered default IS `undefined` (e.g. kai-thread's `messages`)
+  // is untouched and stays optional on both sides, which is correct: there the
+  // read really can yield undefined.
+  // Guarded by tests/elements/element-prop-read-write-split.test.ts.
+  //
   // `theme` used to be hand-written here as the first two lines. It now arrives in
   // el.props like every other prop, read off define.tsx's injected defaults by
   // gen-element-api.mjs, so there is one declaration instead of three copies.
   const propBody = (el, domSafe = false) => [
     ...el.props.flatMap((p) => {
       const collides = domSafe && domMembers.has(p.name);
+      const defaulted = domSafe && p.default !== undefined && !p.scalar;
+      const forceRequired = collides || defaulted;
       // One JSDoc block per member — a second one would shadow the first.
       const note = collides
         ? `Re-declares the DOM member \`HTMLElement.${p.name}\`, so it is NOT optional here: an interface extending HTMLElement may only narrow it, and the element always carries a value for it.`
@@ -306,7 +331,7 @@ export function writeTypes(root, elements, _toAttr, IMPORTS, { domMembers = new 
       const doc = [p.description, note].filter(Boolean).join(' ');
       return [
         ...(doc ? [`  /** ${doc} */`] : []),
-        `  ${p.name}${p.optional && !collides ? '?' : ''}: ${clean(p.type, p.optional)};`,
+        `  ${p.name}${p.optional && !forceRequired ? '?' : ''}: ${clean(p.type, p.optional)};`,
       ];
     }),
   ].join('\n');

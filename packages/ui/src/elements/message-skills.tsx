@@ -6,8 +6,10 @@ import { MessageSkills, type Skill } from '../components/message-skills';
 
 
 interface Props extends Record<string, unknown> {
-  /** The active skills to badge. Set as a JS property. */
-  skills: Skill[];
+  /** The active skills to badge. Set as a JS property. Omit to supply them as
+   *  `<kai-skill>` light-DOM children instead; when both are present the
+   *  property's skills come first. Nothing renders when there are none. */
+  skills?: Skill[];
 }
 
 /**
