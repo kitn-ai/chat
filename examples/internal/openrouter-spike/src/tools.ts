@@ -1,4 +1,4 @@
-// The three tools the model can call, plus their LOCAL (canned, deterministic)
+// The tools the model can call, plus their LOCAL (canned, deterministic)
 // implementations. No third-party network calls: the spike is about the UI wire,
 // not about real weather.
 //
@@ -6,7 +6,18 @@
 //   get_weather    → structured JSON        → <kai-tool> panel
 //   search_docs    → a list of sources      → `source` parts on the message
 //   propose_action → a confirm card         → a `card` part on the message
+//   ask_choice     → a choice card          → `card` part
+//   request_form   → a form card            → `card` part
+//   plan_tasks     → a tasks card           → `card` part
+//   preview_link   → a link card            → `card` part
+//   embed_video    → an embed card          → `card` part
+//   attach_file    → an attachment          → a `file` part
+//   fail_deploy    → a tool FAILURE         → <kai-tool> in output-error
+//
+// A scenario picks the subset it needs with `pickTools(...)`: shipping all of
+// them on every turn both costs more and gives the model more ways to wander.
 import type { CardEnvelope } from '@kitn.ai/ui';
+import type { AttachmentData } from '@kitn.ai/ui/state';
 
 // ── Tool schemas sent to the model ───────────────────────────────────────────
 
@@ -84,23 +95,224 @@ export const TOOL_SPECS: ToolSpec[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'ask_choice',
+      description:
+        'Ask the user to pick ONE option from a short list. Renders a choice card. ' +
+        'Returns immediately with status "awaiting_user": the user has not picked yet.',
+      parameters: {
+        type: 'object',
+        properties: {
+          prompt: { type: 'string', description: 'The question, one sentence.' },
+          options: {
+            type: 'array',
+            description: '2-4 options.',
+            items: {
+              type: 'object',
+              properties: {
+                label: { type: 'string' },
+                description: { type: 'string' },
+              },
+              required: ['label'],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ['prompt', 'options'],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'request_form',
+      description:
+        'Ask the user to fill in a short form. Renders a form card. Returns immediately with ' +
+        'status "awaiting_user": the fields are NOT filled in yet.',
+      parameters: {
+        type: 'object',
+        properties: {
+          title: { type: 'string', description: 'Form heading.' },
+          fields: {
+            type: 'array',
+            description: '1-4 fields.',
+            items: {
+              type: 'object',
+              properties: {
+                key: { type: 'string', description: 'snake_case field key.' },
+                label: { type: 'string' },
+                type: { type: 'string', enum: ['string', 'number', 'boolean'] },
+                required: { type: 'boolean' },
+              },
+              required: ['key', 'label', 'type'],
+              additionalProperties: false,
+            },
+          },
+          submitLabel: { type: 'string', description: 'Label for the submit button.' },
+        },
+        required: ['title', 'fields'],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'plan_tasks',
+      description:
+        'Show the user a checklist of steps to approve. Renders a tasks card. Returns immediately ' +
+        'with status "awaiting_user".',
+      parameters: {
+        type: 'object',
+        properties: {
+          heading: { type: 'string', description: 'Checklist heading.' },
+          tasks: {
+            type: 'array',
+            description: '2-5 steps.',
+            items: {
+              type: 'object',
+              properties: { label: { type: 'string' }, description: { type: 'string' } },
+              required: ['label'],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ['heading', 'tasks'],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'preview_link',
+      description: 'Show a rich preview card for a URL. Use for any link worth showing visually.',
+      parameters: {
+        type: 'object',
+        properties: {
+          url: { type: 'string', description: 'Absolute http(s) URL.' },
+          title: { type: 'string' },
+          description: { type: 'string' },
+        },
+        required: ['url'],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'embed_video',
+      description: 'Embed a video player card for a YouTube or Vimeo video.',
+      parameters: {
+        type: 'object',
+        properties: {
+          provider: { type: 'string', enum: ['youtube', 'vimeo'] },
+          id: { type: 'string', description: 'The provider video id.' },
+          title: { type: 'string' },
+        },
+        required: ['provider', 'id'],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'attach_file',
+      description:
+        'Attach a generated file to your reply so the user can see it. Returns immediately; the ' +
+        'attachment is rendered inline in your message.',
+      parameters: {
+        type: 'object',
+        properties: {
+          filename: { type: 'string', description: 'e.g. "q3-summary.pdf".' },
+          kind: { type: 'string', enum: ['pdf', 'image', 'csv'], description: 'Defaults to pdf.' },
+        },
+        required: ['filename'],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'open_artifact',
+      description:
+        'Open (or REVISE) a document artifact beside the conversation. Call it again with the same ' +
+        'artifactId to replace the content with a newer draft.',
+      parameters: {
+        type: 'object',
+        properties: {
+          artifactId: { type: 'string', description: 'Stable id. Reuse it to revise the same artifact.' },
+          title: { type: 'string' },
+          body: { type: 'string', description: 'The document text.' },
+        },
+        required: ['artifactId', 'title', 'body'],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'fail_deploy',
+      description:
+        'Deploy a service. This tool is UNRELIABLE and frequently fails; report the failure to the ' +
+        'user verbatim rather than retrying.',
+      parameters: {
+        type: 'object',
+        properties: { target: { type: 'string', description: 'The environment to deploy to.' } },
+        required: ['target'],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
+/** Look tool specs up by name, in the order given. Throws on a typo rather than
+ *  silently shipping a shorter tool list than the scenario meant. */
+export function pickTools(...names: string[]): ToolSpec[] {
+  return names.map((name) => {
+    const hit = TOOL_SPECS.find((t) => t.function.name === name);
+    if (!hit) throw new Error(`No tool spec named "${name}". Known: ${TOOL_SPECS.map((t) => t.function.name).join(', ')}`);
+    return hit;
+  });
+}
+
+/** One line of system-prompt guidance per tool. Only the tools actually in the
+ *  request get their line: a prompt that mentions a tool the request omits makes
+ *  the model burn reasoning tokens on the contradiction (observed live). */
+const TOOL_GUIDANCE: Record<string, string> = {
+  get_weather: '- get_weather: for anything about weather.',
+  search_docs:
+    '- search_docs: for anything about @kitn.ai/ui, kai-* elements, theming, or installation. Cite the sources you get back.',
+  propose_action:
+    '- propose_action: whenever the user asks you to DO something with a side effect (deploy, delete, send, publish).',
+  ask_choice: '- ask_choice: whenever the user has to pick between options.',
+  request_form: '- request_form: whenever you need several values from the user at once.',
+  plan_tasks: '- plan_tasks: whenever the user asks for a plan, checklist or set of steps.',
+  preview_link: '- preview_link: whenever a link is worth showing as a card.',
+  embed_video: '- embed_video: whenever the user asks to watch or play a video.',
+  attach_file: '- attach_file: whenever the user asks for a file, report or export.',
+  open_artifact: '- open_artifact: whenever the user asks you to draft a document. Reuse the artifactId to revise it.',
+  fail_deploy: '- fail_deploy: for any deploy/ship/release request.',
+};
+
 /**
- * The system prompt is built PER CARD MODE. It must only advertise tools that
- * are actually in the request: a prompt that mentions `propose_action` while
- * the tool list omits it makes the model burn reasoning tokens on the
- * contradiction (observed live before this was fixed).
+ * The system prompt is built from the tool list that is ACTUALLY being sent, so
+ * it can never advertise a tool the request omits.
  */
-export function buildSystemPrompt(includeProposeAction: boolean): string {
+export function buildSystemPrompt(tools: ToolSpec[]): string {
+  const lines = tools.map((t) => TOOL_GUIDANCE[t.function.name]).filter(Boolean);
   return [
     'You are a demo assistant embedded in the @kitn.ai/ui component kit.',
-    'Use your tools eagerly: the whole point of this demo is to show the tool UI.',
-    '- get_weather: for anything about weather.',
-    '- search_docs: for anything about @kitn.ai/ui, kai-* elements, theming, or installation. Cite the sources you get back.',
-    ...(includeProposeAction
-      ? ['- propose_action: whenever the user asks you to DO something with a side effect (deploy, delete, send, publish).']
-      : []),
+    ...(lines.length
+      ? ['Use your tools eagerly: the whole point of this demo is to show the tool UI.', ...lines]
+      : ['You have no tools on this turn. Answer directly.']),
     'After the tools return, write a short natural answer in markdown. Keep it under 120 words.',
   ].join('\n');
 }
@@ -108,9 +320,8 @@ export function buildSystemPrompt(includeProposeAction: boolean): string {
 /** Which tools go out for a given card mode. In structured mode the approval
  *  card comes from `response_format`, so `propose_action` is dropped. */
 export function toolsFor(cardMode: 'tool' | 'structured'): ToolSpec[] {
-  return cardMode === 'structured'
-    ? TOOL_SPECS.filter((t) => t.function.name !== 'propose_action')
-    : TOOL_SPECS;
+  const base = pickTools('get_weather', 'search_docs', 'propose_action');
+  return cardMode === 'structured' ? base.filter((t) => t.function.name !== 'propose_action') : base;
 }
 
 // ── Results ──────────────────────────────────────────────────────────────────
@@ -128,8 +339,14 @@ export interface ToolRun {
   output: Record<string, unknown>;
   /** Citations to add as `source` parts (search_docs only). */
   sources?: SourceItem[];
-  /** A card envelope to add as a `card` part (propose_action only). */
+  /** A card envelope to add as a `card` part (the card-producing tools). */
   card?: CardEnvelope;
+  /** An attachment to add as a `file` part (attach_file only). */
+  file?: AttachmentData;
+  /** Set when the tool FAILED. The caller routes this through `applyToolFailure`
+   *  so the panel lands in `output-error` instead of `output-available`, and the
+   *  failure text is what goes back to the model. */
+  failure?: string;
 }
 
 const WEATHER: Record<string, { condition: string; tempC: number; humidity: number; windKph: number }> = {
@@ -289,7 +506,201 @@ export function runTool(name: string, input: Record<string, unknown>): ToolRun {
       };
     }
 
+    case 'ask_choice': {
+      const prompt = toStr(input.prompt, 'Pick one');
+      const raw = Array.isArray(input.options) ? input.options : [];
+      const options = raw.slice(0, 4).map((o, i) => {
+        const rec = (o ?? {}) as Record<string, unknown>;
+        return {
+          id: `opt-${i + 1}`,
+          label: toStr(rec.label, `Option ${i + 1}`),
+          description: typeof rec.description === 'string' ? rec.description : undefined,
+        };
+      });
+      // Two options is the minimum that makes a CHOICE, and a one-option card
+      // would let a lazy model pass the scenario without really choosing.
+      if (options.length < 2) {
+        return {
+          output: { error: 'too_few_options', message: 'ask_choice needs at least 2 options.' },
+          failure: 'ask_choice needs at least 2 options.',
+        };
+      }
+      const id = `card-${++cardSeq}`;
+      return {
+        output: { status: 'awaiting_user', cardId: id, rendered: 'choice card', optionCount: options.length },
+        card: {
+          type: 'choice',
+          id,
+          title: 'Choose an option',
+          data: { prompt, options, submitLabel: 'Choose', dismissible: true },
+        },
+      };
+    }
+
+    case 'request_form': {
+      const title = toStr(input.title, 'Details');
+      const raw = Array.isArray(input.fields) ? input.fields : [];
+      const properties: Record<string, unknown> = {};
+      const required: string[] = [];
+      const order: string[] = [];
+      raw.slice(0, 4).forEach((f, i) => {
+        const rec = (f ?? {}) as Record<string, unknown>;
+        const key = toStr(rec.key, `field_${i + 1}`).replace(/[^a-z0-9_]/gi, '_');
+        const type = (['string', 'number', 'boolean'] as const).includes(toStr(rec.type) as 'string')
+          ? toStr(rec.type)
+          : 'string';
+        properties[key] = { type, title: toStr(rec.label, key) };
+        order.push(key);
+        if (rec.required === true) required.push(key);
+      });
+      if (order.length === 0) {
+        return {
+          output: { error: 'no_fields', message: 'request_form needs at least 1 field.' },
+          failure: 'request_form needs at least 1 field.',
+        };
+      }
+      const id = `card-${++cardSeq}`;
+      return {
+        output: { status: 'awaiting_user', cardId: id, rendered: 'form card', fieldCount: order.length },
+        card: {
+          type: 'form',
+          id,
+          title,
+          data: {
+            type: 'object',
+            title,
+            properties,
+            ...(required.length ? { required } : {}),
+            'x-kai-order': order,
+            'x-kai-submitLabel': toStr(input.submitLabel, 'Submit'),
+          },
+        },
+      };
+    }
+
+    case 'plan_tasks': {
+      const heading = toStr(input.heading, 'Plan');
+      const raw = Array.isArray(input.tasks) ? input.tasks : [];
+      const tasks = raw.slice(0, 5).map((t, i) => {
+        const rec = (t ?? {}) as Record<string, unknown>;
+        return {
+          id: `task-${i + 1}`,
+          label: toStr(rec.label, `Step ${i + 1}`),
+          description: typeof rec.description === 'string' ? rec.description : undefined,
+        };
+      });
+      if (tasks.length < 2) {
+        return {
+          output: { error: 'too_few_tasks', message: 'plan_tasks needs at least 2 tasks.' },
+          failure: 'plan_tasks needs at least 2 tasks.',
+        };
+      }
+      const id = `card-${++cardSeq}`;
+      return {
+        output: { status: 'awaiting_user', cardId: id, rendered: 'tasks card', taskCount: tasks.length },
+        card: {
+          type: 'tasks',
+          id,
+          title: heading,
+          data: {
+            heading,
+            tasks,
+            selectAll: true,
+            // The APP owns the action label, exactly as it owns "Not now" on the
+            // confirm card. A model-authored confirm label ("Start", "Ship it")
+            // gives a test nothing stable to click, and the model-authored part
+            // of this card — the task list — is asserted on its own.
+            confirmLabel: 'Confirm',
+          },
+        },
+      };
+    }
+
+    case 'preview_link': {
+      const url = toStr(input.url, 'https://ui.kitn.ai');
+      // The model supplies a URL; the METADATA is canned, because fetching real
+      // Open Graph tags would put a third-party network call in the loop.
+      const known = DOCS.find((d) => d.url === url);
+      const id = `card-${++cardSeq}`;
+      let domain = 'ui.kitn.ai';
+      try {
+        domain = new URL(url).hostname;
+      } catch {
+        /* keep the fallback: LinkPreview renders "Invalid link" for a bad URL,
+           which is itself a state worth being able to reach. */
+      }
+      return {
+        output: { status: 'rendered', cardId: id, rendered: 'link card', url },
+        card: {
+          type: 'link',
+          id,
+          data: {
+            url,
+            title: toStr(input.title, known?.title ?? 'kitn.ai UI'),
+            description: toStr(input.description, known?.snippet ?? 'Web components for AI chat UIs.'),
+            domain,
+            siteName: 'kitn.ai',
+          },
+        },
+      };
+    }
+
+    case 'embed_video': {
+      const provider = toStr(input.provider, 'youtube') === 'vimeo' ? 'vimeo' : 'youtube';
+      const videoId = toStr(input.id, 'dQw4w9WgXcQ');
+      const id = `card-${++cardSeq}`;
+      return {
+        output: { status: 'rendered', cardId: id, rendered: 'embed card', provider },
+        card: {
+          type: 'embed',
+          id,
+          data: { provider, id: videoId, title: toStr(input.title, 'Demo video'), aspectRatio: '16:9' },
+        },
+      };
+    }
+
+    case 'attach_file': {
+      const filename = toStr(input.filename, 'report.pdf');
+      const kind = toStr(input.kind, 'pdf');
+      const mediaType =
+        kind === 'image' ? 'image/png' : kind === 'csv' ? 'text/csv' : 'application/pdf';
+      return {
+        output: { status: 'attached', filename, mediaType, note: 'The file is attached to your reply.' },
+        file: { id: `file-${++cardSeq}`, type: 'file', filename, mediaType },
+      };
+    }
+
+    case 'open_artifact': {
+      const artifactId = toStr(input.artifactId, 'artifact-1');
+      const title = toStr(input.title, 'Draft');
+      const body = toStr(input.body, '');
+      // NOTE the envelope id: it is the model's OWN artifactId, deliberately
+      // stable across revisions. `AssistantStream.addCard` ignores it and
+      // appends anyway — there is no id-keyed card upsert the way `upsertTool`
+      // works for tool parts. S13 measures exactly that.
+      return {
+        output: { status: 'open', artifactId, title, chars: body.length },
+        card: {
+          type: 'artifact',
+          id: artifactId,
+          title,
+          data: { title, body },
+        },
+      };
+    }
+
+    case 'fail_deploy': {
+      const target = toStr(input.target, 'staging');
+      // Deterministic FAILURE. The point is the output-error branch of the tool
+      // panel, which no amount of prompting can reliably provoke from a model.
+      const message = `Deploy to "${target}" failed: the release pipeline returned HTTP 502 (upstream_unavailable).`;
+      return { output: { error: 'upstream_unavailable', target, message }, failure: message };
+    }
+
     default:
-      return { output: { error: 'unknown_tool', message: `No local implementation for "${name}".` } };
+      return {
+        output: { error: 'unknown_tool', message: `No local implementation for "${name}".` },
+        failure: `No local implementation for "${name}".`,
+      };
   }
 }

@@ -6,6 +6,9 @@ interface ThreadViewProps {
   theme: Theme;
   messages: ChatMessage[];
   loading: boolean;
+  /** Consumer card types (envelope type → custom-element tag), merged over the
+   *  built-ins. The spike adds `artifact`, which the kit does not ship. */
+  cardTypes?: Record<string, string>;
 }
 
 /**
@@ -18,14 +21,20 @@ interface ThreadViewProps {
  * `<kai-tool>` renders it while the call is `input-streaming`, so the app
  * renders nothing itself.
  */
-export function ThreadView({ theme, messages, loading }: ThreadViewProps) {
+export function ThreadView({ theme, messages, loading, cardTypes }: ThreadViewProps) {
   const withActions: ChatMessage[] = messages.map((m) =>
     m.role === 'assistant' ? { ...m, actions: ['copy'] } : m,
   );
 
   return (
     <div className="thread-wrap">
-      <Thread className="thread" theme={theme} messages={withActions} loading={loading} />
+      <Thread
+        className="thread"
+        theme={theme}
+        messages={withActions}
+        loading={loading}
+        cardTypes={cardTypes}
+      />
     </div>
   );
 }
