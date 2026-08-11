@@ -375,7 +375,24 @@ const PROJECTS = {
     // The missing DOM lib is the whole point — it is what makes `Request` resolve
     // to undici's (json(): Promise<unknown>) rather than the browser's
     // (json(): Promise<any>), and therefore what a consumer's `tsc -b` really sees
-    // for vite.config.ts → vite-chat-api.ts → src/server/chat.ts.
+    // for vite.config.ts → vite-chat-api.ts → server/chat.ts.
+    //
+    // NOT nodenext, and that is a KNOWN GAP rather than an oversight. The real
+    // template ships `"module": "nodenext"`, and switching this project to match
+    // is the only way this harness could see TS2835 (extensionless relative
+    // imports). It cannot yet, because the KIT's own shipped .d.ts files do not
+    // resolve under node16/nodenext: `dist/wire/index.d.ts` re-exports `./read`,
+    // `./encode`, … with no file extensions, so nodenext fails every one and the
+    // whole public API comes back as `any`.
+    //
+    // Measured in a stock create-vite app, same file, only the resolution mode
+    // changed:
+    //   moduleResolution: bundler   `const x: OpenAIWireMessage = 12345` -> TS2322
+    //   module: nodenext            the same line compiles CLEAN
+    // Flipping this project to nodenext today would therefore make the route
+    // matrix pass vacuously against `any` — strictly worse than the gap it closes.
+    // `assertRelativeImportsHaveExtensions` covers TS2835 directly in the
+    // meantime; switch this to nodenext once the dts emit is fixed.
     options: { lib: ['ES2023'], types: ['node'], moduleDetection: 'force' },
     // Proves express's types are the REAL ones and did not resolve to `any`.
     probe: {
@@ -422,6 +439,8 @@ const PROJECTS = {
 
 for (const [name, project] of Object.entries(PROJECTS)) {
   if (name !== 'default') mkdirSync(project.dir, { recursive: true });
+  if (project.packageJson)
+    writeFileSync(join(project.dir, 'package.json'), JSON.stringify(project.packageJson, null, 2));
   writeFileSync(
     join(project.dir, 'tsconfig.json'),
     JSON.stringify(
@@ -871,6 +890,47 @@ function generatedCompanions(files) {
 }
 
 /**
+ * Every RELATIVE import an emitted route writes must carry an explicit extension.
+ *
+ * This is TS2835, and it is the one thing the route-node project cannot see: it
+ * compiles with `moduleResolution: bundler` (which accepts extensionless paths)
+ * because the kit's own .d.ts files do not resolve under nodenext — see the
+ * comment on that project. The real templates DO ship nodenext, so the check has
+ * to exist somewhere, and here it is textual instead of compiled.
+ *
+ * Measured in a stock `npm create vite -- --template react-ts` app:
+ *   vite.config.ts(1,31): error TS2835: Relative import paths need explicit file
+ *   extensions in ECMAScript imports when '--moduleResolution' is 'node16' or
+ *   'nodenext'. Did you mean './vite-chat-api.js'?
+ *
+ * `.js` is the required form even though the file on disk is `.ts` — that is the
+ * TypeScript convention nodenext expects, and Vite's own config loader resolves
+ * it. Verified: `npm run build` passes and `POST /api/chat` answers 401 from the
+ * provider (not 404), so the plugin really loaded.
+ *
+ * Commented lines count. The vite.config.ts chunk is emitted entirely commented
+ * out as guidance a consumer uncomments, so an extensionless import there fails
+ * their build just the same — and that is exactly where the shipped defect was.
+ */
+function assertRelativeImportsHaveExtensions(label, files, failures) {
+  // `from './x'` / `import './x'`, in live code OR in a `//` comment.
+  const RELATIVE = /(?:from|import)\s+'(\.\.?\/[^']*)'/g;
+  for (const f of files) {
+    for (const m of f.code.matchAll(RELATIVE)) {
+      const spec = m[1];
+      // SvelteKit's `./$types` is generated and virtual — it has no file on disk
+      // and Kit's own templates import it exactly like this.
+      if (spec.endsWith('/$types')) continue;
+      if (!/\.(js|mjs|cjs|ts|mts|cts|json|css)$/.test(spec))
+        failures.push(
+          `${label}: ${f.path} imports '${spec}' with no file extension — TS2835 under the ` +
+            `nodenext tsconfig.node.json the stock Vite templates ship. Use '${spec}.js'.`,
+        );
+    }
+  }
+}
+
+/**
  * Block (2) must not depend on the archetype.
  *
  * The route matrix skips the archetype axis because `chooseRoute` only ever
@@ -971,6 +1031,7 @@ async function routeCheck(scaffold) {
   const pythonCells = [];
   const noRoute = [];
   const usedProjects = new Set();
+  const importFailures = [];
 
   for (const c of cells) {
     const out = await scaffold.handler({
@@ -1027,6 +1088,11 @@ async function routeCheck(scaffold) {
       continue;
     }
 
+    // Run over the WHOLE block, not over `files`: splitRouteFiles drops the
+    // fully-commented vite.config.ts chunk as illustration, and that chunk is
+    // precisely where the extensionless import shipped. A consumer uncomments it.
+    assertRelativeImportsHaveExtensions(c.label, [{ path: 'block (2)', code }], importFailures);
+
     const files = splitRouteFiles(code, 'route.ts');
     if (!files.length) {
       cleanup();
@@ -1040,6 +1106,13 @@ async function routeCheck(scaffold) {
       writeFileSync(dest, f.code);
     }
   }
+
+  if (importFailures.length) {
+    for (const f of importFailures) console.log(`  ✗ ${f}`);
+    cleanup();
+    fail(`${importFailures.length} emitted route import(s) lack an explicit file extension.`);
+  }
+  console.log('  ✓ every relative import in an emitted route carries an explicit extension (TS2835)');
 
   await assertRoutesAreArchetypeIndependent(scaffold, reference);
   if (noRoute.length) console.log(`  · ${noRoute.length} cases have no backend by design (mock streams in the browser)`);

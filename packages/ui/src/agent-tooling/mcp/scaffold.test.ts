@@ -250,6 +250,49 @@ describe('scaffold', () => {
     }
   });
 
+  /**
+   * TS2835: relative imports in the emitted Vite-middleware route need explicit
+   * extensions, because the stock `tsconfig.node.json` is `"module": "nodenext"`.
+   *
+   * Measured in stock create-vite react-ts AND vue-ts apps:
+   *   vite.config.ts(1,31): error TS2835: Relative import paths need explicit
+   *   file extensions ... Did you mean './vite-chat-api.js'?
+   * `.js` is the correct form even though the file is `.ts` — tsc maps it, and so
+   * does Vite's config loader (proved by POST /api/chat answering 401 from the
+   * provider rather than 404).
+   *
+   * The handler also moves OUT of `src/`: a create-vite app's tsconfig.app.json is
+   * `"include": ["src"]` with no node types, so `src/server/chat.ts` was compiled
+   * by the BROWSER project too and failed TS2591 on `process`.
+   */
+  it('the vite-middleware route uses extensioned imports and keeps the handler out of src/', async () => {
+    for (const framework of ['react', 'vue', 'solid'] as const) {
+      const out = await scaffold.handler({
+        useCase: 'drop-in-chat', integration: 'openrouter', placement: 'full-page', framework,
+      });
+      const text = (out.content as { type: string; text: string }[])[0].text;
+      const route = text.split('=== (2) BACKEND ROUTE ===')[1].split('=== (3)')[0];
+
+      // Explicit extensions, in the live import AND in the commented vite.config
+      // guidance a consumer uncomments.
+      expect(route, `${framework}: live handler import needs an extension`).toContain(
+        "import { chatHandler } from './server/chat.js';",
+      );
+      expect(route, `${framework}: vite.config guidance needs an extension`).toContain(
+        "// import { chatApiPlugin } from './vite-chat-api.js';",
+      );
+      expect(route, `${framework}: extensionless import is TS2835 under nodenext`).not.toMatch(
+        /from '\.\/(vite-chat-api|server\/chat)'/,
+      );
+
+      // The handler must not live under src/, where the browser tsconfig claims it.
+      expect(route, `${framework}: handler under src/ is TS2591 on process`).not.toContain(
+        'src/server/chat',
+      );
+      expect(route, `${framework}: handler file path`).toContain('// server/chat.ts');
+    }
+  });
+
   it('falls back to a usable route when the framework has no exact template', async () => {
     // pydantic-ai only ships a fastapi template; asking for `next` (ts) should
     // still emit its python fastapi route rather than failing.
@@ -2294,7 +2337,7 @@ describe('real-backend scaffolds send what the panel needs and survive a failure
    * `Request.json()` returns `Promise<unknown>` under undici's typings and
    * `Promise<any>` under the DOM lib, so `const { messages } = await
    * request.json()` compiles in Next and is a hard TS2339 in a stock Vite app,
-   * whose `tsc -b` walks vite.config.ts -> vite-chat-api.ts -> src/server/chat.ts
+   * whose `tsc -b` walks vite.config.ts -> vite-chat-api.ts -> server/chat.ts
    * with no DOM. Every route narrows the body once through the injected
    * `ChatRequestBody` instead.
    *
@@ -2456,8 +2499,10 @@ describe('the backend route matches the framework that asked for it', () => {
     ['next', 'app/api/chat/route.ts', /export async function POST\(req: Request\)/],
     ['svelte', 'src/routes/api/chat/+server.ts', /export const POST: RequestHandler = \(\{ request \}\) => chatHandler\(request\)/],
     ['tanstack-start', 'src/routes/api/chat.ts', /createFileRoute\('\/api\/chat'\)\(\{\n\s*server: \{ handlers: \{ POST/],
-    ['vue', 'src/server/chat.ts', /server\.middlewares\.use\('\/api\/chat'/],
-    ['react', 'src/server/chat.ts', /server\.middlewares\.use\('\/api\/chat'/],
+    // Outside src/: a create-vite tsconfig.app.json is `"include": ["src"]` with no
+    // node types, so a handler under src/ is TS2591 on `process` in a stock build.
+    ['vue', '// server/chat.ts', /server\.middlewares\.use\('\/api\/chat'/],
+    ['react', '// server/chat.ts', /server\.middlewares\.use\('\/api\/chat'/],
     ['worker', 'src/index.ts', /export default \{\n\s*fetch\(request: Request\)/],
     ['express', 'server.ts', /app\.post\('\/api\/chat'/],
   ])('%s declares its own route in %s', async (framework, file, declaration) => {
@@ -2693,7 +2738,7 @@ describe('scaffold — solid', () => {
 
   it('hosts the route the way any Vite SPA does, and says it is dev-only', async () => {
     const r = route(await emit());
-    expect(r).toContain('// src/server/chat.ts');
+    expect(r).toContain('// server/chat.ts');
     expect(r).toContain('configureServer(server)');
     expect(r).toContain("server.middlewares.use('/api/chat'");
     expect(r).toMatch(/DEV ONLY/);

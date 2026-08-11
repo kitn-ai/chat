@@ -2703,7 +2703,15 @@ function svelteEnvAccess(fragment: string): { fragment: string; imports: string[
 function viteMiddlewareAdapter(plugin: string): WebRouteAdapter {
   return {
     runtime: 'Vite dev-server middleware (Node)',
-    file: 'src/server/chat.ts',
+    // `server/chat.ts`, NOT `src/server/chat.ts`. A create-vite app splits its
+    // tsconfig in two: tsconfig.app.json is `"include": ["src"]` with
+    // `types: ["vite/client"]` and no node types, and tsconfig.node.json covers
+    // vite.config.ts and what it imports. A handler under `src/` is therefore
+    // compiled by the BROWSER project as well, where `process.env` is
+    // TS2591 "Cannot find name 'process'" — measured in a stock react-ts app.
+    // Outside `src/` only the node project claims it, which is the one with the
+    // node types it needs.
+    file: 'server/chat.ts',
     after: [
       ``,
       `// vite.config.ts imports it from here.`,
@@ -2715,7 +2723,10 @@ function viteMiddlewareAdapter(plugin: string): WebRouteAdapter {
       `// production, deploy the handler to a real server (Next, SvelteKit, a Worker,`,
       `// Express) or point the fetch at one.`,
       `import type { Plugin } from 'vite';`,
-      `import { chatHandler } from './src/server/chat';`,
+      `// The '.js' is REQUIRED and is not a typo: the stock tsconfig.node.json sets`,
+      `// "module": "nodenext", where an extensionless relative import is TS2835. TS`,
+      `// resolves './server/chat.js' to server/chat.ts, and so does Vite.`,
+      `import { chatHandler } from './server/chat.js';`,
       ``,
       `export function chatApiPlugin(): Plugin {`,
       `  return {`,
@@ -2757,7 +2768,9 @@ function viteMiddlewareAdapter(plugin: string): WebRouteAdapter {
       `}`,
       ``,
       `// ── vite.config.ts ───────────────────────────────────────────────────────────`,
-      `// import { chatApiPlugin } from './vite-chat-api';`,
+      `// Again '.js', for the same reason: tsconfig.node.json is "module": "nodenext",`,
+      `// where './vite-chat-api' is TS2835 and fails \`npm run build\`.`,
+      `// import { chatApiPlugin } from './vite-chat-api.js';`,
       `// export default defineConfig({ plugins: [${plugin}, chatApiPlugin()] });`,
     ],
   };
