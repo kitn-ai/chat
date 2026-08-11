@@ -101,22 +101,32 @@ function collectSpecs(node, out = []) {
  *   · `fail` — everything else, with the runner's own diagnostic block attached
  *              (rounds / tool calls / finish reason), which is what lets a human
  *              tell a UI bug from a model that simply never called the tool.
+ *
+ * A fourth thing two `pass` cells can hide: the two wires do not always test the
+ * same claim. S05's OpenAI fixture interleaves two calls' argument fragments;
+ * Anthropic closes each content block before opening the next and CANNOT produce
+ * that shape, so its cell is a strictly weaker claim. The scenario declares the
+ * difference (`provesByWire`), the runner annotates it per run, and `claim`
+ * carries it into the table as a footnote — because printing both as a bare
+ * `pass` reads the weaker cell as the stronger one.
  */
 function classify(spec) {
   const test = spec.tests?.[0];
   const result = test?.results?.[0];
   const annotations = [...(spec.annotations ?? []), ...(test?.annotations ?? [])];
   const gap = annotations.find((a) => a.type === 'confirmed-gap');
+  const claim = annotations.find((a) => a.type === 'wire-claim')?.description ?? '';
   const status = result?.status ?? test?.status ?? 'unknown';
 
-  if (gap) return { state: 'gap', detail: gap.description ?? '' };
+  if (gap) return { state: 'gap', detail: gap.description ?? '', claim };
   if (status === 'skipped') {
-    return { state: 'skip', detail: result?.error?.message ?? 'no recording yet' };
+    return { state: 'skip', detail: result?.error?.message ?? 'no recording yet', claim };
   }
-  if (status === 'passed') return { state: 'pass', detail: '' };
+  if (status === 'passed') return { state: 'pass', detail: '', claim };
   return {
     state: 'fail',
     detail: (result?.error?.message ?? result?.errors?.[0]?.message ?? 'failed').trim(),
+    claim,
   };
 }
 
@@ -188,13 +198,36 @@ const GLYPH = { pass: 'pass', fail: 'FAIL', gap: 'gap', skip: 'skip', unknown: '
 
 const row = (cells) => `| ${cells.join(' | ')} |`;
 
+/** `pass*` = this cell's wire proves something OTHER than the scenario's general
+ *  claim. The asterisk is the whole point: it is what stops a reader treating
+ *  two green cells as two equal results. */
+const glyphFor = (cell) => `${GLYPH[cell?.state ?? 'unknown']}${cell?.claim ? '*' : ''}`;
+
 function renderTable(rows) {
   const ids = [...new Set(rows.flatMap((r) => Object.keys(r.cells)))].sort();
   return [
     row(['scenario', ...rows.map((r) => r.key)]),
     row(['---', ...rows.map(() => '---')]),
-    ...ids.map((id) => row([id, ...rows.map((r) => GLYPH[r.cells[id]?.state ?? 'unknown'])])),
+    ...ids.map((id) => row([id, ...rows.map((r) => glyphFor(r.cells[id]))])),
   ].join('\n');
+}
+
+/** The footnotes behind every `*`: what that configuration's cell ACTUALLY
+ *  proves, in its own words, deduped so five columns of the same wire print the
+ *  claim once. */
+function renderClaims(rows) {
+  const out = [];
+  const seen = new Set();
+  for (const r of rows) {
+    for (const [id, cell] of Object.entries(r.cells)) {
+      if (!cell.claim) continue;
+      const key = `${id}|${cell.claim}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(`  ${id} ${cell.claim}`);
+    }
+  }
+  return out;
 }
 
 const results = [];
@@ -212,6 +245,13 @@ writeFileSync(summaryPath, JSON.stringify(results, null, 2));
 
 console.log(`\n${'='.repeat(72)}\nMATRIX (${MODE})\n${'='.repeat(72)}\n`);
 console.log(renderTable(results));
+
+const claims = renderClaims(results);
+if (claims.length) {
+  console.log('\n* these cells do not prove what the scenario generally claims:\n');
+  console.log(claims.join('\n'));
+}
+
 console.log('\nFailures and gaps in detail:\n');
 for (const row of results) {
   for (const [id, cell] of Object.entries(row.cells)) {

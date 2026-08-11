@@ -43,6 +43,14 @@ as documented — worth its own glyph, because the runner reports a confirmed ga
 a *passing* test and only the annotation tells them apart. `skip` is a live
 scenario with no recording yet: a missing measurement, not a failing one.
 
+A trailing `*` means the cell does **not** prove what the scenario generally
+claims, and the footnotes under the table say what it proves instead. Only S05
+carries one today: chat-completions announces both tool calls up front and
+interleaves their argument fragments, Anthropic closes each content block before
+opening the next and **cannot** produce that framing, so the Anthropic cell tests
+a strictly weaker claim. Two identical `pass` glyphs would read the weaker one as
+the stronger. A scenario declares the difference with `provesByWire`.
+
 ## Two wires, not one
 
 OpenRouter's `/api/v1/chat/completions` normalises **every** model onto the OpenAI
