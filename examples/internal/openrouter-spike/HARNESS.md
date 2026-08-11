@@ -104,9 +104,22 @@ the replay directory is chosen by the page and `.env.local` is two levels above
 
 ## Cost
 
-The default model is `$0.09 / $0.18` per million tokens with `max_tokens` capped
-at 900. A full live pass over the 13 live scenarios is roughly **$0.005**. The
-replay and control passes are free.
+**Measured**, not estimated: summing `usage.cost` out of the recorded fixtures of
+one full live pass over the 13 live scenarios — 28 requests, 16,046 prompt tokens
+and 2,939 completion tokens on `~deepseek/deepseek-v4-flash-latest` — comes to
+**$0.0015**. The replay and control passes are free.
+
+```bash
+python3 - <<'PY'
+import re, glob
+print(sum(float(m) for f in glob.glob('fixtures/live/*/*/*.sse')
+          for m in re.findall(r'"cost":([0-9.eE-]+)', open(f).read())))
+PY
+```
+
+A different model's number will differ by its own price per token, but not by its
+token COUNT: the prompts and the `max_tokens: 900` cap are fixed by the harness.
+Multiply by the ratio of prices to price a sweep.
 
 ## Adding a scenario
 

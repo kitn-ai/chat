@@ -43,7 +43,7 @@ watched failing before it was trusted. See **[HARNESS.md](./HARNESS.md)**.
 
 ```bash
 pnpm --filter @kitn.ai/ui-example-openrouter-spike conformance          # free: replay only
-pnpm --filter @kitn.ai/ui-example-openrouter-spike conformance:live     # ~$0.005, records fixtures
+pnpm --filter @kitn.ai/ui-example-openrouter-spike conformance:live     # $0.0015 measured, records fixtures
 pnpm --filter @kitn.ai/ui-example-openrouter-spike conformance:control  # prove the assertions can fail
 ```
 
