@@ -221,7 +221,7 @@ function SettingsContent() {
 
 const AS_MODAL_SNIPPET = `import { createSignal } from 'solid-js';
 import { Monitor, Sun, Moon, X } from 'lucide-solid';
-import { SettingsGroup, SettingItem, Segmented, Switch, Nav } from '@kitn.ai/ui';
+import { SettingsGroup, SettingItem, Segmented, Switch, Nav } from '@kitn.ai/ui/solid';
 
 ${SETTINGS_CONTENT_SNIPPET}
 
@@ -246,7 +246,7 @@ function SettingsModal() {
 
 const AS_PAGE_SNIPPET = `import { createSignal } from 'solid-js';
 import { Monitor, Sun, Moon, ChevronLeft } from 'lucide-solid';
-import { SettingsGroup, SettingItem, Segmented, Switch, Nav } from '@kitn.ai/ui';
+import { SettingsGroup, SettingItem, Segmented, Switch, Nav } from '@kitn.ai/ui/solid';
 
 ${SETTINGS_CONTENT_SNIPPET}
 

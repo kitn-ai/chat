@@ -117,7 +117,7 @@ const meta = {
 export default meta;
 type Story = StoryObj;
 
-const IMPORT = `import { Composer, type TriggerDef, type ComposerDoc } from '@kitn.ai/ui';`;
+const IMPORT = `import { Composer, type TriggerDef, type ComposerDoc } from '@kitn.ai/ui/solid';`;
 const src = (code: string) => ({
   parameters: { docs: { source: { code: `${IMPORT}\n\n${code}`, language: 'tsx' } } },
 });

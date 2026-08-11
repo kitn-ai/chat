@@ -81,6 +81,15 @@ export { Pane } from './ui/pane';
 export type { PaneProps, PaneStatus, PaneStatusTone } from './ui/pane';
 export { PaneGroup } from './ui/pane-group';
 export type { PaneGroupProps, PaneTab, PaneTabStatus } from './ui/pane-group';
+// PaneGrid and the three overlay primitives have Storybook pages that tell a
+// consumer to `import { … } from '@kitn.ai/ui'` — and were exported from NEITHER
+// entry, so those snippets named symbols nobody could import. They belong on
+// ./solid (Solid-only building blocks, and the overlay trio is what you compose a
+// custom popover/tooltip out of).
+export { PaneGrid } from './ui/pane-grid';
+export type { PaneGridProps } from './ui/pane-grid';
+export { createPresence, usePosition, useDismiss } from './ui/overlay';
+export type { UsePositionOptions, UseDismissOptions, DismissReason } from './ui/overlay';
 export { PromptDock } from './ui/prompt-dock';
 export type { PromptDockProps, PromptDockFrame, PromptDockAppearance } from './ui/prompt-dock';
 export { SettingsGroup, SettingItem } from './ui/settings-group';

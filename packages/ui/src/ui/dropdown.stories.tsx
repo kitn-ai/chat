@@ -82,7 +82,7 @@ const CASCADE_IMPORT = `import {
   Dropdown, DropdownTrigger, DropdownContent, DropdownItem,
   DropdownLabel, DropdownSeparator, DropdownCheckboxItem,
   DropdownSub, DropdownSubTrigger, DropdownSubContent,
-} from '@kitn.ai/ui';`;
+} from '@kitn.ai/ui/solid';`;
 
 function CascadingMenuDemo(props: { onSelect?: SelectHandler }) {
   const [webSearch, setWebSearch] = createSignal(true);

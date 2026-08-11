@@ -37,7 +37,7 @@ type Story = StoryObj<typeof meta>;
  * paste-ready snippet (with its import line). `language: 'tsx'` labels SolidJS.
  * Args-only stories already show clean source, so they skip this.
  */
-const IMPORT = `import { Switch } from '@kitn.ai/ui';`;
+const IMPORT = `import { Switch } from '@kitn.ai/ui/solid';`;
 const src = (code: string) => ({
   parameters: { docs: { source: { code: `${IMPORT}\n\n${code}`, language: 'tsx' } } },
 });

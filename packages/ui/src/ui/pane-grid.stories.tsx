@@ -83,7 +83,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-const IMPORT = `import { PaneGrid } from '@kitn.ai/ui';`;
+const IMPORT = `import { PaneGrid } from '@kitn.ai/ui/solid';`;
 
 /** Six panes in a draggable container. Wide = 3 columns; drag the corner handle in
  *  to narrow it and watch columns drop to 2 then 1, then the grid scroll - the panes
