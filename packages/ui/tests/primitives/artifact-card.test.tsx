@@ -2,8 +2,13 @@
 // The `artifact` built-in card: the sizing wrapper (an <Artifact> fills its
 // container, so a card with no height collapses to an invisible zero-height box),
 // its stable handles, and the emit wiring onto the frozen CardEvent set.
+import { createSignal } from 'solid-js';
 import { render } from '@solidjs/testing-library';
 import { BUILTIN_CARD_COMPONENTS } from '../../src/primitives/card-registry';
+import { CardRenderer } from '../../src/components/card-renderer';
+import { CardProvider } from '../../src/primitives/card-host';
+import { upsertCardPart } from '../../src/state/parts';
+import type { MessagePart } from '../../src/elements/chat-types';
 import type { CardEnvelope, CardEvent, CardHost } from '../../src/primitives/card-contract';
 
 afterEach(() => { document.body.innerHTML = ''; });
@@ -37,7 +42,10 @@ test('renders a wrapper carrying the stable part + data-card-type handles', () =
   const { container } = renderArtifactCard(BASE);
   const el = wrapperOf(container);
   expect(el).toBeTruthy();
-  expect(el.getAttribute('part')).toBe('card artifact');
+  // `card` matches the other chromed cards (they inherit it from <Card>). The
+  // artifact-specific handle is data-card-type: a second part token would have to
+  // be declared in elements/slots.ts, which slots.test.ts's drift guard enforces.
+  expect(el.getAttribute('part')).toBe('card');
 });
 
 // THE height guard. <Artifact>'s root is `flex h-full w-full flex-col`, so with no
@@ -155,4 +163,83 @@ test('a file selection emits a contract `state` patch carrying activeFile', () =
 test('emitting without a host does not throw', () => {
   const { getByRole } = renderArtifactCard(BASE);
   expect(() => (getByRole('tab', { name: /code/i }) as HTMLElement).click()).not.toThrow();
+});
+
+// --- Revision safety -------------------------------------------------------
+// The card exists to be REVISED (addCard upserts on envelope.id). A revision
+// hands the same live component a new envelope; it must not reach in and undo
+// what the user did in the meantime.
+//
+// The rendering shape here mirrors components/message.tsx: an <Index> + accessor
+// keeps ONE component instance alive and only updates its props. Using a keyed
+// <For> would recreate the component and mask the effect being tested, so the
+// envelope must arrive through a reactive accessor exactly as it does there.
+
+const REV_FILES = [
+  { path: 'index.html', code: '<h1>Home v1</h1>', language: 'html', type: 'html' as const },
+  { path: 'about.html', code: '<h1>About v1</h1>', language: 'html', type: 'html' as const },
+];
+
+function revisable(version: string): CardEnvelope {
+  return {
+    type: 'artifact',
+    id: 'rev-1',
+    title: `Landing page ${version}`,
+    data: {
+      src: 'https://x.test/index.html',
+      files: REV_FILES.map((f) => ({ ...f, code: f.code.replace('v1', version) })),
+      tab: 'code',
+      activeFile: 'index.html',
+    },
+  };
+}
+
+function renderRevisable() {
+  const [parts, setParts] = createSignal<MessagePart[]>(upsertCardPart([], revisable('v1')));
+  const envelope = () => (parts()[0] as Extract<MessagePart, { type: 'card' }>).envelope;
+  const r = render(() => (
+    <CardProvider context={{ theme: { mode: 'light' }, locale: 'en' }} policy={{}}>
+      <CardRenderer envelope={envelope()} />
+    </CardProvider>
+  ));
+  /** A model revising its own artifact: same id, same tab/activeFile, new source. */
+  const revise = () => setParts((p) => upsertCardPart(p, revisable('v2')));
+  return { ...r, revise, parts };
+}
+
+const selectedTab = (c: HTMLElement) =>
+  [...c.querySelectorAll('[role="tab"]')].find((t) => t.getAttribute('aria-selected') === 'true')?.textContent?.trim();
+const selectedFile = (c: HTMLElement) =>
+  c.querySelector('[role="treeitem"][aria-selected="true"]')?.getAttribute('data-tree-path') ?? null;
+
+test('a revision does NOT yank the user out of the tab they chose', () => {
+  const { container, getByRole, revise } = renderRevisable();
+  expect(selectedTab(container)).toBe('Code'); // data.tab seeded the first view
+  (getByRole('tab', { name: /preview/i }) as HTMLElement).click();
+  expect(selectedTab(container)).toBe('Preview');
+  revise();
+  // The revision landed...
+  expect(container.querySelector('h3')!.textContent).toContain('v2');
+  // ...without dragging the user back to the envelope's tab.
+  expect(selectedTab(container)).toBe('Preview');
+});
+
+test('a revision does NOT reset the file the user selected', () => {
+  const { container, revise } = renderRevisable();
+  expect(selectedFile(container)).toBe('index.html'); // data.activeFile seeded it
+  (container.querySelector('[data-tree-path="about.html"]') as HTMLElement).click();
+  expect(selectedFile(container)).toBe('about.html');
+  revise();
+  expect(container.querySelector('h3')!.textContent).toContain('v2');
+  expect(selectedFile(container)).toBe('about.html');
+});
+
+test('a revision still updates the CONTENT the user is looking at', () => {
+  const { container, revise } = renderRevisable();
+  (container.querySelector('[data-tree-path="about.html"]') as HTMLElement).click();
+  expect(container.textContent).toContain('About v1');
+  revise();
+  // Same file, revised source — the point of upserting rather than appending.
+  expect(selectedFile(container)).toBe('about.html');
+  expect(container.textContent).toContain('About v2');
 });

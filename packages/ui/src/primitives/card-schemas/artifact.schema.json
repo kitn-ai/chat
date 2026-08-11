@@ -73,12 +73,12 @@
       "type": "string",
       "enum": ["preview", "code"],
       "default": "preview",
-      "description": "Which view opens first. The user can switch freely afterwards; a change is reported back as a `state` patch.",
+      "description": "Which view the card OPENS on. SEED ONLY: the user can switch freely afterwards and a revision of this card will NOT move them back, because the user's choice wins over the model's. A switch is reported back as a `state` patch.",
       "x-kai-control": "select"
     },
     "activeFile": {
       "type": "string",
-      "description": "Path of the file selected in the tree (must match a `files[].path`). Syncs the tree highlight, the Code source and the preview.",
+      "description": "Path of the file selected in the tree when the card FIRST renders (must match a `files[].path`). Seeds the tree highlight, the Code source and the preview. SEED ONLY, like `tab`: revising this card will not move a user who has since selected a different file.",
       "maxLength": 1024
     },
     "displayUrl": {
