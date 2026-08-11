@@ -251,6 +251,46 @@ describe('scaffold', () => {
   });
 
   /**
+   * SCAF-3: Vue's isCustomElement is its own emitted STEP, not a buried comment.
+   *
+   * It used to be an HTML comment above the `<script setup>` block — and block (1)
+   * IS a `<script setup>` + `<template>` pair, so anyone copying "the component"
+   * copies past it. Verified in a stock `create-vite vue-ts` app: skipping it logs
+   * `[Vue warn]: Failed to resolve component: kai-chat`, and applying block (0)
+   * clears it.
+   *
+   * (Measured honestly: the app still RENDERS without it — Vue falls back to a
+   * native element — so this asserts the warning and the step, not a blank page.)
+   */
+  it('vue emits isCustomElement as its own setup block, ahead of the component', async () => {
+    const out = await scaffold.handler({
+      useCase: 'drop-in-chat', integration: 'mock', placement: 'full-page', framework: 'vue',
+    });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+
+    expect(text).toContain('=== (0) REQUIRED SETUP — do this FIRST ===');
+    // It has to come BEFORE the front end, or it is the same buried note again.
+    expect(text.indexOf('=== (0) REQUIRED SETUP')).toBeLessThan(text.indexOf('=== (1) FRONT-END'));
+
+    const setup = text.split('=== (0) REQUIRED SETUP — do this FIRST ===')[1].split('=== (1) FRONT-END')[0];
+    // A real, complete, pasteable vite.config.ts — not a prose fragment.
+    expect(setup).toContain("import vue from '@vitejs/plugin-vue';");
+    expect(setup).toContain("import { defineConfig } from 'vite';");
+    expect(setup).toContain("isCustomElement: (tag) => tag.startsWith('kai-'),");
+    // And it must name the warning it removes, in Vue's own words.
+    expect(setup).toContain('[Vue warn]: Failed to resolve component: kai-chat');
+
+    // No other framework gets a block (0) it does not need.
+    for (const framework of ['react', 'svelte', 'html', 'angular', 'solid', 'next'] as const) {
+      const other = await scaffold.handler({
+        useCase: 'drop-in-chat', integration: 'mock', placement: 'full-page', framework,
+      });
+      const otherText = (other.content as { type: string; text: string }[])[0].text;
+      expect(otherText, `${framework}: unexpected block (0)`).not.toContain('=== (0) REQUIRED SETUP');
+    }
+  });
+
+  /**
    * TS2835: relative imports in the emitted Vite-middleware route need explicit
    * extensions, because the stock `tsconfig.node.json` is `"module": "nodenext"`.
    *

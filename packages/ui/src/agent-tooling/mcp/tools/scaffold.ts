@@ -1528,10 +1528,10 @@ function renderVue(archetype: Archetype, ctx: RenderCtx): string {
   return [
     `<!-- vue — ${archetype.title} — ${p.note}. empty-state hint: ${emptyHint} -->`,
     ...(p.altNote ?? []).map((l) => `<!-- ${l} -->`),
-    `<!-- SCAF-3: vite.config.ts — tell Vue that kai-* are custom elements (not Vue components).`,
-    `     Without this, Vue warns "Unknown custom element" and .prop bindings may misbehave.`,
-    `     import vue from '@vitejs/plugin-vue';`,
-    `     export default { plugins: [vue({ template: { compilerOptions: { isCustomElement: (tag) => tag.startsWith('kai-') } } })] }; -->`,
+    `<!-- SCAF-3: pair this with the vite.config.ts in block (0) above. Without its`,
+    `     isCustomElement, every kai-* tag logs "[Vue warn]: Failed to resolve`,
+    `     component: kai-chat" in dev — the app still renders, but the console does`,
+    `     not, and that warning is Vue asking you for exactly that config. -->`,
     `<script setup lang="ts">`,
     `import '@kitn.ai/ui/elements';  // registers <kai-*> — required, must come first`,
     ...(isMock ? [] : wireImportLines({ typed: true, toolLoop: emitToolLoop })),
@@ -2824,7 +2824,10 @@ const WEB_ROUTE_ADAPTERS: Record<string, WebRouteAdapter> = {
     ],
   },
   react: viteMiddlewareAdapter('react()'),
-  vue: viteMiddlewareAdapter('vue()'),
+  // NOT a bare `vue()`. This one-liner and block (0) configure the same file, and
+  // a consumer who pastes this over that silently drops `isCustomElement`, at
+  // which point every kai-* tag stops resolving and the page renders empty.
+  vue: viteMiddlewareAdapter('vue({ /* keep the template.compilerOptions from block (0) */ })'),
   // A Solid app is a Vite SPA, so it hosts the route exactly the way react/vue
   // do. `tailwindcss()` is in the plugin list because the Solid front end needs
   // it (the components are Tailwind source) — see renderSolid's setup note.
@@ -3157,6 +3160,79 @@ function cannotHostWarning(integration: Integration, route: RouteChoice, framewo
   ];
 }
 
+// ── block (0): setup a framework REQUIRES before block (1) runs at all ────────
+
+/**
+ * SCAF-3, promoted from a comment to a step.
+ *
+ * The placement was the defect. This used to be an HTML comment sitting ABOVE the
+ * `<script setup>` block, and block (1) is a `<script setup>` + `<template>` pair:
+ * an agent or a developer copying "the component" copies that pair, and the one
+ * thing that configures it is not inside it. As its own labelled block, ordered
+ * first, it cannot be lost to that copy.
+ *
+ * WHAT IT ACTUALLY DOES, measured rather than assumed. On Vue 3.5.39, skipping it
+ * does NOT blank the page: Vue falls back to rendering the unresolved tag as a
+ * native element, and its runtime sets `key in el` bindings as DOM properties, so
+ * a scaffold built from this output still runs — verified in a stock `vue-ts` app
+ * in dev AND in a production build, with and without the `.prop` modifiers, and
+ * the mock reply streamed in every time. What you get instead is
+ *
+ *   [Vue warn]: Failed to resolve component: kai-chat
+ *
+ * on every kai-* tag in development, which reads like a bug and is the exact
+ * warning Vue tells you to fix with `compilerOptions.isCustomElement`.
+ *
+ * So the emitted copy says that, and does not claim a blank page it cannot
+ * produce. Overstating it would be worse than the buried comment was: the first
+ * developer to skip the step and find their app working stops believing the rest
+ * of the scaffold.
+ *
+ * The whole file is emitted rather than a fragment because the plugin list is
+ * where this collides with block (2): a Vite SPA's dev API route adds
+ * `chatApiPlugin()` to the SAME array, and a consumer who pastes one config over
+ * the other silently loses whichever came first. The emitted comment says so.
+ */
+function setupBlock(framework: string): string | undefined {
+  if (framework !== 'vue') return undefined;
+  return [
+    `=== (0) REQUIRED SETUP — do this FIRST ===`,
+    ``,
+    `// vite.config.ts`,
+    `//`,
+    `// Tell Vue that kai-* tags are CUSTOM ELEMENTS rather than Vue components.`,
+    `// This is its own step, not a note inside block (1), because block (1) is a`,
+    `// <script setup> + <template> pair and this configures it from outside — copy`,
+    `// just the component and you never see it.`,
+    `//`,
+    `// Without it, every kai-* tag logs this in development:`,
+    `//   [Vue warn]: Failed to resolve component: kai-chat`,
+    `//   If this is a native custom element, make sure to exclude it from component`,
+    `//   resolution via compilerOptions.isCustomElement.`,
+    `// The app does still render — Vue falls back to a native element — so this is`,
+    `// a warning to remove, not a crash to avoid. Removing it is the point: it is`,
+    `// the fix Vue's own message asks for, and it stops the console reading like`,
+    `// something is broken.`,
+    `import vue from '@vitejs/plugin-vue';`,
+    `import { defineConfig } from 'vite';`,
+    ``,
+    `export default defineConfig({`,
+    `  plugins: [`,
+    `    vue({`,
+    `      template: {`,
+    `        compilerOptions: {`,
+    `          // Every kai-* tag is a custom element, not a Vue component.`,
+    `          isCustomElement: (tag) => tag.startsWith('kai-'),`,
+    `        },`,
+    `      },`,
+    `    }),`,
+    `    // If you also add the dev API route from block (2), its chatApiPlugin() goes`,
+    `    // in THIS array — do not replace this file with the one-liner shown there.`,
+    `  ],`,
+    `});`,
+  ].join('\n');
+}
+
 // ── compose ───────────────────────────────────────────────────────────────────
 
 function compose(
@@ -3298,7 +3374,11 @@ function compose(
   // capture without leaving the scaffold. Does not change blocks 1–4.
   const block5 = interactionPatternsBlock();
 
-  return [header, block1, block2, block3, block4, block5].join('\n\n');
+  // Block (0) is emitted only where the framework genuinely needs setup before
+  // block (1) will run — today that is vue's isCustomElement.
+  const block0 = setupBlock(framework);
+
+  return [header, ...(block0 ? [block0] : []), block1, block2, block3, block4, block5].join('\n\n');
 }
 
 // ── SCAF-17: reusable interaction-pattern snippets ─────────────────────────────
