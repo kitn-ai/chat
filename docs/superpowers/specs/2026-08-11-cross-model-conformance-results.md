@@ -48,8 +48,13 @@
 
 ## The result
 
-95 cells: **82 pass, 10 confirmed known gaps** (S12 and S13 in all five columns, both
-already documented), **3 model-behaviour differences**, and **zero UI failures**.
+95 cells: **82 pass**, **10 cells whose gap is now closed in the library** (S12 and S13
+across all five columns — 4 of the 10 re-verified by offline replay, 6 not re-run),
+**3 model-behaviour differences**, and **zero UI failures**.
+
+**No known gap remains open**, and the 10 are marked `fixed`, not `pass`, on purpose. The
+fix landed after the sweep, so what backs those cells is a replay, not a live re-run. The
+distinction, and why the replay is still evidence, is under [S12 and S13](#s12-and-s13-closed-and-exactly-how-far-that-is-proven).
 
 | scenario | deepseek-v4-flash | haiku-4.5 (anthropic wire) | haiku-4.5 (openai wire) | gpt-5.4-mini | ministral-3b |
 |---|---|---|---|---|---|
@@ -65,8 +70,8 @@ already documented), **3 model-behaviour differences**, and **zero UI failures**
 | S09 form card | pass | pass | pass | pass | pass |
 | S10 tasks card | pass | pass | pass | pass | pass |
 | S11 link + embed | pass | pass | pass | pass | pass |
-| S12 citations | gap | gap | gap | gap | gap |
-| S13 artifact over time | gap | gap | gap | gap | gap |
+| S12 citations | **fixed‡** | **fixed§** | **fixed‡** | **fixed§** | **fixed§** |
+| S13 artifact over time | **fixed‡** | **fixed§** | **fixed‡** | **fixed§** | **fixed§** |
 | S14 attachments | pass | pass | pass | pass | pass |
 | S15 interleaving | pass | pass | pass | pass | pass |
 | S16 mid-stream error | pass | pass | pass | pass | pass |
@@ -89,14 +94,34 @@ green square: an `n/a` that means "the provider cannot do this" and an `n/a` tha
 means "we asked wrong" are indistinguishable from the table, and only running the
 same model down a second wire made the difference visible at all.
 
-`pass` = the behaviour rendered · `gap` = a documented known gap, failing as
-documented · **`n/a`** = the model did not produce the input the scenario needs.
-Not a failure of ours, and the distinction is argued below rather than asserted.
+‡ **Closed in the library and re-verified by an OFFLINE REPLAY against the current
+build — not by a live re-run.** Two runs cover these four cells: the `haiku-oai` matrix
+column, 19/19 with no gaps (`harness/matrix-reports/haiku-oai.replay.json`), and the
+default replay suite, 21/21 with no `KNOWN GAP CONFIRMED` line — which replays the
+`deepseek-v4-flash` recordings, because that is `DEFAULT_MODEL`.
+
+§ **Closed in the library; this cell has NOT been re-run.** The per-model matrix needs
+live spend nobody authorised. Do not read these as passes, and do not promote them
+without re-running. One asymmetry is worth knowing before you spend anything: **S13 is
+replay-only in every column and its fixture is canned, not per-model** — one stream per
+wire dialect. The gpt and ministral S13 cells would replay bytes identical to the two ‡
+cells above, so they are unexecuted rather than uncertain. The genuinely unexercised
+inputs are the `canned-anthropic` S13 stream and three models' recorded S12 streams.
+
+`pass` = the behaviour rendered · **`fixed`** = the documented gap is closed in the
+library; ‡/§ say what was actually measured · **`n/a`** = the model did not produce the
+input the scenario needs. Not a failure of ours, and the distinction is argued below
+rather than asserted.
 
 Every cell was produced twice: once live, once by replaying the recording offline.
 The two agree exactly, including the failures. **The corrected S02 cell holds to the
 same standard**: live pass recorded in `harness/matrix-reports/haiku-oai.live.json`,
 fixture committed, offline replay re-confirmed green against a settled build.
+
+**S12 and S13 do NOT hold to that standard, and are marked `fixed` rather than `pass`
+for exactly that reason.** Their fix landed after the sweep, so they have a replay
+against the current build and no live re-run behind it. Why that replay is still
+evidence and not a tautology is the point of the section below.
 
 That replay took two attempts, and the first one is worth recording rather than
 quietly dropping: it failed against a `packages/ui/dist/` that a concurrent session
@@ -264,13 +289,90 @@ failed because the stream parsed to nothing — and was reported as its known ga
 which it was not. The gap-confirmation should match the documented failure rather
 than accept any failure.
 
-## Confirmed, not re-diagnosed
+**FIXED.** `knownGap` now requires three things — the run reached the gap, the
+assertion still fails, and it fails with the DOCUMENTED message — typed as
+`{ what, reached, signature }` so a bare gap note cannot be written. No scenario uses
+it today, S12 and S13 having been its only users. Keep the mechanism: the next gap
+should be forced through it rather than left as a comment.
 
-**S12 (citations)** and **S13 (artifact over time)** fail on all five configurations,
-exactly as documented, with identical messages everywhere. S12's positive control
-stays green throughout, so the locator is looking in the right place and the feature
-is genuinely absent rather than the selector being wrong. Both are model-independent,
-which is itself the useful new information: five models, one shape of failure.
+## S12 and S13: closed, and exactly how far that is proven
+
+Both were model-independent — five models, one shape of failure — which is what made
+them library defects rather than conformance results. Two scenarios, three underlying
+defects, all now fixed:
+
+- **`AssistantStream.addCard` upserts on `envelope.id`** (`upsertCardPart`,
+  `packages/ui/src/state/parts.ts`) instead of appending, so a revised artifact replaces
+  the draft rather than stacking a second copy. It replaces the envelope **wholesale**:
+  a card arrives whole as one tool result, and a field-by-field merge could never CLEAR
+  `resolution`, which `CardPolicy.onReopen` needs.
+- **`artifact` is the 7th built-in card type**, through
+  `packages/ui/src/components/artifact-card.tsx`. S13 no longer needs the spike's own
+  `<spike-artifact>` registered through the `cardTypes` seam.
+- **`source` parts render as a grouped citation row** (`part="citations"`), outside the
+  message bubble. `message.tsx` used to match them to `null` on purpose.
+
+Neither scenario carries a `knownGap` any more. They are ordinary assertions.
+
+### What was measured
+
+- **Offline replay, green, against the current build.** The `haiku-oai` matrix column at
+  19/19 with no gaps, and the default replay suite at 21/21 with no `KNOWN GAP CONFIRMED`
+  line.
+- **Negative control, red, twice.** S12 and S13 both fail under `conformance:control`
+  across two independent full runs, so the assertions are load-bearing rather than
+  vacuously satisfiable.
+
+### What was NOT measured
+
+**No live run since the fix, on any configuration.** The per-model matrix would cost live
+spend nobody has authorised. Six of the ten cells are marked `§` and have not been
+executed at all. Treat the four `‡` cells as the evidence and the other six as a
+consequence of it.
+
+### Why an offline replay is evidence here, and not a tautology
+
+This is the part that is easy to miss, and it is the strongest thing in this section.
+
+The weak version of this claim would be "we changed the renderer and our own recording now
+passes", which proves nothing. What rules that out is **provenance**, and it is checkable
+from git rather than argued:
+
+| fixture | last touched | the fix it now passes |
+|---|---|---|
+| `fixtures/live/deepseek-.../S12-citations` | `18e7dd8`, 13:58 | citation row, `216beeb`, **15:43** |
+| `fixtures/canned/S13-artifact` | `3acec1f`, the harness's first commit | `upsertCardPart` 15:25 · `artifact-card.tsx` 15:37 |
+
+Both fixtures predate the code they now test — the deepseek S12 recording by nearly two
+hours, the canned S13 stream by the entire sub-project. They are also the two the DEFAULT
+replay runs. **A recording made before a renderer existed cannot have been shaped by it**,
+which is what makes the green a measurement rather than a restatement.
+
+The general form: fixtures are **provider bytes**, captured in the proxy, upstream of
+everything the fix touched. The renderer is not in the recording path at all.
+
+One honest wrinkle, because the reverse claim is easy to make by accident: **the
+`haiku-oai` S12 fixture is NOT one of the pre-dating ones.** It differs from the sweep's
+version — it was re-recorded in the corrected thinking-enabled pass (`c62c53c`) at roughly
+15:52, after the citation row landed. That re-recording was driven by the thinking-budget
+fix and has nothing to do with citations, so it is not tainted; it just is not the clean
+provenance argument, and the deepseek and canned fixtures above are.
+
+### The caveat that came out of closing S13
+
+**S13 passed in 2.0s while the artifact card rendered as empty chrome** — heading, toolbar,
+no content. The assertion was `seesText(page, 'v2')`, unscoped, and it was satisfied by the
+`<kai-tool>` panel echoing the model's own `open_artifact` arguments a few inches up the
+thread.
+
+**The negative control could not have caught it.** `CONTROL-empty` produces no tool panel
+either, so the control goes red for a plausible-looking reason while the real run proves
+nothing. It was caught by DOM-probing a GREEN run.
+
+Both assertions are now scoped to the element that has to do the rendering —
+`kai-thread [data-card-type="artifact"]` for S13, and "a `ui.kitn.ai` anchor outside
+`[part~="content"]`" for S12, which learned the same lesson independently when a bare
+`a[href*="ui.kitn.ai"]` passed off a markdown link the model had typed in its prose.
 
 ## Cost
 

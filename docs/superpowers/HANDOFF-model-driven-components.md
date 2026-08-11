@@ -22,8 +22,10 @@ See `docs/superpowers/specs/2026-08-11-cross-model-conformance-results.md`.
 frameworks; backend routes are type-checked against real host tsconfigs; the emitted code no
 longer teaches a bug.
 
-What remains between here and something genuinely distinctive is **sub-project D's three
-small items, then the emit contract**. That is roughly a session, not an epic.
+**Sub-project D is done** (§1.1). Both conformance known gaps are closed in the library.
+
+What remains between here and something genuinely distinctive is **the emit contract** (§1.2).
+That is the head of the queue.
 
 ---
 
@@ -31,33 +33,28 @@ small items, then the emit contract**. That is roughly a session, not an epic.
 
 Do these in order. The reasoning for the ordering matters more than the list.
 
-### 1.1 Sub-project D — the three small items. DO THESE FIRST.
+### 1.1 Sub-project D — DONE. Nothing to do here.
 
-Tasks #65, #66, #67, plus the citation row.
+Tasks #65, #66, #67 and the citation row all landed on this branch. Recorded here so nobody
+re-opens them, and because the details are contracts a consumer can hit:
 
-**Why before the emit contract, which is the roadmap's stated next step:** `AssistantStream.addCard`
-only appends, with no id-keyed upsert (`packages/ui/src/state/stream.ts:55`, contrast
-`upsertTool`). The emit contract's entire pitch is "hand a model our `confirm` schema as a tool
-and it emits a renderable envelope by construction". If a model then REVISES that card, today it
-renders N copies. Shipping schemas-as-tool-definitions on top of a card pipeline that cannot
-update a card would undercut the feature at launch.
+- **#65 `addCard` is an id-keyed upsert** — `upsertCardPart` in `packages/ui/src/state/parts.ts`.
+  It **replaces the envelope wholesale** rather than merging fields. Deliberate: a card envelope
+  arrives whole, as one tool result, and a field-by-field merge could never CLEAR `resolution`,
+  which `CardPolicy.onReopen` needs.
+- **#66 `artifact` is the 7th built-in card type**, rendering through
+  `packages/ui/src/components/artifact-card.tsx`. That wrapper exists because `<Artifact>` cannot
+  supply its own height — bare in a thread, its preview frame measures 0px — and it carries
+  `part="card"` + `data-card-type="artifact"` as the handles a test or a consumer can hold.
+- **#67 `Reasoning` has `aria-expanded` / `aria-controls` / `data-state`.**
+- **The citation row.** `source` parts render as a citation row (`part="citations"`), grouped the
+  way `file` parts are and placed OUTSIDE the message bubble.
 
-- **#65 `addCard` id-keyed upsert.** Mirror `upsertTool`. Turns conformance S13 from red to green.
-- **#66 `artifact` in `BUILTIN_CARD_TAGS`.** `<kai-artifact>` ships but nothing routes a card part
-  to it, so a model cannot drive an artifact through the dispatcher at all. The conformance spike
-  had to register its own `<spike-artifact>` via the `cardTypes` seam just to test S13.
-- **#67 `Reasoning` has no `aria-expanded`/`aria-controls`** (`components/reasoning.tsx`), unlike
-  `Collapsible`. An a11y gap, and it left the harness asserting on computed `max-height` because
-  there is no attribute handle on the disclosure.
-- **The citation row.** `source` parts land on the message correctly, but `message.tsx:464`
-  deliberately matches them to `null`. Conformance S12 fails by design because of this. A developer
-  wiring up a search tool today sees results arrive and nothing appear.
+Both former red cells are closed: S12 and S13 no longer carry a `knownGap` at all. Evidence, and
+the limits on it, are in the results doc — the per-model matrix has NOT been re-run live, so do
+not read those cells as five fresh passes.
 
-All four are narrow. The conformance harness already exists to prove them: S12 and S13 are the last
-two red cells in the table, and both have preconditions that now fail loudly if the run is broken
-rather than silently reporting "gap confirmed" (see §4).
-
-### 1.2 The emit contract (tasks #8–#11)
+### 1.2 The emit contract (tasks #8–#11) — START HERE
 
 Ten card JSON Schemas are built into `dist/schemas/` on every build and exported nowhere.
 
@@ -104,6 +101,26 @@ attribution is file-level), #63 (docs harness should read `declarativeChildren` 
 source — would take 17 advisories to zero), #64 (the defensive `[]` defaults on `kai-file-tree` /
 `kai-segmented`), #68 (promote the Solid mid-stream repro into CI), #69 (Solid starter imports from
 the root entry while the guide says `./solid`).
+
+**New, from sub-project D. No issue numbers yet.** The first two are the ones that matter:
+
+- **The scaffolder's emitted `renderPart` has no `source` branch** — `agent-tooling/mcp/tools/scaffold.ts:2479`,
+  where the fallback comment still says "card / source / file parts hit the fallback". It no longer
+  renders what `<kai-chat>` renders, and the scaffold's own stated invariant (line 2208, "the thread
+  renders exactly what `renderPart` renders") is now false. Every citation-emitting scaffold is a
+  developer watching search results arrive and nothing appear — the exact bug we just fixed in the kit.
+- **No CI guard that generated files are in sync with source.** `element-meta.json`, `llms-full.txt`
+  and `docs/web-components.md` are derived, committed, and checked by nothing. The obvious guard is a
+  regenerate-and-`git diff --exit-code` job. Watch it fail before trusting it (§5.10).
+- **The conformance harness no longer exercises the consumer `cardTypes` seam anywhere.** S13 used to
+  be its only user, via `<spike-artifact>`; now that `artifact` is built in, the seam that lets a
+  consumer substitute their own design-system component is untested end to end. That seam is exactly
+  what task #9 is about to build on.
+- **`docs/web-components.md:5` claims 27 elements.** `element-meta.json` has 80. Hand-written prose
+  inside a generated file (§5.2).
+- **Two timing tests flake under full-suite load** — `primitives/create-tween.test.ts` and
+  `components/audio-visualizer/variant-wave.test.tsx`. They pass in isolation. Fake timers or a
+  tolerance, not a retry.
 
 ### 1.5 #70 — INVESTIGATED, and it demoted itself. Do not fix it next.
 
@@ -217,7 +234,10 @@ types that error at everything; "right code compiles" alone is satisfied by type
 runner drives the real app; the proxy records every live stream to a fixture and replays it with no
 key and no network. Results: `docs/superpowers/specs/2026-08-11-cross-model-conformance-results.md`.
 
-**95 cells: 81 pass, 10 confirmed known gaps, 4 model-behaviour differences, ZERO UI failures.**
+**95 cells, ZERO UI failures, and no open known gaps.** S12 and S13 were the last two, and both are
+closed in the library. The per-cell counts live in the results doc rather than here, so they only
+have to be right in one place — and it matters that you read them there, because the S12/S13 cells
+are backed by an OFFLINE REPLAY, not by a re-run of the live matrix.
 
 ### Things about it you must know before touching it
 
@@ -232,7 +252,11 @@ key and no network. Results: `docs/superpowers/specs/2026-08-11-cross-model-conf
 - **`knownGap` now requires three things**: the run reached the gap, the assertion still fails, and it
   fails with the DOCUMENTED message. It previously swallowed any failure for S12/S13 — a broken
   run was recorded as "gap confirmed". The type is `{ what, reached, signature }` so a bare gap note
-  is impossible to write.
+  is impossible to write. **No scenario uses it today** (S12 and S13 were its only users). Keep the
+  mechanism: the next gap you document should be forced through it, not written as a comment.
+- **The negative control (`conformance:control`) can be structurally blind.** It is the harness's own
+  proof that the assertions are load-bearing, and it is weaker than it looks. Read §5.6 before you
+  trust a red control cell as evidence that the green one means anything.
 - **S05's cells are not equivalent across wires.** The OpenAI fixture interleaves argument fragments
   adversarially; Anthropic streams content blocks sequentially and cannot produce that shape. Marked
   `pass*` with a footnote.
@@ -298,6 +322,9 @@ the bug in seconds.
 
 ### 5.4 Concurrent writers need isolated worktrees
 
+This is about writers colliding. For the other worktree failure — a writer that starts from the
+wrong tree — see §5.9.
+
 File-ownership instructions do not constrain whole-tree operations. One agent's
 `git checkout -- <path>` clobbered another's in-flight edit; `npm pack` captured a third's mid-edit
 file. Use `isolation: "worktree"` for agents that WRITE; readers can share.
@@ -327,13 +354,111 @@ Three things made it recoverable and one made it detectable:
 A reference-keyed `<For>` type-checks perfectly. A Next.js route handler compiles cleanly and throws
 `req.json is not a function` in SvelteKit. `verify:scaffold` structurally cannot catch either.
 
+### 5.6 A control pass can be structurally blind
+
+§5.1 says watch the check fail. That is necessary and **not sufficient**. Confirm it fails for the
+reason you think.
+
+S13 passed in 2.0s while the artifact card rendered as **empty chrome** — heading, toolbar, no
+content. The assertion was `seesText(page, 'v2')`, unscoped, and it was satisfied by the
+`<kai-tool>` panel echoing the model's own `open_artifact` ARGUMENTS a few inches up the thread.
+The card never had to render anything.
+
+The part worth internalising is that **the negative control could not have caught it.**
+`CONTROL-empty` produces no tool panel either, so the control goes red — for a plausible-looking
+reason — while the real run proves nothing. Two green-and-red signals, agreeing, both blind. It was
+caught by DOM-probing a GREEN run, which is the only thing that would have.
+
+Both S12 and S13 now scope their assertions to the element that must do the rendering
+(`kai-thread [data-card-type="artifact"]`, and "outside `[part~="content"]`" for citations). S12
+learned the same lesson independently: a bare `a[href*="ui.kitn.ai"]` passed off a markdown link the
+model had typed in its prose.
+
+### 5.7 Verifying the intended change is not verifying the diff
+
+A peer regenerating the derived docs confirmed the thing it wanted was present — and nearly
+committed a silent **67-entry regression in the same file**: every slot's `inject`/`replace` value
+collapsed to `—`, from running `gen-llms.mjs` standalone after `build:api` had already written it.
+
+The intended change was correct. Everything around it was not. **The oversized diff was the only
+tell.** Read the whole diff of a generated file, not the lines you went looking for.
+
+### 5.8 A cached build looks exactly like a successful one
+
+**`nx build ui` does NOT regenerate the derived artifacts.** It hits the NX cache, prints
+"Successfully ran target build", and changes nothing — those generators write side-effects into the
+SOURCE tree, and the cache does not restore those. Use `npm run build:api` inside `packages/ui`, or
+`--skip-nx-cache`.
+
+Same family as §5.1: success and no-op are indistinguishable from the output. Verify the artifact
+changed, not that the command exited 0.
+
+### 5.9 Worktree-isolated agents branch from `origin/main`, not from your branch
+
+`worktree.baseRef: fresh`. Of four agents dispatched today, **two were stale** — one by 12 commits,
+on a base where two of its own target files had since changed. It would have gone green the whole
+way against a tree that no longer exists.
+
+Both caught it themselves, and only because the base "looked wrong". That is luck, not a process.
+
+**Fix: state the base SHA in the dispatch and require the agent to assert it before editing.** One
+line each side. This is the cheap half of §5.4 — that one is about writers colliding, this one is
+about a writer starting from the wrong tree, and they need different fixes.
+
+### 5.10 A one-directional guard is satisfied by a registry that has drifted into fiction
+
+Proven, not argued: **deleting `part="row"` from the source left all 27 `slots.test.ts` tests
+green.** The drift guard only asserted "every `::part` in source is registered". A registry entry
+with nothing behind it sailed through, which is the failure mode a registry actually has.
+
+Both directions now exist (`slots.test.ts`, "reverse drift guard"). Note the residual limit
+honestly, because the next person will over-read it: **the reverse check matches part names
+GLOBALLY.** It proves a name is rendered *somewhere* in the source, not that it is rendered by the
+element it is registered under. A part moved between elements still passes.
+
+### 5.11 A fact stated in two places gets fixed in one
+
+This is the shape underneath §5.6, §5.7 and §5.10, and it is worth more than any of them.
+
+**When a value appears in more than one place — a count in a summary and in a heading, a field name
+across two wire formats, a registry entry and the source it describes — changing one and verifying
+that one is indistinguishable from having changed both.** Four instances, all today:
+
+- **S13.** The assertion verified there was exactly one artifact card, and missed that the `v2` text
+  proving the revision came from the tool panel rather than from the card. One half checked.
+- **The regen.** A peer confirmed the entry it was adding was present, and nearly committed a silent
+  67-entry regression in the same file (§5.7).
+- **The results doc.** A correction updated "3 model-behaviour differences" in the summary and left
+  "### 2. Model-behaviour differences — 4 cells" eleven lines below it. Two statements of one count,
+  one updated — in a document whose entire subject is a table disagreeing with the prose under it.
+- **A guard spec.** A reasoning-floor check keyed on `usage.completion_tokens_details.reasoning_tokens`,
+  which is the OPENAI-wire spelling. The Anthropic wire calls it
+  `usage.output_tokens_details.thinking_tokens`. Same fact, two spellings. It would have failed the
+  one column that was always correct, and gone red against its historical control for a reason
+  unrelated to the claim — a validated-looking red/green pair keyed on a field that is meaningless
+  on half the columns. Same failure as §5.6: **a real red is not sufficient; the red has to be red
+  BECAUSE of the thing being measured.**
+
+The check that catches this is not "did my change work" but **"where else is this same fact
+written"**.
+
+And the lesson is not "be careful" — this repo already has the structural answer for the code cases.
+`TOOL_KEYS`/`REASONING_KEYS` fail the BUILD when a field is added without a comparator; the `::part`
+guard now compares registry against source in both directions. **Make the duplicate impossible, or
+make it fail loudly.** Prose is where that is hardest and where no guard exists, which is why the
+results doc is the instance that got furthest.
+
 ---
 
 ## 6. Repo gotchas
 
 - After `nx build ui`, `packages/ui/src/components/component-meta.json` churns with TS-expansion
   noise. `git checkout --` it; it is not used at runtime. **Everything else regenerating is real** and
-  should be committed — the branch is meant to be a zero-drift build fixpoint.
+  should be committed — the branch is meant to be a zero-drift build fixpoint. But if NOTHING
+  regenerated, you got a cache hit, not a clean tree: see §5.8.
+- **Run `pnpm --filter @kitn.ai/ui run build:css` in a fresh worktree** before the unit suite.
+  `src/elements/compiled.css` is generated and gitignored, and without it the element tests fail on
+  `Failed to resolve import "./compiled.css?inline"` — which reads as a broken checkout.
 - **Do not run a gate in the same shell command as the build.** Several "failures" this session were
   a gate reading a mid-rebuild `dist/`. Build, then run.
 - `nextjs` and `tanstack-start` starters use `file:` deps. **Plain `npm install` does NOT refresh
