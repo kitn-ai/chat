@@ -2347,16 +2347,6 @@
         "name": "ContextCacheUsage",
         "group": "Components",
         "storyId": "solid-advanced-elements-contextcacheusage--docs"
-      },
-      {
-        "name": "DEFAULT_WARN_THRESHOLD",
-        "group": "Components",
-        "storyId": "solid-advanced-elements-defaultwarnthreshold--docs"
-      },
-      {
-        "name": "DEFAULT_DANGER_THRESHOLD",
-        "group": "Components",
-        "storyId": "solid-advanced-elements-defaultdangerthreshold--docs"
       }
     ],
     "tokens": []
@@ -5058,7 +5048,63 @@
         "description": "Send the current value programmatically — same path as Enter / the send button (fires kai-submit, then clears staged attachments). Named `send`, not `submit`, to avoid colliding with the `submit` prop."
       }
     ],
-    "composedFrom": [],
+    "composedFrom": [
+      {
+        "name": "PromptInput",
+        "group": "Components",
+        "storyId": "solid-advanced-elements-promptinput--docs"
+      },
+      {
+        "name": "PromptInputTextarea",
+        "group": "Components",
+        "storyId": "solid-advanced-elements-promptinputtextarea--docs"
+      },
+      {
+        "name": "PromptInputActions",
+        "group": "Components",
+        "storyId": "solid-advanced-elements-promptinputactions--docs"
+      },
+      {
+        "name": "PromptSuggestion",
+        "group": "Components",
+        "storyId": "solid-advanced-elements-promptsuggestion--docs"
+      },
+      {
+        "name": "Button",
+        "group": "UI",
+        "storyId": "solid-advanced-primitives-button--docs"
+      },
+      {
+        "name": "Tooltip",
+        "group": "UI",
+        "storyId": "solid-advanced-primitives-tooltip--docs"
+      },
+      {
+        "name": "Attachments",
+        "group": "Components",
+        "storyId": "solid-advanced-elements-attachments--docs"
+      },
+      {
+        "name": "Attachment",
+        "group": "Components",
+        "storyId": "solid-advanced-elements-attachment--docs"
+      },
+      {
+        "name": "AttachmentPreview",
+        "group": "Components",
+        "storyId": "solid-advanced-elements-attachmentpreview--docs"
+      },
+      {
+        "name": "AttachmentInfo",
+        "group": "Components",
+        "storyId": "solid-advanced-elements-attachmentinfo--docs"
+      },
+      {
+        "name": "AttachmentRemove",
+        "group": "Components",
+        "storyId": "solid-advanced-elements-attachmentremove--docs"
+      }
+    ],
     "tokens": [],
     "slots": [
       {

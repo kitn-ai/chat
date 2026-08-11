@@ -452,6 +452,10 @@ Restyle from outside the Shadow DOM via `kai-prompt-input::part(name)`.
 |------|-------------|
 | `::part(send)` | The send button. Restyle from outside, or hide it entirely (Enter-only) — hiding is pure CSS, which is why there is no `submit="never"`. <br>`kai-prompt-input::part(send) { display: none } /* Enter-only; or restyle: background, border-radius, … */` |
 
+#### Composed from
+
+`Components/PromptInput`, `Components/PromptInputTextarea`, `Components/PromptInputActions`, `Components/PromptSuggestion`, `UI/Button`, `UI/Tooltip`, `Components/Attachments`, `Components/Attachment`, `Components/AttachmentPreview`, `Components/AttachmentInfo`, `Components/AttachmentRemove`
+
 #### Theming
 
 Themed by the global design tokens (override any `--color-*`).
@@ -736,7 +740,7 @@ A dropdown that lets the user switch between available models.
 
 #### Composed from
 
-`Components/Context`, `Components/ContextTrigger`, `Components/ContextContent`, `Components/ContextContentHeader`, `Components/ContextContentBody`, `Components/ContextContentFooter`, `Components/ContextInputUsage`, `Components/ContextOutputUsage`, `Components/ContextReasoningUsage`, `Components/ContextCacheUsage`, `Components/DEFAULT_WARN_THRESHOLD`, `Components/DEFAULT_DANGER_THRESHOLD`
+`Components/Context`, `Components/ContextTrigger`, `Components/ContextContent`, `Components/ContextContentHeader`, `Components/ContextContentBody`, `Components/ContextContentFooter`, `Components/ContextInputUsage`, `Components/ContextOutputUsage`, `Components/ContextReasoningUsage`, `Components/ContextCacheUsage`
 
 #### Theming
 

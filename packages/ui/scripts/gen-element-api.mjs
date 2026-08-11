@@ -97,26 +97,85 @@ function defaultsFrom(objLiteralNode) {
 
 // Storybook toId: lowercase, non-alphanumerics → nothing (matches our story titles).
 const kebabId = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
-// Collect { name, group } for imports from ../components/ or ../ui/ in a facade file.
-// Skips `import type` declarations and inline `type` specifiers (type-only imports).
-const composedImports = (sourceFile) => {
+/** Does this module register its own custom element? Used to stop the recursion
+ *  below at a facade boundary — one element must not inherit another's parts. */
+const definesElement = (sourceFile) => {
+  let found = false;
+  const visit = (n) => {
+    if (found) return;
+    if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === 'defineWebComponent') found = true;
+    else ts.forEachChild(n, visit);
+  };
+  visit(sourceFile);
+  return found;
+};
+
+/** A same-directory relative import resolved to its SourceFile in the program. */
+const localModule = (sourceFile, spec) => {
+  const dir = dirname(sourceFile.fileName);
+  for (const ext of ['.tsx', '.ts']) {
+    const sf = program.getSourceFile(resolve(dir, spec + ext));
+    if (sf) return sf;
+  }
+  return null;
+};
+
+/** Is this imported binding a COMPONENT (something you can render), as opposed to
+ *  a constant, an enum-ish object or a plain value that merely starts with a
+ *  capital? `/^[A-Z]/` alone let `DEFAULT_WARN_THRESHOLD` / `DEFAULT_DANGER_THRESHOLD`
+ *  (two numbers from ../components/context) into kai-context's `composedFrom`,
+ *  where they got a `solid-advanced-elements-defaultwarnthreshold--docs` story id
+ *  that resolves to nothing. Ask the checker for the declaration instead. */
+const isComponentBinding = (node) => {
+  let sym = checker.getSymbolAtLocation(node);
+  if (!sym) return false;
+  try { if (sym.flags & ts.SymbolFlags.Alias) sym = checker.getAliasedSymbol(sym); } catch { /* unresolved */ }
+  const decl = sym.valueDeclaration ?? sym.declarations?.[0];
+  if (!decl) return false;
+  if (ts.isFunctionDeclaration(decl) || ts.isClassDeclaration(decl)) return true;
+  const init = ts.isVariableDeclaration(decl) ? decl.initializer : undefined;
+  if (!init) return false;
+  // `const Foo = (props) => …`, `const Foo = function (props) {…}`, and the
+  // `Object.assign(Base, { Sub })` / `createX(…)` component-factory forms.
+  return ts.isArrowFunction(init) || ts.isFunctionExpression(init) || ts.isCallExpression(init);
+};
+
+// Collect { name, group } for the kit components a facade renders: named value
+// imports from ../components/ or ../ui/. Skips `import type` declarations and
+// inline `type` specifiers, and non-component bindings (see isComponentBinding).
+//
+// Recurses through ELEMENT-LOCAL helper modules. `kai-prompt-input` composes its
+// whole UI in ./default-input (so `<kai-chat>` can render the same composer), and
+// with a facade-file-only walk it reported `composedFrom: []` — the one element
+// whose composition a consumer most wants to see. Recursion stops at any module
+// that registers an element of its own, so an element never inherits another's
+// parts.
+const composedImports = (sourceFile, seen = new Set([sourceFile.fileName])) => {
   const out = [];
   for (const st of sourceFile.statements) {
     if (!ts.isImportDeclaration(st) || !st.importClause?.namedBindings) continue;
     // Skip `import type { ... }` (the whole declaration is type-only)
     if (st.importClause.isTypeOnly) continue;
     const spec = st.moduleSpecifier.text;
+    const named = st.importClause.namedBindings;
+    if (!ts.isNamedImports(named)) continue;
     const group = spec.startsWith('../components/') ? 'Components'
                 : spec.startsWith('../ui/') ? 'UI' : null;
-    if (!group) continue;
-    const named = st.importClause.namedBindings;
-    if (ts.isNamedImports(named)) {
-      for (const el of named.elements) {
-        // Skip inline `type` specifiers e.g. `{ Foo, type Bar }`
-        if (el.isTypeOnly) continue;
-        const name = el.name.text;
-        if (/^[A-Z]/.test(name)) out.push({ name, group }); // components, not lowercase utils
-      }
+    if (!group) {
+      if (!spec.startsWith('./')) continue;
+      const local = localModule(sourceFile, spec);
+      if (!local || seen.has(local.fileName) || definesElement(local)) continue;
+      seen.add(local.fileName);
+      out.push(...composedImports(local, seen));
+      continue;
+    }
+    for (const el of named.elements) {
+      // Skip inline `type` specifiers e.g. `{ Foo, type Bar }`
+      if (el.isTypeOnly) continue;
+      const name = el.name.text;
+      if (!/^[A-Z]/.test(name)) continue; // components, not lowercase utils
+      if (!isComponentBinding(el.name)) continue;
+      if (!out.some((o) => o.name === name)) out.push({ name, group });
     }
   }
   return out;
