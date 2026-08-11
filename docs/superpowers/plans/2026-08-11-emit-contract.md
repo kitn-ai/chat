@@ -301,7 +301,7 @@ The repo's dominant defect is checks that pass while covering nothing, and today
 | **Validation-projection sync** (new) | the lean client projection drifting from the authored schema | Add a property to `confirm.schema.json`, do not regenerate, confirm red. | Same family as the derived-artifacts gap §1.4 flags. Regenerate-and-`git diff --exit-code`, and **read the whole diff, not the line you went looking for** (§5.7). |
 | **Validator-coverage** (new, build-time) | claiming "we validate cards" while `embed`'s `allOf` is silently unchecked | Add `"multipleOf": 2` to any card schema and confirm **the build fails**, naming the keyword and the file. | This is the `TOOL_KEYS`/`REASONING_KEYS` pattern (§5.11's structural answer). Every keyword in every card schema is either implemented by `validateAgainstSchema` or listed in an explicit `NOT_ENFORCED` set **with a written reason**. A silent skip list defeats the whole guard. |
 | **`verify:scaffold` part-coverage** (extends existing) | an emitted `renderPart` missing a part kind | Delete the `source` branch, confirm red; add a fake union variant, confirm red without touching the guard. | tsc cannot see a missing `<Match>` (§5.5: compilation is not behaviour). It must read the variant list from the `MessagePart` union in source. |
-| **S19a: model-driven card renders** (conformance) | the exported schema does not actually produce a renderable envelope | Point the assertion at `CONTROL-empty` and confirm red. **Then DOM-probe the GREEN run**. §5.6 says a red control is necessary and not sufficient. | S13's exact failure. The assertion must be scoped to `kai-thread [data-card-type="confirm"] button[data-action-id]`, never unscoped text: an unscoped `seesText('Deploy')` is satisfied by the `<kai-tool>` panel echoing the model's own arguments a few inches up the thread. |
+| **S19a: model-driven card renders** (conformance) | the exported schema does not actually produce a renderable envelope | Point the assertion at `CONTROL-empty` and confirm red. **Then DOM-probe the GREEN run**. §5.6 says a red control is necessary and not sufficient. | S13's exact failure, from before S13 was closed (it now passes live in all ten cells). The assertion must be scoped to `kai-thread [data-card-type="confirm"] button[data-action-id]`, never unscoped text: an unscoped `seesText('Deploy')` is satisfied by the `<kai-tool>` panel echoing the model's own arguments a few inches up the thread. |
 | **S19b: a WRONG shape is surfaced** (conformance; **the loop's proof**) | the diagnostic path itself | Replay the corrupted fixture against a build with T1.5 reverted. It must go red **because the confirm card rendered empty chrome**, not because nothing rendered. Confirm that distinction in the failure text before trusting it. | If the corrupted envelope also fails to produce a card *part*, S19b passes for the wrong reason and proves nothing about validation. Corrupt `data` only (`{actions: []}`), never `type` or `id`. Use a **replayed** fixture so this costs nothing and is deterministic. |
 
 Free coverage worth knowing: `verify:ssr` derives its entry list from the exports map, so `./schemas` (JS) is covered the day it lands. `./schemas/*.json` is **not**: `jsTargets()` returns `[]` for a non-`.js` target. That gap is exactly why `verify:schemas` exists. `emit-subpath-dts.mjs` is likewise derived and needs no edit.
@@ -316,7 +316,9 @@ Free coverage worth knowing: `verify:ssr` derives its entry list from the export
 
 ### Resolved, recorded so they are not re-litigated
 
-**Decided by Rob (2026-08-11):**
+**Decided by the supervising session (2026-08-11), under delegated authority:**
+
+Rob delegated ownership of this direction. The four calls below were made by the supervising session and reported to him afterwards, with an explicit invitation to overrule any of them; he has not objected. That is not the same as approval, and it is not recorded as approval: he has not responded to these four specifically. Argue with the supervising session, not with Rob.
 
 - **Tool-name convention: `kai_confirm`.** Prefixed, short, and collision-resistant against a developer's own `confirm` tool. `createCardRegistry({ toolPrefix })` overrides it. Reversible pre-1.0, so it does not have to be right forever.
 - **Strict mode: non-strict is the default, `strict: true` is opt-in and THROWS.** The throw names the card type and the offending keyword for anything the provider cannot express: today `embed` and `artifact` on both providers, plus `maxItems` on Anthropic. **`embed`'s `allOf`/`if` and `artifact`'s `oneOf` are NOT rewritten now.** That rewrite is deferred, for the reason this plan already gives: `embed`'s conditional requirement ("generic needs `url`; youtube/vimeo need `id` or `url`") **is** the contract, so flattening it changes what a valid embed card is, and that is a `CARD_CONTRACT_VERSION` conversation.
@@ -347,16 +349,16 @@ Stated plainly, because two of these are live risks.
 
 ---
 
-## What I did not do
+## Provenance
 
-- **No file was written and nothing was committed.** This agent is read-only and has no editing tools. The plan above needs persisting at `docs/superpowers/plans/2026-08-11-emit-contract.md` and committing by an agent that can write.
-- No implementation code. The code blocks in §2 are the developer-facing before/after that the brief asked for, not emitted output.
+- **Written by a read-only planning agent, persisted separately.** That agent had no file-editing tools, so it could not write or commit this document; a second agent placed it at this path and committed it. The text is the planning agent's, apart from the decisions recorded in §8 (which added T1.6 in §6 and the `provider: 'jsonschema'` requirement on T1.3 and T3.1), the phase-order note at the top of §4, and em dash removal per the repo convention.
+- **No implementation code was written.** The code blocks in §2 are the developer-facing before/after that the brief asked for, not emitted output.
 
 ### Critical Files for Implementation
 
-- `/Users/home/Projects/kitn-ai/kitn-chat/.claude/worktrees/agent-aa56f43010e9f04a5/packages/ui/package.json`: the `exports` map, absent `typesVersions`, and the `build`/`postbuild` chain the new entry hooks into
-- `/Users/home/Projects/kitn-ai/kitn-chat/.claude/worktrees/agent-aa56f43010e9f04a5/packages/ui/src/primitives/card-schemas/`: the 11 schemas; `confirm`, `embed` (`allOf`/`if`) and `artifact` (`oneOf`) are the ones that decide the projection design
-- `/Users/home/Projects/kitn-ai/kitn-chat/.claude/worktrees/agent-aa56f43010e9f04a5/packages/ui/src/agent-tooling/mcp/tools/scaffold.ts`: the false invariant at 2208/2469-2471, `renderPart` at 2479-2510, `toolSchemaLines` at 700-721, `toolLoopBody` at 493-524
-- `/Users/home/Projects/kitn-ai/kitn-chat/.claude/worktrees/agent-aa56f43010e9f04a5/packages/ui/src/remote/provider-runtime.ts`: line 142, the validate-and-emit-`error` precedent the native dispatcher must mirror
-- `/Users/home/Projects/kitn-ai/kitn-chat/.claude/worktrees/agent-aa56f43010e9f04a5/packages/ui/src/primitives/card-registry.tsx`: `mergeCardComponents`/`mergeCardTags`, the seam `createCardRegistry` must stay assignment-compatible with
-- `/Users/home/Projects/kitn-ai/kitn-chat/.claude/worktrees/agent-aa56f43010e9f04a5/packages/ui/scripts/verify-dts-boundaries.mjs`: the resolution-mode pattern the new `verify:schemas` guard must copy (the implied-mode argument is load-bearing)
+- `packages/ui/package.json`: the `exports` map, absent `typesVersions`, and the `build`/`postbuild` chain the new entry hooks into
+- `packages/ui/src/primitives/card-schemas/`: the 11 schemas; `confirm`, `embed` (`allOf`/`if`) and `artifact` (`oneOf`) are the ones that decide the projection design
+- `packages/ui/src/agent-tooling/mcp/tools/scaffold.ts`: the false invariant at 2208/2469-2471, `renderPart` at 2479-2510, `toolSchemaLines` at 700-721, `toolLoopBody` at 493-524
+- `packages/ui/src/remote/provider-runtime.ts`: line 142, the validate-and-emit-`error` precedent the native dispatcher must mirror
+- `packages/ui/src/primitives/card-registry.tsx`: `mergeCardComponents`/`mergeCardTags`, the seam `createCardRegistry` must stay assignment-compatible with
+- `packages/ui/scripts/verify-dts-boundaries.mjs`: the resolution-mode pattern the new `verify:schemas` guard must copy (the implied-mode argument is load-bearing)
