@@ -16,7 +16,7 @@
 //   replay (default) — no key, no network, fixtures only.
 //   live             — hits the model and RECORDS each round into fixtures/live.
 //   both             — live first, then replay the freshly recorded stream.
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { SCENARIOS, replayDirFor, type Scenario, type ScenarioMode } from '../src/scenarios';
 import { readHarnessState } from '../src/harness-state';
 
@@ -28,6 +28,8 @@ const ONLY = process.env.SPIKE_ONLY?.split(',').map((s) => s.trim()).filter(Bool
  *  that CANNOT satisfy it, and passing is the failure. */
 const CONTROL = process.env.SPIKE_CONTROL === '1';
 const DEFAULT_CONTROL = 'canned/CONTROL-empty';
+/** Set by the matrix runner: the model this run is supposed to be measuring. */
+const EXPECT_MODEL = process.env.SPIKE_EXPECT_MODEL;
 
 /** Which modes a given scenario should actually be run in. A `replay`-only
  *  scenario is never run live: the behaviour it covers cannot be provoked from a
@@ -39,6 +41,15 @@ function modesFor(scenario: Scenario): ScenarioMode[] {
 }
 
 const selected = SCENARIOS.filter((s) => !ONLY || ONLY.includes(s.id));
+
+/** Point a hardcoded `canned/...` control directory at the dialect this server
+ *  actually speaks. The wire is a server decision (see `resolveWire`), so it is
+ *  read from `/api/config` rather than guessed from an env var that could drift
+ *  from it. */
+async function controlDirFor(page: Page, dir: string): Promise<string> {
+  const config = (await page.request.get('/api/config').then((r) => r.json())) as { wire?: string };
+  return config.wire === 'anthropic' ? dir.replace(/^canned\//, 'canned-anthropic/') : dir;
+}
 
 if (CONTROL) {
   // ── the negative-control pass ─────────────────────────────────────────────
@@ -54,8 +65,13 @@ if (CONTROL) {
   for (const scenario of selected.filter((s) => !s.knownGap)) {
     const control = scenario.controlDir ?? DEFAULT_CONTROL;
     test(`CONTROL ${scenario.id} — must FAIL against ${control}`, async ({ page }) => {
+      // The control streams exist in both SSE dialects, and the WRONG dialect
+      // parses to nothing — which would make every control go red for a reason
+      // that has nothing to do with the assertion under test, i.e. a green
+      // control run that proves nothing. Ask the server which wire it speaks.
+      const dir = await controlDirFor(page, control);
       await page.goto(
-        `/?scenario=${encodeURIComponent(scenario.id)}&mode=replay&fixture=${encodeURIComponent(control)}`,
+        `/?scenario=${encodeURIComponent(scenario.id)}&mode=replay&fixture=${encodeURIComponent(dir)}`,
       );
       await page.waitForSelector('html[data-kai-phase="running"]', { timeout: 60_000 });
 
@@ -119,6 +135,16 @@ for (const scenario of CONTROL ? [] : selected) {
       // A replay run must PROVE it replayed. Without this a misconfigured live
       // run could quietly pass as an offline one — and cost money doing it.
       expect(state?.source, 'the app must report which stream source it used').toBe(mode);
+
+      // The cross-model matrix restarts the dev server once per model, because
+      // OPENROUTER_MODEL is read server-side per request. If a stale server from
+      // the previous model were reused, every row of the table would be a lie
+      // with no symptom. SPIKE_EXPECT_MODEL makes that failure loud.
+      if (EXPECT_MODEL) {
+        expect(state?.model, 'the server under test must be running the model this row claims').toBe(
+          EXPECT_MODEL,
+        );
+      }
 
       // A `live` scenario has nothing to replay until it has been recorded once.
       // That is a MISSING RECORDING, not a failing assertion, and reporting the
@@ -184,7 +210,8 @@ for (const scenario of CONTROL ? [] : selected) {
  * FEATURE. A red S12 with a red control here would just be a bad selector.
  */
 test('S12 control: the citation locator finds a citation when one exists', async ({ page }) => {
-  await page.goto('/?scenario=S12-citations&mode=replay&fixture=canned/CONTROL-empty');
+  const dir = await controlDirFor(page, 'canned/CONTROL-empty');
+  await page.goto(`/?scenario=S12-citations&mode=replay&fixture=${encodeURIComponent(dir)}`);
   await page.waitForSelector('html[data-kai-phase="done"], html[data-kai-phase="error"]', { timeout: 60_000 });
 
   const citation = page.locator('a[href*="ui.kitn.ai/guides/theming"]');

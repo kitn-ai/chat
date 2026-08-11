@@ -13,7 +13,8 @@
     "fixtures": "node harness/make-canned-fixtures.mjs",
     "conformance": "playwright test --config harness/playwright.config.ts",
     "conformance:live": "SPIKE_MODE=live playwright test --config harness/playwright.config.ts",
-    "conformance:control": "SPIKE_CONTROL=1 playwright test --config harness/playwright.config.ts"
+    "conformance:control": "SPIKE_CONTROL=1 playwright test --config harness/playwright.config.ts",
+    "conformance:matrix": "node harness/run-matrix.mjs"
   },
   "dependencies": {
     "@kitn.ai/ui": "workspace:*",

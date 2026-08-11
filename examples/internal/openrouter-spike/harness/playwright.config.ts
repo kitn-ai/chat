@@ -21,7 +21,15 @@ export default defineConfig({
   // information, and swallowing it is how a suite starts proving nothing.
   retries: 0,
   timeout: 120_000,
-  reporter: process.env.CI ? [['list'], ['json', { outputFile: 'harness-report.json' }]] : [['list']],
+  // SPIKE_JSON_REPORT is how the cross-model matrix runner collects one machine-
+  // readable result set per model without parsing console output. It carries the
+  // per-test annotations too, which is the only place `knownGap` confirmation is
+  // recorded — a gap and a pass are both "passed" to Playwright.
+  reporter: process.env.SPIKE_JSON_REPORT
+    ? [['list'], ['json', { outputFile: process.env.SPIKE_JSON_REPORT }]]
+    : process.env.CI
+      ? [['list'], ['json', { outputFile: 'harness-report.json' }]]
+      : [['list']],
   use: {
     baseURL: `http://localhost:${PORT}`,
     screenshot: 'only-on-failure',
