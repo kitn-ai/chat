@@ -7,7 +7,7 @@
 // No key, no network, no server: these call the resolver directly.
 import { describe, expect, it } from 'vitest';
 import { resolve } from 'node:path';
-import { fixturePath, modelSlug } from './openrouter-proxy';
+import { fixturePath, fixtureSlug, modelSlug, resolveWire } from './openrouter-proxy';
 
 const ROOT = resolve('/tmp/spike-fixtures');
 
@@ -57,6 +57,53 @@ describe('modelSlug', () => {
 
   it('cannot produce a path separator or a traversal segment', () => {
     const slug = modelSlug('../../etc/passwd');
+    expect(slug).not.toContain('/');
+    expect(slug).not.toContain('..');
+  });
+});
+
+describe('resolveWire', () => {
+  it('sends an anthropic/* model through the Anthropic Skin by default', () => {
+    expect(resolveWire('', 'anthropic/claude-haiku-4.5')).toBe('anthropic');
+    expect(resolveWire('auto', '~anthropic/claude-haiku-4.5')).toBe('anthropic');
+  });
+
+  it('leaves every other model on the OpenAI-compatible endpoint', () => {
+    expect(resolveWire('', '~deepseek/deepseek-v4-flash-latest')).toBe('openai');
+    expect(resolveWire('', 'openai/gpt-5.4-mini')).toBe('openai');
+    // Not a prefix match on the vendor: a model merely NAMED after anthropic is
+    // still served by whoever hosts it.
+    expect(resolveWire('', 'someone/anthropic-clone')).toBe('openai');
+  });
+
+  it('honours an explicit override in both directions', () => {
+    // The whole point of the override: drive an Anthropic MODEL down the
+    // OpenAI-compat path, so a failure can be attributed to the model or to the
+    // Anthropic wire rather than to both at once.
+    expect(resolveWire('openai', 'anthropic/claude-haiku-4.5')).toBe('openai');
+    expect(resolveWire('anthropic', '~deepseek/deepseek-v4-flash-latest')).toBe('anthropic');
+    expect(resolveWire('  ANTHROPIC  ', 'openai/gpt-5.4-mini')).toBe('anthropic');
+  });
+});
+
+describe('fixtureSlug', () => {
+  it('keeps the bare slug on the OpenAI wire, so existing recordings resolve', () => {
+    expect(fixtureSlug('~deepseek/deepseek-v4-flash-latest', 'openai')).toBe(
+      'deepseek-deepseek-v4-flash-latest',
+    );
+  });
+
+  it('separates the two dialects of the SAME model', () => {
+    // These two directories hold mutually unparseable SSE. Sharing one would let
+    // an OpenAI-shaped recording be replayed into readAnthropicStream, which
+    // does not throw — it yields an empty turn, i.e. a green-looking lie.
+    const model = 'anthropic/claude-haiku-4.5';
+    expect(fixtureSlug(model, 'anthropic')).not.toBe(fixtureSlug(model, 'openai'));
+    expect(fixtureSlug(model, 'anthropic')).toBe('anthropic-claude-haiku-4.5-anthropic-wire');
+  });
+
+  it('is still a safe directory name', () => {
+    const slug = fixtureSlug('../../etc/passwd', 'anthropic');
     expect(slug).not.toContain('/');
     expect(slug).not.toContain('..');
   });

@@ -5,15 +5,24 @@
 // This used to parse SSE itself. It does not any more: the proxy forwards raw
 // upstream SSE and `readOpenAIStream` from @kitn.ai/ui/wire parses it. Handing
 // back the Response is the whole job.
-import type { OpenAIWireMessage } from '@kitn.ai/ui/wire';
+import type { AnthropicWireMessage, OpenAIWireMessage } from '@kitn.ai/ui/wire';
 import type { ToolSpec } from './tools';
 
 export type CardMode = 'tool' | 'structured';
 
+/** Which SSE dialect the proxy is speaking this session. Chosen SERVER-side
+ *  from the model id; the client reads it to pick the matching encoder
+ *  (`toOpenAIMessages` / `toAnthropicMessages`) and reader (`readOpenAIStream` /
+ *  `readAnthropicStream`). */
+export type WireKind = 'openai' | 'anthropic';
+
 export interface SpikeConfig {
   model: string;
-  /** Filesystem-safe form of `model`, used as the fixture directory name. */
+  /** Filesystem-safe form of `model` AND wire, used as the fixture directory
+   *  name. The wire is part of it because the two dialects are not
+   *  interchangeable — see `fixtureSlug` in the proxy. */
   modelSlug: string;
+  wire: WireKind;
   reasoningEffort: string;
   maxTokens: number;
   /** Whether the SERVER has a key. The key itself never crosses this boundary. */
@@ -49,7 +58,14 @@ export interface ReplayRequest {
 }
 
 export interface ChatStreamRequest {
-  messages: OpenAIWireMessage[];
+  /** Encoded for `wire`. The proxy rejects a body whose `wire` disagrees with
+   *  its own rather than forwarding a mis-shaped request. */
+  messages: OpenAIWireMessage[] | AnthropicWireMessage[];
+  wire?: WireKind;
+  /** The system turn, sent separately because the Anthropic wire carries it as
+   *  a top-level field rather than as a message. On the OpenAI wire the client
+   *  has already put it in `messages[0]` and this is left unset. */
+  system?: string;
   tools?: ToolSpec[];
   cardMode: CardMode;
   signal?: AbortSignal;
@@ -66,6 +82,8 @@ export function openChatStream(req: ChatStreamRequest): Promise<Response> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       messages: req.messages,
+      wire: req.wire,
+      system: req.system,
       tools: req.tools,
       cardMode: req.cardMode,
       harness: req.harness,

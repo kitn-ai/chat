@@ -5,13 +5,22 @@ import {
   applyToolFailure,
   applyToolOutput,
   bufferText,
+  readAnthropicStream,
   readOpenAIStream,
+  toAnthropicMessages,
   toOpenAIMessages,
+  type AnthropicWireMessage,
   type AssistantStreamSink,
   type ModelTurn,
   type OpenAIWireMessage,
 } from '@kitn.ai/ui/wire';
-import { openChatStream, type CardMode, type HarnessTag, type ReplayRequest } from '../transport';
+import {
+  openChatStream,
+  type CardMode,
+  type HarnessTag,
+  type ReplayRequest,
+  type WireKind,
+} from '../transport';
 import { buildSystemPrompt, runTool, toolsFor, type ToolSpec } from '../tools';
 import { STRUCTURED_SYSTEM_SUFFIX, parseReplyWithCard } from '../card-schema';
 import { newId } from '../chat-data';
@@ -90,13 +99,27 @@ function tee(a: AssistantStreamSink, b: AssistantStreamSink): AssistantStreamSin
   };
 }
 
-export function useSpikeChat(chat: KaiChatController, cardMode: CardMode): SpikeChat {
+/**
+ * @param wire which SSE dialect the proxy is speaking, from `/api/config`. It
+ *   selects BOTH halves of the round trip — the encoder that puts the thread
+ *   back on the wire and the reader that parses the reply — because those two
+ *   must always agree. Defaults to `openai` so a render before the config
+ *   resolves cannot silently pick the wrong pair; the harness waits for the
+ *   config before it sends anything.
+ */
+export function useSpikeChat(
+  chat: KaiChatController,
+  cardMode: CardMode,
+  wire: WireKind = 'openai',
+): SpikeChat {
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<TurnStats | null>(null);
 
-  /** The system turn, held across sends. Everything after it is re-encoded from
-   *  the thread each round. */
-  const systemRef = useRef<OpenAIWireMessage | null>(null);
+  /** The system prompt TEXT, held across sends. Everything after it is
+   *  re-encoded from the thread each round. Kept as text rather than as a wire
+   *  message because the two wires carry it differently: OpenAI as
+   *  `messages[0]`, Anthropic as a top-level `system` field. */
+  const systemRef = useRef<string | null>(null);
   /** The in-flight turn's abort handle, plus the stream to mark up on cancel.
    *  Held in a ref so `stop` can reach a turn started by an earlier render. */
   const inflightRef = useRef<{ abort: AbortController; stream: AssistantStream } | null>(null);
@@ -128,11 +151,9 @@ export function useSpikeChat(chat: KaiChatController, cardMode: CardMode): Spike
 
       const structured = cardMode === 'structured';
       const tools = opts.tools ?? toolsFor(cardMode);
-      systemRef.current ??= {
-        role: 'system',
-        content: buildSystemPrompt(tools) + (structured ? STRUCTURED_SYSTEM_SUFFIX : ''),
-      };
-      const systemMessage = systemRef.current;
+      systemRef.current ??=
+        buildSystemPrompt(tools) + (structured ? STRUCTURED_SYSTEM_SUFFIX : '');
+      const systemPrompt = systemRef.current;
 
       const userMessage: ChatMessage = {
         id: newId(),
@@ -155,7 +176,16 @@ export function useSpikeChat(chat: KaiChatController, cardMode: CardMode): Spike
         },
         { id: stream.id },
       );
-      const encode = (): OpenAIWireMessage[] => [systemMessage, ...toOpenAIMessages(mirror)];
+      // Both encoders are the kit's, and both split the turn at the tool
+      // boundary; what differs is where the system prompt goes and what a tool
+      // result looks like. Picking here — rather than in the proxy — is the
+      // point of the exercise: `toAnthropicMessages` is what has to survive a
+      // real multi-round tool loop, verbatim thinking blocks and all.
+      const encode = (): OpenAIWireMessage[] | AnthropicWireMessage[] =>
+        wire === 'anthropic'
+          ? toAnthropicMessages(mirror)
+          : [{ role: 'system', content: systemPrompt }, ...toOpenAIMessages(mirror)];
+      const readStream = wire === 'anthropic' ? readAnthropicStream : readOpenAIStream;
 
       // In structured mode the whole message is JSON, so it must NOT be appended
       // into the visible thread: buffer it, parse, then append just the prose.
@@ -202,6 +232,10 @@ export function useSpikeChat(chat: KaiChatController, cardMode: CardMode): Spike
         for (let round = 0; round < maxRounds; round++) {
           const res = await openChatStream({
             messages: encode(),
+            wire,
+            // Only the Anthropic wire needs it out-of-band; on the OpenAI wire
+            // `encode()` has already put it in messages[0].
+            ...(wire === 'anthropic' ? { system: systemPrompt } : {}),
             tools,
             cardMode,
             signal: abort.signal,
@@ -211,7 +245,7 @@ export function useSpikeChat(chat: KaiChatController, cardMode: CardMode): Spike
             ...(opts.harness ? { harness: { ...opts.harness, round: round + 1 } } : {}),
             ...(opts.replay ? { replay: { ...opts.replay, round: round + 1 } } : {}),
           });
-          const turn = await readOpenAIStream(res, sink, { reasoningLabel: 'Thinking' });
+          const turn = await readStream(res, sink, { reasoningLabel: 'Thinking' });
           absorb(turn);
 
           if (turn.error) throw new Error(turn.error.message);
@@ -301,7 +335,7 @@ export function useSpikeChat(chat: KaiChatController, cardMode: CardMode): Spike
         mirrorStream.done();
       }
     },
-    [chat, cardMode],
+    [chat, cardMode, wire],
   );
 
   return { send, stop, reset, error, stats };

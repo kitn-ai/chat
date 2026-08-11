@@ -39,7 +39,7 @@ export default function App() {
   const [configError, setConfigError] = useState<string | null>(null);
 
   const chat = useKaiChat();
-  const spike = useSpikeChat(chat, cardMode);
+  const spike = useSpikeChat(chat, cardMode, config?.wire);
 
   // Parsed once: a bad ?scenario= is a harness bug worth failing loudly on.
   const [harnessRequest, harnessError] = useMemo(() => {
@@ -69,7 +69,7 @@ export default function App() {
       setActiveId(scenario.id);
       void spike.send(
         scenario.prompt,
-        sendOptionsFor(scenario, mode, config?.modelSlug ?? 'unknown', fixtureDir),
+        sendOptionsFor(scenario, mode, config?.modelSlug ?? 'unknown', fixtureDir, config?.wire),
       );
     },
     [chat, spike, config],
@@ -125,6 +125,10 @@ export default function App() {
                 {config && (
                   <span className="model" title="Chosen server-side from OPENROUTER_MODEL">
                     {config.model}
+                    {/* Which reader/encoder pair is in play. Worth showing: it is
+                        the difference between exercising readOpenAIStream and
+                        readAnthropicStream, and nothing else on screen says so. */}
+                    {config.wire === 'anthropic' ? ' · anthropic wire' : ''}
                     {config.hasKey ? '' : ' · NO KEY'}
                   </span>
                 )}
