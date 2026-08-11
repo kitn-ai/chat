@@ -1,4 +1,4 @@
-import { createSignal, For } from "solid-js";
+import { createMemo, createSignal, For, Show } from "solid-js";
 import {
   ChatConfig,
   ChatContainer,
@@ -23,8 +23,14 @@ import type {
   ConversationGroup,
   ConversationSummary,
   FeedbackVote,
+  MessagePart,
 } from "@kitn.ai/ui";
-import { appendTextPart, partsToText } from "@kitn.ai/ui/state";
+import {
+  appendReasoningPart,
+  appendTextPart,
+  partsToText,
+  upsertToolPart,
+} from "@kitn.ai/ui/state";
 import { ArrowUp, Plus } from "lucide-solid";
 
 // ─── Static seed data ────────────────────────────────────────────────────────
@@ -192,10 +198,22 @@ Omit \`source\` for a fetch that runs once; pass a signal to re-fetch whenever i
 
 // ─── Canned reply generator ───────────────────────────────────────────────────
 
-function cannedReply(text: string): string {
+/** A turn is an ordered SCRIPT of parts, not a string — the same shape a real
+ *  model stream produces: the model thinks, calls a tool, then answers.
+ *  `streamReply` replays it part by part through the `@kitn.ai/ui/state` folds. */
+interface CannedTurn {
+  reasoning?: string;
+  tool?: { name: string; input: Record<string, unknown>; output: Record<string, unknown> };
+  text: string;
+}
+
+function cannedReply(text: string): CannedTurn {
   const t = text.toLowerCase();
   if (t.includes("store") || t.includes("context"))
-    return `SolidJS **stores** are deeply reactive objects — perfect for shared state.
+    return {
+      reasoning:
+        "Stores, not signals — they want the shared-state answer. Lead with createStore and show the nested setter path, since that is the part people get wrong.",
+      text: `SolidJS **stores** are deeply reactive objects — perfect for shared state.
 
 \`\`\`typescript
 import { createStore } from "solid-js/store";
@@ -209,10 +227,14 @@ setState("count", c => c + 1);
 setState("user", "name", "Bob");
 \`\`\`
 
-For global state, wrap a store in a context with \`createContext\` + \`useContext\`.`;
+For global state, wrap a store in a context with \`createContext\` + \`useContext\`.`,
+    };
 
   if (t.includes("typescript") || t.includes("type"))
-    return `SolidJS has excellent TypeScript support out of the box.
+    return {
+      reasoning:
+        "A types question, so the answer should be code. Component and ParentComponent cover almost everything people reach for; no need to go into JSX.Element generics here.",
+      text: `SolidJS has excellent TypeScript support out of the box.
 
 \`\`\`typescript
 import type { Component, ParentComponent } from "solid-js";
@@ -229,9 +251,23 @@ const Card: ParentComponent<{ title: string }> = (props) => (
     {props.children}
   </div>
 );
-\`\`\``;
+\`\`\``,
+    };
 
-  return `That's a great question! Here's a quick rundown:
+  // The full agentic shape: think, look it up, then answer. Streamed as three
+  // kinds of part into one message, exactly like a real tool-calling turn.
+  return {
+    reasoning:
+      "This is broad enough that I should not answer from memory — the primitive list has changed across versions and I would rather cite the current one. Let me search the docs for the reactivity primitives, check what the index actually lists today, and then group them so the answer stays short instead of turning into five separate explanations nobody asked for.",
+    tool: {
+      name: "search_docs",
+      input: { query: "reactivity primitives", version: "1.9" },
+      output: {
+        top: "solidjs.com/docs/latest/api",
+        excerpt: "createSignal · createMemo · createEffect · createStore · createResource",
+      },
+    },
+    text: `That's a great question! Here's a quick rundown:
 
 - **Signals** (\`createSignal\`) — atomic reactive state
 - **Memos** (\`createMemo\`) — derived/computed values, cached
@@ -239,7 +275,33 @@ const Card: ParentComponent<{ title: string }> = (props) => (
 - **Stores** (\`createStore\`) — deeply reactive objects
 - **Resources** (\`createResource\`) — async data fetching
 
-Each primitive composes cleanly. You rarely need anything beyond these five.`;
+Each primitive composes cleanly. You rarely need anything beyond these five.`,
+  };
+}
+
+/** One delta per word, leading space kept — the shape a token stream arrives in. */
+function deltas(text: string): string[] {
+  return text.split(" ").map((w, i) => (i > 0 ? " " : "") + w);
+}
+
+/** A turn flattened into the ordered list of folds that produce it. Each returns
+ *  a NEW parts array; that new reference is the re-render signal. */
+function turnSteps(turn: CannedTurn): ((parts: MessagePart[]) => MessagePart[])[] {
+  const steps: ((parts: MessagePart[]) => MessagePart[])[] = [];
+  for (const delta of turn.reasoning ? deltas(turn.reasoning) : [])
+    steps.push((parts) => appendReasoningPart(parts, delta, { label: "Thinking" }));
+  if (turn.tool) {
+    const { name, input, output } = turn.tool;
+    const callId = `call_${name}`;
+    // Three beats, because that is how a tool call actually arrives: the call
+    // opens before its arguments are parseable, the arguments settle, then the
+    // result lands. <Tool> renders each state differently.
+    steps.push((parts) => upsertToolPart(parts, callId, { type: name, state: "input-streaming" }));
+    steps.push((parts) => upsertToolPart(parts, callId, { state: "input-available", input }));
+    steps.push((parts) => upsertToolPart(parts, callId, { state: "output-available", output }));
+  }
+  for (const delta of deltas(turn.text)) steps.push((parts) => appendTextPart(parts, delta));
+  return steps;
 }
 
 // ─── App ──────────────────────────────────────────────────────────────────────
@@ -253,20 +315,33 @@ export default function App() {
   // own, so the app owns the vote and the transient "copied" flag.
   const [votes, setVotes] = createSignal<Record<string, FeedbackVote | undefined>>({});
   const [copiedId, setCopiedId] = createSignal<string | null>(null);
+  // The list's KEYS, not the messages. `<For>` is reference-keyed, and every
+  // delta rebuilds the streaming message as a new object — so keying on the
+  // messages themselves makes each chunk look like a brand-new list and rebuilds
+  // the whole row. Diffing ids (plain strings) instead means a delta produces an
+  // identical key list, nothing moves, and the row survives the update.
+  //
+  // Not `<Index>`: position-keying leaves a row's local state (an open tool or
+  // reasoning panel) with the SLOT rather than the message, so prepending older
+  // turns would shift every open disclosure onto the wrong message. Position is
+  // the right key INSIDE a message, which is what `<MessageBody>` does.
+  const messageKeys = createMemo(() => messages().map((m) => m.id));
 
-  /** Stream `reply` into `assistantId` word-by-word. A NEW parts array per chunk
-   *  (`appendTextPart` returns one) is what makes the thread re-render. */
-  function streamReply(assistantId: string, reply: string) {
-    const words = reply.split(" ");
+  /** Replay `turn` into `assistantId` one fold at a time. Each fold returns a NEW
+   *  parts array and this rebuilds the message object around it — a new reference
+   *  IS the re-render signal — which is exactly why the thread below is keyed by
+   *  message id rather than by the message objects themselves. */
+  function streamReply(assistantId: string, turn: CannedTurn) {
+    const steps = turnSteps(turn);
     setIsLoading(true);
     let i = 0;
     const timer = setInterval(() => {
+      const step = steps[i];
       i += 1;
-      const delta = (i > 1 ? " " : "") + words[i - 1];
       setMessages((prev) =>
-        prev.map((m) => (m.id === assistantId ? { ...m, parts: appendTextPart(m.parts, delta) } : m)),
+        prev.map((m) => (m.id === assistantId ? { ...m, parts: step(m.parts) } : m)),
       );
-      if (i >= words.length) {
+      if (i >= steps.length) {
         clearInterval(timer);
         setIsLoading(false);
       }
@@ -364,26 +439,36 @@ export default function App() {
                         and renders each kind — text as markdown, reasoning as a
                         collapsible block, tool calls as a panel, cards through
                         the card registry — and owns the action bar. */}
-                    <For each={messages()}>
-                      {(msg) => (
-                        <Message
-                          class={`mx-auto flex w-full max-w-3xl flex-col gap-2 px-6 ${
-                            msg.role === "user" ? "items-end" : "items-start"
-                          }`}
-                        >
-                          <div class="group flex w-full flex-col gap-0">
-                            <MessageBody
-                              parts={msg.parts}
-                              isUser={msg.role === "user"}
-                              markdown={msg.role !== "user"}
-                              actions={msg.role === "user" ? undefined : ASSISTANT_ACTIONS}
-                              actionsReveal="hover"
-                              activeFeedback={votes()[msg.id]}
-                              copied={copiedId() === msg.id}
-                              onAction={(id) => handleAction(msg, id)}
-                            />
-                          </div>
-                        </Message>
+                    <For each={messageKeys()}>
+                      {(_id, i) => (
+                        // The row reads its message through <For>'s index
+                        // accessor, never through a captured value: it outlives
+                        // the delta that replaced its object, so every read has
+                        // to go through msg() for the new content to land.
+                        // <Show> supplies the non-null accessor and covers the
+                        // frame where a removal has shortened the array.
+                        <Show when={messages()[i()]}>
+                          {(msg) => (
+                            <Message
+                              class={`mx-auto flex w-full max-w-3xl flex-col gap-2 px-6 ${
+                                msg().role === "user" ? "items-end" : "items-start"
+                              }`}
+                            >
+                              <div class="group flex w-full flex-col gap-0">
+                                <MessageBody
+                                  parts={msg().parts}
+                                  isUser={msg().role === "user"}
+                                  markdown={msg().role !== "user"}
+                                  actions={msg().role === "user" ? undefined : ASSISTANT_ACTIONS}
+                                  actionsReveal="hover"
+                                  activeFeedback={votes()[msg().id]}
+                                  copied={copiedId() === msg().id}
+                                  onAction={(id) => handleAction(msg(), id)}
+                                />
+                              </div>
+                            </Message>
+                          )}
+                        </Show>
                       )}
                     </For>
 

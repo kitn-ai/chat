@@ -1,0 +1,87 @@
+event: message_start
+data: {"type":"message_start","message":{"id":"gen-1786476919-GQMueIEvWRPxhSAN8odj","type":"message","role":"assistant","container":null,"content":[],"model":"anthropic/claude-haiku-4.5","stop_reason":null,"stop_details":null,"stop_sequence":null,"usage":{"input_tokens":761,"output_tokens":3,"output_tokens_details":null,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"inference_geo":null,"server_tool_use":null,"service_tier":null,"speed":"standard"},"provider":"Amazon Bedrock"}}
+
+event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"The user wants"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" me to check"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" weather"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" in three cities sequ"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"entially -"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" Paris first"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":", then Tokyo, then Berlin. They"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" explicitly"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" want me to wait for each result before"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" asking for the next one."}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" After"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" getting all"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" three"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" results, I should compare them in one"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" short paragraph.\n\nLet"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" me start"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" by getting the weather for Paris."}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"EuEDCkgIEBABGAIqQKYpDWa22ypEIf058Ueqtfqq4TxL1prXy2TGpdZgOiz/lla9YPC8o2CIogvobiyScpZQ25grGxnrVD8mtaNNGv4SDDxP/LdWKIl/+dETphoM9iYNEazziFJ6xmFUIjBY0QHlJ3hgPNJCKVDsQUxjVPt/Sy8RQLk8nMHdXQkAjWnWPZJQNVdWiZ17tWHXK4cqxgIqRxYZS4xETMHNrjhYosrvIElvQIIbuqH6//XODXJHM8nN3AV9BmlnG3z62O8LE5i24trqDivseI3MMK7JMDQpAUkCTRj2oyWcllhgDrl2j1qy3o4ak30qGPmvv26DjmYEOKJZ6C/Wqqs6C7qvd3XQmBmVQdHlno4+vvEFQtdmzshUue0dzgqHj+FE4kTQMfE6lpt1FRucmbll+Ypp4SfE5ftThLetn+N3pZShu9VmxOV2mq925tKpxXdUrxMamd/zh47wJwM7IiADg975OdSYvTrDY3paX6ZIczpMR++JUEmpXieFCmNjhs+EAzIZviscufykdBDQ0R0MZkfTp8zZBdM6WaG40sk25TcEuYn7GzaKW1E4aANyjaQn5jdYIrbggZ8G70k7LGFmmom9sSJufDBE/Yuar/uVFUPAmLOXajttdNA7shgB"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":0}
+
+event: content_block_start
+data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_bdrk_01NFJwxPHLw6E9Cg5vVNEKd3","caller":{"type":"direct"},"name":"get_weather","input":{}}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"city\": \"Paris"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\", \"units\": \"metric"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\"}"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":1}
+
+event: message_delta
+data: {"type":"message_delta","delta":{"container":null,"stop_details":null,"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":761,"output_tokens":142,"output_tokens_details":{"thinking_tokens":78},"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"server_tool_use":null,"service_tier":null,"speed":"standard","cost":0.001471,"is_byok":false,"cost_details":{"upstream_inference_cost":0.001471,"upstream_inference_prompt_cost":0.000761,"upstream_inference_completions_cost":0.00071}},"context_management":null}
+
+event: message_stop
+data: {"type":"message_stop"}
+
+event: data
+data: [DONE]
+

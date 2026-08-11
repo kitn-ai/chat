@@ -1,33 +1,34 @@
 import { Conversations } from '@kitn.ai/ui/react';
 import type { Theme } from '../App';
-import type { Scenario } from '../chat-data';
+import type { RailEntry } from '../chat-data';
 
 interface SidebarProps {
   theme: Theme;
-  scenarios: Scenario[];
+  entries: RailEntry[];
   activeId: string;
   collapsed: boolean;
-  onRun: (scenario: Scenario) => void;
+  onRun: (entry: RailEntry) => void;
   onNewChat: () => void;
   onToggle: () => void;
 }
 
 /**
- * The rail: `<kai-conversations>` repurposed as a scenario picker. Selecting an
- * entry starts a fresh thread and fires its prompt at the real model, so each
- * kit component (tool panel / sources / cards) is one click away.
+ * The rail: `<kai-conversations>` repurposed as a scenario picker, listing the
+ * SAME conformance catalog the Playwright runner drives. Selecting an entry
+ * starts a fresh thread and runs that scenario, so every case the suite covers
+ * is one click away in the browser too.
  */
-export function Sidebar({ theme, scenarios, activeId, collapsed, onRun, onNewChat, onToggle }: SidebarProps) {
+export function Sidebar({ theme, entries, activeId, collapsed, onRun, onNewChat, onToggle }: SidebarProps) {
   return (
     <aside className="sidebar">
       <Conversations
         theme={theme}
         groups={[]}
-        conversations={scenarios}
+        conversations={entries}
         activeId={activeId}
         collapsed={collapsed}
         onConversationSelect={(e) => {
-          const hit = scenarios.find((s) => s.id === e.detail.id);
+          const hit = entries.find((s) => s.id === e.detail.id);
           if (hit) onRun(hit);
         }}
         onNewChat={onNewChat}

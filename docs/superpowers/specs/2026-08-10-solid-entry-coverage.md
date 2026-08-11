@@ -192,6 +192,16 @@ and event wiring a private component also carries.
 Each of these was compiled from JSX with `babel-preset-solid` and rendered through `renderToString`
 against the packed tarball. All 15 produce non-empty HTML.
 
+**Do not copy these.** They are the record of what was compiled during this audit, left verbatim, and
+two things have since changed. `Thread` is now a public export, so the `kai-thread` snippet's
+"hand-composed, because there is no public Thread export" no longer holds. And that snippet's
+`<For each={messages()}>` carries a real defect: `<For>` is reference-keyed, a streaming message is
+a new object every delta, so every chunk rebuilds the whole row and a tool or reasoning panel opened
+mid-stream closes itself on the next token. Key on `message.id` and read the message back through
+`<For>`'s index accessor instead, as `cb41f5c` (the kit), `442749d` (the scaffolder) and
+`apps/docs/src/content/docs/guides/frameworks/solid.mdx` (the Solid guide) now do. `renderToString`
+cannot see this: it renders one frame, and there is no second delta.
+
 ```tsx
 // kai-message
 <ChatConfig>

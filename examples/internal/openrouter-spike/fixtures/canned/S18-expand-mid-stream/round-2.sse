@@ -1,0 +1,8 @@
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"content":"It is 12°C with light rain in Paris — "},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"content":"take a light jacket and something waterproof."},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+
+data: [DONE]
+

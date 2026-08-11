@@ -1,0 +1,6 @@
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"content":"The release note is ready above."},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+
+data: [DONE]
+

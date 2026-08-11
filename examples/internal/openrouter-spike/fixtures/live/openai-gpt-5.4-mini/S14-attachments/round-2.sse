@@ -1,0 +1,28 @@
+data: {"id":"gen-1786477174-EQ3c50dKF7tX2tbVdhBM","object":"chat.completion.chunk","created":1786477174,"model":"openai/gpt-5.4-mini","provider":"OpenAI","choices":[{"index":0,"delta":{"content":"Done","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1786477174-EQ3c50dKF7tX2tbVdhBM","object":"chat.completion.chunk","created":1786477174,"model":"openai/gpt-5.4-mini","provider":"OpenAI","choices":[{"index":0,"delta":{"content":" —","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1786477174-EQ3c50dKF7tX2tbVdhBM","object":"chat.completion.chunk","created":1786477174,"model":"openai/gpt-5.4-mini","provider":"OpenAI","choices":[{"index":0,"delta":{"content":" I","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1786477174-EQ3c50dKF7tX2tbVdhBM","object":"chat.completion.chunk","created":1786477174,"model":"openai/gpt-5.4-mini","provider":"OpenAI","choices":[{"index":0,"delta":{"content":" attached","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1786477174-EQ3c50dKF7tX2tbVdhBM","object":"chat.completion.chunk","created":1786477174,"model":"openai/gpt-5.4-mini","provider":"OpenAI","choices":[{"index":0,"delta":{"content":" **","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1786477174-EQ3c50dKF7tX2tbVdhBM","object":"chat.completion.chunk","created":1786477174,"model":"openai/gpt-5.4-mini","provider":"OpenAI","choices":[{"index":0,"delta":{"content":"q","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1786477174-EQ3c50dKF7tX2tbVdhBM","object":"chat.completion.chunk","created":1786477174,"model":"openai/gpt-5.4-mini","provider":"OpenAI","choices":[{"index":0,"delta":{"content":"3","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1786477174-EQ3c50dKF7tX2tbVdhBM","object":"chat.completion.chunk","created":1786477174,"model":"openai/gpt-5.4-mini","provider":"OpenAI","choices":[{"index":0,"delta":{"content":"-summary","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1786477174-EQ3c50dKF7tX2tbVdhBM","object":"chat.completion.chunk","created":1786477174,"model":"openai/gpt-5.4-mini","provider":"OpenAI","choices":[{"index":0,"delta":{"content":".pdf","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1786477174-EQ3c50dKF7tX2tbVdhBM","object":"chat.completion.chunk","created":1786477174,"model":"openai/gpt-5.4-mini","provider":"OpenAI","choices":[{"index":0,"delta":{"content":"**","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1786477174-EQ3c50dKF7tX2tbVdhBM","object":"chat.completion.chunk","created":1786477174,"model":"openai/gpt-5.4-mini","provider":"OpenAI","choices":[{"index":0,"delta":{"content":".","role":"assistant"},"finish_reason":null,"native_finish_reason":null}]}
+
+data: {"id":"gen-1786477174-EQ3c50dKF7tX2tbVdhBM","object":"chat.completion.chunk","created":1786477174,"model":"openai/gpt-5.4-mini","provider":"OpenAI","choices":[{"index":0,"delta":{"content":"","role":"assistant"},"finish_reason":"stop","native_finish_reason":"completed"}]}
+
+data: {"id":"gen-1786477174-EQ3c50dKF7tX2tbVdhBM","object":"chat.completion.chunk","created":1786477174,"model":"openai/gpt-5.4-mini","provider":"OpenAI","service_tier":"default","choices":[{"index":0,"delta":{"content":"","role":"assistant"},"finish_reason":"stop","native_finish_reason":"completed"}],"usage":{"prompt_tokens":245,"completion_tokens":15,"total_tokens":260,"cost":0.00025125,"is_byok":false,"prompt_tokens_details":{"cached_tokens":0,"cache_write_tokens":0,"audio_tokens":0,"video_tokens":0},"cost_details":{"upstream_inference_cost":0.00025125,"upstream_inference_prompt_cost":0.00018375,"upstream_inference_completions_cost":0.0000675},"completion_tokens_details":{"reasoning_tokens":0,"image_tokens":0,"audio_tokens":0}}}
+
+data: [DONE]
+

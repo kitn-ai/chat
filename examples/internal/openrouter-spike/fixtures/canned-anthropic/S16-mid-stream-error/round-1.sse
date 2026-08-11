@@ -1,0 +1,18 @@
+event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Streaming is "}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"the part everyone gets wrong: a new array reference per chunk is "}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"what makes the thread re-render. "}}
+
+event: error
+data: {"type":"error","error":{"type":"rate_limit_exceeded","message":"Provider rate limit exceeded mid-generation."}}
+
+event: message_stop
+data: {"type":"message_stop"}
+

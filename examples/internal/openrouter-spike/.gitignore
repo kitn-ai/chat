@@ -3,6 +3,15 @@ dist/
 *.log
 .DS_Store
 
+# Playwright output. `fixtures/` is NOT ignored: the captured streams are the
+# point — every live run is meant to leave the offline suite stronger.
+test-results/
+playwright-report/
+harness-report.json
+# Derived from the fixtures + the run. The committed artifact is the TABLE in
+# docs/superpowers/specs/, not these raw reports.
+harness/matrix-reports/
+
 # The API key lives here. NEVER commit it.
 .env
 .env.local

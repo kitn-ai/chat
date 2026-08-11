@@ -2742,11 +2742,48 @@ describe('scaffold — solid', () => {
 
   it('renders EVERY part kind, not just text — the coarse element did that for free', async () => {
     const f = front(await emit());
-    expect(f).toContain('function renderPart(part: MessagePart');
-    expect(f).toContain("case 'text':");
-    expect(f).toContain("case 'reasoning':");
-    expect(f).toContain("case 'tool':");
-    expect(f).toContain('<Tool toolPart={part.tool} />');
+    expect(f).toContain('function renderPart(part: () => MessagePart');
+    expect(f).toContain("partAs(part(), 'text')");
+    expect(f).toContain("partAs(part(), 'reasoning')");
+    expect(f).toContain("partAs(part(), 'tool')");
+    expect(f).toContain('<Tool toolPart={p().tool} />');
+  });
+
+  /**
+   * THE KEYING GUARD, and the honest statement of what it is worth.
+   *
+   * `verify:scaffold` cannot see this: a reference-keyed `<For>` type-checks
+   * perfectly, and the failure is a runtime remount. What it costs a developer
+   * who copies this file is real though — the outer `<For each={messages()}>`
+   * plus the inner `<For each={m.parts}>` that used to be emitted here tore the
+   * whole message row down on EVERY streaming delta, so expanding a tool or
+   * reasoning panel mid-stream silently did nothing. The kit had the identical
+   * defect in `ChatThread`/`Thread` (fixed in cb41f5c); this is the same fix,
+   * applied to the code we tell people to copy.
+   *
+   * So this is a SHAPE assertion, not a behaviour one, and it is written to fail
+   * loudly on the exact regression rather than to prove the emitted app works.
+   * The behavioural proof is a browser: build a Solid app from this block
+   * verbatim, replay a stream, expand a panel mid-stream and check it is still
+   * open — see `examples/internal/openrouter-spike`'s `S18-expand-mid-stream`,
+   * which is the same check against the kit's own components.
+   */
+  it('keys the message list by ID and the parts list by POSITION — the mid-stream remount bug', async () => {
+    const f = front(await emit());
+    // OUTER: keyed by id. Not the message objects — createAssistantStream gives
+    // the streaming message a new identity per delta.
+    expect(f).toContain('const messageKeys = createMemo(() => messages().map((m) => m.id));');
+    expect(f).toContain('<For each={messageKeys()}>');
+    expect(f).not.toContain('<For each={messages()}>');
+    // and the row reads its message back through <For>'s index accessor
+    expect(f).toContain('<Show when={messages()[i()]}>');
+    // INNER: <Index>, keyed by position — the folds only append or patch in
+    // place, and <Index> hands each row a SIGNAL so it survives the delta.
+    expect(f).toContain('<Index each={m().parts}>{(part) => renderPart(part, m().role)}</Index>');
+    expect(f).not.toContain('<For each={m.parts}>');
+    // Not `<Index>` for the OUTER list: position keying leaves an open panel
+    // with the slot, so prepending older turns moves it onto the wrong message.
+    expect(f).not.toContain('<Index each={messages()');
   });
 
   it('uses HYPHENATED style keys — Solid applies style via setProperty, not camelCase', async () => {

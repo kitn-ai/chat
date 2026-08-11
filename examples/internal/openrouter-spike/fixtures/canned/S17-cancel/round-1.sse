@@ -1,0 +1,32 @@
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_slow","type":"function","function":{"name":"get_weather","arguments":""}}]},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"city"}}]},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\":\"Par"}}]},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"is\"}"}}]},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"content":"Streaming a chat UI is mostly a question of identity. "},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"content":"Every delta produces a new array, and the renderer has to decide which rows are the same rows. "},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"content":"Key by reference and every chunk looks like a brand-new list. "},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"content":"Key by position and a row survives its own content changing. "},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"content":"That distinction is invisible until a user interacts with a half-written message. "},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"content":"Then it is the only thing that matters. "},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"content":"A disclosure they opened has to still be open one token later. "},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"content":"A tool panel they are reading must not scroll away and come back empty. "},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"content":"None of this shows up in a snapshot test. "},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"content":"All of it shows up the first time somebody clicks. "},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}
+
+data: [DONE]
+

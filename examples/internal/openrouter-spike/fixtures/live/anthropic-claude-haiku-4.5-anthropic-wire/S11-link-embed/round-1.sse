@@ -1,0 +1,123 @@
+event: message_start
+data: {"type":"message_start","message":{"id":"gen-1786476953-AjcEonbL8kcygaiA2Fmz","type":"message","role":"assistant","container":null,"content":[],"model":"anthropic/claude-haiku-4.5","stop_reason":null,"stop_details":null,"stop_sequence":null,"usage":{"input_tokens":884,"output_tokens":8,"output_tokens_details":null,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"inference_geo":null,"server_tool_use":null,"service_tier":null,"speed":"standard"},"provider":"Amazon Bedrock"}}
+
+event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"The user is asking me to:"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\n1. Show a preview card for https"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"://ui.kitn.ai/"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"guides/theming\n2."}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" Embed a YouTube video with id "}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"aqz-KE-bp"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"KQ\n\nThese"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" are two independent operations,"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" so I can make both calls at"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" the same time."}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\n\nFor the preview_"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"link:"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\n- url"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":": \"https://ui.kitn"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":".ai/guides/theming\""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\n\nFor the embed_video:\n-"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" provider"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":": \"youtube"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\"\n- id: \"aq"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"z-KE-bpK"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"Q\""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"EvwDCkgIEBABGAIqQGBD5vMGvR00ynGHIliS1p6b3pB2OyM8ecAonoDOaRJA07bLtU3RuEwV83IUTvYcB1dXo8Ym3pRVSkjZwBNKBzQSDJbnDFlNmflqQ/l2ChoMamhbem9/6ZCGz7WxIjB4gRQe8LxrVMiA2rIuRnZGvc0aCsaCOuoHSXseKsFxOg+sGtnyh9Ei+fvo7X0of2kq4QLwUtSh/pOPxK6OMIW/kL6SnQHahy11SOirhUQSXQn6zPDkJ6l12nKkBnXhCCintO8KcK+8eN5DQsYSXN2qRxs1cnheQ0K9GH3psZPESoxmcz5VtWfCfZiucGfagSO3AIgm/Mi0j0twT/dqBam597sLYfA/2bb9WAzk/eB01iXSmpoQWdhGb1lVDrc+6r3xLNOosbP7F/fv+8vlATTcfzK0OqQYqrSkTh9M33z9huQpO8uN/ciJlJ5W+53okiBGhzK2usxsBKGKmRpP/ULiwq8E0TXlcEomPD0SRD+jAeVyHKvewmhWiHa6Dq4SXey6nXPLcQ0cjJDX2P+SdvBeqEJrsg6g3IaYrq48BainIU/edBOf6ZCh9VXNM2nDKB/ZtDxFXyHMheSWd0Spq+NHGxDL4lV51rJGYBWHeOdRrmCHKJpAVOPA6nD3FTteUIoF4j3f0OAdQycsX9dwb5pQNu/zqhgB"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":0}
+
+event: content_block_start
+data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_bdrk_01LjRAdzAfqrNpe3YWyTmGAN","caller":{"type":"direct"},"name":"preview_link","input":{}}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"url\": \"https://ui"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":".kitn.ai/guides/"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"theming"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\"}"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":1}
+
+event: content_block_start
+data: {"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"toolu_bdrk_01CZf6tmh13domntm5s4TRUm","caller":{"type":"direct"},"name":"embed_video","input":{}}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"{\"provider\": \"youtube"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"\", \"id\": \"aq"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"z-KE-bpK"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"Q"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"\"}"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":2}
+
+event: message_delta
+data: {"type":"message_delta","delta":{"container":null,"stop_details":null,"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":884,"output_tokens":260,"output_tokens_details":{"thinking_tokens":89},"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"server_tool_use":null,"service_tier":null,"speed":"standard","cost":0.002184,"is_byok":false,"cost_details":{"upstream_inference_cost":0.002184,"upstream_inference_prompt_cost":0.000884,"upstream_inference_completions_cost":0.0013}},"context_management":null}
+
+event: message_stop
+data: {"type":"message_stop"}
+
+event: data
+data: [DONE]
+

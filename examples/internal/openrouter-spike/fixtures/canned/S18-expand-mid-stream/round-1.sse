@@ -1,0 +1,86 @@
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"reasoning":"The user wan"},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"reasoning":"ts to know w"},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"reasoning":"hat to wear "},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"reasoning":"in Paris. "},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"reasoning":"That needs the curr"},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"reasoning":"ent conditions, not"},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"reasoning":" a general answer a"},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"reasoning":"bout the climate. "},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"reasoning":"get_weather take"},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"reasoning":"s a single city,"},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"reasoning":" so one call is "},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"reasoning":"enough here. "},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"reasoning":"Paris in the "},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"reasoning":"fixture is li"},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"reasoning":"ght rain at 1"},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"reasoning":"2 degrees. "},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"reasoning":"Twelve degrees an"},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"reasoning":"d rain means a la"},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"reasoning":"yer plus somethin"},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"reasoning":"g waterproof. "},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"reasoning":"I should answer "},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"reasoning":"briefly and not "},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"reasoning":"lecture them abo"},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"reasoning":"ut the weather. "},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"reasoning":"Let me make the c"},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"reasoning":"all first and wri"},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"reasoning":"te the answer fro"},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"reasoning":"m the result. "},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"reasoning":"It is worth naming "},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"reasoning":"the temperature exp"},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"reasoning":"licitly so the advi"},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"reasoning":"ce is checkable. "},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_wear","type":"function","function":{"name":"get_weather","arguments":""}}]},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\""}}]},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"ci"}}]},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"ty"}}]},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\":"}}]},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"P"}}]},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"ar"}}]},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"is"}}]},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"}"}}]},"finish_reason":null}]}
+
+data: {"id":"gen-canned","object":"chat.completion.chunk","model":"canned/fixture","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}
+
+data: [DONE]
+

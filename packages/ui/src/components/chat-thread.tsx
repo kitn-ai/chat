@@ -1,4 +1,4 @@
-import { createSignal, createEffect, For, Show, onMount } from 'solid-js';
+import { createSignal, createEffect, createMemo, For, Show, onMount } from 'solid-js';
 import { ChatConfig, useChatConfig } from '../primitives/chat-config';
 import { type ComposerDoc, normalizeValue, serializeToText } from '../primitives/composer-model';
 import { ChatContainer, ChatContainerContent, ChatContainerScrollAnchor } from './chat-container';
@@ -140,9 +140,48 @@ export interface ChatThreadController {
   scrollToBottom(behavior?: ScrollBehavior): void;
 }
 
+/**
+ * THE MESSAGE LIST'S KEY, and the reason it is not the message object. This is
+ * the canonical note; `thread.tsx` keys its identical list the same way and
+ * points here.
+ *
+ *  `<For>` is REFERENCE-keyed, and a streaming assistant message gets a brand
+ *  new object identity on every delta — `createAssistantStream` rebuilds it as
+ *  `{ ...prev[i], parts: next }` because a new reference IS the re-render
+ *  signal. Keyed on the objects, every chunk therefore looks like an entirely
+ *  new list: the whole message row is torn down and rebuilt, and everything the
+ *  user did inside it dies with it. Expanding a tool or reasoning panel
+ *  mid-stream did nothing at all — the disclosure opened and was discarded
+ *  microseconds later by the next token. (`MessageBody` keys its PARTS by
+ *  position for exactly this reason; that fix was dead while its parent kept
+ *  destroying the subtree above it.)
+ *
+ *  So key on `message.id`, which is stable across the object churn: `<For>` over
+ *  the id array diffs by string value, a delta produces an identical id list,
+ *  and no row moves. The row then reads its message through `messages[i()]` —
+ *  `<For>`'s index accessor, which it keeps current across inserts, removals and
+ *  moves — so the CONTENT keeps updating through accessors while the DOM stays
+ *  put.
+ *
+ *  WHY NOT `<Index>`, the other way to survive the churn: `<Index>` keys by
+ *  POSITION, so a row's local state (an open panel, a half-filled form card)
+ *  belongs to the slot rather than to the message. Appends and tail truncations
+ *  (regenerate/edit) are fine, but prepending older turns — load-earlier-history,
+ *  which every real chat grows — shifts every row, and each open disclosure
+ *  stays behind with the wrong message. Position IS a valid key inside a
+ *  message, where the folds only ever append or patch a part in place; it is not
+ *  one for the message list, where the host owns the array and splices it.
+ *  Both approaches require the row to read through accessors — that is inherent
+ *  in keeping a row mounted while its object is replaced, not a cost unique to
+ *  either.
+ *
+ *  Contract: `id` must be unique per message. It already had to be — the
+ *  feedback/copy state above this list is keyed by it.
+ */
 export function ChatThread(props: ChatThreadProps) {
   const outer = useChatConfig();
   const reveal = () => (props.actionsReveal === 'hover' ? 'hover' : 'always');
+  const messageKeys = createMemo(() => props.messages.map((m) => m.id));
   // Feedback (copy + vote) state lives ABOVE the per-message <For>, so streaming
   // re-renders (a fresh `messages` array ref per chunk) don't wipe it.
   // The copy/feedback toasts scope to the chat (this thread's root) so they appear
@@ -265,42 +304,54 @@ export function ChatThread(props: ChatThreadProps) {
                 <Show when={props.empty && props.messages.length === 0}>
                   <slot name="empty" />
                 </Show>
-                <For each={props.messages}>
-                  {(m) => {
-                    const body = (
-                      <MessageBody
-                        parts={m.parts}
-                        cardTypes={props.cardTypes}
-                        isUser={m.role === 'user'}
-                        markdown={m.role === 'assistant'}
-                        actions={m.actions}
-                        actionsReveal={reveal()}
-                        activeFeedback={feedback.resolveFeedback(m)}
-                        copied={feedback.isCopied(m.id)}
-                        onAction={(action) => feedback.handleAction(m, action)}
-                      />
-                    );
-                    const rowGroup = reveal() === 'hover' ? 'group ' : '';
-                    return (
-                      <Show
-                        when={m.avatar}
-                        fallback={
-                          <Message class={`${rowGroup}${m.role === 'user' ? 'flex-col items-end' : 'flex-col items-start'}`}>
-                            {body}
-                          </Message>
-                        }
-                      >
-                        {(av) => (
-                          <Message class={rowGroup}>
-                            <MessageAvatar src={av().src ?? ''} alt={av().alt ?? ''} fallback={av().fallback} />
-                            <div class={`flex min-w-0 flex-1 flex-col ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
-                              {body}
-                            </div>
-                          </Message>
-                        )}
-                      </Show>
-                    );
-                  }}
+                {/* Keyed by message id (see the note above this component), so a
+                    streaming delta updates the row instead of replacing it. */}
+                <For each={messageKeys()}>
+                  {(_id, i) => (
+                    // The row reads its message through <For>'s index accessor,
+                    // never through a captured value: the row outlives the delta
+                    // that replaced its object, so every read below has to go
+                    // through `m()` for the new content to land. <Show> supplies
+                    // the non-null accessor and covers the frame where a removal
+                    // has shortened the array.
+                    <Show when={props.messages[i()]}>
+                      {(m) => {
+                        const body = (
+                          <MessageBody
+                            parts={m().parts}
+                            cardTypes={props.cardTypes}
+                            isUser={m().role === 'user'}
+                            markdown={m().role === 'assistant'}
+                            actions={m().actions}
+                            actionsReveal={reveal()}
+                            activeFeedback={feedback.resolveFeedback(m())}
+                            copied={feedback.isCopied(m().id)}
+                            onAction={(action) => feedback.handleAction(m(), action)}
+                          />
+                        );
+                        const rowGroup = () => (reveal() === 'hover' ? 'group ' : '');
+                        return (
+                          <Show
+                            when={m().avatar}
+                            fallback={
+                              <Message class={`${rowGroup()}${m().role === 'user' ? 'flex-col items-end' : 'flex-col items-start'}`}>
+                                {body}
+                              </Message>
+                            }
+                          >
+                            {(av) => (
+                              <Message class={rowGroup()}>
+                                <MessageAvatar src={av().src ?? ''} alt={av().alt ?? ''} fallback={av().fallback} />
+                                <div class={`flex min-w-0 flex-1 flex-col ${m().role === 'user' ? 'items-end' : 'items-start'}`}>
+                                  {body}
+                                </div>
+                              </Message>
+                            )}
+                          </Show>
+                        );
+                      }}
+                    </Show>
+                  )}
                 </For>
                 <ChatContainerScrollAnchor />
               </ChatContainerContent>

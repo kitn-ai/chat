@@ -55,7 +55,7 @@ Compose directly in JSX. Size the layout with flex — `ChatContainer` fills its
 A message is an **ordered `parts` array**, not a string: text, reasoning, tool calls, generative-UI cards and file attachments interleaved in the order the model produced them. `MessageBody` walks that array and renders each kind in place, so render it rather than joining the parts into text.
 
 ```tsx
-import { createSignal, For } from 'solid-js';
+import { createMemo, createSignal, For, Show } from 'solid-js';
 import {
   Button,
   ChatConfig,
@@ -76,6 +76,9 @@ export function Chat() {
     { id: '1', role: 'assistant', parts: [{ type: 'text', text: 'How can I help?' }] },
   ]);
   const [input, setInput] = createSignal('');
+  // The list's KEYS, not the messages. A streaming message is a new object every
+  // delta, so a reference-keyed <For> would rebuild the whole row for each one.
+  const messageKeys = createMemo(() => messages().map((m) => m.id));
 
   const handleSubmit = async () => {
     const text = input().trim();
@@ -103,15 +106,22 @@ export function Chat() {
       <ChatConfig proseSize="sm">
         <ChatContainer class="h-full">
           <ChatContainerContent class="space-y-4 p-4">
-            <For each={messages()}>
-              {(msg) => (
-                <Message>
-                  <MessageBody
-                    parts={msg.parts}
-                    isUser={msg.role === 'user'}
-                    markdown={msg.role !== 'user'}
-                  />
-                </Message>
+            <For each={messageKeys()}>
+              {(_id, i) => (
+                // Read the message through <For>'s index accessor, never through
+                // a captured value: the row outlives the delta that replaced its
+                // object, so every read has to go through msg().
+                <Show when={messages()[i()]}>
+                  {(msg) => (
+                    <Message>
+                      <MessageBody
+                        parts={msg().parts}
+                        isUser={msg().role === 'user'}
+                        markdown={msg().role !== 'user'}
+                      />
+                    </Message>
+                  )}
+                </Show>
               )}
             </For>
             <ChatContainerScrollAnchor />
@@ -133,6 +143,14 @@ export function Chat() {
 
 `ChatMessage` is the kit's own public type, the same shape the `kai-*` elements take and the [wire adapter](/guides/recipes/wire-adapter/) produces from real provider SSE. `@kitn.ai/ui/state` holds the pure part folds: `appendTextPart`, `appendReasoningPart`, `upsertToolPart`, `partsToText`.
 
+<Aside type="caution" title="Key the message list by `message.id`">
+`<For>` diffs by object identity, and a streaming message is a new object on every delta: that new reference is what tells Solid to re-render. Key the list on the message objects and each chunk looks like an entirely new list, so the row is torn down and rebuilt. A tool or reasoning panel the reader opens mid-stream then closes itself on the next token.
+
+Key on the ids and read the message back through `<For>`'s index accessor, as above. The keys are plain strings, a delta produces an identical key list, and the row stays put while its content updates.
+
+Not `<Index>` here. Position keying leaves an open panel with the slot rather than the message, so loading older turns in at the top would move every open disclosure onto the wrong message. Position is the right key *inside* a message, which is what `MessageBody` already does: the folds behind `parts` only append or patch in place.
+</Aside>
+
 <Aside type="caution" title="Don't flatten parts to a string">
 `<MessageContent>{msg.parts.map((p) => p.text).join('')}</MessageContent>` compiles and looks fine on a text-only thread, then silently drops every reasoning block, tool call and card the moment a model emits one. `MessageContent` renders one blob of content; `MessageBody` renders the whole message.
 </Aside>
@@ -143,14 +161,14 @@ export function Chat() {
 
 ```tsx
 <MessageBody
-  parts={msg.parts}
-  isUser={msg.role === 'user'}
-  markdown={msg.role !== 'user'}
+  parts={msg().parts}
+  isUser={msg().role === 'user'}
+  markdown={msg().role !== 'user'}
   actions={['copy', 'like', 'dislike', 'regenerate']}
   actionsReveal="hover"
-  activeFeedback={votes()[msg.id]}
-  copied={copiedId() === msg.id}
-  onAction={(id) => handleAction(msg, id)}
+  activeFeedback={votes()[msg().id]}
+  copied={copiedId() === msg().id}
+  onAction={(id) => handleAction(msg(), id)}
 />
 ```
 
