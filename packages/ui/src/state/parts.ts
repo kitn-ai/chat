@@ -1,5 +1,6 @@
 import type { MessagePart, RawOrigin } from '../elements/chat-types';
 import type { ToolPart } from '../components/tool-types';
+import type { CardEnvelope } from '../primitives/card-contract';
 import { classifyTool } from '../components/tool-classify';
 
 /** Stable structural fingerprint. Key order independent, so an identical snapshot
@@ -141,6 +142,39 @@ const REASONING_COMPARATORS: {
 
 function reasoningEqual(a: ReasoningPart, b: ReasoningPart): boolean {
   return REASONING_KEYS.every((key) => REASONING_COMPARATORS[key](a, b));
+}
+
+type CardPart = Extract<MessagePart, { type: 'card' }>;
+
+/** Creates or REPLACES a card part, keyed on `envelope.id`. Returns the SAME array
+ *  reference when the incoming envelope is structurally identical to the current
+ *  one, for the same reason `upsertToolPart` does: a new `parts` array is the
+ *  re-render signal, so handing one back for a revision that changed nothing is a
+ *  spurious render.
+ *
+ *  WHY THIS REPLACES WHERE `upsertToolPart` MERGES. A tool part is patched
+ *  fragment-by-fragment as its arguments stream in, which is why that function
+ *  needs carry-forward rules for `raw` and `kind` — a later patch that omits a
+ *  field is not asserting the field is gone. A card envelope is the opposite: it
+ *  arrives WHOLE, as one complete tool result, so an omitted field IS an
+ *  assertion. Last-write-wins is both simpler and the only semantics under which
+ *  a host can CLEAR `resolution` to re-open a dismissed card — a field-by-field
+ *  merge can only ever set that field, never unset it, so `CardPolicy.onReopen`
+ *  (see `primitives/card-contract.ts`) would have no way to express its result.
+ *
+ *  The PART-level `raw` is preserved across a revision. It is a different field
+ *  from anything inside the envelope: the untranslated provider payload the part
+ *  was built from, attached once by the producer, which a fresh envelope carries
+ *  no opinion about.
+ *
+ *  Position is preserved: a revised card stays where it first appeared in the
+ *  thread rather than jumping past the text that followed it. */
+export function upsertCardPart(parts: MessagePart[], envelope: CardEnvelope): MessagePart[] {
+  const i = parts.findIndex((p) => p.type === 'card' && p.envelope.id === envelope.id);
+  if (i < 0) return [...parts, { type: 'card', envelope }];
+  const cur = parts[i] as CardPart;
+  if (fingerprint(cur.envelope) === fingerprint(envelope)) return parts;
+  return [...parts.slice(0, i), { ...cur, envelope }, ...parts.slice(i + 1)];
 }
 
 /** Creates or merges a tool part. Returns the SAME array reference when the merge

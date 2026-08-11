@@ -7,6 +7,7 @@ describe('@kitn.ai/ui/state barrel', () => {
       'appendMessage', 'upsertMessage', 'updateMessage', 'removeMessage', 'appendText',
       'textMessage', 'partsToText',
       'addSuggestion', 'removeSuggestion', 'createAssistantStream', 'onStreamSettled',
+      'appendTextPart', 'appendReasoningPart', 'upsertToolPart', 'upsertCardPart', 'fingerprint',
     ]) {
       expect(typeof (state as Record<string, unknown>)[name]).toBe('function');
     }
