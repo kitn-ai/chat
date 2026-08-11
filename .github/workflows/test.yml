@@ -43,6 +43,24 @@ jobs:
       - name: Consumer packaging guard (registrations survive a real bundler)
         run: pnpm --filter @kitn.ai/ui run verify:consumer
 
+      # Packs the build, installs it into a throwaway app, and type-checks our
+      # SHIPPED .d.ts with a real tsc under BOTH `bundler` and `nodenext`, in both
+      # directions: a wrong assignment per public entry MUST error, and correct
+      # usage MUST compile. Both halves are required -- "wrong code errors" alone
+      # is satisfied by types that error at everything, and "right code compiles"
+      # alone is satisfied by types that are entirely `any`, which is the actual
+      # bug this catches. 0.19.0 shipped declarations re-exporting './read',
+      # './encode' with no file extension: `bundler` tolerates it, node16/nodenext
+      # rejects it, and `skipLibCheck: true` -- on in every Vite template --
+      # SUPPRESSES the rejection and silently types the whole public API as `any`.
+      # No error, no warning, no type-checking at all for the consumer. The kit's
+      # own typecheck compiles src/ under its own tsconfig and cannot see it; the
+      # in-build verify:dts reasons about dist/ with our model of resolution. This
+      # asks the only authority that counts. Needs the build above + network. ~8s
+      # locally; the npm install dominates on CI.
+      - name: Consumer types guard (shipped .d.ts type-check under bundler + nodenext)
+        run: pnpm --filter @kitn.ai/ui run verify:dts:consumer
+
       # Imports EVERY public entry in the exports map under Node's `node`
       # condition, one child process each. Nothing in the repo ever imported the
       # BUILT package on a server, so `import '@kitn.ai/ui'` threw "Client-only
