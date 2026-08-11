@@ -17,7 +17,7 @@ Four web components share one piece of state — the active scope:
 - **`<kai-scope-picker>`** emits `kai-scope-change` with the chosen `filters`. `undefined` filters mean "all knowledge".
 - **`<kai-conversations>`** re-renders with only the threads tagged for that scope.
 - **`<kai-chat>`** drives the thread; its `kai-submit` handler fetches a scoped answer.
-- **`<kai-sources numbered>`** shows the citations behind that answer — a separate element below the chat.
+- **`<kai-sources numbered>`** shows the citations behind that answer — a separate element below the chat, because the retriever owns them. Citations that arrive as `source` parts on a message render their own row inside the thread instead.
 
 `<kai-resizable>` wraps the sidebar and main pane so the user can drag the split.
 

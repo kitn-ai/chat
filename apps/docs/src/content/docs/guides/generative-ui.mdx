@@ -26,7 +26,7 @@ Everything the agent sends is a `CardEnvelope`:
 
 ```ts
 interface CardEnvelope {
-  type: string;   // which card — confirm | choice | form | tasks | link | embed
+  type: string;   // which card — confirm | choice | form | tasks | link | embed | artifact
   id: string;     // stable id; every event correlates back to it
   data: unknown;  // conforms to that type's JSON Schema
   title?: string; // optional card-chrome heading
@@ -44,6 +44,9 @@ The built-in types and the element each renders:
 | `tasks` | Select from a proposed plan | `kai-tasks` | `submit` |
 | `link` | Preview a URL (title/desc/image) | `kai-link-preview` | — |
 | `embed` | Lazy media embed (YouTube, Vimeo) | `kai-embed` | — |
+| `artifact` | Frame a generated page plus the source files behind it | `kai-artifact` | — |
+
+`artifact` reaches a deliberately narrow slice of the `<kai-artifact>` element: an envelope sets `src`, `files`, `tab`, `activeFile`, `displayUrl` and `height`, never the iframe `sandbox`, the toolbar composition or the view state. A model says what to show; the host keeps control of how the viewer behaves. `tab` and `activeFile` seed the first render only, so revising the card leaves a user who has since switched views where they are.
 
 Each `data` shape has a published **JSON Schema** (shipped in the package under `dist/schemas/`, e.g. `confirm.schema.json`). A `confirm` envelope looks like:
 

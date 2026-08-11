@@ -24,6 +24,8 @@ import NeedAHand from '../../../components/NeedAHand.astro';
 
 <Aside type="tip" title="When to use">
 Place `<kai-sources>` directly below an assistant message when the reply cites external references. Use `numbered` when the answer body uses `[1]`, `[2]`, … citation markers. Use the `sources` property for dynamic or streamed lists; use declarative `<kai-source>` children for static or server-rendered markup.
+
+Citations the model streamed as `source` parts already render as a row inside the message. Reach for `<kai-sources>` when the citations are yours to place rather than the model's.
 </Aside>
 
 ## Usage

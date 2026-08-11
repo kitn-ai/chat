@@ -80,11 +80,13 @@ The full handle:
 | `appendText(chunk)` | Append a text delta to the trailing text part |
 | `appendReasoning(chunk, opts?)` | Append a reasoning delta (`opts` can set `label`, provider `index`, or `signature`) |
 | `upsertTool(toolCallId, patch)` | Insert a tool part (first call) or merge `patch` onto its `ToolPart` (later calls), keyed by `toolCallId` |
-| `addCard(envelope)` | Append a generative-UI card part |
+| `addCard(envelope)` | Insert a generative-UI card part (first call) or replace it in place on later calls, keyed by `envelope.id` |
 | `addSource(source)` | Append a citation part |
 | `addFile(attachment)` | Append a file/attachment part |
 | `done()` | Mark the message complete |
 | `abort(reason?)` | Mark the message aborted; flips any in-flight tool parts to `output-error` |
+
+Re-send a card with the same `envelope.id` to revise it in place — a card can fill in as the model works instead of stacking duplicates.
 
 You can pass an optional `init` object (a `Partial<ChatMessage>`) as the second argument to
 seed the message before the stream starts — for example a stable id you generated up front so
