@@ -1,65 +1,74 @@
 event: message_start
-data: {"type":"message_start","message":{"id":"gen-1786476968-jXYtJUhlA1YUC9gTGJyR","type":"message","role":"assistant","container":null,"content":[],"model":"anthropic/claude-haiku-4.5","stop_reason":null,"stop_details":null,"stop_sequence":null,"usage":{"input_tokens":985,"output_tokens":3,"output_tokens_details":null,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"inference_geo":null,"server_tool_use":null,"service_tier":null,"speed":"standard"},"provider":"Amazon Bedrock"}}
+data: {"type":"message_start","message":{"id":"gen-1786489325-Es320GHO6GBhin1QZG5l","type":"message","role":"assistant","container":null,"content":[],"model":"anthropic/claude-haiku-4.5","stop_reason":null,"stop_details":null,"stop_sequence":null,"usage":{"input_tokens":985,"output_tokens":8,"output_tokens_details":null,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"inference_geo":null,"server_tool_use":null,"service_tier":null,"speed":"standard"},"provider":"Amazon Bedrock"}}
 
 event: content_block_start
 data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"The user wants"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"The user wants me to:\n1"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" me to:\n1. First"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":". First"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" check the weather in Tokyo\n2."}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" Then,"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" Then offer to publish a summary of it"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" once I have that"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" somewhere\n\nI shoul"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" information"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"d start"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":", offer to publish a summary of it"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" somewhere\n\nSo"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" I need to:\n1. Call"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" by calling"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" get_weather for"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" Tokyo\n2. Wait"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" Tokyo. Once"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" for the result\n3. Then"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" I have that"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" call propose"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" result"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"_action to offer to publish a summary"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":", I'll use"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\n\nLet me start with the weather check"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" propose"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"_action to ask"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" the"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" user if they want to publish a summary"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"."}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"EtgDCkgIEBABGAIqQPZj80RZVfQ+4XROQ8FV6VwktK+F41mzVb/YGB8VMll0zIodAjv2IAZTLEEAWbk4MRDykpVml+mvRT/2aW7dmZsSDEBWcVi8nyMmwZeUUhoMhQF8AXnsj/gqdYoIIjD6A7xgLlapSQcoXJkvWHeCnZrHkOpT06tZTxIEfQvVLkzy1FbT806I0hKTOxxVmREqvQL/RKu51pBKKme+w++3vWAVHHw3xSk3zDjqu2DeFTUJQUBDucCRfSv8kb/OggHwK8Kg1j7rCmC4d5WVcknWLrMvtoVxUaqupDKZBcD/Elu3eSgKdyLA8oRlsbxBqC5fNIrrPEherrkzI4mw54+I41bh4nFwQhWssl7Ytg/X6f+x99F/wV1wNuJzoQ7H+MY8rpFFuTVCWn+gMNfCMLRAOnbFAfwWSCWTp2nhn4zkxB8oIvb4enAy79GhBqdJBtKhBPAS3ucEEgA+ieC/pR7/E1UG5JjIko80wYXzt9DAT3e+sPTO46zx1iFxAK361HWX2W7LswB4lsSXS+t40rXfRtJX72OxtiSouki5mC/OlqNKjdkwr6EcFUGQi1znIA2FsHQt6uZFIlKjYsgiR1djxxgVpFvWpL5lOfBY1Q4CuBgB"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\n\nLet me start"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" with the weather call."}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"EtADCkgIEBABGAIqQNTxtx2E3TP6x8S0MbP3Vo949Fx/aLEh6yaUqzgwfBB7+UA+ZxaV6upMc4xmp09h2jIZN67LSSXIXsPlU4FhBkUSDHXbxd1nclXEO5Uw2xoMumBhLuR76khSNk1hIjBm1JX1FufYMpTFwOCKdJkZzzN6MoIPUhAyI5ph4xySIF2ByZqIkDN4M480l6H4xncqtQJpk2GmkVeUF47htCEfKG4KTFOs6MY21JFyeNjb67UUpn9LgHunHYEC8HqN+CwRnCwwHQ0R0+BwQVGbqEy01er8VEyz2YKTefGdx2VxVSHY4GX/VWlhbypvSdEtrMNAayLPh68Qsw2E4iUKXFG3PSQ3Y8XH48uKKbiBAQZQl+r0THEUtMFjtYIufIPiO7tbLp8pIFfo3eruZoII/G0dIFD9mFLFr4KLwBh6XELwnKkVS2pa7iJBJhkRNbQMwJs4qK8jThtOI1p3KZQrhYIzTtyhlnw642IiTVFaDZ3do/RColWNZjqig5eNMK6fDh+/VqJL+VemYauZNoejfOEB5gLL2R+iMAukOOBVwPDjHgNokByPF6nA50+egysZ90PSmk5zKFqvS6rIrr9QTz8yRk1d6xJ0dzYYAQ=="}}
 
 event: content_block_stop
 data: {"type":"content_block_stop","index":0}
 
 event: content_block_start
-data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_bdrk_01EK8LiZ7rM3jHanRLjf6b49","caller":{"type":"direct"},"name":"get_weather","input":{}}}
+data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_bdrk_01UMLSfKYeSi1WtxDdzSEpzL","caller":{"type":"direct"},"name":"get_weather","input":{}}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"city\": \"Tokyo"}}
@@ -71,7 +80,7 @@ event: content_block_stop
 data: {"type":"content_block_stop","index":1}
 
 event: message_delta
-data: {"type":"message_delta","delta":{"container":null,"stop_details":null,"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":985,"output_tokens":140,"output_tokens_details":{"thinking_tokens":79},"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"server_tool_use":null,"service_tier":null,"speed":"standard","cost":0.001685,"is_byok":false,"cost_details":{"upstream_inference_cost":0.001685,"upstream_inference_prompt_cost":0.000985,"upstream_inference_completions_cost":0.0007}},"context_management":null}
+data: {"type":"message_delta","delta":{"container":null,"stop_details":null,"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":985,"output_tokens":133,"output_tokens_details":{"thinking_tokens":76},"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"server_tool_use":null,"service_tier":null,"speed":"standard","cost":0.00165,"is_byok":false,"cost_details":{"upstream_inference_cost":0.00165,"upstream_inference_prompt_cost":0.000985,"upstream_inference_completions_cost":0.000665}},"context_management":null}
 
 event: message_stop
 data: {"type":"message_stop"}

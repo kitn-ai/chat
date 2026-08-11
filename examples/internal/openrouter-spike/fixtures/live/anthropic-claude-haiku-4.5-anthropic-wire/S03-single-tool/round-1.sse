@@ -1,5 +1,5 @@
 event: message_start
-data: {"type":"message_start","message":{"id":"gen-1786476912-3DZIdvafHFCLrOaOsX5J","type":"message","role":"assistant","container":null,"content":[],"model":"anthropic/claude-haiku-4.5","stop_reason":null,"stop_details":null,"stop_sequence":null,"usage":{"input_tokens":735,"output_tokens":5,"output_tokens_details":null,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"inference_geo":null,"server_tool_use":null,"service_tier":null,"speed":"standard"},"provider":"Amazon Bedrock"}}
+data: {"type":"message_start","message":{"id":"gen-1786489267-J28JI4yeYMTnzEcvnwbB","type":"message","role":"assistant","container":null,"content":[],"model":"anthropic/claude-haiku-4.5","stop_reason":null,"stop_details":null,"stop_sequence":null,"usage":{"input_tokens":735,"output_tokens":5,"output_tokens_details":null,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"inference_geo":null,"server_tool_use":null,"service_tier":null,"speed":"standard"},"provider":"Amazon Bedrock"}}
 
 event: content_block_start
 data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}
@@ -11,55 +11,67 @@ event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" the weather in Paris. I have"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" the"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" a get"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" get_weather function available, which takes"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"_weather function available that can look"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" a city name"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" up the"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" ("}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" current"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"required) and units"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" weather for a city"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" (optional,"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" defaults to metric). I"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" have"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":". I have"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" all"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" the information"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" the required parameters:\n- city:"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" I need to make this call."}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" \"Paris\""}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\n\nLet me call"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\n- units: not"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" the get_weather function with city"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" specified, but"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" defaults"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" to metric which"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" is fine"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\n\nI"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" should call the get_weather function with"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" city"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"=\"Paris\"."}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"ErsDCkgIEBABGAIqQAXyzbjzdI2R+0Us33qht/ih23EarTwHhUZqy4gvzmI5gm3VaysorbnEjAkHXr23gIJbPLjc4pq8HIkqaOnI0QMSDMQ2Qa557cEQo7H7vBoMOEIHQ6+p1hjfMG83IjBlOOyDxzB1ujoTBVkBWcHQNTKnouy/k1YUdqFUV7Sin/73WH9Tpo4tfis01D7NFGQqoAK25BjxCP4S4f08Y9e4x9QFj5JDzaB+bqQlmm23/BBh8guH8QyEoQXiSvCfCRHhZF0wNFTXXasF4lCMQWKZbCJiwjYxrco3XL5PLi8gwWaavLRE03AFK9qPduKV9LYyOB5+ywRtlcuuAycHZ59SeJYy11kpd0e/bo7mq1c38iqzSMCcsd5pBOaXcTJTqm1wAwPm121L8t0iVTS0Pszis2LBwjOEmd7DYKRqC2RNoYX4VV0spEtyjiRew8lzraF7bNs+uOl4EiLvp7G7eMemkRrPUEHNNIisBSLs3GmekCjQOVkMXMxD70sAispcpWZHAs7uq6Mt6ziq4IxeCtl+IBgtlSCW5RyxpI3JrMaWxwx+Um2evLvmdpEHC8A5SM5WjzUYAQ=="}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"EtkDCkgIEBABGAIqQIEd0cmRgj9Rr+Vtdxc6+mZiGvDTzdeMW0aLhATsZDUdfP42Q78mxcs5Z7Va8AEnwmT4GAkYPVYn2FY8RA9lUToSDIBAs4SB1xvDRxiu8hoMK4/XF2RyYOqxGg9vIjBW+omClKzMoBuYLBQTphguT6aIvelc9m5yJPN6DSpyWpWDvtjW2YxjduoLCM/R1LMqvgIV6CWmIwzEnirFYRnNjzMifwV7De1zkyQXBLY5V/3x+xdLmPfh03YeFufsZzuvTnyqSTyDNrLsKlPYLwkpr7xmSryJrGPmxqoHqjPFT9Iz3bzFsnUjWpj9TsMAfKiUD3xLGYnSEGYJntMcECNgA+OVRcZhgFA+SaEhffdNcYStcbb03CJYdMfl+LE3Eh7L+b7ehAJEr63pskag4dEIMj83Wt/zI2VW4g9EvdyBbFmWOI3zeHjx4hEdDr0CfOlnTC/NrnG5mhDPs7C0ZL8XiWH8qHWZ1cox4gHMKx6CtzLMryo7Vkd+PWqGxxx5LjU2wJbBHLDPSZ72Bt/Syq7FVlR+C3W25dqfEncMjP06E/DsmMXNaLpB5yjE75AFaGFDOV8UIZttBtNOF41vePXBXqpErqWuiw8xuCslVkzzTYMYAQ=="}}
 
 event: content_block_stop
 data: {"type":"content_block_stop","index":0}
 
 event: content_block_start
-data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_bdrk_018wJS1xFNsUTpqj5oNmSSZw","caller":{"type":"direct"},"name":"get_weather","input":{}}}
+data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_bdrk_01ECfgqo276QAiuh8sKKabQV","caller":{"type":"direct"},"name":"get_weather","input":{}}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"city\": \"Paris"}}
@@ -71,7 +83,7 @@ event: content_block_stop
 data: {"type":"content_block_stop","index":1}
 
 event: message_delta
-data: {"type":"message_delta","delta":{"container":null,"stop_details":null,"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":735,"output_tokens":123,"output_tokens_details":{"thinking_tokens":69},"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"server_tool_use":null,"service_tier":null,"speed":"standard","cost":0.00135,"is_byok":false,"cost_details":{"upstream_inference_cost":0.00135,"upstream_inference_prompt_cost":0.000735,"upstream_inference_completions_cost":0.000615}},"context_management":null}
+data: {"type":"message_delta","delta":{"container":null,"stop_details":null,"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":735,"output_tokens":132,"output_tokens_details":{"thinking_tokens":78},"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"server_tool_use":null,"service_tier":null,"speed":"standard","cost":0.001395,"is_byok":false,"cost_details":{"upstream_inference_cost":0.001395,"upstream_inference_prompt_cost":0.000735,"upstream_inference_completions_cost":0.00066}},"context_management":null}
 
 event: message_stop
 data: {"type":"message_stop"}

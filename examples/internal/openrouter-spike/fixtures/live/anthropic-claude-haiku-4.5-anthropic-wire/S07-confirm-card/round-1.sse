@@ -1,5 +1,5 @@
 event: message_start
-data: {"type":"message_start","message":{"id":"gen-1786476933-tBxRJm8xmOrIyshl4noe","type":"message","role":"assistant","container":null,"content":[],"model":"anthropic/claude-haiku-4.5","stop_reason":null,"stop_details":null,"stop_sequence":null,"usage":{"input_tokens":838,"output_tokens":3,"output_tokens_details":null,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"inference_geo":null,"server_tool_use":null,"service_tier":null,"speed":"standard"},"provider":"Amazon Bedrock"}}
+data: {"type":"message_start","message":{"id":"gen-1786489286-enzO2R8mkU67ZGeGoh8U","type":"message","role":"assistant","container":null,"content":[],"model":"anthropic/claude-haiku-4.5","stop_reason":null,"stop_details":null,"stop_sequence":null,"usage":{"input_tokens":838,"output_tokens":3,"output_tokens_details":null,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"inference_geo":null,"server_tool_use":null,"service_tier":null,"speed":"standard"},"provider":"Amazon Bedrock"}}
 
 event: content_block_start
 data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}
@@ -11,7 +11,13 @@ event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" asking me to redeploy the staging"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" environment. This is an"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" environment. This"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" is"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" an"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" action with"}}
@@ -20,61 +26,43 @@ event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" a"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" side effect - it's actually"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" side effect (re"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" changing"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"deploying infrastructure"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"/"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"deploying something"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"application"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":". According"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"), so I should use the propose_"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" to my instructions, I should use the"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"action function to"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" propose_action tool"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" get"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" to ask"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" user"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" for approval"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" approval"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" before taking"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" before"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" actions"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" proceeding.\n\nI"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" with"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"'ll"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" side effects like"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" deploy"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":", delete, send, publish"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":","}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" etc.\n\nI"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" shoul"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"d create"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" create"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" an"}}
@@ -87,6 +75,9 @@ data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"d that"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" clearly"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" describes"}}
@@ -107,19 +98,100 @@ event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"deploying the staging environment."}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"EskECkgIEBABGAIqQOXXJrDJpE1I6ACzHlKwx1CeSRmJOYHD6ALxX3Ctykm5ojMzQzTsbLr8RObSK6T+8RQGrW3lh68sHGaGuIR/GnoSDK1OKg19MuRCI1GDUxoMd2AzDCOVvD83UHlMIjDlHg+LDv16CTTe/ReXTY1fCxoeCD908tZr/OReEGNmRA11ExiPdSHCMVnLNZZwGV0qrgPKbigpxL2wWvmyfQ6H1RVMsO2EroeuYahjtc1UBxJbO9qO93etWoC4AyMq2F2zaAok/F5h44Khc2Vd+qjmnY3FgczsLCr8WSFBcpdZo+3C8Scov02X35mxV1dtmJzxP9YJCGY6HA1JX2KrgYwbHVwvjuxTxGmK8iaxeG8u4mgxZMNbTnTXbkgFFIPZx/a1oaLtOZGpT1DCwrygRwWD2nkr3pHKsYUdplTNYTXvyxFPt3w1eIcxHYdZo5WSihs/KzzIEwNsfQoDBiz8gyhlW+pMaakPsAcKrtX0tWJOsBL0egSmQHyOtpWbQP8DQUxYtt2oANboC1b3HQs63xmYUedE1nMbBqcdszZlFEYUMeT9dasifq5lGwjjn/eI7SHxECrNwu0eDC68HaMrUrHM0alTw4DFoICz5W6ew2/N238eZSFv+NH2jHIxj8b/c3lGLTXM9ek32SWHG8/teRm7vAUPxJldB+HinQrhwxeGf0NsHfJ/cjTt9KQZXR9LdoSpGz/hoiJ5OdNZUPpaEdy3XhuzNbvczK6svCJFaFdXDFo8lN/6+ro3vYj46Vq4dATfGAE="}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\n\nRequire"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"d parameters:\n- title: Something"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" like \"Redeploy"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" Staging Environment\"\n- body: Description"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" of what will happen\n- confirmLabel"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":": Something"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" like \"Redeploy\""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\n\nOptional"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" parameters:\n- tone"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":": Coul"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"d use"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" \"warning"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\" since"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" re"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"deploy"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"ment might"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" have"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" some impact"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":","}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" but \""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"default"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\" is"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" probably"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" fine"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\n\nLet"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" me propose"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" this"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" action."}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"EqcGCkgIEBABGAIqQMof5tdUqeOITxAmpgpN/TjOeaVTbjn5u2s6sM/HEoErl0m62EeDi3iTzBtYAM8yvSYvlLcb/qigBnQUuTzOZrsSDDkboALBPaE6yEMmXxoMegbFzU3lmIVPg4ODIjBqAC8xyS5dIDiwN0ucsn6wwzTLBsbT8q4bWxrqNXoXWg0JV4r0FgLXndKcNCdNqyUqjAUYm54v5Z5gC6K12Jmm9SFJM9nTEEh0hOCk8REGuG+0GGOpap/wJYA0hOp7JrnqLreWl1fm1iqQ9cITTzeuIeZAgS2AiWN4m3xd9u4+QONbMmv0LeN6wK6b4j1SbECkFLi203rxVHaxS+2rOxNyxr00mYR3b3V6uyUp70QqOBAfZNj0xm50WSJoh0f381i6qJwdWy5ujmnjmYETl6M17zgSPIb0An3VFyd9KkYfhd/p19prX90O7T/NEnFrSVjXPWd95oKIC8Ar//TaQlHWVXx1qK25aBJmicLRs5X4nkyYq0wKYAp+jQzWCb+Qi7blvYYgqvbfafRMILiMDpSbMTRO68nO2+DMi1ydKpEK1fLK8wC4iqQDcKWVxspoeNeI/LrbCTXes+eTKwKo7lBZ0sl0OyIFvwXYlrfkDBHzwY0Q13QAgRgjn1VaLXXIFA/14EsIM2zaWgRx4pexFf9yjiK+l3bkSCM4m+cTsMLX+obgoS+skSK8w66UB5wMxc7YT1B7viY2WKBL+2UEk04KZzLgblcPJCpU2Dd94Q/llHsqsfRSDnzAaQJjzDQltJ1agJ5iany4qm8gZtVcIl4FN46/7wHRUzptMvgo0k6ozupg0MkaTEOqf2kGaKadG48wDNmMCrhbDOi0pYYcwIIAG1Mk6/60cX7WToW87XyCB4MB8v1JpNJKXSkyFlwaI4L1u2khmm/txKpiwSpfGakkPFSPZmkmtQV+oNV0npbW/Q5nadZVo7nZPQoE3ri5V7wMYIbkcbcRclOvDiFG0QEHrfigxCqe1xkurenujpXaa1HywDT9FgPVYBbdl/yZpli0BdbVsEIGBvwz5ojdU2OJGIjBrUJN8C6HCb6aN/sZGAE="}}
 
 event: content_block_stop
 data: {"type":"content_block_stop","index":0}
 
 event: content_block_start
-data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_bdrk_01YFy4nDFVQTnxnX4fh4MxpN","caller":{"type":"direct"},"name":"propose_action","input":{}}}
+data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_bdrk_01TuVDuvZRDrBBdxmSo7YLkE","caller":{"type":"direct"},"name":"propose_action","input":{}}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"title\": \"Redeploy"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" Staging Environment"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"title\": \"Redeploy Staging Environment"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\", \"body\": \"This"}}
@@ -164,13 +236,16 @@ event: content_block_delta
 data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\", \"confirmLabel\": \"Redeploy"}}
 
 event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\", \"tone\": \"default"}}
+
+event: content_block_delta
 data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\"}"}}
 
 event: content_block_stop
 data: {"type":"content_block_stop","index":1}
 
 event: message_delta
-data: {"type":"message_delta","delta":{"container":null,"stop_details":null,"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":838,"output_tokens":214,"output_tokens_details":{"thinking_tokens":104},"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"server_tool_use":null,"service_tier":null,"speed":"standard","cost":0.001908,"is_byok":false,"cost_details":{"upstream_inference_cost":0.001908,"upstream_inference_prompt_cost":0.000838,"upstream_inference_completions_cost":0.00107}},"context_management":null}
+data: {"type":"message_delta","delta":{"container":null,"stop_details":null,"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":838,"output_tokens":292,"output_tokens_details":{"thinking_tokens":164},"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"server_tool_use":null,"service_tier":null,"speed":"standard","cost":0.002298,"is_byok":false,"cost_details":{"upstream_inference_cost":0.002298,"upstream_inference_prompt_cost":0.000838,"upstream_inference_completions_cost":0.00146}},"context_management":null}
 
 event: message_stop
 data: {"type":"message_stop"}

@@ -1,5 +1,5 @@
 event: message_start
-data: {"type":"message_start","message":{"id":"gen-1786476950-iTRJ5Jh4iZDl35rPGJyY","type":"message","role":"assistant","container":null,"content":[],"model":"anthropic/claude-haiku-4.5","stop_reason":null,"stop_details":null,"stop_sequence":null,"usage":{"input_tokens":1164,"output_tokens":1,"output_tokens_details":null,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"inference_geo":null,"server_tool_use":null,"service_tier":null,"speed":"standard"},"provider":"Amazon Bedrock"}}
+data: {"type":"message_start","message":{"id":"gen-1786489305-tcszySuKJGJdhCbXnq15","type":"message","role":"assistant","container":null,"content":[],"model":"anthropic/claude-haiku-4.5","stop_reason":null,"stop_details":null,"stop_sequence":null,"usage":{"input_tokens":1174,"output_tokens":1,"output_tokens_details":null,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"inference_geo":null,"server_tool_use":null,"service_tier":null,"speed":"standard"},"provider":"Amazon Bedrock"}}
 
 event: content_block_start
 data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":"","citations":[]}}
@@ -14,28 +14,22 @@ event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"'ve created a release"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" shipping checklist with"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" shipping checklist for you. Check"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" 5 key steps."}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" off each step as you complete it:"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" You"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"\n\n1"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" can now tick off each step as you"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":". **Run final tests and QA"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" complete it"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"** —"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":":"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"\n\n1. **Run full test suite"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" and QA** - ensure"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" Verify"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" everything"}}
@@ -44,79 +38,82 @@ event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" works"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"\n2. **Create release tag an"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"\n2. **Update version and changelog**"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"d changelog** - "}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" — Document"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"document what"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" the release\n3. **Build an"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"'s"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"d create artifacts"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" new\n3. **Build and package"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"** — Prepare"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" release** - prepare"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" packages"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" the artifacts"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"\n4. **Tag and push to repository"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"\n4. **Deploy to production**"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"** — Version"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" - push"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" control tracking"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" it"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"\n5. **Deploy to production**"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" live"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" — Ship it"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"\n5. **Verify and notify"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" live!"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"**"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"\n\nStart"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" - confirm success"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" with the first item"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" an"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"d let"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"d work your"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" people"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" way down"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" know\n\nCheck"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":". Let"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" off each task"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" me know if"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" as you go"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" you need to"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" through"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" add,"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" your"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" remove"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" release process!"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":", or modify any steps"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"!"}}
 
 event: content_block_stop
 data: {"type":"content_block_stop","index":0}
 
 event: message_delta
-data: {"type":"message_delta","delta":{"container":null,"stop_details":null,"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1164,"output_tokens":117,"output_tokens_details":{"thinking_tokens":0},"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"server_tool_use":null,"service_tier":null,"speed":"standard","cost":0.001749,"is_byok":false,"cost_details":{"upstream_inference_cost":0.001749,"upstream_inference_prompt_cost":0.001164,"upstream_inference_completions_cost":0.000585}},"context_management":null}
+data: {"type":"message_delta","delta":{"container":null,"stop_details":null,"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1174,"output_tokens":122,"output_tokens_details":{"thinking_tokens":0},"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"server_tool_use":null,"service_tier":null,"speed":"standard","cost":0.001784,"is_byok":false,"cost_details":{"upstream_inference_cost":0.001784,"upstream_inference_prompt_cost":0.001174,"upstream_inference_completions_cost":0.00061}},"context_management":null}
 
 event: message_stop
 data: {"type":"message_stop"}

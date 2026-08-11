@@ -1,86 +1,113 @@
 event: message_start
-data: {"type":"message_start","message":{"id":"gen-1786476904-2xNUDqcIqv7ISltNynjy","type":"message","role":"assistant","container":null,"content":[],"model":"anthropic/claude-haiku-4.5","stop_reason":null,"stop_details":null,"stop_sequence":null,"usage":{"input_tokens":99,"output_tokens":8,"output_tokens_details":null,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"inference_geo":null,"server_tool_use":null,"service_tier":null,"speed":"standard"},"provider":"Amazon Bedrock"}}
+data: {"type":"message_start","message":{"id":"gen-1786489257-HokYCFSjkIwdPCWjXxKC","type":"message","role":"assistant","container":null,"content":[],"model":"anthropic/claude-haiku-4.5","stop_reason":null,"stop_details":null,"stop_sequence":null,"usage":{"input_tokens":99,"output_tokens":7,"output_tokens_details":null,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"inference_geo":null,"server_tool_use":null,"service_tier":null,"speed":"standard"},"provider":"Amazon Bedrock"}}
 
 event: content_block_start
 data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"The user is asking for a two-"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"The user is asking for a conc"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"sentence explanation of what a web component is"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"ise definition"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":". This"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" of web"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" is a straightforward technical"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" components in just"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" question that I can answer directly without ne"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" two sentences. Let"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"eding any"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" me provide"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" tools."}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" a clear an"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\n\nA web component is a set"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"d accurate explanation."}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" of web platform APIs that"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\n\nWeb components are a set of web platform"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" allow"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" APIs that allow developers"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" you to create custom"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" to create reusable, encaps"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":","}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"ulated custom"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" reusable HTML elements with"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" HTML"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" encapsulated functionality an"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" elements."}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"d styling. They"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"'re built"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" They're built"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" on standards"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" like Custom"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" like Custom Elements, Shadow DOM, an"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" Elements,"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"d HTML Templates,"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" Shadow DOM, and HTML Templates."}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" enabling"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" developers to package"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" functionality"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" an"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"d styling that"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" works"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" consistently"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" across different frameworks"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" and applications"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"."}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\n\nLet"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" me make"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" me make sure this"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" this"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" is clear"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" concise and clear in exactly"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" and accurate"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" in exactly"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" two sentences."}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"EvoECkgIEBABGAIqQIzgpL2r3HI2SsmYyTYSfAg9N5iezOwRY4SeUeiu5Oc7FYnQYTGtbILH8mAes/VGXIhGfP1lvIOZ/QNugzn+CLMSDNGmU+0boBjodupVgRoMM+anneLuLB2avnUFIjB9dyLG5sQUSg3WQSGsha+9aUum8wIZiqIOwmbBguSKncr8VH1OFbYUsSKrGEdVWcYq3wOn65cQNcF6wJa24R5ehxQfy4ikPN6Oi9rGldoIzbPWYYOjUiaIsKtP0kYwSDnEPzsw74GU6XiuoMD5yY9Fp77G57zRg9hO7s/yEkZjZvuiF+x5fDhVMLAryVDvHwZnvBWxD/owVtFo/JHPMnw9/yntS/hGWD5CB91oK5oVsO1Q5hRniF4QEQlBBNmEAezDazae4wpyYOvFsOEzA9gbrQr9RzQDvKdreWsnCdcFqUY0lz9BF5VEWs16liuLFofhuYZuk/N7teAtH8/eDX8sVTkq6+hydXU0+5kwjckFTeX8VjTg8nPYx/Hsdu/BcVS0nO8BMmgPIV/FndIM27T4LQxr8h0ZQMfhET8taeD/RlHTwuS2ghU5EcEs7rxoEhV84ipSYM7kFxjZ3Axjdu65KRkzTql/o48+mHyVl+TZYbQuAZG15IgsRjHaaQZYOj8atCIZ6m9HjPQui6wy1skiUOApZlHpQYQWnlkiqtXasUL5oCFQg+bEufRjufd5YA6qaphljMCU1B0G54VP26nstrDWW91ucB7hm7JCojVSW/XE5r1e96HXVAN9n3obEwQOrLQtd2DSb4lzPBGxZxnUpwMbhpmV7ZPEAr2c4Wewv/reDeDoteO7YJaYid3bt24CWxgB"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"Er8FCkgIEBABGAIqQNFtNDC6WJ99b8ADQr9mIWchZWNrOLKVoTwiH/Y19fsLZBPr7oisiDzieXGKyRY328DbCM1pXXKx/VLiRoZg50MSDFLT2s9SqO0QndmmbBoMRWZwr3lyUuJi3a91IjCoxL3CyaLxOiEVzfku3A5EKpVH4qC6HOgkqrIHobIjSoDYdp4L2ROZBAoq5fbNWesqpAQ+89Obi8Yg8P2d08PgJHYjt920c50VMKpLLaLrzssGnr4Vzb9QS2JqrzVYS9a8DT7bOa/1XT+ILb0vpSB9lDnEUvSZgPTrsXV27eEr/FX+f2rqVkiVflaQaM5E1X8LT1EwVxZKaAs3bRS1pPDgz2VBlXv3BSz7+EkfWgUbEpmA5zju2bNeL2QpcgFLbdutpDx6Z3ZpAMx/WoYFruUvqMCm9e05j7UYT/Q9YlMsQP/Eev781eYub+H/iEmPgsMMWMj25e21daxaggeLnQI30bfAnHRxvzzVeIATmCN8/+FrhoudpKfk1Y0/rhBvhXsoQvhoD/UAgTbmRLfppLbivBAHJDjpfxBkvYRTPqPL3FDo2TuNZevHQqhMV8CFltk3hv+jpjZErepjINPcwlZnjRZeAEwiIJn85amg9gno2pvmRyNExsOHdQc62eYbC1+WnWLUcUzRfLnDo8fUUlwb0kndLAuX7Zf6k9+4hA6MrUKyD9GN2w4TZLJODFEeY/9001x34q61fu60C8fReaaikL5BsXjNu1Yfb0nb6VtS1EExrHzt3x107Dm30ap0HvtIyS53LVZ/V/MRIN60rtSFeX2CaUKCtc8btBqIR9Ra1OEyHvpTdAyZ+/XjDwamlzjZqS/v8xuatKP/SaaKFJYKLy+okEV710WxfX20btnE7g6ojHNF6WYyASgwzb5HV/B9JijW/V/gd0MQZ88tX8bWOkcHCa3ZxhgB"}}
 
 event: content_block_stop
 data: {"type":"content_block_stop","index":0}
@@ -89,61 +116,49 @@ event: content_block_start
 data: {"type":"content_block_start","index":1,"content_block":{"type":"text","text":"","citations":[]}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"A web component is a"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"A web component is a re"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" re"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"usable,"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"usable custom HTML element created using web"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" encapsulated custom HTML element built"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" platform standards"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" using web"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" ("}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" platform APIs like"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"Custom Elements, Shadow DOM, and HTML"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" Custom"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" Templates) that encapsulates its"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" Elements, Shadow DOM, an"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" own"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"d HTML Templates. They"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" markup"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" allow developers to create self"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":", styling, and behavior."}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"-contained components with"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" They"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" their own styling and behavior that work"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" allow developers"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" consistently across any"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" to buil"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" framework"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"d mo"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" or vanilla"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"dular, inter"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"operable components that work"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" across"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" different frameworks"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" and applications"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" JavaScript project"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"."}}
@@ -152,7 +167,7 @@ event: content_block_stop
 data: {"type":"content_block_stop","index":1}
 
 event: message_delta
-data: {"type":"message_delta","delta":{"container":null,"stop_details":null,"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":99,"output_tokens":167,"output_tokens_details":{"thinking_tokens":118},"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"server_tool_use":null,"service_tier":null,"speed":"standard","cost":0.000934,"is_byok":false,"cost_details":{"upstream_inference_cost":0.000934,"upstream_inference_prompt_cost":0.000099,"upstream_inference_completions_cost":0.000835}},"context_management":null}
+data: {"type":"message_delta","delta":{"container":null,"stop_details":null,"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":99,"output_tokens":167,"output_tokens_details":{"thinking_tokens":135},"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"server_tool_use":null,"service_tier":null,"speed":"standard","cost":0.000934,"is_byok":false,"cost_details":{"upstream_inference_cost":0.000934,"upstream_inference_prompt_cost":0.000099,"upstream_inference_completions_cost":0.000835}},"context_management":null}
 
 event: message_stop
 data: {"type":"message_stop"}
