@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { createSignal } from 'solid-js';
 import { render, cleanup, fireEvent } from '@solidjs/testing-library';
@@ -59,8 +59,61 @@ describe('groupMessageParts', () => {
       { type: 'text', text: 'Done.' },
     ];
     const groups = groupMessageParts(parts);
-    expect(groups.map((g) => (g.kind === 'single' ? g.part.type : 'files'))).toEqual([
+    expect(groups.map((g) => (g.kind === 'single' ? g.part.type : g.kind))).toEqual([
       'text', 'tool', 'text',
+    ]);
+  });
+
+  // --- source parts group exactly like file parts ---------------------------
+
+  it('wraps a single source part in its own sources group', () => {
+    const parts: MessagePart[] = [
+      { type: 'source', source: { url: 'https://ui.kitn.ai/guides/theming' } },
+    ];
+    expect(groupMessageParts(parts)).toEqual([{ kind: 'sources', parts: [parts[0]] }]);
+  });
+
+  it('collapses three consecutive source parts into ONE sources group', () => {
+    // N citations from one search are one wrapped row, not N stacked rows.
+    const parts: MessagePart[] = [
+      { type: 'source', source: { url: 'https://ui.kitn.ai/a', index: 1 } },
+      { type: 'source', source: { url: 'https://ui.kitn.ai/b', index: 2 } },
+      { type: 'source', source: { url: 'https://ui.kitn.ai/c', index: 3 } },
+    ];
+    const groups = groupMessageParts(parts);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toEqual({ kind: 'sources', parts });
+  });
+
+  it('keeps source parts separated by a non-source part as two distinct groups', () => {
+    const src1: MessagePart = { type: 'source', source: { url: 'https://ui.kitn.ai/a' } };
+    const text: MessagePart = { type: 'text', text: 'in between' };
+    const src2: MessagePart = { type: 'source', source: { url: 'https://ui.kitn.ai/b' } };
+    expect(groupMessageParts([src1, text, src2])).toEqual([
+      { kind: 'sources', parts: [src1] },
+      { kind: 'single', part: text },
+      { kind: 'sources', parts: [src2] },
+    ]);
+  });
+
+  it('does not merge a source run into an adjacent file run', () => {
+    const file: MessagePart = { type: 'file', attachment: { id: 'a', type: 'file', filename: 'a.png' } };
+    const src: MessagePart = { type: 'source', source: { url: 'https://ui.kitn.ai/a' } };
+    expect(groupMessageParts([file, src])).toEqual([
+      { kind: 'files', parts: [file] },
+      { kind: 'sources', parts: [src] },
+    ]);
+  });
+
+  it('leaves a source group where its parts sat in `parts`', () => {
+    const parts: MessagePart[] = [
+      { type: 'text', text: 'Searching.' },
+      { type: 'source', source: { url: 'https://ui.kitn.ai/a' } },
+      { type: 'source', source: { url: 'https://ui.kitn.ai/b' } },
+      { type: 'text', text: 'Done.' },
+    ];
+    expect(groupMessageParts(parts).map((g) => (g.kind === 'single' ? g.part.type : g.kind))).toEqual([
+      'text', 'sources', 'text',
     ]);
   });
 });
@@ -87,14 +140,22 @@ function renderStream(initial: MessagePart[]) {
   };
 }
 
-/** The tool panel's disclosure trigger — the only button carrying aria-controls. */
-const toolTrigger = (c: HTMLElement) => c.querySelector('button[aria-controls]') as HTMLButtonElement;
-/** The reasoning disclosure trigger (a plain button, no aria-controls). */
-const reasoningTrigger = (c: HTMLElement) =>
-  Array.from(c.querySelectorAll('button')).find((b) => !b.hasAttribute('aria-controls')) as HTMLButtonElement;
-/** The reasoning disclosure has no aria state; its chevron rotates when open. */
+/** Find a disclosure trigger by its VISIBLE label. Both disclosures now carry
+ *  `aria-controls` (the reasoning block gained it along with the rest of its aria
+ *  wiring), so "the button with/without aria-controls" no longer tells them
+ *  apart — the label a user actually reads does. */
+const triggerLabelled = (c: HTMLElement, label: string) =>
+  Array.from(c.querySelectorAll('button')).find((b) =>
+    (b.textContent ?? '').includes(label),
+  ) as HTMLButtonElement;
+/** The tool panel's disclosure trigger — labelled with the tool's type. */
+const toolTrigger = (c: HTMLElement) => triggerLabelled(c, 'get_weather');
+/** The reasoning disclosure trigger — labelled from the part's `label`, default 'Reasoning'. */
+const reasoningTrigger = (c: HTMLElement) => triggerLabelled(c, 'Reasoning');
+/** Read the reasoning disclosure's state off its aria wiring rather than the
+ *  chevron's rotation class. */
 const reasoningOpen = (c: HTMLElement) =>
-  (reasoningTrigger(c).querySelector('div')?.className ?? '').includes('rotate-180');
+  reasoningTrigger(c).getAttribute('aria-expanded') === 'true';
 
 describe('MessageBody streaming identity', () => {
   it('keeps a TOOL panel expanded across the next stream delta', () => {
@@ -196,5 +257,199 @@ describe('MessageBody streaming identity', () => {
     expect(toolTrigger(container)).toBe(node);
     expect(toolTrigger(container)).toHaveAttribute('aria-expanded', 'true');
     expect(container.textContent).toContain('It is sunny.');
+  });
+});
+
+// ─── The citation row ────────────────────────────────────────────────────────
+//
+// `source` parts arrive on the message correctly (the wire and
+// `AssistantStream.addSource` both work) and used to render NOTHING. These tests
+// guard the row that fixes that.
+//
+// The scoping below is the whole point, and it is copied from a real miss: the
+// S12 conformance assertion in the openrouter spike first used a bare
+// `a[href*="ui.kitn.ai/guides/theming"]` and PASSED — because the MODEL had
+// typed a markdown link in its prose and `Markdown` rendered it as an anchor.
+// That proved the model can type a URL, not that the kit renders a citation. A
+// citation lives OUTSIDE the message bubble, so every assertion here filters to
+// anchors that are NOT inside `[part~="content"]`, and the negative controls
+// below keep that filter honest.
+
+/** A message whose text part contains a link the MODEL typed — rendered as a
+ *  real anchor INSIDE `[part~="content"]`. The decoy. */
+const MODEL_TYPED_PROSE = 'See [theming](https://ui.kitn.ai/guides/theming) for details.';
+
+/** Anchors the KIT put on screen as citations: anchors OUTSIDE the content part. */
+const citationAnchors = (c: HTMLElement) =>
+  [...c.querySelectorAll('a[href]')].filter((a) => !a.closest('[part~="content"]')) as HTMLAnchorElement[];
+
+const citationHrefs = (c: HTMLElement) => citationAnchors(c).map((a) => a.getAttribute('href'));
+
+const citationRow = (c: HTMLElement) => c.querySelector('[part~="citations"]');
+
+const renderBody = (parts: MessagePart[], markdown = true) =>
+  render(() => <MessageBody parts={parts} isUser={false} markdown={markdown} />);
+
+describe('MessageBody citation row', () => {
+  it('renders a source part as a citation the user can see and follow', () => {
+    const { container } = renderBody([
+      { type: 'source', source: { url: 'https://ui.kitn.ai/guides/theming', title: 'Theming' } },
+    ]);
+    expect(citationHrefs(container)).toContain('https://ui.kitn.ai/guides/theming');
+  });
+
+  it('puts the citation row OUTSIDE the message content part', () => {
+    const { container } = renderBody([
+      { type: 'text', text: 'Theming uses CSS variables.' },
+      { type: 'source', source: { url: 'https://ui.kitn.ai/guides/theming', title: 'Theming' } },
+    ]);
+    const row = citationRow(container);
+    expect(row).not.toBeNull();
+    expect(row!.closest('[part~="content"]')).toBeNull();
+    // The anchor really is inside that row, not merely somewhere on the page.
+    expect(citationAnchors(container)[0]!.closest('[part~="citations"]')).toBe(row);
+  });
+
+  // --- negative controls: the assertions above must have teeth --------------
+
+  it('does NOT count a link the model typed in its prose as a citation', () => {
+    // No source parts at all. The prose still contains a rendered anchor to the
+    // exact URL a citation would use. If this ever goes green-by-accident, the
+    // filter above is measuring the model, not the kit.
+    const { container } = renderBody([{ type: 'text', text: MODEL_TYPED_PROSE }]);
+
+    // The decoy is genuinely there and genuinely an anchor…
+    const inProse = container.querySelectorAll('[part~="content"] a[href]');
+    expect(inProse.length).toBe(1);
+    expect(inProse[0]!.getAttribute('href')).toBe('https://ui.kitn.ai/guides/theming');
+
+    // …and it is NOT a citation.
+    expect(citationRow(container)).toBeNull();
+    expect(citationHrefs(container)).toEqual([]);
+  });
+
+  it('renders no citation row for a message with no source parts', () => {
+    const { container } = renderBody([
+      { type: 'text', text: 'Just an answer.' },
+      { type: 'tool', tool: { type: 'get_weather', kind: 'generic', state: 'output-available' } },
+    ]);
+    expect(citationRow(container)).toBeNull();
+  });
+
+  it('separates the citation from the model-typed link when BOTH are present', () => {
+    // The realistic case: the model cites in prose AND the search tool produced
+    // source parts. Exactly one of those two anchors is the kit's citation.
+    const { container } = renderBody([
+      { type: 'text', text: MODEL_TYPED_PROSE },
+      { type: 'source', source: { url: 'https://ui.kitn.ai/guides/theming', title: 'Theming' } },
+    ]);
+    expect(container.querySelectorAll('a[href]')).toHaveLength(2);
+    expect(citationHrefs(container)).toEqual(['https://ui.kitn.ai/guides/theming']);
+  });
+
+  // --- grouping, as seen in the DOM ----------------------------------------
+
+  it('renders three consecutive sources as ONE row, not three', () => {
+    const { container } = renderBody([
+      { type: 'source', source: { url: 'https://ui.kitn.ai/a' } },
+      { type: 'source', source: { url: 'https://ui.kitn.ai/b' } },
+      { type: 'source', source: { url: 'https://ui.kitn.ai/c' } },
+    ]);
+    expect(container.querySelectorAll('[part~="citations"]')).toHaveLength(1);
+    expect(citationHrefs(container)).toEqual([
+      'https://ui.kitn.ai/a', 'https://ui.kitn.ai/b', 'https://ui.kitn.ai/c',
+    ]);
+  });
+
+  it('renders two rows when a text part splits the source run', () => {
+    const { container } = renderBody([
+      { type: 'source', source: { url: 'https://ui.kitn.ai/a' } },
+      { type: 'text', text: 'Then I looked further.' },
+      { type: 'source', source: { url: 'https://ui.kitn.ai/b' } },
+    ]);
+    expect(container.querySelectorAll('[part~="citations"]')).toHaveLength(2);
+  });
+
+  it('keeps a source group in its original position among the parts', () => {
+    const { container } = renderBody([
+      { type: 'text', text: 'First.' },
+      { type: 'source', source: { url: 'https://ui.kitn.ai/a' } },
+      { type: 'text', text: 'Last.' },
+    ], false);
+    const order = [...container.querySelectorAll('[part~="content"],[part~="citations"]')]
+      .map((el) => (el.getAttribute('part')!.includes('citations') ? 'citations' : 'content'));
+    expect(order).toEqual(['content', 'citations', 'content']);
+  });
+
+  // --- labels + the all-optional Source shape ------------------------------
+
+  it('labels a citation with its index when the model numbered it', () => {
+    const { container } = renderBody([
+      { type: 'source', source: { url: 'https://ui.kitn.ai/a', index: 1 } },
+      { type: 'source', source: { url: 'https://example.com/b', index: 2 } },
+    ]);
+    expect(citationAnchors(container).map((a) => a.textContent?.trim())).toEqual(['1', '2']);
+  });
+
+  it('falls back to the domain when the source is not numbered', () => {
+    const { container } = renderBody([
+      { type: 'source', source: { url: 'https://ui.kitn.ai/guides/theming' } },
+    ]);
+    expect(citationAnchors(container)[0]!.textContent?.trim()).toBe('ui.kitn.ai');
+  });
+
+  it('renders a url-less source without crashing and without href="undefined"', () => {
+    // EVERY field on `Source` is optional. A citation with no url must degrade
+    // to a plain non-link chip, never to `<a href="undefined">` or `<a href="">`
+    // (which navigates to the current page).
+    const { container } = renderBody([
+      { type: 'source', source: { title: 'An offline reference', index: 3 } },
+      { type: 'source', source: {} },
+    ]);
+    const row = citationRow(container);
+    expect(row).not.toBeNull();
+    expect(row!.innerHTML).not.toContain('undefined');
+    for (const a of row!.querySelectorAll('a')) {
+      // No href attribute at all — an <a> without href is valid and inert.
+      expect(a.hasAttribute('href')).toBe(false);
+    }
+    expect(row!.textContent).toContain('3');
+  });
+
+  it('labels a url-less, unnumbered source with its title rather than nothing', () => {
+    const { container } = renderBody([
+      { type: 'source', source: { title: 'An offline reference' } },
+    ]);
+    expect(citationRow(container)!.textContent).toContain('An offline reference');
+  });
+
+  it('shows the source title + snippet in the hover card', async () => {
+    // The chip is only the handle; `title` and `snippet` live in the hover card,
+    // which is PORTALED and only mounts while open. Drive it for real (focus
+    // opens it, same as pointer-enter) instead of asserting the props go in.
+    vi.useFakeTimers();
+    try {
+      const { container } = renderBody([
+        {
+          type: 'source',
+          source: {
+            url: 'https://ui.kitn.ai/guides/theming',
+            title: 'Theming',
+            snippet: 'Themes are driven by CSS custom properties.',
+          },
+        },
+      ]);
+      const chip = citationAnchors(container)[0]!;
+      expect(document.body.textContent).not.toContain('Themes are driven by CSS custom properties.');
+
+      fireEvent.focusIn(chip);
+      vi.advanceTimersByTime(200); // past HoverCardRoot's 150ms openDelay
+      await Promise.resolve();
+
+      expect(document.body.textContent).toContain('Theming');
+      expect(document.body.textContent).toContain('Themes are driven by CSS custom properties.');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

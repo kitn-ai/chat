@@ -20,21 +20,29 @@ function useSourceContext() {
 // --- Source (Root) ---
 
 export interface SourceProps {
-  href: string;
+  /** The citation's URL. OPTIONAL: every field of a model-produced citation is,
+   *  so a source can arrive with a title and no url. In that case the chip
+   *  renders as a plain, inert `<a>` with NO `href` attribute — which is valid
+   *  HTML and simply not a link — rather than `<a href="">`, which would
+   *  navigate to the current page. */
+  href?: string;
   children: JSX.Element;
 }
 
 function Source(props: SourceProps) {
+  const href = () => props.href ?? '';
   const domain = () => {
+    const h = href();
+    if (!h) return '';
     try {
-      return new URL(props.href).hostname;
+      return new URL(h).hostname;
     } catch {
-      return props.href.split('/').pop() || props.href;
+      return h.split('/').pop() || h;
     }
   };
 
   return (
-    <SourceContext.Provider value={{ get href() { return props.href; }, get domain() { return domain(); } }}>
+    <SourceContext.Provider value={{ get href() { return href(); }, get domain() { return domain(); } }}>
       <HoverCardRoot openDelay={150}>
         {props.children}
       </HoverCardRoot>
@@ -57,7 +65,8 @@ function SourceTrigger(props: SourceTriggerProps) {
   return (
     <HoverCardTrigger>
       <a
-        href={ctx.href}
+        // `undefined` OMITS the attribute — see SourceProps.href.
+        href={ctx.href || undefined}
         target="_blank"
         rel="noopener noreferrer"
         class={cn(
@@ -66,7 +75,8 @@ function SourceTrigger(props: SourceTriggerProps) {
           props.class
         )}
       >
-        <Show when={props.showFavicon}>
+        {/* No url, no favicon to look up. */}
+        <Show when={props.showFavicon && ctx.href}>
           <img
             src={`https://www.google.com/s2/favicons?sz=64&domain_url=${encodeURIComponent(ctx.href)}`}
             alt="favicon"
@@ -94,27 +104,35 @@ function SourceContent(props: SourceContentProps) {
   return (
     <HoverCardContent class={cn('w-80 p-0 shadow-xs', props.class)}>
       <a
-        href={ctx.href}
+        // `undefined` OMITS the attribute — see SourceProps.href.
+        href={ctx.href || undefined}
         target="_blank"
         rel="noopener noreferrer"
         class="flex flex-col gap-2 p-3"
       >
-        <div class="flex items-center gap-1.5">
-          <img
-            src={`https://www.google.com/s2/favicons?sz=64&domain_url=${encodeURIComponent(ctx.href)}`}
-            alt="favicon"
-            class="size-4 rounded-full"
-            width={16}
-            height={16}
-          />
-          <div class="text-primary truncate text-sm">
-            {ctx.domain.replace('www.', '')}
+        {/* The domain header row only means anything when there IS a url. */}
+        <Show when={ctx.href}>
+          <div class="flex items-center gap-1.5">
+            <img
+              src={`https://www.google.com/s2/favicons?sz=64&domain_url=${encodeURIComponent(ctx.href)}`}
+              alt="favicon"
+              class="size-4 rounded-full"
+              width={16}
+              height={16}
+            />
+            <div class="text-primary truncate text-sm">
+              {ctx.domain.replace('www.', '')}
+            </div>
           </div>
-        </div>
-        <div class="line-clamp-2 text-sm font-medium">{props.title}</div>
-        <div class="text-muted-foreground line-clamp-2 text-sm">
-          {props.description}
-        </div>
+        </Show>
+        <Show when={props.title}>
+          <div class="line-clamp-2 text-sm font-medium">{props.title}</div>
+        </Show>
+        <Show when={props.description}>
+          <div class="text-muted-foreground line-clamp-2 text-sm">
+            {props.description}
+          </div>
+        </Show>
       </a>
     </HoverCardContent>
   );
@@ -122,10 +140,16 @@ function SourceContent(props: SourceContentProps) {
 
 // --- SourceList (convenience) ---
 
-export interface SourceListProps { children: JSX.Element; class?: string }
+export interface SourceListProps {
+  children: JSX.Element;
+  class?: string;
+  /** `::part` name(s) exposed on the row. The message body passes `"citations"`
+   *  so consumers can target the citation row from outside the shadow boundary. */
+  part?: string;
+}
 
 function SourceList(props: SourceListProps) {
-  return <div class={cn('flex flex-wrap gap-1.5 mt-3', props.class)}>{props.children}</div>;
+  return <div part={props.part} class={cn('flex flex-wrap gap-1.5 mt-3', props.class)}>{props.children}</div>;
 }
 
 export { Source, SourceTrigger, SourceContent, SourceList };
