@@ -8,6 +8,7 @@ import Playground from '../../../components/Playground.tsx';
 import Example from '../../../components/Example.tsx';
 import PropTable from '../../../components/PropTable.astro';
 import PartTable from '../../../components/PartTable.astro';
+import SlotTable from '../../../components/SlotTable.astro';
 import ComposedFrom from '../../../components/ComposedFrom.astro';
 import Facts from '../../../components/Facts.astro';
 import NeedAHand from '../../../components/NeedAHand.astro';
@@ -56,6 +57,10 @@ Put the scrollable content as light-DOM children — it lands in the default slo
 `orientation="both"` — content larger than the box on both axes scrolls in two directions.
 
 <Example client:visible tag="kai-scroll-area" config={{ orientation: 'both' }} data="both" />
+
+## Slots
+
+<SlotTable tag="kai-scroll-area" />
 
 ## Styling
 

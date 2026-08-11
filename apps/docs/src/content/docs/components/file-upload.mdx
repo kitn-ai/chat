@@ -8,6 +8,7 @@ import Playground from '../../../components/Playground.tsx';
 import Example from '../../../components/Example.tsx';
 import PropTable from '../../../components/PropTable.astro';
 import EventTable from '../../../components/EventTable.astro';
+import SlotTable from '../../../components/SlotTable.astro';
 import ComposedFrom from '../../../components/ComposedFrom.astro';
 import Facts from '../../../components/Facts.astro';
 import NeedAHand from '../../../components/NeedAHand.astro';
@@ -68,6 +69,10 @@ Override the default copy with `label` when context makes it too generic.
 Lock the dropzone while an upload is in progress or the user lacks permissions.
 
 <Example client:visible tag="kai-file-upload" config={{ disabled: true, label: 'Uploads are disabled' }} />
+
+## Slots
+
+<SlotTable tag="kai-file-upload" />
 
 ## Props
 

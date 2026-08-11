@@ -9,6 +9,7 @@ import Example from '../../../components/Example.tsx';
 import PropTable from '../../../components/PropTable.astro';
 import EventTable from '../../../components/EventTable.astro';
 import SlotTable from '../../../components/SlotTable.astro';
+import DeclarativeChildrenTable from '../../../components/DeclarativeChildrenTable.astro';
 import PartTable from '../../../components/PartTable.astro';
 import ComposedFrom from '../../../components/ComposedFrom.astro';
 import Facts from '../../../components/Facts.astro';
@@ -63,6 +64,8 @@ Set `message` in JavaScript (objects can't be HTML attributes) and listen for `k
 - **Markdown** is on by default for `role="assistant"`, off for `role="user"`. Override with the `markdown` boolean.
 - **`actions`** accepts built-in names (`'copy'`, `'like'`, `'dislike'`, `'regenerate'`, `'edit'`) and/or `{ id, label, icon?, tooltip? }` descriptors. Alternatively, place `<kai-action>` children in the light DOM.
 - **`actionsReveal`** — `'always'` (default) keeps the action bar visible; `'hover'` hides it until the row is hovered.
+
+<DeclarativeChildrenTable tag="kai-message" />
 
 ## The action row
 

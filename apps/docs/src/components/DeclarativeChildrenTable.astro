@@ -1,0 +1,40 @@
+---
+// Declarative light-DOM children an element accepts, from the generated
+// element-meta.json's `declarativeChildren`. These are markup-only child tags
+// (`<kai-step>`, `<kai-model>`, …) parsed into the equivalent prop item on
+// mount and re-parsed on every light-DOM mutation — the SSR / no-JS-wiring
+// alternative to setting the array prop directly.
+import meta from '@kitn.ai/ui/element-meta.json';
+interface Props { tag: string }
+const { tag } = Astro.props;
+const el = (meta as any[]).find((e) => e.tag === tag);
+const children = el?.declarativeChildren ?? [];
+const th = 'text-left text-xs font-semibold uppercase tracking-wide text-ink-3 bg-surface px-4 py-2.5 border-b border-line';
+---
+{children.length > 0 && (
+  <div class="not-content my-4 overflow-hidden rounded-xl border border-line">
+    <table class="w-full border-collapse text-sm">
+      <thead><tr><th class={th}>Child element</th><th class={th}>Attributes</th><th class={th}>Text content</th><th class={th}>Notes</th></tr></thead>
+      <tbody>
+        {children.map((c: any) => (
+          <tr class="border-b border-line last:[&>td]:border-0">
+            <td class="px-4 py-3 align-top font-mono text-sm font-semibold text-link border-b border-line whitespace-nowrap">{`<${c.tag}>`}</td>
+            <td class="px-4 py-3 align-top border-b border-line">
+              {(c.attributes ?? []).length > 0 ? (
+                <div class="flex flex-wrap gap-1">
+                  {c.attributes.map((a: string) => (
+                    <code class="rounded border border-line bg-surface-2 px-1.5 py-0.5 font-mono text-xs text-ink-2">{a}</code>
+                  ))}
+                </div>
+              ) : (
+                <span class="text-sm text-ink-3">—</span>
+              )}
+            </td>
+            <td class="px-4 py-3 align-top text-sm text-ink-2 border-b border-line">{c.text ? 'Yes' : '—'}</td>
+            <td class="px-4 py-3 align-top text-sm text-ink-2 border-b border-line">{c.description ?? '—'}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+)}

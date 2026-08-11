@@ -8,6 +8,7 @@ import Playground from '../../../components/Playground.tsx';
 import Example from '../../../components/Example.tsx';
 import PropTable from '../../../components/PropTable.astro';
 import PartTable from '../../../components/PartTable.astro';
+import SlotTable from '../../../components/SlotTable.astro';
 import ComposedFrom from '../../../components/ComposedFrom.astro';
 import Facts from '../../../components/Facts.astro';
 import NeedAHand from '../../../components/NeedAHand.astro';
@@ -55,6 +56,10 @@ A muted pill for labels and statuses.
 `citation` is a filled primary marker for inline citation references.
 
 <Example client:visible tag="kai-badge" config={{ variant: 'citation' }} data="citation" />
+
+## Slots
+
+<SlotTable tag="kai-badge" />
 
 ## Styling
 

@@ -7,6 +7,7 @@ import { Aside } from '@astrojs/starlight/components';
 import Playground from '../../../components/Playground.tsx';
 import Example from '../../../components/Example.tsx';
 import PropTable from '../../../components/PropTable.astro';
+import SlotTable from '../../../components/SlotTable.astro';
 import ComposedFrom from '../../../components/ComposedFrom.astro';
 import Facts from '../../../components/Facts.astro';
 import NeedAHand from '../../../components/NeedAHand.astro';
@@ -100,6 +101,10 @@ The breakpoint is the **`collapse`** prop (a CSS length, default `28rem`); set `
 `dense` tightens `--kai-card-spacing` for lists and feeds.
 
 <Example client:visible tag="kai-card" config={{ dense: true }} />
+
+## Slots
+
+<SlotTable tag="kai-card" />
 
 ## Props
 

@@ -7,6 +7,7 @@ import { Aside } from '@astrojs/starlight/components';
 import Playground from '../../../components/Playground.tsx';
 import Example from '../../../components/Example.tsx';
 import PropTable from '../../../components/PropTable.astro';
+import SlotTable from '../../../components/SlotTable.astro';
 import ComposedFrom from '../../../components/ComposedFrom.astro';
 import Facts from '../../../components/Facts.astro';
 import NeedAHand from '../../../components/NeedAHand.astro';
@@ -73,6 +74,10 @@ No `size` — stretches to fill whatever space siblings leave. Right choice for 
 `locked` fixes the panel at its `size` — adjacent dividers become non-draggable. Use for nav sidebars and tool panels.
 
 <Example client:visible tag="kai-resizable-item" config={{ size: '240px', locked: true }} data="locked" />
+
+## Slots
+
+<SlotTable tag="kai-resizable-item" />
 
 ## Props
 
