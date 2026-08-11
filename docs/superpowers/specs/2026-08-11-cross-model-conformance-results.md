@@ -121,10 +121,11 @@ The two agree exactly, including the failures. **The corrected S02 cell holds to
 same standard**: live pass recorded in `harness/matrix-reports/haiku-oai.live.json`,
 fixture committed, offline replay re-confirmed green against a settled build.
 
-**S12 and S13 do NOT hold to that standard, and are marked `fixed` rather than `pass`
-for exactly that reason.** Their fix landed after the sweep, so they have a replay
-against the current build and no live re-run behind it. Why that replay is still
-evidence and not a tautology is the point of the section below.
+**S12 and S13 now hold to it too.** For part of 2026-08-11 they did not — their fix landed
+after the sweep, so only a replay stood behind them and they were marked `fixed` rather
+than `pass`. A full live re-run has since measured all ten cells. Why the replay was
+*already* evidence rather than a tautology is still worth the section below, because that
+argument is what justified trusting the fix before anyone paid to re-measure it.
 
 That replay took two attempts, and the first one is worth recording rather than
 quietly dropping: it failed against a `packages/ui/dist/` that a concurrent session
@@ -272,9 +273,12 @@ the full UI on a model costing $0.10 per million tokens.
    otherwise. That part was right. Its price is roughly **7%**, not 120%.
 
    **The independent corroboration is what makes it certain**, because it does not go
-   through token counting at all: the two columns' costs are within 2% of each other
-   ($0.046465 vs $0.043233). **2.2x the input tokens cannot produce that.** The arithmetic
-   and the billing agree, and they disagree with the published number.
+   through token counting at all. The two columns' billed costs differ by **7.5%**
+   ($0.046465 vs $0.043233), which is what a **6.6%** prompt-token difference
+   (26,185 vs 24,560) should produce. **2.2x the input tokens could not.** Two
+   measurements that share no arithmetic — one derived from token counts, one from what
+   OpenRouter charged — land within a point of each other, and both contradict the
+   published figure.
 
    Why it matters past tidiness: "the Anthropic wire costs 2.2x in prompt tokens" is a
    number someone makes an architecture decision on. It reads as *do not use verbatim
