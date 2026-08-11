@@ -8,12 +8,14 @@
  *  All kai-* elements are real, prop-driven, and upgraded after loadKit(); arrays
  *  and objects are set as JS PROPERTIES, never serialized to attributes. */
 import { onMount, onCleanup } from 'solid-js';
+import type { ChatMessage } from '@kitn.ai/ui';
 import { loadKit } from './example/kit';
 
 // --- Shapes (verified against element-meta.json) -------------------------
 
-type MessagePart = { type: 'text'; text: string };
-type ChatMsg = { id: string; role: 'user' | 'assistant'; parts: MessagePart[]; actions?: string[] };
+// The kit's own message shape — an ordered `parts` array (text, reasoning, tool,
+// card, source, file), not a text-only stand-in. See @kitn.ai/ui's MessagePart.
+type ChatMsg = ChatMessage;
 
 interface SourceItem {
   href: string;

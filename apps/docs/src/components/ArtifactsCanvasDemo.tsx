@@ -6,6 +6,7 @@
  *  JS PROPERTIES, and the same-origin fixtures in public/artifact-demo/ frame
  *  live in the preview iframe. */
 import { onMount, onCleanup } from 'solid-js';
+import type { ChatMessage } from '@kitn.ai/ui';
 import { loadKit } from './example/kit';
 
 // Same-origin fixtures served from public/artifact-demo/ — BASE_URL is '/' (root);
@@ -115,8 +116,9 @@ const FILES: ProjectFile[] = [
   { path: 'src/store.ts', type: 'other', language: 'ts', code: STORE_TS },
 ];
 
-type MessagePart = { type: 'text'; text: string };
-type ChatMsg = { id: string; role: 'user' | 'assistant'; parts: MessagePart[]; actions?: string[] };
+// The kit's own message shape — an ordered `parts` array (text, reasoning, tool,
+// card, source, file), not a text-only stand-in. See @kitn.ai/ui's MessagePart.
+type ChatMsg = ChatMessage;
 
 const SEED_MESSAGES: ChatMsg[] = [
   {

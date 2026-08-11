@@ -4,6 +4,7 @@
  *  A segmented toggle swaps the sidebar to the left or right by
  *  re-ordering the two <kai-resizable-item> elements in the DOM. */
 import { createSignal, onMount, onCleanup } from 'solid-js';
+import type { ChatMessage } from '@kitn.ai/ui';
 import { loadKit } from './example/kit';
 
 // ConversationSummary shape (verified against element-meta.json)
@@ -52,9 +53,9 @@ const GROUPS = [
   { id: 'yesterday', name: 'Yesterday', sortOrder: 1, createdAt: '2026-06-16T00:00:00.000Z' },
 ];
 
-// ChatMessage seed (verified against element-meta.json kai-chat.messages shape)
-type MessagePart = { type: 'text'; text: string };
-type ChatMsg = { id: string; role: 'user' | 'assistant'; parts: MessagePart[]; actions?: string[] };
+// The kit's own message shape — an ordered `parts` array (text, reasoning, tool,
+// card, source, file), not a text-only stand-in. See @kitn.ai/ui's MessagePart.
+type ChatMsg = ChatMessage;
 const SEED_MESSAGES: ChatMsg[] = [
   { id: 'm1', role: 'user', parts: [{ type: 'text', text: 'How does the resizable layout work?' }] },
   {

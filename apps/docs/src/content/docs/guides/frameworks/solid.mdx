@@ -239,26 +239,36 @@ import {
 
 When you want a complete chat in one tag, register the `kai-*` elements and use `<kai-chat>`. In Solid, pass rich data with `prop:` (forces a DOM property assignment, not a stringified attribute) and listen for CustomEvents with Solid's `on:` namespace.
 
+A message is an **ordered `parts` array**, not a string — the same shape as the native components above. `ChatMessage` is the kit's own type, so import it rather than hand-rolling a text-only copy — the copy compiles and then hides every other part kind from you.
+
 ```tsx
 import '@kitn.ai/ui/elements';
 import { createSignal } from 'solid-js';
-
-type MessagePart = { type: 'text'; text: string };
-type Message = { id: string; role: 'user' | 'assistant'; parts: MessagePart[] };
+import type { ChatMessage } from '@kitn.ai/ui';
+import { appendTextPart } from '@kitn.ai/ui/state';
 
 function Shell() {
-  const [messages, setMessages] = createSignal<Message[]>([
+  const [messages, setMessages] = createSignal<ChatMessage[]>([
     { id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hello! How can I help?' }] },
   ]);
 
-  const handleSubmit = (e: CustomEvent<{ value: string }>) => {
-    const userMsg: Message = {
+  const handleSubmit = async (e: CustomEvent<{ value: string }>) => {
+    const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
       role: 'user',
       parts: [{ type: 'text', text: e.detail.value }],
     };
-    setMessages((prev) => [...prev, userMsg]);
-    // …call your model, then append the assistant reply
+    const history = [...messages(), userMsg];
+    const aid = crypto.randomUUID();
+    setMessages([...history, { id: aid, role: 'assistant', parts: [] }]);
+
+    for await (const token of streamFromYourAPI(history)) {
+      // appendTextPart returns a NEW parts array and leaves any reasoning, tool
+      // or card parts alone. Replacing `parts` wholesale would drop them.
+      setMessages((prev) =>
+        prev.map((m) => (m.id === aid ? { ...m, parts: appendTextPart(m.parts, token) } : m)),
+      );
+    }
   };
 
   return (
