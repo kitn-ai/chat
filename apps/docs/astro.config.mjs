@@ -191,6 +191,7 @@ export default defineConfig({
                   { slug: 'components/checkpoint' },
                   { slug: 'components/skills' },
                   { slug: 'components/thinking-bar' },
+                  { slug: 'components/audio-visualizer' },
                 ],
               },
               {

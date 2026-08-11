@@ -1,0 +1,46 @@
+# SHA-256 manifest -- aurora clean-room evidence
+#
+# Recorded 2026-08-10 from
+#   .superpowers/sdd/2026-08-07-audio-visualizers/reference/aura-prototype/
+# (gitignored session workspace), mirrored at
+#   /Users/home/Projects/kitn-ai/aurora-prototype/  (off-repo, survives worktree deletion)
+#
+# Only the TRACKED files below are committed beside this manifest, so only they
+# are listed in checksum form. Digests for the artifacts held off-repo are in
+# the comment block at the end -- compare those by eye. The point of the
+# manifest is that an artifact produced later can be checked against these
+# digests, whether or not it was ever committed.
+#
+# Verify the tracked copies (should print 7x OK and nothing else):
+#   shasum -a 256 -c MANIFEST.sha256
+#
+# --- TRACKED (copies committed in this directory) ---
+0457c38124d3d0d98692927fd07e1e98077f6b68bfcf8ed36ae7832df8cfa647  livekit-reground.md
+e6cf2e223e013d3ac2867cbd340b97f41ecb973dfe94581e7016319717c73c0d  aura-shader-handoff.md
+feb7b76ccbe66e43b1fde5b537295411baddaa5011e2e380e560d51458e6dcad  aura-prototype-README.md
+37b517232d1359f6b2ee6961fb8e568ea4ee184471c7c22adddd94a2cf3f6cfc  aura-proto.html
+44f6e0f248482ab0a229853ebde5eed53878b065c7e3a8186ab11a599becbed8  analyze.mjs
+39cd762125235604b79180bcfcf387a4e688d22e897e6108fe53a57b9b6e2ceb  capture-livekit.mjs
+b4b6e8ee8ef504d6b4b59fd22a9b40ad788815c09ed0cab812c4a4fc6981680c  measure-travel.mjs
+# --- OFF-REPO, deliberately not committed ---
+#
+# lk-aura-factsheet.md -- the functional spec. Withheld from this public repo
+# pending an owner/counsel decision; see ../aurora-clean-room.md section 9.
+# Confirmed byte-identical in the off-repo mirror on 2026-08-10.
+#
+#   caa746d66022197f86d0ef6a57edd41c4a6977bd64d76c0a86057a7ee3670f15  lk-aura-factsheet.md
+#
+# --- OFF-REPO, bulk media and remaining instruments (too large to track) ---
+#
+#   ce6bcd79808ec503b0a8ee1509f7676b5d4f73e7befecc7ae1a473f746032e84  motion-aura.mjs
+#   6356373d484caf76506864790079c9e03a7535fda45680734934e019d3ee0115  shot-aura.mjs
+#   293914a5e4b56c5f45dc95e4f71d791ef2cdc2ea4af9a70a71b2940686e28cda  render-lk-compare.mjs
+#   1e49b6412d0f7c987fdedcd00c55b86a89c26fb5ea724fb7a059067d4930c418  aura-compare.mp4
+#   edf0aafb9ecf71d84d1d9c69ab9c9b69113c4cc20eae61f0d2aaff8a359ec6db  lk-compare.mp4
+#
+# Frame directories (PNG captures of RENDERED OUTPUT, not hashed individually):
+#   lk-frames/    101 files -- LiveKit's public demo, captured at 2x DPR
+#   aura-frames/   32 files -- the owner's screen recording, sampled at 3fps
+#   aura-burst/    15 files -- 30fps burst from the same recording
+#   my-lk/        103 files -- our renders, paired against lk-frames
+#   renders/       42 files -- tuning history, ours vs reference side by side

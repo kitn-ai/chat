@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>aura prototype</title>
+<style>
+  html, body { margin: 0; background: #050505; color: #9ab; font: 12px/1.4 ui-monospace, monospace; }
+  #wrap { display: flex; gap: 24px; align-items: flex-start; }
+  #stage { width: fit-content; background: #050505; position: relative; }
+  canvas { display: block; }
+  #panel { display: none; padding: 14px 16px; max-height: 100vh; overflow-y: auto;
+           background: #0c0e10; border-left: 1px solid #1c2226; min-width: 310px; box-sizing: border-box; }
+  #panel.on { display: block; }
+  .row { display: grid; grid-template-columns: 88px 1fr 52px; gap: 8px; align-items: center; margin: 3px 0; }
+  .row label { color: #7a8a94; }
+  .row output { text-align: right; color: #cde; }
+  input[type=range] { width: 100%; accent-color: #2db5d1; }
+  h3 { margin: 14px 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #4a5a64; }
+  h3:first-child { margin-top: 0; }
+  button { background: #16333b; color: #7fd6e8; border: 1px solid #2db5d1; border-radius: 4px;
+           padding: 4px 10px; font: inherit; cursor: pointer; margin: 2px 4px 2px 0; }
+  button:hover { background: #1d4450; }
+  button.active { background: #2db5d1; color: #041014; }
+  #msg { color: #6fcf97; min-height: 16px; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="stage"><canvas id="c" width="268" height="286"></canvas></div>
+  <div id="panel"></div>
+</div>
+<script>
+const canvas = document.getElementById('c');
+// Render at native device pixels so Retina displays stay crisp. ?size=N scales
+// the on-screen size. The Playwright harness runs at dpr 1 with no ?play, so
+// captures stay 268x286 for metric parity.
+const QUERY = new URLSearchParams(location.search);
+const PLAY = QUERY.has('play');
+{
+  const CSS_W = 268, CSS_H = 286;
+  const scale = parseFloat(QUERY.get('size') || (PLAY ? '2' : '1')) || 1;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.style.width = CSS_W * scale + 'px';
+  canvas.style.height = CSS_H * scale + 'px';
+  canvas.width = Math.round(CSS_W * scale * dpr);
+  canvas.height = Math.round(CSS_H * scale * dpr);
+}
+const gl = canvas.getContext('webgl', { alpha: true, premultipliedAlpha: true, preserveDrawingBuffer: true });
+
+const VS = `
+attribute vec2 aPos;
+void main() { gl_Position = vec4(aPos, 0.0, 1.0); }
+`;
+
+const FS = `
+precision highp float;
+uniform vec2  uRes;
+uniform float uTime;
+uniform float uLevel;      // 0..1 smoothed voice level
+uniform vec3  uColor;
+uniform float uMode;       // 1 = three-strand braid, 2 = single ribbon (wind)
+uniform float uBaseR;      // ring radius, fraction of half-height
+uniform float uAmpIdle;    // wobble amplitude at level 0
+uniform float uAmpVoice;   // extra wobble amplitude at level 1
+uniform float uRadVoice;   // extra base radius at level 1
+uniform float uSigma;      // stroke / edge half-width
+uniform float uGain;       // master gain
+uniform float uF1;         // lobe frequency 1 (braid waves / ribbon centerline)
+uniform float uF2;         // lobe frequency 2 (braid waves / ribbon edge flutter)
+uniform float uS1;         // speed 1
+uniform float uS2;         // speed 2
+uniform float uEnvSpd;     // heavy-side precession speed
+uniform float uSepSpd;     // braid fold travel speed
+uniform float uWhiteLo;
+uniform float uWhiteHi;
+uniform float uBloomMul;
+uniform float uBloomGain;
+uniform float uDelta;      // braid: per-strand angular offset
+uniform float uOff;        // braid: per-strand radial offset
+// ribbon (wind) mode
+uniform float uWWidth;     // max ribbon half-width
+uniform float uWMin;       // half-width at a pinch (edge-on)
+uniform float uFillGain;   // translucent fill strength
+uniform float uEdgeGain;   // edge stroke strength
+uniform float uFlut;       // independent edge flutter amplitude
+uniform float uTwistSpd;   // fold speed: wind = pinch travel; veil = phase rate (rad/s)
+// veil mode (built from the clean-room fact sheet, not from source)
+uniform float uWarpAmp;    // warp displacement amplitude
+uniform float uTheme;      // 0 = dark pipeline, 1 = light pipeline
+
+float strandGlow(float d, float sigma) {
+  // super-gaussian: flat solid core, fast but feathered falloff
+  float q = d / sigma;
+  float q2 = q * q;
+  float core = exp(-q2 * q2);
+  float bq = d / (sigma * uBloomMul);
+  float bloom = exp(-bq * bq) * uBloomGain;
+  return core + bloom;
+}
+
+float braidGlow(float r, float th, float t, float amp, float baseR, float env) {
+  float glow = 0.0;
+  for (int i = 0; i < 3; i++) {
+    float fi = float(i);
+    float a  = th + fi * uDelta;
+    float tt = t + fi * 1.3;
+    float wob =
+        sin(a * uF1 + tt * uS1) * 0.55
+      + sin(a * uF2 - tt * uS2) * 0.45;
+    float ampi = amp * (0.65 + 0.35 * fi);
+    float sepMod = 0.5 + 0.5 * sin(th * 1.0 + t * uSepSpd + fi * 1.9);
+    float ringR = baseR + (fi - 1.0) * uOff * (0.35 + 1.5 * sepMod) + wob * ampi * env;
+    glow += uGain * (0.8 + 0.35 * env) * strandGlow(abs(r - ringR), uSigma);
+  }
+  return glow;
+}
+
+float ribbonGlow(float r, float th, float t, float amp, float baseR, float env) {
+  // ONE ribbon whose half-width pinches to ~zero at twist points. Measured on
+  // LiveKit's live demo: the pattern FLAPS like a flag (thickness profile
+  // inverts every ~0.95s, recurs at ~1.9s) rather than slowly traveling, so
+  // uTwistSpd runs high (~1.9).
+  float wRaw = sin(th * 2.0 + t * uTwistSpd) * 0.6
+             + sin(th * 3.0 - t * uTwistSpd * 0.7 + 1.7) * 0.4;
+  float w = (abs(wRaw) * uWWidth + uWMin) * (0.55 + 0.45 * env);
+
+  // centerline: slow large-scale wobble, breathing with the voice
+  float c = baseR
+    + (sin(th * uF1 + t * uS1) * 0.6
+     + sin(th * (uF1 + 2.0) - t * uS1 * 0.63 + 2.3) * 0.4) * amp;
+
+  // edges flap out of lockstep; flutter grows with the voice
+  float fl = uFlut * (0.5 + 0.9 * uLevel);
+  float e1 = c - w + sin(th * uF2 + t * uS2) * fl;
+  float e2 = c + w + sin(th * uF2 * 1.3 - t * uS2 * 0.8 + 2.0) * fl;
+
+  float lo = min(e1, e2), hi = max(e1, e2);
+  float ww = max(hi - lo, 0.004);
+  // mass conservation: a pinched band reads dense, a spread one reads sheer
+  float dens = clamp(uWWidth * 1.2 / ww, 0.4, 2.0);
+
+  // CONTINUOUS sheet between the two edges (discrete sub-strands can never
+  // sum flat and always band). Feathered coverage box + denser rim + a faint
+  // filament texture across the width.
+  float box = smoothstep(-uSigma, uSigma, r - lo)
+            * (1.0 - smoothstep(-uSigma, uSigma, r - hi));
+  float u = clamp((r - lo) / ww, 0.0, 1.0);
+  float rim = smoothstep(0.5, 1.0, abs(u - 0.5) * 2.0);
+
+  // soft halo just outside the band, stronger where the band is dense
+  float outside = max(max(lo - r, r - hi), 0.0);
+  float bs = uSigma * uBloomMul;
+  float halo = exp(-(outside * outside) / (2.0 * bs * bs)) * uBloomGain * dens;
+
+  return uGain * uFillGain
+       * (box * dens * (1.0 + uEdgeGain * rim) + halo * (1.0 - box));
+}
+
+// ---- veil mode: 36 phase-offset warped copies of one ring, fused by an
+// analytic neighbor-distance blur. Implemented from the clean-room fact sheet
+// (facts and math only; the source itself was never seen by this file's author).
+const mat2 VM0 = mat2(0.6, 0.25, -0.25, 0.9);
+const mat2 VM1 = mat2(0.16, 0.63, -0.87, 0.34);
+const mat2 VM2 = mat2(-0.408, 0.506, -0.794, -0.492);
+const mat2 VM3 = mat2(-0.6496, -0.0228, -0.0828, -0.9304);
+const vec2 VV0 = vec2(0.600, -0.250);
+const vec2 VV1 = vec2(0.160, -0.870);
+const vec2 VV2 = vec2(-0.408, -0.794);
+const vec2 VV3 = vec2(-0.650, -0.083);
+
+// 4-octave directional-sine cascade; octave k advances phase at k*tau, so the
+// coarse folds stand still while fine corrugation flows across them (the wind)
+vec2 veilWarp(vec2 p, float phi, float tau, float F, float A) {
+  vec2 x = p;
+  float f = F;
+  float a = A;
+  vec2 q = VM0 * x;
+  vec2 w = sin(f * q + vec2(phi));
+  x += (a / f) * VV0 * w;
+  f *= 1.4; a *= 1.0 + 0.1 * (max(w.x, w.y) - 1.0);
+  q = VM1 * x; w = sin(f * q + vec2(tau + phi));
+  x += (a / f) * VV1 * w;
+  f *= 1.4; a *= 1.0 + 0.1 * (max(w.x, w.y) - 1.0);
+  q = VM2 * x; w = sin(f * q + vec2(2.0 * tau + phi));
+  x += (a / f) * VV2 * w;
+  f *= 1.4; a *= 1.0 + 0.1 * (max(w.x, w.y) - 1.0);
+  q = VM3 * x; w = sin(f * q + vec2(3.0 * tau + phi));
+  x += (a / f) * VV3 * w;
+  return x;
+}
+
+vec3 vrgb2hsv(vec3 c) {
+  vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+  vec4 pp = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+  vec4 q = mix(vec4(pp.xyw, c.r), vec4(c.r, pp.yzx), step(pp.x, c.r));
+  float d = q.x - min(q.w, q.y);
+  return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + 1.0e-10)), d / (q.x + 1.0e-10), q.x);
+}
+vec3 vhsv2rgb(vec3 c) {
+  vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+  vec3 pp = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+  return c.z * mix(K.xxx, clamp(pp - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec4 veilImage(vec2 p, float t) {
+  float tau = t * uTwistSpd;              // net phase rate, rad/s
+  float F = uF2;                          // warp spatial frequency, direct
+  float A = uWarpAmp;
+  float rr = uBaseR + uRadVoice * uLevel;
+
+  vec3 hsv = vrgb2hsv(uColor);
+  vec2 sPrev = veilWarp(p, -1.0 / 36.0, tau, F, A);
+  vec3 acc = vec3(0.0);
+  for (int j = 1; j <= 36; j++) {
+    float fj = float(j) / 36.0;
+    float phi = fj * 3.6415927;           // strand phase span 0.5 + pi
+    vec2 s = veilWarp(p, phi, tau, F, A);
+    float D = abs(length(s) - rr);
+    float beta = exp(2.0 * length(s - sPrev)) - 1.0;
+    float E = 0.01 + max(beta, 0.001);    // analytic blur: fans fuse, bunches stay crisp
+    float c = 1.0 - smoothstep(0.0, 1.0, D / E);
+    vec3 C = vhsv2rgb(vec3(fract(hsv.x + (1.0 - fj) * 0.015), hsv.y, hsv.z));
+    acc += c * C;
+    sPrev = s;
+  }
+  vec3 I = acc / 36.0;
+  float n = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
+  float dith = (n - 0.5) / 255.0;
+  float brightness = uGain;
+  if (uTheme < 0.5) {
+    // dark pipeline: pre-gain, Reinhard-4 tonemap, luma alpha; RGB can exceed
+    // alpha on purpose (additive-looking glow)
+    vec3 x1 = 1.2 * I + vec3(dith);
+    vec3 tm = 4.0 * x1 / (1.0 + 4.0 * x1);
+    float luma = dot(tm, vec3(0.299, 0.587, 0.114));
+    return vec4(tm * brightness, clamp(luma * brightness, 0.0, 1.0));
+  }
+  // light pipeline: brightness curve on vector length, 3x saturation about gray
+  vec3 x1 = I + vec3(dith);
+  float bb = length(x1);
+  vec3 dir = x1 / max(bb, 1.0e-5);
+  float b2 = 2.0 * bb / (1.0 + 2.0 * bb);
+  vec3 x2 = dir * b2;
+  float g = dot(x2, vec3(0.2, 0.5, 0.1));
+  vec3 x3 = clamp(vec3(g) + 3.0 * (x2 - vec3(g)), 0.0, 1.0);
+  return vec4(x3, clamp(b2 * clamp(brightness, 1.0, 2.0), 0.0, 1.0));
+}
+
+void main() {
+  vec2 hres = uRes * 0.5;
+  vec2 p = (gl_FragCoord.xy - hres) / hres.y;
+
+  float r  = length(p);
+  float th = atan(p.y, p.x);
+  float t  = uTime;
+
+  if (uMode > 2.5) {
+    // veil coordinates run -0.5..0.5 across the frame, matching its constants
+    gl_FragColor = veilImage(p * 0.5, t);
+    return;
+  }
+
+  float amp   = uAmpIdle + uAmpVoice * uLevel;
+  float baseR = uBaseR + uRadVoice * uLevel;
+  float env = 0.62 + 0.38 * sin(th * 2.0 + t * uEnvSpd + 2.0);
+
+  float glow = uMode < 1.5
+    ? braidGlow(r, th, t, amp, baseR, env)
+    : ribbonGlow(r, th, t, amp, baseR, env);
+
+  float bright = 0.75 + 0.45 * min(glow, 1.2);
+  float white = smoothstep(uWhiteLo, uWhiteHi, glow) * 0.55;
+  vec3 col = mix(uColor * bright, vec3(1.0), white);
+
+  float alpha = clamp(glow, 0.0, 1.0);
+  float n = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
+  alpha = clamp(alpha + (n - 0.5) / 255.0, 0.0, 1.0);
+
+  gl_FragColor = vec4(col * alpha, alpha);  // premultiplied
+}
+`;
+
+function compile(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(gl.VERTEX_SHADER, VS));
+gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FS));
+gl.linkProgram(prog);
+if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+gl.useProgram(prog);
+
+const buf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+const loc = gl.getAttribLocation(prog, 'aPos');
+gl.enableVertexAttribArray(loc);
+gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+
+gl.enable(gl.BLEND);
+gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+gl.clearColor(0, 0, 0, 0);
+
+const UNIFORM_NAMES = ['uRes','uTime','uLevel','uColor','uMode','uBaseR','uAmpIdle','uAmpVoice',
+  'uRadVoice','uSigma','uGain','uF1','uF2','uS1','uS2','uEnvSpd','uSepSpd','uWhiteLo','uWhiteHi',
+  'uBloomMul','uBloomGain','uDelta','uOff','uWWidth','uWMin','uFillGain','uEdgeGain','uFlut','uTwistSpd',
+  'uWarpAmp','uTheme'];
+const U = {};
+for (const name of UNIFORM_NAMES) U[name] = gl.getUniformLocation(prog, name);
+
+// ---- presets ----
+const BASE = {
+  mode: 1,
+  baseR: 0.33, ampIdle: 0.017, ampVoice: 0.043, radVoice: 0.24,
+  sigma: 0.022, gain: 0.42, f1: 6, f2: 10, s1: 0.55, s2: 0.85,
+  envSpd: 0.21, sepSpd: 0.38, whiteLo: 1.35, whiteHi: 2.30,
+  bloomMul: 2.6, bloomGain: 0.18, delta: 0.35, off: 0.024,
+  wWidth: 0.045, wMin: 0.006, fillGain: 0.38, edgeGain: 0.7, flut: 0.010, twistSpd: 0.55,
+  warpAmp: 0.75, theme: 0,
+};
+const PRESET_SOFT = { ...BASE };
+const PRESET_BOLD = { ...BASE, sigma: 0.026, gain: 0.48, s1: 1.15, s2: 1.8, envSpd: 0.5, sepSpd: 0.85, bloomMul: 2.2, bloomGain: 0.14 };
+// Rob's hand-tuned braid, 2026-08-07
+const PRESET_ROB = { ...BASE,
+  baseR: 0.315, ampIdle: 0.017, ampVoice: 0.063, radVoice: 0.09,
+  sigma: 0.028, gain: 0.48, f1: 6, f2: 11, s1: 1.95, s2: 2.35,
+  envSpd: 1.45, sepSpd: 1.25, whiteLo: 0.5, whiteHi: 2.3,
+  bloomMul: 4.3, bloomGain: 0.25, delta: 0.96, off: 0.02,
+};
+// v8: single ribbon with wind through it
+// speeds + width measured off LiveKit's live demo (flap period ~1.9s, sheer wide band)
+const PRESET_WIND = { ...BASE, mode: 2,
+  baseR: 0.315, ampIdle: 0.012, ampVoice: 0.032, radVoice: 0.09,
+  sigma: 0.014, gain: 0.60, f1: 3, f2: 9, s1: 1.1, s2: 2.2,
+  envSpd: 0.5, whiteLo: 1.0, whiteHi: 2.4, bloomMul: 2.5, bloomGain: 0.15,
+  wWidth: 0.085, wMin: 0.009, fillGain: 0.85, edgeGain: 0.35, flut: 0.010, twistSpd: 1.9,
+};
+// veil: the fact-sheet reconstruction. Defaults = their demo's "connecting"
+// state (F 15, phase rate 1.5 rad/s, warp amp 0.5, r 0.3, brightness mid).
+// Speaking state: f2 18.25, twistSpd 3.5, warpAmp 0.75, baseR 0.2, radVoice 0.2.
+const PRESET_VEIL = { ...BASE, mode: 3,
+  baseR: 0.3, radVoice: 0.1, gain: 1.5, f2: 15, twistSpd: 1.5, warpAmp: 0.5,
+};
+// their speaking state: much faster phase rate, finer warp, voice-driven radius
+const PRESET_VEIL_TALK = { ...BASE, mode: 3,
+  baseR: 0.2, radVoice: 0.2, gain: 1.5, f2: 18.25, twistSpd: 3.5, warpAmp: 0.75,
+};
+let P = { color: [0x1f / 255, 0xd5 / 255, 0xf9 / 255], ...PRESET_VEIL };
+
+function setParams(obj) { Object.assign(P, obj); syncUI(); }
+
+function renderAt(t, level) {
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.uniform2f(U.uRes, canvas.width, canvas.height);
+  gl.uniform1f(U.uTime, t);
+  gl.uniform1f(U.uLevel, level);
+  gl.uniform3f(U.uColor, P.color[0], P.color[1], P.color[2]);
+  gl.uniform1f(U.uMode, P.mode);
+  gl.uniform1f(U.uBaseR, P.baseR);
+  gl.uniform1f(U.uAmpIdle, P.ampIdle);
+  gl.uniform1f(U.uAmpVoice, P.ampVoice);
+  gl.uniform1f(U.uRadVoice, P.radVoice);
+  gl.uniform1f(U.uSigma, P.sigma);
+  gl.uniform1f(U.uGain, P.gain);
+  gl.uniform1f(U.uF1, P.f1);
+  gl.uniform1f(U.uF2, P.f2);
+  gl.uniform1f(U.uS1, P.s1);
+  gl.uniform1f(U.uS2, P.s2);
+  gl.uniform1f(U.uEnvSpd, P.envSpd);
+  gl.uniform1f(U.uSepSpd, P.sepSpd);
+  gl.uniform1f(U.uWhiteLo, P.whiteLo);
+  gl.uniform1f(U.uWhiteHi, P.whiteHi);
+  gl.uniform1f(U.uBloomMul, P.bloomMul);
+  gl.uniform1f(U.uBloomGain, P.bloomGain);
+  gl.uniform1f(U.uDelta, P.delta);
+  gl.uniform1f(U.uOff, P.off);
+  gl.uniform1f(U.uWWidth, P.wWidth);
+  gl.uniform1f(U.uWMin, P.wMin);
+  gl.uniform1f(U.uFillGain, P.fillGain);
+  gl.uniform1f(U.uEdgeGain, P.edgeGain);
+  gl.uniform1f(U.uFlut, P.flut);
+  gl.uniform1f(U.uTwistSpd, P.twistSpd);
+  gl.uniform1f(U.uWarpAmp, P.warpAmp);
+  gl.uniform1f(U.uTheme, P.theme);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.finish();
+}
+
+// RMS envelope measured from the reference video (dB per 1/3s window)
+const ENV_DB = [-60.9,-49.0,-46.7,-54.1,-50.0,-47.8,-49.3,-53.3,-53.5,-50.4,
+                -46.9,-53.0,-50.2,-52.5,-53.9,-50.6,-50.8,-49.2,-55.1,-48.7,
+                -48.4,-47.4,-49.6,-50.7,-49.0,-46.9,-50.8,-52.9,-52.2,-46.6,
+                -46.6,-46.2];
+function levelAt(sec) {
+  const x = sec * 3;
+  const i = Math.max(0, Math.min(ENV_DB.length - 1, Math.floor(x)));
+  const j = Math.min(ENV_DB.length - 1, i + 1);
+  const f = x - i;
+  const db = ENV_DB[i] * (1 - f) + ENV_DB[j] * f;
+  return Math.max(0, Math.min(1, (db + 58) / 14));
+}
+
+// ---- control panel (?play only) ----
+const SLIDERS = [
+  ['motion speed'],
+  ['twistSpd', 'main speed',   0.0, 8.0, 0.05],
+  ['shape (both modes)'],
+  ['baseR',    'ring size',    0.02, 0.50, 0.005],
+  ['sigma',    'stroke width', 0.006, 0.060, 0.001],
+  ['gain',     'brightness',   0.10, 2.50, 0.01],
+  ['radVoice', 'voice growth', 0.00, 0.40, 0.005],
+  ['ampIdle',  'idle wobble',  0.00, 0.05, 0.001],
+  ['ampVoice', 'voice wobble', 0.00, 0.12, 0.001],
+  ['f1',       'wave freq A',  2, 10, 1],
+  ['f2',       'wave freq B',  4, 20, 0.25],
+  ['s1',       'wave spd A',   0.0, 3.0, 0.05],
+  ['s2',       'wave spd B',   0.0, 3.0, 0.05],
+  ['envSpd',   'heavy-side spd', 0.0, 2.0, 0.05],
+  ['ribbon wind (mode 2)'],
+  ['wWidth',   'fold width',   0.010, 0.090, 0.001],
+  ['wMin',     'pinch width',  0.001, 0.020, 0.001],
+  ['veil (mode 3)'],
+  ['warpAmp',  'warp amp',     0.0, 2.0, 0.05],
+  ['fillGain', 'fill sheer',   0.0, 1.0, 0.01],
+  ['edgeGain', 'edge strength',0.0, 1.5, 0.01],
+  ['flut',     'wind flutter', 0.0, 0.03, 0.001],
+  ['braid (mode 1)'],
+  ['delta',    'strand twist', 0.00, 1.50, 0.01],
+  ['off',      'strand gap',   0.00, 0.06, 0.001],
+  ['sepSpd',   'fold spd',     0.0, 2.0, 0.05],
+  ['glow (both modes)'],
+  ['whiteLo',  'white start',  0.5, 2.5, 0.05],
+  ['whiteHi',  'white end',    1.0, 3.5, 0.05],
+  ['bloomMul', 'halo width',   1.5, 5.0, 0.1],
+  ['bloomGain','halo strength',0.00, 0.60, 0.01],
+];
+const inputs = {};
+
+function buildPanel() {
+  const panel = document.getElementById('panel');
+  panel.classList.add('on');
+  let html = '<h3>mode</h3><div id="modes">'
+    + '<button data-mode="3">veil (LK spec)</button>'
+    + '<button data-mode="2">single ribbon (wind)</button>'
+    + '<button data-mode="1">3-strand braid</button></div>'
+    + '<h3>drive</h3><div id="drive">'
+    + '<button data-src="env" class="active">envelope loop</button>'
+    + '<button data-src="slider">slider</button>'
+    + '<button data-src="mic">microphone</button></div>'
+    + '<div class="row"><label>level</label><input id="lvl" type="range" min="0" max="1" step="0.01" value="0.5" disabled><output id="lvlOut">auto</output></div>'
+    + '<div id="msg"></div>';
+  for (const s of SLIDERS) {
+    if (s.length === 1) { html += `<h3>${s[0]}</h3>`; continue; }
+    const [key, label, min, max, step] = s;
+    html += `<div class="row"><label>${label}</label>`
+      + `<input type="range" data-key="${key}" min="${min}" max="${max}" step="${step}" value="${P[key]}">`
+      + `<output id="out_${key}">${P[key]}</output></div>`;
+  }
+  html += '<h3>color</h3>'
+    + '<div class="row"><label>accent</label><input type="color" id="accent" value="#2db5d1"><output></output></div>'
+    + '<div class="row"><label>background</label><input type="color" id="bg" value="#050505"><output></output></div>'
+    + '<div><button data-bg="#050505">dark</button><button data-bg="#808080">mid</button><button data-bg="#ffffff">white</button></div>'
+    + '<h3>presets</h3>'
+    + '<button id="pveil">veil (LK)</button>'
+    + '<button id="pveilt">veil speaking</button>'
+    + '<button id="pwind">wind (v8)</button>'
+    + '<button id="prob">braid (Rob)</button>'
+    + '<button id="pbold">braid bold (v7)</button>'
+    + '<button id="psoft">braid soft (v6)</button>'
+    + '<br><button id="copy">copy params</button>';
+  panel.innerHTML = html;
+
+  const hexToRgb01 = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+  const setBg = (hex) => {
+    document.body.style.background = hex;
+    document.getElementById('stage').style.background = hex;
+    document.getElementById('bg').value = hex;
+    // veil mode has separate dark/light pipelines; pick by background luminance
+    const [rr, gg, bb] = hexToRgb01(hex);
+    P.theme = (0.2126 * rr + 0.7152 * gg + 0.0722 * bb) > 0.5 ? 1 : 0;
+  };
+  document.getElementById('accent').addEventListener('input', (e) => { P.color = hexToRgb01(e.target.value); });
+  document.getElementById('bg').addEventListener('input', (e) => setBg(e.target.value));
+  panel.querySelectorAll('button[data-bg]').forEach((b) => {
+    b.addEventListener('click', () => setBg(b.dataset.bg));
+  });
+
+  panel.querySelectorAll('input[data-key]').forEach((el) => {
+    inputs[el.dataset.key] = el;
+    el.addEventListener('input', () => {
+      P[el.dataset.key] = parseFloat(el.value);
+      document.getElementById('out_' + el.dataset.key).textContent = el.value;
+    });
+  });
+  panel.querySelectorAll('#modes button').forEach((b) => {
+    b.addEventListener('click', () => { P.mode = parseInt(b.dataset.mode, 10); syncUI(); });
+  });
+  panel.querySelectorAll('#drive button').forEach((b) => {
+    b.addEventListener('click', () => {
+      panel.querySelectorAll('#drive button').forEach((x) => x.classList.remove('active'));
+      b.classList.add('active');
+      setSource(b.dataset.src);
+    });
+  });
+  document.getElementById('pveil').addEventListener('click', () => setParams(PRESET_VEIL));
+  document.getElementById('pveilt').addEventListener('click', () => setParams(PRESET_VEIL_TALK));
+  document.getElementById('pwind').addEventListener('click', () => setParams(PRESET_WIND));
+  document.getElementById('prob').addEventListener('click', () => setParams(PRESET_ROB));
+  document.getElementById('pbold').addEventListener('click', () => setParams(PRESET_BOLD));
+  document.getElementById('psoft').addEventListener('click', () => setParams(PRESET_SOFT));
+  document.getElementById('copy').addEventListener('click', async () => {
+    const { color, ...rest } = P;
+    rest.accent = document.getElementById('accent').value;
+    await navigator.clipboard.writeText(JSON.stringify(rest, null, 2));
+    flash('params copied to clipboard');
+  });
+  syncUI();
+}
+
+function syncUI() {
+  for (const [key, el] of Object.entries(inputs)) {
+    el.value = P[key];
+    const out = document.getElementById('out_' + key);
+    if (out) out.textContent = String(P[key]);
+  }
+  document.querySelectorAll('#modes button').forEach((b) => {
+    b.classList.toggle('active', parseInt(b.dataset.mode, 10) === P.mode);
+  });
+}
+
+function flash(text) {
+  const m = document.getElementById('msg');
+  if (!m) return;
+  m.textContent = text;
+  setTimeout(() => { m.textContent = ''; }, 2500);
+}
+
+// ---- level sources + run loop ----
+let source = 'env';
+let micAnalyser = null, micBuf = null;
+
+async function setSource(s) {
+  const lvl = document.getElementById('lvl');
+  const lvlOut = document.getElementById('lvlOut');
+  if (s === 'mic' && !micAnalyser) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const ctx = new AudioContext();
+      const src = ctx.createMediaStreamSource(stream);
+      micAnalyser = ctx.createAnalyser();
+      micAnalyser.fftSize = 2048;
+      micBuf = new Float32Array(micAnalyser.fftSize);
+      src.connect(micAnalyser);   // terminal side-tap, nothing to destination
+      flash('mic live: talk to it');
+    } catch (e) {
+      flash('mic blocked: ' + e.message);
+      return;
+    }
+  }
+  source = s;
+  lvl.disabled = s !== 'slider';
+  lvlOut.textContent = s === 'slider' ? lvl.value : 'auto';
+}
+
+function rawLevel(elapsed) {
+  if (source === 'slider') {
+    const v = parseFloat(document.getElementById('lvl').value);
+    document.getElementById('lvlOut').textContent = v.toFixed(2);
+    return v;
+  }
+  if (source === 'mic' && micAnalyser) {
+    micAnalyser.getFloatTimeDomainData(micBuf);
+    let sum = 0;
+    for (let i = 0; i < micBuf.length; i++) sum += micBuf[i] * micBuf[i];
+    const db = 20 * Math.log10(Math.sqrt(sum / micBuf.length) + 1e-8);
+    return Math.max(0, Math.min(1, (db + 50) / 25));
+  }
+  return levelAt(elapsed % 10.6);
+}
+
+if (PLAY) {
+  buildPanel();
+  const t0 = performance.now();
+  let smooth = 0;
+  (function loop() {
+    const el = (performance.now() - t0) / 1000;
+    const raw = rawLevel(el);
+    const k = raw > smooth ? 0.25 : 0.06;  // fast attack, slow release
+    smooth += (raw - smooth) * k;
+    renderAt(el, smooth);
+    requestAnimationFrame(loop);
+  })();
+}
+
+window.renderAt = renderAt;
+window.setParams = setParams;
+window.levelAt = levelAt;
+window.__ready = true;
+</script>
+</body>
+</html>

@@ -66,6 +66,26 @@ export function createTsHelpers(program, checker, { importable = new Set() } = {
       });
       return `{ ${props.join('; ')} }`;
     }
+    // A `Record<string, X>` (mapped/index-signature type) has ZERO enumerable
+    // properties, so the branch above never catches it — it would otherwise
+    // fall through to the `typeToString` call below, which for an `X` whose
+    // symbol lives in another source file prints `import("<absolute path>").X`
+    // (a TS compiler-API quirk: there's no enclosing import to reference, so it
+    // synthesizes one against the FILESYSTEM PATH of the file that declared X).
+    // That path is specific to the machine that ran this generator and breaks
+    // every consumer's `tsc` the moment they touch the property (as with
+    // `shader.uniforms?: Record<string, UniformSpec>` on kai-audio-visualizer).
+    // Render it the same self-contained way as the object-with-properties
+    // branch above: recurse into the value type so IT gets inlined/imported too.
+    // NOTE: no `!isLibSym(sym)` guard here (unlike the branch above) — `sym` for
+    // a `Record<K, V>` IS the lib-declared `Record` alias itself (from
+    // lib.es5.d.ts), so that guard would always exclude exactly the case this
+    // is for. `getIndexInfoOfType` is the real gate: it only returns non-null
+    // for a genuine index signature, so this is a no-op for every other type.
+    if (type.flags & ts.TypeFlags.Object && type.getCallSignatures().length === 0) {
+      const stringIndex = checker.getIndexInfoOfType(type, ts.IndexKind.String);
+      if (stringIndex) return `Record<string, ${renderType(stringIndex.type, decl, seen)}>`;
+    }
     return checker.typeToString(type, decl, ts.TypeFormatFlags.NoTruncation);
   }
 

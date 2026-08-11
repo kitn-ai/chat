@@ -272,6 +272,27 @@ function moduleExports(file) {
 }
 
 // ---- 5. walk every defineWebComponent --------------------------------------
+// Most facades pass an inline arrow as the render argument, so the JSX is right
+// there in the call. A few hoist it into a named function and pass the reference
+// (`defineWebComponent('kai-audio-visualizer', {...}, AudioVisualizerFacade)`).
+// Walking only the argument expression finds no JSX in that shape and reports the
+// element as having NO Solid surface at all -- a false GAP, which is worse than a
+// miss: it would push someone to "fix" an element that is already fine, or to
+// weaken this check. Resolve an identifier to its declaration in the same file
+// and walk that instead.
+function renderNodeFor(sf, renderArg) {
+  if (!ts.isIdentifier(renderArg)) return renderArg;
+  let found = null;
+  const seek = (node) => {
+    if (found) return;
+    if (ts.isFunctionDeclaration(node) && node.name?.text === renderArg.text) found = node;
+    else if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === renderArg.text && node.initializer) found = node.initializer;
+    ts.forEachChild(node, seek);
+  };
+  seek(sf);
+  return found ?? renderArg;
+}
+
 const byTag = new Map();
 for (const file of facadeFiles) {
   const sf = program.getSourceFile(file);
@@ -282,7 +303,7 @@ for (const file of facadeFiles) {
       const tagArg = node.arguments[0];
       const renderArg = node.arguments[2];
       if (tagArg && ts.isStringLiteralLike(tagArg) && renderArg) {
-        byTag.set(tagArg.text, { module: basename(file), usage: kitUsage(renderArg), api });
+        byTag.set(tagArg.text, { module: basename(file), usage: kitUsage(renderNodeFor(sf, renderArg)), api });
       }
     }
     ts.forEachChild(node, visit);

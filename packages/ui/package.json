@@ -1,6 +1,6 @@
 {
   "name": "@kitn.ai/ui",
-  "version": "0.19.0",
+  "version": "0.20.1",
   "nx": {
     "name": "ui",
     "targets": {
@@ -135,12 +135,13 @@
     "frameworks",
     "theme.css",
     "llms.txt",
-    "llms-full.txt"
+    "llms-full.txt",
+    "NOTICE"
   ],
   "scripts": {
     "prepublishOnly": "npm run build",
     "prebuild": "npm run build:css",
-    "build": "vite build --config vite.config.ts && vite build --config vite.config.provider.ts && vite build --config vite.config.react.ts && vite build --config vite.config.barrel.ts && vite build --config vite.config.barrel.server.ts && vite build --config vite.config.solid.ts && vite build --config vite.config.solid.server.ts && vite build --config vite.config.state.ts && vite build --config vite.config.wire.ts && vite build --config vite.config.mcp.ts && npm run build:elements && node scripts/verify-elements-bundle.mjs && node scripts/verify-react-wrappers.mjs",
+    "build": "vite build --config vite.config.ts && vite build --config vite.config.provider.ts && vite build --config vite.config.react.ts && vite build --config vite.config.barrel.ts && vite build --config vite.config.barrel.server.ts && vite build --config vite.config.solid.ts && vite build --config vite.config.solid.server.ts && vite build --config vite.config.state.ts && vite build --config vite.config.wire.ts && vite build --config vite.config.mcp.ts && npm run build:elements && node scripts/verify-elements-bundle.mjs && node scripts/verify-react-wrappers.mjs && node scripts/verify-shader-lazy.mjs",
     "build:elements": "node scripts/gen-elements-manifest.mjs && vite build --config vite.config.elements.ts && node scripts/gen-element-dts.mjs",
     "postbuild": "npm run build:theme && npm run build:api && npm run build:schemas && npm run build:subpath-dts && npm run verify:dts",
     "build:theme": "node scripts/build-theme-tokens.mjs",

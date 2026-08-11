@@ -1,5 +1,97 @@
 # Changelog
 
+## [0.20.1](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.20.0...@kitn.ai/ui-v0.20.1) (2026-08-10)
+
+
+### Bug Fixes
+
+* **build:** make the root entry importable on the server ([#142](https://github.com/kitn-ai/ui/issues/142)) ([181961f](https://github.com/kitn-ai/ui/commit/181961f79eeb23519098468a3852b6b924596a10))
+
+## [0.20.0](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.19.0...@kitn.ai/ui-v0.20.0) (2026-08-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* **audio-visualizer:** kai-audio-visualizer's grid rowCount/columnCount props (row-count/column-count attributes) are replaced by count.
+
+### Features
+
+* **audio-visualizer:** add animateWhenNotVisible to opt out of context release ([18f20b1](https://github.com/kitn-ai/ui/commit/18f20b14b89e7176e911f8f90f3bc236a94baf1e))
+* **audio-visualizer:** distinct scripted-state looks for the custom demo ([cf6839e](https://github.com/kitn-ai/ui/commit/cf6839ed1f4d06d953e76d2b2ebfe4067893aee6))
+* **audio-visualizer:** drive speaking tiles from real recorded voice ([b483f96](https://github.com/kitn-ai/ui/commit/b483f9608aa5b025e1bf51702a7a1b188b35846e))
+* **audio-visualizer:** grid speaking threshold remap and dark idle ([17214f7](https://github.com/kitn-ai/ui/commit/17214f70e22427cf173898122df656a6e69a60a3))
+* **audio-visualizer:** kai-audio-visualizer, matched to LiveKit and verified side by side ([abc49fe](https://github.com/kitn-ai/ui/commit/abc49fe69cf74987f3e9beffb476b4bac2056c93))
+* **audio-visualizer:** kai-audio-visualizer, matched to LiveKit and verified side by side ([#140](https://github.com/kitn-ai/ui/issues/140)) ([abc49fe](https://github.com/kitn-ai/ui/commit/abc49fe69cf74987f3e9beffb476b4bac2056c93))
+* **audio-visualizer:** match the aurora's behavior to LiveKit's aura ([9020656](https://github.com/kitn-ai/ui/commit/90206566b05bb40e1a289f5e46885ae27886feaf))
+* **audio-visualizer:** square grid count and a first-class disconnected state ([33e8b07](https://github.com/kitn-ai/ui/commit/33e8b07052523d5baeb14607c91f15409e68991f))
+* **components:** add a short height transition to bar and radial (deliberate upstream divergence) ([f384d80](https://github.com/kitn-ai/ui/commit/f384d8064bf7a4ff747135a3d612d367980b2415))
+* **components:** add audio visualizer aurora variant ([3c89aa4](https://github.com/kitn-ai/ui/commit/3c89aa465ebb60b4259c28d4a29931e8094acb0f))
+* **components:** add audio visualizer dispatcher with lazy shader variants ([56197a9](https://github.com/kitn-ai/ui/commit/56197a95d1316bc30ca241dcef7933935a162314))
+* **components:** add audio visualizer grid variant ([3b8f83c](https://github.com/kitn-ai/ui/commit/3b8f83c377f81ea6139b55a070eb1f63fc8dd8af))
+* **components:** add audio visualizer radial variant ([7289cc7](https://github.com/kitn-ai/ui/commit/7289cc728f0b14c7c496d966bd2b35cc24856fdd))
+* **components:** add audio visualizer size scales and bar variant ([912b2b9](https://github.com/kitn-ai/ui/commit/912b2b9ec982ad68cdb1604decb363b9a6ca1bb0))
+* **components:** add audio visualizer wave variant ([8a053ca](https://github.com/kitn-ai/ui/commit/8a053ca7573ae0af82c0dea482dd1719d54b2d0a))
+* **components:** add aurora veil fragment shader ([926916e](https://github.com/kitn-ai/ui/commit/926916e4b7df02dc54abd33a5dc4d14867a193f5))
+* **components:** add BYO-shader audio visualizer variant ([b2da9f7](https://github.com/kitn-ai/ui/commit/b2da9f77d748a225c181cad4b4059dfbd0effe38))
+* **components:** add ShaderToy-compatible WebGL canvas ([cf26430](https://github.com/kitn-ai/ui/commit/cf2643047cf2e606a2dffe470ec08179167773dc))
+* **elements:** add kai-audio-visualizer ([75fee9e](https://github.com/kitn-ai/ui/commit/75fee9e72f83c10467faa25af4ccff55018f1652))
+* **primitives:** add numeric tween for shader uniforms ([a873af9](https://github.com/kitn-ai/ui/commit/a873af9e08bbe753050cb0902ab5dce404d6e0d3))
+* **primitives:** add pure audio band and volume reductions ([af3560b](https://github.com/kitn-ai/ui/commit/af3560b6a1e42063e5c27a6b0a481279f341289c))
+* **primitives:** add visualizer state sequences and RAF sequencer ([5e5ae70](https://github.com/kitn-ai/ui/commit/5e5ae704cb2904805d0e464f47c078b8a90c4631))
+* **primitives:** add Web Audio analysis and expose the recorder stream ([13ee4e6](https://github.com/kitn-ai/ui/commit/13ee4e6cc4bc8f0c356908883440e360a5d0d30c))
+* **primitives:** match motion's cubic-bezier easings for tween curves ([981dbd2](https://github.com/kitn-ai/ui/commit/981dbd20ee7d6712462438b101eb83f4a4ad2d81))
+* **stories:** add MicrophoneAll, all six variants on one shared stream ([5f039d6](https://github.com/kitn-ai/ui/commit/5f039d6ee90042d922d967bb9808fe212e6b110c))
+* **stories:** add WaveStates, clarify ShaderVariants/StateMatrix scope ([f8efe80](https://github.com/kitn-ai/ui/commit/f8efe807efc253b65ddbb7c253d49a2ff16d5502))
+
+
+### Bug Fixes
+
+* **audio-visualizer:** align the audio analysis chain with LiveKit upstream ([c22933e](https://github.com/kitn-ai/ui/commit/c22933e0df5c642e3a18f988efd8401c278b60f5))
+* **audio-visualizer:** derive Storybook demo band width per variant ([e2eb176](https://github.com/kitn-ai/ui/commit/e2eb176359ca557db5164cf38af5c707fd275ea7))
+* **audio-visualizer:** gentle wave at idle, matching upstream's fall-through ([0dbfb2f](https://github.com/kitn-ai/ui/commit/0dbfb2f785dcc47e4957c43c8043fe3118d61097))
+* **audio-visualizer:** mirror the speaking-tile stories centre-outward from a half-width voice bake ([24534bd](https://github.com/kitn-ai/ui/commit/24534bdab2f5be3ad69a83f066248566d7c7e7de))
+* **audio-visualizer:** single-writer speaking override in wave and custom ([1a3eb38](https://github.com/kitn-ai/ui/commit/1a3eb385bdb669c28c52fb2fbf82296935519c33))
+* **audio-visualizer:** unify the aurora's transitional rotation clockwise ([4c91763](https://github.com/kitn-ai/ui/commit/4c91763515332083aca520f5a672369347262c76))
+* **audio-visualizer:** upstream mic constraints and a solid custom demo ([348f09b](https://github.com/kitn-ai/ui/commit/348f09bf700774e5b23ca41e85c260ff8889afcc))
+* **build:** cover the element-registration chunk in sideEffects ([#139](https://github.com/kitn-ai/ui/issues/139)) ([c6a2f10](https://github.com/kitn-ai/ui/commit/c6a2f109712791705273e7370b420b7cc452a9d5))
+* **build:** stop leaking an absolute path into generated Record types, add the visual IVP ([9d8bdb6](https://github.com/kitn-ai/ui/commit/9d8bdb6e29fff887478c7520102bc14713ce3ce9))
+* **components,primitives:** centre-outward band mapping with geometric spacing ([3f34a45](https://github.com/kitn-ai/ui/commit/3f34a45880b55e2703a1f9b088f4c9d8564e0997))
+* **components:** address custom-shader review findings ([1c35ddb](https://github.com/kitn-ai/ui/commit/1c35ddbb3e56841a6dcc9f108fe7006b407aa1a2))
+* **components:** clamp aurora dark-pipeline rgb before premultiply ([e2b26ff](https://github.com/kitn-ai/ui/commit/e2b26ff9c920eee3c6198977ebdad6caa07ff2d6))
+* **components:** close array-uniform mismatch, correct alpha docs ([ce7d054](https://github.com/kitn-ai/ui/commit/ce7d05404a99a03a5e754a424d904964acff8503))
+* **components:** derive shader volume from caller-supplied bands ([0b9cf2d](https://github.com/kitn-ai/ui/commit/0b9cf2dd6704d5a5dfdede9f193def22862c7c3a))
+* **components:** document radial's render-prop wrapper, floor barCount at 1 ([d0ca1da](https://github.com/kitn-ai/ui/commit/d0ca1dac3e8763ed104adcf2260166cc8c08e81c))
+* **components:** fall back to bars when a mounted shader is unavailable ([666656a](https://github.com/kitn-ai/ui/commit/666656ab2fe98b42aa8cd60985be7c5be982ecd8))
+* **components:** forward the children render-prop to the DOM variants ([59fe512](https://github.com/kitn-ai/ui/commit/59fe5125026f6fc651921ce3ff4d7838711c0edc))
+* **components:** make the audio visualizer analyser band count reactive ([a05ffab](https://github.com/kitn-ai/ui/commit/a05ffab3ee72a3e495cfda4858be8139f50de2a6))
+* **components:** recover from lost WebGL contexts, stop docs page from exceeding the context cap ([369bc2d](https://github.com/kitn-ai/ui/commit/369bc2de48e2faa654469fefd09b075e3171cc65))
+* **components:** reduced-motion parity for custom, and five non-discriminating tests ([788564f](https://github.com/kitn-ai/ui/commit/788564f84cd74b99a0a64d64f07bc640edc54f5a))
+* **components:** register audio-visualizer parts, zero grid levels outside speaking ([d9d54be](https://github.com/kitn-ai/ui/commit/d9d54be5ce89e2e3f46d2cc5a9ca8604eb4d42ef))
+* **components:** stop bundling bands with the dispatcher's static spread ([b5795ac](https://github.com/kitn-ai/ui/commit/b5795ac5ff701c2d04ee44b827fe845b5f116fe4))
+* **components:** stop the shader compile effect leaking bands() via precision ([61eadc3](https://github.com/kitn-ai/ui/commit/61eadc34757b74cf8e9fa63cd461ed502148be78))
+* **components:** thread resolved theme into shader variants ([1651417](https://github.com/kitn-ai/ui/commit/1651417cfac5c0504683cd5dda5d6a6fc56c4c3b))
+* **components:** thread resolved theme into the aurora variant ([18f714b](https://github.com/kitn-ai/ui/commit/18f714b728d387a803018508687ed5583a3d0510))
+* **components:** unify inferred array size for declaration and recompile ([2c1099a](https://github.com/kitn-ai/ui/commit/2c1099acc5bcf5610660266991c4a8dd383f0ae9))
+* **components:** use Index and live accessors in the audio visualizer variants ([59904ee](https://github.com/kitn-ai/ui/commit/59904ee33acaf5759703c84ce9a2b617e6ae9526))
+* **components:** zero the wave shader's speed uniform when frozen ([360076e](https://github.com/kitn-ai/ui/commit/360076e9269ae698f448ac8074ea80b1d49f39d8))
+* **primitives:** anchor tween origin on performance.now(), not last frame ([e58e93a](https://github.com/kitn-ai/ui/commit/e58e93ae576aa04eb42726e7f65192eebb3d46c0))
+* **primitives:** gridRing centerX/centerY and spread === 0 handling ([92688e1](https://github.com/kitn-ai/ui/commit/92688e198645d60270329e39c99b66a1859ecad2))
+* **primitives:** isolate sequencer effect from unrelated signal churn ([ce721f3](https://github.com/kitn-ai/ui/commit/ce721f351ce8699e0ebada8037f643d8494ce5af))
+* **primitives:** move rAF and timing fixes to the test layer ([9c72912](https://github.com/kitn-ai/ui/commit/9c7291233efe381d02857cce0cf717b0125bdb52))
+* **primitives:** run two analysers, matching upstream's per-reduction smoothing ([a1d59f2](https://github.com/kitn-ai/ui/commit/a1d59f2d735e6dacc4ea7ab2cea0db1e0a5c4476))
+* **primitives:** share one source node per MediaStream across consumers ([3ca4101](https://github.com/kitn-ai/ui/commit/3ca410114af711561e2347658bd2c98cbdc1cfab))
+* **primitives:** stop double-connecting element sources to destination ([fdc53d8](https://github.com/kitn-ai/ui/commit/fdc53d8116ed3830cb9475a0f737ad39e7e24156))
+* **primitives:** untrack createTween's own value() read inside to() ([1610121](https://github.com/kitn-ai/ui/commit/1610121ca4ce5885255e6d8812d78ed4f1f195c7))
+* **stories:** make audio-visualizer synthetic speaking data non-periodic ([fe25a57](https://github.com/kitn-ai/ui/commit/fe25a573977687426ecec5e304f3c329f428ae7f))
+* **stories:** match real audio cadence, smooth synthetic waveform, add mic story ([27d98ad](https://github.com/kitn-ai/ui/commit/27d98adcbb2c1578ba4169513cd621861f1b2db3))
+* **tests:** make the ::part drift guard see dynamic part={} and the e2e spec's part selectors token-aware ([73d1214](https://github.com/kitn-ai/ui/commit/73d12140214a1936927df75f7adb423cbf4a5e89))
+* **tests:** validate full story ids in the e2e drift guard ([8977dd4](https://github.com/kitn-ai/ui/commit/8977dd455c73b0d8c1b66a45d3644e5d8ded443e))
+
+
+### Performance Improvements
+
+* **audio-visualizer:** release the WebGL context while off screen ([a2c56f5](https://github.com/kitn-ai/ui/commit/a2c56f5f19b12357a8033bc8da7f358e9314c7ac))
+
 ## [0.19.0](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.18.2...@kitn.ai/ui-v0.19.0) (2026-08-07)
 
 

@@ -140,3 +140,11 @@ export { Composer } from './components/composer';
 export type {
   ComposerProps, ComposerController, ComposerChange, TriggerDef, TriggerItem, HighlightRule,
 } from './components/composer';
+// AudioVisualizer — the component behind `<kai-audio-visualizer>`. It arrived on
+// main after this entry was written, and the coverage guard caught it as the one
+// element with no writable SolidJS equivalent, which is exactly the job.
+export { AudioVisualizer } from './components/audio-visualizer';
+export type {
+  AudioVisualizerProps, VisualizerVariant, ShaderSpec, ShaderVariantProps,
+} from './components/audio-visualizer';
+export type { VisualizerSize } from './components/audio-visualizer/sizes';

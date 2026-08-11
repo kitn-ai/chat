@@ -580,6 +580,40 @@ export const POPOVER_SLOTS: SlotDef[] = [
   { name: 'trigger', mode: 'replace', doc: 'The control that opens the popover (a button, an avatar, …). The panel anchors to it.' },
 ];
 
+/** Styleable `::part`s of `<kai-audio-visualizer>`. Every DOM variant (`bar`,
+ *  `grid`, `radial`) shares the `bar`/`cell` markup pattern; the shader variants
+ *  (`wave`, `aurora`) share the `canvas` part. Lit items ALSO carry the
+ *  `highlighted` part token, so `::part(bar highlighted)`/`::part(cell
+ *  highlighted)` selects only the lit ones. `::part(bar)[data-kai-highlighted=
+ *  "true"]` looks plausible but is invalid CSS: a CSS attribute selector
+ *  cannot follow a pseudo-element (`CSS.supports(selector(...))` returns
+ *  `false` for it in Chromium, and `insertRule` throws). `data-kai-index` /
+ *  `data-kai-highlighted` still exist on the element for consumers reading
+ *  them from INSIDE the shadow root or via the Solid render-prop; they are
+ *  just not reachable from an external `::part()` selector. */
+export const AUDIO_VISUALIZER_PARTS: PartDef[] = [
+  {
+    name: 'bar',
+    doc: 'A single bar in the `bar` variant, or a single spoke in the `radial` variant. Also carries `data-kai-index` and `data-kai-highlighted` ("true"/"false") for use inside the shadow root; to style the lit state from OUTSIDE, combine with the `highlighted` part below rather than an attribute selector.',
+    recipe: 'kai-audio-visualizer::part(bar) { border-radius: 2px }\nkai-audio-visualizer::part(bar highlighted) { background: var(--brand) }',
+  },
+  {
+    name: 'cell',
+    doc: 'A single dot in the `grid` variant. Also carries `data-kai-index` and `data-kai-highlighted` ("true"/"false") for use inside the shadow root; to style the lit state from OUTSIDE, combine with the `highlighted` part below rather than an attribute selector.',
+    recipe: 'kai-audio-visualizer::part(cell) { border-radius: 9999px }\nkai-audio-visualizer::part(cell highlighted) { background: var(--brand) }',
+  },
+  {
+    name: 'highlighted',
+    doc: 'A second part TOKEN present on a `bar` or `cell` exactly when the sequencer or live audio has it lit, not a standalone styleable element. Combine it in the same `::part()` argument: `::part(bar highlighted)` or `::part(cell highlighted)`. This is the external equivalent of the internal `data-kai-highlighted="true"` attribute, which a `::part()` selector cannot reach (an attribute selector cannot follow a pseudo-element).',
+    recipe: 'kai-audio-visualizer::part(bar highlighted) { background: var(--brand) }\nkai-audio-visualizer::part(cell highlighted) { background: var(--brand) }',
+  },
+  {
+    name: 'canvas',
+    doc: 'The WebGL canvas backing the `wave` and `aurora` variants. Restyle its size or radius, or layer a mask/filter, from outside.',
+    recipe: 'kai-audio-visualizer::part(canvas) { border-radius: 0.75rem }',
+  },
+];
+
 export const ELEMENT_COMPOSITION: Record<string, ElementComposition> = {
   'kai-chat': { slots: CHAT_SLOTS, parts: CHAT_PARTS },
   'kai-command': { parts: COMMAND_PARTS },
@@ -625,6 +659,7 @@ export const ELEMENT_COMPOSITION: Record<string, ElementComposition> = {
   'kai-resizable': { children: 'The `<kai-resizable-item>` panels, in order. Dividers are inserted between them.' },
   'kai-resizable-item': { children: 'This panel\'s content.' },
   'kai-tooltip': { children: 'The TRIGGER the tooltip describes. The tip text is the `text` prop.' },
+  'kai-audio-visualizer': { parts: AUDIO_VISUALIZER_PARTS },
 };
 
 /**

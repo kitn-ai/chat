@@ -64,7 +64,7 @@ jobs:
       # Imports EVERY public entry in the exports map under Node's `node`
       # condition, one child process each. Nothing in the repo ever imported the
       # BUILT package on a server, so `import '@kitn.ai/ui'` threw "Client-only
-      # API called on the server side" in every published version through 0.19.0
+      # API called on the server side" in every published version through 0.20.0
       # -- a hard SSR/prerender/RSC failure for any consumer touching a value
       # export. Needs the build above. ~4s, no network.
       - name: Server-import guard (every entry imports under `node`)

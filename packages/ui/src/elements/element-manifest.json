@@ -19,6 +19,7 @@
     "kai-suggestions": "prompt-suggestions",
     "kai-file-upload": "file-upload",
     "kai-voice-input": "voice-input",
+    "kai-audio-visualizer": "audio-visualizer",
     "kai-loader": "loader",
     "kai-text-shimmer": "text-shimmer",
     "kai-image": "image",
@@ -136,6 +137,9 @@
     ],
     "voice-input": [
       "kai-voice-input"
+    ],
+    "audio-visualizer": [
+      "kai-audio-visualizer"
     ],
     "loader": [
       "kai-loader"

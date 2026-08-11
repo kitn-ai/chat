@@ -400,3 +400,7 @@ export type { PaneTab } from './ui/pane-group';
 export type {
   KaiCommandItem, KaiContextUsage, KaiMenuItem, KaiSegmentedOption, KaiSourceItem,
 } from './elements/element-data-types';
+// `kai-audio-visualizer.shader` takes a ShaderSpec. The element arrived from main
+// after this block was written, and prop-types-exported.test.ts caught it, which
+// is the point of deriving that list from the facades rather than maintaining it.
+export type { ShaderSpec } from './components/audio-visualizer';

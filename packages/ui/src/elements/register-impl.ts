@@ -27,6 +27,7 @@ import './chat-scope-picker';
 import './prompt-suggestions';
 import './file-upload';
 import './voice-input';
+import './audio-visualizer';
 // Phase 4 — indicators & leaves
 import './loader';
 import './text-shimmer';

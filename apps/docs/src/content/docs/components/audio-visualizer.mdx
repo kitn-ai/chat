@@ -1,0 +1,216 @@
+---
+title: Audio Visualizer
+description: Render live audio, or a scripted state alone, as bars, a grid, a ring, a wave, or an aurora, chosen by one attribute.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+import Playground from '../../../components/Playground.tsx';
+import Example from '../../../components/Example.tsx';
+import PropTable from '../../../components/PropTable.astro';
+import PartTable from '../../../components/PartTable.astro';
+import ComposedFrom from '../../../components/ComposedFrom.astro';
+import Facts from '../../../components/Facts.astro';
+import NeedAHand from '../../../components/NeedAHand.astro';
+
+<p class="kai-tag-sub">kai-audio-visualizer</p>
+
+<p class="kai-lede">Render live audio (a microphone stream, an `<audio>`/`<video>` element, or precomputed levels) as bars, a grid, a ring, a flowing wave, or a glowing aurora. One element, six variants, chosen by `variant`.</p>
+
+<Facts items={['Shadow DOM', '6 variants', 'Live audio or scripted state', 'Custom GLSL shaders', '3 parts']} />
+
+## Preview
+
+<Playground client:only="solid" tag="kai-audio-visualizer" />
+
+<Aside type="tip" title="When to use">
+Pair `<kai-audio-visualizer>` with `<kai-voice-input>` while recording, or `<kai-voice-output>` while it talks. Pick `variant` for the space: `bar` for a slim status LED, `grid` for a call tile, `radial` for a ring around an avatar, `wave` or `aurora` for a hero-sized ambient visual.
+</Aside>
+
+## Usage
+
+`variant`, `state`, `size`, and the rest of the shape props (`bar-count`, `count`, `radius`, `spread`, `interval`, `color`, `complexity`, `label`) are plain scalars: set them as HTML attributes. Live audio is not a scalar. Assign `stream`, `audioElement`, and `bands` in JavaScript, never as attributes. `shader` (for `variant="custom"`) works the same way.
+
+```html
+<kai-audio-visualizer variant="grid" state="listening" size="lg"></kai-audio-visualizer>
+```
+
+```js
+const viz = document.querySelector('kai-audio-visualizer');
+viz.stream = mediaStream;         // a live MediaStream
+viz.audioElement = audioEl;       // HTMLAudioElement or HTMLVideoElement
+viz.bands = [0.2, 0.8, 0.4, 0.5]; // number[], 0..1, skips Web Audio entirely
+```
+
+Only one source wins. Setting `bands` short-circuits Web Audio entirely, so `stream` and `audioElement` are ignored even if you also set them. Streaming levels into `bands` needs a fresh array reference on every update; mutating the existing array in place will not re-render.
+
+## State without audio
+
+`state` alone drives a full scripted animation with no audio source at all. `idle`, `connecting`, `listening`, `thinking`, `speaking`, and `disconnected` (connection down: the dead, flat look, matching LiveKit's disconnected) each get their own timing and pattern per variant (LiveKit's room-lifecycle names are accepted as aliases). This is what backs `<kai-voice-output>`: the browser's `speechSynthesis` exposes no audio node to analyze, so there is nothing to tap. Set `state="speaking"` while it talks and skip the audio props entirely.
+
+## Examples
+
+### Bar
+
+`variant="bar"` (default). A compact row of levels, good for a mic button or a slim status strip.
+
+<Example client:visible tag="kai-audio-visualizer" config={{ variant: 'bar', state: 'speaking' }} />
+
+### Grid
+
+`variant="grid"`. A dot matrix that pulses outward, sized for a call tile.
+
+<Example client:visible tag="kai-audio-visualizer" config={{ variant: 'grid', state: 'speaking', size: 'lg' }} />
+
+### Radial
+
+`variant="radial"`. A ring of spokes around a center point, for wrapping an avatar.
+
+<Example client:visible tag="kai-audio-visualizer" config={{ variant: 'radial', state: 'speaking' }} />
+
+### Wave
+
+`variant="wave"`. A flowing oscilloscope line, rendered through WebGL.
+
+<Example client:visible tag="kai-audio-visualizer" config={{ variant: 'wave', state: 'speaking' }} />
+
+### Aurora
+
+`variant="aurora"`. A glowing ambient wash, good for a hero-sized idle state.
+
+<Example client:visible tag="kai-audio-visualizer" config={{ variant: 'aurora', state: 'listening' }} />
+
+## Wiring it to the microphone
+
+`<kai-voice-input>` hands you a transcript, not a stream. It never exposes the raw `MediaStream` it records with. Request your own with `getUserMedia`, gated by the mic's `kai-recording-change` event so the visualizer's `state` and its `stream` change together:
+
+```html
+<kai-voice-input id="mic"></kai-voice-input>
+<kai-audio-visualizer id="viz" variant="bar" size="icon"></kai-audio-visualizer>
+
+<script type="module">
+  import '@kitn.ai/ui/elements';
+
+  await customElements.whenDefined('kai-voice-input');
+
+  const mic = document.getElementById('mic');
+  const viz = document.getElementById('viz');
+  let micStream;
+
+  mic.addEventListener('kai-recording-change', async (e) => {
+    viz.state = e.detail.recording ? 'speaking' : 'idle';
+    if (e.detail.recording) {
+      // Request processed capture, not bare `audio: true`. The default
+      // analysis window expects gain-controlled speech (it reads the
+      // 2-4kHz band and gates the room's noise floor out); these are the
+      // same capture constraints LiveKit's own client applies to local
+      // mic tracks.
+      micStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          voiceIsolation: true,
+        },
+      });
+      viz.stream = micStream;
+    } else {
+      viz.stream = undefined;
+      micStream?.getTracks().forEach((track) => track.stop());
+    }
+  });
+</script>
+```
+
+<Aside type="note" title="Two mic requests">
+This opens a second `getUserMedia` stream alongside `kai-voice-input`'s own internal one (native `SpeechRecognition`, or its own `MediaRecorder` when there is a `transcribe` callback). The browser only prompts for permission once per origin, so the second concurrent stream costs a live track, not an extra dialog.
+</Aside>
+
+## Styling
+
+Restyle the `bar`, `cell`, or `canvas` part from outside. A lit bar or cell also carries the `highlighted` part, as a second token in the same `part` attribute, so target it by combining both names in one `::part()`:
+
+```css
+/* wrong: a CSS attribute selector cannot follow a pseudo-element, so this
+   never matches anything -- CSS.supports(selector(...)) returns false for it */
+kai-audio-visualizer::part(bar)[data-kai-highlighted="true"] { background: var(--brand); }
+
+/* right */
+kai-audio-visualizer::part(bar highlighted) { background: var(--brand); }
+kai-audio-visualizer::part(cell highlighted) { background: var(--brand); }
+```
+
+Bar and cell items also carry `data-kai-index` and `data-kai-highlighted` (`"true"`/`"false"`) for reading from inside the shadow root, or from a render-prop when composing the Solid component directly, but a `::part()` selector from outside cannot see them.
+
+<PartTable tag="kai-audio-visualizer" />
+
+## Custom shaders
+
+Set `variant="custom"` and a `shader` property to render your own fragment shader instead of the built-in geometry:
+
+```html
+<kai-audio-visualizer id="viz" variant="custom"></kai-audio-visualizer>
+<script type="module">
+  import '@kitn.ai/ui/elements';
+
+  await customElements.whenDefined('kai-audio-visualizer');
+
+  document.getElementById('viz').shader = {
+    fragment: `
+      void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+        vec2 uv = fragCoord / iResolution.xy;
+        float alpha = smoothstep(1.0, 0.0, length(uv - 0.5) * 2.0) * uIntensity;
+        fragColor = vec4(uColor * alpha, alpha); // premultiplied, not vec4(uColor, alpha)
+      }
+    `,
+  };
+</script>
+```
+
+<Aside type="caution" title="Registration and upgrade order">
+Without `import '@kitn.ai/ui/elements'`, `<kai-audio-visualizer>` never registers and `variant="custom"` never renders. Without the `customElements.whenDefined` guard, the `shader` property write can land before the element upgrades and gets clobbered when it does. Skipping either one produces a blank 112px box with no console output, not an error.
+</Aside>
+
+Your fragment must define `mainImage(out vec4 fragColor, in vec2 fragCoord)`. The canvas declares every uniform below for you and injects them ahead of your source. Redeclaring any of them (`uniform float iTime;`, `uniform vec3 uColor;`, and so on) inside `fragment` is a GLSL redefinition and fails to compile.
+
+<Aside type="caution" title="Output premultiplied colour">
+`fragColor` must be premultiplied: `vec4(rgb * alpha, alpha)`, never `vec4(rgb, alpha)`. The canvas composites with the browser's default `premultipliedAlpha: true`. A straight-alpha edge gets a dark fringe where it meets a light page background.
+</Aside>
+
+| Uniform | GLSL type | What it carries |
+|---|---|---|
+| `iTime` | `float` | Seconds since the shader mounted. |
+| `iResolution` | `vec2` | Canvas size in device pixels. |
+| `iMouse` | `vec4` | Pointer position in `.xy`. `.zw` stays zero; only `.xy` is implemented. |
+| `iFrame` | `int` | Frame counter, incrementing every draw. |
+| `iDate` | `vec4` | Year, month, day, and seconds into the day. |
+| `uColor` | `vec3` | The `color` attribute (or the shader default), as 0..1 RGB. |
+| `uIntensity` | `float` | An eased 0..1 value that follows `state`. |
+| `uSpeed` | `float` | An eased animation speed that follows `state`. |
+| `uComplexity` | `float` | The `complexity` attribute, 0..1 (default `0.5`). |
+| `uVolume` | `float` | A single scalar volume: from live analysis, or the RMS of `bands` when you supply it directly. |
+| `uBands[N]` | `float[N]` | Per-band levels, `N` tracking the actual band count (never zero-length). |
+
+`uBands` is ours. LiveKit's upstream shader path only ever hands a shader a scalar volume, so a spectrum-reactive custom shader is only possible here.
+
+## Props
+
+<PropTable tag="kai-audio-visualizer" />
+
+## Notes
+
+- `wave`, `aurora`, and `custom` load behind a dynamic import and fall back to `bar` if the chunk fails or WebGL is not available. A `kai-chat`-only page never pays for the shader runtime.
+- Scrolled off screen, a shader variant stops drawing and hands its WebGL context back to the browser, taking it again on the way in. Browsers only allow around 16 live contexts per page and silently kill the oldest past that, so without this a page with a dozen shader tiles ends up with dead canvases. The animation resumes where you left it rather than jumping forward.
+- `animate-when-not-visible` opts a single element out of that, for a visualizer that has to keep running unseen. It holds its context for as long as it is mounted, so use it on one or two elements, not on a page full of them.
+
+  ```html
+  <kai-audio-visualizer variant="wave" animate-when-not-visible></kai-audio-visualizer>
+  ```
+
+- `prefers-reduced-motion` freezes the scripted animation on all six variants (`bar`, `grid`, `radial`, `wave`, `aurora`, and `custom`): no easing, no pulsing, no drift. It wins over `animate-when-not-visible`, which only decides whether frames keep being drawn, never what they show.
+- `aura` is accepted as an alias for `aurora`, for markup ported from LiveKit.
+
+## Composed from
+
+<ComposedFrom tag="kai-audio-visualizer" />
+
+<NeedAHand />

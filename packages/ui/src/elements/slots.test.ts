@@ -168,10 +168,63 @@ describe('NAV_PARTS registry', () => {
 });
 
 describe('ELEMENT_COMPOSITION registry (single source of truth the build extracts)', () => {
-  // Every `::part` a consumer can style is declared by writing `part="name"` in a
-  // facade/component. The registry must name each one so docs + the kai MCP can
-  // surface it; this guard fails the build if a part is added in code but not here.
-  const PART_RE = /part="([a-z][a-z0-9-]*)"/g;
+  // Every `::part` a consumer can style is declared by writing `part="name"`
+  // (or, for a value that toggles, `part={lit ? 'name modifier' : 'name'}`)
+  // in a facade/component. The registry must name each one so docs + the kai
+  // MCP can surface it; this guard fails the build if a part is added in
+  // code but not here.
+  //
+  // `part` is a space-separated TOKEN LIST (like `class`), so ONE attribute
+  // can declare more than one name -- `part="bubble content"` is TWO parts,
+  // not one -- and it can be built dynamically, e.g.
+  // `part={highlighted() ? 'bar highlighted' : 'bar'}`, which is how the
+  // audio-visualizer variants expose their lit state: `::part()` cannot be
+  // followed by a `[data-*]` attribute selector, so a second part TOKEN is
+  // the only way to select the lit state from outside the shadow root. Both
+  // shapes must be visible to this scan, or it reports success while
+  // covering nothing for whichever files use them -- which is exactly what
+  // happened here: a plain `/part="([a-z][a-z0-9-]*)"/g` regex cannot match
+  // either the dynamic form OR a multi-token static value (no whitespace is
+  // in that character class), so it silently stopped seeing `bar`/`cell`
+  // once the audio-visualizer variants switched to the dynamic form, and it
+  // had ALREADY never seen `content` in message.tsx's pre-existing
+  // `part="bubble content"` for the same reason.
+  //
+  // A dynamic `part={...}` value is not reliably parseable as an arbitrary
+  // JS expression with a regex, so this does not try to evaluate it: it
+  // scans for STRING LITERALS inside the balanced `{...}` that follows
+  // `part=`, and treats each one as a candidate part-token string -- which
+  // is exactly the shape every `part={...}` in this codebase that declares a
+  // NEW name actually uses (a ternary between string literals). A bare
+  // passthrough like `part={props.part}` has no string literal inside it, so
+  // it contributes nothing here; whoever supplies that prop with a literal
+  // value elsewhere in the tree is what the scan sees for that part name.
+  const STATIC_PART_RE = /\bpart="([a-z][a-z0-9-]*(?:\s+[a-z][a-z0-9-]*)*)"/g;
+  const DYNAMIC_PART_START_RE = /\bpart=\{/g;
+  const STRING_LITERAL_RE = /'([^']*)'|"([^"]*)"/g;
+  const TOKEN_RE = /^[a-z][a-z0-9-]*$/;
+
+  /** Every space-separated token from every string literal inside the
+   *  balanced `{...}` that opens at `openBraceIndex` (the index of that
+   *  `{` itself). Brace-balanced rather than regex-bounded, so a nested `?:`
+   *  or object literal inside the expression cannot truncate the scan
+   *  early or run it past the attribute's actual end. */
+  function tokensInDynamicPart(source: string, openBraceIndex: number): string[] {
+    let depth = 1;
+    let i = openBraceIndex + 1;
+    while (i < source.length && depth > 0) {
+      if (source[i] === '{') depth++;
+      else if (source[i] === '}') depth--;
+      i++;
+    }
+    const expr = source.slice(openBraceIndex + 1, i - 1);
+    const tokens: string[] = [];
+    for (const m of expr.matchAll(STRING_LITERAL_RE)) {
+      const literal = m[1] ?? m[2] ?? '';
+      tokens.push(...literal.split(/\s+/).filter((t) => TOKEN_RE.test(t)));
+    }
+    return tokens;
+  }
 
   function partNamesInSource(): Set<string> {
     const found = new Set<string>();
@@ -187,7 +240,14 @@ describe('ELEMENT_COMPOSITION registry (single source of truth the build extract
         // `ui/stat.tsx` is an internal-only SolidJS component — there is no
         // `kai-stat` web component, so its parts are intentionally unregistered.
         if (p.endsWith(join('ui', 'stat.tsx'))) continue;
-        for (const m of readFileSync(p, 'utf8').matchAll(PART_RE)) found.add(m[1]);
+        const src = readFileSync(p, 'utf8');
+        for (const m of src.matchAll(STATIC_PART_RE)) {
+          for (const tok of m[1].split(/\s+/)) found.add(tok);
+        }
+        for (const m of src.matchAll(DYNAMIC_PART_START_RE)) {
+          const openBraceIndex = m.index + m[0].length - 1;
+          for (const tok of tokensInDynamicPart(src, openBraceIndex)) found.add(tok);
+        }
       }
     };
     for (const d of ['elements', 'ui', 'components']) walk(join(HERE, '..', d));
@@ -215,6 +275,7 @@ describe('ELEMENT_COMPOSITION registry (single source of truth the build extract
     expect(Object.keys(ELEMENT_COMPOSITION).sort()).toEqual([
       'kai-agent-card',
       'kai-attachments',
+      'kai-audio-visualizer',
       'kai-badge',
       'kai-button',
       'kai-card',

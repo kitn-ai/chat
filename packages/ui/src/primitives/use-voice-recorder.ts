@@ -8,6 +8,7 @@ export function useVoiceRecorder(options: UseVoiceRecorderOptions = {}) {
   const mimeType = options.mimeType ?? 'audio/webm;codecs=opus';
   const [isRecording, setIsRecording] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
+  const [stream, setStream] = createSignal<MediaStream | undefined>();
 
   let mediaRecorder: MediaRecorder | undefined;
   let chunks: Blob[] = [];
@@ -17,14 +18,16 @@ export function useVoiceRecorder(options: UseVoiceRecorderOptions = {}) {
     setError(null);
     chunks = [];
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorder = new MediaRecorder(stream, { mimeType });
+      const mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      setStream(mediaStream);
+      mediaRecorder = new MediaRecorder(mediaStream, { mimeType });
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) chunks.push(e.data);
       };
       mediaRecorder.onstop = () => {
         const blob = new Blob(chunks, { type: mimeType });
-        stream.getTracks().forEach((t) => t.stop());
+        mediaStream.getTracks().forEach((t) => t.stop());
+        setStream(undefined);
         setIsRecording(false);
         resolveBlob?.(blob);
       };
@@ -32,6 +35,15 @@ export function useVoiceRecorder(options: UseVoiceRecorderOptions = {}) {
       setIsRecording(true);
       return new Promise<Blob>((resolve) => { resolveBlob = resolve; });
     } catch (err) {
+      // getUserMedia may have already succeeded (stream() is live) even
+      // though something after it threw, e.g. an unsupported mimeType
+      // rejected by `new MediaRecorder(...)`. Leaving that stream open would
+      // keep the microphone live with no indication anything is recording.
+      const liveStream = stream();
+      if (liveStream) {
+        liveStream.getTracks().forEach((t) => t.stop());
+        setStream(undefined);
+      }
       setError(err instanceof Error ? err.message : 'Microphone access denied');
       setIsRecording(false);
       throw err;
@@ -46,5 +58,5 @@ export function useVoiceRecorder(options: UseVoiceRecorderOptions = {}) {
 
   onCleanup(() => stop());
 
-  return { isRecording, error, start, stop };
+  return { isRecording, error, stream, start, stop };
 }
