@@ -15,7 +15,7 @@ already documented), **4 model-behaviour differences**, and **zero UI failures**
 | S02 reasoning | pass | pass | **n/a** | **n/a** | **n/a** |
 | S03 single tool | pass | pass | pass | pass | pass |
 | S04 multi-round tool loop | pass | pass | pass | pass | **n/a** |
-| S05 parallel tools | pass | pass | pass | pass | pass |
+| S05 parallel tools | pass | pass\* | pass | pass | pass |
 | S06 tool error | pass | pass | pass | pass | pass |
 | S06b malformed args | pass | pass | pass | pass | pass |
 | S07 confirm card | pass | pass | pass | pass | pass |
@@ -30,6 +30,15 @@ already documented), **4 model-behaviour differences**, and **zero UI failures**
 | S16 mid-stream error | pass | pass | pass | pass | pass |
 | S17 cancel | pass | pass | pass | pass | pass |
 | S18 expand mid-stream | pass | pass | pass | pass | pass |
+
+\* **S05 on the Anthropic wire proves less than the same cell on the OpenAI wire**, so
+the two are not interchangeable despite both reading `pass`. The OpenAI fixture
+announces both calls up front and INTERLEAVES their argument fragments, correlated
+only by `index` — the adversarial shape the adapter exists to survive. Anthropic
+cannot produce that: its content blocks stream strictly sequentially, so its cell
+tests two complete tool_use blocks arriving one after another. The harness now
+carries this per wire (`provesByWire` in `s05-parallel-tools.ts`) and prints it as a
+footnote, rather than leaving a reader to infer equivalence from two green cells.
 
 `pass` = the behaviour rendered · `gap` = a documented known gap, failing as
 documented · **`n/a`** = the model did not produce the input the scenario needs.
