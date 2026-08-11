@@ -84,8 +84,6 @@ src/hooks/useSpikeChat  The multi-round tool loop. The reason to keep the spike.
 src/scenarios/          The conformance catalog: one module per scenario, each
                           owning its prompt, its tools and its DOM assertion.
 src/useHarnessRun.ts    ?scenario=&mode= — the browser half of the harness.
-src/spike-artifact.ts   A consumer-registered card type (the kit has no artifact
-                          card; S13 measures what that costs).
 
 server/openrouter-proxy.ts  The dev proxy. Adds the key, forwards raw upstream
                               SSE, records it, and replays it. The only place the

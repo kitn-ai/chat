@@ -5,7 +5,6 @@ import { fetchSpikeConfig, type CardMode, type SpikeConfig } from './transport';
 import { useSpikeChat } from './hooks';
 import type { Scenario, ScenarioMode } from './scenarios';
 import { readHarnessRequest, sendOptionsFor, useHarnessRun } from './useHarnessRun';
-import { registerSpikeArtifact, SPIKE_CARD_TYPES } from './spike-artifact';
 import { Sidebar } from './components/Sidebar';
 import { ThreadView } from './components/ThreadView';
 import { Composer } from './components/Composer';
@@ -14,9 +13,10 @@ import { ThemeToggle } from './components/ThemeToggle';
 
 export type Theme = 'light' | 'dark';
 
-// A consumer-registered card type. See spike-artifact.ts: the kit has no
-// `artifact` card, so S13 reaches one through the documented `cardTypes` seam.
-registerSpikeArtifact();
+// No `cardTypes` override. There used to be one: `<spike-artifact>`, registered
+// through the documented consumer seam, because the kit shipped no `artifact`
+// card. It ships one now, and a consumer entry OVERRIDES the built-in — so
+// keeping the workaround would have meant S13 measuring the workaround forever.
 
 /**
  * ⚠ SPIKE, not a supported starter. See README.md.
@@ -154,12 +154,7 @@ export default function App() {
               </div>
             </header>
 
-            <ThreadView
-              theme={theme}
-              messages={chat.messages}
-              loading={chat.loading}
-              cardTypes={SPIKE_CARD_TYPES}
-            />
+            <ThreadView theme={theme} messages={chat.messages} loading={chat.loading} />
 
             <ModelPanel theme={theme} error={spike.error} stats={spike.stats} />
 
