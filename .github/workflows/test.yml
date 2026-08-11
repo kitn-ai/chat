@@ -98,6 +98,30 @@ jobs:
       - name: Scaffolder output compiles (tsc --strict over emitted code)
         run: pnpm --filter @kitn.ai/ui run verify:scaffold
 
+      # Compiles every fenced code block in apps/docs against the SHIPPED API --
+      # the built dist/*.d.ts and element-meta.json, read at run time, nothing
+      # baked in -- and checks kai-* markup, events, ::part() names and prose
+      # symbols against the same source. Docs are the one consumer surface with
+      # no compiler behind it, so a renamed prop or a symbol that moved entries
+      # stays wrong on the site indefinitely.
+      #
+      # BLOCKING, and it earned that: an adversarial pass planted 12 defects --
+      # camelCased attributes, a real kit prop on the wrong element, a typo'd
+      # component prop, a wrong property on a kit type inside an UNTYPED js
+      # fence, four real symbols imported from the wrong entry point, a
+      # misspelled event, a bad ::part(), an array set as an attribute -- and it
+      # caught 12/12, on the right lines, while reporting nothing at all on a
+      # page of legitimate reader-owned code (undeclared helpers, omitted
+      # imports, uninstalled third-party packages, a marked counter-example) or
+      # on a control page of correct usage.
+      #
+      # It gates on `high` only; medium/advisory are reported and do not fail.
+      # Its own anti-theatre self-test runs first and hard-fails the whole run if
+      # a probe that must be RED goes green, so "0 findings" cannot mean "the kit
+      # types resolved to `any`". Needs the build above. ~8s, no network.
+      - name: Docs alignment (every doc snippet compiles against the shipped API)
+        run: pnpm --filter @kitn.ai/docs run verify:docs
+
       # Run ONLY the jsdom unit project. pnpm test (= vitest run) would also
       # spin up the storybook BROWSER project; that runs in its own job now.
       - name: Unit tests (jsdom)

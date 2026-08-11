@@ -115,21 +115,48 @@ const lineOf = (code, index, startLine) => startLine + code.slice(0, index).spli
  *     <!-- Fails — an array can't be an HTML attribute -->
  *     <kai-chat messages="[...]"></kai-chat>
  *
- * Flagging that is flagging the docs for being right. A marker comment on the
- * same line or either of the two lines above exempts a line. This reads the
- * docs' existing wording rather than requiring new directives, so nothing has to
- * be annotated for the harness's benefit.
+ * Flagging that is flagging the docs for being right. So a marker comment exempts
+ * itself and the counter-example that follows it. This reads the docs' existing
+ * wording rather than requiring new directives, so nothing has to be annotated
+ * for the harness's benefit.
+ *
+ * Both halves of that are narrower than they look, and both were widened by an
+ * adversarial pass that made the harness go quiet on real defects:
+ *
+ *   · The marker must LEAD the comment body. A counter-example marker is a
+ *     LABEL — `Fails — …`, `Wrong: …`, `✗ …` — and matching the words anywhere
+ *     in the comment turns every ordinary prose caution into a mute button.
+ *     guides/recipes/streaming.mdx really writes "Point at your own backend in
+ *     production. Never expose an API key in the browser", and on the old rule
+ *     that "Never" exempted the four lines under it, `fetch(...)` included.
+ *   · The window stops at a BLANK LINE. A counter-example is a contiguous block;
+ *     a fixed three-line reach reads past the end of one into whatever follows.
+ *     Measured: `<kai-chat sugestions="…">` one blank line below an unrelated
+ *     counter-example was silently dropped.
  */
 const NEGATIVE_MARKER =
-  /(^|[^\w])(fails?|failing|wrong|incorrect|broken|don'?t|do not|never|avoid|bad|anti-pattern|instead of|won'?t work|not this|✗|❌)([^\w]|$)/i;
+  /^["'`(\[*\-–—>\s]*(fails?|failing|won'?t work|anti-pattern|instead of|not this|incorrect|wrong|broken|don'?t|do not|never|avoid|bad|✗|❌)(?!\w)/i;
+
+/** The comment body on a line, or null when the line opens no comment. */
+function commentBody(line) {
+  const m = /(?:^|\s)(?:\/\/+|\/\*+|<!--|#)[ \t]*(.*)$/.exec(line);
+  return m ? m[1] : null;
+}
 
 export function counterExampleLines(code) {
   const lines = code.split('\n');
   const marked = new Set();
   lines.forEach((line, i) => {
-    const isComment = /(^|\s)(\/\/|\/\*|<!--|#)/.test(line);
-    if (!isComment || !NEGATIVE_MARKER.test(line)) return;
-    for (let d = 0; d <= 3; d++) marked.add(i + 1 + d); // 1-based, this line + 3 below
+    const body = commentBody(line);
+    if (body === null || !NEGATIVE_MARKER.test(body)) return;
+    marked.add(i + 1); // 1-based: the marker itself
+    // …then the contiguous block it labels, up to three lines, ending at the
+    // first blank line. Beyond that is a different example.
+    for (let d = 1; d <= 3; d++) {
+      const next = lines[i + d];
+      if (next === undefined || !next.trim()) break;
+      marked.add(i + 1 + d);
+    }
   });
   return marked;
 }

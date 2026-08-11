@@ -180,6 +180,48 @@ export function runSelfTest({ workspace, surface, uiRoot, verbose }) {
       want: 'unknown-part',
     },
     {
+      // The counter-example exemption is a MUTE BUTTON, so its edges are worth
+      // more than its centre. Both of these went quiet on a real defect until an
+      // adversarial pass caught them.
+      //
+      // A counter-example is a contiguous block. Reaching a fixed three lines
+      // past the marker reads into the NEXT example and silently drops whatever
+      // is wrong there.
+      id: 'counter-example-window-stops-at-a-blank-line',
+      run: () =>
+        checkMarkup({
+          code:
+            `<!-- Fails — an array can't be an HTML attribute -->\n` +
+            `<kai-chat messages="[...]"></kai-chat>\n` +
+            `\n` +
+            `<kai-chat sugestions="[]"></kai-chat>`,
+          startLine: 1,
+          surface,
+          lang: 'html',
+        }),
+      want: 'unknown-prop',
+      wantLine: 4,
+      wantCount: 1, // the marked line 2 must STAY exempt
+    },
+    {
+      // "Never expose an API key in the browser" is a caution, not a label for a
+      // counter-example. guides/recipes/streaming.mdx really writes it, and
+      // matching the marker words anywhere in a comment muted the four lines
+      // under it — `await fetch('/api/chat', {` included.
+      id: 'mid-sentence-caution-is-not-a-counter-example-marker',
+      run: () =>
+        checkMarkup({
+          code:
+            `<!-- Point at your own backend in production. Never expose an API key in the browser. -->\n` +
+            `<kai-chat plaecholder="typo"></kai-chat>`,
+          startLine: 1,
+          surface,
+          lang: 'html',
+        }),
+      want: 'unknown-prop',
+      wantLine: 2,
+    },
+    {
       id: 'stale-mdx-example-tag',
       run: () =>
         checkMdxComponents(
@@ -228,12 +270,23 @@ export function runSelfTest({ workspace, surface, uiRoot, verbose }) {
 
   for (const p of structural) {
     const found = p.run();
-    if (!found.some((f) => f.kind === p.want)) {
+    // `wantLine`/`wantCount` matter for the exemption probes: "some finding of
+    // the right kind" would also be satisfied by reporting the counter-example
+    // itself, which is the opposite of what the probe is asserting.
+    const hit = found.find((f) => f.kind === p.want && (p.wantLine === undefined || f.line === p.wantLine));
+    if (!hit) {
       problems.push(
-        `MUST-FAIL structural probe '${p.id}' did not report '${p.want}'. Got: ${JSON.stringify(found.map((f) => f.kind))}`,
+        `MUST-FAIL structural probe '${p.id}' did not report '${p.want}'` +
+          `${p.wantLine === undefined ? '' : ` on line ${p.wantLine}`}. ` +
+          `Got: ${JSON.stringify(found.map((f) => `${f.kind}@${f.line}`))}`,
+      );
+    } else if (p.wantCount !== undefined && found.length !== p.wantCount) {
+      problems.push(
+        `MUST-FAIL structural probe '${p.id}' reported ${found.length}, expected exactly ${p.wantCount}: ` +
+          `${JSON.stringify(found.map((f) => `${f.kind}@${f.line}`))}`,
       );
     } else {
-      log.push(`    RED as required  ${p.id}  ->  ${found.find((f) => f.kind === p.want).detail}`);
+      log.push(`    RED as required  ${p.id}  ->  ${hit.detail}`);
     }
   }
   for (const p of structuralPass) {
