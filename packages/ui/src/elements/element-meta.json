@@ -34,6 +34,9 @@
         "optional": true,
         "scalar": false,
         "description": "Run status — a JS PROPERTY (object), not an attribute. Shape: `{ tone, label?, pulse? }`, where `tone` is one of `working` | `idle` | `done` | `error` | `blocked` (maps to the kit's tool hues), `label` is an optional short string beside the dot, and `pulse` animates the dot. Set it with `el.status = { tone: 'working', label: 'Working', pulse: true }`.",
+        "typeName": "AgentStatus",
+        "typeShape": "{ tone: \"working\" | \"idle\" | \"done\" | \"error\" | \"blocked\"; label?: undefined | string; pulse?: undefined | false | true }",
+        "typeImport": "AgentStatus",
         "displayType": "undefined | { tone: \"working\" | \"idle\" | \"done\" | \"error\" | \"blocked\"; label?: undefined | string; pulse?: undefined | false | true }"
       }
     ],
@@ -853,6 +856,9 @@
         "optional": true,
         "scalar": false,
         "description": "The stream of card envelopes to render. Set as a JS PROPERTY: `el.cards = [...]`.",
+        "typeName": "CardEnvelope[]",
+        "typeShape": "{ type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }[]",
+        "typeImport": "CardEnvelope",
         "displayType": "undefined | { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }[]"
       },
       {
@@ -869,6 +875,9 @@
         "optional": true,
         "scalar": false,
         "description": "Optional CardPolicy handling child events. Property: `el.policy`.",
+        "typeName": "CardPolicy",
+        "typeShape": "{ onSubmit?: undefined | (cardId: string, data: unknown) => void; onAction?: undefined | (cardId: string, action: string, payload?: unknown) => void; onSendPrompt?: undefined | (text: string, opts: { mode: \"compose\" | \"send\"; context?: unknown; }) => void; onOpen?: undefined | (url: string, target: \"tab\" | \"artifact\") => void; onState?: undefined | (cardId: string, patch: unknown) => void; onDismiss?: undefined | (cardId: string) => void; onReopen?: undefined | (cardId: string) => void; onError?: undefined | (cardId: string, message: string) => void; maxSendPromptMode?: undefined | \"compose\" | \"send\" }",
+        "typeImport": "CardPolicy",
         "displayType": "undefined | { onSubmit?: undefined | (cardId: string, data: unknown) => void; onAction?: undefined | (cardId: string, action: string, payload?: unknown) => void; onSendPrompt?: undefined | (text: string, opts: { mode: \"compose\" | \"send\"; context?: unknown; }) => void; onOpen?: undefined | (url: string, target: \"tab\" | \"artifact\") => void; onState?: undefined | (cardId: string, patch: unknown) => void; onDismiss?: undefined | (cardId: string) => void; onReopen?: undefined | (cardId: string) => void; onError?: undefined | (cardId: string, message: string) => void; maxSendPromptMode?: undefined | \"compose\" | \"send\" }"
       }
     ],
@@ -1107,6 +1116,9 @@
         "optional": true,
         "scalar": false,
         "description": "Optional model list. When set (>1 model) a ModelSwitcher is shown in the header and a `kai-model-change` event fires on selection.",
+        "typeName": "ModelOption[]",
+        "typeShape": "{ id: string; name: string; provider?: undefined | string; description?: undefined | string; group?: undefined | string }[]",
+        "typeImport": "ModelOption",
         "displayType": "undefined | { id: string; name: string; provider?: undefined | string; description?: undefined | string; group?: undefined | string }[]"
       },
       {
@@ -1123,6 +1135,9 @@
         "optional": true,
         "scalar": false,
         "description": "Optional context-window token usage. When set, a Context token meter is shown in the header.",
+        "typeName": "ChatThreadContextUsage",
+        "typeShape": "{ usedTokens: number; maxTokens: number; inputTokens?: undefined | number; outputTokens?: undefined | number; estimatedCost?: undefined | number }",
+        "typeImport": "ChatThreadContextUsage",
         "displayType": "ContextData | undefined"
       },
       {
@@ -1213,6 +1228,9 @@
         "optional": true,
         "scalar": false,
         "description": "Rich entity triggers — each `{ char, kind, items }` opens a caret-anchored menu that inserts an atomic pill (`/` skills, `@` agents/plugins). Set as a JS property; forwarded to the input.",
+        "typeName": "TriggerDef[]",
+        "typeShape": "{ char: string; kind: string; items?: undefined | { id: string; label: string; icon?: undefined | string; description?: undefined | string; group?: undefined | string; kind?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[] }[]",
+        "typeImport": "TriggerDef",
         "displayType": "undefined | { char: string; kind: string; items?: undefined | { id: string; label: string; icon?: undefined | string; description?: undefined | string; group?: undefined | string; kind?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[] }[]"
       },
       {
@@ -1794,6 +1812,9 @@
         "optional": true,
         "scalar": false,
         "description": "Flat list of items. Set as a JS property — not an HTML attribute.",
+        "typeName": "KaiCommandItem[]",
+        "typeShape": "{ id: string; label: string; icon?: undefined | string; description?: undefined | string; shortcut?: undefined | string; group?: undefined | string }[]",
+        "typeImport": "KaiCommandItem",
         "displayType": "undefined | { id: string; label: string; icon?: undefined | string; description?: undefined | string; shortcut?: undefined | string; group?: undefined | string }[]"
       },
       {
@@ -2038,6 +2059,9 @@
         "optional": true,
         "scalar": false,
         "description": "Trigger definitions — set as a JS property.",
+        "typeName": "TriggerDef[]",
+        "typeShape": "{ char: string; kind: string; items?: undefined | { id: string; label: string; icon?: undefined | string; description?: undefined | string; group?: undefined | string; kind?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[] }[]",
+        "typeImport": "TriggerDef",
         "displayType": "undefined | { char: string; kind: string; items?: undefined | { id: string; label: string; icon?: undefined | string; description?: undefined | string; group?: undefined | string; kind?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[] }[]"
       },
       {
@@ -2242,6 +2266,9 @@
         "optional": true,
         "scalar": false,
         "description": "Token-usage data. Set as a JS property.",
+        "typeName": "KaiContextUsage",
+        "typeShape": "{ usedTokens: number; maxTokens: number; inputTokens?: undefined | number; outputTokens?: undefined | number; reasoningTokens?: undefined | number; cacheTokens?: undefined | number; estimatedCost?: undefined | number }",
+        "typeImport": "KaiContextUsage",
         "displayType": "ContextData | undefined"
       },
       {
@@ -2345,7 +2372,10 @@
         "optional": true,
         "scalar": false,
         "description": "The list's section headers (`{ id, name, sortOrder, createdAt }`), rendered in array order. A group carries no conversations of its own; it is matched against `conversations` by id, so the two props are complementary rather than alternatives. Omit for an ungrouped list. Set as a JS property.",
+        "typeName": "ConversationGroup[]",
+        "typeShape": "{ id: string; userId?: undefined | string; teamId?: undefined | string; name: string; sortOrder: number; createdAt: string }[]",
         "default": "[]",
+        "typeImport": "ConversationGroup",
         "displayType": "undefined | { id: string; userId?: undefined | string; teamId?: undefined | string; name: string; sortOrder: number; createdAt: string }[]"
       },
       {
@@ -2702,6 +2732,9 @@
         "optional": true,
         "scalar": false,
         "description": "The embed payload (provider + id/url + options). Set as a JS **property** (object).",
+        "typeName": "EmbedCardData",
+        "typeShape": "{ provider: \"generic\" | \"youtube\" | \"vimeo\"; id?: undefined | string; url?: undefined | string; title?: undefined | string; poster?: undefined | string; start?: undefined | number; aspectRatio?: undefined | \"16:9\" | \"4:3\" | \"1:1\" | \"9:16\" }",
+        "typeImport": "EmbedCardData",
         "displayType": "undefined | { provider: \"generic\" | \"youtube\" | \"vimeo\"; id?: undefined | string; url?: undefined | string; title?: undefined | string; poster?: undefined | string; start?: undefined | number; aspectRatio?: undefined | \"16:9\" | \"4:3\" | \"1:1\" | \"9:16\" }"
       }
     ],
@@ -3599,6 +3632,9 @@
         "optional": true,
         "scalar": false,
         "description": "The link payload (OG metadata). Set as a JS **property** (object).",
+        "typeName": "LinkPreviewData",
+        "typeShape": "{ url: string; title?: undefined | string; description?: undefined | string; image?: undefined | string; imageAlt?: undefined | string; favicon?: undefined | string; domain?: undefined | string; siteName?: undefined | string }",
+        "typeImport": "LinkPreviewData",
         "displayType": "undefined | { url: string; title?: undefined | string; description?: undefined | string; image?: undefined | string; imageAlt?: undefined | string; favicon?: undefined | string; domain?: undefined | string; siteName?: undefined | string }"
       }
     ],
@@ -3720,6 +3756,9 @@
         "optional": true,
         "scalar": false,
         "description": "Tree of menu items. Set as a JS property — not an HTML attribute.",
+        "typeName": "KaiMenuItem[]",
+        "typeShape": "{ id?: undefined | string; label?: undefined | string; icon?: undefined | string; shortcut?: undefined | string; checked?: undefined | false | true; radioGroup?: undefined | string; disabled?: undefined | false | true; separator?: undefined | false | true; heading?: undefined | false | true; items?: undefined | { id?: undefined | string; label?: undefined | string; icon?: undefined | string; shortcut?: undefined | string; checked?: undefined | false | true; radioGroup?: undefined | string; disabled?: undefined | false | true; separator?: undefined | false | true; heading?: undefined | false | true; items?: undefined | Record<string, unknown>[] }[] }[]",
+        "typeImport": "KaiMenuItem",
         "displayType": "undefined | { id?: undefined | string; label?: undefined | string; icon?: undefined | string; shortcut?: undefined | string; checked?: undefined | false | true; radioGroup?: undefined | string; disabled?: undefined | false | true; separator?: undefined | false | true; heading?: undefined | false | true; items?: undefined | Record<string, unknown>[] }[]"
       },
       {
@@ -3910,6 +3949,9 @@
         "optional": true,
         "scalar": false,
         "description": "The full message object. Set as a JS property.",
+        "typeName": "ChatMessage",
+        "typeShape": "{ id: string; role: \"user\" | \"assistant\"; parts: ({ type: \"text\"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: \"reasoning\"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: \"tool\"; tool: { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"card\"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"source\"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: \"file\"; attachment: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }",
+        "typeImport": "ChatMessage",
         "displayType": "undefined | { id: string; role: \"user\" | \"assistant\"; parts: ({ type: \"text\"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: \"reasoning\"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: \"tool\"; tool: { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"card\"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"source\"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: \"file\"; attachment: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }"
       },
       {
@@ -4181,6 +4223,9 @@
         "optional": true,
         "scalar": false,
         "description": "The nav items. Set as a JS property (array, not an attribute). Each item may carry `children` (a collapsible group), a `status` dot, and trailing `meta` text.",
+        "typeName": "KaiNavItem[]",
+        "typeShape": "{ id: string; label?: undefined | string; icon?: undefined | string; badge?: undefined | string; trailing?: undefined | string; disabled?: undefined | false | true; children?: undefined | { id: string; label?: undefined | string; icon?: undefined | string; badge?: undefined | string; trailing?: undefined | string; disabled?: undefined | false | true; children?: undefined | Record<string, unknown>[]; status?: undefined | { tone: \"error\" | \"primary\" | \"info\" | \"success\" | \"warning\" | \"neutral\"; label?: undefined | string; pulse?: undefined | false | true }; meta?: undefined | string; action?: undefined | { icon: string; label: string }; closable?: undefined | false | true }[]; status?: undefined | { tone: \"error\" | \"primary\" | \"info\" | \"success\" | \"warning\" | \"neutral\"; label?: undefined | string; pulse?: undefined | false | true }; meta?: undefined | string; action?: undefined | { icon: string; label: string }; closable?: undefined | false | true }[]",
+        "typeImport": "KaiNavItem",
         "displayType": "undefined | { id: string; label?: undefined | string; icon?: undefined | string; badge?: undefined | string; trailing?: undefined | string; disabled?: undefined | false | true; children?: undefined | Record<string, unknown>[]; status?: undefined | { tone: \"error\" | \"primary\" | \"info\" | \"success\" | \"warning\" | \"neutral\"; label?: undefined | string; pulse?: undefined | false | true }; meta?: undefined | string; action?: undefined | { icon: string; label: string }; closable?: undefined | false | true }[]"
       },
       {
@@ -4408,6 +4453,9 @@
         "optional": true,
         "scalar": false,
         "description": "A tone-colored status dot (+ optional label) in the header. An object `{ tone, label?, pulse? }` set as a JS PROPERTY (not an attribute).",
+        "typeName": "PaneStatus",
+        "typeShape": "{ tone: \"working\" | \"idle\" | \"done\" | \"error\" | \"blocked\"; label?: undefined | string; pulse?: undefined | false | true }",
+        "typeImport": "PaneStatus",
         "displayType": "undefined | { tone: \"working\" | \"idle\" | \"done\" | \"error\" | \"blocked\"; label?: undefined | string; pulse?: undefined | false | true }"
       }
     ],
@@ -4497,6 +4545,9 @@
         "optional": true,
         "scalar": false,
         "description": "The tabs to render. An array of `{ id, name, status?, needsAttention?, number? }` set as a JS PROPERTY (not an HTML attribute).",
+        "typeName": "PaneTab[]",
+        "typeShape": "{ id: string; name: string; status?: undefined | { tone: \"working\" | \"idle\" | \"done\" | \"error\" | \"blocked\"; label?: undefined | string; pulse?: undefined | false | true }; needsAttention?: undefined | false | true; number?: undefined | number }[]",
+        "typeImport": "PaneTab",
         "displayType": "undefined | { id: string; name: string; status?: undefined | { tone: \"working\" | \"idle\" | \"done\" | \"error\" | \"blocked\"; label?: undefined | string; pulse?: undefined | false | true }; needsAttention?: undefined | false | true; number?: undefined | number }[]"
       },
       {
@@ -4906,6 +4957,9 @@
         "optional": true,
         "scalar": false,
         "description": "Attachments to seed the input with (so a consumer can pre-populate staged files without an upload). Set as a JS property; the element then manages its own attachment state from there (add via the paperclip, remove per chip).",
+        "typeName": "AttachmentData[]",
+        "typeShape": "{ id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[]",
+        "typeImport": "AttachmentData",
         "displayType": "AttachmentData[] | undefined"
       },
       {
@@ -4914,6 +4968,9 @@
         "optional": true,
         "scalar": false,
         "description": "Rich entity triggers — each `{ char, kind, items }` opens a caret-anchored menu that inserts an atomic pill. Convention: `/` → skills, `@` → agents (plugins are the grouping/provenance of those items). Set as a JS property.",
+        "typeName": "TriggerDef[]",
+        "typeShape": "{ char: string; kind: string; items?: undefined | { id: string; label: string; icon?: undefined | string; description?: undefined | string; group?: undefined | string; kind?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[] }[]",
+        "typeImport": "TriggerDef",
         "displayType": "undefined | { char: string; kind: string; items?: undefined | { id: string; label: string; icon?: undefined | string; description?: undefined | string; group?: undefined | string; kind?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[] }[]"
       },
       {
@@ -5826,9 +5883,10 @@
         "optional": false,
         "scalar": false,
         "description": "The selectable segments, left to right. Set as a JS property (array).",
-        "typeName": "Option[]",
+        "typeName": "KaiSegmentedOption[]",
         "typeShape": "{ value: string; label: string; icon?: undefined | string }[]",
         "default": "[]",
+        "typeImport": "KaiSegmentedOption",
         "displayType": "{ value: string; label: string; icon?: undefined | string }[]"
       },
       {
@@ -6082,6 +6140,7 @@
         "typeName": "Skill[]",
         "typeShape": "{ id: string; name: string }[]",
         "default": "[]",
+        "typeImport": "Skill",
         "displayType": "{ id: string; name: string }[]"
       }
     ],
@@ -6183,9 +6242,10 @@
         "optional": false,
         "scalar": false,
         "description": "The sources to render. Set as a JS property.",
-        "typeName": "SourceItem[]",
+        "typeName": "KaiSourceItem[]",
         "typeShape": "{ href: string; title?: undefined | string; description?: undefined | string; label?: undefined | string; showFavicon?: undefined | false | true }[]",
         "default": "[]",
+        "typeImport": "KaiSourceItem",
         "displayType": "SourceItem[]"
       },
       {
@@ -6465,6 +6525,9 @@
         "optional": true,
         "scalar": false,
         "description": "Tabs to render. Set as a JS property, not an HTML attribute.",
+        "typeName": "KaiTabItem[]",
+        "typeShape": "{ id: string; label?: undefined | string; icon?: undefined | string; disabled?: undefined | false | true }[]",
+        "typeImport": "KaiTabItem",
         "displayType": "undefined | { id: string; label?: undefined | string; icon?: undefined | string; disabled?: undefined | false | true }[]"
       },
       {
@@ -6794,6 +6857,9 @@
         "optional": true,
         "scalar": false,
         "description": "The full message thread to render, newest last. Each entry carries its role, ordered `parts`, and optional actions/avatar/feedback. Set as a JS property (`el.messages = [...]`); a NEW array reference per streaming chunk re-renders (mutating in place does not).",
+        "typeName": "ChatMessage[]",
+        "typeShape": "{ id: string; role: \"user\" | \"assistant\"; parts: ({ type: \"text\"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: \"reasoning\"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: \"tool\"; tool: { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"card\"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"source\"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: \"file\"; attachment: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]",
+        "typeImport": "ChatMessage",
         "displayType": "undefined | { id: string; role: \"user\" | \"assistant\"; parts: ({ type: \"text\"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: \"reasoning\"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: \"tool\"; tool: { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"card\"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"source\"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: \"file\"; attachment: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]"
       },
       {
@@ -7005,6 +7071,9 @@
         "optional": true,
         "scalar": false,
         "description": "The tool-call to display. Set as a JS property.",
+        "typeName": "ToolPart",
+        "typeShape": "{ type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }",
+        "typeImport": "ToolPart",
         "displayType": "undefined | { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }"
       },
       {
@@ -7371,7 +7440,10 @@
         "optional": true,
         "scalar": false,
         "description": "The sidebar's section headers, rendered in array order. A group carries no conversations of its own; it is matched against `conversations` by id, so the two props are complementary rather than alternatives. Omit for an ungrouped sidebar. Set as a JS property.",
+        "typeName": "ConversationGroup[]",
+        "typeShape": "{ id: string; userId?: undefined | string; teamId?: undefined | string; name: string; sortOrder: number; createdAt: string }[]",
         "default": "[]",
+        "typeImport": "ConversationGroup",
         "displayType": "undefined | { id: string; userId?: undefined | string; teamId?: undefined | string; name: string; sortOrder: number; createdAt: string }[]"
       },
       {
@@ -7490,6 +7562,9 @@
         "optional": true,
         "scalar": false,
         "description": "",
+        "typeName": "ModelOption[]",
+        "typeShape": "{ id: string; name: string; provider?: undefined | string; description?: undefined | string; group?: undefined | string }[]",
+        "typeImport": "ModelOption",
         "displayType": "undefined | { id: string; name: string; provider?: undefined | string; description?: undefined | string; group?: undefined | string }[]"
       },
       {
@@ -7506,6 +7581,9 @@
         "optional": true,
         "scalar": false,
         "description": "",
+        "typeName": "ChatThreadContextUsage",
+        "typeShape": "{ usedTokens: number; maxTokens: number; inputTokens?: undefined | number; outputTokens?: undefined | number; estimatedCost?: undefined | number }",
+        "typeImport": "ChatThreadContextUsage",
         "displayType": "ContextData | undefined"
       },
       {
@@ -7541,6 +7619,9 @@
         "optional": true,
         "scalar": false,
         "description": "Rich entity triggers (`/` skills, `@` agents/plugins) forwarded to the input.",
+        "typeName": "TriggerDef[]",
+        "typeShape": "{ char: string; kind: string; items?: undefined | { id: string; label: string; icon?: undefined | string; description?: undefined | string; group?: undefined | string; kind?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[] }[]",
+        "typeImport": "TriggerDef",
         "displayType": "undefined | { char: string; kind: string; items?: undefined | { id: string; label: string; icon?: undefined | string; description?: undefined | string; group?: undefined | string; kind?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[] }[]"
       },
       {

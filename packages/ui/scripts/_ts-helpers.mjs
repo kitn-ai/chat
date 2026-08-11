@@ -73,8 +73,21 @@ export function createTsHelpers(program, checker, { importable = new Set() } = {
   // `AttachmentData[]`) — so docs can show the named type and reveal its shape
   // on demand, instead of an anonymous expanded literal. Returns null for
   // primitives, unions, and anonymous object literals (no useful name).
+  // An OPTIONAL property's type is `undefined | X` — a UNION — so bailing on every
+  // union hid the name of every optional object/array prop: `messages: ChatMessage[]`
+  // (required) was named, `triggers?: TriggerDef[]` (optional) was not, and the docs
+  // could only show it expanded. Strip the nullish constituents first; anything left
+  // that is still a union genuinely has no single name.
+  const unwrapNullish = (t) => {
+    if (!t?.isUnion?.()) return t;
+    const rest = t.types.filter(
+      (x) => !(x.flags & (ts.TypeFlags.Undefined | ts.TypeFlags.Null | ts.TypeFlags.Void)),
+    );
+    return rest.length === 1 ? rest[0] : t;
+  };
+
   const namedTypeName = (type) => {
-    let t = type;
+    let t = unwrapNullish(type);
     let suffix = '';
     if (checker.isArrayType(t)) { t = checker.getTypeArguments(t)[0]; suffix = '[]'; }
     if (!t || t.isUnion?.()) return null;
@@ -89,7 +102,7 @@ export function createTsHelpers(program, checker, { importable = new Set() } = {
   // shape (for the docs "click to see the shape" dialog), even when renderType
   // would otherwise print the bare name.
   const expandShape = (type) => {
-    let t = type;
+    let t = unwrapNullish(type);
     let suffix = '';
     if (checker.isArrayType(t)) { t = checker.getTypeArguments(t)[0]; suffix = '[]'; }
     if (t && t.flags & ts.TypeFlags.Object && !t.isUnion?.() && t.getProperties().length) {

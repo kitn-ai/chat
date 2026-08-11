@@ -373,3 +373,30 @@ export type {
 // so a React or Vue consumer reading them has to be able to import it. Type-only,
 // so it is erased by the build and costs the root barrel nothing.
 export type { ComposerDoc, Segment, EntityRef } from './primitives/composer-model';
+
+// ---------------------------------------------------------------------------
+// Named types for the remaining kai-* array/object PROPERTIES.
+//
+// Same rationale as `ComposerDoc` above, applied to the whole class instead of
+// one instance: the generated `./elements` declarations and React wrappers expand
+// every prop type structurally (deliberately — see the `IMPORTS = {}` note in
+// scripts/gen-element-api.mjs), so a consumer who wants to NAME the shape had to
+// write `NonNullable<KaiPromptInputElementProps['triggers']>`. Every element-prop
+// type that has a name in source is now reachable from "." — the entry a React /
+// Vue / Svelte / vanilla consumer imports — not only from "./solid".
+//
+// Type-only, so the root barrel pays nothing at runtime.
+// Guarded by tests/elements/prop-types-exported.test.ts, which re-derives the
+// list from the facades with the TS checker and fails on a new unexported one.
+// ---------------------------------------------------------------------------
+export type { TriggerDef, TriggerItem } from './components/composer';
+export type { ChatThreadContextUsage } from './components/chat-thread';
+export type { Skill } from './components/message-skills';
+export type { AgentStatus } from './ui/agent-card';
+export type { KaiNavItem } from './ui/nav';
+export type { KaiTabItem } from './ui/tabs';
+export type { PaneStatus } from './ui/pane';
+export type { PaneTab } from './ui/pane-group';
+export type {
+  KaiCommandItem, KaiContextUsage, KaiMenuItem, KaiSegmentedOption, KaiSourceItem,
+} from './elements/element-data-types';

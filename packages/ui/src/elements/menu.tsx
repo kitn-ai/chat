@@ -11,31 +11,12 @@ import { Kbd } from '../ui/kbd';
 import { cn } from '../utils/cn';
 import { defineWebComponent } from './define';
 import { wireDisclosure } from './disclosure';
+import type { KaiMenuItem } from './element-data-types';
 
-export interface KaiMenuItem {
-  /** Emitted in `kai-select` for actionable items. */
-  id?: string;
-  label?: string;
-  /** Named icon (e.g. "paperclip"), image URL / data-URI, or plain text. */
-  icon?: string;
-  /** e.g. '⌘U' — shown right-aligned, muted. */
-  shortcut?: string;
-  /** Presence ⇒ a checkbox item (role=menuitemcheckbox). With `radioGroup` set,
-   *  marks the SELECTED radio item in that group instead. */
-  checked?: boolean;
-  /** Membership in a single-select group (role=menuitemradio). Items sharing a
-   *  `radioGroup` are mutually exclusive — the one with `checked: true` shows the
-   *  checkmark; selecting one emits `{ id, radioGroup }` so the consumer moves
-   *  the checkmark (the consumer owns state, like checkbox items). */
-  radioGroup?: string;
-  disabled?: boolean;
-  /** A divider (ignores other fields). */
-  separator?: boolean;
-  /** A non-interactive section label (uses `label`). */
-  heading?: boolean;
-  /** ⇒ a submenu. */
-  items?: KaiMenuItem[];
-}
+// The item shape lives in ./element-data-types so the ROOT entry can re-export it
+// (a per-element module's shipped .d.ts is `export {};`). Re-exported here so
+// `import type { KaiMenuItem } from './menu'` keeps working.
+export type { KaiMenuItem } from './element-data-types';
 
 interface Props extends Record<string, unknown> {
   /** Tree of menu items. Set as a JS property — not an HTML attribute. */

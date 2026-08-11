@@ -1,27 +1,12 @@
 import { createEffect, createMemo, createSignal, createUniqueId, on } from 'solid-js';
 import { CommandList, type CommandGroup } from '../ui/command';
 import { defineWebComponent } from './define';
+import type { KaiCommandItem } from './element-data-types';
 
-/**
- * A single command/mention item for `<kai-command>`.
- *
- * Set `items` as a JS property (array ref) — not an HTML attribute.
- */
-export interface KaiCommandItem {
-  /** Unique identifier emitted in `kai-select`. */
-  id: string;
-  /** Display name shown in the list row. */
-  label: string;
-  /** Named icon (e.g. "search"), image URL / data-URI, or plain text. */
-  icon?: string;
-  /** Muted supplementary text (e.g. a file path or a short description). */
-  description?: string;
-  /** Optional keyboard shortcut shown as right-aligned key caps; uses the
-   *  kai-kbd `keys` syntax (e.g. "Mod+K", "Alt+1"). */
-  shortcut?: string;
-  /** Group name that buckets this item under a section header. */
-  group?: string;
-}
+// The item shape lives in ./element-data-types so the ROOT entry can re-export it
+// (a per-element module's shipped .d.ts is `export {};`). Re-exported here so
+// `import type { KaiCommandItem } from './command'` keeps working.
+export type { KaiCommandItem } from './element-data-types';
 
 interface Props extends Record<string, unknown> {
   /** Flat list of items. Set as a JS property — not an HTML attribute. */

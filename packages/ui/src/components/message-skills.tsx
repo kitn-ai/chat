@@ -3,8 +3,12 @@ import { cn } from "../utils/cn";
 
 // --- MessageSkills ---
 
+/** One skill badge. Also the shape of `<kai-skills>`' `skills` property and of a
+ *  `<kai-skill>` light-DOM child. */
 export interface Skill {
+  /** Stable identifier for the skill. */
   id: string;
+  /** Human-readable skill name shown on the badge. */
   name: string;
 }
 

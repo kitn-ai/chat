@@ -1,6 +1,9 @@
 import { createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { defineWebComponent } from './define';
 import { Source, SourceTrigger, SourceContent, SourceList } from '../components/source';
+// Public shape of the `sources` prop; lives in ./element-data-types so the ROOT
+// entry can re-export it (see that file's header).
+import type { KaiSourceItem } from './element-data-types';
 
 // --- <kai-source> — a single citation link with hover preview ---
 
@@ -42,17 +45,10 @@ defineWebComponent<SourceProps>('kai-source', {
 
 // --- <kai-sources> — a wrapped list of citation links ---
 
-interface SourceItem {
-  href: string;
-  title?: string;
-  description?: string;
-  label?: string;
-  showFavicon?: boolean;
-}
 
 interface SourceListProps extends Record<string, unknown> {
   /** The sources to render. Set as a JS property. */
-  sources: SourceItem[];
+  sources: KaiSourceItem[];
   /** Show favicons on all items (per-item `showFavicon` overrides). */
   showFavicon?: boolean;
   /**
@@ -66,16 +62,16 @@ interface SourceListProps extends Record<string, unknown> {
   numbered?: boolean;
 }
 
-/** Parse a single light-DOM `<kai-source>` element into a `SourceItem` descriptor.
+/** Parse a single light-DOM `<kai-source>` element into a `KaiSourceItem` descriptor.
  *  Attribute mapping:
- *   - `href`        → SourceItem.href
- *   - `label`       → SourceItem.label
- *   - `headline`    → SourceItem.title  (matches kai-source's prop name; "title" is a
+ *   - `href`        → KaiSourceItem.href
+ *   - `label`       → KaiSourceItem.label
+ *   - `headline`    → KaiSourceItem.title  (matches kai-source's prop name; "title" is a
  *                       reserved HTMLElement attribute so kai-source uses "headline")
- *   - `description` → SourceItem.description
- *   - `show-favicon`→ SourceItem.showFavicon (bare boolean attribute)
+ *   - `description` → KaiSourceItem.description
+ *   - `show-favicon`→ KaiSourceItem.showFavicon (bare boolean attribute)
  */
-export function parseKaiSourceElement(n: Element): SourceItem {
+export function parseKaiSourceElement(n: Element): KaiSourceItem {
   return {
     href: n.getAttribute('href') ?? '',
     label: n.getAttribute('label') ?? undefined,
@@ -92,7 +88,7 @@ defineWebComponent<SourceListProps>('kai-sources', {
 }, (props, { element, flag }) => {
   // Read declarative <kai-source> children from light DOM.
   // The shadow root has no <slot> for them, so they are invisible — pure data carriers.
-  const [slottedSources, setSlottedSources] = createSignal<SourceItem[]>([]);
+  const [slottedSources, setSlottedSources] = createSignal<KaiSourceItem[]>([]);
   onMount(() => {
     const read = () => {
       const nodes = [...element.querySelectorAll('kai-source')];
