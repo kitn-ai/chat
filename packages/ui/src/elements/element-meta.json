@@ -2341,15 +2341,12 @@
     "props": [
       {
         "name": "groups",
-        "type": "{ id: string; userId?: undefined | string; teamId?: undefined | string; name: string; sortOrder: number; createdAt: string }[]",
-        "optional": false,
+        "type": "undefined | { id: string; userId?: undefined | string; teamId?: undefined | string; name: string; sortOrder: number; createdAt: string }[]",
+        "optional": true,
         "scalar": false,
         "description": "The list's section headers (`{ id, name, sortOrder, createdAt }`), rendered in array order. A group carries no conversations of its own; it is matched against `conversations` by id, so the two props are complementary rather than alternatives. Omit for an ungrouped list. Set as a JS property.",
-        "typeName": "ConversationGroup[]",
-        "typeShape": "{ id: string; userId?: undefined | string; teamId?: undefined | string; name: string; sortOrder: number; createdAt: string }[]",
         "default": "[]",
-        "typeImport": "ConversationGroup",
-        "displayType": "ConversationGroup[]"
+        "displayType": "undefined | { id: string; userId?: undefined | string; teamId?: undefined | string; name: string; sortOrder: number; createdAt: string }[]"
       },
       {
         "name": "conversations",
@@ -7370,15 +7367,12 @@
     "props": [
       {
         "name": "groups",
-        "type": "{ id: string; userId?: undefined | string; teamId?: undefined | string; name: string; sortOrder: number; createdAt: string }[]",
-        "optional": false,
+        "type": "undefined | { id: string; userId?: undefined | string; teamId?: undefined | string; name: string; sortOrder: number; createdAt: string }[]",
+        "optional": true,
         "scalar": false,
         "description": "The sidebar's section headers, rendered in array order. A group carries no conversations of its own; it is matched against `conversations` by id, so the two props are complementary rather than alternatives. Omit for an ungrouped sidebar. Set as a JS property.",
-        "typeName": "ConversationGroup[]",
-        "typeShape": "{ id: string; userId?: undefined | string; teamId?: undefined | string; name: string; sortOrder: number; createdAt: string }[]",
         "default": "[]",
-        "typeImport": "ConversationGroup",
-        "displayType": "ConversationGroup[]"
+        "displayType": "undefined | { id: string; userId?: undefined | string; teamId?: undefined | string; name: string; sortOrder: number; createdAt: string }[]"
       },
       {
         "name": "conversations",

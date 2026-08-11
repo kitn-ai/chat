@@ -18,7 +18,7 @@ interface Props extends Record<string, unknown> {
    *  conversations of its own; it is matched against `conversations` by id, so
    *  the two props are complementary rather than alternatives. Omit for an
    *  ungrouped sidebar. Set as a JS property. */
-  groups: ConversationGroup[];
+  groups?: ConversationGroup[];
   /** Every conversation in the sidebar, flat. Each one is filed under the group
    *  whose `id` equals its `groupId`; one with no `groupId` falls into a trailing
    *  ungrouped section (headerless when `compact`). There is no recency bucketing,
@@ -274,7 +274,7 @@ defineWebComponent<Props, Events>('kai-workspace', {
                 <div class="min-h-0 flex-1">
                   <ConversationList
                     class="bg-transparent"
-                    groups={props.groups} conversations={props.conversations} activeId={props.activeId as string | undefined}
+                    groups={props.groups ?? []} conversations={props.conversations} activeId={props.activeId as string | undefined}
                     compact={flag('compact')}
                     onSelect={(id) => dispatch('kai-conversation-select', { id })}
                     onNewChat={() => dispatch('kai-new-chat', {})}

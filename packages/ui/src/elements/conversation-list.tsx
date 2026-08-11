@@ -10,7 +10,7 @@ interface Props extends Record<string, unknown> {
    *  in array order. A group carries no conversations of its own; it is matched
    *  against `conversations` by id, so the two props are complementary rather
    *  than alternatives. Omit for an ungrouped list. Set as a JS property. */
-  groups: ConversationGroup[];
+  groups?: ConversationGroup[];
   /** Every conversation the list renders, flat. Each one is filed under the group
    *  whose `id` equals its `groupId`; one with no `groupId` falls into a trailing
    *  "Ungrouped" section. There is no recency bucketing, and a `groupId` matching
@@ -135,7 +135,7 @@ defineWebComponent<Props, Events>('kai-conversations', {
       fallback={<CollapsedRail onExpand={() => setCollapsedTo(false)} />}
     >
       <ConversationList
-        groups={props.groups}
+        groups={props.groups ?? []}
         conversations={allConversations()}
         activeId={props.activeId}
         onSelect={(id) => dispatch('kai-conversation-select', { id })}
