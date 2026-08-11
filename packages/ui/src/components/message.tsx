@@ -374,8 +374,9 @@ function partAs<T extends MessagePart['type']>(
 
 /**
  * The shared message body: the message's `parts` rendered in a single ordered
- * pass (text, reasoning, tool calls, generative-UI cards, and file attachments
- * interleaved exactly as they appear), followed by the action bar. This is the
+ * pass (text, reasoning, tool calls, generative-UI cards, citations and file
+ * attachments interleaved exactly as they appear), followed by the action bar.
+ * Runs of `source` and `file` parts each collapse into one row. This is the
  * single source of truth for how a message renders, consumed by `ChatThread`
  * (the `<For>` over `messages`), the standalone `<kai-message>` facade, and (in
  * future) `kai-compare` for each candidate. Pure/prop-driven: all interaction

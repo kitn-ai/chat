@@ -268,7 +268,7 @@ You can trigger either option from the streaming completion (auto-read replies) 
 
 ## State helpers & hooks
 
-`@kitn.ai/ui/state` ships immutable helpers (`appendMessage`, `upsertMessage`, `updateMessage`, `removeMessage`, `appendText`, `textMessage`), the part-level folds they build on (`appendTextPart`, `appendReasoningPart`, `upsertToolPart`), and a streaming handle (`createAssistantStream`) so you don't hand-roll array mutations. React apps get `useKaiChat` (from `@kitn.ai/ui/react`); SolidJS apps get `createKaiChat` (from `@kitn.ai/ui`). Both return a `bind` object to spread directly onto the element:
+`@kitn.ai/ui/state` ships immutable helpers (`appendMessage`, `upsertMessage`, `updateMessage`, `removeMessage`, `appendText`, `textMessage`), the part-level folds they build on (`appendTextPart`, `appendReasoningPart`, `upsertToolPart`, `upsertCardPart`), and a streaming handle (`createAssistantStream`) so you don't hand-roll array mutations. React apps get `useKaiChat` (from `@kitn.ai/ui/react`); SolidJS apps get `createKaiChat` (from `@kitn.ai/ui`). Both return a `bind` object to spread directly onto the element:
 
 ```tsx
 import { Chat, useKaiChat } from '@kitn.ai/ui/react';

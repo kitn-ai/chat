@@ -63,8 +63,8 @@ export interface ModelStreamChunk {
   /** Informational. `reasoningRaw` is the round-trip channel, not this. */
   reasoningSignature?: string;
   toolCalls?: ModelToolCallDelta[];
-  /** Citations the model produced. This entry ships the channel; rendering the
-   *  citation row is a later sub-project. */
+  /** Citations the model produced. A run of consecutive `source` parts renders
+   *  as one citation row (`part="citations"`), outside the message bubble. */
   sources?: MessageSource[];
   /** Provider VERBATIM: 'stop' | 'tool_calls' | 'end_turn' | 'max_tokens' | ...
    *  Normalizing in place would destroy information consumers branch on. */
