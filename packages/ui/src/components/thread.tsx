@@ -1,4 +1,4 @@
-import { For, Show, onMount, type JSX } from 'solid-js';
+import { For, Show, createMemo, onMount, type JSX } from 'solid-js';
 import { ChatConfig, useChatConfig } from '../primitives/chat-config';
 import { ChatContainer, ChatContainerContent, ChatContainerScrollAnchor } from './chat-container';
 import { Message, MessageAvatar, MessageBody } from './message';
@@ -89,6 +89,11 @@ export function Thread(props: ThreadProps) {
   });
   const showScrollButton = () => props.scrollButton !== false;
   const showEmpty = () => props.messages.length === 0 && !props.loading;
+  // Keyed by message id, NOT by object reference: a streaming message is a new
+  // object every delta, and a reference-keyed <For> rebuilds the whole row for
+  // each one — which is why expanding a tool/reasoning panel mid-stream used to
+  // do nothing. Full rationale (and why not `<Index>`) in `chat-thread.tsx`.
+  const messageKeys = createMemo(() => props.messages.map((m) => m.id));
 
   // Hand the imperative controller to the facade once mounted (rootEl is set).
   onMount(() => {
@@ -120,42 +125,50 @@ export function Thread(props: ThreadProps) {
                 {props.empty}
               </Show>
             </Show>
-            <For each={props.messages}>
-              {(m) => {
-                const body = (
-                  <MessageBody
-                    parts={m.parts}
-                    cardTypes={props.cardTypes}
-                    isUser={m.role === 'user'}
-                    markdown={m.role === 'assistant'}
-                    actions={m.actions}
-                    actionsReveal={reveal()}
-                    activeFeedback={feedback.resolveFeedback(m)}
-                    copied={feedback.isCopied(m.id)}
-                    onAction={(action) => feedback.handleAction(m, action)}
-                  />
-                );
-                const rowGroup = reveal() === 'hover' ? 'group ' : '';
-                return (
-                  <Show
-                    when={m.avatar}
-                    fallback={
-                      <Message class={`${rowGroup}${m.role === 'user' ? 'flex-col items-end' : 'flex-col items-start'}`}>
-                        {body}
-                      </Message>
-                    }
-                  >
-                    {(av) => (
-                      <Message class={rowGroup}>
-                        <MessageAvatar src={av().src ?? ''} alt={av().alt ?? ''} fallback={av().fallback} />
-                        <div class={`flex min-w-0 flex-1 flex-col ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
-                          {body}
-                        </div>
-                      </Message>
-                    )}
-                  </Show>
-                );
-              }}
+            <For each={messageKeys()}>
+              {(_id, i) => (
+                // Read the message through <For>'s index accessor, never through
+                // a captured value — the row outlives the delta that replaced its
+                // object. <Show> supplies the non-null accessor and covers the
+                // frame where a removal has shortened the array.
+                <Show when={props.messages[i()]}>
+                  {(m) => {
+                    const body = (
+                      <MessageBody
+                        parts={m().parts}
+                        cardTypes={props.cardTypes}
+                        isUser={m().role === 'user'}
+                        markdown={m().role === 'assistant'}
+                        actions={m().actions}
+                        actionsReveal={reveal()}
+                        activeFeedback={feedback.resolveFeedback(m())}
+                        copied={feedback.isCopied(m().id)}
+                        onAction={(action) => feedback.handleAction(m(), action)}
+                      />
+                    );
+                    const rowGroup = () => (reveal() === 'hover' ? 'group ' : '');
+                    return (
+                      <Show
+                        when={m().avatar}
+                        fallback={
+                          <Message class={`${rowGroup()}${m().role === 'user' ? 'flex-col items-end' : 'flex-col items-start'}`}>
+                            {body}
+                          </Message>
+                        }
+                      >
+                        {(av) => (
+                          <Message class={rowGroup()}>
+                            <MessageAvatar src={av().src ?? ''} alt={av().alt ?? ''} fallback={av().fallback} />
+                            <div class={`flex min-w-0 flex-1 flex-col ${m().role === 'user' ? 'items-end' : 'items-start'}`}>
+                              {body}
+                            </div>
+                          </Message>
+                        )}
+                      </Show>
+                    );
+                  }}
+                </Show>
+              )}
             </For>
             {/* Typing indicator on the pending assistant turn. */}
             <Show when={props.loading}>
