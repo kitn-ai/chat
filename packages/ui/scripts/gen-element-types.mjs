@@ -255,7 +255,7 @@ const clean = (type, optional) => {
   return t.trim();
 };
 
-export function writeTypes(root, elements, _toAttr, IMPORTS) {
+export function writeTypes(root, elements, _toAttr, IMPORTS, { domMembers = new Set() } = {}) {
   // which exported kit types are actually referenced → import only those
   const used = new Set();
   const scan = (s) => { for (const n of Object.keys(IMPORTS)) if (new RegExp(`\\b${n}\\b`).test(s)) used.add(n); };
@@ -271,18 +271,47 @@ export function writeTypes(root, elements, _toAttr, IMPORTS) {
 
   // The declared (non-DOM) member list for one element. Shared by the
   // HTMLElement interfaces below and the Vue GlobalComponents props interfaces,
-  // so the two can never disagree about what a kai-* element accepts.
-  const propBody = (el) => [
+  // so the two can never disagree about WHICH props a kai-* element accepts.
+  //
+  // `domSafe` is the one axis on which the two copies differ, and only for a prop
+  // whose NAME re-declares a member HTMLElement already has (today: kai-confirm's
+  // `autofocus`, kai-message's `role`, kai-resizable-item's `hidden` — the set is
+  // computed from the checker in gen-element-api.mjs, never hand-listed). An
+  // interface that `extends HTMLElement` may only narrow such a member, and
+  // `foo?: T` widens it to `T | undefined`:
+  //   - `autofocus?: boolean`   vs HTMLElement's `autofocus: boolean`   → TS2430
+  //   - `hidden?: boolean`      vs HTMLElement's `hidden: boolean`      → TS2430
+  //   - `role?: 'user'|…`       vs Element's    `role: string | null`   → TS2430,
+  //     and because `role` is declared by *Element*, lib.dom's own
+  //     `HTMLElementTagNameMap[K] extends Element` constraint then fails too
+  //     (2 × TS2344 raised inside lib.dom.d.ts).
+  // Those 5 errors are invisible under `skipLibCheck: true` and land on any
+  // consumer who turns it off. So in the ELEMENT interfaces a colliding prop is
+  // emitted required, with `undefined` stripped — which is also what the runtime
+  // does: `defineWebComponent` registers every prop with a default, so the
+  // property always exists on an upgraded element. The Vue props interfaces below
+  // don't extend HTMLElement and keep the prop optional (a Vue template legitimately
+  // omits it). Guarded by tests/elements/element-types-lib-check.test.ts, which
+  // compiles this file with `skipLibCheck: false`.
+  const propBody = (el, domSafe = false) => [
     `  /** Color mode (\`auto\` follows prefers-color-scheme). */`,
     `  theme?: 'light' | 'dark' | 'auto';`,
-    ...el.props.flatMap((p) => [
-      ...(p.description ? [`  /** ${p.description} */`] : []),
-      `  ${p.name}${p.optional ? '?' : ''}: ${clean(p.type, p.optional)};`,
-    ]),
+    ...el.props.flatMap((p) => {
+      const collides = domSafe && domMembers.has(p.name);
+      // One JSDoc block per member — a second one would shadow the first.
+      const note = collides
+        ? `Re-declares the DOM member \`HTMLElement.${p.name}\`, so it is NOT optional here: an interface extending HTMLElement may only narrow it, and the element always carries a value for it.`
+        : '';
+      const doc = [p.description, note].filter(Boolean).join(' ');
+      return [
+        ...(doc ? [`  /** ${doc} */`] : []),
+        `  ${p.name}${p.optional && !collides ? '?' : ''}: ${clean(p.type, p.optional)};`,
+      ];
+    }),
   ].join('\n');
 
   const interfaces = elements
-    .map((el) => `export interface ${el.className} extends HTMLElement {\n${propBody(el)}\n}`)
+    .map((el) => `export interface ${el.className} extends HTMLElement {\n${propBody(el, true)}\n}`)
     .join('\n\n');
 
   const tagMap = elements.map((el) => `    '${el.tag}': ${el.className};`).join('\n');
@@ -422,6 +451,15 @@ ${vueTagMap}
   // source at the value level.
   const srcOut = `${banner}
 ${importLines}
+
+// Local bindings for the two names the DECLARATIONS below reference
+// (\`configureCodeHighlighting(options: CodeHighlightingOptions)\`, \`classifyTool(): ToolKind\`).
+// \`export type { X } from '…'\` re-exports X without binding it in this file's scope,
+// so without these imports both signatures are TS2304 — invisible under
+// \`skipLibCheck: true\`, which is exactly why this file is now compiled with it off
+// (tests/elements/element-types-lib-check.test.ts).
+import type { CodeHighlightingOptions } from '../primitives/highlighter';
+import type { ToolKind } from '../components/tool-classify';
 
 // Re-exports for \`import { … } from '@kitn.ai/ui/elements'\`. Mirrors the names the
 // shipped dist/elements.d.ts inlines, so both copies expose the same surface.

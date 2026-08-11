@@ -38,6 +38,26 @@ const exportedTypeNames = new Set(entrySym ? checker.getExportsOfModule(entrySym
 
 const toAttr = (name) => name.replace(/([A-Z])/g, '-$1').toLowerCase();
 
+// Every member name `HTMLElement` already carries (own + inherited: Element,
+// Node, EventTarget, ARIAMixin, GlobalEventHandlers, …). A generated element
+// interface `extends HTMLElement`, so a prop whose NAME lands in here re-declares
+// a DOM member and must stay assignable to it — otherwise the interface is
+// formally invalid (TS2430) and, for members `Element` itself declares (`role`),
+// lib.dom's own `HTMLElementTagNameMap[K] extends Element` constraint fails too
+// (TS2344). Read from the checker rather than hand-listed, so a TypeScript/lib
+// upgrade that adds a member is picked up on the next build.
+// See writeTypes() in gen-element-types.mjs for what is done with this, and
+// tests/elements/element-types-lib-check.test.ts for the guard that proves it.
+const DOM_MEMBERS = new Set();
+for (const sf of program.getSourceFiles()) {
+  if (!sf.isDeclarationFile || !/[\\/]lib\.dom\.d\.ts$/.test(sf.fileName)) continue;
+  for (const st of sf.statements) {
+    if (!ts.isInterfaceDeclaration(st) || st.name.text !== 'HTMLElement') continue;
+    for (const p of checker.getPropertiesOfType(checker.getTypeAtLocation(st))) DOM_MEMBERS.add(p.name);
+  }
+}
+if (DOM_MEMBERS.size === 0) throw new Error('gen-element-api: could not resolve HTMLElement members from lib.dom.d.ts');
+
 // Generated types are FULLY SELF-CONTAINED: every named type is expanded inline
 // (no imports), so the type files don't drag the kit's Solid `.tsx` sources into
 // a consumer's (or React-JSX) compilation. Only lib types (Uint8Array, Blob,
@@ -374,7 +394,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   for (const mod of ['./gen-element-types.mjs', './gen-element-react.mjs']) {
     try {
       const m = await import(mod);
-      if (m.writeTypes) m.writeTypes(root, elements, toAttr, IMPORTS);
+      if (m.writeTypes) m.writeTypes(root, elements, toAttr, IMPORTS, { domMembers: DOM_MEMBERS });
       if (m.writeReact) m.writeReact(root, elements, IMPORTS);
     } catch (e) {
       if (e.code !== 'ERR_MODULE_NOT_FOUND') throw e;

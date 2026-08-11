@@ -5,6 +5,15 @@
 // written directly in TSX type-checks.
 
 
+// Local bindings for the two names the DECLARATIONS below reference
+// (`configureCodeHighlighting(options: CodeHighlightingOptions)`, `classifyTool(): ToolKind`).
+// `export type { X } from '…'` re-exports X without binding it in this file's scope,
+// so without these imports both signatures are TS2304 — invisible under
+// `skipLibCheck: true`, which is exactly why this file is now compiled with it off
+// (tests/elements/element-types-lib-check.test.ts).
+import type { CodeHighlightingOptions } from '../primitives/highlighter';
+import type { ToolKind } from '../components/tool-classify';
+
 // Re-exports for `import { … } from '@kitn.ai/ui/elements'`. Mirrors the names the
 // shipped dist/elements.d.ts inlines, so both copies expose the same surface.
 export type {
@@ -466,8 +475,8 @@ export interface KaiConfirmElement extends HTMLElement {
   cardId?: string;
   /** Heading rendered in the card chrome (= CardEnvelope.title). Attribute: `heading`. */
   heading?: string;
-  /** Focus the default action on mount (off by default — no focus-stealing). Attribute: `autofocus`. */
-  autofocus?: boolean;
+  /** Focus the default action on mount (off by default — no focus-stealing). Attribute: `autofocus`. Re-declares the DOM member `HTMLElement.autofocus`, so it is NOT optional here: an interface extending HTMLElement may only narrow it, and the element always carries a value for it. */
+  autofocus: boolean;
   /** Set when the user resolved this card; renders the read-only view. Property: `el.resolution = { kind:'action', action:'…' }`. */
   resolution?: Record<string, unknown>;
 }
@@ -746,8 +755,8 @@ export interface KaiMessageElement extends HTMLElement {
   theme?: 'light' | 'dark' | 'auto';
   /** The full message object. Set as a JS property. */
   message?: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: string; index?: number; streamId?: string; signature?: string; raw?: { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: "image" | "command" | "file-change" | "search" | "fetch" | "mcp" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } }; raw?: { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }; raw?: { source: string; payload: unknown } } | { type: "source"; source: { id?: string; url?: string; title?: string; snippet?: string; index?: number }; raw?: { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }; raw?: { source: string; payload: unknown } })[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" };
-  /** Convenience for simple cases when not passing a `message` object. */
-  role?: "user" | "assistant";
+  /** Convenience for simple cases when not passing a `message` object. Re-declares the DOM member `HTMLElement.role`, so it is NOT optional here: an interface extending HTMLElement may only narrow it, and the element always carries a value for it. */
+  role: "user" | "assistant";
   /** Force markdown on/off. Defaults to on for assistant, off for user. */
   markdown?: boolean;
   /** Text/markdown sizing for the message body. */
@@ -961,8 +970,8 @@ export interface KaiResizableItemElement extends HTMLElement {
   max?: string;
   /** Fix this panel's size; adjacent dividers become non-draggable. */
   locked?: boolean;
-  /** Hide this panel; its divider is dropped and the rest reflow. */
-  hidden?: boolean;
+  /** Hide this panel; its divider is dropped and the rest reflow. Re-declares the DOM member `HTMLElement.hidden`, so it is NOT optional here: an interface extending HTMLElement may only narrow it, and the element always carries a value for it. */
+  hidden: boolean;
   /** Collapse this panel — same layout effect as `hidden` (divider dropped, the rest reflow), but it WORKS as a bare boolean from framework JSX. A plain `<kai-resizable-item collapsed>` in React/Solid/Vue/Svelte collapses the panel at the first render; `hidden` does not, because a JSX boolean sets neither the `hidden` attribute nor the IDL property on a custom element, so the parent never sees it. The facade reflects `collapsed` to a `collapsed` attribute the parent reads. Prefer this over `hidden` for declarative collapse. */
   collapsed?: boolean;
 }
