@@ -49,7 +49,7 @@ const DEFAULT_REPLAY_DELAY_MS = 8;
  *  a public bundle can influence, and it cannot drift from the recorded stream. */
 export type WireKind = 'openai' | 'anthropic';
 
-interface ProxyEnv {
+export interface ProxyEnv {
   key: string;
   model: string;
   wire: WireKind;
@@ -103,7 +103,18 @@ function readEnv(root: string, mode: string): ProxyEnv {
 export function resolveWire(requested: string, model: string): WireKind {
   const want = requested.trim().toLowerCase();
   if (want === 'openai' || want === 'anthropic') return want;
-  return /^~?anthropic\//.test(model) ? 'anthropic' : 'openai';
+  return isAnthropicFamily(model) ? 'anthropic' : 'openai';
+}
+
+/** Whether this model is served by Anthropic, INDEPENDENT of the wire it is
+ *  reached through. `anthropic/claude-haiku-4.5` is an Anthropic model whether
+ *  the request goes to the Anthropic Skin or to `/chat/completions`, and the
+ *  provider's own constraints — the 1024-token thinking floor above all — apply
+ *  on both. Sharing one predicate with `resolveWire` is deliberate: the wire
+ *  default and the thinking budget must never disagree about what an Anthropic
+ *  model is. */
+export function isAnthropicFamily(model: string): boolean {
+  return /^~?anthropic\//.test(model);
 }
 
 /** A filesystem-safe slug for a model id, used as a fixture directory name.
@@ -201,7 +212,7 @@ export function openrouterProxy(): Plugin {
   };
 }
 
-interface ChatBody {
+export interface ChatBody {
   /** Already wire-shaped: the client builds it with `toOpenAIMessages` or
    *  `toAnthropicMessages` according to the wire `/api/config` reported, so
    *  there is no message mapping left to do here. */
@@ -381,11 +392,15 @@ function toAnthropicTools(tools: ToolSpec[]): AnthropicToolSpec[] {
  *     greater than it, so the cap is raised by the budget rather than shared
  *     with it — otherwise the answer gets no tokens at all.
  */
-function buildUpstreamRequest(
+export function buildUpstreamRequest(
   env: ProxyEnv,
   body: ChatBody,
 ): { url: string; payload: Record<string, unknown> } {
   const thinking = env.reasoningEffort !== 'off' && env.reasoningEffort !== 'none';
+  // Anthropic takes a token BUDGET, not an effort level, on either wire. See the
+  // OpenAI branch below for why asking it for an effort level silently produced
+  // no thinking at all.
+  const budgeted = thinking && isAnthropicFamily(env.model);
 
   if (env.wire === 'anthropic') {
     return {
@@ -423,8 +438,27 @@ function buildUpstreamRequest(
       // the provider's own error body.
       ...(body.tools?.length ? { tools: body.tools, tool_choice: 'auto' } : {}),
       ...(body.cardMode === 'structured' ? { response_format: REPLY_WITH_CARD_FORMAT } : {}),
-      ...(thinking ? { reasoning: { effort: env.reasoningEffort } } : {}),
-      max_tokens: env.maxTokens,
+      // An Anthropic model reached through THIS wire is still an Anthropic model,
+      // and OpenRouter derives its thinking budget from `effort` as a percentage
+      // of `max_tokens` (medium ~= 50%). At this spike's 900-token cap that
+      // derives 450, under Anthropic's 1024 floor, and the provider returns no
+      // thinking at all — no error, no warning, just an empty reasoning channel.
+      // The matrix recorded that silence as a PROVIDER limit ("Haiku emits no
+      // reasoning on the OpenAI wire") for a whole sweep. It was our own request.
+      //
+      // So send the budget explicitly, and send the SAME one the Anthropic branch
+      // sends, which is the only thing that makes the two Haiku columns
+      // comparable — the entire reason this configuration is in the matrix.
+      ...(thinking
+        ? {
+            reasoning: budgeted
+              ? { max_tokens: ANTHROPIC_THINKING_BUDGET }
+              : { effort: env.reasoningEffort },
+          }
+        : {}),
+      // Same reason as the Anthropic branch: the budget is ADDED to the cap, not
+      // shared with it, or the answer gets no tokens after thinking.
+      max_tokens: env.maxTokens + (budgeted ? ANTHROPIC_THINKING_BUDGET : 0),
     },
   };
 }
