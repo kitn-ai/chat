@@ -95,9 +95,14 @@
 // Routes compile under THREE projects, because the host decides the types and
 // the host is what block (2) gets wrong:
 //   · route-node   — express, Angular SSR, and the Vite dev-server middleware.
-//                    `lib: ES2023` + `types: ["node"]`, NO DOM: this is a stock
-//                    `npm create vite` tsconfig.node.json, and it is what makes
-//                    `await request.json()` `unknown` (undici) instead of `any`.
+//                    `lib: ES2023` + `types: ["node"]` + `module: nodenext`, NO
+//                    DOM: this is a stock `npm create vite` tsconfig.node.json,
+//                    and it is what makes `await request.json()` `unknown`
+//                    (undici) instead of `any`. It is also the ONLY project here
+//                    that resolves the kit under node16/nodenext, which is the
+//                    one mode where a missing extension in our shipped .d.ts
+//                    degrades the whole public API to `any` — see its entry in
+//                    PROJECTS.
 //   · route-web    — Next, SvelteKit, TanStack Start. DOM lib present, which is
 //                    what those frameworks' own tsconfigs ship.
 //   · route-worker — Cloudflare. `@cloudflare/workers-types` + node, matching the
@@ -371,29 +376,43 @@ const PROJECTS = {
   'route-node': {
     dir: join(tmp, 'route-node'),
     include: ['**/*.ts', '**/*.d.ts'],
-    // A stock `npm create vite` tsconfig.node.json: ES lib, node types, NO DOM.
-    // The missing DOM lib is the whole point — it is what makes `Request` resolve
+    // A stock `npm create vite` tsconfig.node.json: ES lib, node types, NO DOM,
+    // and `module: nodenext`. The missing DOM lib is what makes `Request` resolve
     // to undici's (json(): Promise<unknown>) rather than the browser's
     // (json(): Promise<any>), and therefore what a consumer's `tsc -b` really sees
     // for vite.config.ts → vite-chat-api.ts → server/chat.ts.
     //
-    // NOT nodenext, and that is a KNOWN GAP rather than an oversight. The real
-    // template ships `"module": "nodenext"`, and switching this project to match
-    // is the only way this harness could see TS2835 (extensionless relative
-    // imports). It cannot yet, because the KIT's own shipped .d.ts files do not
-    // resolve under node16/nodenext: `dist/wire/index.d.ts` re-exports `./read`,
-    // `./encode`, … with no file extensions, so nodenext fails every one and the
-    // whole public API comes back as `any`.
-    //
-    // Measured in a stock create-vite app, same file, only the resolution mode
-    // changed:
+    // nodenext is the OTHER half of that fidelity, and it is the only project here
+    // that runs in it. It was deliberately absent until 0.19.x: the kit's shipped
+    // .d.ts files re-exported './read', './encode', … with no file extension, which
+    // `bundler` tolerates and node16/nodenext rejects — and with skipLibCheck on
+    // (every Vite template) the rejection is SUPPRESSED and the whole public API
+    // silently becomes `any`. Measured on 0.19.0, same file, only the mode changed:
     //   moduleResolution: bundler   `const x: OpenAIWireMessage = 12345` -> TS2322
     //   module: nodenext            the same line compiles CLEAN
-    // Flipping this project to nodenext today would therefore make the route
-    // matrix pass vacuously against `any` — strictly worse than the gap it closes.
-    // `assertRelativeImportsHaveExtensions` covers TS2835 directly in the
-    // meantime; switch this to nodenext once the dts emit is fixed.
-    options: { lib: ['ES2023'], types: ['node'], moduleDetection: 'force' },
+    // So this project would have passed vacuously, which is why it stayed on
+    // bundler with `assertRelativeImportsHaveExtensions` covering TS2835 textually.
+    //
+    // scripts/emit-subpath-dts.mjs now stamps an explicit extension on every
+    // relative specifier it emits, so nodenext resolves the kit for real and the
+    // swap is live. The selfTest below is what keeps it honest: re-break a single
+    // specifier in dist/wire/index.d.ts and THIS project — alone among the six —
+    // fails with "`@kitn.ai/ui/wire` is resolving to `any`" while every bundler
+    // project stays green. Nothing else in the repo's gates can see that.
+    //
+    // `packageJson: { type: 'module' }` is load-bearing, not decoration. The temp
+    // dir has no package.json of its own, so nodenext would infer CommonJS and
+    // fail 24 routes on TS1470 (`import.meta` is not allowed) plus a bogus
+    // "vite has no exported member 'Plugin'" — neither of which a real Vite
+    // template (which ships `"type": "module"`) would ever see.
+    packageJson: { type: 'module' },
+    options: {
+      lib: ['ES2023'],
+      types: ['node'],
+      moduleDetection: 'force',
+      module: 'nodenext',
+      moduleResolution: 'nodenext',
+    },
     // Proves express's types are the REAL ones and did not resolve to `any`.
     probe: {
       code: `import type { RequestHandler } from 'express';\nexport const bad: RequestHandler = 5;\n`,
@@ -892,11 +911,21 @@ function generatedCompanions(files) {
 /**
  * Every RELATIVE import an emitted route writes must carry an explicit extension.
  *
- * This is TS2835, and it is the one thing the route-node project cannot see: it
- * compiles with `moduleResolution: bundler` (which accepts extensionless paths)
- * because the kit's own .d.ts files do not resolve under nodenext — see the
- * comment on that project. The real templates DO ship nodenext, so the check has
- * to exist somewhere, and here it is textual instead of compiled.
+ * This is TS2835. The route-node project now runs under genuine nodenext and so
+ * DOES flag it in live code — but this textual pass is not redundant, and it is
+ * kept deliberately, because it covers two things tsc structurally cannot:
+ *
+ *   1. COMMENTED-OUT code. The vite.config.ts chunk is emitted entirely as `//`
+ *      guidance a consumer uncomments, and splitRouteFiles drops it before tsc
+ *      ever runs (see the call site). tsc does not parse comments. That chunk is
+ *      exactly where the shipped defect was.
+ *   2. route-web and route-worker, which stay on `bundler` ON PURPOSE — Next,
+ *      SvelteKit, TanStack Start and wrangler all ship bundler resolution — so a
+ *      missing extension in one of their routes is invisible to the compiler
+ *      there, and this is its only coverage.
+ *
+ * So the compiled check and this one overlap on 18 live route-node imports and
+ * are disjoint everywhere else. Keep both.
  *
  * Measured in a stock `npm create vite -- --template react-ts` app:
  *   vite.config.ts(1,31): error TS2835: Relative import paths need explicit file
