@@ -423,20 +423,55 @@ const exposeMethods = (scope, sourceFile) => {
       ts.isObjectLiteralExpression(node.arguments[0])
     ) {
       for (const prop of node.arguments[0].properties) {
-        let name, fn;
+        let name, fn, valueSym;
         if (ts.isPropertyAssignment(prop) && (ts.isIdentifier(prop.name) || ts.isStringLiteralLike(prop.name))) {
           name = prop.name.text; fn = prop.initializer;
         } else if (ts.isMethodDeclaration(prop) && ts.isIdentifier(prop.name)) {
           name = prop.name.text; fn = prop;
+        } else if (ts.isShorthandPropertyAssignment(prop)) {
+          // `expose({ clear })` — the value is the local of the same name, and this
+          // branch did not exist. A ShorthandPropertyAssignment is NOT a
+          // PropertyAssignment, so the whole member was skipped and never entered
+          // the model: `kai-search.clear`, `kai-editable-label.commit` and
+          // `kai-editable-label.cancel` were callable at runtime, typed nowhere, and
+          // absent from element-meta.json, custom-elements.json, element-types.d.ts,
+          // the React wrappers, llms-full.txt, docs/web-components.md, the docs-site
+          // MethodTable and the kai MCP's component_reference — eight artifacts.
+          //
+          // They were INVISIBLE rows, not blank ones, which is why every existing
+          // guard missed them: method-docs-coverage.test.ts checks that each method
+          // in the model reaches each artifact, and a guard over the model cannot
+          // catch what never reaches the model. The count it reported was 128; the
+          // real one is 131.
+          name = prop.name.text;
+          valueSym = checker.getShorthandAssignmentValueSymbol(prop);
+          const d = valueSym?.valueDeclaration ?? valueSym?.declarations?.[0];
+          const init = d && ts.isVariableDeclaration(d) ? d.initializer : d;
+          if (!init || !ts.isFunctionLike(init)) {
+            throw new Error(
+              `gen-element-api: expose({ ${name} }) in ${basename(sourceFile.fileName)} does not resolve to a ` +
+              'function declaration, so its signature cannot be extracted. Write it as ' +
+              `\`${name}: <fn>\` in the expose literal, or give the local an explicit function form. ` +
+              'Skipping it would put a callable method in no artifact at all.',
+            );
+          }
+          fn = init;
         } else continue;
-        const params = fn.parameters ? fn.parameters.map((pp) => pp.getText(sourceFile)).join(', ') : '';
-        const returns = fn.type ? fn.type.getText(sourceFile) : 'void';
+        // The parameters may be declared in the local `const`, not in the expose
+        // literal, so read their text from the file that actually holds them.
+        const fnSf = fn.getSourceFile();
+        const params = fn.parameters ? fn.parameters.map((pp) => pp.getText(fnSf)).join(', ') : '';
+        const returns = fn.type ? fn.type.getText(fnSf) : 'void';
         let description = '';
         for (const r of ts.getLeadingCommentRanges(sourceFile.text, prop.getFullStart()) ?? []) {
           const t = sourceFile.text.slice(r.pos, r.end);
           if (t.startsWith('/**')) description = t.replace(/^\/\*\*|\*\/$/g, '').replace(/^\s*\*\s?/gm, '').replace(/\s+/g, ' ').trim();
         }
-        out.push(withDts({ name, params, returns, description }, dtsSignature(fn, sourceFile)));
+        // A shorthand member carries no doc comment of its own when the JSDoc was
+        // written on the local it points at; take it from there rather than emit a
+        // blank description row.
+        if (!description && valueSym) description = jsdocOf(valueSym);
+        out.push(withDts({ name, params, returns, description }, dtsSignature(fn, fnSf)));
       }
     }
     ts.forEachChild(node, visit);

@@ -110,7 +110,14 @@ defineWebComponent<Props, Events>('kai-editable-label', {
      *  `disabled`. Commit with `commit()` or by blurring, abandon with `cancel()`
      *  or Escape. */
     edit: enter,
+    /** Close the field and keep what was typed, exactly as blurring it does.
+     *  `kai-rename` fires only when the text actually changed, so committing an
+     *  untouched field is silent. A no-op while the field is closed. */
     commit,
+    /** Abandon the edit, exactly as Escape does: the original text is restored,
+     *  the field closes and `kai-cancel` fires. `kai-rename` never fires, even if
+     *  the field was edited. Also works when `editing` was set programmatically
+     *  and the field has not rendered yet. */
     cancel,
   });
 

@@ -339,7 +339,7 @@ export interface KaiCardsElement extends HTMLElement {
   /** Collapse a card to its re-openable stub from the host side. Convenience for `resolve(cardId, { kind: 'dismissed' })`. */
   dismiss(cardId: string): void;
   /** Return the live child element node for a card id (or null) so consumers can call that card's own methods (focus/expand/…) without a shadow-DOM query. */
-  getCard(cardId: string): null | HTMLElement;
+  getCard(cardId: string): HTMLElement | null;
 }
 
 export interface KaiChainOfThoughtElement extends HTMLElement {
@@ -379,7 +379,7 @@ export interface KaiChatElement extends HTMLElement {
   /** Keep suggestions visible after the conversation starts. By default suggestions are conversation starters and hide once `messages` is non-empty; set this to keep them always shown. Default false. */
   persistSuggestions?: boolean;
   /** Body/prose font scale for rendered markdown (`'xs' | 'sm' | 'base' | 'lg'`). Defaults to `'sm'`. */
-  proseSize?: "sm" | "lg" | "xs" | "base";
+  proseSize?: "xs" | "sm" | "base" | "lg";
   /** Shiki theme name for syntax-highlighted code blocks (e.g. `'github-dark-dimmed'`). */
   codeTheme?: string;
   /** Enable Shiki syntax highlighting in code blocks. Turn off to render plain `<pre>` blocks (lighter, no highlighter load). Default true. */
@@ -419,7 +419,7 @@ export interface KaiChatElement extends HTMLElement {
   /** Whether each message's action bar is always visible (`'always'`, default) or only revealed on hover of that message row (`'hover'`). */
   actionsReveal?: "always" | "hover";
   /** The full message thread to render, newest last. Each entry carries its role, ordered `parts`, and optional actions/avatar/feedback. Set as a JS property (`el.messages = [...]`); a NEW array reference per streaming chunk re-renders (mutating in place does not). Omit for an empty thread. Re-declared here (rather than inherited from `ChatThreadProps`) because the ELEMENT registers a `[]` default and renders the empty state without it, while the SolidJS `<ChatThread>` component still requires it. The facade hands it a validated array either way. Matches `<kai-thread>`. */
-  messages: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: string; index?: number; streamId?: string; signature?: string; raw?: { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: "image" | "command" | "file-change" | "search" | "fetch" | "mcp" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } }; raw?: { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }; raw?: { source: string; payload: unknown } } | { type: "source"; source: { id?: string; url?: string; title?: string; snippet?: string; index?: number }; raw?: { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }; raw?: { source: string; payload: unknown } })[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" }[];
+  messages: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: string; index?: number; streamId?: string; signature?: string; raw?: { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: "command" | "file-change" | "search" | "fetch" | "mcp" | "image" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } }; raw?: { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }; raw?: { source: string; payload: unknown } } | { type: "source"; source: { id?: string; url?: string; title?: string; snippet?: string; index?: number }; raw?: { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }; raw?: { source: string; payload: unknown } })[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" }[];
   /** Optional card type -> custom-element tag overrides/additions for `card` parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type. */
   cardTypes?: Record<string, string>;
   /** JSON Schemas for the card types this app renders, keyed by envelope type. The companion of `cardTypes`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type, the one your app actually cares about, as the only unchecked thing on screen. A schema here WINS over a built-in of the same name. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `"type"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one. */
@@ -444,7 +444,7 @@ export interface KaiCheckpointElement extends HTMLElement {
   /** Tooltip on hover. */
   tooltip?: string;
   /** Visual button style. */
-  variant?: "default" | "ghost" | "outline";
+  variant?: "ghost" | "default" | "outline";
   /** Button size (use an `icon*` size for an icon-only checkpoint). */
   size?: "sm" | "md" | "lg" | "icon" | "icon-sm";
 }
@@ -492,7 +492,7 @@ export interface KaiCoachmarkElement extends HTMLElement {
   /** Floating placement relative to the anchor (default `bottom`). */
   placement?: string;
   /** Color tone: `primary` (default, theme accent), `info` (blue), `success` (green), `warning` (amber), or `error` (red), reusing the kit's tool hues. */
-  tone?: "error" | "primary" | "info" | "success" | "warning";
+  tone?: "primary" | "info" | "success" | "warning" | "error";
   /** Render the arrow that points at the anchor (default `true`). Set `arrow="false"` for a plain bubble with no pointer. */
   arrow?: boolean;
   /** Open it programmatically (no-op while disabled). */
@@ -515,7 +515,7 @@ export interface KaiCodeBlockElement extends HTMLElement {
   /** Disable syntax highlighting (renders plain text, no Shiki). */
   codeHighlight?: boolean;
   /** Code text sizing. */
-  proseSize?: "sm" | "lg" | "xs" | "base";
+  proseSize?: "xs" | "sm" | "base" | "lg";
 }
 
 export interface KaiCommandElement extends HTMLElement {
@@ -547,7 +547,7 @@ export interface KaiCompareElement extends HTMLElement {
   /** Layout: `'auto'` (default, columns when wide, tabs when narrow, by CONTAINER width) | `'columns'` (side-by-side) | `'tabs'` (pills to switch). Attribute: `layout`. */
   layout?: "auto" | "columns" | "tabs";
   /** Prose/text size for the rendered candidates. Attribute: `prose-size`. */
-  proseSize?: "sm" | "lg" | "xs" | "base";
+  proseSize?: "xs" | "sm" | "base" | "lg";
   /** Shiki theme for code blocks in the candidates. Attribute: `code-theme`. */
   codeTheme?: string;
   /** Whether code blocks are syntax-highlighted. Attribute: `code-highlight`. */
@@ -570,7 +570,7 @@ export interface KaiComposerElement extends HTMLElement {
   /** Show a loading/streaming state and block submit. */
   loading?: boolean;
   /** Maximum height in px before the content scrolls. Default 240. */
-  maxHeight?: string | number;
+  maxHeight?: number | string;
   /** Whether pressing Enter (without Shift) submits. Default true. */
   submitOnEnter?: boolean;
   /** Trigger definitions. Set as a JS property. */
@@ -595,7 +595,7 @@ export interface KaiConfirmElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
   /** The confirm definition (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { body, tone, actions:[…] }`. Import `ConfirmCardData` from `@kitn.ai/ui` for the full shape. */
-  data?: { heading?: string; body?: string; tone?: "default" | "warning" | "danger"; actions: { id: string; label: string; style?: "default" | "destructive" | "primary"; payload?: unknown; default?: boolean }[]; dismissible?: boolean };
+  data?: { heading?: string; body?: string; tone?: "default" | "warning" | "danger"; actions: { id: string; label: string; style?: "primary" | "default" | "destructive"; payload?: unknown; default?: boolean }[]; dismissible?: boolean };
   /** Stable card id correlating every emitted CardEvent. Attribute: `card-id`. */
   cardId?: string;
   /** Heading rendered in the card chrome (= CardEnvelope.title). Attribute: `heading`. */
@@ -682,6 +682,10 @@ export interface KaiEditableLabelElement extends HTMLElement {
   disabled?: boolean;
   /** Switch the label into its editing field, which autofocuses and selects the current text. Same entry point as a user double-click, and a no-op while `disabled`. Commit with `commit()` or by blurring, abandon with `cancel()` or Escape. */
   edit(): void;
+  /** Close the field and keep what was typed, exactly as blurring it does. `kai-rename` fires only when the text actually changed, so committing an untouched field is silent. A no-op while the field is closed. */
+  commit(): void;
+  /** Abandon the edit, exactly as Escape does: the original text is restored, the field closes and `kai-cancel` fires. `kai-rename` never fires, even if the field was edited. Also works when `editing` was set programmatically and the field has not rendered yet. */
+  cancel(): void;
 }
 
 export interface KaiEmbedElement extends HTMLElement {
@@ -690,7 +694,7 @@ export interface KaiEmbedElement extends HTMLElement {
   /** Stable card id correlating every emitted event. Set as an attribute or property. */
   cardId?: string;
   /** The embed payload (provider + id/url + options). Set as a JS **property** (object). */
-  data?: { provider: "generic" | "youtube" | "vimeo"; id?: string; url?: string; title?: string; poster?: string; start?: number; aspectRatio?: "16:9" | "4:3" | "1:1" | "9:16" };
+  data?: { provider: "youtube" | "vimeo" | "generic"; id?: string; url?: string; title?: string; poster?: string; start?: number; aspectRatio?: "16:9" | "4:3" | "1:1" | "9:16" };
 }
 
 export interface KaiEmptyElement extends HTMLElement {
@@ -751,7 +755,7 @@ export interface KaiFormElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
   /** The form definition: a JSON Schema (`type:'object'`) + `x-kai-*` UI hints (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { type:'object', properties:{…} }`. Import the `FormDefinition` type from `@kitn.ai/ui` for the full shape. It IS self-referential (`FormField.properties` is another `FormField` map), and the generated `element-types.d.ts` inlines every named type, so the shipped declaration bottoms out in a `Record<string, unknown>` placeholder one level down rather than carrying the recursion. That is why `FormDefinition` is a `type` alias: an interface gets no implicit index signature, so it would not be assignable to that placeholder. */
-  data?: { type: "object"; title?: string; description?: string; required?: string[]; properties: Record<string, { type: "string" | "number" | "boolean" | "object" | "integer" | "array"; title?: string; description?: string; default?: unknown; enum?: unknown[]; format?: "email" | "uri" | "url" | "date" | "date-time" | "time"; minimum?: number; maximum?: number; minLength?: number; maxLength?: number; pattern?: string; minItems?: number; maxItems?: number; items?: Record<string, unknown> | { enum: unknown[] }; properties?: Record<string, Record<string, unknown>>; required?: string[]; readOnly?: boolean; "x-kai-widget"?: "textarea" | "slider" | "rating" | "radio" | "select" | "checkbox" | "password" | "switch"; "x-kai-placeholder"?: string; "x-kai-step"?: number }>; "x-kai-order"?: string[]; "x-kai-inlineMax"?: number; "x-kai-submitLabel"?: string; "x-kai-dismissible"?: boolean; "x-kai-actions"?: { id: string; label: string; variant?: "default" | "ghost" | "outline" }[] };
+  data?: { type: "object"; title?: string; description?: string; required?: string[]; properties: Record<string, { type: "string" | "number" | "integer" | "boolean" | "array" | "object"; title?: string; description?: string; default?: unknown; enum?: unknown[]; format?: "email" | "uri" | "url" | "date" | "date-time" | "time"; minimum?: number; maximum?: number; minLength?: number; maxLength?: number; pattern?: string; minItems?: number; maxItems?: number; items?: Record<string, unknown> | { enum: unknown[] }; properties?: Record<string, Record<string, unknown>>; required?: string[]; readOnly?: boolean; "x-kai-widget"?: "textarea" | "slider" | "rating" | "radio" | "select" | "checkbox" | "password" | "switch"; "x-kai-placeholder"?: string; "x-kai-step"?: number }>; "x-kai-order"?: string[]; "x-kai-inlineMax"?: number; "x-kai-submitLabel"?: string; "x-kai-dismissible"?: boolean; "x-kai-actions"?: { id: string; label: string; variant?: "default" | "ghost" | "outline" }[] };
   /** Stable card id correlating every emitted CardEvent. Attribute: `card-id`. */
   cardId?: string;
   /** Heading rendered in the card chrome (= CardEnvelope.title). Attribute: `heading`. */
@@ -868,7 +872,7 @@ export interface KaiKbdElement extends HTMLElement {
   /** Shortcut spec: tokens joined by `+` (e.g. `Mod+Shift+K`). Omit it to show default-slot content instead. Display only; the element does not bind keys. */
   keys?: string;
   /** `mac` uses ⌘/⌥, `other` uses Ctrl. `auto` (default) sniffs the OS. */
-  platform?: "auto" | "other" | "mac";
+  platform?: "auto" | "mac" | "other";
   /** Cap size: `sm` or `md`. Defaults to `md`. */
   size?: "sm" | "md";
 }
@@ -899,7 +903,7 @@ export interface KaiMarkdownElement extends HTMLElement {
   /** The markdown source to render. */
   content: string;
   /** Text/markdown sizing. */
-  proseSize?: "sm" | "lg" | "xs" | "base";
+  proseSize?: "xs" | "sm" | "base" | "lg";
   /** Shiki theme for fenced code blocks. */
   codeTheme?: string;
   /** Disable syntax highlighting (no Shiki loads). */
@@ -939,13 +943,13 @@ export interface KaiMessageElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
   /** The full message object. Set as a JS property. */
-  message?: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: string; index?: number; streamId?: string; signature?: string; raw?: { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: "image" | "command" | "file-change" | "search" | "fetch" | "mcp" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } }; raw?: { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }; raw?: { source: string; payload: unknown } } | { type: "source"; source: { id?: string; url?: string; title?: string; snippet?: string; index?: number }; raw?: { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }; raw?: { source: string; payload: unknown } })[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" };
+  message?: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: string; index?: number; streamId?: string; signature?: string; raw?: { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: "command" | "file-change" | "search" | "fetch" | "mcp" | "image" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } }; raw?: { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }; raw?: { source: string; payload: unknown } } | { type: "source"; source: { id?: string; url?: string; title?: string; snippet?: string; index?: number }; raw?: { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }; raw?: { source: string; payload: unknown } })[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" };
   /** Who is speaking: `'user'` or `'assistant'`. Convenience for simple cases when not passing a `message` object. This is the SEMANTIC role of the message, not an ARIA role. The name collides with the global ARIA `role` attribute, which is why the facade lifts it off the host (see `liftRoleOffHost`). Neither speaker is a valid ARIA role, so a `role="user"` left on `<kai-message>` is a CRITICAL axe `aria-roles` violation. The accessible role lives on the row inside the shadow root instead: `role="article"` plus an `aria-label` naming the speaker, matching the SolidJS `<Message>` component. Re-declares the DOM member `HTMLElement.role`, so it is NOT optional here: an interface extending HTMLElement may only narrow it, and the element always carries a value for it. */
   role: "user" | "assistant";
   /** Force markdown on/off. Defaults to on for assistant, off for user. */
   markdown?: boolean;
   /** Text/markdown sizing for the message body. */
-  proseSize?: "sm" | "lg" | "xs" | "base";
+  proseSize?: "xs" | "sm" | "base" | "lg";
   /** Shiki theme name used for fenced code blocks in the content. */
   codeTheme?: string;
   /** Disable syntax highlighting for code blocks (no Shiki loads). */
@@ -991,7 +995,7 @@ export interface KaiNavElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
   /** The nav items. Set as a JS property (array, not an attribute). Each item may carry `children` (a collapsible group), a `status` dot, and trailing `meta` text. */
-  items?: { id: string; label?: string; icon?: string; badge?: string; trailing?: string; disabled?: boolean; children?: Record<string, unknown>[]; status?: { tone: "error" | "primary" | "info" | "success" | "warning" | "neutral"; label?: string; pulse?: boolean }; meta?: string; action?: { icon: string; label: string }; closable?: boolean }[];
+  items?: { id: string; label?: string; icon?: string; badge?: string; trailing?: string; disabled?: boolean; children?: Record<string, unknown>[]; status?: { tone: "primary" | "info" | "success" | "warning" | "error" | "neutral"; label?: string; pulse?: boolean }; meta?: string; action?: { icon: string; label: string }; closable?: boolean }[];
   /** Active item id (controlled). */
   value?: string;
   /** Initial active id when uncontrolled. */
@@ -1006,7 +1010,7 @@ export interface KaiNoticeElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
   /** `neutral` (default) · `info` · `warning` · `error` · `success`. Drives the leading icon's color and the a11y role (`alert` for errors, else `status`). */
-  severity?: "error" | "info" | "success" | "warning" | "neutral";
+  severity?: "neutral" | "info" | "warning" | "error" | "success";
   /** Leading icon: omit for the severity default, `"none"` to hide it, or a named icon to override. */
   icon?: string;
   /** Show a dismiss (×) that hides the notice and emits `kai-dismiss`. */
@@ -1051,7 +1055,7 @@ export interface KaiPopoverElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
   /** Floating placement relative to the trigger (floating-ui placement). */
-  placement?: "top" | "right" | "bottom" | "left" | "top-start" | "top-end" | "right-start" | "right-end" | "bottom-start" | "bottom-end" | "left-start" | "left-end";
+  placement?: "top" | "right" | "bottom" | "left" | "bottom-end" | "bottom-start" | "left-end" | "left-start" | "right-end" | "right-start" | "top-end" | "top-start";
   /** Gap in px between the trigger and the panel. */
   gutter?: number;
   /** Drive/observe open state (Shoelace-style: settable + reflected to the `open` attribute, the element still self-manages on click). Set `el.open = true`, or `<kai-popover open>`; listen for `kai-open-change`. */
@@ -1085,9 +1089,9 @@ export interface KaiPromptDockElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
   /** How the tray frames the input, the SPATIAL inset axis: `inset` (default, the classic recessed frame on every side) | `edge` (top/bottom inset only; the input sits flush left/right so the lips span the full width) | `none` (no inset; the lips attach directly as a plain stack). Attribute: `frame`. */
-  frame?: "none" | "inset" | "edge";
+  frame?: "inset" | "edge" | "none";
   /** How the tray surface looks, the VISUAL axis orthogonal to `frame`: `soft` (default, sunken surface + border + radius) | `outlined` (transparent + border + radius) | `filled` (sunken, no border, + radius) | `plain` (bare). Attribute: `appearance`. */
-  appearance?: "outlined" | "filled" | "plain" | "soft";
+  appearance?: "soft" | "outlined" | "filled" | "plain";
 }
 
 export interface KaiPromptInputElement extends HTMLElement {
@@ -1112,7 +1116,7 @@ export interface KaiPromptInputElement extends HTMLElement {
   /** When set and `loading` is true, the send button is replaced by a Stop button (square icon, "Stop" aria-label). Clicking it fires `kai-stop`. */
   stoppable?: boolean;
   /** Send-button visibility. `'always'` (default) always shows it; `'auto'` shows it only when there's text/attachments (an empty composer hides it, though Enter still submits). To hide it entirely (Enter-only), it's pure CSS: `::part(send){display:none}`, no prop needed. Restyle via `::part(send)`. The Stop button (`stoppable` + `loading`) is unaffected. */
-  submit?: "auto" | "always";
+  submit?: "always" | "auto";
   /** When `false`, hides the built-in paperclip attach button even though the element otherwise supports attachments. Use this when a `+` menu in `toolbar-start` already exposes "Add files", to avoid a duplicate control. Defaults to `true`. */
   attach?: boolean;
   /** Attachments to seed the input with (so a consumer can pre-populate staged files without an upload). Set as a JS property; the element then manages its own attachment state from there (add via the paperclip, remove per chip). */
@@ -1173,11 +1177,11 @@ export interface KaiResizableElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
   /** Layout axis: `horizontal` (row, default) or `vertical` (column). */
-  orientation?: "vertical" | "horizontal";
+  orientation?: "horizontal" | "vertical";
   /** Which item index is maximized (null = none). Declarative source of truth. */
-  maximizedIndex: null | number;
+  maximizedIndex: number | null;
   /** Divider affordance drawn inside each draggable handle's 8px grab zone: - `line` (default): a 1px hairline, transparent at rest, tinting on hover/drag. - `grip`: a dotted grip handle. - `none`: no visible divider, just the invisible hit-area. The full grab zone and keyboard/ARIA behavior are identical for all three. */
-  handle?: "none" | "line" | "grip";
+  handle?: "line" | "grip" | "none";
   /** Imperatively maximize the item at `index` (thin wrapper over `maximizedIndex`). */
   maximize(index: number): void;
   /** Imperatively restore from the maximized layout. */
@@ -1273,7 +1277,7 @@ export interface KaiScrollButtonElement extends HTMLElement {
   /** CSS id of the scroll container to control. When omitted the element walks up the DOM (outside its own shadow root) to find the nearest scrollable ancestor. Mirrors the `for` convention of `<label for="...">`. */
   for?: string;
   /** Button visual variant: `'outline' | 'ghost' | 'default'`. Defaults to `'outline'`. */
-  variant?: "default" | "ghost" | "outline";
+  variant?: "outline" | "ghost" | "default";
   /** Button size token. Defaults to `'icon'` (square). */
   size?: "sm" | "md" | "lg" | "icon" | "icon-sm";
 }
@@ -1295,6 +1299,8 @@ export interface KaiSearchElement extends HTMLElement {
   shortcut?: string;
   /** Focus the search input inside the shadow root. A native `focus()` on the host lands on the host itself and never reaches it. */
   focus(): void;
+  /** Empty the field and fire `kai-search` with an empty value immediately, cancelling any debounced search still in flight, then return focus to the input. Same path as the trailing clear button. */
+  clear(): void;
 }
 
 export interface KaiSegmentedElement extends HTMLElement {
@@ -1312,7 +1318,7 @@ export interface KaiSeparatorElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
   /** `horizontal` (default, block + full-width) or `vertical` (a rule inside a flex/grid row, stretching to the row height). */
-  orientation?: "vertical" | "horizontal";
+  orientation?: "horizontal" | "vertical";
 }
 
 export interface KaiSettingItemElement extends HTMLElement {
@@ -1398,11 +1404,11 @@ export interface KaiSuggestionsElement extends HTMLElement {
   /** The suggestions. Strings, or `{ label, value }` when the displayed text and the emitted value differ. Set as a JS property. Omit to supply them as `<kai-suggestion>` light-DOM children instead; when both are present the property's suggestions come first. */
   suggestions: (string | { label: string; value?: string; icon?: string })[];
   /** Chip style: `'outline'` (default), `'ghost'`, or `'default'` (filled). */
-  variant?: "default" | "ghost" | "outline";
+  variant?: "outline" | "ghost" | "default";
   /** Row height for `layout="list"`: `'md'` (default) or `'lg'` for taller rows. Chips are unaffected. */
   size?: "md" | "lg";
   /** Layout: `'chips'` (default) renders a wrapping row of rounded pills; `'list'` renders a vertical, full-width "Ideas for you" list where each row is left-aligned with a leading `icon`, a label, and a hover background. */
-  layout?: "list" | "chips";
+  layout?: "chips" | "list";
   /** Full-width left-aligned rows instead of pills. */
   block?: boolean;
   /** Substring to highlight within each suggestion. */
@@ -1512,11 +1518,11 @@ export interface KaiThreadElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
   /** The full message thread to render, newest last. Each entry carries its role, ordered `parts`, and optional actions/avatar/feedback. Set as a JS property (`el.messages = [...]`); a NEW array reference per streaming chunk re-renders (mutating in place does not). */
-  messages?: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: string; index?: number; streamId?: string; signature?: string; raw?: { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: "image" | "command" | "file-change" | "search" | "fetch" | "mcp" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } }; raw?: { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }; raw?: { source: string; payload: unknown } } | { type: "source"; source: { id?: string; url?: string; title?: string; snippet?: string; index?: number }; raw?: { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }; raw?: { source: string; payload: unknown } })[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" }[];
+  messages?: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: string; index?: number; streamId?: string; signature?: string; raw?: { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: "command" | "file-change" | "search" | "fetch" | "mcp" | "image" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } }; raw?: { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }; raw?: { source: string; payload: unknown } } | { type: "source"; source: { id?: string; url?: string; title?: string; snippet?: string; index?: number }; raw?: { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }; raw?: { source: string; payload: unknown } })[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" }[];
   /** Show a typing indicator on the pending assistant turn. Set it while awaiting the assistant's reply. */
   loading?: boolean;
   /** Body/prose font scale for rendered markdown (`'xs' | 'sm' | 'base' | 'lg'`). Defaults to `'sm'`. */
-  proseSize?: "sm" | "lg" | "xs" | "base";
+  proseSize?: "xs" | "sm" | "base" | "lg";
   /** Shiki theme name for syntax-highlighted code blocks (e.g. `'github-dark-dimmed'`). */
   codeTheme?: string;
   /** Enable Shiki syntax highlighting in code blocks. Turn off to render plain `<pre>` blocks (lighter, no highlighter load). Default true. */
@@ -1539,7 +1545,7 @@ export interface KaiToastRegionElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
   /** The toasts to render. Newest is shown on top. Set as a JS property (array); pass a new array reference to update. Omit for an empty region, which is the normal resting state and how the imperative `toast()` API starts. */
-  toasts: { id: string; message: string; variant?: "error" | "info" | "success" | "warning" | "neutral"; appearance?: "card" | "pill"; inverse?: boolean; description?: string; action?: { label: string; onAction: () => void | false }; duration?: number; dismissible?: boolean; target?: HTMLElement }[];
+  toasts: { id: string; message: string; variant?: "neutral" | "success" | "warning" | "error" | "info"; appearance?: "pill" | "card"; inverse?: boolean; description?: string; action?: { label: string; onAction: () => void | false }; duration?: number; dismissible?: boolean; target?: HTMLElement }[];
   /** Stack anchor: `'top-center'` (default), `'top-right'`, `'bottom-center'`, … */
   position?: "top-center" | "top-right" | "top-left" | "bottom-center" | "bottom-right" | "bottom-left";
   /** Max simultaneously-visible toasts; the rest queue. Defaults to `3`. */
@@ -1547,7 +1553,7 @@ export interface KaiToastRegionElement extends HTMLElement {
   /** Stacking: 'expanded' (default, full column) | 'collapsed' (Sonner-style pile that expands on hover/focus). Attribute: stack. */
   stack?: "expanded" | "collapsed";
   /** Default appearance for this region's toasts: `'pill'` (default, compact) | `'card'` (richer, with a description line). A per-toast `appearance` wins. Attribute: `appearance`. */
-  appearance?: "card" | "pill";
+  appearance?: "pill" | "card";
   /** Default high-contrast inverse treatment for this region's toasts. A per-toast `inverse` wins. Off by default. Attribute: `inverse`. */
   inverse?: boolean;
   /** Container element to anchor this region to (JS property). Set by the store for a scoped region; unset = the global viewport region. */
@@ -1558,7 +1564,7 @@ export interface KaiToolElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
   /** The tool-call to display. Set as a JS property. */
-  tool?: { type: string; kind?: "image" | "command" | "file-change" | "search" | "fetch" | "mcp" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } };
+  tool?: { type: string; kind?: "command" | "file-change" | "search" | "fetch" | "mcp" | "image" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } };
   /** Drive/observe open state (Shoelace-style: settable + reflected to the `open` attribute; the element still self-manages on trigger click). Set `el.open = true`, or `<kai-tool open>`; listen for `kai-open-change`. */
   open?: boolean;
   /** Initial open state on mount (uncontrolled seed). */
@@ -1646,13 +1652,13 @@ export interface KaiWorkspaceElement extends HTMLElement {
   /** Id of the open conversation, highlighted in the sidebar. */
   activeId?: string;
   /** The active conversation's message thread, newest last. Set as a JS property (`el.messages = [...]`); a NEW array reference per streaming chunk re-renders (mutating in place does not). Omit for an empty thread. */
-  messages: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: string; index?: number; streamId?: string; signature?: string; raw?: { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: "image" | "command" | "file-change" | "search" | "fetch" | "mcp" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } }; raw?: { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }; raw?: { source: string; payload: unknown } } | { type: "source"; source: { id?: string; url?: string; title?: string; snippet?: string; index?: number }; raw?: { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }; raw?: { source: string; payload: unknown } })[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" }[];
+  messages: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: string; index?: number; streamId?: string; signature?: string; raw?: { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: "command" | "file-change" | "search" | "fetch" | "mcp" | "image" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } }; raw?: { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }; raw?: { source: string; payload: unknown } } | { type: "source"; source: { id?: string; url?: string; title?: string; snippet?: string; index?: number }; raw?: { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }; raw?: { source: string; payload: unknown } })[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" }[];
   value?: string;
   placeholder?: string;
   loading?: boolean;
   suggestions?: string[];
   suggestionMode?: "submit" | "fill";
-  proseSize?: "sm" | "lg" | "xs" | "base";
+  proseSize?: "xs" | "sm" | "base" | "lg";
   codeTheme?: string;
   codeHighlight?: boolean;
   chatTitle?: string;
@@ -2106,7 +2112,7 @@ export interface KaiChatElementProps {
   /** Keep suggestions visible after the conversation starts. By default suggestions are conversation starters and hide once `messages` is non-empty; set this to keep them always shown. Default false. */
   persistSuggestions?: boolean;
   /** Body/prose font scale for rendered markdown (`'xs' | 'sm' | 'base' | 'lg'`). Defaults to `'sm'`. */
-  proseSize?: "sm" | "lg" | "xs" | "base";
+  proseSize?: "xs" | "sm" | "base" | "lg";
   /** Shiki theme name for syntax-highlighted code blocks (e.g. `'github-dark-dimmed'`). */
   codeTheme?: string;
   /** Enable Shiki syntax highlighting in code blocks. Turn off to render plain `<pre>` blocks (lighter, no highlighter load). Default true. */
@@ -2146,7 +2152,7 @@ export interface KaiChatElementProps {
   /** Whether each message's action bar is always visible (`'always'`, default) or only revealed on hover of that message row (`'hover'`). */
   actionsReveal?: "always" | "hover";
   /** The full message thread to render, newest last. Each entry carries its role, ordered `parts`, and optional actions/avatar/feedback. Set as a JS property (`el.messages = [...]`); a NEW array reference per streaming chunk re-renders (mutating in place does not). Omit for an empty thread. Re-declared here (rather than inherited from `ChatThreadProps`) because the ELEMENT registers a `[]` default and renders the empty state without it, while the SolidJS `<ChatThread>` component still requires it. The facade hands it a validated array either way. Matches `<kai-thread>`. */
-  messages?: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: string; index?: number; streamId?: string; signature?: string; raw?: { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: "image" | "command" | "file-change" | "search" | "fetch" | "mcp" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } }; raw?: { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }; raw?: { source: string; payload: unknown } } | { type: "source"; source: { id?: string; url?: string; title?: string; snippet?: string; index?: number }; raw?: { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }; raw?: { source: string; payload: unknown } })[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" }[];
+  messages?: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: string; index?: number; streamId?: string; signature?: string; raw?: { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: "command" | "file-change" | "search" | "fetch" | "mcp" | "image" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } }; raw?: { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }; raw?: { source: string; payload: unknown } } | { type: "source"; source: { id?: string; url?: string; title?: string; snippet?: string; index?: number }; raw?: { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }; raw?: { source: string; payload: unknown } })[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" }[];
   /** Optional card type -> custom-element tag overrides/additions for `card` parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type. */
   cardTypes?: Record<string, string>;
   /** JSON Schemas for the card types this app renders, keyed by envelope type. The companion of `cardTypes`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type, the one your app actually cares about, as the only unchecked thing on screen. A schema here WINS over a built-in of the same name. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `"type"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one. */
@@ -2161,7 +2167,7 @@ export interface KaiCheckpointElementProps {
   /** Tooltip on hover. */
   tooltip?: string;
   /** Visual button style. */
-  variant?: "default" | "ghost" | "outline";
+  variant?: "ghost" | "default" | "outline";
   /** Button size (use an `icon*` size for an icon-only checkpoint). */
   size?: "sm" | "md" | "lg" | "icon" | "icon-sm";
 }
@@ -2199,7 +2205,7 @@ export interface KaiCoachmarkElementProps {
   /** Floating placement relative to the anchor (default `bottom`). */
   placement?: string;
   /** Color tone: `primary` (default, theme accent), `info` (blue), `success` (green), `warning` (amber), or `error` (red), reusing the kit's tool hues. */
-  tone?: "error" | "primary" | "info" | "success" | "warning";
+  tone?: "primary" | "info" | "success" | "warning" | "error";
   /** Render the arrow that points at the anchor (default `true`). Set `arrow="false"` for a plain bubble with no pointer. */
   arrow?: boolean;
 }
@@ -2216,7 +2222,7 @@ export interface KaiCodeBlockElementProps {
   /** Disable syntax highlighting (renders plain text, no Shiki). */
   codeHighlight?: boolean;
   /** Code text sizing. */
-  proseSize?: "sm" | "lg" | "xs" | "base";
+  proseSize?: "xs" | "sm" | "base" | "lg";
 }
 
 export interface KaiCommandElementProps {
@@ -2242,7 +2248,7 @@ export interface KaiCompareElementProps {
   /** Layout: `'auto'` (default, columns when wide, tabs when narrow, by CONTAINER width) | `'columns'` (side-by-side) | `'tabs'` (pills to switch). Attribute: `layout`. */
   layout?: "auto" | "columns" | "tabs";
   /** Prose/text size for the rendered candidates. Attribute: `prose-size`. */
-  proseSize?: "sm" | "lg" | "xs" | "base";
+  proseSize?: "xs" | "sm" | "base" | "lg";
   /** Shiki theme for code blocks in the candidates. Attribute: `code-theme`. */
   codeTheme?: string;
   /** Whether code blocks are syntax-highlighted. Attribute: `code-highlight`. */
@@ -2261,7 +2267,7 @@ export interface KaiComposerElementProps {
   /** Show a loading/streaming state and block submit. */
   loading?: boolean;
   /** Maximum height in px before the content scrolls. Default 240. */
-  maxHeight?: string | number;
+  maxHeight?: number | string;
   /** Whether pressing Enter (without Shift) submits. Default true. */
   submitOnEnter?: boolean;
   /** Trigger definitions. Set as a JS property. */
@@ -2276,7 +2282,7 @@ export interface KaiConfirmElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
   /** The confirm definition (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { body, tone, actions:[…] }`. Import `ConfirmCardData` from `@kitn.ai/ui` for the full shape. */
-  data?: { heading?: string; body?: string; tone?: "default" | "warning" | "danger"; actions: { id: string; label: string; style?: "default" | "destructive" | "primary"; payload?: unknown; default?: boolean }[]; dismissible?: boolean };
+  data?: { heading?: string; body?: string; tone?: "default" | "warning" | "danger"; actions: { id: string; label: string; style?: "primary" | "default" | "destructive"; payload?: unknown; default?: boolean }[]; dismissible?: boolean };
   /** Stable card id correlating every emitted CardEvent. Attribute: `card-id`. */
   cardId?: string;
   /** Heading rendered in the card chrome (= CardEnvelope.title). Attribute: `heading`. */
@@ -2341,7 +2347,7 @@ export interface KaiEmbedElementProps {
   /** Stable card id correlating every emitted event. Set as an attribute or property. */
   cardId?: string;
   /** The embed payload (provider + id/url + options). Set as a JS **property** (object). */
-  data?: { provider: "generic" | "youtube" | "vimeo"; id?: string; url?: string; title?: string; poster?: string; start?: number; aspectRatio?: "16:9" | "4:3" | "1:1" | "9:16" };
+  data?: { provider: "youtube" | "vimeo" | "generic"; id?: string; url?: string; title?: string; poster?: string; start?: number; aspectRatio?: "16:9" | "4:3" | "1:1" | "9:16" };
 }
 
 export interface KaiEmptyElementProps {
@@ -2402,7 +2408,7 @@ export interface KaiFormElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
   /** The form definition: a JSON Schema (`type:'object'`) + `x-kai-*` UI hints (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { type:'object', properties:{…} }`. Import the `FormDefinition` type from `@kitn.ai/ui` for the full shape. It IS self-referential (`FormField.properties` is another `FormField` map), and the generated `element-types.d.ts` inlines every named type, so the shipped declaration bottoms out in a `Record<string, unknown>` placeholder one level down rather than carrying the recursion. That is why `FormDefinition` is a `type` alias: an interface gets no implicit index signature, so it would not be assignable to that placeholder. */
-  data?: { type: "object"; title?: string; description?: string; required?: string[]; properties: Record<string, { type: "string" | "number" | "boolean" | "object" | "integer" | "array"; title?: string; description?: string; default?: unknown; enum?: unknown[]; format?: "email" | "uri" | "url" | "date" | "date-time" | "time"; minimum?: number; maximum?: number; minLength?: number; maxLength?: number; pattern?: string; minItems?: number; maxItems?: number; items?: Record<string, unknown> | { enum: unknown[] }; properties?: Record<string, Record<string, unknown>>; required?: string[]; readOnly?: boolean; "x-kai-widget"?: "textarea" | "slider" | "rating" | "radio" | "select" | "checkbox" | "password" | "switch"; "x-kai-placeholder"?: string; "x-kai-step"?: number }>; "x-kai-order"?: string[]; "x-kai-inlineMax"?: number; "x-kai-submitLabel"?: string; "x-kai-dismissible"?: boolean; "x-kai-actions"?: { id: string; label: string; variant?: "default" | "ghost" | "outline" }[] };
+  data?: { type: "object"; title?: string; description?: string; required?: string[]; properties: Record<string, { type: "string" | "number" | "integer" | "boolean" | "array" | "object"; title?: string; description?: string; default?: unknown; enum?: unknown[]; format?: "email" | "uri" | "url" | "date" | "date-time" | "time"; minimum?: number; maximum?: number; minLength?: number; maxLength?: number; pattern?: string; minItems?: number; maxItems?: number; items?: Record<string, unknown> | { enum: unknown[] }; properties?: Record<string, Record<string, unknown>>; required?: string[]; readOnly?: boolean; "x-kai-widget"?: "textarea" | "slider" | "rating" | "radio" | "select" | "checkbox" | "password" | "switch"; "x-kai-placeholder"?: string; "x-kai-step"?: number }>; "x-kai-order"?: string[]; "x-kai-inlineMax"?: number; "x-kai-submitLabel"?: string; "x-kai-dismissible"?: boolean; "x-kai-actions"?: { id: string; label: string; variant?: "default" | "ghost" | "outline" }[] };
   /** Stable card id correlating every emitted CardEvent. Attribute: `card-id`. */
   cardId?: string;
   /** Heading rendered in the card chrome (= CardEnvelope.title). Attribute: `heading`. */
@@ -2495,7 +2501,7 @@ export interface KaiKbdElementProps {
   /** Shortcut spec: tokens joined by `+` (e.g. `Mod+Shift+K`). Omit it to show default-slot content instead. Display only; the element does not bind keys. */
   keys?: string;
   /** `mac` uses ⌘/⌥, `other` uses Ctrl. `auto` (default) sniffs the OS. */
-  platform?: "auto" | "other" | "mac";
+  platform?: "auto" | "mac" | "other";
   /** Cap size: `sm` or `md`. Defaults to `md`. */
   size?: "sm" | "md";
 }
@@ -2526,7 +2532,7 @@ export interface KaiMarkdownElementProps {
   /** The markdown source to render. */
   content: string;
   /** Text/markdown sizing. */
-  proseSize?: "sm" | "lg" | "xs" | "base";
+  proseSize?: "xs" | "sm" | "base" | "lg";
   /** Shiki theme for fenced code blocks. */
   codeTheme?: string;
   /** Disable syntax highlighting (no Shiki loads). */
@@ -2560,13 +2566,13 @@ export interface KaiMessageElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
   /** The full message object. Set as a JS property. */
-  message?: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: string; index?: number; streamId?: string; signature?: string; raw?: { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: "image" | "command" | "file-change" | "search" | "fetch" | "mcp" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } }; raw?: { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }; raw?: { source: string; payload: unknown } } | { type: "source"; source: { id?: string; url?: string; title?: string; snippet?: string; index?: number }; raw?: { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }; raw?: { source: string; payload: unknown } })[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" };
+  message?: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: string; index?: number; streamId?: string; signature?: string; raw?: { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: "command" | "file-change" | "search" | "fetch" | "mcp" | "image" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } }; raw?: { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }; raw?: { source: string; payload: unknown } } | { type: "source"; source: { id?: string; url?: string; title?: string; snippet?: string; index?: number }; raw?: { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }; raw?: { source: string; payload: unknown } })[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" };
   /** Who is speaking: `'user'` or `'assistant'`. Convenience for simple cases when not passing a `message` object. This is the SEMANTIC role of the message, not an ARIA role. The name collides with the global ARIA `role` attribute, which is why the facade lifts it off the host (see `liftRoleOffHost`). Neither speaker is a valid ARIA role, so a `role="user"` left on `<kai-message>` is a CRITICAL axe `aria-roles` violation. The accessible role lives on the row inside the shadow root instead: `role="article"` plus an `aria-label` naming the speaker, matching the SolidJS `<Message>` component. */
   role?: "user" | "assistant";
   /** Force markdown on/off. Defaults to on for assistant, off for user. */
   markdown?: boolean;
   /** Text/markdown sizing for the message body. */
-  proseSize?: "sm" | "lg" | "xs" | "base";
+  proseSize?: "xs" | "sm" | "base" | "lg";
   /** Shiki theme name used for fenced code blocks in the content. */
   codeTheme?: string;
   /** Disable syntax highlighting for code blocks (no Shiki loads). */
@@ -2604,7 +2610,7 @@ export interface KaiNavElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
   /** The nav items. Set as a JS property (array, not an attribute). Each item may carry `children` (a collapsible group), a `status` dot, and trailing `meta` text. */
-  items?: { id: string; label?: string; icon?: string; badge?: string; trailing?: string; disabled?: boolean; children?: Record<string, unknown>[]; status?: { tone: "error" | "primary" | "info" | "success" | "warning" | "neutral"; label?: string; pulse?: boolean }; meta?: string; action?: { icon: string; label: string }; closable?: boolean }[];
+  items?: { id: string; label?: string; icon?: string; badge?: string; trailing?: string; disabled?: boolean; children?: Record<string, unknown>[]; status?: { tone: "primary" | "info" | "success" | "warning" | "error" | "neutral"; label?: string; pulse?: boolean }; meta?: string; action?: { icon: string; label: string }; closable?: boolean }[];
   /** Active item id (controlled). */
   value?: string;
   /** Initial active id when uncontrolled. */
@@ -2617,7 +2623,7 @@ export interface KaiNoticeElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
   /** `neutral` (default) · `info` · `warning` · `error` · `success`. Drives the leading icon's color and the a11y role (`alert` for errors, else `status`). */
-  severity?: "error" | "info" | "success" | "warning" | "neutral";
+  severity?: "neutral" | "info" | "warning" | "error" | "success";
   /** Leading icon: omit for the severity default, `"none"` to hide it, or a named icon to override. */
   icon?: string;
   /** Show a dismiss (×) that hides the notice and emits `kai-dismiss`. */
@@ -2658,7 +2664,7 @@ export interface KaiPopoverElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
   /** Floating placement relative to the trigger (floating-ui placement). */
-  placement?: "top" | "right" | "bottom" | "left" | "top-start" | "top-end" | "right-start" | "right-end" | "bottom-start" | "bottom-end" | "left-start" | "left-end";
+  placement?: "top" | "right" | "bottom" | "left" | "bottom-end" | "bottom-start" | "left-end" | "left-start" | "right-end" | "right-start" | "top-end" | "top-start";
   /** Gap in px between the trigger and the panel. */
   gutter?: number;
   /** Drive/observe open state (Shoelace-style: settable + reflected to the `open` attribute, the element still self-manages on click). Set `el.open = true`, or `<kai-popover open>`; listen for `kai-open-change`. */
@@ -2686,9 +2692,9 @@ export interface KaiPromptDockElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
   /** How the tray frames the input, the SPATIAL inset axis: `inset` (default, the classic recessed frame on every side) | `edge` (top/bottom inset only; the input sits flush left/right so the lips span the full width) | `none` (no inset; the lips attach directly as a plain stack). Attribute: `frame`. */
-  frame?: "none" | "inset" | "edge";
+  frame?: "inset" | "edge" | "none";
   /** How the tray surface looks, the VISUAL axis orthogonal to `frame`: `soft` (default, sunken surface + border + radius) | `outlined` (transparent + border + radius) | `filled` (sunken, no border, + radius) | `plain` (bare). Attribute: `appearance`. */
-  appearance?: "outlined" | "filled" | "plain" | "soft";
+  appearance?: "soft" | "outlined" | "filled" | "plain";
 }
 
 export interface KaiPromptInputElementProps {
@@ -2713,7 +2719,7 @@ export interface KaiPromptInputElementProps {
   /** When set and `loading` is true, the send button is replaced by a Stop button (square icon, "Stop" aria-label). Clicking it fires `kai-stop`. */
   stoppable?: boolean;
   /** Send-button visibility. `'always'` (default) always shows it; `'auto'` shows it only when there's text/attachments (an empty composer hides it, though Enter still submits). To hide it entirely (Enter-only), it's pure CSS: `::part(send){display:none}`, no prop needed. Restyle via `::part(send)`. The Stop button (`stoppable` + `loading`) is unaffected. */
-  submit?: "auto" | "always";
+  submit?: "always" | "auto";
   /** When `false`, hides the built-in paperclip attach button even though the element otherwise supports attachments. Use this when a `+` menu in `toolbar-start` already exposes "Add files", to avoid a duplicate control. Defaults to `true`. */
   attach?: boolean;
   /** Attachments to seed the input with (so a consumer can pre-populate staged files without an upload). Set as a JS property; the element then manages its own attachment state from there (add via the paperclip, remove per chip). */
@@ -2760,11 +2766,11 @@ export interface KaiResizableElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
   /** Layout axis: `horizontal` (row, default) or `vertical` (column). */
-  orientation?: "vertical" | "horizontal";
+  orientation?: "horizontal" | "vertical";
   /** Which item index is maximized (null = none). Declarative source of truth. */
-  maximizedIndex?: null | number;
+  maximizedIndex?: number | null;
   /** Divider affordance drawn inside each draggable handle's 8px grab zone: - `line` (default): a 1px hairline, transparent at rest, tinting on hover/drag. - `grip`: a dotted grip handle. - `none`: no visible divider, just the invisible hit-area. The full grab zone and keyboard/ARIA behavior are identical for all three. */
-  handle?: "none" | "line" | "grip";
+  handle?: "line" | "grip" | "none";
 }
 
 export interface KaiResizableItemElementProps {
@@ -2842,7 +2848,7 @@ export interface KaiScrollButtonElementProps {
   /** CSS id of the scroll container to control. When omitted the element walks up the DOM (outside its own shadow root) to find the nearest scrollable ancestor. Mirrors the `for` convention of `<label for="...">`. */
   for?: string;
   /** Button visual variant: `'outline' | 'ghost' | 'default'`. Defaults to `'outline'`. */
-  variant?: "default" | "ghost" | "outline";
+  variant?: "outline" | "ghost" | "default";
   /** Button size token. Defaults to `'icon'` (square). */
   size?: "sm" | "md" | "lg" | "icon" | "icon-sm";
 }
@@ -2879,7 +2885,7 @@ export interface KaiSeparatorElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
   /** `horizontal` (default, block + full-width) or `vertical` (a rule inside a flex/grid row, stretching to the row height). */
-  orientation?: "vertical" | "horizontal";
+  orientation?: "horizontal" | "vertical";
 }
 
 export interface KaiSettingItemElementProps {
@@ -2965,11 +2971,11 @@ export interface KaiSuggestionsElementProps {
   /** The suggestions. Strings, or `{ label, value }` when the displayed text and the emitted value differ. Set as a JS property. Omit to supply them as `<kai-suggestion>` light-DOM children instead; when both are present the property's suggestions come first. */
   suggestions?: (string | { label: string; value?: string; icon?: string })[];
   /** Chip style: `'outline'` (default), `'ghost'`, or `'default'` (filled). */
-  variant?: "default" | "ghost" | "outline";
+  variant?: "outline" | "ghost" | "default";
   /** Row height for `layout="list"`: `'md'` (default) or `'lg'` for taller rows. Chips are unaffected. */
   size?: "md" | "lg";
   /** Layout: `'chips'` (default) renders a wrapping row of rounded pills; `'list'` renders a vertical, full-width "Ideas for you" list where each row is left-aligned with a leading `icon`, a label, and a hover background. */
-  layout?: "list" | "chips";
+  layout?: "chips" | "list";
   /** Full-width left-aligned rows instead of pills. */
   block?: boolean;
   /** Substring to highlight within each suggestion. */
@@ -3059,11 +3065,11 @@ export interface KaiThreadElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
   /** The full message thread to render, newest last. Each entry carries its role, ordered `parts`, and optional actions/avatar/feedback. Set as a JS property (`el.messages = [...]`); a NEW array reference per streaming chunk re-renders (mutating in place does not). */
-  messages?: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: string; index?: number; streamId?: string; signature?: string; raw?: { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: "image" | "command" | "file-change" | "search" | "fetch" | "mcp" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } }; raw?: { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }; raw?: { source: string; payload: unknown } } | { type: "source"; source: { id?: string; url?: string; title?: string; snippet?: string; index?: number }; raw?: { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }; raw?: { source: string; payload: unknown } })[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" }[];
+  messages?: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: string; index?: number; streamId?: string; signature?: string; raw?: { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: "command" | "file-change" | "search" | "fetch" | "mcp" | "image" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } }; raw?: { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }; raw?: { source: string; payload: unknown } } | { type: "source"; source: { id?: string; url?: string; title?: string; snippet?: string; index?: number }; raw?: { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }; raw?: { source: string; payload: unknown } })[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" }[];
   /** Show a typing indicator on the pending assistant turn. Set it while awaiting the assistant's reply. */
   loading?: boolean;
   /** Body/prose font scale for rendered markdown (`'xs' | 'sm' | 'base' | 'lg'`). Defaults to `'sm'`. */
-  proseSize?: "sm" | "lg" | "xs" | "base";
+  proseSize?: "xs" | "sm" | "base" | "lg";
   /** Shiki theme name for syntax-highlighted code blocks (e.g. `'github-dark-dimmed'`). */
   codeTheme?: string;
   /** Enable Shiki syntax highlighting in code blocks. Turn off to render plain `<pre>` blocks (lighter, no highlighter load). Default true. */
@@ -3084,7 +3090,7 @@ export interface KaiToastRegionElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
   /** The toasts to render. Newest is shown on top. Set as a JS property (array); pass a new array reference to update. Omit for an empty region, which is the normal resting state and how the imperative `toast()` API starts. */
-  toasts?: { id: string; message: string; variant?: "error" | "info" | "success" | "warning" | "neutral"; appearance?: "card" | "pill"; inverse?: boolean; description?: string; action?: { label: string; onAction: () => void | false }; duration?: number; dismissible?: boolean; target?: HTMLElement }[];
+  toasts?: { id: string; message: string; variant?: "neutral" | "success" | "warning" | "error" | "info"; appearance?: "pill" | "card"; inverse?: boolean; description?: string; action?: { label: string; onAction: () => void | false }; duration?: number; dismissible?: boolean; target?: HTMLElement }[];
   /** Stack anchor: `'top-center'` (default), `'top-right'`, `'bottom-center'`, … */
   position?: "top-center" | "top-right" | "top-left" | "bottom-center" | "bottom-right" | "bottom-left";
   /** Max simultaneously-visible toasts; the rest queue. Defaults to `3`. */
@@ -3092,7 +3098,7 @@ export interface KaiToastRegionElementProps {
   /** Stacking: 'expanded' (default, full column) | 'collapsed' (Sonner-style pile that expands on hover/focus). Attribute: stack. */
   stack?: "expanded" | "collapsed";
   /** Default appearance for this region's toasts: `'pill'` (default, compact) | `'card'` (richer, with a description line). A per-toast `appearance` wins. Attribute: `appearance`. */
-  appearance?: "card" | "pill";
+  appearance?: "pill" | "card";
   /** Default high-contrast inverse treatment for this region's toasts. A per-toast `inverse` wins. Off by default. Attribute: `inverse`. */
   inverse?: boolean;
   /** Container element to anchor this region to (JS property). Set by the store for a scoped region; unset = the global viewport region. */
@@ -3103,7 +3109,7 @@ export interface KaiToolElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
   /** The tool-call to display. Set as a JS property. */
-  tool?: { type: string; kind?: "image" | "command" | "file-change" | "search" | "fetch" | "mcp" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } };
+  tool?: { type: string; kind?: "command" | "file-change" | "search" | "fetch" | "mcp" | "image" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } };
   /** Drive/observe open state (Shoelace-style: settable + reflected to the `open` attribute; the element still self-manages on trigger click). Set `el.open = true`, or `<kai-tool open>`; listen for `kai-open-change`. */
   open?: boolean;
   /** Initial open state on mount (uncontrolled seed). */
@@ -3167,13 +3173,13 @@ export interface KaiWorkspaceElementProps {
   /** Id of the open conversation, highlighted in the sidebar. */
   activeId?: string;
   /** The active conversation's message thread, newest last. Set as a JS property (`el.messages = [...]`); a NEW array reference per streaming chunk re-renders (mutating in place does not). Omit for an empty thread. */
-  messages?: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: string; index?: number; streamId?: string; signature?: string; raw?: { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: "image" | "command" | "file-change" | "search" | "fetch" | "mcp" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } }; raw?: { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }; raw?: { source: string; payload: unknown } } | { type: "source"; source: { id?: string; url?: string; title?: string; snippet?: string; index?: number }; raw?: { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }; raw?: { source: string; payload: unknown } })[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" }[];
+  messages?: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: string; index?: number; streamId?: string; signature?: string; raw?: { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: "command" | "file-change" | "search" | "fetch" | "mcp" | "image" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } }; raw?: { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }; raw?: { source: string; payload: unknown } } | { type: "source"; source: { id?: string; url?: string; title?: string; snippet?: string; index?: number }; raw?: { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }; raw?: { source: string; payload: unknown } })[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" }[];
   value?: string;
   placeholder?: string;
   loading?: boolean;
   suggestions?: string[];
   suggestionMode?: "submit" | "fill";
-  proseSize?: "sm" | "lg" | "xs" | "base";
+  proseSize?: "xs" | "sm" | "base" | "lg";
   codeTheme?: string;
   codeHighlight?: boolean;
   chatTitle?: string;
@@ -3310,7 +3316,7 @@ export interface KaiCodeBlockElementEvents {
 
 export interface KaiCommandElementEvents {
   /** Fired when the highlighted/active item changes, via Arrow keys or when filtering re-clamps the active row. `id` is the newly active item's id, or `undefined` when no item is active (e.g. the filtered list is empty). Lets a host preview the active item without committing a selection. */
-  onKaiActiveChange?: (event: CustomEvent<{ id: undefined | string }>) => void;
+  onKaiActiveChange?: (event: CustomEvent<{ id: string | undefined }>) => void;
   /** Fired on every keystroke in the search input. */
   onKaiQueryChange?: (event: CustomEvent<{ value: string }>) => void;
   /** Fired when the user selects an item (click or Enter). */
@@ -3351,7 +3357,7 @@ export interface KaiConfirmElementEvents {
 
 export interface KaiContextElementEvents {
   /** Fires when the computed severity level changes (ok → warn → danger or back). `detail.level` is `'ok'`, `'warn'`, or `'danger'`. */
-  onKaiThresholdChange?: (event: CustomEvent<{ level: "danger" | "ok" | "warn" }>) => void;
+  onKaiThresholdChange?: (event: CustomEvent<{ level: "ok" | "warn" | "danger" }>) => void;
 }
 
 export interface KaiConversationsElementEvents {
@@ -3545,7 +3551,7 @@ export interface KaiResizableElementEvents {
   /** Fired on drag-end / keyboard resize / visibility change. `detail.sizes` = panel sizes in percent. */
   onKaiChange?: (event: CustomEvent<{ sizes: number[] }>) => void;
   /** Observe layout maximize state. */
-  onKaiMaximizeChange?: (event: CustomEvent<{ maximized: boolean; index: null | number }>) => void;
+  onKaiMaximizeChange?: (event: CustomEvent<{ maximized: boolean; index: number | null }>) => void;
   /** Authoritative maximize state, dispatched as a raw composed CustomEvent (not through `dispatch`) onto the affected `<kai-resizable-item>` and, on restore, onto the group host. A nested element (e.g. `<kai-artifact>`) listens for it to reconcile its own toggle. */
   onKaiMaximizeState?: (event: CustomEvent<{ maximized: boolean }>) => void;
 }
@@ -3565,7 +3571,7 @@ export interface KaiScopePickerElementEvents {
   /** The scope dropdown opened or closed (by click, keyboard, Escape, outside-click, or a method). */
   onKaiOpenChange?: (event: CustomEvent<{ open: boolean }>) => void;
   /** A scope was chosen (`undefined` filters = "All Content"). */
-  onKaiScopeChange?: (event: CustomEvent<{ filters: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | "transcript" | "markdown"; dateRange?: undefined | { from: string; to: string } } }>) => void;
+  onKaiScopeChange?: (event: CustomEvent<{ filters: { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | "transcript" | "markdown"; dateRange?: undefined | { from: string; to: string } } | undefined }>) => void;
 }
 
 export interface KaiScreenElementEvents {
@@ -3668,7 +3674,7 @@ export interface KaiToastRegionElementEvents {
   /** A toast's action button was pressed. */
   onKaiAction?: (event: CustomEvent<{ id: string; label: string }>) => void;
   /** A toast left the stack. `reason` is `'timeout' | 'close' | 'action'`. */
-  onKaiDismiss?: (event: CustomEvent<{ id: string; reason: "action" | "timeout" | "close" }>) => void;
+  onKaiDismiss?: (event: CustomEvent<{ id: string; reason: "timeout" | "close" | "action" }>) => void;
 }
 
 export interface KaiToolElementEvents {
