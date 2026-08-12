@@ -97,6 +97,31 @@ jobs:
       - name: Server-import guard (every entry imports under `node`)
         run: pnpm --filter @kitn.ai/ui run verify:ssr
 
+      # Resolves the card JSON Schemas the way a consumer would, from a temp
+      # package OUTSIDE the repo with the built package symlinked in. 11 schemas
+      # had been copied into dist/schemas/ on every build and shipped in every
+      # tarball since the card contract landed, reachable by NOBODY: "exports" is
+      # a closed map and had no ./schemas key, so every specifier resolved to
+      # ERR_PACKAGE_PATH_NOT_EXPORTED / TS2307. This repo's own reference harness
+      # gave up and hand-derived the confirm schema in the openrouter spike,
+      # saying so in a comment.
+      #
+      # Existence was never the question, so this never stats dist/schemas/ -- the
+      # files were already there and already unreachable. It RESOLVES both public
+      # surfaces (the JS entry @kitn.ai/ui/schemas, and the raw
+      # @kitn.ai/ui/schemas/*.schema.json) through tsc under `bundler` AND
+      # `nodenext` with the containing file's implied format, and independently
+      # through Node's own exports-map implementation. It then compares BYTES:
+      # every schema the entry exports, and every raw file a specifier lands on,
+      # must equal the authored file in src/primitives/card-schemas/, so a stale
+      # copy fails instead of reading as reachable.
+      #
+      # The expected set is readdirSync of that source directory, never a literal
+      # count, so a 12th schema is covered the day it is added rather than the day
+      # someone remembers. Needs the build above. <1s, no network.
+      - name: Card-schema export guard (both surfaces reachable from outside)
+        run: pnpm --filter @kitn.ai/ui run verify:schemas
+
       # Diffs the 79-element registry against the public SolidJS surface, derived
       # from the TS checker and cross-checked against the BUILT entry's runtime
       # keys. Solid is the authored layer, and the framework docs promise the same

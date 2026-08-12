@@ -116,9 +116,21 @@
       "types": "./dist/wire/index.d.ts",
       "default": "./dist/wire.js"
     },
+    "./schemas": {
+      "types": "./dist/schemas/index.d.ts",
+      "default": "./dist/schemas.js"
+    },
+    "./schemas/*": "./dist/schemas/*",
     "./provider": {
       "types": "./dist/remote/provider.d.ts",
       "default": "./dist/kai-provider.es.js"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "schemas": [
+        "./dist/schemas/index.d.ts"
+      ]
     }
   },
   "files": [
@@ -141,7 +153,7 @@
   "scripts": {
     "prepublishOnly": "npm run build",
     "prebuild": "npm run build:css",
-    "build": "vite build --config vite.config.ts && vite build --config vite.config.provider.ts && vite build --config vite.config.react.ts && vite build --config vite.config.barrel.ts && vite build --config vite.config.barrel.server.ts && vite build --config vite.config.solid.ts && vite build --config vite.config.solid.server.ts && vite build --config vite.config.state.ts && vite build --config vite.config.wire.ts && vite build --config vite.config.mcp.ts && npm run build:elements && node scripts/verify-elements-bundle.mjs && node scripts/verify-react-wrappers.mjs && node scripts/verify-shader-lazy.mjs",
+    "build": "vite build --config vite.config.ts && vite build --config vite.config.provider.ts && vite build --config vite.config.react.ts && vite build --config vite.config.barrel.ts && vite build --config vite.config.barrel.server.ts && vite build --config vite.config.solid.ts && vite build --config vite.config.solid.server.ts && vite build --config vite.config.state.ts && vite build --config vite.config.wire.ts && vite build --config vite.config.schemas.ts && vite build --config vite.config.mcp.ts && npm run build:elements && node scripts/verify-elements-bundle.mjs && node scripts/verify-react-wrappers.mjs && node scripts/verify-shader-lazy.mjs",
     "build:elements": "node scripts/gen-elements-manifest.mjs && vite build --config vite.config.elements.ts && node scripts/gen-element-dts.mjs",
     "postbuild": "npm run build:theme && npm run build:api && npm run build:schemas && npm run build:subpath-dts && npm run verify:dts",
     "build:theme": "node scripts/build-theme-tokens.mjs",
