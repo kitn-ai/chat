@@ -31,8 +31,15 @@ const PLAN: TasksCardData = {
 };
 
 async function mount(data: TasksCardData, cardId = 'card-plan-42') {
-  const el = document.createElement('kai-tasks') as HTMLElement & { data: TasksCardData };
+  // No cast — this is a real KaiTasksElement now. See the long note in
+  // choice-element.test.tsx: the old `as HTMLElement & { data: TasksCardData }` could
+  // not fail, because without the tag map every `kai-*` tag was an opaque HTMLElement.
+  const el = document.createElement('kai-tasks');
   el.setAttribute('card-id', cardId);
+  // @ts-expect-error — the generated `data?: Record<string, unknown>` rejects every
+  // exported card interface (no implicit index signature), so this is the error a
+  // consumer hits following the element's own "import TasksCardData" doc comment.
+  // Marked, not cast away: fixing the generator makes it unused and fails the pass.
   el.data = data;
   document.body.appendChild(el);
   await flush();
