@@ -223,5 +223,5 @@ describe('the EMITTED scaffold really produces a card, end to end', () => {
       rmSync(TMP_DIR, { recursive: true, force: true });
       (globalThis as unknown as { fetch: unknown }).fetch = realFetch;
     }
-  }, 30000);
+  });
 });
