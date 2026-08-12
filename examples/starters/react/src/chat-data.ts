@@ -1,5 +1,6 @@
-// Self-contained sample data + a local fake streaming responder — no backend.
+// Self-contained sample data + the kit's shared mock responder — no backend.
 import type { MessagePart } from '@kitn.ai/ui';
+import { createMockResponder } from '@kitn.ai/ui/state';
 
 export interface Conversation {
   id: string;
@@ -70,38 +71,36 @@ export const TRIGGERS = [
   },
 ];
 
-const REPLIES: { match: RegExp; text: string }[] = [
-  {
-    match: /install|setup|getting started|how do i (start|use)/i,
-    text: "Install it:\n\n```bash\nnpm install @kitn.ai/ui\n```\n\nThen import the wrappers + tokens:\n\n```tsx\nimport { Conversations, Message, PromptInput } from '@kitn.ai/ui/react';\nimport '@kitn.ai/ui/theme.tokens.css';\n```",
-  },
-  {
-    match: /markdown|format|code|highlight/i,
-    text: "I render **bold**, *italic*, `inline code`, lists, and code blocks:\n\n```ts\nconst chat = useKaiChat();\nawait streamFakeReply(text, (d) => stream.appendText(d));\n```\n\n> Blockquotes too.",
-  },
-  {
-    match: /compose|build|piece|element|how/i,
-    text: "This chat is **composed by hand**: `<Conversations>` for the sidebar, a `<Message>` per item in a scroll area, and `<PromptInput>` at the bottom — all wired with React state. Swap in your own model call where `streamFakeReply` is and you're shipping.",
-  },
-  {
-    match: /what|who|about|can you|do you/i,
-    text: "**@kitn.ai/ui** is framework-agnostic, Shadow-DOM web components for AI chat UIs. This demo composes the individual elements rather than the batteries-included `<kai-chat>`.",
-  },
+// The replies the mock cycles through, one per turn. Markdown-rich on purpose:
+// the thread renders markdown, code blocks and blockquotes, so the canned
+// replies exercise that instead of only proving text arrives.
+//
+// The first one says it is a mock in words. That is the WEAKEST of the
+// responder's tells and the only one a real model could imitate, which is
+// exactly why it is not the only one — the rest are on the wire, below.
+const MOCK_REPLIES = [
+  "This reply streams token-by-token from the kit's own mock responder — no API key, no backend, no provider was contacted. Replace `mockResponse(text)` with a real model call (Anthropic, OpenAI, your own endpoint) to ship a real app.",
+  "Install it:\n\n```bash\nnpm install @kitn.ai/ui\n```\n\nThen import the wrappers + tokens:\n\n```tsx\nimport { Conversations, Message, PromptInput } from '@kitn.ai/ui/react';\nimport '@kitn.ai/ui/theme.tokens.css';\n```",
+  "I render **bold**, *italic*, `inline code`, lists, and code blocks:\n\n```ts\nconst stream = chat.streamAssistant();\nawait readOpenAIStream(mockResponse(text), stream);\nstream.done();\n```\n\n> Blockquotes too.",
+  "This chat is **composed by hand**: `<Conversations>` for the sidebar, a `<Message>` per item in a scroll area, and `<PromptInput>` at the bottom — all wired with React state. Swap `mockResponse(text)` for your own model call and you're shipping.",
 ];
 
-const DEFAULT =
-  "This reply streams token-by-token from a local fake responder — no API key, no backend. Replace `streamFakeReply` with a real model call (Anthropic, OpenAI, your own endpoint) to ship a real app.";
-
-function pickReply(prompt: string): string {
-  return REPLIES.find((r) => r.match.test(prompt))?.text ?? DEFAULT;
-}
-
-/** Simulate token-by-token streaming of a canned, markdown-rich reply. */
-export async function streamFakeReply(prompt: string, onDelta: (delta: string) => void): Promise<void> {
-  const reply = pickReply(prompt);
-  const tokens = reply.match(/\s*\S+/g) ?? [reply];
-  for (const token of tokens) {
-    await new Promise((r) => setTimeout(r, 24 + Math.random() * 38));
-    onDelta(token);
-  }
-}
+/**
+ * The kit's own mock responder, shared with the `kai` MCP scaffolder and
+ * `create-kai` so there is ONE implementation of this and not seven.
+ *
+ * It yields canned SSE frames in the OpenAI chat-completions shape, which
+ * `readOpenAIStream` parses exactly as it parses a real provider's. So this
+ * no-backend preview runs the kit's REAL streaming path — the SSE reader, the
+ * part folding, all of it — rather than a hand-rolled loop that merely
+ * resembles it. Going live then changes one expression, not the handler.
+ *
+ * It also cannot be mistaken for a real turn: the stream opens with a
+ * `: kai-mock` SSE comment, every frame carries a `_kai_mock` field, `model`
+ * reports as `kai-mock` (no provider serves that, so an echoed mock frame is
+ * rejected upstream rather than quietly believed), and usage is all zeros.
+ *
+ * MODULE scope, not per-send: the responder owns the cursor into the replies
+ * above, so rebuilding it each turn would answer with the first one forever.
+ */
+export const mockResponse = createMockResponder({ replies: MOCK_REPLIES });

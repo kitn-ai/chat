@@ -1,9 +1,10 @@
 import '@kitn.ai/ui/elements'; // registers the kai-* custom elements (async)
 import '@kitn.ai/ui/theme.tokens.css'; // plain --color-* tokens for the shell
 import './index.css';
+import { readOpenAIStream } from '@kitn.ai/ui/wire';
 import { createStore } from './state';
 import { createView } from './view';
-import { streamFakeReply, newId } from './chat-data';
+import { mockResponse, newId } from './chat-data';
 
 const root = document.getElementById('app');
 if (!root) throw new Error('Root element #app not found');
@@ -20,14 +21,18 @@ async function boot(host: HTMLElement): Promise<void> {
 
   const store = createStore();
 
-  // Append the user turn, then stream the (fake) assistant reply. Swap
-  // streamFakeReply for a real model call (Anthropic, OpenAI, your own endpoint).
+  // Append the user turn, then stream the (mock) assistant reply.
   async function send(raw: string): Promise<void> {
     const text = raw.trim();
     if (!text) return;
     store.append({ id: newId(), role: 'user', parts: [{ type: 'text', text }] });
     const stream = store.streamAssistant();
-    await streamFakeReply(text, (delta) => stream.appendText(delta));
+    // NO BACKEND AND NO PROVIDER. mockResponse() yields canned SSE frames that go
+    // through the SAME reader a real model's response would, so this preview
+    // exercises the real path. To go live, only this one expression changes —
+    // `mockResponse(text)` becomes a POST to your route, with
+    // toOpenAIMessages(store.state.messages) as the body. The line below stays.
+    await readOpenAIStream(mockResponse(text), stream);
     stream.done();
   }
 

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { CONVERSATIONS, THREADS, SUGGESTIONS, TRIGGERS, newId, streamFakeReply } from './chat-data';
+import { readOpenAIStream } from '@kitn.ai/ui/wire';
+import { CONVERSATIONS, THREADS, SUGGESTIONS, TRIGGERS, newId, mockResponse } from './chat-data';
 import type { Theme } from './types';
 import { useChat, useConversations } from './composables';
 import Sidebar from './components/Sidebar.vue';
@@ -22,7 +23,7 @@ import ThemeToggle from './components/ThemeToggle.vue';
  * The pieces are split into `components/` (the UI subcomponents + the example's own
  * moon/sun icons) and `composables/` (`useChat` owns the message array + streaming,
  * `useConversations` the conversation stash, `useVoiceInput` the mic). Everything
- * else is plain Vue refs. Swap `streamFakeReply` for a real model call to ship.
+ * else is plain Vue refs. Swap `mockResponse(text)` for a real `fetch` to ship.
  */
 const theme = ref<Theme>('dark');
 const collapsed = ref(false);
@@ -36,10 +37,15 @@ async function send(raw: string) {
   const text = raw.trim();
   if (!text) return;
   // The Composer already cleared its own input; here we just append the user
-  // message and stream the (fake) assistant reply.
+  // message and stream the (mock) assistant reply.
   chat.append({ id: newId(), role: 'user', parts: [{ type: 'text', text }] });
   const stream = chat.streamAssistant();
-  await streamFakeReply(text, (delta) => stream.appendText(delta));
+  // NO BACKEND AND NO PROVIDER. mockResponse() yields canned SSE frames that go
+  // through the SAME reader a real model's response would, so this preview
+  // exercises the real path. To go live, only this one expression changes —
+  // `mockResponse(text)` becomes a POST to your route, with
+  // toOpenAIMessages(messages.value) as the body. The line below stays.
+  await readOpenAIStream(mockResponse(text), stream);
   stream.done();
 }
 </script>
