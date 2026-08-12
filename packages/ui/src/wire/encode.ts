@@ -5,6 +5,7 @@
 // No provider SDK, no fetch, no DOM. Pure functions over the content model.
 import type { ChatMessage, MessagePart } from '../elements/chat-types';
 import type { ToolPart } from '../components/tool-types';
+import { classifyAttachment, type ClassifiedFile } from './files';
 
 export interface OpenAIToolCall {
   id: string;
@@ -18,9 +19,20 @@ export interface OpenAIToolCall {
  *  to have seen. */
 export type OpenAIReasoningDetail = Record<string, unknown>;
 
+/** A multimodal user message's content entries. `image_url` takes an https URL
+ *  or a `data:` URI in the same field; `file` takes `file_data`, which is a DATA
+ *  URI on this wire (`data:application/pdf;base64,...`) and not bare base64. */
+export type OpenAIContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } }
+  | { type: 'file'; file: { filename?: string; file_data: string } };
+
 export interface OpenAIWireMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
-  content: string | null;
+  /** An ARRAY only when the turn carries an encodable `file` part. A text-only
+   *  turn stays a plain string, so adding attachment support changed nothing
+   *  about what an existing thread puts on the wire. */
+  content: string | OpenAIContentPart[] | null;
   tool_calls?: OpenAIToolCall[];
   tool_call_id?: string;
   name?: string;
@@ -52,7 +64,31 @@ export interface OpenAIEncodeOptions {
    * or rebuilt thinking block there is a hard 400.
    */
   reasoning?: 'omit' | 'include';
+
+  /** See `FileEncodeOptions`. */
+  onUnencodableFile?: UnencodableFilePolicy;
 }
+
+/**
+ * What to do with a `file` part this wire cannot carry.
+ *
+ * DEFAULT `'throw'`, and the default is the whole point. Skipping is how
+ * attachments came to render perfectly in the thread and reach the model as
+ * nothing: the developer wires up upload, watches it work, and ships a model
+ * that cannot see the file. A throw here names the message, the part and the
+ * reason, which is strictly more than a 400 at request time would tell you.
+ *
+ * `'skip'` restores the lenient behaviour for a host that would rather send a
+ * degraded turn than fail one. It is silent, but it is silence the developer
+ * asked for by name, which is the difference that matters.
+ */
+export type UnencodableFilePolicy = 'throw' | 'skip';
+
+export interface FileEncodeOptions {
+  onUnencodableFile?: UnencodableFilePolicy;
+}
+
+export type AnthropicEncodeOptions = FileEncodeOptions;
 
 /** Anthropic content blocks are an open, provider-owned union. Keeping them as
  *  records is what lets a verbatim `thinking` payload pass through UNTOUCHED,
@@ -98,6 +134,87 @@ const textOf = (parts: MessagePart[]): string =>
     .filter(isTextPart)
     .map((p) => p.text)
     .join('');
+
+type FilePart = Extract<MessagePart, { type: 'file' }>;
+
+/** A wire either shapes a classified file into a block, or explains why it
+ *  cannot. `ok: false` is NOT the same as an unencodable attachment: the
+ *  attachment can be perfectly sound and still have no form on this particular
+ *  wire, which is exactly the remote-PDF case on OpenAI. */
+type WireFileResult<T> = { ok: true; block: T } | { ok: false; reason: string };
+
+/**
+ * One `file` part to one wire block, or `null` when it is skipped.
+ *
+ * Skipped means one of two things and never a third: the attachment is kit-side
+ * (a citation chip), or the host explicitly opted into `onUnencodableFile:
+ * 'skip'`. Everything else throws, because a dropped attachment is invisible in
+ * exactly the way the developer needs it not to be.
+ */
+function encodeFilePart<T>(
+  part: FilePart,
+  messageId: string,
+  partIndex: number,
+  policy: UnencodableFilePolicy,
+  toBlock: (file: ClassifiedFile) => WireFileResult<T>,
+): T | null {
+  const classified = classifyAttachment(part.attachment);
+  if (classified.status === 'kit-side') return null;
+
+  const refuse = (reason: string): null => {
+    if (policy === 'skip') return null;
+    throw new WireEncodeError(
+      `Cannot encode file part ${partIndex} of message "${messageId}": ${reason} Pass { onUnencodableFile: 'skip' } to drop it instead of failing.`,
+      messageId,
+      partIndex,
+    );
+  };
+
+  if (classified.status === 'unencodable') return refuse(classified.reason);
+
+  const shaped = toBlock(classified.file);
+  return shaped.ok ? shaped.block : refuse(shaped.reason);
+}
+
+/** `image_url` takes an https URL and a `data:` URI in the same field, so an
+ *  image is one shape here. A PDF is not: `file_data` is base64-only. */
+const openAIFileBlock = (file: ClassifiedFile): WireFileResult<OpenAIContentPart> => {
+  if (file.kind === 'image') {
+    const url = file.source.type === 'base64' ? file.source.dataUri : file.source.url;
+    return { ok: true, block: { type: 'image_url', image_url: { url } } };
+  }
+
+  if (file.source.type === 'remote') {
+    return {
+      ok: false,
+      reason: `it is a PDF at a remote URL ("${file.source.url}"), and a chat-completions \`file\` content part carries only \`file_id\` or \`file_data\` -- this wire has no URL form for a document. Fetch it and stage it as a \`data:\` URI, or upload it through the Files API and send \`file_id\` yourself; fetching it HERE would put I/O in the encoder. The Anthropic wire does take a remote PDF, so toAnthropicMessages accepts this same message.`,
+    };
+  }
+
+  return {
+    ok: true,
+    block: {
+      type: 'file',
+      file: {
+        ...(file.filename !== undefined ? { filename: file.filename } : {}),
+        file_data: file.source.dataUri,
+      },
+    },
+  };
+};
+
+/** Both block types take the same two source shapes, which is why this wire has
+ *  no gap where OpenAI has one. */
+const anthropicFileBlock = (file: ClassifiedFile): WireFileResult<AnthropicContentBlock> => ({
+  ok: true,
+  block: {
+    type: file.kind === 'image' ? 'image' : 'document',
+    source:
+      file.source.type === 'base64'
+        ? { type: 'base64', media_type: file.source.mediaType, data: file.source.data }
+        : { type: 'url', url: file.source.url },
+  },
+});
 
 /** A tool is encodable only once it has a RESULT. Both APIs require every echoed
  *  tool call to have exactly one matching result, so a call with no answer yet is
@@ -260,21 +377,66 @@ function reasoningDetailOf(part: ReasoningPart): OpenAIReasoningDetail | undefin
  * text and no settled tool is skipped exactly as before, rather than becoming
  * `{ content: null }` with no `tool_calls`.
  *
- * `card`, `source` and `file` parts are never encoded; they are kit-side. File
- * attachments are a documented v1 limitation, which is why a user turn carrying
- * only an attachment encodes to nothing and is skipped.
+ * `card` and `source` parts are never encoded; they are kit-side.
+ *
+ * `file` parts ARE encoded, on a USER turn, and a turn carrying nothing but an
+ * attachment is now a real message rather than nothing. Images become
+ * `image_url` (https URL or `data:` URI alike); a base64 PDF becomes a `file`
+ * part whose `file_data` is the data URI. Two cases have no form here and THROW
+ * by default: a remote PDF, because this wire's `file` part has no URL variant,
+ * and anything that is neither -- see `UnencodableFilePolicy` for why the
+ * default is a throw and not a skip.
+ *
+ * A `file` part on an ASSISTANT turn is still dropped. Neither API accepts image
+ * or document content in an assistant message, so there is nothing to encode it
+ * to; attachments belong to the user turn that sent them.
  */
 export function toOpenAIMessages(
   messages: ChatMessage[],
   options: OpenAIEncodeOptions = {},
 ): OpenAIWireMessage[] {
   const includeReasoning = options.reasoning === 'include';
+  const filePolicy = options.onUnencodableFile ?? 'throw';
   const out: OpenAIWireMessage[] = [];
 
   for (const message of messages) {
     if (message.role === 'user') {
-      const content = textOf(message.parts);
-      if (content !== '') out.push({ role: 'user', content });
+      // Built in PART ORDER, with runs of adjacent text merged into one entry.
+      // A file authored after the text stays after it: `parts` is an ordered
+      // content model and reordering it here would be the encoder second-guessing
+      // the author. Anthropic's docs do suggest putting images before text for
+      // best results, which is guidance for whoever builds the parts array.
+      const content: OpenAIContentPart[] = [];
+      let buffered = '';
+      let carriesFile = false;
+
+      const flushText = (): void => {
+        if (buffered === '') return;
+        content.push({ type: 'text', text: buffered });
+        buffered = '';
+      };
+
+      message.parts.forEach((part, partIndex) => {
+        if (part.type === 'text') {
+          buffered += part.text;
+          return;
+        }
+        if (part.type !== 'file') return;
+        const block = encodeFilePart(part, message.id, partIndex, filePolicy, openAIFileBlock);
+        if (!block) return;
+        flushText();
+        content.push(block);
+        carriesFile = true;
+      });
+      flushText();
+
+      // No file survived, so this is an ordinary turn and stays a plain string.
+      if (!carriesFile) {
+        const text = textOf(message.parts);
+        if (text !== '') out.push({ role: 'user', content: text });
+        continue;
+      }
+      out.push({ role: 'user', content });
       continue;
     }
 
@@ -367,11 +529,22 @@ export function toOpenAIMessages(
  * tool_result message always follows its assistant message and can never be
  * appended after a plain user turn.
  *
+ * `file` parts on a USER turn become `image` and `document` blocks, in part
+ * order. Both take `source: {type:'base64'}` and `source: {type:'url'}`, so this
+ * wire can carry a remote PDF that `toOpenAIMessages` has to refuse. Anything
+ * neither API accepts as message content THROWS by default; see
+ * `UnencodableFilePolicy`. A `file` part on an ASSISTANT turn is dropped, because
+ * an assistant message here carries only text, thinking and tool_use.
+ *
  * Asymmetry worth knowing: `tool_use.input` is a parsed OBJECT on this wire, not
  * a string, so it uses `input` and not `rawInput`. Only thinking blocks carry a
  * verbatim requirement.
  */
-export function toAnthropicMessages(messages: ChatMessage[]): AnthropicWireMessage[] {
+export function toAnthropicMessages(
+  messages: ChatMessage[],
+  options: AnthropicEncodeOptions = {},
+): AnthropicWireMessage[] {
+  const filePolicy = options.onUnencodableFile ?? 'throw';
   const out: AnthropicWireMessage[] = [];
 
   /** Append to the trailing user message when there is one, so the wire never
@@ -384,10 +557,17 @@ export function toAnthropicMessages(messages: ChatMessage[]): AnthropicWireMessa
 
   for (const message of messages) {
     if (message.role === 'user') {
-      const userBlocks = message.parts
-        .filter(isTextPart)
-        .filter((p) => p.text !== '')
-        .map<AnthropicContentBlock>((p) => ({ type: 'text', text: p.text }));
+      // Part order, for the same reason as `toOpenAIMessages`.
+      const userBlocks: AnthropicContentBlock[] = [];
+      message.parts.forEach((part, partIndex) => {
+        if (part.type === 'text') {
+          if (part.text !== '') userBlocks.push({ type: 'text', text: part.text });
+          return;
+        }
+        if (part.type !== 'file') return;
+        const block = encodeFilePart(part, message.id, partIndex, filePolicy, anthropicFileBlock);
+        if (block) userBlocks.push(block);
+      });
       if (userBlocks.length > 0) pushUser(userBlocks);
       continue;
     }
@@ -461,8 +641,9 @@ export function toAnthropicMessages(messages: ChatMessage[]): AnthropicWireMessa
           break;
         }
         default:
-          // card, source and file are kit-side and have no wire representation
-          // in v1. File attachments in particular are a known limitation.
+          // card and source are kit-side. A `file` part reaches this arm only on
+          // an ASSISTANT turn, where the API accepts no image or document
+          // content at all -- user attachments are handled in the user branch.
           break;
       }
     });

@@ -278,15 +278,24 @@ describe('toOpenAIMessages', () => {
     ).toEqual([]);
   });
 
-  it('emits NO user message for a turn with no text', () => {
-    // An attachment-only turn. Sending `content: ''` carries nothing and is
-    // rejected by some endpoints; the Anthropic encoder drops it too.
+  it('emits NO user message for a turn whose only parts are kit-side', () => {
+    // Sending `content: ''` carries nothing and is rejected by some endpoints;
+    // the Anthropic encoder drops it too. A `source-document` attachment is the
+    // citation chip an app renders, not an upload, so it is kit-side and this
+    // turn really is empty.
+    //
+    // This used to be asserted with a REAL attachment, which is how the encoder
+    // came to drop uploads silently: an attachment-only turn now encodes to a
+    // user message. See encode-files.test.ts.
     expect(
       toOpenAIMessages([
         {
           id: 'u1',
           role: 'user',
-          parts: [{ type: 'file', attachment: { id: 'f1', type: 'file', filename: 'a.pdf' } }],
+          parts: [
+            { type: 'file', attachment: { id: 's1', type: 'source-document', title: 'Policy' } },
+            { type: 'source', source: { url: 'https://a' } },
+          ],
         },
       ]),
     ).toEqual([]);
