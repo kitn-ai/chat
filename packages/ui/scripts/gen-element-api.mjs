@@ -9,7 +9,7 @@
 
 import ts from 'typescript';
 import { readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
-import { basename, dirname, resolve } from 'node:path';
+import { basename, dirname, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createTsHelpers, displayNameFromClass } from './_ts-helpers.mjs';
 
@@ -70,6 +70,38 @@ const IMPORTABLE = new Set(Object.keys(IMPORTS));
 // reads a Props/Events *type node*.
 const { membersOfNode: membersOf, renderType, isScalar, jsdocOf } = createTsHelpers(program, checker, { importable: IMPORTABLE });
 
+// ---- unhandled AST kinds are FATAL, never skipped ---------------------------
+// The extractors below each walk a hand-picked set of node kinds and build their
+// output from what they recognise. That shape fails in exactly one direction:
+// meet a kind it does not handle and the walker produces LESS — silently, exit 0,
+// no warning — and the artifacts it feeds (dist/custom-elements.json,
+// element-meta.json, element-types.d.ts, the React wrappers, llms-full.txt,
+// docs/web-components.md) are missing an entry that nothing downstream knows to
+// ask for. That is not hypothetical: a single shorthand `{ foo }` member in an
+// expose() literal made three methods invisible to EVERY artifact, and four
+// guards went on confidently asserting a method count that was wrong by three.
+//
+// So an unrecognised kind stops the generator dead. This is deliberately NOT an
+// invitation to widen these walkers — do not teach them to guess at shorthand,
+// spread or computed members. When a new construct appears, this throws with the
+// file, the construct and the SyntaxKind, and a human decides what it should
+// mean. A generator that quietly emits less is the bug; one that stops and says
+// so is the fix.
+function unhandledKind({ site, construct, node, kindOf = 'member', hint }) {
+  const sf = node.getSourceFile();
+  const where = sf
+    ? `${relative(root, sf.fileName)}:${sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1}`
+    : '<unknown source file>';
+  throw new Error(
+    `gen-element-api (${site}): unhandled ${kindOf} kind ${ts.SyntaxKind[node.kind]} in ${construct}\n` +
+      `  at ${where}\n` +
+      `  source: ${node.getText().split('\n')[0].slice(0, 120)}\n` +
+      (hint ? `  ${hint}\n` : '') +
+      '  Refusing to skip it: a skipped member does not fail, it just vanishes from every\n' +
+      '  generated artifact — and the guards that read those artifacts go quiet with it.',
+  );
+}
+
 // Render a propDefaults object-literal property value to a short display string.
 function defaultText(initializer) {
   if (!initializer) return undefined;
@@ -84,14 +116,35 @@ function defaultText(initializer) {
   return initializer.getText();
 }
 // Map prop name -> default display string from the propDefaults object literal (arg 1).
-function defaultsFrom(objLiteralNode) {
+// `tag` is carried only so a failure can name the element. All 80 defineWebComponent
+// calls pass an inline object literal of plain `name: value` members today; anything
+// else is fatal rather than skipped (see unhandledKind above).
+function defaultsFrom(objLiteralNode, tag) {
+  const construct = `the propDefaults literal of defineWebComponent('${tag}')`;
+  if (!objLiteralNode || !ts.isObjectLiteralExpression(objLiteralNode)) {
+    throw new Error(
+      `gen-element-api (defaultsFrom): defineWebComponent('${tag}') passes ` +
+        `${objLiteralNode ? ts.SyntaxKind[objLiteralNode.kind] : 'no argument'} as its propDefaults ` +
+        'argument rather than an inline object literal, so every default for this element would\n' +
+        '  silently read as undefined in the docs, the CEM and the Storybook API tab. Inline the\n' +
+        '  literal, or teach defaultsFrom to resolve this form on purpose.',
+    );
+  }
   const out = {};
-  if (objLiteralNode && ts.isObjectLiteralExpression(objLiteralNode)) {
-    for (const p of objLiteralNode.properties) {
-      if (ts.isPropertyAssignment(p) && (ts.isIdentifier(p.name) || ts.isStringLiteral(p.name))) {
-        out[p.name.text] = defaultText(p.initializer);
-      }
+  for (const p of objLiteralNode.properties) {
+    if (!ts.isPropertyAssignment(p)) {
+      unhandledKind({
+        site: 'defaultsFrom', construct, node: p,
+        hint: 'Only `name: value` members are read; a shorthand/spread/method member would drop this prop\'s default.',
+      });
     }
+    if (!ts.isIdentifier(p.name) && !ts.isStringLiteral(p.name)) {
+      unhandledKind({
+        site: 'defaultsFrom', construct, node: p.name, kindOf: 'property name',
+        hint: 'Prop names must be a plain identifier or a string literal to be matched against the Props interface.',
+      });
+    }
+    out[p.name.text] = defaultText(p.initializer);
   }
   return out;
 }
@@ -210,9 +263,27 @@ const UNIVERSAL_PROPS = (() => {
       'props would silently vanish from every generated artifact.',
     );
   }
+  const construct = "defineWebComponent's injected `defaults` literal in src/elements/define.tsx";
   const out = [];
   for (const p of objLit.properties) {
-    if (!ts.isPropertyAssignment(p) || !(ts.isIdentifier(p.name) || ts.isStringLiteral(p.name))) continue;
+    // The one DELIBERATE spread. `...propDefaults` is the facade's own per-element
+    // defaults being merged in, not a universal prop, and it is the marker this
+    // literal is located by (see the finder above) — so it stays explicitly skipped
+    // rather than fatal. Any OTHER spread is a real unknown and falls through.
+    if (ts.isSpreadAssignment(p) && p.expression.getText() === 'propDefaults') continue;
+    if (!ts.isPropertyAssignment(p)) {
+      unhandledKind({
+        site: 'UNIVERSAL_PROPS', construct, node: p,
+        hint: 'Only `name: value` members (plus the one `...propDefaults` spread) become universal props. '
+          + 'Skipping one would drop a prop that all 80 elements really have from every generated artifact.',
+      });
+    }
+    if (!ts.isIdentifier(p.name) && !ts.isStringLiteral(p.name)) {
+      unhandledKind({
+        site: 'UNIVERSAL_PROPS', construct, node: p.name, kindOf: 'property name',
+        hint: 'A universal prop needs a statically known name — it becomes a field, an attribute and a React prop.',
+      });
+    }
     const t = checker.getTypeAtLocation(p.initializer);
     const sym = checker.getSymbolAtLocation(p.name);
     out.push({
@@ -495,7 +566,7 @@ for (const file of facadeFiles) {
       if (!tagArg || !ts.isStringLiteralLike(tagArg)) return;
       const tag = tagArg.text;
       const props = membersOf(node.typeArguments?.[0]);
-      const defaults = defaultsFrom(node.arguments[1]);
+      const defaults = defaultsFrom(node.arguments[1], tag);
       for (const p of props) {
         p.default = defaults[p.name];
         if (p.typeName && exportedTypeNames.has(p.typeName.replace(/\[\]$/, ''))) p.typeImport = p.typeName.replace(/\[\]$/, '');
@@ -562,27 +633,76 @@ for (const el of elements) {
         }
       }
     }
+    // Of the three walkers in this file this is the one with the most to lose, and
+    // nothing downstream would report the loss. MEASURED, not assumed: rewriting one
+    // entry to `'kai-chat': { slots, parts }` (shorthand, runtime-identical) made the
+    // pre-hardening extractor skip both members and strip kai-chat's whole composition
+    // surface — 113 lines across element-meta.json, llms-full.txt and
+    // docs/web-components.md — while exiting 0 with eight green checkmarks. Both
+    // guards over this data stayed green: slot-registry-coverage.test.ts asserts
+    // facades AGAINST the registry (which it imports as TS, where the shorthand still
+    // evaluates fine) and never checks the registry against the emitted artifacts, and
+    // verify-generated-sync.mjs re-runs this same generator, so it only ever proves the
+    // extractor agrees with itself. A blind extractor here is therefore silent all the
+    // way down. Hence: no path below may return `undefined` quietly.
+    const REGISTRY = 'the ELEMENT_COMPOSITION registry in src/elements/slots.ts';
     const evalNode = (node) => {
-      if (!node) return undefined;
       if (ts.isStringLiteralLike(node)) return node.text;
       if (node.kind === ts.SyntaxKind.TrueKeyword) return true;
       if (node.kind === ts.SyntaxKind.FalseKeyword) return false;
       if (ts.isNumericLiteral(node)) return Number(node.text);
-      if (ts.isArrayLiteralExpression(node)) return node.elements.map(evalNode);
+      if (ts.isArrayLiteralExpression(node)) return node.elements.map((e) => evalNode(e));
       if (ts.isObjectLiteralExpression(node)) {
         const obj = {};
         for (const p of node.properties) {
-          if (ts.isPropertyAssignment(p) && (ts.isIdentifier(p.name) || ts.isStringLiteralLike(p.name))) {
-            obj[p.name.text] = evalNode(p.initializer);
+          if (!ts.isPropertyAssignment(p)) {
+            unhandledKind({
+              site: 'evalNode', construct: REGISTRY, node: p,
+              hint: 'The registry is pure data: only `name: value` members are evaluated. A shorthand or spread '
+                + 'member here would silently delete slots/parts, and the ::part drift guards read this same registry.',
+            });
           }
+          if (!ts.isIdentifier(p.name) && !ts.isStringLiteralLike(p.name)) {
+            unhandledKind({
+              site: 'evalNode', construct: REGISTRY, node: p.name, kindOf: 'property name',
+              hint: 'Slot/part names and element tags must be statically readable — they are emitted verbatim.',
+            });
+          }
+          obj[p.name.text] = evalNode(p.initializer);
         }
         return obj;
       }
       if (ts.isAsExpression(node) || ts.isParenthesizedExpression(node)) return evalNode(node.expression);
-      if (ts.isIdentifier(node)) return evalNode(symbols.get(node.text));
-      return undefined;
+      if (ts.isIdentifier(node)) {
+        // Registry entries share arrays by reference (CHAT_SLOTS, MESSAGE_PARTS, …),
+        // so an identifier must resolve to a top-level const in slots.ts. One that
+        // did not silently evaluated to `undefined` and took its entry down with it.
+        const target = symbols.get(node.text);
+        if (!target) {
+          throw new Error(
+            `gen-element-api (evalNode): \`${node.text}\` is referenced by ${REGISTRY} but is not a\n` +
+              '  top-level `const` in that file, so it cannot be resolved. Whatever it names (an import,\n' +
+              '  a computed value, a nested binding) would have evaluated to undefined and silently\n' +
+              '  dropped the slots/parts around it. Move it to a top-level const in slots.ts.',
+          );
+        }
+        return evalNode(target);
+      }
+      unhandledKind({
+        site: 'evalNode', construct: REGISTRY, node, kindOf: 'expression',
+        hint: 'Only string/number/boolean literals, arrays, object literals, `as`/parenthesised expressions '
+          + 'and references to top-level consts in slots.ts are evaluated.',
+      });
     };
-    const composition = evalNode(symbols.get('ELEMENT_COMPOSITION')) ?? {};
+    const compositionNode = symbols.get('ELEMENT_COMPOSITION');
+    if (!compositionNode) {
+      throw new Error(
+        'gen-element-api (evalNode): src/elements/slots.ts declares no top-level `ELEMENT_COMPOSITION`\n' +
+          '  const. Every element would lose its slots and parts from every generated artifact, and the\n' +
+          '  ::part drift guards that read this same registry would go quiet at the same moment.',
+      );
+    }
+    const composition = evalNode(compositionNode);
     for (const el of elements) {
       const comp = composition[el.tag];
       if (!comp) continue;
