@@ -7,6 +7,7 @@
     "dev": "vite dev",
     "build": "vite build",
     "start": "node serve.mjs",
+    "test": "node --test",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

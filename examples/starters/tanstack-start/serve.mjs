@@ -8,11 +8,15 @@
 // (Request/Response/ReadableStream) this needs.
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
-import { join, extname } from 'node:path';
+import { join, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const clientDir = join(root, 'dist', 'client');
+// Trailing separator, on purpose. A bare `startsWith(clientDir)` also matches
+// SIBLINGS whose name merely begins with it (dist/client-secret/), so the boundary
+// has to be the separator, not the string.
+const clientPrefix = clientDir.endsWith(sep) ? clientDir : clientDir + sep;
 const { default: handler } = await import('./dist/server/server.js');
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -26,16 +30,55 @@ const TYPES = {
   '.map': 'application/json',
 };
 
+const badRequest = () => new Response('Bad Request', { status: 400 });
+
+// Returns a Response to send, or null to hand the request to the SSR handler.
+//
+// THE ORDER HERE IS THE WHOLE POINT: decode, then resolve, then check containment,
+// then touch the disk. `url.pathname` is still percent-encoded, so the string we
+// would validate and the string the filesystem actually opens are different
+// strings. Validate the encoded one and `/..%2f..%2fsecret` sails past a guard that
+// has already pronounced the path safe, because `..%2f` only becomes `../` after
+// the decode. `serve.traversal.test.mjs` pins this down by running the same probes
+// against a build with the check before the decode, and asserting it LEAKS.
+//
+// `new URL` in the request handler does part of the job already: it resolves
+// dot-segments and counts `%2e` as a dot, so plain `..` and `%2e%2e/` never arrive
+// here. It does NOT touch `%2f`, which is exactly the vector this function has to
+// stop. Don't lean on that upstream pass; it is one refactor away from disappearing.
 async function serveStatic(pathname) {
   if (pathname === '/' || pathname.endsWith('/')) return null;
-  const filePath = join(clientDir, pathname);
-  if (!filePath.startsWith(clientDir)) return null; // path traversal guard
+
+  let decoded;
+  try {
+    decoded = decodeURIComponent(pathname);
+  } catch {
+    return badRequest(); // decodeURIComponent('%') throws URIError. A 400, not a crash.
+  }
+
+  // Exactly one decode pass, never a loop-until-stable: re-decoding would turn
+  // `%252e%252e` back into `..` and reopen the hole from the other side. After one
+  // pass `%252e%252e` is a literal filename, which is the correct reading of it.
+
+  // A NUL truncates the path at the syscall boundary; a backslash is a separator on
+  // Windows and a legal filename character on POSIX, so the same request would mean
+  // two different files. Neither appears in a real Vite asset name.
+  if (decoded.includes('\0') || decoded.includes('\\')) return badRequest();
+
+  // join(), not resolve(): `decoded` is attacker-controlled and may be absolute, and
+  // resolve() would honour that and walk out of clientDir entirely. join() re-roots
+  // it and normalises away the `..` the decode just produced.
+  const filePath = join(clientDir, decoded);
+  if (filePath === clientDir) return null;
+  if (!filePath.startsWith(clientPrefix)) return badRequest();
+
+  let body;
   try {
     if (!(await stat(filePath)).isFile()) return null;
+    body = await readFile(filePath);
   } catch {
     return null;
   }
-  const body = await readFile(filePath);
   return new Response(body, {
     headers: { 'content-type': TYPES[extname(filePath)] ?? 'application/octet-stream' },
   });
