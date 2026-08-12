@@ -2,11 +2,15 @@
 
 Last updated 2026-08-11. Supersedes the 2026-08-10 version entirely.
 
-**The epic through PR #147 is MERGED TO MAIN.** The 2026-08-11 work described below is not:
-sub-project D, the guard round, the re-recorded five-configuration matrix and the corrections
-to this document all sit on `feat/message-parts`, ahead of `origin/main`. Check the gap with
-`git rev-list --count origin/main..feat/message-parts` rather than trusting a count written
-here, because a count written here is stale by the next commit (§5.11).
+**The work this document describes as done is MERGED TO MAIN**, through PR #150: the epic,
+sub-project D, the guard round, the re-recorded five-configuration matrix and the harness fixes.
+What is still in flight is the emit contract (§1.2). In-flight work is described by its plan under
+`docs/superpowers/plans/`, and those files carry their own base SHAs.
+
+Read the state from the repo, not from a branch name written here. `git log --oneline origin/main`
+answers what has landed. A branch name cannot, because branches merge and get deleted while a
+sentence naming one stays put, which makes a branch name a worse thing to hardcode here than the
+count this paragraph used to warn about (§5.11).
 
 ---
 
@@ -381,9 +385,9 @@ This accounted for more defects than bad implementations, by a wide margin. Inst
   Completed" from fixture data while the live loop had never run. **Sample data is a check that
   proves nothing, aimed at humans.**
 - The `knownGap` mechanism in the harness built to catch all of this (§4).
-- My own CI poller, twice — treating an empty API response, and an unenumerated status word, as
-  "done".
-- **A third from the same poller, and the worst-timed one in the epic.** I watched required checks
+- My own CI poller, treating an empty API response as "done".
+- The same poller, treating an unenumerated status word as "done".
+- **The same poller again, and the worst-timed instance in the epic.** I watched required checks
   with `gh pr checks --watch | tail -20; echo "EXIT=$?"`. `$?` there is **`tail`'s** exit status,
   not `gh`'s, so it printed success no matter what CI did. Caught only by going to query the check
   conclusions directly instead of trusting the number, while merging the PR whose headline is four
@@ -494,9 +498,9 @@ The hazard holds either way, and it is the same family as §5.1: **success and n
 indistinguishable from the output.** Verify the artifact changed, not that the command exited 0.
 
 This was first written flat ("`nx build ui` does NOT regenerate the derived artifacts"), here and
-in `CLAUDE.md`, generalised from that single observation inside an hour. It is the freshest
-instance of §5.13. The advice survives both observations, so it was safe to state; the mechanism
-was contingent on one run, and the mechanism is the half that had to be corrected.
+in `CLAUDE.md`, generalised from that single observation inside an hour. **That is §5.13 in its
+mechanism-versus-advice form.** The advice survives both observations, so it was safe to state; the
+mechanism was contingent on one run, and the mechanism is the half that had to be corrected.
 
 ### 5.9 Worktree-isolated agents branch from `origin/main`, not from your branch
 
@@ -558,6 +562,17 @@ And the lesson is not "be careful" — this repo already has the structural answ
 guard now compares registry against source in both directions. **Make the duplicate impossible, or
 make it fail loudly.** Prose is where that is hardest and where no guard exists, which is why the
 results doc is the instance that got furthest.
+
+**There is a prose-only class of this, and this document keeps producing it.** A count, a
+superlative and a branch name are all facts about the state of things, embedded in prose that
+describes the state of things. Each is a second copy of something the document already expresses,
+and each goes stale on a change that had no reason to touch it: a count when a sibling is added,
+"the freshest instance of" when anything is appended below it, a branch name when the branch merges
+and is deleted. A volatile identifier quoted from memory rather than read from the source is the
+same defect arriving already broken. The fix is the same in every case: **name the thing; do not
+count it, rank it against a set that is still growing, or pin it to a location that moves.** The
+section documenting this keeps committing it, which is the evidence that it is hard rather than
+careless.
 
 ### 5.12 Absence read as a legitimate value
 
