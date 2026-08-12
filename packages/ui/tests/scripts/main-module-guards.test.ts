@@ -1,12 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * Every "am I the entry point?" guard in this package must still be TRUE when the
+ * Every "am I the entry point?" guard in this REPO must still be TRUE when the
  * checkout sits on a path that percent-encodes.
  *
  * THE FAILURE THIS EXISTS FOR IS SILENT, WHICH IS WHY IT IS A TEST AND NOT A NOTE.
@@ -38,19 +45,41 @@ import { fileURLToPath } from 'node:url';
  *
  * WHY THE GUARD LIST IS EXTRACTED AND NOT RESTATED. Naming the scripts here would make
  * the fourth one — added next month, copied from one of these three — invisible. The
- * walk finds every `.mjs`/`.js` in the package and the extractor finds every `if (…)`
+ * walk finds every `.mjs`/`.js` in the repo and the extractor finds every `if (…)`
  * whose condition mentions both `import.meta.url` and `process.argv[1]`, so a new
  * script is covered the day it lands. `covers every script that looks like it has a
  * guard` below is what keeps the extractor honest: if it silently stops matching, that
  * assertion goes red rather than this file passing over an empty list.
  *
+ * WHY THE WALK IS ANCHORED AT THE REPO ROOT AND NOT AT `packages/ui`. It used to be
+ * anchored at the package, which made the check's NAME broader than its POPULATION: a
+ * guard in `.github/scripts/`, `apps/docs/scripts/`, `examples/` or at the repo root was
+ * never evaluated, so this file could stay green while the exact defect it exists for
+ * shipped one directory over. That is the same class of hole as the bug itself — a check
+ * that passes because it is not looking. The anchor is asserted against a repo-root
+ * marker file below, so moving this test file goes red loudly instead of silently
+ * re-narrowing the net, and `walks past packages/ui` pins the widening itself.
+ *
  * The fix, and the idiom already in `scripts/run-storybook-tests.mjs`:
  *
  *   import { pathToFileURL } from 'node:url';
  *   if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();
+ *
+ * `pathToFileURL` is the idiom to REACH FOR, not the only spelling that is correct.
+ * `examples/internal/openrouter-spike/harness/reasoning-coverage.mjs` compares
+ * `resolve(process.argv[1])` against `resolve(fileURLToPath(import.meta.url))`, which is
+ * equally space-safe because `fileURLToPath` DECODES. This file tests behaviour, so that
+ * guard passes on its merits; the fixture preamble below therefore has to put `resolve`
+ * and `fileURLToPath` in scope alongside `pathToFileURL`, or a correct guard would blow
+ * up as a ReferenceError and read as a failure.
  */
 
-const pkgRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+/**
+ * `packages/ui/tests/scripts/` → the repo root. Verified against a marker file rather
+ * than trusted, because a wrong `..` count here silently changes what is scanned.
+ */
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
+const REPO_ROOT_MARKER = 'pnpm-workspace.yaml';
 
 /** Build output, dependencies, and report dirs: not sources we own. */
 const SKIP_DIRS = new Set([
@@ -62,9 +91,22 @@ const SKIP_DIRS = new Set([
   'playwright-report',
 ]);
 
+/**
+ * Dot-directories are skipped wholesale: `.git`, `.nx` and `.claude` (which holds
+ * throwaway worktrees — FULL COPIES of this repo, so descending would rescan everything
+ * once per worktree). `.github` is the exception because CI scripts live there and are
+ * exactly the kind of "runs on its own, prints nothing when skipped" code this guards.
+ * `visits .github` below is what keeps this allowance from being quietly dropped.
+ */
+const ALLOWED_DOT_DIRS = new Set(['.github']);
+
+const visitedDirs: string[] = [];
+
 function walk(dir: string, out: string[] = []): string[] {
+  visitedDirs.push(dir);
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name.startsWith('.') || SKIP_DIRS.has(entry.name)) continue;
+    if (entry.name.startsWith('.') && !ALLOWED_DOT_DIRS.has(entry.name)) continue;
+    if (SKIP_DIRS.has(entry.name)) continue;
     const full = join(dir, entry.name);
     if (entry.isDirectory()) walk(full, out);
     else if (/\.(mjs|cjs|js)$/.test(entry.name)) out.push(full);
@@ -105,9 +147,9 @@ function extractGuardConditions(source: string): string[] {
   return found;
 }
 
-const sources = walk(pkgRoot).map((file) => ({
+const sources = walk(repoRoot).map((file) => ({
   file,
-  rel: relative(pkgRoot, file),
+  rel: relative(repoRoot, file),
   text: readFileSync(file, 'utf8'),
 }));
 
@@ -126,6 +168,37 @@ const looksGuarded = sources
   .sort();
 
 describe('main-module guards survive a path that percent-encodes', () => {
+  it('is anchored at the repo root', () => {
+    // A wrong `..` count in `repoRoot` scans the wrong tree while every other assertion
+    // in this file stays green, so pin it to something only the repo root has.
+    expect(
+      existsSync(join(repoRoot, REPO_ROOT_MARKER)),
+      `repoRoot resolved to ${repoRoot}, which has no ${REPO_ROOT_MARKER}. ` +
+        'This test moved; fix the `..` count rather than the marker.',
+    ).toBe(true);
+  });
+
+  it('walks past packages/ui, into every workspace that can hold a script', () => {
+    // THE HOLE THIS CLOSES. The walk used to start at `packages/ui`, so a guard in
+    // `apps/`, `examples/`, `.github/scripts/` or at the repo root was never evaluated
+    // and this file was green on a population narrower than its name. Assert the SHAPE
+    // of what got scanned, not a file count, so it survives files coming and going.
+    const topLevel = new Set(sources.map((s) => s.rel.split('/')[0]));
+    expect([...topLevel].sort()).toEqual(
+      expect.arrayContaining(['apps', 'examples', 'packages']),
+    );
+  });
+
+  it('visits .github, which the dot-directory skip would otherwise hide', () => {
+    // CI scripts live here and are precisely the "exits 0 having printed nothing" shape
+    // this file exists for. The walk skips dot-dirs wholesale (`.git`, `.nx`, `.claude`
+    // — the last holds full repo copies), so `.github` needs an explicit allowance, and
+    // an allowance nobody asserts is one a tidy-up deletes.
+    const rels = visitedDirs.map((d) => relative(repoRoot, d));
+    expect(rels).toContain('.github');
+    expect(rels).not.toContain('.git');
+  });
+
   it('covers every script that looks like it has a guard', () => {
     // Non-vacuity, in the two directions it can fail. A refactor that breaks the
     // extractor, or a walk that stops finding scripts, must go red here instead of
@@ -153,8 +226,16 @@ describe('main-module guards survive a path that percent-encodes', () => {
     writeFileSync(
       fixture,
       [
-        "import { pathToFileURL } from 'node:url';",
+        // Everything a correct guard is allowed to be spelled with. `pathToFileURL` is
+        // the house idiom; `resolve(process.argv[1]) === resolve(fileURLToPath(...))` is
+        // the equally-safe form used in examples/internal/openrouter-spike. A guard that
+        // reaches for a helper missing here dies as a ReferenceError, which would read as
+        // "this guard is broken" when it is this preamble that is incomplete.
+        "import { pathToFileURL, fileURLToPath } from 'node:url';",
+        "import { resolve } from 'node:path';",
         'void pathToFileURL;',
+        'void fileURLToPath;',
+        'void resolve;',
         ...guards.map(
           (g) =>
             `console.log(${JSON.stringify(`${g.rel}#${g.index}`)} + '\\t' + Boolean(${g.condition}));`,

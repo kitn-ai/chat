@@ -1,8 +1,15 @@
 import { chromium } from 'playwright';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 
 const URL = 'http://localhost:8000/examples/demos/composable/index.html';
-const AXE = readFileSync('./node_modules/axe-core/axe.min.js', 'utf-8');
+// Resolve axe-core the way Node would, NOT as `./node_modules/axe-core/...`. The root
+// `.npmrc` sets `node-linker=hoisted`, so axe-core is installed ONLY at the repo-root
+// `node_modules` and there is no `packages/ui/node_modules/axe-core` to find. The
+// cwd-relative form therefore threw ENOENT from the one directory this script actually
+// lives in, which is why it could not be run at all. `require.resolve` walks the real
+// resolution chain from here, so it finds the hoisted copy from any cwd.
+const AXE = readFileSync(createRequire(import.meta.url).resolve('axe-core/axe.min.js'), 'utf-8');
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
