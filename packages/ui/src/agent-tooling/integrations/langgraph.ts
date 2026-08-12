@@ -109,6 +109,19 @@ async function chatHandler(request: Request): Promise<Response> {
   // No key appears in the route: `new ChatOpenAI(...)` reads OPENAI_API_KEY from
   // the environment itself. Same invisible-key shape as vercel-ai-sdk.
   keyExposure: 'needs-proxy',
+  // 'none', and this is the entry most likely to be "corrected" to something
+  // else, so the reason is here rather than assumed. The create-kai spec lists
+  // LangGraph under "Bring a server or runtime". That is WRONG for this route:
+  // the graph is built and compiled IN PROCESS above (`createReactAgent` over a
+  // `new ChatOpenAI(...)`), so there is no LangGraph server, no port and no
+  // second process — the four packages in `deps` are the whole install and
+  // `runNote` asks for a key and nothing else.
+  //
+  // LangGraph Platform / `langgraph dev` IS a server, and an integration that
+  // talked to one over HTTP would be 'local-server'. That is a different route
+  // than the one above, and if it is ever added it must be added as its own
+  // catalog entry rather than by changing this line.
+  outOfBand: 'none',
 };
 
 export default langgraph;

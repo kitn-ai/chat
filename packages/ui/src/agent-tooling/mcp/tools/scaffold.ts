@@ -311,6 +311,20 @@ function realStreamBody(opts: {
   /** lines emitted right after the value is read and guarded */
   afterValue?: string[];
   /**
+   * The attachments capability: an EXPRESSION producing this turn's staged
+   * attachments, which become `file` parts ahead of the message's text part.
+   *
+   * An expression rather than a flag because every framework holds the list
+   * somewhere different (a module-scope `let`, a signal, a rune), and it is
+   * evaluated exactly once here — in `afterValue` each renderer has already
+   * captured it into a local, because the same lines then CLEAR the staging list
+   * and a lazily-read accessor would come back empty.
+   *
+   * It sits in `parts` before the text so the thread renders the files above the
+   * message body, which is where a composer's own attachment chips sit.
+   */
+  filesExpr?: string;
+  /**
    * The `mock` integration. Swaps ONLY the source of the stream — the canned
    * responder instead of `fetch('/api/chat')` — and leaves every other line
    * identical. That identity is the point: see `mockRequest`.
@@ -319,14 +333,23 @@ function realStreamBody(opts: {
 }): string {
   const {
     pad, read, commitSet, setterAdapter, setLoading, bodyPayload, strictRoles = false, toolLoop, thread,
-    cards = false, valueSource = 'e.detail.value', afterValue = [], mock = false,
+    cards = false, valueSource = 'e.detail.value', afterValue = [], mock = false, filesExpr,
   } = opts;
   const asConst = strictRoles ? ' as const' : '';
   // Under strict TS an un-annotated array literal widens the part's `type` to
   // `string`, so the later commit fails TS2322. Plain-JS contexts (html) have no
   // type to annotate with.
   const historyType = strictRoles ? ': ChatMessage[]' : '';
-  const userMessage = `{ id: crypto.randomUUID(), role: 'user'${asConst}, parts: [{ type: 'text', text: value }] }`;
+  // `type: 'file' as const` even though every call site here is contextually
+  // typed by a ChatMessage[] target: the spread's element type is computed from
+  // the callback's own return, BEFORE the surrounding array literal's contextual
+  // type reaches it, so without the assertion `type` widens to string and the
+  // whole assignment fails TS2322.
+  const fileParts = filesExpr
+    ? `...${filesExpr}.map((attachment) => ({ type: 'file'${asConst}, attachment })), `
+    : '';
+  const userMessage =
+    `{ id: crypto.randomUUID(), role: 'user'${asConst}, parts: [${fileParts}{ type: 'text', text: value }] }`;
 
   const open = toolLoop
     ? thread.open({ pad, userMessage, typed: strictRoles })
@@ -631,7 +654,7 @@ function assertCardToolFormat(integration: Integration): 'openai' | 'anthropic' 
  *
  * KEYED ON A COMPONENTS LIST, not an archetype id, for the same reason
  * `renderSurface` is. A guard that took an archetype id could only ever check the
- * six presets, so the surfaces the feature multi-select makes reachable — the ones
+ * seven presets, so the surfaces the feature multi-select makes reachable — the ones
  * with no preset — would emit cards with nothing asserting they did. The archetype
  * axis was also the narrower one: `getArchetype` returns `undefined` for anything
  * not in the catalog, so the guard could not have been pointed at a new surface
@@ -691,13 +714,29 @@ function wireImportLines(opts: {
   cardTools?: boolean;
   /** the `mock` integration → import the shared responder, not a fetch encoder */
   mock?: boolean;
+  /**
+   * The attachments capability → `type AttachmentData`.
+   *
+   * The kit exports it from `@kitn.ai/ui/state` precisely because it is the type
+   * BOTH ends of this feature hold: `<kai-attachments>.items` and the
+   * `{ type: 'file', attachment }` MessagePart. Naming it is better than deriving
+   * a structural equivalent per framework, which is what the first cut did — a
+   * `NonNullable<AttachmentsProps['items']>[number]` is the same type spelled so
+   * that only React can spell it.
+   *
+   * Independent of `typed` on purpose: `solid` takes `ChatMessage` from
+   * `@kitn.ai/ui` alongside its components (so `typed` is false there) and still
+   * needs this one from the state entry.
+   */
+  attachments?: boolean;
 }): string[] {
-  const { pad = '', typed, toolLoop = false, setMessagesType = false, cards = false, cardTools: emitsCardTools = false, mock = false } = opts;
+  const { pad = '', typed, toolLoop = false, setMessagesType = false, cards = false, cardTools: emitsCardTools = false, mock = false, attachments = false } = opts;
   const stateNames = [
     'createAssistantStream',
     // The mock's canned reply comes from the kit, not from a copy pasted into
     // this file. One implementation, shared with create-kai and the starters.
     ...(mock ? ['createMockResponder'] : []),
+    ...(attachments ? ['type AttachmentData'] : []),
     ...(typed ? ['type ChatMessage'] : []),
     ...(typed && setMessagesType ? ['type SetMessages'] : []),
   ].join(', ');
@@ -1014,6 +1053,175 @@ function isWorkspace(components: readonly string[]): boolean {
   return components.includes('kai-resizable') && components.includes('kai-artifact');
 }
 
+// ── attachments ───────────────────────────────────────────────────────────────
+
+/**
+ * The attachment staging pair. Structural in the same sense the workspace tags
+ * are: neither is emitted as a bare sibling with nothing wired to it, because
+ * neither does anything on its own.
+ *
+ * `<kai-file-upload>` is a dropzone that only EMITS (`kai-files-added`, carrying
+ * `File[]`); it holds no list. `<kai-attachments>` only RENDERS what its `items`
+ * property is set to, and an unset `items` draws the empty state. So the two
+ * bare tags the generic companion fall-through used to emit were a dropzone
+ * whose files went nowhere and a list that could never fill.
+ */
+const ATTACHMENT_TAGS = new Set(['kai-file-upload', 'kai-attachments']);
+
+/**
+ * True when the surface stages attachments — BOTH tags, for the same reason
+ * `isWorkspace` needs both.
+ *
+ * They are one capability group in `archetypes.ts`, so in practice a request
+ * carries both or neither. Requiring both here is what keeps a hand-built
+ * `components: ['kai-chat', 'kai-attachments']` from reaching the wiring below
+ * and emitting a `kai-remove` listener for a list nothing can add to.
+ */
+function hasAttachments(components: readonly string[]): boolean {
+  return components.includes('kai-file-upload') && components.includes('kai-attachments');
+}
+
+/**
+ * What the scaffolder INTENDS to emit for one components list, so a guard can
+ * check the seven renderers against the decision instead of restating it.
+ *
+ * The sibling of `cardEmitPlan`, and exported for the same reason:
+ * `attachmentStagingCheck` in scripts/verify-scaffold-compiles.mjs would
+ * otherwise re-derive "both attachment tags are present" itself, and a guard that
+ * re-derives its own expectation stops being a check of anything the day the two
+ * derivations disagree — it just agrees with itself.
+ *
+ * Unlike `cardEmitPlan` this takes no integration, and that is a real difference
+ * rather than an omission: staging a file needs no model, no tools array and no
+ * route, so `mock` emits exactly what `openai` does. The one thing the wire
+ * decides — whether the files reach the provider — is the same NO for every
+ * integration (see `ATTACHMENT_WIRE_NOTE`).
+ */
+export function attachmentEmitPlan(components: readonly string[]): { staging: boolean } {
+  return { staging: hasAttachments(components) };
+}
+
+/**
+ * What the emitted attachment surface does, and — the part that matters — what
+ * it does NOT do.
+ *
+ * `toOpenAIMessages` and `toAnthropicMessages` do not encode `file` parts. That
+ * is not an oversight in this scaffold, it is stated at the encoder
+ * (`wire/encode.ts`: "card, source and file are kit-side and have no wire
+ * representation in v1"), and it is load-bearing enough that an
+ * attachment-ONLY user turn encodes to nothing at all and is dropped from the
+ * request. So a scaffold that quietly staged files and POSTed the thread would
+ * put a paperclip on screen, accept a PDF, render it in the thread, and send the
+ * model a message that never mentions it — with nothing anywhere saying why.
+ *
+ * The emitted comment says it instead. Read that as the honest state of the
+ * feature: the SURFACE is complete (stage, preview, remove, render in-thread),
+ * the WIRE is not, and encoding a file for a specific provider is the
+ * consumer's own step because every provider spells it differently.
+ */
+const ATTACHMENT_WIRE_NOTE = [
+  '// The staged files ride along on the message as `file` parts, so they RENDER',
+  '// in the thread. They are NOT sent to the model: toOpenAIMessages /',
+  '// toAnthropicMessages do not encode `file` parts (a stated v1 limit of',
+  '// @kitn.ai/ui/wire), so nothing here reaches the provider. To send one, encode',
+  '// it into your OWN route request — every provider spells file content',
+  '// differently (base64 image_url, a files API id, a document block).',
+];
+
+/**
+ * The `File` -> `AttachmentData` conversion, emitted as a real function.
+ *
+ * `<kai-file-upload>` hands over `File` objects and `<kai-attachments>` renders
+ * `AttachmentData`, so something has to bridge them and it may as well be code
+ * the consumer can edit. The object URL is what makes an image preview a real
+ * thumbnail rather than a generic icon; it is deliberately not revoked here,
+ * and the comment says why rather than leaving a silent leak.
+ *
+ * The parameter type is derived from the property it feeds
+ * (`KaiAttachmentsElement['items']` / the wrapper's `items` prop) at each call
+ * site rather than importing `AttachmentData`, for the reason the html target
+ * already derives its message type from `KaiChatElement['messages']`: a type
+ * read off the assignment target cannot drift out of step with it.
+ */
+function fileToAttachmentLines(pad: string, typeName: string): string[] {
+  return [
+    `${pad}/** <kai-file-upload> hands over File objects; <kai-attachments> renders these. */`,
+    `${pad}function toAttachment(file: File): ${typeName} {`,
+    `${pad}  return {`,
+    `${pad}    id: crypto.randomUUID(),`,
+    `${pad}    type: 'file',`,
+    `${pad}    filename: file.name,`,
+    `${pad}    // '' for an extensionless file, and an empty mediaType would render as a`,
+    `${pad}    // blank detail line rather than falling back to the generic icon.`,
+    `${pad}    mediaType: file.type || undefined,`,
+    `${pad}    // The object URL is what makes an image preview an actual thumbnail. It`,
+    `${pad}    // lives until the document unloads — revoke it yourself if you drop`,
+    `${pad}    // long threads while the page stays open.`,
+    `${pad}    url: URL.createObjectURL(file),`,
+    `${pad}  };`,
+    `${pad}}`,
+  ];
+}
+
+/**
+ * Why the submit handler merges TWO sources of staged files.
+ *
+ * `<kai-chat>` renders its own paperclip unconditionally — `ChatThread` always
+ * passes `onAttachmentsChange` to the composer, and there is no prop on the
+ * element that turns it off — so every scaffold ALREADY has an attach button,
+ * and every scaffold before this one dropped whatever was attached through it on
+ * the floor: `kai-submit` carries `{ value, attachments }` and every emitted
+ * handler read only `.value`.
+ *
+ * So reading only the dropzone would leave that bug in place on the one surface
+ * that is supposed to be about attachments. Both are folded in.
+ */
+const ATTACHMENT_MERGE_NOTE = [
+  "// <kai-chat> renders its OWN paperclip (there is no prop that hides it), and its",
+  '// staged files arrive on this event as detail.attachments. The dropzone above is',
+  '// the second source. Both are folded in — reading either one alone silently',
+  '// drops files the user really attached.',
+];
+
+/**
+ * The lines every framework emits at the TOP of a submit, before the message is
+ * built: capture this turn's attachments into `files`, then empty the staging
+ * list.
+ *
+ * They go through `afterValue` rather than into the message expression because
+ * the order is load-bearing and easy to get backwards — `filesExpr` is spliced
+ * into `parts` AFTER these run, so the capture has to be into a local. Reading
+ * the staging list lazily from `parts` would read it post-clear and attach
+ * nothing, which is precisely the silent failure this whole capability is being
+ * added to stop.
+ *
+ * `fromSubmitEvent` is false for exactly one target: `solid` renders the SolidJS
+ * `PromptInput` primitives directly rather than `<kai-chat>`, so there is no
+ * `kai-submit` event and no second source to merge — its dropzone is the only
+ * one. Merging a `detail` that does not exist there would be a runtime TypeError
+ * on every submit.
+ */
+function attachmentTurnLines(opts: {
+  /** expression reading the dropzone's staged list */
+  stagedExpr: string;
+  /** statement(s) that empty the staging list (and re-render it) */
+  clear: string[];
+  /** the framework submits through `kai-submit`, so `e.detail.attachments` exists */
+  fromSubmitEvent: boolean;
+}): string[] {
+  const { stagedExpr, clear, fromSubmitEvent } = opts;
+  return [
+    ...(fromSubmitEvent ? ATTACHMENT_MERGE_NOTE : [
+      '// This target renders PromptInput directly rather than <kai-chat>, so the',
+      '// dropzone is the only source of staged files — there is no kai-submit detail.',
+    ]),
+    fromSubmitEvent
+      ? `const files = [...${stagedExpr}, ...e.detail.attachments];`
+      : `const files = [...${stagedExpr}];`,
+    ...clear,
+  ];
+}
+
 /**
  * A sample assistant message showing embedded tool + reasoning.
  *
@@ -1136,15 +1344,37 @@ interface RenderCtx {
  *
  * SCAF-14: workspace structural types (kai-resizable, kai-artifact) are emitted
  * as a properly composed split layout — chat in one pane, artifact in the other.
+ *
+ * The attachment pair (kai-file-upload, kai-attachments) is filtered out of the
+ * companion loop for the same reason the workspace pair is: it gets a composed
+ * block of its own, above the chat, with ids the emitted module wires together.
  */
 function componentTags(components: readonly string[], chatFill: string): string {
   const companionTags = components.filter(
-    (t) => t !== 'kai-chat' && !MESSAGE_EMBEDDED_TAGS.has(t) && !WORKSPACE_STRUCTURAL_TAGS.has(t),
+    (t) =>
+      t !== 'kai-chat' &&
+      !MESSAGE_EMBEDDED_TAGS.has(t) &&
+      !WORKSPACE_STRUCTURAL_TAGS.has(t) &&
+      !(hasAttachments(components) && ATTACHMENT_TAGS.has(t)),
   );
   const hasEmbedded = components.some((t) => MESSAGE_EMBEDDED_TAGS.has(t));
   const hasStandaloneCompanions = companionTags.length > 0;
 
   const lines: string[] = [];
+  // The staging strip, ABOVE the thread: drop files in, see them as removable
+  // chips, and they ride out on the next message. `flex: 0 0 auto` keeps it out
+  // of the chat's `flex: 1` claim on the remaining height.
+  if (hasAttachments(components)) {
+    lines.push(
+      `  <!-- Drop files here to stage them for the NEXT message. src/main.ts wires`,
+      `       kai-files-added -> the staged list -> kai-attachments' items property. -->`,
+      `  <div style="flex: 0 0 auto; display: flex; flex-direction: column; gap: 0.5rem; padding: 0.75rem;">`,
+      `    <kai-file-upload id="upload" accept="image/*,application/pdf"></kai-file-upload>`,
+      `    <!-- items is a JS PROPERTY (arrays can't be attributes); 'removable' fires kai-remove. -->`,
+      `    <kai-attachments id="attachments" variant="inline" removable></kai-attachments>`,
+      `  </div>`,
+    );
+  }
   // SCAF-14: workspace is a structural/layout surface — emit a runnable split.
   //
   // This used to `return` here, which dropped every standalone companion on the
@@ -1229,6 +1459,47 @@ function componentTags(components: readonly string[], chatFill: string): string 
 function htmlModule(ctx: RenderCtx, components: readonly string[]): string {
   const hasEmbedded = components.some((t) => MESSAGE_EMBEDDED_TAGS.has(t));
   const hasSources = components.includes('kai-sources');
+  const attachments = hasAttachments(components);
+
+  // MODULE scope, like `model`/`runTool`: the staged list has to outlive `init()`
+  // so the submit handler can read it, and `Staged` is used by the module-scope
+  // `toAttachment` declaration below.
+  const attachmentModuleLines = attachments
+    ? [
+        ...ATTACHMENT_WIRE_NOTE,
+        `//`,
+        `// AttachmentData is the kit's own type for a staged file — the same one`,
+        `// <kai-attachments>.items holds and the same one a 'file' message part holds.`,
+        `let staged: AttachmentData[] = [];`,
+        ``,
+        ...fileToAttachmentLines('', 'AttachmentData'),
+        ``,
+      ]
+    : [];
+
+  const attachmentSetupLines = attachments
+    ? [
+        `  const uploadEl = document.getElementById('upload') as HTMLElement;`,
+        `  const attachmentsEl = document.getElementById('attachments') as KaiAttachmentsElement;`,
+        `  // Same upgrade rule as <kai-chat>: 'items' is an array, so it is a PROPERTY,`,
+        `  // and a property set before the element upgrades is dropped on upgrade.`,
+        `  await customElements.whenDefined('kai-attachments');`,
+        `  // A NEW array per write — same contract as chat.messages.`,
+        `  const showStaged = () => { attachmentsEl.items = [...staged]; };`,
+        ``,
+        `  uploadEl.addEventListener('kai-files-added', (event: Event) => {`,
+        `    const { files } = (event as CustomEvent<{ files: File[] }>).detail;`,
+        `    staged = [...staged, ...files.map(toAttachment)];`,
+        `    showStaged();`,
+        `  });`,
+        `  attachmentsEl.addEventListener('kai-remove', (event: Event) => {`,
+        `    const { id } = (event as CustomEvent<{ id: string }>).detail;`,
+        `    staged = staged.filter((a) => a.id !== id);`,
+        `    showStaged();`,
+        `  });`,
+        ``,
+      ]
+    : [];
 
   // SCAF-9: the agentic archetype explains where tool + reasoning parts come
   // from. It no longer SEEDS a fabricated turn — see `SAMPLE_AGENTIC_MESSAGE`.
@@ -1272,8 +1543,15 @@ function htmlModule(ctx: RenderCtx, components: readonly string[]): string {
 
   // KaiSourcesElement only when a kai-sources companion is really declared: a
   // stock vanilla-ts tsconfig sets noUnusedLocals, so an always-on import is a
-  // build error on every other archetype.
-  const elementTypes = hasSources ? 'KaiChatElement, KaiSourcesElement' : 'KaiChatElement';
+  // build error on every other archetype. KaiAttachmentsElement follows the same
+  // rule — the `items =` assignment needs it. KaiFileUploadElement is deliberately
+  // NOT imported: the dropzone is only ever listened to, and `as HTMLElement`
+  // types addEventListener fully.
+  const elementTypes = [
+    'KaiChatElement',
+    ...(hasSources ? ['KaiSourcesElement'] : []),
+    ...(attachments ? ['KaiAttachmentsElement'] : []),
+  ].join(', ');
 
   /**
    * Same rule, applied to the kit's own `ChatMessage`.
@@ -1305,11 +1583,13 @@ function htmlModule(ctx: RenderCtx, components: readonly string[]): string {
       cards: ctx.emitCards,
       cardTools: ctx.cardProvider !== null,
       mock: ctx.isMock,
+      attachments,
     }),
     `import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
     ``,
     ...(ctx.isMock ? [...mockResponderInit(), ``] : []),
     ...modelLines,
+    ...attachmentModuleLines,
     ...cardsLines,
     ...toolsLines,
     ...runnerLines,
@@ -1326,14 +1606,21 @@ function htmlModule(ctx: RenderCtx, components: readonly string[]): string {
     ...cardPropLines,
     ...seedLines,
     ...sourcesSetupLines,
+    ...attachmentSetupLines,
   ];
 
   // `Event`, not `CustomEvent`: addEventListener with a custom event name hands
   // the listener a plain Event, so the narrowing happens in the body — the same
   // shape renderAngular emits, for the same reason.
+  //
+  // `attachments` is on the detail whether or not this surface stages files —
+  // <kai-chat> always sends both — but it is only NAMED in the cast where the
+  // handler reads it, so every other scaffold keeps the narrower type it uses.
   const listenerOpen = [
     `  chat.addEventListener('kai-submit', async (event: Event) => {`,
-    `    const e = event as CustomEvent<{ value: string }>;`,
+    attachments
+      ? `    const e = event as CustomEvent<{ value: string; attachments: AttachmentData[] }>;`
+      : `    const e = event as CustomEvent<{ value: string }>;`,
   ];
   const footer = [
     `  });`,
@@ -1363,6 +1650,16 @@ function htmlModule(ctx: RenderCtx, components: readonly string[]): string {
         'chat.messages ?? []',
       ),
       mock: ctx.isMock,
+      ...(attachments
+        ? {
+            filesExpr: 'files',
+            afterValue: attachmentTurnLines({
+              stagedExpr: 'staged',
+              clear: ['staged = [];', 'showStaged();'],
+              fromSubmitEvent: true,
+            }),
+          }
+        : {}),
     }),
     ...footer,
   ].join('\n');
@@ -1438,9 +1735,17 @@ function renderJsx(components: readonly string[], ctx: RenderCtx, framework: str
   const wrapperNames = importTags.map(toPascalCase);
   const importList = wrapperNames.join(', ');
 
-  // SCAF-9: standalone companion tags (not kai-chat, not message-embedded, not workspace-structural).
+  const attachments = hasAttachments(components);
+
+  // SCAF-9: standalone companion tags (not kai-chat, not message-embedded, not
+  // workspace-structural, and not the attachment pair — that gets a composed
+  // block of its own with state behind it).
   const standaloneCompanionTags = components.filter(
-    (t) => t !== 'kai-chat' && !MESSAGE_EMBEDDED_TAGS.has(t) && !WORKSPACE_STRUCTURAL_TAGS.has(t),
+    (t) =>
+      t !== 'kai-chat' &&
+      !MESSAGE_EMBEDDED_TAGS.has(t) &&
+      !WORKSPACE_STRUCTURAL_TAGS.has(t) &&
+      !(attachments && ATTACHMENT_TAGS.has(t)),
   );
 
   // Build companion JSX: only standalone companions with real props.
@@ -1464,6 +1769,55 @@ function renderJsx(components: readonly string[], ctx: RenderCtx, framework: str
     }
   }
   const companions = companionJsxLines.join('\n');
+
+  // The staging strip, ABOVE the chat. `<FileUpload>`/`<Attachments>` are the
+  // generated wrappers, already in `importList` because both tags are in
+  // `components` — no extra import bookkeeping, which is the point of keying the
+  // import list off the components rather than off a per-capability table.
+  const attachmentJsx = attachments
+    ? [
+        `      {/* Drop files here to stage them for the NEXT message. */}`,
+        `      <div style={{ flex: '0 0 auto', display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '0.75rem' }}>`,
+        `        <FileUpload accept="image/*,application/pdf" onFilesAdded={onFilesAdded} />`,
+        `        {/* items is an ARRAY, so the wrapper sets it as a DOM property, never an attribute. */}`,
+        `        <Attachments items={staged} variant="inline" removable onRemove={onRemoveAttachment} />`,
+        `      </div>`,
+      ].join('\n')
+    : '';
+
+  // MODULE scope for `toAttachment` (it closes over nothing); component scope for
+  // the state and the two handlers.
+  const attachmentModuleInit = attachments
+    ? [
+        ...ATTACHMENT_WIRE_NOTE,
+        `//`,
+        `// AttachmentData is the kit's own type for a staged file — the same one`,
+        `// <Attachments>.items holds and the same one a 'file' message part holds.`,
+        ...fileToAttachmentLines('', 'AttachmentData'),
+      ]
+    : [];
+  const attachmentStateInit = attachments
+    ? [
+        `  const [staged, setStaged] = useState<AttachmentData[]>([]);`,
+        `  const onFilesAdded = (e: CustomEvent<{ files: File[] }>) =>`,
+        `    setStaged((prev) => [...prev, ...e.detail.files.map(toAttachment)]);`,
+        `  const onRemoveAttachment = (e: CustomEvent<{ id: string }>) =>`,
+        `    setStaged((prev) => prev.filter((a) => a.id !== e.detail.id));`,
+      ].join('\n')
+    : '';
+  const attachmentSubmitOpts = attachments
+    ? {
+        filesExpr: 'files',
+        afterValue: attachmentTurnLines({
+          stagedExpr: 'staged',
+          clear: ['setStaged([]);'],
+          fromSubmitEvent: true,
+        }),
+      }
+    : {};
+  const submitParamType = attachments
+    ? 'CustomEvent<{ value: string; attachments: AttachmentData[] }>'
+    : 'CustomEvent<{ value: string }>';
 
   const mockInit = isMock ? mockResponderInit() : [];
 
@@ -1528,6 +1882,7 @@ function renderJsx(components: readonly string[], ctx: RenderCtx, framework: str
     cards: ctx.emitCards,
     thread: REACT_THREAD,
     mock: isMock,
+    ...attachmentSubmitOpts,
   });
 
   // SCAF-2: Next.js App Router requires 'use client' for components that use hooks/interactivity.
@@ -1564,6 +1919,7 @@ function renderJsx(components: readonly string[], ctx: RenderCtx, framework: str
         cards: ctx.emitCards,
         cardTools: ctx.cardProvider !== null,
         mock: isMock,
+        attachments,
       }),
       `import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
       `// <kai-*> are client-only custom elements (the server has no customElements`,
@@ -1576,22 +1932,25 @@ function renderJsx(components: readonly string[], ctx: RenderCtx, framework: str
       ...(p.altNote ?? []).map((l) => `// ${l}`),
       ...mockInit,
       ``,
+      ...attachmentModuleInit,
       ...cardsInit,
       `export default function App() {`,
       sampleMessagesInit,
       `  const [loading, setLoading] = useState(false);`,
       `  const suggestions = ${jsArray(suggestions)};`,
+      ...(attachmentStateInit ? [attachmentStateInit] : []),
       ...(sampleSourcesInit ? [sampleSourcesInit] : []),
       ...(modelInit ? [modelInit] : []),
       ...(toolsInit ? [toolsInit] : []),
       ...(toolRunner ? [toolRunner] : []),
       ``,
-      `  async function onSubmit(e: CustomEvent<{ value: string }>) {`,
+      `  async function onSubmit(e: ${submitParamType}) {`,
       onSubmitBody,
       `  }`,
       ``,
       `  return (`,
       `    <div style={{ ${jsxStyle(p.style)} }}>`,
+      ...(attachmentJsx ? [attachmentJsx] : []),
       ...(workspace
         ? [
             `      {/* SCAF-14: workspace split — chat pane left, artifact preview right. */}`,
@@ -1659,6 +2018,7 @@ function renderJsx(components: readonly string[], ctx: RenderCtx, framework: str
       cards: ctx.emitCards,
       cardTools: ctx.cardProvider !== null,
       mock: isMock,
+      attachments,
     }),
     `import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
     ``,
@@ -1667,22 +2027,25 @@ function renderJsx(components: readonly string[], ctx: RenderCtx, framework: str
     ...(p.altNote ?? []).map((l) => `// ${l}`),
     ...mockInit,
     ``,
+    ...attachmentModuleInit,
     ...cardsInit,
     `export default function App() {`,
     sampleMessagesInit,
     `  const [loading, setLoading] = useState(false);`,
     `  const suggestions = ${jsArray(suggestions)};`,
+    ...(attachmentStateInit ? [attachmentStateInit] : []),
     ...(sampleSourcesInit ? [sampleSourcesInit] : []),
     ...(modelInit ? [modelInit] : []),
     ...(toolsInit ? [toolsInit] : []),
     ...(toolRunner ? [toolRunner] : []),
     ``,
-    `  async function onSubmit(e: CustomEvent<{ value: string }>) {`,
+    `  async function onSubmit(e: ${submitParamType}) {`,
     onSubmitBody,
     `  }`,
     ``,
     `  return (`,
     `    <div style={{ ${jsxStyle(p.style)} }}>`,
+    ...(attachmentJsx ? [attachmentJsx] : []),
     ...(workspace
       ? [
           `      {/* SCAF-14: workspace split — chat pane left, artifact preview right. */}`,
@@ -1736,8 +2099,13 @@ function renderVue(components: readonly string[], ctx: RenderCtx): string {
   // SCAF-9: exclude message-embedded tags from companion rendering.
   // SCAF-14: also exclude workspace structural tags (handled by the workspace block below).
   const workspace = isWorkspace(components);
+  const attachments = hasAttachments(components);
   const standaloneCompanionTags = components.filter(
-    (t) => t !== 'kai-chat' && !MESSAGE_EMBEDDED_TAGS.has(t) && !WORKSPACE_STRUCTURAL_TAGS.has(t),
+    (t) =>
+      t !== 'kai-chat' &&
+      !MESSAGE_EMBEDDED_TAGS.has(t) &&
+      !WORKSPACE_STRUCTURAL_TAGS.has(t) &&
+      !(attachments && ATTACHMENT_TAGS.has(t)),
   );
   const hasEmbedded = components.some((t) => MESSAGE_EMBEDDED_TAGS.has(t));
 
@@ -1758,6 +2126,52 @@ function renderVue(components: readonly string[], ctx: RenderCtx): string {
   }
   const companions = companionLines.join('\n');
 
+  // `:items.prop` for the same reason `:messages.prop` carries the thread: an
+  // array set as an ATTRIBUTE stringifies, and `<kai-attachments>` would render
+  // the empty state. The listeners are plain `@kai-*` — Vue maps an unknown-tag
+  // event name straight to addEventListener, which is how `@kai-submit` already
+  // works here.
+  const attachmentTemplate = attachments
+    ? [
+        `    <!-- Drop files here to stage them for the NEXT message. -->`,
+        `    <div style="flex: 0 0 auto; display: flex; flex-direction: column; gap: 0.5rem; padding: 0.75rem;">`,
+        `      <kai-file-upload accept="image/*,application/pdf" @kai-files-added="onFilesAdded" />`,
+        `      <kai-attachments :items.prop="staged" variant="inline" removable @kai-remove="onRemoveAttachment" />`,
+        `    </div>`,
+      ].join('\n')
+    : '';
+
+  const attachmentScript = attachments
+    ? [
+        ...ATTACHMENT_WIRE_NOTE,
+        `//`,
+        `// AttachmentData is the kit's own type for a staged file, and it is what`,
+        `// <kai-attachments>.items and a 'file' MessagePart both hold.`,
+        `const staged = ref<AttachmentData[]>([]);`,
+        ``,
+        ...fileToAttachmentLines('', 'AttachmentData'),
+        ``,
+        `function onFilesAdded(event: Event) {`,
+        `  const { files } = (event as CustomEvent<{ files: File[] }>).detail;`,
+        `  staged.value = [...staged.value, ...files.map(toAttachment)];`,
+        `}`,
+        `function onRemoveAttachment(event: Event) {`,
+        `  const { id } = (event as CustomEvent<{ id: string }>).detail;`,
+        `  staged.value = staged.value.filter((a) => a.id !== id);`,
+        `}`,
+      ]
+    : [];
+  const attachmentSubmitOpts = attachments
+    ? {
+        filesExpr: 'files',
+        afterValue: attachmentTurnLines({
+          stagedExpr: 'staged.value',
+          clear: ['staged.value = [];'],
+          fromSubmitEvent: true,
+        }),
+      }
+    : {};
+
   const onSubmitBody = realStreamBody({
     pad: '    ',
     read: 'messages.value',
@@ -1770,6 +2184,7 @@ function renderVue(components: readonly string[], ctx: RenderCtx): string {
     cards: ctx.emitCards,
     thread: liveThreadBinding('messages.value', '(fn) => { messages.value = fn(messages.value); }'),
     mock: isMock,
+    ...attachmentSubmitOpts,
   });
 
   // SCAF-10: ChatMessage declaration for strict-TS Vue consumers.
@@ -1879,6 +2294,7 @@ function renderVue(components: readonly string[], ctx: RenderCtx): string {
       cards: ctx.emitCards,
       cardTools: ctx.cardProvider !== null,
       mock: isMock,
+      attachments,
     }),
     `import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
     vueImports,
@@ -1893,6 +2309,7 @@ function renderVue(components: readonly string[], ctx: RenderCtx): string {
     ...toolsLines,
     ...runnerLines,
     ...sourcesSeed,
+    ...attachmentScript,
     ``,
     `// SCAF-15: kai-* register via an async dynamic import (SSR-safety). The .prop`,
     `// bindings can apply before the element upgrades, which drops them — re-apply once`,
@@ -1904,13 +2321,16 @@ function renderVue(components: readonly string[], ctx: RenderCtx): string {
     `  if (el) Object.assign(el, { messages: messages.value, loading: loading.value, suggestions${cardPropAssign.length ? `, ${cardPropAssign.join(', ')}` : ''} });`,
     `});`,
     ``,
-    `async function onSubmit(e: CustomEvent<{ value: string }>) {`,
+    `async function onSubmit(e: ${attachments
+      ? 'CustomEvent<{ value: string; attachments: AttachmentData[] }>'
+      : 'CustomEvent<{ value: string }>'}) {`,
     onSubmitBody,
     `}`,
     `</script>`,
     ``,
     `<template>`,
     `  <div style="${p.style}">`,
+    ...(attachmentTemplate ? [attachmentTemplate] : []),
     ...workspaceTemplate,
     `  </div>`,
     `</template>`,
@@ -1926,8 +2346,13 @@ function renderSvelte(components: readonly string[], ctx: RenderCtx): string {
   // SCAF-9: exclude message-embedded tags from companion rendering.
   // SCAF-14: also exclude workspace structural tags (handled by the workspace block below).
   const workspace = isWorkspace(components);
+  const attachments = hasAttachments(components);
   const standaloneCompanionTags = components.filter(
-    (t) => t !== 'kai-chat' && !MESSAGE_EMBEDDED_TAGS.has(t) && !WORKSPACE_STRUCTURAL_TAGS.has(t),
+    (t) =>
+      t !== 'kai-chat' &&
+      !MESSAGE_EMBEDDED_TAGS.has(t) &&
+      !WORKSPACE_STRUCTURAL_TAGS.has(t) &&
+      !(attachments && ATTACHMENT_TAGS.has(t)),
   );
   const hasEmbedded = components.some((t) => MESSAGE_EMBEDDED_TAGS.has(t));
   const hasSourcesCompanion = standaloneCompanionTags.includes('kai-sources');
@@ -1949,6 +2374,17 @@ function renderSvelte(components: readonly string[], ctx: RenderCtx): string {
   }
   const companionLines = companionLinesList.join('\n');
 
+  const attachmentSubmitOpts = attachments
+    ? {
+        filesExpr: 'files',
+        afterValue: attachmentTurnLines({
+          stagedExpr: 'staged',
+          clear: ['staged = [];'],
+          fromSubmitEvent: true,
+        }),
+      }
+    : {};
+
   const onSubmitBody = realStreamBody({
     pad: '    ',
     read: 'messages',
@@ -1961,6 +2397,7 @@ function renderSvelte(components: readonly string[], ctx: RenderCtx): string {
     cards: ctx.emitCards,
     thread: liveThreadBinding('messages', '(fn) => { messages = fn(messages); }'),
     mock: isMock,
+    ...attachmentSubmitOpts,
   });
 
   // SCAF-10: ChatMessage declaration for strict-TS Svelte consumers.
@@ -2021,6 +2458,40 @@ function renderSvelte(components: readonly string[], ctx: RenderCtx): string {
       ]
     : [];
 
+  // Svelte 5: the element ref is $state (bind:this writes to it), and the staged
+  // list is $state.raw for the same reason `messages` is — a NEW array per write is
+  // the kit's contract, and deep state would proxy every object on its way into a
+  // Solid-backed custom element. `items` is an ARRAY, so it is applied through the
+  // same upgrade-gated $effect chatEl.messages goes through, never as an attribute.
+  const attachmentScript = attachments
+    ? [
+        ...ATTACHMENT_WIRE_NOTE.map((l) => `  ${l}`),
+        `  //`,
+        `  // AttachmentData is the kit's own type for a staged file, and it is what`,
+        `  // <kai-attachments>.items and a 'file' MessagePart both hold.`,
+        `  let attachmentsEl = $state<KaiAttachmentsElement | undefined>(undefined);`,
+        `  let staged = $state.raw<AttachmentData[]>([]);`,
+        `  $effect(() => { if (attachmentsEl && defined) { attachmentsEl.items = staged; } });`,
+        ``,
+        ...fileToAttachmentLines('  ', 'AttachmentData'),
+        `  function onFilesAdded(e: CustomEvent<{ files: File[] }>) {`,
+        `    staged = [...staged, ...e.detail.files.map(toAttachment)];`,
+        `  }`,
+        `  function onRemoveAttachment(e: CustomEvent<{ id: string }>) {`,
+        `    staged = staged.filter((a) => a.id !== e.detail.id);`,
+        `  }`,
+      ]
+    : [];
+  const attachmentMarkup = attachments
+    ? [
+        `  <!-- Drop files here to stage them for the NEXT message. -->`,
+        `  <div style="flex: 0 0 auto; display: flex; flex-direction: column; gap: 0.5rem; padding: 0.75rem;">`,
+        `    <kai-file-upload accept="image/*,application/pdf" onkai-files-added={onFilesAdded}></kai-file-upload>`,
+        `    <kai-attachments bind:this={attachmentsEl} variant="inline" removable onkai-remove={onRemoveAttachment}></kai-attachments>`,
+        `  </div>`,
+      ]
+    : [];
+
   // SCAF-14: workspace template block — resizable split with chat + artifact panes.
   const workspaceMarkup = workspace
     ? [
@@ -2055,7 +2526,11 @@ function renderSvelte(components: readonly string[], ctx: RenderCtx): string {
     // KaiSourcesElement is only imported when a kai-sources companion is actually
     // declared below: an always-on import would be unused (and fail noUnusedLocals)
     // on every archetype without kai-sources.
-    `  import type { ${hasSourcesCompanion ? 'KaiChatElement, KaiSourcesElement' : 'KaiChatElement'} } from '@kitn.ai/ui/elements';`,
+    `  import type { ${[
+      'KaiChatElement',
+      ...(hasSourcesCompanion ? ['KaiSourcesElement'] : []),
+      ...(attachments ? ['KaiAttachmentsElement'] : []),
+    ].join(', ')} } from '@kitn.ai/ui/elements';`,
     ...wireImportLines({
       pad: '  ',
       typed: true,
@@ -2063,6 +2538,7 @@ function renderSvelte(components: readonly string[], ctx: RenderCtx): string {
       cards: ctx.emitCards,
       cardTools: ctx.cardProvider !== null,
       mock: isMock,
+      attachments,
     }),
     `  import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
     `  import { onMount } from 'svelte';`,
@@ -2088,13 +2564,17 @@ function renderSvelte(components: readonly string[], ctx: RenderCtx): string {
     `    if (chatEl && defined) { chatEl.messages = messages; chatEl.loading = loading; chatEl.suggestions = suggestions;${cardPropEffect} }`,
     `  });`,
     ...sourcesReactive,
+    ...attachmentScript,
     ``,
-    `  async function onSubmit(e: CustomEvent<{ value: string }>) {`,
+    `  async function onSubmit(e: ${attachments
+      ? 'CustomEvent<{ value: string; attachments: AttachmentData[] }>'
+      : 'CustomEvent<{ value: string }>'}) {`,
     onSubmitBody,
     `  }`,
     `</script>`,
     ``,
     `<div style="${p.style}">`,
+    ...attachmentMarkup,
     ...workspaceMarkup,
     `</div>`,
   ]
@@ -2151,8 +2631,14 @@ function renderTanstackStart(components: readonly string[], ctx: RenderCtx): str
   const wrapperNames = importTags.map(toPascalCase);
   const importList = wrapperNames.join(', ');
 
+  const attachments = hasAttachments(components);
+
   const standaloneCompanionTags = components.filter(
-    (t) => t !== 'kai-chat' && !MESSAGE_EMBEDDED_TAGS.has(t) && !WORKSPACE_STRUCTURAL_TAGS.has(t),
+    (t) =>
+      t !== 'kai-chat' &&
+      !MESSAGE_EMBEDDED_TAGS.has(t) &&
+      !WORKSPACE_STRUCTURAL_TAGS.has(t) &&
+      !(attachments && ATTACHMENT_TAGS.has(t)),
   );
 
   const companionJsxLines: string[] = [];
@@ -2174,6 +2660,50 @@ function renderTanstackStart(components: readonly string[], ctx: RenderCtx): str
     }
   }
   const companions = companionJsxLines.join('\n');
+
+  // Same three pieces as `renderJsx` — this target IS React. See there for why
+  // the type comes from @kitn.ai/ui/state and why the strip sits above the chat.
+  const attachmentJsx = attachments
+    ? [
+        `      {/* Drop files here to stage them for the NEXT message. */}`,
+        `      <div style={{ flex: '0 0 auto', display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '0.75rem' }}>`,
+        `        <FileUpload accept="image/*,application/pdf" onFilesAdded={onFilesAdded} />`,
+        `        {/* items is an ARRAY, so the wrapper sets it as a DOM property, never an attribute. */}`,
+        `        <Attachments items={staged} variant="inline" removable onRemove={onRemoveAttachment} />`,
+        `      </div>`,
+      ].join('\n')
+    : '';
+  const attachmentModuleInit = attachments
+    ? [
+        ...ATTACHMENT_WIRE_NOTE,
+        `//`,
+        `// AttachmentData is the kit's own type for a staged file — the same one`,
+        `// <Attachments>.items holds and the same one a 'file' message part holds.`,
+        ...fileToAttachmentLines('', 'AttachmentData'),
+      ]
+    : [];
+  const attachmentStateInit = attachments
+    ? [
+        `  const [staged, setStaged] = useState<AttachmentData[]>([]);`,
+        `  const onFilesAdded = (e: CustomEvent<{ files: File[] }>) =>`,
+        `    setStaged((prev) => [...prev, ...e.detail.files.map(toAttachment)]);`,
+        `  const onRemoveAttachment = (e: CustomEvent<{ id: string }>) =>`,
+        `    setStaged((prev) => prev.filter((a) => a.id !== e.detail.id));`,
+      ].join('\n')
+    : '';
+  const attachmentSubmitOpts = attachments
+    ? {
+        filesExpr: 'files',
+        afterValue: attachmentTurnLines({
+          stagedExpr: 'staged',
+          clear: ['setStaged([]);'],
+          fromSubmitEvent: true,
+        }),
+      }
+    : {};
+  const submitParamType = attachments
+    ? 'CustomEvent<{ value: string; attachments: AttachmentData[] }>'
+    : 'CustomEvent<{ value: string }>';
 
   const mockInit = isMock ? mockResponderInit() : [];
 
@@ -2227,6 +2757,7 @@ function renderTanstackStart(components: readonly string[], ctx: RenderCtx): str
     cards: ctx.emitCards,
     thread: REACT_THREAD,
     mock: isMock,
+    ...attachmentSubmitOpts,
   });
 
   // File path guidance for TanStack Start (file-based routing)
@@ -2260,6 +2791,7 @@ function renderTanstackStart(components: readonly string[], ctx: RenderCtx): str
       cards: ctx.emitCards,
       cardTools: ctx.cardProvider !== null,
       mock: isMock,
+      attachments,
     }),
     `import '@kitn.ai/ui/theme.tokens.css'  // compiled token defaults`,
     ``,
@@ -2267,6 +2799,7 @@ function renderTanstackStart(components: readonly string[], ctx: RenderCtx): str
     ...(p.altNote ?? []).map((l) => `// ${l}`),
     ...mockInit,
     ``,
+    ...attachmentModuleInit,
     ...cardsInit,
     `// ssr: false keeps the Solid-based web component client-only.`,
     `// Server HTML for /chat omits <kai-chat> → no hydration mismatch.`,
@@ -2279,17 +2812,19 @@ function renderTanstackStart(components: readonly string[], ctx: RenderCtx): str
     sampleMessagesInit,
     `  const [loading, setLoading] = useState(false);`,
     `  const suggestions = ${jsArray(suggestions)};`,
+    ...(attachmentStateInit ? [attachmentStateInit] : []),
     ...(sampleSourcesInit ? [sampleSourcesInit] : []),
     ...(modelInit ? [modelInit] : []),
     ...(toolsInit ? [toolsInit] : []),
     ...(toolRunner ? [toolRunner] : []),
     ``,
-    `  async function onSubmit(e: CustomEvent<{ value: string }>) {`,
+    `  async function onSubmit(e: ${submitParamType}) {`,
     onSubmitBody,
     `  }`,
     ``,
     `  return (`,
     `    <main style={{ ${jsxStyle(p.style)} }}>`,
+    ...(attachmentJsx ? [attachmentJsx] : []),
     ...(workspace
       ? [
           `      {/* SCAF-14: workspace split — chat pane left, artifact preview right. */}`,
@@ -2366,8 +2901,13 @@ function renderAngular(components: readonly string[], ctx: RenderCtx): string {
   const { p, emptyHint, suggestions, isMock, defaultModel, emitTools, emitToolLoop } = ctx;
 
   const workspace = isWorkspace(components);
+  const attachments = hasAttachments(components);
   const standaloneCompanionTags = components.filter(
-    (t) => t !== 'kai-chat' && !MESSAGE_EMBEDDED_TAGS.has(t) && !WORKSPACE_STRUCTURAL_TAGS.has(t),
+    (t) =>
+      t !== 'kai-chat' &&
+      !MESSAGE_EMBEDDED_TAGS.has(t) &&
+      !WORKSPACE_STRUCTURAL_TAGS.has(t) &&
+      !(attachments && ATTACHMENT_TAGS.has(t)),
   );
   const hasEmbedded = components.some((t) => MESSAGE_EMBEDDED_TAGS.has(t));
   const hasSourcesCompanion = standaloneCompanionTags.includes('kai-sources');
@@ -2390,6 +2930,58 @@ function renderAngular(components: readonly string[], ctx: RenderCtx): string {
     }
   }
 
+  // `[items]` is a PROPERTY binding for the same reason `[messages]` is: an array
+  // written as an attribute stringifies. Angular's own signal read goes in the
+  // template, so no afterNextRender re-apply is needed for it — the binding
+  // re-runs on every signal change, including the first one after upgrade.
+  const attachmentTemplate = attachments
+    ? [
+        `      <!-- Drop files here to stage them for the NEXT message. -->`,
+        `      <div style="flex: 0 0 auto; display: flex; flex-direction: column; gap: 0.5rem; padding: 0.75rem;">`,
+        `        <kai-file-upload accept="image/*,application/pdf" (kai-files-added)="onFilesAdded($event)"></kai-file-upload>`,
+        `        <kai-attachments [items]="staged()" variant="inline" removable (kai-remove)="onRemoveAttachment($event)"></kai-attachments>`,
+        `      </div>`,
+      ]
+    : [];
+  // Module scope for `toAttachment` (a class holds no bare function declaration),
+  // class scope for the signal and the two handlers the template calls.
+  const attachmentModuleInit = attachments
+    ? [
+        ...ATTACHMENT_WIRE_NOTE,
+        `//`,
+        `// AttachmentData is the kit's own type for a staged file, and it is what`,
+        `// <kai-attachments>.items and a 'file' MessagePart both hold.`,
+        ...fileToAttachmentLines('', 'AttachmentData'),
+        ``,
+      ]
+    : [];
+  const attachmentFields = attachments
+    ? [
+        `  readonly staged = signal<AttachmentData[]>([]);`,
+        ``,
+        `  // Same Event-not-CustomEvent rule as onSubmit below: strictTemplates types`,
+        `  // $event on an unknown custom-element event as a plain Event.`,
+        `  onFilesAdded(event: Event) {`,
+        `    const { files } = (event as CustomEvent<{ files: File[] }>).detail;`,
+        `    this.staged.set([...this.staged(), ...files.map(toAttachment)]);`,
+        `  }`,
+        `  onRemoveAttachment(event: Event) {`,
+        `    const { id } = (event as CustomEvent<{ id: string }>).detail;`,
+        `    this.staged.set(this.staged().filter((a) => a.id !== id));`,
+        `  }`,
+      ]
+    : [];
+  const attachmentSubmitOpts = attachments
+    ? {
+        filesExpr: 'files',
+        afterValue: attachmentTurnLines({
+          stagedExpr: 'this.staged()',
+          clear: ['this.staged.set([]);'],
+          fromSubmitEvent: true,
+        }),
+      }
+    : {};
+
   // Angular signals: `this.messages()` reads, `this.messages.set(next)` writes a
   // BRAND-NEW array, which is what re-renders <kai-chat>.
   const read = 'this.messages()';
@@ -2408,6 +3000,7 @@ function renderAngular(components: readonly string[], ctx: RenderCtx): string {
     cards: ctx.emitCards,
     thread: accessorThreadBinding(read, commit, setter),
     mock: isMock,
+    ...attachmentSubmitOpts,
   });
 
   // Module scope, exactly like vue: a class can hold neither a bare `const` nor a
@@ -2495,6 +3088,9 @@ function renderAngular(components: readonly string[], ctx: RenderCtx): string {
   // declared: an always-on import is unused on every other archetype, and a stock
   // Angular tsconfig turns on the checks that make that a build error.
   const elementTypes = hasSourcesCompanion ? 'KaiChatElement, KaiSourcesElement' : 'KaiChatElement';
+  // No KaiAttachmentsElement here: unlike svelte/html this target never holds an
+  // element reference for the list — `[items]` is a template binding, so nothing
+  // in the class is typed by it.
 
   return [
     `// Angular standalone component — save as: src/app/chat.component.ts`,
@@ -2516,6 +3112,7 @@ function renderAngular(components: readonly string[], ctx: RenderCtx): string {
       cards: ctx.emitCards,
       cardTools: ctx.cardProvider !== null,
       mock: isMock,
+      attachments,
     }),
     ``,
     `// ${ctx.label} — ${p.note}. empty-state hint: ${emptyHint}`,
@@ -2523,6 +3120,7 @@ function renderAngular(components: readonly string[], ctx: RenderCtx): string {
     ...(isMock ? mockResponderInit() : []),
     ``,
     ...modelInit,
+    ...attachmentModuleInit,
     ...cardsInit,
     ...toolsLines,
     ...runnerLines,
@@ -2534,6 +3132,7 @@ function renderAngular(components: readonly string[], ctx: RenderCtx): string {
     `  schemas: [CUSTOM_ELEMENTS_SCHEMA],`,
     `  template: \``,
     `    <div style="${p.style}">`,
+    ...attachmentTemplate,
     ...templateBody,
     `    </div>`,
     `  \`,`,
@@ -2566,11 +3165,13 @@ function renderAngular(components: readonly string[], ctx: RenderCtx): string {
     `    });`,
     `  }`,
     ``,
+    ...attachmentFields,
+    ``,
     `  // \`Event\`, not \`CustomEvent\`: under strictTemplates Angular types \`$event\` on`,
     `  // an unknown custom-element event as a plain Event, so the narrowing happens`,
     `  // here rather than in the signature.`,
     `  async onSubmit(event: Event) {`,
-    `    const e = event as CustomEvent<{ value: string }>;`,
+    `    const e = event as CustomEvent<{ value: string${attachments ? '; attachments: AttachmentData[]' : ''} }>;`,
     onSubmitBody,
     `  }`,
     `}`,
@@ -2625,8 +3226,13 @@ function renderSolid(components: readonly string[], ctx: RenderCtx): string {
   const { p, emptyHint, suggestions, isMock, defaultModel, emitTools, emitToolLoop } = ctx;
 
   const workspace = isWorkspace(components);
+  const attachments = hasAttachments(components);
   const standaloneCompanionTags = components.filter(
-    (t) => t !== 'kai-chat' && !MESSAGE_EMBEDDED_TAGS.has(t) && !WORKSPACE_STRUCTURAL_TAGS.has(t),
+    (t) =>
+      t !== 'kai-chat' &&
+      !MESSAGE_EMBEDDED_TAGS.has(t) &&
+      !WORKSPACE_STRUCTURAL_TAGS.has(t) &&
+      !(attachments && ATTACHMENT_TAGS.has(t)),
   );
   const hasSources = standaloneCompanionTags.includes('kai-sources');
   const hasVoice = standaloneCompanionTags.includes('kai-voice-input');
@@ -2669,6 +3275,12 @@ function renderSolid(components: readonly string[], ctx: RenderCtx): string {
     'Tool',
     ...(workspace ? ['Artifact', 'ResizableHandle', 'ResizablePanel', 'ResizablePanelGroup'] : []),
     ...(hasVoice ? ['VoiceInput'] : []),
+    // `Attachments`/`Attachment`/`AttachmentPreview`/`AttachmentInfo` are already
+    // unconditional above — `renderPart` draws `file` PARTS with them whatever the
+    // surface asked for. These three are the STAGING half, which only this
+    // capability composes: the dropzone, its trigger, and the per-chip remove
+    // button `renderPart` has no use for (a sent file is not removable).
+    ...(attachments ? ['AttachmentRemove', 'FileUpload', 'FileUploadTrigger'] : []),
   ].sort();
 
   // Solid signals: `messages()` reads, `setMessages(next)` writes a NEW array.
@@ -2691,7 +3303,19 @@ function renderSolid(components: readonly string[], ctx: RenderCtx): string {
     cards: ctx.emitCards,
     thread: accessorThreadBinding(read, commit, setter),
     valueSource: 'input()',
-    afterValue: [`setInput('');`],
+    // The staged files are captured BEFORE either list is cleared. `setInput('')`
+    // stays last so the order reads the way it executes.
+    afterValue: [
+      ...(attachments
+        ? attachmentTurnLines({
+            stagedExpr: 'staged()',
+            clear: ['setStaged([]);'],
+            fromSubmitEvent: false,
+          })
+        : []),
+      `setInput('');`,
+    ],
+    ...(attachments ? { filesExpr: 'files' } : {}),
     mock: isMock,
   });
 
@@ -2715,6 +3339,17 @@ function renderSolid(components: readonly string[], ctx: RenderCtx): string {
     ? [
         `            types={cards.components}`,
         `            schemas={cards.validationSchemas}`,
+      ]
+    : [];
+
+  // The staging state. `toAttachment` is declared INSIDE App() here, unlike the
+  // kai-* targets: this file's module scope is where `renderPart` and the card
+  // registry live, and nothing outside the component needs it.
+  const attachmentInit = attachments
+    ? [
+        ...ATTACHMENT_WIRE_NOTE.map((l) => `  ${l}`),
+        `  const [staged, setStaged] = createSignal<AttachmentData[]>([]);`,
+        ...fileToAttachmentLines('  ', 'AttachmentData'),
       ]
     : [];
 
@@ -2802,6 +3437,32 @@ function renderSolid(components: readonly string[], ctx: RenderCtx): string {
       `          </For>`,
       `        </div>`,
       `      </Show>`,
+      ...(attachments
+        ? [
+            `      {/* Drop files here to stage them for the NEXT message. */}`,
+            `      <div class="flex flex-col gap-2 pb-3">`,
+            `        <FileUpload accept="image/*,application/pdf" onFilesAdded={(files) => setStaged([...staged(), ...files.map(toAttachment)])}>`,
+            `          <FileUploadTrigger class="border-border text-muted-foreground w-full rounded-xl border border-dashed px-4 py-3 text-center text-sm">`,
+            `            Click or drop files to attach`,
+            `          </FileUploadTrigger>`,
+            `        </FileUpload>`,
+            `        {/* The staged chips. onRemove is what makes <AttachmentRemove> draw its button. */}`,
+            `        <Show when={staged().length > 0}>`,
+            `          <Attachments variant="inline">`,
+            `            <For each={staged()}>`,
+            `              {(a) => (`,
+            `                <Attachment data={a} onRemove={() => setStaged(staged().filter((x) => x.id !== a.id))}>`,
+            `                  <AttachmentPreview />`,
+            `                  <AttachmentInfo />`,
+            `                  <AttachmentRemove />`,
+            `                </Attachment>`,
+            `              )}`,
+            `            </For>`,
+            `          </Attachments>`,
+            `        </Show>`,
+            `      </div>`,
+          ]
+        : []),
       `      <PromptInput value={input()} onValueChange={setInput} onSubmit={onSubmit} isLoading={loading()}>`,
       `        <div class="flex flex-col">`,
       `          <PromptInputTextarea placeholder="Send a message…" class="min-h-[44px] pt-3 pl-4" />`,
@@ -2876,7 +3537,9 @@ function renderSolid(components: readonly string[], ctx: RenderCtx): string {
     ...componentImports.map((n) => `  ${n},`),
     `} from '@kitn.ai/ui';`,
     `// The kit's own types, from the same entry the components come from.`,
-    `import type { ChatMessage, MessagePart, MessageSource } from '@kitn.ai/ui';`,
+    `import type { ${attachments
+      ? 'AttachmentData, ChatMessage, MessagePart, MessageSource'
+      : 'ChatMessage, MessagePart, MessageSource'} } from '@kitn.ai/ui';`,
     ...wireImportLines({
       typed: false,
       toolLoop: emitToolLoop,
@@ -3080,6 +3743,7 @@ function renderSolid(components: readonly string[], ctx: RenderCtx): string {
     `  // value, no row moves, and the content updates through accessors instead.`,
     `  const messageKeys = createMemo(() => messages().map((m) => m.id));`,
     `  const suggestions = ${jsArray(suggestions)};`,
+    ...attachmentInit,
     ...sourcesInit,
     ...modelInit,
     ...toolsLines,
@@ -3159,7 +3823,7 @@ export interface SurfaceRequest {
    * The `kai-*` components this surface composes — THE AXIS, not an archetype id.
    *
    * A list rather than a preset name is the whole point of this function. The six
-   * archetypes are six points in this space and the CLI's feature multi-select
+   * archetypes are seven points in this space and the CLI's feature multi-select
    * reaches the rest of it, so a renderer keyed on a preset id could only ever
    * emit what someone had already thought to name. `kai-chat` is expected to be
    * present; everything else is a capability.
@@ -4342,7 +5006,7 @@ function rejectUseCase(id: string): string {
     ``,
     `Valid useCases (presets): ${valid}.`,
     ``,
-    // The presets are six points, not the space. A harness that only ever learns
+    // The presets are seven points, not the space. A harness that only ever learns
     // the six ids will ask for the nearest one instead of the surface it wants,
     // so the rejection that teaches the id list is the right place to say so.
     `These are PRESETS over the real axis, which is \`components\`. To compose a surface no`,
@@ -4368,14 +5032,14 @@ export const scaffold: Tool = {
     // catalogs to discover valid ids.
     //
     // `useCase` is OPTIONAL because `components` can carry the surface instead —
-    // the archetypes are six points in the components space, not the space. A
+    // the archetypes are seven points in the components space, not the space. A
     // request must still name one of the two, and the handler says so when it
     // names neither.
     useCase: z
       .string()
       .optional()
       .describe(
-        'Archetype PRESET id, e.g. "drop-in-chat", "support-widget", "knowledge-base", "agentic", "workspace", "voice". ' +
+        'Archetype PRESET id, e.g. "drop-in-chat", "support-widget", "knowledge-base", "agentic", "workspace", "voice", "attachments". ' +
           'Shorthand for the preset\'s `components`. Omit it and pass `components` to compose a surface no preset names.',
       ),
     components: z
@@ -4383,7 +5047,7 @@ export const scaffold: Tool = {
       .optional()
       .describe(
         'The kai-* components this surface composes, e.g. ["kai-chat", "kai-tool", "kai-reasoning", "kai-artifact", "kai-resizable"]. ' +
-          'The real axis: any combination is renderable, not just the six presets. Include "kai-chat". Wins over `useCase` when both are given.',
+          'The real axis: any combination is renderable, not just the seven presets. Include "kai-chat". Wins over `useCase` when both are given.',
       ),
     integration: z
       .string()

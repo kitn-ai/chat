@@ -159,12 +159,38 @@ describe('generate (refusals)', () => {
     ).rejects.toThrow(/generated feature surfaces are not wired/);
   });
 
-  it('refuses a feature no renderer and no template can produce', async () => {
-    await expect(
-      generate(plan(path.join(root, 'b'), { featureIds: ['attachments'] }), {
-        templateRoot: TEMPLATE_ROOT,
-      }),
-    ).rejects.toThrow(/cannot be emitted/);
+  /**
+   * Was `featureIds: ['attachments']`, which the kit's catalog can now emit — so
+   * the request stopped being refused HERE and fell through to the next refusal
+   * ("generated feature surfaces are not wired"), which is the test above. That
+   * is two tests asserting one rule and none asserting this one.
+   *
+   * The subject moved to `conversations` on Next.js: no composed workspace shell
+   * and no `kai-conversations` renderer branch, so nothing can produce it.
+   *
+   * ORDER MATTERS AND IS ASSERTED. `generate` refuses in sequence — unknown
+   * framework, unknown gateway, resolveSurface, unwired generated surface, no
+   * template — and Next.js has no template in `dist/templates` either, so a bare
+   * `rejects.toThrow()` here would pass on the LAST of those while this one
+   * silently stopped firing. Matching the reason pins which rule caught it.
+   */
+  it('refuses a feature no renderer and no starter can produce', async () => {
+    const error = await generate(
+      plan(path.join(root, 'b'), { frameworkId: 'nextjs', featureIds: ['conversations'] }),
+      { templateRoot: TEMPLATE_ROOT },
+    ).then(
+      () => null,
+      (e: unknown) => e as Error,
+    );
+    expect(error, 'generate accepted a feature nothing can produce').not.toBeNull();
+    // ONE error, both properties. Two separate `rejects` calls would let the
+    // "not the template refusal" half pass on its own while the first half was
+    // the thing that failed — and this cell reaches BOTH refusals, so which one
+    // fired is the entire question.
+    expect(error!.message).toMatch(/feature 'conversations' cannot be emitted for Next\.js/);
+    expect(error!.message, 'caught by the missing-template check, not the feature gate').not.toMatch(
+      /no template/,
+    );
   });
 
   it('refuses a framework with no template', async () => {

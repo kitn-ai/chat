@@ -110,6 +110,9 @@ async function chatHandler(request: Request): Promise<Response> {
   // unsafe and the declaration necessary; `envVars` is what the schema's safety
   // net can still see.
   keyExposure: 'needs-proxy',
+  // The AI Gateway is a remote HTTPS endpoint reached through the `ai` package,
+  // which is an ordinary npm dependency (see `deps`). Nothing to start.
+  outOfBand: 'none',
 };
 
 export default vercelAiSdk;

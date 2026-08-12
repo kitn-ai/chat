@@ -45,6 +45,50 @@ export const Placement = z.enum(['side', 'full-page', 'docked-widget', 'inline']
 export const KeyExposure = z.enum(['frontend-safe', 'needs-proxy']);
 
 /**
+ * What this integration needs the developer to supply OUT OF BAND — beyond an
+ * install and a key.
+ *
+ * `create-kai` groups its gateway prompt three ways: **No backend**, **Bring a
+ * key**, **Bring a server or runtime**. The third group is defined by exactly
+ * this question, and until now the catalog could not answer it. Every derivation
+ * that reproduced the spec's split did so by accident and broke on inspection:
+ *   · `category` does not separate them at all — `provider` holds `openai` and
+ *     `ollama`, `framework` holds `vercel-ai-sdk` and `langgraph`.
+ *   · a non-empty `routeTemplates` picks out `cloudflare`/`pi`/`pydantic-ai`,
+ *     which is a fact about how a route is EXPRESSED, not about what it needs.
+ *   · "declares a secret env var" puts `langgraph` and `pydantic-ai` in the key
+ *     group, which is right for one and wrong for the other.
+ * So it is declared, for the reason `keyExposure`, `forwardsFromClient` and
+ * `clientToolFormat` are each declared: only the route knows.
+ *
+ * The four values, and what makes each its own case for the CLI rather than a
+ * boolean it could have been:
+ *
+ *   · `'none'` ......... `npm install` plus (maybe) a key is the whole story.
+ *     The upstream is a remote HTTPS endpoint, or the agent runs IN the route.
+ *     `langgraph` is the one worth reading twice: it is in the spec's "server or
+ *     runtime" group and does not belong there — its emitted route builds the
+ *     graph in process (`createReactAgent` + `new ChatOpenAI(...)`), so there is
+ *     no LangGraph server anywhere and its runNote asks only for a key.
+ *   · `'local-server'` . a separate process must already be LISTENING before the
+ *     app works. The CLI cannot create it and must say so: `ollama serve` on
+ *     11434, a `mastra dev` server behind `MASTRA_URL`.
+ *   · `'local-binary'` . an executable must be on PATH; the route spawns it on
+ *     demand rather than talking to a port. Nothing is listening beforehand, so
+ *     "start the server" is the wrong instruction — `pi` is the case.
+ *   · `'language-runtime'` the emitted backend runs on a runtime the JS toolchain
+ *     does not provide, and the user starts it themselves. `pydantic-ai` is a
+ *     FastAPI service: `deps.pip`, `uvicorn main:app`, a second port.
+ *
+ * A boolean would collapse the last three, and they are three different sentences
+ * to print next to a menu item. The refinement below REFUSES an integration that
+ * declares nothing, for the same reason `keyExposure` does: a missing value read
+ * as `'none'` is a scaffold that says "npm run dev" to someone who needs to start
+ * Ollama first, and then reports as a broken kit.
+ */
+export const OutOfBand = z.enum(['none', 'local-server', 'local-binary', 'language-runtime']);
+
+/**
  * The packages an app must install BEYOND `@kitn.ai/ui` to run this
  * integration's route.
  *
@@ -92,6 +136,25 @@ export const SECRET_ENV_VAR = /(?:KEY|TOKEN|SECRET|PASSWORD)$/;
  * is Anthropic's spelling, which is not an `Authorization` header at all.
  */
 const AUTH_HEADER = /Authorization\s*:|['"]x-api-key['"]\s*:/i;
+
+/**
+ * A route that FETCHES a loopback address — so something local has to be
+ * listening. `ollama`'s `fetch('http://localhost:11434/v1/chat/completions')` is
+ * the case this catches.
+ *
+ * Anchored at the fetch/URL call, not matched anywhere in the source, and that
+ * precision is the whole point. Two other routes mention loopback in prose:
+ * mastra's `throw new Error('MASTRA_URL is not set… e.g. http://localhost:4111')`
+ * and pi's `console.log('chat api: http://localhost:3001/api/chat')`. A bare
+ * /localhost/ would flag both — mastra for the right answer by the wrong
+ * evidence, pi for a line about its OWN listening port, which says nothing about
+ * what it depends on. A net that is right by accident is the thing this field
+ * exists to replace, so it is narrowed until it only fires on a real dependency.
+ */
+const LOOPBACK_FETCH = /\b(?:fetch|URL)\s*\(\s*['"`]https?:\/\/(?:localhost|127\.0\.0\.1)/;
+
+/** A route that shells out. The program it names must exist on the host. */
+const SPAWNS_PROCESS = /\bfrom\s+['"]node:child_process['"]|\bspawn\s*\(/;
 
 export const IntegrationSchema = z.object({
   id: z.string(),
@@ -178,6 +241,13 @@ export const IntegrationSchema = z.object({
    * the one field where the reader needs to be told what is at stake.
    */
   keyExposure: KeyExposure.optional(),
+  /**
+   * See {@link OutOfBand}. Optional in the TYPE only so the refinement below owns
+   * the error message — Zod skips refinements when the base object already
+   * failed, so a plain required field would report "Invalid input" and this is a
+   * field whose reader needs to be told what the four values mean.
+   */
+  outOfBand: OutOfBand.optional(),
 }).superRefine((integration, ctx) => {
   // Enforced against the real catalog by `registry.test.ts`, which parses every
   // integration through this schema. A new host that forwards tools therefore
@@ -242,6 +312,68 @@ export const IntegrationSchema = z.object({
         message:
           `integration '${integration.id}' claims keyExposure 'frontend-safe' but its route sends an ` +
           `authorization header, so it holds a credential a browser bundle must not. Use 'needs-proxy'.`,
+      });
+    }
+  }
+
+  // ---- outOfBand ----
+  //
+  // Same two-check shape as keyExposure, and the same asymmetry. The first
+  // refuses SILENCE. The second refuses a specific LIE, and only in the direction
+  // that costs the developer something: it can turn a `'none'` claim into an
+  // error, never the reverse. Over-declaring prints a prerequisite that was not
+  // strictly needed; under-declaring ships a scaffold that cannot possibly run
+  // and blames the kit.
+
+  if (integration.outOfBand === undefined) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['outOfBand'],
+      message:
+        `integration '${integration.id}' declares no outOfBand. State what the developer must supply ` +
+        `BEYOND an install and a key, because that is the group create-kai's gateway prompt puts it in: ` +
+        `'none' (a remote endpoint, or the agent runs inside the route), 'local-server' (a process must ` +
+        `already be listening, e.g. 'ollama serve'), 'local-binary' (an executable on PATH that the route ` +
+        `spawns), or 'language-runtime' (the emitted backend needs a runtime the JS toolchain does not ` +
+        `provide, e.g. python + uvicorn). Read the route and the runNote to decide, not the category: ` +
+        `'provider' holds both openai and ollama. There is no default on purpose — a missing value read ` +
+        `as 'none' is a scaffold that says "npm run dev" to someone who has nothing to connect to.`,
+    });
+  }
+
+  if (integration.outOfBand === 'none') {
+    const routeSources = [
+      ...Object.values(integration.routeTemplates),
+      ...(integration.webRoute ? [integration.webRoute] : []),
+    ];
+    if (integration.language === 'python') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['outOfBand'],
+        message:
+          `integration '${integration.id}' claims outOfBand 'none' but its route is python, so a consumer ` +
+          `whose whole toolchain is node cannot run it without an interpreter and an ASGI server they ` +
+          `start themselves. Use 'language-runtime'.`,
+      });
+    }
+    if (routeSources.some((code) => SPAWNS_PROCESS.test(code))) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['outOfBand'],
+        message:
+          `integration '${integration.id}' claims outOfBand 'none' but its route spawns a child process, ` +
+          `so the program it spawns has to be installed on the host — nothing in package.json puts it ` +
+          `there. Use 'local-binary'.`,
+      });
+    }
+    if (routeSources.some((code) => LOOPBACK_FETCH.test(code))) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['outOfBand'],
+        message:
+          `integration '${integration.id}' claims outOfBand 'none' but its route fetches a loopback ` +
+          `address, so something local has to be listening before the first message works. ` +
+          `Use 'local-server'.`,
       });
     }
   }
