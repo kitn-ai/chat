@@ -1,4 +1,6 @@
 import type { Integration, Archetype } from './types';
+import openai from './integrations/openai';
+import anthropic from './integrations/anthropic';
 import openrouter from './integrations/openrouter';
 import vercelAiSdk from './integrations/vercel-ai-sdk';
 import langgraph from './integrations/langgraph';
@@ -10,7 +12,11 @@ import pydanticAi from './integrations/pydantic-ai';
 import mock from './integrations/mock';
 import { archetypes as _archetypes } from './archetypes';
 
+// Order is the order a scaffolding agent reads them in. `openai` and `anthropic`
+// lead because they are the two keys a developer is most likely to already hold.
 export const integrations: Integration[] = [
+  openai,
+  anthropic,
   openrouter,
   vercelAiSdk,
   langgraph,
