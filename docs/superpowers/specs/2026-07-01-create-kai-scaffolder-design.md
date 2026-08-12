@@ -1,9 +1,10 @@
 # `npx create-kai` scaffolder - design
 
-Date: 2026-07-01. Revised 2026-08-07 (v2).
-Status: DESIGN + RESEARCH ONLY (for human review). Nothing implemented.
+Date: 2026-07-01. Revised 2026-08-07 (v2). Corrected 2026-08-12 against the tree.
+Status: **v0 (the catalog prerequisites) is COMPLETE and merged.** The CLI itself
+is still design only. See Staging for what v1 now builds on rather than builds.
 Branch context: v1 was written on `feat/examples-rollout` (now merged; the kit is
-published at 0.19.0). This is Phase 2 of the examples refresh (Phase 1 = the
+published at 0.20.1). This is Phase 2 of the examples refresh (Phase 1 = the
 per-framework starters that double as templates, now shipped).
 
 ## What changed in v2
@@ -28,6 +29,8 @@ Rob's review of v1 plus prior-art research on shadcn and TanStack moved five thi
    harness they finish the app with already knows the kit. No prior art does this.
 7. **The integration catalog needs OpenAI and Anthropic before this ships.** Neither
    exists today, and they are the two keys developers most often already hold.
+   *(Both shipped 2026-08-12. `openai` and `anthropic` are in the catalog, and the
+   catalog is eleven integrations.)*
 
 ## Summary
 
@@ -124,8 +127,8 @@ are eight, in three tiers with genuinely different provenance:
 
 | Tier | Starters | What they are | Kit dep |
 |---|---|---|---|
-| **Composed workspace** | react, vue, svelte, vanilla, angular | The Phase-1 hand-composed mini-workspace: conversations sidebar + message thread + composer, wired by hand over the `kai-*` elements. Each has `chat-data.ts` (sample data + `streamFakeReply`) and a `components/` split. | `workspace:*` |
-| **Solid-native** | solid | 358-line single-file `App.tsx` composing the SolidJS components DIRECTLY (`ChatContainer`, `Message`, `PromptInput`, `ConversationList`, `ResizablePanelGroup`) rather than the `kai-*` web components. Uses `lucide-solid`. | `workspace:*` |
+| **Composed workspace** | react, vue, svelte, vanilla, angular | The Phase-1 hand-composed mini-workspace: conversations sidebar + message thread + composer, wired by hand over the `kai-*` elements. Each has `chat-data.ts` (sample data + `mockResponse`, the kit's shared `createMockResponder()`) and a `components/` split. | `workspace:*` |
+| **Solid-native** | solid | Single-file `App.tsx` composing the SolidJS components DIRECTLY (`ChatContainer`, `Message`, `PromptInput`, `ConversationList`, `ResizablePanelGroup`) rather than the `kai-*` web components. Uses `lucide-solid`. | `workspace:*` |
 | **SSR consumer apps** | nextjs, tanstack-start | Real published-package consumer apps from the consumer-hardening campaign. Next: `app/layout.tsx` + `app/page.tsx` + `app/InteractiveIsland.tsx` (the client-island pattern). TanStack: `src/router.tsx` + `src/routes/`. | `file:../../..` (deliberately tarball-style, to test the consumer path) |
 
 The React starter is the flagship: `src/App.tsx` composes `<Resizable>` +
@@ -149,9 +152,16 @@ listening for `kai-submit`). The shared, parameterizable parts are `chat-data.ts
 is a Zod-typed `Integration` (`types.ts`): `id`, `title`, `category`
 (`provider|gateway|framework|harness|mock`), `language` (`ts|python`),
 `streamFormat`, `envVars: string[]`, `routeTemplates` (keyed by framework value ->
-code string), `streamMapping`, `runNote`, `docsSlug`. Nine integrations ship today
-(openrouter, vercel-ai-sdk, langgraph, cloudflare, ollama, mastra, pi, pydantic-ai,
-mock).
+code string), `webRoute` (one web-standard `(Request) => Response` handler the
+scaffolder wraps per framework), `streamMapping`, `runNote`, `docsSlug`,
+`forwardsFromClient`, `clientToolFormat`, `deps` and `keyExposure`.
+
+**Eleven** integrations ship today: openai, anthropic, openrouter, vercel-ai-sdk,
+ollama, cloudflare, langgraph, mastra, pydantic-ai, pi, mock. `deps` and
+`keyExposure` are this spec's v0 additions (see Staging); `webRoute`,
+`forwardsFromClient` and `clientToolFormat` arrived alongside them from the
+scaffolder's own hardening, and each is declared rather than derived for a reason
+recorded next to it in `types.ts`.
 
 **Six** archetypes ship in `archetypes.ts` (v1 of this spec said seven; that was
 wrong, and it double-counted the hand-authored workspace):
@@ -167,13 +177,18 @@ wrong, and it double-counted the hand-authored workspace):
 
 Read that table as a components list plus a placement, and the v2 flow falls out of
 it: **placement is the layout question, and `components` is the feature multi-select.**
-The archetypes are six useful points in that space, not the space itself.
+The archetypes are six useful points in that space, not the space itself. That is
+now literally true rather than aspirational: since v0 an archetype is DATA over
+`renderSurface`, and `scaffold.test.ts` asserts each preset's render is byte-equal
+to `renderSurface` called with its own `components`.
 
-`mcp/tools/scaffold.ts` renders framework + archetype + integration into a runnable
-front-end App file. Renderers exist for `html`, `react`, `next`, `vue`, `svelte`,
-`tanstack-start`. **No angular renderer, no solid renderer.** It special-cases `mock`
-to stream client-side (the same idea as `streamFakeReply`) and emits the OpenAI-format
-SSE reader loop for real gateways. `create-kai` reuses this exact code.
+`mcp/tools/scaffold.ts` exports `renderSurface({ framework, components,
+integration, placement?, suggestions?, audience? })`, which renders a components
+list into a runnable front-end App file. Renderers exist for all eight targets:
+`html`, `react`, `next`, `vue`, `svelte`, `angular`, `solid`, `tanstack-start`. It
+special-cases `mock` to call the shared `createMockResponder()` in place of
+`fetch`, and emits `readOpenAIStream` for every integration including that one.
+`create-kai` reuses this exact function.
 
 ### The existing bin
 
@@ -279,9 +294,12 @@ Prompt: `Wire a model gateway?` Sourced from `listIntegrations()`, ordered by
 frontend relevance, with a synthesized "None" at the top that maps to the `mock`
 integration.
 
-The nine that ship today:
+The eleven that ship today:
 
-- None - local mock, no key, no backend (default). Ships `streamFakeReply`.
+- None - local mock, no key, no backend (default). Ships the shared
+  `createMockResponder()` from `@kitn.ai/ui/state`.
+- OpenAI
+- Anthropic
 - OpenRouter
 - Vercel AI SDK (AI Gateway)
 - Ollama (local models)
@@ -291,22 +309,28 @@ The nine that ship today:
 - Pydantic AI (Python backend)
 - Pi (local coding-agent bridge)
 
-**Gap: there is no direct OpenAI integration and no direct Anthropic integration.**
-The catalog covers aggregators (OpenRouter), SDK layers (Vercel AI SDK), orchestration
-frameworks (LangGraph, Mastra, Pydantic AI), a local runner (Ollama), a
-platform (Cloudflare) and a harness bridge (Pi). It does not cover "I have an OpenAI
-key" or "I have an Anthropic key", which are the two most common starting points a
-developer actually arrives with.
+**The OpenAI / Anthropic gap this section opened is CLOSED (2026-08-12).** It was
+real: the catalog covered aggregators (OpenRouter), SDK layers (Vercel AI SDK),
+orchestration frameworks (LangGraph, Mastra, Pydantic AI), a local runner
+(Ollama), a platform (Cloudflare) and a harness bridge (Pi), but not "I have an
+OpenAI key" or "I have an Anthropic key", which are the two most common starting
+points a developer actually arrives with.
 
-This is a real hole and it predates the CLI: the `kai` MCP has the same gap today.
-Both integrations are cheap, because the wiring is the shape the catalog is already
-built for: a single `envVars` entry (`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`), a
-`routeTemplates` entry per framework, and an SSE `streamMapping`. OpenAI's format is
-already the one `scaffold.ts` emits a reader for; Anthropic's SSE needs its own
-`streamMapping` (`content_block_delta` rather than `choices[].delta`).
+One prediction in the original text was wrong and is worth keeping for whoever
+adds the next provider. Anthropic did NOT reduce to a different `streamMapping`
+over the same emitted reader. Its route **re-frames** the Messages dialect to
+OpenAI SSE server-side (`content_block_delta` -> `delta.content`,
+`thinking_delta` -> `delta.reasoning`, a `tool_use` block plus its
+`input_json_delta` fragments -> `delta.tool_calls`), because Anthropic indexes by
+CONTENT BLOCK while OpenAI's `tool_calls[].index` counts TOOL CALLS, so the two
+indices are not the same number. Feeding the native dialect to `readOpenAIStream`
+does not throw; it parses to nothing and the turn ends silently empty. Anthropic
+also needed four request-shape differences that are each a 400 (top-level
+`system`, required `max_tokens`, object-valued `tool_choice`, `input_schema`
+rather than `function.parameters`). Read `integrations/anthropic.ts` before
+assuming a new provider is a `streamMapping` string.
 
-Recommend adding both to `src/agent-tooling/integrations/` BEFORE the CLI ships, so
-the gateway list matches what people expect on first run. Ordered list after that:
+The ordered list:
 
 ```
 None (mock)  ·  OpenAI  ·  Anthropic  ·  OpenRouter  ·  Vercel AI SDK  ·  Ollama
@@ -415,15 +439,16 @@ Docs: https://ui.kitn.ai/integrations/connect-any-model
 For no-key gateways it prints the `runNote` (start Ollama / Pi first). For None it
 prints the run steps and a "swap the mock responder when ready" pointer.
 
-## The mock responder (decide before building)
+## The mock responder (decided and built)
 
 The zero-config default is the difference between a scaffolder that feels alive and
 one that dumps files, so it needs a real decision rather than an implementation
 detail.
 
-All five composed-workspace starters already carry a `streamFakeReply` in their own
-`chat-data.ts`, and `scaffold.ts` has its own client-side mock render. That is two
-implementations plus five copies. **Standardize one**: a small
+The problem this section was written against: all five composed-workspace starters
+carried their own hand-rolled `streamFakeReply` in `chat-data.ts`, and `scaffold.ts`
+had a sixth client-side mock render. That was two implementations plus five copies.
+**Standardize one**: a small
 `createMockResponder({ delayMs, chunkSize, replies })` shipped from
 `@kitn.ai/ui/state` (which already exports `createAssistantStream`, used by the
 vanilla starter). Every starter and every scaffold render imports it.
@@ -488,10 +513,15 @@ A one-time `console.info` on the first turn covers "notice it instantly"; pass
 `wire`), has no DOM and no Solid, and yields `AsyncIterable<string>`, which is
 structurally a `StreamSource`. The dependency runs one way — a caller pairs them.
 
-Still open: the five `examples/starters/*` copies of `streamFakeReply` have NOT been
-migrated yet, and `integrations/mock.ts`'s `streamMapping` prose still claims the
-scaffold "folds tokens onto the message parts, so nothing parses a wire format",
-which is now false.
+**Migration COMPLETE (2026-08-12).** No source file in the tree defines or calls
+`streamFakeReply` any more. All five composed-workspace starters export
+`mockResponse = createMockResponder({ replies: MOCK_REPLIES })` from their own
+`chat-data.ts` and read it with `readOpenAIStream`, and `integrations/mock.ts`'s
+`streamMapping` describes the wire it actually produces. That string is worth
+getting right out of proportion to its size: `compose()` prints it as the `stream:`
+line at the top of every emitted scaffold, and the mock scaffold is the zero-config
+path, so it is the first prose a new developer reads with no prior context to
+correct it against.
 
 ## The clone rule
 
@@ -535,7 +565,7 @@ shape, which is the single thing that makes shadcn's `add` tractable.
   "$schema": "https://ui.kitn.ai/schema/kai.json",
   "version": 1,
   "framework": "react",          // react|vue|svelte|solid|angular|html|nextjs|tanstack-start
-  "kit": "^0.19.0",              // the @kitn.ai/ui range this project was scaffolded against
+  "kit": "^0.20.1",              // the @kitn.ai/ui range this project was scaffolded against
   "layout": "full-screen",       // full-screen|widget
   "widgetStyle": null,           // fab|side, when layout=widget
   "features": ["conversations"], // the multi-select result
@@ -597,7 +627,7 @@ consumer, not a monorepo member:
 - `package.json`: set `name` to the project name, drop `private`/monorepo bits,
   replace `"@kitn.ai/ui": "workspace:*"` (or `"file:../../.."` for the SSR starters)
   with the published range (the CLI's own version pins a matching `@kitn.ai/ui`
-  range, e.g. `^0.19.0`), add any gateway deps.
+  range, e.g. `^0.20.1`), add any gateway deps from `integration.deps`.
 - Rename example-specific ids; strip repo-internal comments that reference
   `nx build ui` / `workspace:*`.
 
@@ -626,16 +656,23 @@ Which cells can actually be emitted today:
 | Vue | yes | yes | elements | |
 | Svelte | yes | yes | elements | |
 | Vanilla / HTML | yes | yes (`html`) | elements | Imperative DOM over raw `kai-*` |
-| Angular | yes (Angular 22, zoneless) | **no renderer** | elements | Composed template only until a renderer exists. Needs Node >= 22.22.3 |
-| SolidJS | single-file, Solid-native | **no renderer** | **solid** | Direct component imports, not `kai-*`. Needs its own renderer |
+| Angular | yes (Angular 22, zoneless) | yes (`angular`) | elements | Needs Node >= 22.22.3. Route lives in `src/server.ts` and must be registered BEFORE the SSR catch-all |
+| SolidJS | single-file, Solid-native | yes (`solid`) | **solid** | Direct component imports, not `kai-*`. The one target that does not render through `<kai-chat>` |
 | Next.js | no (SSR consumer app) | yes (`next`) | elements | Client-island pattern; native route for gateways |
 | TanStack Start | no (SSR consumer app) | yes (`tanstack-start`) | elements | Native route for gateways |
 
-Two real gaps, both of which also improve the MCP if closed:
+**The Angular and Solid renderer gap is CLOSED.** Both landed in
+`feat(mcp): scaffold Angular and SolidJS`, so all eight frameworks now have a
+renderer and the feature multi-select reaches every one of them. `verify:scaffold`
+compiles the emitted front ends under three tsc projects (default, angular, solid),
+and adds a structural check the compiler cannot do for Solid specifically: it
+asserts the emitted `renderPart` branches on every `MessagePart` variant, with the
+variant list derived from the union in `chat-types.ts`. Solid is the target that
+renders parts itself rather than delegating to `<kai-chat>`, so a `<Switch>` missing
+a `<Match>` compiles perfectly and renders nothing.
 
-- **Angular and Solid have no `scaffold.ts` renderer.** Until they do, those
-  frameworks offer only the composed-workspace path, and the feature multi-select is
-  limited to what the hand-authored template already includes.
+One real gap remains:
+
 - **Next.js and TanStack Start have no composed-workspace template.** They have
   renderers, so feature combinations work, but the flagship hand-composed shell does
   not exist for them.
@@ -645,16 +682,33 @@ cannot emit.
 
 ## Staging
 
-### v0 - catalog prerequisites (before the CLI)
+### v0 - catalog prerequisites (before the CLI) - **COMPLETE, 2026-08-12**
 
-Small, independently useful, and they improve the `kai` MCP on their own:
+Small, independently useful, and they improved the `kai` MCP on their own. All four
+landed:
 
-- Add `openai` and `anthropic` integrations to `src/agent-tooling/integrations/`.
-- Extend `IntegrationSchema` with an explicit deps list and a
-  `frontendSafe`/`needsProxy` flag.
-- Extract `renderSurface({ framework, components, integration })` so the MCP and the
-  CLI share one renderer, keyed on a components list rather than an archetype id.
-- Standardize the mock responder in `@kitn.ai/ui/state`.
+- **DONE** - `openai` and `anthropic` integrations added to
+  `src/agent-tooling/integrations/`. The catalog is eleven.
+- **DONE** - `IntegrationSchema` carries `deps: { npm, pip }` and `keyExposure:
+  'frontend-safe' | 'needs-proxy'` (the flag this spec called
+  `frontendSafe`/`needsProxy`). Both are guarded in `registry.test.ts`; see
+  Gateway wiring for what that means for prose in this document.
+- **DONE** - `renderSurface({ framework, components, integration, placement?,
+  suggestions?, audience? })` is exported from `mcp/tools/scaffold.ts` and is the
+  one renderer. Archetypes became data over it, `compose()` resolves a preset to its
+  `components` and calls it, and `assertPresetsAreData` in
+  `scripts/verify-scaffold-compiles.mjs` requires the two request shapes to emit
+  byte-identical surfaces.
+- **DONE** - the mock responder is standardized as `createMockResponder()` in
+  `@kitn.ai/ui/state`, and every hand-rolled copy is gone.
+
+`renderSurface` is the one that changes what v1 is. This spec was written assuming
+`create-kai` would need renderer extraction as part of its own work, keyed on an
+archetype id it would then have to translate. It does not: v1 calls the shipped
+function with the multi-select's components list directly, and passes the whole
+`integration` so the renderer derives what it must not be told (whether a tools
+array is forwarded, whether there is a backend to POST a second round to, which
+envelope a card tool takes).
 
 ### v1 - `create-kai` (new projects)
 
@@ -664,7 +718,8 @@ Small, independently useful, and they improve the `kai` MCP on their own:
 - `kai.json` written but unread.
 - Smoke test across a sampled matrix.
 
-Explicitly out: clone templates, `add`, Angular/Solid renderers.
+Explicitly out: clone templates, `add`. (Angular and Solid renderers were on this
+list and are now shipped, so they are in scope for v1's matrix rather than out.)
 
 ### v2 - `add` (existing projects)
 
@@ -695,33 +750,84 @@ server-side. The CLI's default is a Vite dev-server proxy: a small `configureSer
 plugin (or `server.proxy` entry) that reads the UNPREFIXED key via `loadEnv` at dev
 time and proxies `/api/chat` to the upstream. The browser calls `/api/chat`; the key
 never enters the client bundle. For meta-frameworks (Next/TanStack), the CLI writes
-the integration's native server route (`routeTemplates.next` etc.) instead of a
-proxy. Ollama/Pi/None need no proxy.
+the integration's native server route instead of a proxy. Ollama/Pi/None need no
+proxy.
+
+**Not `routeTemplates.next`.** That is how this spec described it and it is the bug
+the catalog has since fixed. `routeTemplates` is keyed by framework, and in practice
+every TS integration only ever filled in `next`, so everything else fell through to
+it and a Svelte scaffold got a Next.js `export async function POST(req)`, which
+TYPECHECKS under SvelteKit and then throws `req.json is not a function` on the first
+submit. Integrations now write the handler body ONCE as `webRoute`, a web-standard
+`async function chatHandler(request: Request)`, and the scaffolder wraps it per
+framework (`WEB_ROUTE_ADAPTERS`). Eight of eleven integrations carry a `webRoute`,
+and seven of those pair it with an empty `routeTemplates`. The exceptions are all
+genuine: `cloudflare` carries both, because a Worker reaches its model through an
+`env` binding rather than a bare `Request`; `pi` is an Express `(req, res)` bridge;
+`pydantic-ai` is a FastAPI service; `mock` has no route at all. An exact
+`routeTemplates[framework]` still wins where present, so the CLI must go through the
+same resolution the MCP does rather than read either field directly.
 
 The front-end surface for a keyed gateway is the `scaffold.ts` non-mock render (POST
 `/api/chat`, read OpenAI-format SSE into the assistant message). For None it is the
 mock render / the standardized mock responder.
 
-| Gateway (id) | Frontend deps added | Backend added | Env var(s) | Server needed | Browser key safe |
-|---|---|---|---|---|---|
-| None / mock (`mock`) | none | none (client-side responder) | none | no | n/a (no key) |
-| OpenAI (`openai`) **TO ADD** | none (fetch) | dev proxy (SPA) or native route | `OPENAI_API_KEY` | yes | NO - needs proxy |
-| Anthropic (`anthropic`) **TO ADD** | none (fetch) | dev proxy (SPA) or native route | `ANTHROPIC_API_KEY` | yes | NO - needs proxy |
-| OpenRouter (`openrouter`) | none (fetch) | dev proxy (SPA) or `routeTemplates.next` | `OPENROUTER_API_KEY` | yes | NO - needs proxy |
-| Vercel AI SDK (`vercel-ai-sdk`) | `ai` (+ a provider pkg) | route / proxy | `AI_GATEWAY_API_KEY` | yes | NO - needs proxy |
-| Ollama (`ollama`) | none | optional proxy, or direct + `OLLAMA_ORIGINS` | none | local | YES (local, no key) |
-| Cloudflare AI (`cloudflare`) | none (fetch) | route / proxy, or a Worker | `CF_ACCOUNT_ID`, `CF_API_TOKEN` | yes | NO - needs proxy |
-| LangGraph (`langgraph`) | `@langchain/langgraph`, `@langchain/openai`, `@langchain/core` | Node route | `OPENAI_API_KEY` | yes (Node) | NO - needs proxy |
-| Mastra (`mastra`) | `@mastra/client-js` | route calling a Mastra server | `MASTRA_URL` | yes (Mastra server) | URL, not a secret |
-| Pydantic AI (`pydantic-ai`) | pip: `pydantic-ai fastapi uvicorn` | FastAPI app (separate process) | `OPENAI_API_KEY` | yes (Python) | NO - needs proxy |
-| Pi (`pi`) | none (spawns `pi`) | local stdio bridge (Node) | none | yes (local bridge) | n/a - sandbox before exposing |
+**Deps are NOT listed here, deliberately.** They are `integration.deps`
+(`{ npm: string[], pip: string[] }`), declared per integration and derived from the
+route's own import statements. `registry.test.ts` asserts `deps.npm` is EXACTLY the
+set of bare-module specifiers the TS route sources import, normalised to package
+names (`@langchain/core/tools` counts as `@langchain/core`), minus `node:` builtins
+and minus `@kitn.ai/ui` itself. `deps.pip` is a superset of the Python route's
+imports, because a Python app also needs `uvicorn`, which nothing imports. The CLI
+reads that field and installs it. It must never read this document.
 
-Notes: env var names and route templates come verbatim from each integration in
-`src/agent-tooling/integrations/*`. Two fields the catalog does NOT yet carry are
-needed for deterministic wiring and should be added to `IntegrationSchema` (see Open
-questions): an explicit deps list (`{ npm?: string[]; pip?: string[] }`) and a
-`frontendSafe` / `needsProxy` flag. Today deps are only described in prose in
-`runNote`/route templates.
+That rule is here because the earlier version of this table got it wrong in the
+expensive direction: it listed langgraph as `@langchain/langgraph`,
+`@langchain/openai`, `@langchain/core` and omitted **`zod`**, while the emitted
+route's tool `schema:` is a `z.object()`. A project installed from that prose fails
+to build. A dependency list maintained in two places has exactly that as its failure
+mode, so this one now has one place.
+
+| Gateway (id) | Backend added | Env var(s) | Server needed | `keyExposure` |
+|---|---|---|---|---|
+| None / mock (`mock`) | none (in-process responder) | none | no | `frontend-safe` |
+| OpenAI (`openai`) | dev proxy (SPA) or native route | `OPENAI_API_KEY` | yes | `needs-proxy` |
+| Anthropic (`anthropic`) | dev proxy (SPA) or native route | `ANTHROPIC_API_KEY` | yes | `needs-proxy` |
+| OpenRouter (`openrouter`) | dev proxy (SPA) or the `webRoute` handler | `OPENROUTER_API_KEY` | yes | `needs-proxy` |
+| Vercel AI SDK (`vercel-ai-sdk`) | route / proxy | `AI_GATEWAY_API_KEY` | yes | `needs-proxy` |
+| Ollama (`ollama`) | optional proxy, or direct + `OLLAMA_ORIGINS` | none | local | `frontend-safe` |
+| Cloudflare AI (`cloudflare`) | route / proxy, or a Worker | `CF_ACCOUNT_ID`, `CF_API_TOKEN` | yes | `needs-proxy` |
+| LangGraph (`langgraph`) | Node route | `OPENAI_API_KEY` | yes (Node) | `needs-proxy` |
+| Mastra (`mastra`) | route calling a Mastra server | `MASTRA_URL` | yes (Mastra server) | `needs-proxy` |
+| Pydantic AI (`pydantic-ai`) | FastAPI app (separate process) | `OPENAI_API_KEY` | yes (Python) | `needs-proxy` |
+| Pi (`pi`) | local stdio bridge (Node) | none | yes (local bridge) | `needs-proxy` |
+
+Env var names, route templates and the `keyExposure` flag come verbatim from each
+integration in `src/agent-tooling/integrations/*`. There is no default and no
+boolean: an integration declaring neither value is REJECTED at the catalog boundary,
+because "absent" must never read as "safe". A second check refuses the specific lie,
+and only ever in the dangerous direction: a `frontend-safe` claim fails if the
+integration declares a secret-looking env var, or if any of its route sources writes
+an `Authorization` / `x-api-key` header. A needless `needs-proxy` never fails, which
+is the asymmetry the flag wants.
+
+**Two rows this table used to leave ambiguous, now resolved conservatively.** Both
+are argued in-file next to the field, not just here.
+
+- **`mastra` is `needs-proxy`**, though `MASTRA_URL` is a base URL and not a secret.
+  The automatic check cannot decide this one and `frontend-safe` would have parsed
+  cleanly. The determination is read off what the route IS: mastra ships a server
+  `chatHandler` that reads `process.env` at module scope and nothing else, with no
+  browser-direct path. Declaring it safe would have the CLI point a public bundle at
+  an unauthenticated agent endpoint. A needless server hop costs a process; the other
+  error costs the endpoint. (The old "URL, not a secret" cell was the argument for
+  the wrong answer.)
+- **`pi` is `needs-proxy`** for the flag's OTHER case, a server-only CAPABILITY. No
+  key is involved anywhere: `envVars` is empty and Pi uses its own credentials on
+  disk. The bridge calls `spawn()`, which no browser can do, and `runNote` warns that
+  Pi runs with full user permissions and wants sandboxing before exposure. "No key"
+  is not the same fact as "safe in the browser", and collapsing the two is exactly
+  how this flag gets got wrong. (The old "n/a" cell collapsed them.)
 
 ## API key + `.env` handling + security
 
@@ -772,11 +878,14 @@ questions): an explicit deps list (`{ npm?: string[]; pip?: string[] }`) and a
   into the package. The CLI reads the bundled catalog + templates at runtime. Keeps
   the gateway/feature list in ONE place while avoiding a runtime dependency on
   `@kitn.ai/ui`.
-- Reuse the `scaffold.ts` renderers by extracting the pure render functions into a
-  small shared module both the MCP and the CLI import. Preferred:
-  `renderSurface({ framework, components, integration })` under `src/agent-tooling/`
-  so neither tool owns a copy. Note the signature takes a COMPONENTS LIST, not an
-  archetype id, which is what makes the feature multi-select possible.
+- Reuse `renderSurface({ framework, components, integration })`, already exported
+  from `mcp/tools/scaffold.ts`. **No extraction work left**: it is the one renderer,
+  the MCP goes through it, and it takes a COMPONENTS LIST rather than an archetype id,
+  which is what makes the feature multi-select possible. Pass the whole `integration`
+  rather than the derivations taken off it (tools forwarded, backend present, card
+  tool envelope): a caller that computed those itself would be free to compute them
+  differently, and those derivations ARE the contract between the surface and the
+  wire.
 - Consider TanStack-style `--json` introspection (`--list-features --json`) so coding
   agents can discover the CLI's capabilities. Cheap to add, and it keeps the human CLI
   and the MCP telling the same story.
@@ -805,10 +914,11 @@ questions): an explicit deps list (`{ npm?: string[]; pip?: string[] }`) and a
   renderer composes them mechanically, but "compiles" is not "looks right". Mitigate
   by sampling combinations in the smoke test and by keeping the composed-workspace
   default on a hand-reviewed path.
-- **Angular and Solid renderers.** No `scaffold.ts` renderer exists for either, so
-  those frameworks are limited to the composed template. Adding renderers benefits
-  the MCP too. Solid's is the more interesting one because it emits direct component
-  imports rather than `kai-*` elements (the `registration: "solid"` branch).
+- ~~**Angular and Solid renderers.**~~ **RESOLVED.** Both shipped; all eight
+  frameworks have a renderer. Solid was the interesting one, as predicted, because it
+  emits direct component imports rather than `kai-*` elements (the
+  `registration: "solid"` branch) and therefore renders message parts itself. That is
+  also why it carries its own structural guard in `verify:scaffold` on top of tsc.
 - **No composed workspace for Next/TanStack.** They have renderers but no
   hand-composed shell, so the flagship experience is missing on exactly the two
   frameworks most likely to be used in production. Worth considering as the first
@@ -816,11 +926,22 @@ questions): an explicit deps list (`{ npm?: string[]; pip?: string[] }`) and a
 - **Template drift.** Mitigated by sourcing templates from CI-built starters and the
   smoke test. Risk remains if a starter uses `workspace:*`-only APIs not in the
   published package; the smoke test builds against the real tarball to catch it.
-- **Extend `IntegrationSchema`.** The catalog lacks an explicit install-deps list and
-  a `frontendSafe`/`needsProxy` flag. Recommend adding both so the CLI (and the MCP)
-  wire deps and the proxy decision deterministically instead of parsing prose. Small,
-  backward-compatible addition.
-- **Matrix size.** framework (8) x features (2^6) x gateway (9) is enormous in
+- ~~**Extend `IntegrationSchema`.**~~ **RESOLVED.** `deps` and `keyExposure` both
+  ship, both guarded. The CLI wires deps and the proxy decision off the catalog and
+  parses no prose. See Gateway wiring for the two determinations that needed an
+  argument rather than a check (`mastra`, `pi`).
+- **`x-kai-contract-version` was dropped, not completed. Do not re-litigate it as an
+  oversight.** It was a JSON-Schema extension keyword on the card schemas, sitting on
+  3 of 11 documents and read by nothing, so no consumer could have built a working
+  lookup on it. The lean projection strips `x-*` by prefix, so it never reached a
+  model or a validator either. The initial ruling was to complete it to all eleven and
+  generate it; the dropping argument won, because a version stamped on eleven
+  documents is eleven chances to disagree and it belongs in ONE authoritative place
+  with a guard. Filed as a separate follow-up, because non-JS consumers (a Python or
+  Go backend building a card envelope) do still need *a* channel for the contract
+  version, just not that one. Nothing in `create-kai` depends on the outcome; this is
+  recorded so v1 does not read the removal as a regression and re-add the keyword.
+- **Matrix size.** framework (8) x features (2^6) x gateway (11) is enormous in
   theory. On-disk templates stay at 8; everything else is generated. The real cost is
   the test matrix, bounded by sampling.
 - **SPA production keys.** The dev proxy makes `npm run dev` safe, but `vite build`

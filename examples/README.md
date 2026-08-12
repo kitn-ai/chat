@@ -12,9 +12,16 @@ resizable sidebar split, a `kai-conversations` rail, a streaming `kai-thread`, a
 to show how the pieces fit together, not to drop in one batteries-included
 `<kai-chat>` tag.
 
-They run with no backend. Replies stream from a local fake responder
-(`src/chat-data.ts`), so there's no API key and nothing to host. Swap
-`streamFakeReply` for a real model call and you have a real app.
+They run with no backend. Replies come from the kit's own `createMockResponder()`
+(`@kitn.ai/ui/state`, wired up in each starter's `src/chat-data.ts`), so there's
+no API key and nothing to host. It yields canned SSE frames that
+`readOpenAIStream` parses exactly as it parses a real provider's, so the preview
+runs the real streaming path rather than a lookalike. Swap `mockResponse(text)`
+for a real `fetch` and you have a real app.
+
+Nothing there can be mistaken for a real turn: the stream opens with a
+`: kai-mock` SSE comment, every frame carries a `_kai_mock` field, `model`
+reports as `kai-mock`, and usage is all zeros.
 
 | Directory | Framework | Kit API used |
 |---|---|---|
@@ -22,7 +29,7 @@ They run with no backend. Replies stream from a local fake responder
 | `starters/vue/` | Vue 3 | Raw `kai-*` web components via `:prop.prop` bindings + `@kai-*` handlers |
 | `starters/svelte/` | Svelte 5 (runes) | Raw `kai-*` web components via `bind:this` + `$effect` + `onkai-*` handlers |
 | `starters/vanilla/` | Plain TypeScript (Vite) | Raw `kai-*` web components, composed imperatively; no framework |
-| `starters/angular/` | Angular 18 (standalone) | Raw `kai-*` web components via `[prop]` / `(kai-*)` + `CUSTOM_ELEMENTS_SCHEMA` |
+| `starters/angular/` | Angular 22 (standalone, zoneless) | Raw `kai-*` web components via `[prop]` / `(kai-*)` + `CUSTOM_ELEMENTS_SCHEMA` |
 
 All five are pnpm-workspace members that depend on the kit with
 `"@kitn.ai/ui": "workspace:*"`, so they build against the local source through
