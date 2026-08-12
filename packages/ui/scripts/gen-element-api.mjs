@@ -10,7 +10,7 @@
 import ts from 'typescript';
 import { readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
 import { basename, dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createTsHelpers, displayNameFromClass } from './_ts-helpers.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -650,7 +650,13 @@ console.log(`✓ dist/custom-elements.json — ${elements.length} elements`);
 export { elements, toAttr, tagToClass, IMPORTS };
 
 // run the sibling generators if present (types + react)
-if (import.meta.url === `file://${process.argv[1]}`) {
+// pathToFileURL, NOT `file://${process.argv[1]}`: import.meta.url percent-encodes and a
+// path does not, so on a checkout under `/My Repo/` the hand-built string never matched
+// and this whole block was skipped. `npm run build:api` IS this command, so it printed
+// its one "✓ dist/custom-elements.json" above and exited 0 while element-meta.json,
+// icon-names.json, element-types.d.ts, the React wrappers, llms.txt/llms-full.txt and
+// docs/web-components.md were never written.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   // Add readable (alias-shortened) display types for the Storybook API tab, which
   // renders from this JSON and can't run the markdown shortening at display time.
   const { shorten } = await import('./gen-web-components-md.mjs');

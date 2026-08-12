@@ -4,6 +4,7 @@
 //
 // Each tool is picked to land in a DIFFERENT kit component:
 //   get_weather    → structured JSON        → <kai-tool> panel
+//                    + a `weather` card     → the CONSUMER `cardTypes` seam
 //   search_docs    → a list of sources      → `source` parts on the message
 //   propose_action → a confirm card         → a `card` part on the message
 //   ask_choice     → a choice card          → `card` part
@@ -18,6 +19,7 @@
 // them on every turn both costs more and gives the model more ways to wander.
 import type { CardEnvelope } from '@kitn.ai/ui';
 import type { AttachmentData } from '@kitn.ai/ui/state';
+import { WEATHER_CARD_TYPE, type WeatherCardData } from './cards';
 
 // ── Tool schemas sent to the model ───────────────────────────────────────────
 
@@ -425,16 +427,32 @@ export function runTool(name: string, input: Record<string, unknown>): ToolRun {
           },
         };
       }
+      // The CONSUMER CARD. `weather` is not one of the kit's seven built-in card
+      // types, so this envelope can only render through the `cardTypes` seam that
+      // ThreadView hands to <kai-thread> — which is exactly why it lives on the
+      // spike's most-used tool rather than in a scenario of its own. See cards.ts.
+      const observation: WeatherCardData = {
+        city,
+        condition: hit.condition,
+        temperature: imperial ? Math.round(hit.tempC * 1.8 + 32) : hit.tempC,
+        units: imperial ? '°F' : '°C',
+        humidityPct: hit.humidity,
+        wind: imperial ? `${Math.round(hit.windKph * 0.621)} mph` : `${hit.windKph} km/h`,
+        observedAt: '2026-08-07T09:00:00Z',
+      };
       return {
-        output: {
-          city,
-          condition: hit.condition,
-          temperature: imperial ? Math.round(hit.tempC * 1.8 + 32) : hit.tempC,
-          units: imperial ? '°F' : '°C',
-          humidityPct: hit.humidity,
-          wind: imperial ? `${Math.round(hit.windKph * 0.621)} mph` : `${hit.windKph} km/h`,
-          observedAt: '2026-08-07T09:00:00Z',
-          source: 'canned fixture (spike)',
+        // UNCHANGED, deliberately: this is what goes back to the model on the
+        // next round, and `card` parts are never encoded onto the wire
+        // (wire/encode.ts: "card, source and file are kit-side"). So adding the
+        // card costs no extra tokens and leaves every recorded fixture valid.
+        output: { ...observation, source: 'canned fixture (spike)' },
+        card: {
+          type: WEATHER_CARD_TYPE,
+          // Per CITY, not per call: two calls for Paris in one turn are one
+          // observation, and `AssistantStream.addCard` upserts on this id.
+          id: `weather-${city.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+          title: `Weather in ${city}`,
+          data: observation,
         },
       };
     }

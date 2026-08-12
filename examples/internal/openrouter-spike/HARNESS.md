@@ -156,6 +156,46 @@ Anything else is a loud red with the reason spelled out. The precondition is hel
 to the same standard as every other assertion here: `conformance:control` points
 it at a stream that cannot reach the gap and fails it if it still passes.
 
+## The consumer card seam rides a normal path
+
+`cardTypes` is how a consumer substitutes their own design-system component for a
+card type. It had exactly one end-to-end user: S13 registered `<spike-artifact>`,
+because the kit shipped no `artifact` card. When `artifact` landed as the 7th
+built-in the workaround was correctly deleted — and the seam's only coverage went
+with it, in a green suite.
+
+**Coverage that exists only because something is MISSING is coverage on a timer.**
+The day the gap closes, someone deletes the workaround, and they are right to.
+
+So the replacement is not a scenario that reaches for the seam. `get_weather` —
+the spike's most-used tool, in the default interactive tool set and offered by
+**seven** catalog scenarios — now returns a `weather` card, a type the kit does
+not ship, drawn by this app's own `<spike-weather-card>`. A consumer card is what
+the app ORDINARILY renders when the model checks the weather, so breaking
+`cardTypes` breaks the normal path rather than one bespoke test. It is the same
+reasoning as the kit's `isCardTool`, which tests the `kai_` prefix rather than
+membership in the built-ins so a consumer type travels the ordinary path.
+
+Adding the card costs nothing on the wire: `card` parts are never encoded
+(`wire/encode.ts`), so every recorded fixture stayed valid and a live run sends
+exactly the bytes it sent before.
+
+S03 asserts **one** card, S05 asserts **two** — one per observation. The count is
+the assertion. "A card-producing scenario ran" and "the seam rendered a card per
+tool call" are different facts, and only the second one says the seam works:
+pinning the envelope id so the second card upserts over the first leaves S03 green
+and a presence check on S05 green too. Only the count goes red. The text check is
+scoped INSIDE the card for S13's reason — the `<kai-tool>` panel echoes the tool's
+own output a few inches up the thread, so an unscoped `Light rain` passes while the
+card renders as empty chrome.
+
+`src/cards.seam.test.ts` guards the half a browser cannot see, in node, with no
+key and no network: that the registered type is **still** not a kit built-in (read
+off `BUILTIN_CARD_TAGS`, never restated), that a real `runTool` still produces one,
+and that scenarios still **assert** it. Delete `seesConsumerCards` from a scenario
+and that test goes red immediately — which is the thing that did not happen last
+time.
+
 ## Live vs replay
 
 | | live | replay |

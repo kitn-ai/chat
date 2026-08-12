@@ -1,6 +1,6 @@
 import type { Scenario } from './types';
 import { pickTools } from '../tools';
-import { fail, seesAtLeast, seesProse } from './dom';
+import { fail, seesAtLeast, seesConsumerCards, seesProse } from './dom';
 
 /** S5 — two tool calls in ONE assistant turn.
  *
@@ -43,6 +43,14 @@ export const s05ParallelTools: Scenario = {
 
     const panels = await page.locator('button[aria-controls]').filter({ hasText: 'get_weather' }).count();
     if (panels !== 2) fail(`expected exactly 2 get_weather panels from one turn, saw ${panels}`);
+
+    // The CONSUMER SEAM, at a count the single-call case cannot reach. Two calls
+    // (Paris, Tokyo) are two distinct observations, so the seam must render TWO
+    // of the app's own elements, in call order, each carrying its own city's
+    // conditions. One card here would mean the second envelope never found the
+    // consumer entry — or found it and upserted over the first, which is the same
+    // green "a card rendered" as a working seam if nobody counts.
+    await seesConsumerCards(page, 2, ['Light rain', 'Clear']);
 
     await seesProse(page, 20);
   },

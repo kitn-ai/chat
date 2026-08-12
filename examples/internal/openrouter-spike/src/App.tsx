@@ -13,10 +13,13 @@ import { ThemeToggle } from './components/ThemeToggle';
 
 export type Theme = 'light' | 'dark';
 
-// No `cardTypes` override. There used to be one: `<spike-artifact>`, registered
-// through the documented consumer seam, because the kit shipped no `artifact`
-// card. It ships one now, and a consumer entry OVERRIDES the built-in — so
-// keeping the workaround would have meant S13 measuring the workaround forever.
+// The `cardTypes` seam lives on `ThreadView`, and it registers ONE type:
+// `weather`, which the kit does not ship. The previous entry was
+// `<spike-artifact>`, which existed only because the kit shipped no `artifact`
+// card; it ships one now, and a consumer entry OVERRIDES the built-in, so keeping
+// that would have meant S13 measuring the workaround forever. Deleting it was
+// right — and it silently took the seam's only end-to-end coverage with it. See
+// `cards.ts` for why the replacement hangs off `get_weather` instead.
 
 /**
  * ⚠ SPIKE, not a supported starter. See README.md.

@@ -57,7 +57,7 @@
 // notion of "enforced" IS the code that enforces it.
 import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..'); // packages/ui
 export const SCHEMA_DIR = join(ROOT, 'src/primitives/card-schemas');
@@ -394,4 +394,8 @@ function main() {
   console.log(`✓ card-validate-schemas.ts: ${CARD_TYPES.length} card schemas projected`);
 }
 
-if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) main();
+// pathToFileURL, NOT `file://${process.argv[1]}`: import.meta.url percent-encodes and
+// a path does not, so on a checkout under `/My Repo/` the hand-built string never
+// matched and `main()` silently did not run — including under `npm run
+// verify:card-validation`, which then exited 0 having checked nothing.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();
