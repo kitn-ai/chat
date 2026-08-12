@@ -142,19 +142,64 @@ export function answer(page: Page): Locator {
   return bubbles(page).last();
 }
 
-/** Wait until the answer holds at least `min` characters, and hand back how many.
+/** How many characters a locator renders right now. */
+export async function textLength(locator: Locator): Promise<number> {
+  return ((await locator.textContent().catch(() => '')) ?? '').length;
+}
+
+/** Wait until `locator` holds at least `min` characters, and hand back how many
+ *  it had when the wait ended — which is UNDER `min` if it timed out, so callers
+ *  can report the shortfall rather than a bare timeout.
  *
- *  Uses a LOCATOR, not `page.waitForFunction`: the thread renders inside an open
- *  shadow root, and `document.querySelector` does not pierce shadow roots even
- *  though Playwright's locators do. A `waitForFunction` written against
- *  `document` here would simply never resolve. */
-export async function waitForAnswerLength(page: Page, min: number, timeout = VISIBLE_TIMEOUT): Promise<number> {
+ *  Takes a LOCATOR, not a page: "the answer" is not always `bubbles().last()`.
+ *  While the assistant is still streaming its first text delta the last bubble
+ *  is the ECHOED PROMPT, and a caller that measured it would be watching the
+ *  user's own words. Pin the bubble you mean and pass it in.
+ *
+ *  A locator rather than `page.waitForFunction` because the thread renders in an
+ *  open shadow root: `document.querySelector` does not pierce it, so a
+ *  `waitForFunction` written against `document` would simply never resolve. */
+export async function waitForMinLength(
+  locator: Locator,
+  min: number,
+  timeout = VISIBLE_TIMEOUT,
+): Promise<number> {
   const deadline = Date.now() + timeout;
   for (;;) {
-    const n = ((await answer(page).textContent().catch(() => '')) ?? '').length;
+    const n = await textLength(locator);
     if (n >= min) return n;
     if (Date.now() > deadline) return n;
-    await page.waitForTimeout(100);
+    await locator.page().waitForTimeout(50);
+  }
+}
+
+/** Poll `locator` until its rendered length has been UNCHANGED for `quietMs`,
+ *  and hand back that settled length. `null` means it was still changing when
+ *  `timeout` ran out.
+ *
+ *  This is how you assert "it stopped" without asserting "it stopped instantly".
+ *  Bytes already on the wire when an abort fires still arrive, so the honest
+ *  claim about a cancelled stream is that growth CEASES — not that it ceases
+ *  before the next frame, which is a race the network gets to win. */
+export async function waitForStableLength(
+  locator: Locator,
+  opts: { quietMs?: number; timeout?: number; pollMs?: number } = {},
+): Promise<number | null> {
+  const quietMs = opts.quietMs ?? 600;
+  const pollMs = opts.pollMs ?? 50;
+  const deadline = Date.now() + (opts.timeout ?? 8_000);
+  let value = await textLength(locator);
+  let steadySince = Date.now();
+  for (;;) {
+    await locator.page().waitForTimeout(pollMs);
+    const n = await textLength(locator);
+    if (n !== value) {
+      value = n;
+      steadySince = Date.now();
+    } else if (Date.now() - steadySince >= quietMs) {
+      return value;
+    }
+    if (Date.now() > deadline) return null;
   }
 }
 
