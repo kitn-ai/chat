@@ -1,6 +1,13 @@
 // src/primitives/card-validate-cards.ts
-// Two-tier validation of a CardEnvelope's `data` against the built-in card schema
-// for its type, for the NATIVE dispatchers.
+// Two-tier validation of a CardEnvelope's `data` against the card schema for its
+// type, for the NATIVE dispatchers.
+//
+// "The card schema for its type" means one of the seven built-ins, OR a schema the
+// app registered for a card type of its own. The second half arrived with
+// `createCardRegistry` (src/schemas/registry.ts) and is the optional third argument
+// to `validateCardData`. It exists because a developer's real generative UI is THEIR
+// pricing table, not our confirm card, and a validator that covers only the built-ins
+// leaves the one card the app actually cares about as the only unchecked one.
 //
 // THIS MIRRORS src/remote/provider-runtime.ts:139-147, DELIBERATELY.
 // -----------------------------------------------------------------
@@ -67,7 +74,7 @@
 // `id` and `url`, an `artifact` with neither `src` nor `files`, a `link.url` that is
 // not a URL, and an undeclared extra property are all NOT caught here.
 
-import { validateAgainstSchema, type ValidationIssue } from './card-validate';
+import { validateAgainstSchema, type JsonSchema, type ValidationIssue } from './card-validate';
 import { CARD_VALIDATION_SCHEMAS, type ValidatedCardType } from './card-validate-schemas';
 
 export type { ValidatedCardType } from './card-validate-schemas';
@@ -154,9 +161,28 @@ const TIER_BY_KEYWORD: Readonly<Record<string, CardValidationTier>> = Object.fre
  */
 const DEFAULT_TIER: CardValidationTier = 'soft';
 
-/** True when this envelope type has a projected schema to validate against. */
+/** True when this envelope type has a BUILT-IN projected schema to validate against. */
 export function isValidatedCardType(type: string): type is ValidatedCardType {
   return Object.prototype.hasOwnProperty.call(CARD_VALIDATION_SCHEMAS, type);
+}
+
+/**
+ * The schema to check `type` against, consumer-supplied first.
+ *
+ * A consumer schema WINS over a built-in of the same name, matching
+ * `mergeCardTags`/`mergeCardComponents`, where the consumer's entry is spread over
+ * ours. Anything else would mean a developer who replaced our confirm card with their
+ * own still had their data checked against our shape.
+ */
+function schemaFor(
+  type: string,
+  extra: Readonly<Record<string, JsonSchema>> | undefined,
+): JsonSchema | null {
+  if (extra && Object.prototype.hasOwnProperty.call(extra, type)) {
+    const custom = extra[type];
+    if (custom && typeof custom === 'object') return custom;
+  }
+  return isValidatedCardType(type) ? CARD_VALIDATION_SCHEMAS[type] : null;
 }
 
 function summarize(issues: CardValidationIssue[]): string {
@@ -168,16 +194,35 @@ function summarize(issues: CardValidationIssue[]): string {
 }
 
 /**
- * Validate a card envelope's `data` against the built-in schema for `type`.
+ * Validate a card envelope's `data` against the schema for `type`.
  *
- * Returns `null` when there is no schema for the type: a consumer's own custom card
- * type, which the kit has no shape for. Returning `null` rather than an empty pass
- * keeps "we checked and it was fine" distinguishable from "there was nothing to
- * check", so a caller cannot report the second as the first.
+ * Returns `null` when there is no schema for the type at all. Returning `null` rather
+ * than an empty pass keeps "we checked and it was fine" distinguishable from "there
+ * was nothing to check", so a caller cannot report the second as the first.
+ *
+ * @param schemas consumer-registered schemas by card type, normally
+ * `registry.validationSchemas` from `createCardRegistry`. Without it this function
+ * knows only the seven built-ins, which would mean a developer's own pricing-table
+ * card, registered perfectly legally through `cardTypes`, is the one card in the app
+ * nothing checks. The custom entry wins over a built-in of the same name; see
+ * {@link schemaFor}.
+ *
+ * A consumer schema is used AS AUTHORED rather than through the build-time lean
+ * projection the built-ins get, because that projection is a bundle-size measure and
+ * cannot run over a schema this package has never seen. The practical difference is
+ * only weight: `validateAgainstSchema` ignores every keyword it does not implement, so
+ * a custom schema is checked to exactly the same depth as a built-in, with the same
+ * NOT_ENFORCED gaps (no `allOf`/`anyOf`/`oneOf`/`if`, no `$ref`, no
+ * `additionalProperties`, no `format`).
  */
-export function validateCardData(type: string, data: unknown): CardValidationReport | null {
-  if (!isValidatedCardType(type)) return null;
-  const result = validateAgainstSchema(CARD_VALIDATION_SCHEMAS[type], data);
+export function validateCardData(
+  type: string,
+  data: unknown,
+  schemas?: Readonly<Record<string, JsonSchema>>,
+): CardValidationReport | null {
+  const schema = schemaFor(type, schemas);
+  if (schema === null) return null;
+  const result = validateAgainstSchema(schema, data);
   if (result.valid) return { ok: true, tier: 'ok', issues: [], hard: [], summary: '' };
 
   const issues: CardValidationIssue[] = result.issues.map((issue) => ({
