@@ -303,6 +303,19 @@ per-cell table lives in the results doc rather than here, so it only has to be r
 sequentially and are indexed by **content block**, so a thinking block pushes a tool call from index
 0 to 1 — which is the exact shape of the original Critical.
 
+**The `budget_tokens` rule above is model-scoped, and the scope is narrow.** It holds for the model
+we actually drove — Haiku 4.5 — and for Sonnet 4.5 and older. On Fable 5, Opus 5, Opus 4.8, Opus 4.7
+and Sonnet 5 the parameter is **removed and returns a 400**; on Opus 4.6 / Sonnet 4.6 it is
+deprecated but still functional. The replacement is `thinking: { type: 'adaptive' }` plus
+`output_config.effort`. Do not generalize the 1024 floor to a current model — verified against the
+`claude-api` reference 2026-08-12.
+
+**The silent-200 trap survives in a new form, and it is worth naming because it is the same trap.**
+On all six current models `thinking.display` now defaults to `'omitted'`, which streams thinking
+blocks whose text is empty. That reads exactly like "this model has no reasoning mode" — the precise
+misdiagnosis that cost the earlier sweep, wearing a different mask. Set
+`display: 'summarized'` explicitly before concluding anything about a model's reasoning.
+
 **Verbatim thinking costs about 1.07x prompt tokens, not 2.2x.** The 2.2x this document used to
 publish was a double-count, wrong by almost exactly a factor of two. **The Anthropic Skin emits
 `input_tokens` TWICE per request**, once in `message_start` and once in the final billed usage
