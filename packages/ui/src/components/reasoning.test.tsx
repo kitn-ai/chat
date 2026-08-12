@@ -140,3 +140,122 @@ describe('Reasoning disclosure aria wiring', () => {
     expect(trigger(container)).toHaveAttribute('aria-expanded', 'false');
   });
 });
+
+/** A Reasoning whose panel holds a focusable child, plus a sibling control
+ *  OUTSIDE the disclosure — so a test can tell "focus was handed back to the
+ *  trigger" from "focus never moved" and from "focus was stolen". */
+function renderFocusable() {
+  const [open, setOpen] = createSignal(true);
+  const result = render(() => (
+    <div>
+      <Reasoning open={open()}>
+        <ReasoningTrigger>Thinking</ReasoningTrigger>
+        <ReasoningContent>
+          <button type="button" data-testid="inside">Copy</button>
+        </ReasoningContent>
+      </Reasoning>
+      <button type="button" data-testid="outside">After</button>
+    </div>
+  ));
+  return { ...result, setOpen };
+}
+
+describe('Reasoning collapsed content leaves the tab order', () => {
+  // NOTE ON WHAT THESE PROVE: jsdom parses `inert` as an attribute but does NOT
+  // enforce it — nothing inside an inert subtree actually becomes unfocusable
+  // there. So these assert the ATTRIBUTE (the instruction to the engine) and the
+  // focus hand-off we drive ourselves. The engine honouring it — focus() refused
+  // inside a collapsed panel, Tab skipping it — is proved in a real browser by
+  // the `KeyboardReachability` story's play function.
+  it('marks the collapsed panel inert, so it is neither focusable nor announced', () => {
+    const { container } = renderReasoning();
+    expect(panel(container)).toHaveAttribute('inert');
+  });
+
+  it('drops inert when the panel opens', () => {
+    const { container } = renderReasoning();
+    fireEvent.click(trigger(container));
+    expect(panel(container)).not.toHaveAttribute('inert');
+  });
+
+  it('re-applies inert when the panel collapses again', () => {
+    const { container } = renderReasoning();
+    fireEvent.click(trigger(container));
+    fireEvent.click(trigger(container));
+    expect(panel(container)).toHaveAttribute('inert');
+  });
+
+  it('follows a CONTROLLED open prop, not just the trigger', () => {
+    const [open, setOpen] = createSignal(false);
+    const { container } = render(() => (
+      <Reasoning open={open()}>
+        <ReasoningTrigger>Thinking</ReasoningTrigger>
+        <ReasoningContent>Weighing the options.</ReasoningContent>
+      </Reasoning>
+    ));
+    expect(panel(container)).toHaveAttribute('inert');
+    setOpen(true);
+    expect(panel(container)).not.toHaveAttribute('inert');
+  });
+
+  it('hands focus back to the trigger when a panel holding focus collapses', () => {
+    // Without this, `inert` drops the focused node and the browser resets focus
+    // to <body> — the user's tab position silently jumps to the top of the page.
+    const { container, getByTestId, setOpen } = renderFocusable();
+    const inside = getByTestId('inside');
+    inside.focus();
+    expect(document.activeElement).toBe(inside);
+
+    setOpen(false);
+    expect(document.activeElement).toBe(trigger(container));
+  });
+
+  it('does NOT steal focus when the collapsing panel never held it', () => {
+    const { getByTestId, setOpen } = renderFocusable();
+    const outside = getByTestId('outside');
+    outside.focus();
+
+    setOpen(false);
+    expect(document.activeElement).toBe(outside);
+  });
+
+  it('leaves focus alone when an already-collapsed panel re-renders', () => {
+    const { getByTestId, setOpen } = renderFocusable();
+    setOpen(false);
+    const outside = getByTestId('outside');
+    outside.focus();
+    setOpen(true);
+    setOpen(false);
+    expect(document.activeElement).toBe(outside);
+  });
+
+  it('still hands a consumer ref the trigger button', () => {
+    // The trigger now takes its own ref to register itself as the focus target;
+    // a consumer's ref must survive that.
+    let seen: HTMLButtonElement | undefined;
+    const { container } = render(() => (
+      <Reasoning>
+        <ReasoningTrigger ref={(el) => { seen = el; }}>Thinking</ReasoningTrigger>
+        <ReasoningContent>Weighing the options.</ReasoningContent>
+      </Reasoning>
+    ));
+    expect(seen).toBe(trigger(container));
+  });
+
+  it('still animates max-height 0 → measured → 0 across a toggle', () => {
+    // The regression this change was deferred over: `inert` must not disturb the
+    // max-height transition the panel drives from its own effect.
+    const { container } = renderReasoning();
+    const p = panel(container)!;
+    const inner = p.firstElementChild as HTMLElement;
+    // jsdom has no layout — scrollHeight is always 0, which would make the
+    // "measured" step vacuously equal to the collapsed one.
+    Object.defineProperty(inner, 'scrollHeight', { configurable: true, value: 120 });
+
+    expect(p.style.maxHeight).toBe('0px');
+    fireEvent.click(trigger(container));
+    expect(p.style.maxHeight).toBe('120px');
+    fireEvent.click(trigger(container));
+    expect(p.style.maxHeight).toBe('0px');
+  });
+});
