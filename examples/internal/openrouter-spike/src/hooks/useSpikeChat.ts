@@ -137,6 +137,10 @@ export function useSpikeChat(
     inflightRef.current = null;
     // Order matters: abort the fetch FIRST so no further delta can land after
     // the parts have been marked up, then settle the message.
+    //
+    // Dropping this line is invisible on screen — `stream.abort` alone stops the
+    // fold, so the text stops either way while the socket stays open and the
+    // bytes keep arriving. S17 claim 3 is what catches it; watched red here.
     inflight.abort.abort();
     inflight.stream.abort(CANCEL_REASON);
     setError(CANCEL_REASON);

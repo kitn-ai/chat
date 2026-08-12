@@ -102,10 +102,18 @@ closed `<kai-tool>` keeps its panel in the DOM at `grid-rows-[0fr]`, so a
 remounted-and-reset panel reports `data-state="closed"` perfectly happily. Only
 the box height tells you what the user is looking at.
 
-`src/harness-state.ts` is the one exception, and it is deliberately narrow: it
-carries the run phase (so the runner knows when to assert) and loop-level facts
-the DOM genuinely cannot express (how many round trips the tool loop took). It
-does **not** carry the message parts.
+There are exactly **two** exceptions, and both exist for facts the rendered DOM
+genuinely cannot express rather than for convenience.
+
+`src/harness-state.ts` is the narrow one: it carries the run phase (so the
+runner knows when to assert) and loop-level facts like how many round trips the
+tool loop took. It does **not** carry the message parts.
+
+`/api/replay-report` is the other, and only S17 reads it. Whether the in-flight
+**fetch** was aborted is not a rendered fact and cannot be made into one — a
+cancel that stops the fold without cancelling the request looks identical on
+screen. See "What S17 can and cannot see" below. The rendered claims stay in the
+scenario; this adds only the claim they cannot make.
 
 ### A position is not a speaker
 
@@ -286,30 +294,63 @@ about its coverage.
 
 ### What S17 can and cannot see
 
-S17 asserts cancellation entirely from the DOM, and there is one thing that
-buys and one thing it does not.
+S17 makes three claims, and the third one is not a DOM claim — deliberately.
 
-It proves the user-visible claim: the answer **stops growing**, and it stops
-**short of the fixture's closing sentence** — a stream that was not cut off
-renders that sentence, whatever the timings were on the day.
+The first two are what the screen shows: the answer **stops growing**, and it
+stops **short of the fixture's closing sentence**, which a stream that ran to
+the end would have rendered whatever the timings were on the day.
 
-It cannot prove the in-flight **fetch** was aborted. `AssistantStream.abort`
-makes the fold ignore later deltas, so a build that dropped `abort.abort()` and
-kept `stream.abort()` looks identical on screen while the socket stays open and
-the bytes keep arriving. That was confirmed by disabling each half in turn: only
-disabling BOTH turns the scenario red.
+Neither of them can prove the in-flight **fetch** was aborted, and for a while
+nothing did. `AssistantStream.abort` makes the fold ignore later deltas, so a
+build that dropped `abort.abort()` and kept `stream.abort()` looks **identical**
+on screen while the socket stays open and the bytes keep arriving. Confirmed by
+disabling each half in turn: only disabling BOTH turned the scenario red. A
+cancel that leaks a live request passed. Text going quiet is consistent with the
+working implementation and the broken one alike, which is what makes a DOM-only
+cancel assertion unable to fail for the reason it exists.
 
-Nor can it bound how PROMPTLY the stream stopped. A character budget on
-post-click growth was tried and removed: under a 6x CPU-throttled renderer it
-failed 1 run in 5 on working code, growing 355 → 572, because what it measures
-is how long the *click* took to dispatch on a loaded box, not how long the
-stream kept flowing.
+So the abort is now observed where it is actually visible: on the **server**,
+the peer whose socket the abort closes. The replay handler records what it wrote
+and whether the client hung up mid-stream, and publishes it at
+`/api/replay-report`:
 
-Both gaps have the same fix, and it is a server-side one: have the replay
-handler count the frames it wrote before `res.on('close')` fired and expose that
-count. "The server stopped writing after frame N" is measured on the server's
-own clock, so it is immune to renderer speed, and it is the only thing that
-actually distinguishes an aborted fetch from an ignored one. Not built.
+| field | what it says |
+|---|---|
+| `framesWritten` / `framesTotal` | how far the replay got |
+| `clientAborted` | the client went away **with frames still owed** — the fetch was aborted |
+| `finished` | the handler has stopped writing, so the two above are final |
+
+`clientAborted` is the whole distinction. A close *after* the last frame is the
+ordinary end of a completed stream and does not set it, so a build that never
+aborts is served every frame and fails. The scenario pins the streaming replay
+by id **before** it clicks Stop, so a later replay — a second round, the next
+scenario on the same dev server — can never be read as the one under test, and
+"nothing was streaming" fails as itself rather than reporting on the wrong
+stream.
+
+Waiting for `finished` is the half that keeps it honest: mid-flight, an aborted
+stream and a healthy one are indistinguishable, because both have written fewer
+frames than they will. A reading taken at the moment of the click would be a
+coin flip.
+
+**Watched red, both directions.** With `abort.abort()` commented out of
+`stop()`, claims 1 and 2 still pass — the text stops, the closing sentence never
+renders — and claim 3 fails with *"the server replayed canned/S17-cancel round 1
+to the END: all 16 frames written, client never hung up"*. Restored, 23/23.
+`server/replay-abort.test.ts` pins the ledger itself in node, in both
+directions, including the false-positive twin: `res.end()` fires `close` too,
+and a ledger that counted that as an abort would call every completed stream
+cancelled.
+
+What this still does **not** do is bound how PROMPTLY the stream stopped. A
+character budget on post-click growth was tried and removed: under a 6x
+CPU-throttled renderer it failed 1 run in 5 on working code, growing 355 → 572,
+because what it measures is how long the *click* took to dispatch on a loaded
+box, not how long the stream kept flowing. A frame budget would inherit exactly
+the same problem from exactly the same source — the frames written before the
+click lands are a function of renderer speed, and no server-side counter can
+subtract that. `clientAborted` is a fact about WHETHER, not about when, and it
+is stated that way on purpose.
 
 ## A 200 is not proof of reasoning
 
