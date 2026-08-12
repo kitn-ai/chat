@@ -28,6 +28,7 @@ import {
   type ScenarioWire,
 } from '../src/scenarios';
 import { readHarnessState } from '../src/harness-state';
+import { allModelBehaviours, modelBehaviourFor } from './model-behaviour';
 
 type RunMode = 'live' | 'replay' | 'both';
 
@@ -296,6 +297,59 @@ for (const scenario of CONTROL ? [] : selected) {
         return;
       }
 
+      // ── a DECLARED model-behaviour difference ────────────────────────────
+      //
+      // Red because this model does something else, not because the kit broke.
+      // Held to the same two-direction standard as `knownGap`: it must still
+      // fail, with the documented failure, AND it must go red if it starts
+      // passing. See `harness/model-behaviour.ts` for why the second half is the
+      // one that matters.
+      const behaviour = modelBehaviourFor(state?.model, await wireOf(page), scenario.id);
+      if (behaviour) {
+        const problem = await runAssertion();
+
+        // 1. Has the difference disappeared? Deliberately NOT auto-forgiving:
+        //    an exemption that silently starts passing is a permanent hole.
+        if (!problem) {
+          throw new Error(
+            `${scenario.id} PASSED on ${state?.model}, which declares a model-behaviour difference:\n\n` +
+              `  scenario wants:  ${behaviour.what}\n` +
+              `  declared as:     ${behaviour.instead}\n` +
+              `  last observed:   ${behaviour.observed}\n\n` +
+              'Two things look identical here and the response differs:\n' +
+              '  (a) the difference is genuinely gone — delete the declaration so the cell is\n' +
+              '      enforced from now on;\n' +
+              '  (b) the provider varied. RE-RUN before deciding. Precedent: `gpt-5.4-mini` S02\n' +
+              '      emitted only `reasoning.encrypted` in one sweep and `reasoning.summary` with\n' +
+              '      2,111 chars in the next — same model, same request, hours apart.\n\n' +
+              'Deleting this on a lucky run means the next run goes red as an undeclared failure ' +
+              'and someone re-adds it, which turns the mechanism into noise.' +
+              diagnostics(),
+          );
+        }
+
+        // 2. Is it failing for the DOCUMENTED reason? Same guard as a gap: an
+        //    unrelated red must not be filed under a known difference.
+        if (!behaviour.signature.test(problem.message)) {
+          throw new Error(
+            `${scenario.id} failed on ${state?.model}, but NOT with the difference it declares.\n\n` +
+              `  declared as:     ${behaviour.instead}\n` +
+              `  expected match:  ${behaviour.signature}\n` +
+              `  actual failure:  ${problem.message}\n\n` +
+              'Filing this as a known model difference would hide a real, undocumented failure ' +
+              'behind one.' +
+              diagnostics(),
+          );
+        }
+
+        testInfo.annotations.push({
+          type: 'model-behaviour',
+          description: `${behaviour.instead} (observed ${behaviour.observed})`,
+        });
+        console.log(`\n  ${scenario.id}: DECLARED MODEL DIFFERENCE (${state?.model})\n    ${behaviour.instead}\n`);
+        return;
+      }
+
       const problem = await runAssertion();
       if (problem) throw new Error(problem.message + '\n' + diagnostics());
     });
@@ -364,5 +418,27 @@ test('the catalog is self-consistent', () => {
     for (const [wire, claim] of Object.entries(s.provesByWire ?? {})) {
       expect(claim.length, `${s.id}'s ${wire} claim must say what that wire actually proves`).toBeGreaterThan(10);
     }
+  }
+
+  // Model-behaviour declarations, held to the same standard. The TYPE requires
+  // every field; these catch the versions that satisfy the type and check
+  // nothing — the empty string, the match-anything regex, the exemption pointing
+  // at a scenario that no longer exists.
+  const knownIds = new Set(ids);
+  for (const { key, scenarioId, behaviour } of allModelBehaviours()) {
+    const at = `${key} ${scenarioId}`;
+    expect(knownIds.has(scenarioId), `${at} declares a difference for a scenario that does not exist`).toBe(true);
+    expect(key, `${at} must be keyed \`model|wire\``).toMatch(/^[^|]+\|(openai|anthropic)$/);
+    expect(behaviour.what.length, `${at} must say what the scenario ASKS for`).toBeGreaterThan(10);
+    // `instead` is the field that cannot be produced without looking, so it gets
+    // the strictest floor: a one-liner here means nobody checked the recordings.
+    expect(behaviour.instead.length, `${at} must say what the model does INSTEAD`).toBeGreaterThan(40);
+    expect(
+      behaviour.signature.test(''),
+      `${at}'s signature must not match an empty message — it has to identify ONE failure`,
+    ).toBe(false);
+    expect(behaviour.observed, `${at} must record WHEN it was measured (YYYY-MM-DD)`).toMatch(
+      /^\d{4}-\d{2}-\d{2}$/,
+    );
   }
 });
