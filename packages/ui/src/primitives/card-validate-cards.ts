@@ -7,7 +7,7 @@
 // The remote (iframe) transport has validated every incoming envelope since the card
 // contract landed: `validateAgainstSchema(renderer.schema, envelope.data)`, and on
 // failure it renders a placeholder and emits `{ kind: 'error', cardId, message }`.
-// The native path — the Solid `<CardRenderer>` and `<kai-cards>` — checked only that
+// The native path (the Solid `<CardRenderer>` and `<kai-cards>`) checked only that
 // the TYPE was registered, so the same bad payload was caught in an iframe and
 // rendered silently in-process. That asymmetry is what this file closes. The two
 // transports are one behaviour; if you change the shape of the failure here, change
@@ -148,7 +148,7 @@ function summarize(issues: CardValidationIssue[]): string {
 /**
  * Validate a card envelope's `data` against the built-in schema for `type`.
  *
- * Returns `null` when there is no schema for the type — a consumer's own custom card
+ * Returns `null` when there is no schema for the type: a consumer's own custom card
  * type, which the kit has no shape for. Returning `null` rather than an empty pass
  * keeps "we checked and it was fine" distinguishable from "there was nothing to
  * check", so a caller cannot report the second as the first.

@@ -25,8 +25,8 @@ export interface JsonSchema {
  *
  * `errors` (the string form) is what every existing caller reads and it is unchanged.
  * This structured twin exists because the native card dispatcher has to TIER a
- * failure — a missing `required` field means the card cannot render, a `maxItems`
- * overrun means it renders five buttons instead of four — and the only honest way to
+ * failure (a missing `required` field means the card cannot render, a `maxItems`
+ * overrun means it renders five buttons instead of four), and the only honest way to
  * tell those apart is the keyword. Re-parsing the prose to recover it would be a
  * second, silently-drifting copy of the same fact.
  */

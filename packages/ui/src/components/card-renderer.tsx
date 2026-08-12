@@ -19,12 +19,14 @@ export interface CardRendererProps {
    * Validate `envelope.data` against the built-in schema for `envelope.type` before
    * rendering. Default `true`.
    *
-   * ON IN PRODUCTION TOO, DELIBERATELY. The obvious alternative — strip the check
-   * from production builds — inverts the point: a model emitting a bad shape is a
+   * ON IN PRODUCTION TOO, DELIBERATELY. The obvious alternative, stripping the check
+   * from production builds, inverts the point: a model emitting a bad shape is a
    * production failure mode, so stripping it means the developer's USERS get the
    * broken card while the developer's laptop looks fine. The cost is the projected
-   * schema data (855 B gzip for all seven card types, measured), which is below the
-   * noise floor of a package that already ships a Solid runtime and `marked`.
+   * schema data for all seven card types, measured by building this package twice
+   * (once with the projection stubbed to `{}`) rather than estimated: +834 B gzip on
+   * `dist/index.js` and +775 B gzip on the elements register bundle. That is below
+   * the noise floor of a package that already ships a Solid runtime and `marked`.
    *
    * Set `false` to opt out. A type with no built-in schema (a consumer's own card)
    * is never validated either way.

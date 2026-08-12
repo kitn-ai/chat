@@ -17,7 +17,9 @@ import '@testing-library/jest-dom/vitest';
 import { render, cleanup } from '@solidjs/testing-library';
 import { CardRenderer } from './card-renderer';
 import { CardProvider } from '../primitives/card-host';
-import type { CardEnvelope, CardEvent } from '../primitives/card-contract';
+import type { CardContext, CardEnvelope } from '../primitives/card-contract';
+
+const CTX: CardContext = { theme: { mode: 'light' }, locale: 'en' };
 
 afterEach(cleanup);
 
@@ -32,16 +34,12 @@ const SOFT = { body: 'Ship it?', actions: [1, 2, 3, 4, 5].map((n) => ({ id: `a${
 
 function mount(data: unknown, props: { validateCards?: boolean; type?: string } = {}) {
   const onError = vi.fn();
-  const events: CardEvent[] = [];
   const result = render(() => (
-    <CardProvider
-      context={{}}
-      policy={{ onError: (cardId, message) => onError(cardId, message), onEvent: (e) => events.push(e) }}
-    >
+    <CardProvider context={CTX} policy={{ onError: (cardId, message) => onError(cardId, message) }}>
       <CardRenderer envelope={envelope(data, props.type)} validateCards={props.validateCards} />
     </CardProvider>
   ));
-  return { ...result, onError, events };
+  return { ...result, onError };
 }
 
 /** The real confirm card's own marker: its action buttons carry data-action-id. */
@@ -169,7 +167,7 @@ describe('CardRenderer: the unknown-TYPE path is unchanged', () => {
     const Custom = (p: { envelope: CardEnvelope }) => <div data-custom>{p.envelope.id}</div>;
     const onError = vi.fn();
     const { container } = render(() => (
-      <CardProvider context={{}} policy={{ onError: (id, m) => onError(id, m) }}>
+      <CardProvider context={CTX} policy={{ onError: (id, m) => onError(id, m) }}>
         <CardRenderer envelope={envelope(HARD)} types={{ confirm: Custom }} />
       </CardProvider>
     ));
@@ -182,7 +180,7 @@ describe('CardRenderer: the unknown-TYPE path is unchanged', () => {
     const Custom = () => <div data-custom>mine</div>;
     const onError = vi.fn();
     const { container } = render(() => (
-      <CardProvider context={{}} policy={{ onError: (id, m) => onError(id, m) }}>
+      <CardProvider context={CTX} policy={{ onError: (id, m) => onError(id, m) }}>
         <CardRenderer envelope={envelope({ whatever: [] }, 'my-widget')} types={{ 'my-widget': Custom }} />
       </CardProvider>
     ));

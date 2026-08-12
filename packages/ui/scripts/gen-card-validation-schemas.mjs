@@ -22,6 +22,15 @@
 // contract shapes, which is why these numbers are lower rather than the plan being
 // wrong. The ratio holds: the projection is about 19% of the authored bytes.
 //
+// The number that actually matters is the BUNDLE delta, which is a different
+// measurement and was taken separately: build the package, stub
+// CARD_VALIDATION_SCHEMAS to `{}`, build again, diff. Real gzip cost of shipping the
+// projection to a browser:
+//   dist/index.js            140,919 -> 140,085   =  +834 B gzip
+//   dist/register-impl-*.js  182,348 -> 181,573   =  +775 B gzip
+//   dist/kai.es.js           unchanged (lazy loader shell, holds no card code)
+// The payload figure above is a good proxy for it, which is why both are recorded.
+//
 // THE GUARD THIS SCRIPT IS
 // ------------------------
 // Every keyword at every keyword position in every card schema must be in exactly
@@ -92,13 +101,13 @@ export function enforcedKeywords(source = readFileSync(VALIDATOR_FILE, 'utf8')) 
     }
   }
   if (found.has('items') === false || found.size > 40) {
-    throw new Error(`gen-card-validation-schemas: implausible enforced set (${found.size} keywords) — check the extraction regex.`);
+    throw new Error(`gen-card-validation-schemas: implausible enforced set (${found.size} keywords); check the extraction regex.`);
   }
   return found;
 }
 
 // ---------------------------------------------------------------------------
-// Table 2: STRIPPED — carries no constraint, so dropping it changes nothing
+// Table 2: STRIPPED, carries no constraint, so dropping it changes nothing
 // ---------------------------------------------------------------------------
 
 /**
@@ -123,7 +132,7 @@ export const STRIPPED = Object.freeze({
 });
 
 // ---------------------------------------------------------------------------
-// Table 3: NOT_ENFORCED — a real constraint we do not check. Named, with a reason.
+// Table 3: NOT_ENFORCED, a real constraint we do not check. Named, with a reason.
 // ---------------------------------------------------------------------------
 
 /**
@@ -382,7 +391,7 @@ function main() {
     return;
   }
   writeFileSync(OUT_FILE, built.source);
-  console.log(`✓ card-validate-schemas.ts — ${CARD_TYPES.length} card schemas projected`);
+  console.log(`✓ card-validate-schemas.ts: ${CARD_TYPES.length} card schemas projected`);
 }
 
 if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) main();

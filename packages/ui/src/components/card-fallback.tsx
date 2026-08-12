@@ -24,7 +24,7 @@ export interface CardFallbackProps {
   reason?: string;
 }
 
-/** Inert, themed fallback for a card that cannot render. Emits nothing itself —
+/** Inert, themed fallback for a card that cannot render. Emits nothing itself:
  *  the dispatcher emits the contract `error` event alongside rendering this. */
 export function CardFallback(props: CardFallbackProps): JSX.Element {
   return (

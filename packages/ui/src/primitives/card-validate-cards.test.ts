@@ -23,7 +23,12 @@ import {
   isValidatedCardType,
   validateCardData,
 } from './card-validate-cards';
-import { enforcedKeywords } from '../../scripts/gen-card-validation-schemas.mjs';
+import { loadGenerator } from './card-validate-generator.testlib';
+
+// The keyword set the validator actually implements, read out of its own body by the
+// generator. Imported rather than restated so the coverage assertions below cannot
+// drift from what `validateAgainstSchema` does.
+const enforcedKeywords = (await loadGenerator()).enforcedKeywords;
 
 const okConfirm = {
   body: 'Deploy to production?',
@@ -70,7 +75,7 @@ describe('HARD: the card has nothing to render', () => {
     expect(report.summary).toContain('(root).actions: expected array, got string');
   });
 
-  it('an empty required collection is hard — this is the plan\'s headline case', () => {
+  it('an empty required collection is hard, and this is the plan\'s headline case', () => {
     // `{ actions: [] }` is the corrupted-fixture shape S19b replays. It is the one
     // that today renders a confirm card with empty chrome and no signal at all.
     const report = validateCardData('confirm', { body: 'Deploy?', actions: [] })!;
@@ -120,7 +125,7 @@ describe('SOFT: the card renders, the bounds do not hold', () => {
     expect(report.issues[0]?.keyword).toBe('maxLength');
   });
 
-  it('an unknown enum value is soft — the card falls back to its default variant', () => {
+  it('an unknown enum value is soft: the card falls back to its default variant', () => {
     const report = validateCardData('confirm', { ...okConfirm, tone: 'chartreuse' })!;
     expect(report.tier).toBe('soft');
     expect(report.issues[0]?.keyword).toBe('enum');

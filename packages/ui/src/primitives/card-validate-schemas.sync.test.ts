@@ -1,8 +1,7 @@
 /**
  * Drift + coverage guard for the generated lean projection.
  *
- * Three separate properties, because each has failed independently in this repo's
- * history in one form or another:
+ * Three separate properties:
  *
  *  1. SYNC. The committed src/primitives/card-validate-schemas.ts is exactly what
  *     scripts/gen-card-validation-schemas.mjs produces from the authored schemas
@@ -20,27 +19,21 @@
  *     would silently remove real card fields and the projection would then validate
  *     a different shape than the one we publish.
  *
- * The test imports the GENERATOR, not a re-implementation of it. A second copy of
- * the projection logic here would pass while the shipped one was broken.
+ * The test drives the GENERATOR, not a re-implementation of it. A second copy of the
+ * projection logic here would pass while the shipped one was broken.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import {
-  CARD_TYPES,
-  NOT_ENFORCED,
-  OUT_FILE,
-  STRIPPED,
-  build,
-  enforcedKeywords,
-  projectSchema,
-  scanUnclassified,
-} from '../../scripts/gen-card-validation-schemas.mjs';
 import { CARD_VALIDATION_SCHEMAS, VALIDATED_CARD_TYPES } from './card-validate-schemas';
+import { loadGenerator } from './card-validate-generator.testlib';
+
+const gen = await loadGenerator();
+const enforced = gen.enforcedKeywords();
 
 describe('card-validate-schemas.ts is in sync with the authored schemas', () => {
   it('matches the generator output byte for byte', () => {
-    const { source } = build();
-    const committed = readFileSync(OUT_FILE, 'utf8');
+    const { source } = gen.build();
+    const committed = readFileSync(gen.OUT_FILE, 'utf8');
     if (committed !== source) {
       throw new Error(
         'src/primitives/card-validate-schemas.ts is stale.\n' +
@@ -51,8 +44,8 @@ describe('card-validate-schemas.ts is in sync with the authored schemas', () => 
   });
 
   it('exports one projection per card-data schema, and no contract shapes', () => {
-    expect([...VALIDATED_CARD_TYPES]).toEqual(CARD_TYPES);
-    expect(Object.keys(CARD_VALIDATION_SCHEMAS).sort()).toEqual([...CARD_TYPES].sort());
+    expect([...VALIDATED_CARD_TYPES]).toEqual(gen.CARD_TYPES);
+    expect(Object.keys(CARD_VALIDATION_SCHEMAS).sort()).toEqual([...gen.CARD_TYPES].sort());
     // The four contract documents are NOT card data: nothing dispatches on them, so
     // shipping them to the browser would be bytes the dispatcher can never use.
     for (const contract of ['card-envelope', 'card-event', 'form.result', 'tasks.result']) {
@@ -62,8 +55,6 @@ describe('card-validate-schemas.ts is in sync with the authored schemas', () => 
 });
 
 describe('keyword coverage: nothing is silently skipped', () => {
-  const enforced = enforcedKeywords();
-
   it('derives the enforced set from validateAgainstSchema, not from a hand list', () => {
     // If this ever reads as a plausible-looking list that does not match the
     // validator's body, the extraction has broken and the guard is blind.
@@ -75,32 +66,35 @@ describe('keyword coverage: nothing is silently skipped', () => {
   });
 
   it('the three tables are disjoint', () => {
-    for (const k of Object.keys(STRIPPED)) expect(enforced.has(k), `${k} is both STRIPPED and enforced`).toBe(false);
-    for (const k of Object.keys(NOT_ENFORCED)) {
-      expect(enforced.has(k), `${k} is both NOT_ENFORCED and enforced`).toBe(false);
-      expect(STRIPPED, `${k} is both NOT_ENFORCED and STRIPPED`).not.toHaveProperty(k);
+    for (const k of Object.keys(gen.STRIPPED)) {
+      expect(enforced.has(k), `${k} is both stripped and enforced`).toBe(false);
+    }
+    for (const k of Object.keys(gen.NOT_ENFORCED)) {
+      expect(enforced.has(k), `${k} is both unenforced and enforced`).toBe(false);
+      expect(gen.STRIPPED, `${k} is both unenforced and stripped`).not.toHaveProperty(k);
     }
   });
 
-  it('every NOT_ENFORCED entry carries a written reason, not a placeholder', () => {
-    for (const [keyword, reason] of Object.entries(NOT_ENFORCED)) {
+  it('every unenforced keyword carries a written reason, not a placeholder', () => {
+    for (const [keyword, reason] of Object.entries(gen.NOT_ENFORCED)) {
       expect(typeof reason, keyword).toBe('string');
       // A one-word "unsupported" is how a skip list gets in wearing a reason's
-      // clothes. Require an actual sentence about what goes unchecked.
+      // clothes. Require an actual sentence about what goes unchecked. This caught
+      // two thin entries (`not`, `definitions`) when it was first run.
       expect(reason.length, `NOT_ENFORCED.${keyword} needs a real reason`).toBeGreaterThan(40);
       expect(reason.toUpperCase()).toContain('NOT');
     }
   });
 
   it('the authored schemas contain no unclassified keyword today', () => {
-    expect(() => build()).not.toThrow();
+    expect(() => gen.build()).not.toThrow();
   });
 
   it('FAILS on a keyword no table accounts for, naming it', () => {
     // The fail-first case from the plan, run as a test so it cannot rot: a numeric
     // constraint the validator does not implement and nobody has classified.
     const doc = { type: 'object', properties: { n: { type: 'integer', multipleOf: 2 } } };
-    expect(scanUnclassified(doc, enforced)).toEqual([{ path: '(root).n', keyword: 'multipleOf' }]);
+    expect(gen.scanUnclassified(doc, enforced)).toEqual([{ path: '(root).n', keyword: 'multipleOf' }]);
   });
 
   it('scans INSIDE the applicators the projection throws away', () => {
@@ -113,15 +107,13 @@ describe('keyword coverage: nothing is silently skipped', () => {
       properties: { p: { type: 'string' } },
       allOf: [{ if: { properties: { p: { const: 'x' } } }, then: { properties: { n: { multipleOf: 2 } } } }],
     };
-    expect(scanUnclassified(doc, enforced)).toEqual([
+    expect(gen.scanUnclassified(doc, enforced)).toEqual([
       { path: '(root)/allOf[0]/then.n', keyword: 'multipleOf' },
     ]);
   });
 });
 
 describe('the projection strips keywords, never property names', () => {
-  const enforced = enforcedKeywords();
-
   it('keeps `link` properties literally named title and description', () => {
     // Both are also annotation KEYWORDS. Stripping by name would delete two real
     // fields of every link-preview card.
@@ -159,7 +151,7 @@ describe('the projection strips keywords, never property names', () => {
     // is nothing left to check, and `walk()` would descend into it for no reason.
     const action = CARD_VALIDATION_SCHEMAS.confirm.properties!.actions!.items!;
     expect(action.properties).not.toHaveProperty('payload');
-    expect(projectSchema({ description: 'prose only' }, enforced)).toBeUndefined();
+    expect(gen.projectSchema({ description: 'prose only' }, enforced)).toBeUndefined();
   });
 
   it('carries no annotation or vendor keyword anywhere', () => {
@@ -175,7 +167,7 @@ describe('the projection strips keywords, never property names', () => {
         }
       }
     };
-    for (const type of CARD_TYPES) walk(CARD_VALIDATION_SCHEMAS[type as keyof typeof CARD_VALIDATION_SCHEMAS]);
+    for (const type of VALIDATED_CARD_TYPES) walk(CARD_VALIDATION_SCHEMAS[type]);
     // Property NAMES land in `seen` too (that is unavoidable without re-walking with
     // position awareness), so assert on the ones that are not property names in any
     // card schema: no card has a field called `$schema`, `$id` or `x-kai-control`.

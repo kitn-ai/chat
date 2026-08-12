@@ -34,7 +34,7 @@ interface Props extends Record<string, unknown> {
    *  = false`) to opt out. A hard failure (wrong type, a missing required field)
    *  renders a diagnostic naming the field instead of the card; a soft failure
    *  (bounds) renders the card unchanged. Both emit a contract `error` event.
-   *  On in production too — a model emitting a bad shape is a production failure
+   *  On in production too: a model emitting a bad shape is a production failure
    *  mode, so stripping the check there would hide it from exactly the person who
    *  needs to see it. */
   validateCards?: boolean;
