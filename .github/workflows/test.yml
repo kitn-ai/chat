@@ -25,6 +25,32 @@ jobs:
           node-version: 22
           cache: pnpm
 
+      # No workflow in this repository may spend money on model calls.
+      #
+      # The openrouter spike's conformance harness can drive REAL models through
+      # OpenRouter; a measured five-configuration sweep came to $0.1019. Live
+      # runs are manual and deliberate, and this is the step that keeps them
+      # that way for every workflow file in the repo, not just the one below.
+      #
+      # It exists because the interesting failure is in the FUTURE: someone
+      # copies the advisory conformance job in spike-conformance.yml, flips it
+      # to live for a nightly sweep, and nothing objects. The audit's central
+      # rule is deny-by-default -- any line that reaches the harness without
+      # going through `spike-ci-guard.mjs exec` is a finding, so an invocation
+      # route nobody predicted fails BECAUSE it is unrecognised rather than
+      # passing because it is unlisted.
+      #
+      # It cannot pass vacuously: a self-test runs each of the 6 rules against
+      # its own known-bad sample and the whole rule set against a known-good
+      # one FIRST, and hard-fails the run if a rule that must fire does not, or
+      # if the clean sample draws a finding. Watched failing rather than assumed
+      # to: neutering one rule's pattern turns it red naming that rule.
+      #
+      # Deliberately before `pnpm install` -- pure node, no dependencies, no
+      # build, no network. <1s.
+      - name: Model-spend guard (no workflow can reach a live model)
+        run: node .github/scripts/spike-ci-guard.mjs audit
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -313,6 +339,31 @@ jobs:
       # written outside the directory the project owns.
       - name: Emitted-code guards (the scaffolder's output actually RUNS)
         run: pnpm --filter @kitn.ai/ui exec vitest run --project=emitted
+
+      # The openrouter spike's own suite, in the REQUIRED job.
+      #
+      # `.github/workflows/test.yml` used to run only packages/ui, so nothing
+      # here ran anywhere automatic. That stopped being tolerable when
+      # `src/cards.seam.test.ts` landed, because its ENTIRE PURPOSE is to fail
+      # when nobody is looking: it guards the consumer `cardTypes` seam, whose
+      # previous coverage vanished silently when the workaround that incidentally
+      # provided it was correctly deleted. A guard against silent disappearance
+      # that itself runs nowhere automatic has exactly the shape of the bug it
+      # guards against.
+      #
+      # REQUIRED rather than advisory, and the cost is why that is an easy call:
+      # node environment, no DOM, no browser, no key, no network, 84 tests in
+      # 1.3s and a 2.3s typecheck. The browser-level conformance harness -- the
+      # part that is slow and has a known flake -- is advisory in its own
+      # workflow (spike-conformance.yml). The deterministic half gates merges;
+      # the flaky half does not. Needs the build above: the spike reads the kit's
+      # own built `@kitn.ai/ui/schemas` entry rather than restating its list of
+      # built-in card types. ~4s total.
+      - name: Spike typecheck (openrouter conformance harness)
+        run: pnpm --filter @kitn.ai/ui-example-openrouter-spike typecheck
+
+      - name: Spike tests (incl. the consumer cardTypes seam guard)
+        run: pnpm --filter @kitn.ai/ui-example-openrouter-spike test
 
       - name: React adapter tests
         run: pnpm --filter @kitn.ai/ui test:react

@@ -19,6 +19,7 @@
 //   replay (default) — no key, no network, fixtures only.
 //   live             — hits the model and RECORDS each round into fixtures/live.
 //   both             — live first, then replay the freshly recorded stream.
+import { readFile } from 'node:fs/promises';
 import { test, expect, type Page } from '@playwright/test';
 import {
   SCENARIOS,
@@ -27,6 +28,7 @@ import {
   type ScenarioMode,
   type ScenarioWire,
 } from '../src/scenarios';
+import { S17_CLOSING_SENTENCE, S17_MAX_FRAME_CHARS } from '../src/scenarios/s17-cancel';
 import { readHarnessState } from '../src/harness-state';
 import { allModelBehaviours, modelBehaviourFor } from './model-behaviour';
 import { waitForPhase } from './stall-report';
@@ -435,5 +437,54 @@ test('the catalog is self-consistent', () => {
     expect(behaviour.observed, `${at} must record WHEN it was measured (YYYY-MM-DD)`).toMatch(
       /^\d{4}-\d{2}-\d{2}$/,
     );
+  }
+});
+
+/** The text deltas of a canned SSE stream, in order, in EITHER dialect. */
+function contentDeltas(sse: string): string[] {
+  const out: string[] = [];
+  for (const line of sse.split('\n')) {
+    if (!line.startsWith('data: ')) continue;
+    const body = line.slice(6).trim();
+    if (!body || body === '[DONE]') continue;
+    let json: unknown;
+    try {
+      json = JSON.parse(body);
+    } catch {
+      continue;
+    }
+    const frame = json as {
+      type?: string;
+      delta?: { text?: unknown };
+      choices?: { delta?: { content?: unknown } }[];
+    };
+    const openai = frame.choices?.[0]?.delta?.content;
+    if (typeof openai === 'string' && openai) out.push(openai);
+    const anthropic = frame.type === 'content_block_delta' ? frame.delta?.text : undefined;
+    if (typeof anthropic === 'string' && anthropic) out.push(anthropic);
+  }
+  return out;
+}
+
+// S17 asserts against two properties of its own fixture: that a named sentence
+// is the LAST thing round 1 streams, and how big a single frame can be. Both are
+// constants in the scenario, and a re-recorded fixture would leave them pointing
+// at nothing — which is the failure mode where the assertion stays green and
+// stops meaning anything. Tie them to the file.
+test('S17 cancel: its markers still match the fixture it replays', async () => {
+  for (const dir of ['canned/S17-cancel', 'canned-anthropic/S17-cancel']) {
+    const sse = await readFile(new URL(`../fixtures/${dir}/round-1.sse`, import.meta.url), 'utf8');
+    const deltas = contentDeltas(sse);
+
+    expect(deltas.length, `${dir} must stream prose to interrupt`).toBeGreaterThan(3);
+    expect(
+      deltas.at(-1)?.trim(),
+      `${dir}: S17_CLOSING_SENTENCE must be the LAST thing round 1 streams, or "it never appeared" ` +
+        'stops meaning "the stream was cut short"',
+    ).toBe(S17_CLOSING_SENTENCE);
+    expect(
+      Math.max(...deltas.map((d) => d.length)),
+      `${dir}: S17_MAX_FRAME_CHARS must be the largest single delta, or the in-flight allowance is guesswork`,
+    ).toBe(S17_MAX_FRAME_CHARS);
   }
 });

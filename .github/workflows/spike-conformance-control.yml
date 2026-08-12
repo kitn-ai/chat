@@ -1,0 +1,101 @@
+name: spike-conformance-control
+
+# The NEGATIVE control: every scenario assertion pointed at a stream that cannot
+# possibly satisfy it, required to go RED. It is what stands between this repo
+# and a suite of assertions that pass against anything.
+#
+# ADVISORY, and PATH-FILTERED rather than run on every pull request. Both are
+# measurements, not preferences:
+#
+#   6.4 MINUTES, against replay's 38 seconds, and the gap is structural rather
+#   than incidental. Proving an assertion fails means waiting for something that
+#   never appears, so all 19 control tests spend a full 20-25s locator timeout
+#   each BY DESIGN. That cost cannot be optimised away without weakening the
+#   control, and it buys nothing on a pull request that does not touch the
+#   catalog.
+#
+#   The property it proves -- "these assertions can still fail" -- can only break
+#   when someone edits a scenario, an assertion, a fixture or the runner. So it
+#   runs exactly then. `paths` below is the mechanism; a PR that touches nothing
+#   in the spike never starts a runner at all.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# WHAT A GREEN RUN HERE DOES NOT PROVE
+#
+# It does NOT prove the consumer `cardTypes` SEAM assertion fires.
+#
+# The control run stops at each scenario's FIRST failing assertion, and for
+# S03/S05 that is the tool panel -- which is missing from the control stream
+# long before anything reaches the seam. So those cells go red for a reason that
+# has nothing to do with the seam, and a green control run is entirely
+# consistent with a seam assertion that asserts nothing.
+#
+# The seam-specific red rests on six deliberate breakages performed by hand, not
+# on this job. Do not cite a green run here as evidence about the seam. The seam
+# guard that DOES run automatically is `src/cards.seam.test.ts`, in the required
+# `test` job -- deterministic, node-only, and the reason that suite is required.
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# NOTHING IN THIS FILE MAY SPEND MONEY. The control is replay-based and free, but
+# it reaches the harness, so it goes through `spike-ci-guard.mjs exec` like every
+# other invocation. The `test` job's `audit` step enforces that repo-wide.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'examples/internal/openrouter-spike/harness/**'
+      - 'examples/internal/openrouter-spike/src/scenarios/**'
+      - 'examples/internal/openrouter-spike/fixtures/**'
+      - '.github/workflows/spike-conformance-control.yml'
+      - '.github/scripts/spike-ci-guard.mjs'
+
+jobs:
+  # Named for what it actually establishes. `scenario-assertions`, not
+  # `assertions`: the seam assertion is NOT among the things this job can speak
+  # to, and a job named as though it were would be cited as though it were.
+  scenario-assertion-control:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Build (element bundle + provider subpath)
+        run: pnpm exec nx build ui
+
+      # SPIKE_CONTROL=1 inverts the suite: passing is the failure. Free -- it
+      # replays the CONTROL-empty / CONTROL-noisy fixtures off disk.
+      #
+      # Known flake: `CONTROL S11-link-embed` stalled once in `waitForPhase`
+      # (60s), passed in isolation and on a full re-run, and was unrelated to the
+      # seam. `retries: 0` is deliberate in this harness, so a recurrence shows
+      # red here rather than being retried away. That is survivable precisely
+      # because this job is advisory and path-filtered.
+      - name: Negative control (scenario assertions must fail; says NOTHING about the seam)
+        working-directory: examples/internal/openrouter-spike
+        env:
+          SPIKE_CONTROL: '1'
+        run: node ../../../.github/scripts/spike-ci-guard.mjs exec -- pnpm exec playwright test --config harness/playwright.config.ts
+
+      - name: Upload report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spike-conformance-control-report
+          path: |
+            examples/internal/openrouter-spike/playwright-report/
+            examples/internal/openrouter-spike/test-results/
+          retention-days: 7

@@ -1,0 +1,84 @@
+name: spike-conformance
+
+# The openrouter spike's browser-level conformance harness, in REPLAY mode.
+#
+# ADVISORY, not required, and both halves of that are deliberate -- see the
+# `spike-conformance` job's own comment for the reasoning. The DETERMINISTIC half
+# of the spike (typecheck + the node test suite, which is where the consumer
+# `cardTypes` seam guard lives) is in the required `test` job in test.yml
+# instead. Flaky things do not gate merges here; this repo already made a browser
+# suite required, watched it flake, and had to revert it to advisory.
+#
+# NOTHING IN THIS FILE MAY SPEND MONEY. The harness can drive real models through
+# OpenRouter and bill a real account. Every invocation goes through
+# `spike-ci-guard.mjs exec`, which refuses a live mode, refuses a credential
+# file, and scrubs OPENROUTER_API_KEY out of the child environment. The `test`
+# job's `audit` step enforces that for every workflow in the repo, including any
+# future copy of this one.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # Every catalog scenario driven against its COMMITTED fixture, in a real
+  # browser, through the real app.
+  #
+  # Why a browser at all: the behaviours under test -- a disclosure surviving a
+  # delta, parts rendering in stream order, a card resolving through the consumer
+  # seam -- are layout facts, and the jsdom unit suite cannot see any of them.
+  #
+  # Why ADVISORY. The evidence for calling it stable is one clean local run
+  # (21 tests, 38s), and that is not enough to put a browser + dev-server job on
+  # the merge path. The harness sets `retries: 0` on purpose -- a scenario that
+  # passes on the second attempt is information, and swallowing it is how a suite
+  # starts proving nothing -- so any transient stall in `waitForPhase` is a red
+  # build rather than a retry. That is the right trade for a diagnostic suite and
+  # the wrong one for a gate. The thing that actually must not regress silently,
+  # the seam guard, is deterministic and already required.
+  #
+  # Promote it once it has a track record: several weeks green here, then move it
+  # behind an aggregation gate job the way `storybook-gate` does it, so branch
+  # protection depends on a stable context name rather than on this job's.
+  spike-conformance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      # The spike consumes the kit through its published entry points, so the
+      # harness needs a real build -- not just for `@kitn.ai/ui/schemas`, which
+      # the seam guard reads, but for the elements bundle the app registers.
+      - name: Build (element bundle + provider subpath)
+        run: pnpm exec nx build ui
+
+      # `exec` pins SPIKE_MODE=replay, scrubs the credential, and refuses to run
+      # at all if a live mode was requested or a .env.local exists. Replay reads
+      # committed SSE off disk: no key, no network, no cost. ~40s.
+      - name: Conformance harness (replay, no key, no network)
+        working-directory: examples/internal/openrouter-spike
+        run: node ../../../.github/scripts/spike-ci-guard.mjs exec -- pnpm exec playwright test --config harness/playwright.config.ts
+
+      - name: Upload report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spike-conformance-report
+          path: |
+            examples/internal/openrouter-spike/playwright-report/
+            examples/internal/openrouter-spike/test-results/
+          retention-days: 7
