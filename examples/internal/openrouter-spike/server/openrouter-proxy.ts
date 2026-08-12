@@ -155,6 +155,148 @@ export function fixtureSlug(model: string, wire: WireKind): string {
   return wire === 'anthropic' ? `${slug}-anthropic-wire` : slug;
 }
 
+// ── what the server saw happen to a replayed stream ─────────────────────────
+//
+// S17 clicks Stop and then asserts, from the DOM, that the answer stopped
+// growing short of its closing sentence. That is the user-visible claim and it
+// is worth having, but it CANNOT see the thing the scenario exists to prove.
+// `AssistantStream.abort` makes the fold ignore later deltas, so a build that
+// dropped `abort.abort()` and kept `stream.abort()` renders identically while
+// the socket stays open and every remaining byte still arrives. Text going
+// quiet is consistent with both the working implementation and the broken one,
+// which makes a DOM-only cancel assertion unable to fail for the reason it
+// exists. Confirmed by disabling each half in turn: only disabling BOTH turned
+// the old scenario red.
+//
+// The abort is observable in exactly one place — HERE. The replay handler is
+// the peer whose socket the abort closes, so it is the only party that can tell
+// "the client went away" from "the stream ended". It already had to know (`open`
+// stops the write loop); it just never said so. This publishes it.
+//
+// Measured on the SERVER's own clock, which is what makes it immune to renderer
+// speed — the reason the character-budget bound this replaces was deleted.
+
+/** Bounded, because a long matrix run replays hundreds of streams and this is a
+ *  debugging channel, not a database. */
+const REPLAY_LOG_LIMIT = 64;
+
+/** What the replay handler observed about ONE replayed stream. */
+export interface ReplayObservation {
+  /** Monotonic per-server id. A caller pins the stream it is watching BEFORE it
+   *  interferes with it, so a later replay (a second round, the next scenario)
+   *  can never be mistaken for the one under test. */
+  id: number;
+  dir: string;
+  round: number;
+  framesTotal: number;
+  framesWritten: number;
+  /**
+   * The client went away while frames were still unwritten — i.e. the in-flight
+   * fetch was ABORTED.
+   *
+   * A close after the last frame is the ordinary end of a finished stream and
+   * does NOT set this, which is the whole distinction: a build that never
+   * aborts the fetch is served every frame and ends normally.
+   */
+  clientAborted: boolean;
+  /** The handler has stopped writing; the counts above are final. A reader must
+   *  wait for this before drawing a conclusion — an unfinished stream has
+   *  written fewer frames than it will, in BOTH the aborted and the healthy
+   *  case, so judging one early is a coin flip. */
+  finished: boolean;
+}
+
+export interface ReplayLog {
+  open(dir: string, round: number, framesTotal: number): ReplayObservation;
+  entries(): ReplayObservation[];
+}
+
+export function createReplayLog(): ReplayLog {
+  const entries: ReplayObservation[] = [];
+  let nextId = 1;
+  return {
+    open(dir, round, framesTotal) {
+      const entry: ReplayObservation = {
+        id: nextId++,
+        dir,
+        round,
+        framesTotal,
+        framesWritten: 0,
+        clientAborted: false,
+        finished: false,
+      };
+      entries.push(entry);
+      if (entries.length > REPLAY_LOG_LIMIT) entries.splice(0, entries.length - REPLAY_LOG_LIMIT);
+      return entry;
+    },
+    // Copied, so a reader cannot hold a handle that mutates under it mid-poll.
+    entries: () => entries.map((e) => ({ ...e })),
+  };
+}
+
+/** The slice of `ServerResponse` the frame writer touches. Narrowed so the node
+ *  test can drive this loop with a fake socket and watch the ledger separate an
+ *  aborted stream from a completed one, with no browser and no dev server. */
+export interface FrameSink {
+  write(chunk: string): unknown;
+  end(): unknown;
+  on(event: 'close', listener: () => void): unknown;
+}
+
+/**
+ * Write `frames` to the client, pausing `delayMs` between them, recording into
+ * `entry` what happened.
+ *
+ * The pause is what makes a replayed stream a real stream — the only way to
+ * test what a user can do to a half-written message.
+ */
+export async function streamReplayFrames(
+  res: FrameSink,
+  frames: string[],
+  delayMs: number,
+  entry: ReplayObservation,
+): Promise<void> {
+  let open = true;
+  res.on('close', () => {
+    open = false;
+    // Ordering matters and is the entire assertion: this reads the count as of
+    // the moment the socket died. Still owing frames means the CLIENT hung up.
+    if (entry.framesWritten < entry.framesTotal) entry.clientAborted = true;
+  });
+  for (const frame of frames) {
+    if (!open) break;
+    res.write(frame);
+    entry.framesWritten += 1;
+    if (delayMs) await new Promise((r) => setTimeout(r, delayMs));
+  }
+  entry.finished = true;
+  res.end();
+}
+
+/** Split a captured SSE file into the frames it will be re-emitted as.
+ *
+ *  Frames are split on the blank line that terminates an SSE event and keep that
+ *  terminator, so the bytes a client sees are byte-identical to the file.
+ *
+ *  The `filter` is DEFENSIVE, not corrective, and the distinction is worth
+ *  stating because it is easy to get backwards: JavaScript's `String.split` does
+ *  NOT emit a trailing empty segment for a zero-width match at the end of the
+ *  string, so a well-formed capture (which does end in `\n\n`) splits to exactly
+ *  its frames and nothing else — measured, 16 for `canned/S17-cancel/round-1`.
+ *  Python's `re.split` DOES emit that trailing empty, which is how this got
+ *  miscounted once while being checked in the wrong language. The old loop's
+ *  `!frame` break was therefore dead code for every real capture.
+ *
+ *  It stays because `framesTotal` is now load-bearing: it is the denominator
+ *  `clientAborted` is decided against, so an empty segment sneaking in from a
+ *  malformed capture would inflate the total, leave it permanently unreachable,
+ *  and make every COMPLETED stream report as aborted — this ledger's own defect
+ *  class, one directory over. Skipping is also strictly better than the old
+ *  `break`, which would have truncated the stream at the first one. */
+export function splitReplayFrames(sse: string): string[] {
+  return sse.split(/(?<=\n\n)/).filter(Boolean);
+}
+
 /** Resolve a fixture path from client-supplied components, refusing anything that
  *  escapes `fixtures/`. The dev server is localhost-only, but a path that a page
  *  can steer is a path worth pinning. */
@@ -183,6 +325,9 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
 export function openrouterProxy(): Plugin {
   let root = process.cwd();
   let mode = 'development';
+  // Lives for the life of the dev server, because a scenario reads it AFTER the
+  // stream it describes is already over.
+  const replayLog = createReplayLog();
 
   return {
     name: 'openrouter-spike-proxy',
@@ -211,9 +356,19 @@ export function openrouterProxy(): Plugin {
         });
       });
 
+      // GET /api/replay-report: what the server saw happen to each replayed
+      // stream. The only channel through which a test can observe that a fetch
+      // was ABORTED rather than merely ignored — see `ReplayObservation`. Replay
+      // bookkeeping only: it names fixture directories, never the key, never a
+      // request body, and it does not exist in a production build (`apply:
+      // 'serve'`, like the rest of this plugin).
+      server.middlewares.use('/api/replay-report', (_req, res) => {
+        json(res, 200, { replays: replayLog.entries() });
+      });
+
       // POST /api/chat: add the key, forward the upstream SSE byte for byte.
       server.middlewares.use('/api/chat', (req, res) => {
-        void handleChat(req, res, readEnv(root, mode));
+        void handleChat(req, res, readEnv(root, mode), replayLog);
       });
     },
   };
@@ -240,7 +395,12 @@ export interface ChatBody {
   replay?: { dir?: string; round?: number; delayMs?: number };
 }
 
-async function handleChat(req: IncomingMessage, res: ServerResponse, env: ProxyEnv): Promise<void> {
+async function handleChat(
+  req: IncomingMessage,
+  res: ServerResponse,
+  env: ProxyEnv,
+  replayLog: ReplayLog,
+): Promise<void> {
   if (req.method !== 'POST') return json(res, 405, { error: { message: 'POST only' } });
 
   let body: ChatBody;
@@ -252,7 +412,7 @@ async function handleChat(req: IncomingMessage, res: ServerResponse, env: ProxyE
 
   // REPLAY is checked BEFORE the key, on purpose: a replay turn must run with no
   // key and no socket at all, which is what makes the offline suite offline.
-  if (body.replay) return handleReplay(res, env, body.replay);
+  if (body.replay) return handleReplay(res, env, body.replay, replayLog);
 
   if (!env.key) {
     return json(res, 503, {
@@ -561,15 +721,14 @@ export async function recordFixture(
 
 /** Serve a captured/canned SSE file frame by frame. No key, no socket.
  *
- *  Frames are split on the blank line that terminates an SSE event and re-emitted
- *  WITH that terminator, so the bytes a client sees are byte-identical to the
- *  file. The per-frame pause is the point: it makes a replayed stream a real
- *  stream, which is the only way to test what a user can do to a half-written
- *  message. */
+ *  What it wrote, and whether the client hung up mid-stream, is recorded into
+ *  `replayLog` and published at `/api/replay-report` — see `ReplayObservation`
+ *  for why that is the only place a cancelled fetch is observable. */
 async function handleReplay(
   res: ServerResponse,
   env: ProxyEnv,
   replay: NonNullable<ChatBody['replay']>,
+  replayLog: ReplayLog,
 ): Promise<void> {
   const file = fixturePath(env.fixtureDir, replay.dir ?? '', replay.round ?? 0);
   if (!file) {
@@ -598,17 +757,9 @@ async function handleReplay(
   res.flushHeaders?.();
 
   const delay = Math.max(0, replay.delayMs ?? DEFAULT_REPLAY_DELAY_MS);
-  const frames = sse.split(/(?<=\n\n)/);
-  let open = true;
-  res.on('close', () => {
-    open = false;
-  });
-  for (const frame of frames) {
-    if (!open || !frame) break;
-    res.write(frame);
-    if (delay) await new Promise((r) => setTimeout(r, delay));
-  }
-  res.end();
+  const frames = splitReplayFrames(sse);
+  const entry = replayLog.open(replay.dir ?? '', replay.round ?? 0, frames.length);
+  await streamReplayFrames(res, frames, delay, entry);
 }
 
 /** Error text with no chance of leaking the request (and therefore the key). */

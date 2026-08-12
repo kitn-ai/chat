@@ -12,6 +12,7 @@ import {
   waitForMinLength,
   waitForStableLength,
 } from './dom';
+import { pinStreamingReplay, seesFetchAborted } from './replay-report';
 
 /**
  * S17 — the user hits Stop on a long stream.
@@ -44,6 +45,19 @@ import {
  * clicking, pace the fixture slowly enough that a loaded runner still gets its
  * click in, and state the post-click claim as "growth ceases, short of the end"
  * rather than as a character budget a lucky measurement window can satisfy.
+ *
+ * ── and why the DOM is not enough on its own ─────────────────────────────────
+ * Everything above is still only what the SCREEN shows, and the screen cannot
+ * see the thing this scenario is named after. `AssistantStream.abort` makes the
+ * fold ignore later deltas, so a build that settles the message without
+ * aborting the fetch renders identically: text stops, closing sentence never
+ * appears, socket stays open, bytes keep arriving. Confirmed by disabling each
+ * half of `stop()` in turn — only disabling BOTH used to turn this red, which
+ * means the half that matters most was untested.
+ *
+ * Claim 3 closes that. The proxy records whether the client hung up mid-stream
+ * and publishes it at `/api/replay-report`; a cancel that leaks a live request
+ * is served every frame and now fails here. See `./replay-report.ts`.
  */
 
 /** The prompt, repeated as a constant because `during` PROVES which bubble it is
@@ -78,7 +92,9 @@ const FRAME_MS = 300;
 export const s17Cancel: Scenario = {
   id: 'S17-cancel',
   title: 'Long stream + user cancel',
-  proves: 'Stop aborts the stream, keeps what rendered, and resolves the orphaned tool panel to Error',
+  proves:
+    'Stop aborts the in-flight FETCH (observed server-side, not inferred from the text stopping), ' +
+    'keeps what rendered, and resolves the orphaned tool panel to Error',
   prompt: PROMPT,
   tools: pickTools('get_weather'),
   mode: 'replay',
@@ -120,6 +136,13 @@ export const s17Cancel: Scenario = {
       );
 
     if (await finished()) tooSlow('before Stop could be clicked');
+
+    // Pin the stream that is on the wire BEFORE interrupting it, so claim 3
+    // below is talking about this replay and not about some later one. This
+    // also arms the whole scenario: no stream in flight means nothing to
+    // cancel, and it fails saying so.
+    const pinned = await pinStreamingReplay(page);
+
     await page.getByRole('button', { name: 'Stop' }).first().click();
     if (await finished()) tooSlow('while the Stop click was being dispatched');
 
@@ -148,6 +171,26 @@ export const s17Cancel: Scenario = {
       page,
       S17_CLOSING_SENTENCE,
       'the cancelled stream to stop short of its closing sentence',
+    );
+
+    // 3. And the FETCH was actually aborted.
+    //
+    //    Claims 1 and 2 are everything the DOM can say, and they are both
+    //    satisfied by a cancel that never reaches `fetch`: `stream.abort()`
+    //    makes the fold ignore later deltas, so the text stops and the closing
+    //    sentence never renders while the socket stays open and every remaining
+    //    byte still arrives. Both readings are consistent with the working
+    //    implementation AND with one that leaks a live request, which is what
+    //    made this scenario unable to fail for the reason it exists.
+    //
+    //    The server is the peer whose socket the abort closes, so it is the
+    //    only party that can tell the two apart. Measured on ITS clock, which
+    //    is also why this does not inherit the flakiness of the post-click
+    //    character budget that was tried and removed above.
+    await seesFetchAborted(
+      page,
+      pinned,
+      'Stop must cancel the request, not just stop listening to it',
     );
   },
   async assert(page) {
