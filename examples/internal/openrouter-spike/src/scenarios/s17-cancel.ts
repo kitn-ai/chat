@@ -57,26 +57,23 @@ const PROMPT = 'Write me a long explanation of how streaming works, and check th
  *  drifting out from under it. */
 export const S17_CLOSING_SENTENCE = 'All of it shows up the first time somebody clicks.';
 
-/** The largest single content delta in the S17 fixture, also guarded in
- *  `harness/scenarios.spec.ts`. A frame already on the wire when the abort fires
- *  still lands, so THIS, not zero, is the floor under any honest growth bound. */
-export const S17_MAX_FRAME_CHARS = 95;
-
-/** What may still arrive after the click: the frame in flight, plus one more for
- *  a loaded runner. Past this the stream is continuing, not draining. */
-const INFLIGHT_ALLOWANCE = 2 * S17_MAX_FRAME_CHARS;
-
 /** How much prose must be rendered before Stop is worth clicking. Deliberately
  *  clear of the prompt's own 89 characters, so the vacuous version of this
  *  scenario cannot come back: pointed at the prompt bubble this never resolves,
  *  and the run fails as "nothing to cancel" instead of passing. */
 const PROSE_BEFORE_STOP = 120;
 
-/** Frame pacing for the replay. Slow on purpose — the whole scenario needs the
- *  stream to still be open when the click lands, and the click is the slowest
- *  thing on a loaded CI runner. At this pace round 1 spans ~2.4s and the click
- *  is due around 0.9s, which leaves ~470 characters still unsent. */
-const FRAME_MS = 150;
+/** Frame pacing for the replay. Slow on purpose, and the single most important
+ *  number here: the scenario needs the stream to still be OPEN when the click
+ *  lands, and dispatching a click is the slowest thing on a loaded runner. Round
+ *  1 is 14 prose frames; the click is due after the 6th, so this leaves 8 frames
+ *  of margin for the click — 2.4s at this pace. Measured against a 6x
+ *  CPU-throttled renderer on an oversubscribed box, clicks took 1-2s, so 150ms
+ *  a frame (1.2s of margin) was not enough and 300ms is.
+ *
+ *  If a runner is ever slower still, this scenario says so in as many words
+ *  rather than blaming cancellation — see the two guards around the click. */
+const FRAME_MS = 300;
 
 export const s17Cancel: Scenario = {
   id: 'S17-cancel',
@@ -108,17 +105,23 @@ export const s17Cancel: Scenario = {
       fail(`nothing to cancel: the answer was only ${before} characters when Stop was due`);
     }
 
-    // If the fixture already finished, this run cannot say anything about
-    // cancelling — and must not pretend to. Diagnose it as the harness problem
-    // it is rather than letting it surface as a confusing assertion failure.
-    if (await page.getByText(S17_CLOSING_SENTENCE).first().isVisible().catch(() => false)) {
+    // A run where the fixture ran out before the click cannot say anything about
+    // cancelling, and must not pretend to — in EITHER direction. Left
+    // undiagnosed it reads as "the closing sentence rendered, so Stop did
+    // nothing", which blames the kit for the harness being slow. Checked on both
+    // sides of the click, because the stream keeps flowing while the click is
+    // being dispatched and that dispatch is the slow part.
+    const finished = () =>
+      page.getByText(S17_CLOSING_SENTENCE).first().isVisible().catch(() => false);
+    const tooSlow = (when: string) =>
       fail(
-        'the fixture finished streaming before Stop could be clicked, so this run never tested ' +
-          `cancellation. Raise the scenario's replayDelayMs (currently ${FRAME_MS}ms a frame).`,
+        `the fixture finished streaming ${when}, so this run never tested cancellation. ` +
+          `Raise the scenario's replayDelayMs (currently ${FRAME_MS}ms a frame).`,
       );
-    }
 
+    if (await finished()) tooSlow('before Stop could be clicked');
     await page.getByRole('button', { name: 'Stop' }).first().click();
+    if (await finished()) tooSlow('while the Stop click was being dispatched');
 
     // 1. Growth must CEASE. Quiet for four frames counts as stopped.
     const settled = await waitForStableLength(streamed, { quietMs: 4 * FRAME_MS, timeout: 8_000 });
@@ -129,17 +132,18 @@ export const s17Cancel: Scenario = {
       );
     }
 
-    // 2. It must cease PROMPTLY — only what was already on the wire may land.
-    if (settled - before > INFLIGHT_ALLOWANCE) {
-      fail(
-        `Stop did not abort the stream promptly: the answer grew from ${before} to ${settled} ` +
-          `characters after the click, past the ${INFLIGHT_ALLOWANCE}-character in-flight allowance`,
-      );
-    }
-
-    // 3. And it must have been cut SHORT. This is the claim a character budget
+    // 2. And it must have been cut SHORT. This is the claim a character budget
     //    cannot make: the closing sentence renders only if round 1 ran to the
     //    end, whatever the timings were on the day.
+    //
+    //    There is deliberately NO "it grew by at most N characters" bound here.
+    //    One was tried (two frames' worth, 190 characters) and it failed 1 run
+    //    in 5 under a 6x CPU-throttled renderer, growing 355 -> 572: what such a
+    //    bound actually measures is how long the CLICK took to dispatch on a
+    //    loaded machine, not how long the stream kept flowing. Loosening it
+    //    would only make the flake rarer, and the promptness it was reaching for
+    //    is not observable from the DOM — see HARNESS.md for the server-side
+    //    frame count that could measure it honestly.
     await neverSeesText(
       page,
       S17_CLOSING_SENTENCE,
