@@ -1,5 +1,117 @@
 # Changelog
 
+## [0.21.0](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.20.1...@kitn.ai/ui-v0.21.0) (2026-08-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* **scaffold:** renderSurface keyed on components, archetypes become data
+* **scaffold:** renderSurface keyed on components, archetypes become data ([#157](https://github.com/kitn-ai/ui/issues/157))
+* **scaffold:** `cardEmitPlan(useCaseId, integrationId)` now takes a components list as its first argument. `scaffold`'s `useCase` input is optional — a request must name `components` or `useCase`.
+* the scaffolder emits a runnable card loop, and the MCP serves the schemas
+* the scaffolder emits a runnable card loop, and the MCP serves the schemas ([#154](https://github.com/kitn-ai/ui/issues/154))
+* **elements:** make every exposed interaction method callable through the types
+* ordered message parts, the wire adapter, and a scaffolder that emits a runnable tool loop
+* ordered message parts, the wire adapter, and a runnable tool loop ([#145](https://github.com/kitn-ai/ui/issues/145))
+* **build:** give SolidJS its own entry so "." stops paying for it
+* **mcp:** Integration.routeTemplates no longer carries a `next` entry for the six integrations that now ship `webRoute`. Anything reading routeTemplates.next off the catalog must read `webRoute` instead.
+
+### Features
+
+* **agent-tooling:** add the openai and anthropic integrations ([f0c6883](https://github.com/kitn-ai/ui/commit/f0c688328983951fdce5c98a6a25baa2148cdf17))
+* **agent-tooling:** declare each integration's deps and key exposure ([9edf57a](https://github.com/kitn-ai/ui/commit/9edf57a4e9918a5efa7b0f11286a6765cb49c40a))
+* **agent-tooling:** deps and keyExposure now drive the emitted install command and proxy decision ([#169](https://github.com/kitn-ai/ui/issues/169)) ([8e08cf2](https://github.com/kitn-ai/ui/commit/8e08cf2ae2b25c8029e76d703a7518055e797461))
+* **api:** put theme, declarative children, default slots and the maximize protocol in the generated API ([7e2a20e](https://github.com/kitn-ai/ui/commit/7e2a20e703a81692dd932f25c065b77d27cc31fd))
+* **build:** add the verify:solid-coverage guard ([8b67b6f](https://github.com/kitn-ai/ui/commit/8b67b6f41140c99410ac8c7780329652232ee1f1))
+* **build:** give SolidJS its own entry so "." stops paying for it ([36c17e8](https://github.com/kitn-ai/ui/commit/36c17e8a331b69d4ef85d31db8c527ff9a59a2f1))
+* **cards:** validate model card output, close the a11y and packaging gaps ([#152](https://github.com/kitn-ai/ui/issues/152)) ([4b33cd8](https://github.com/kitn-ai/ui/commit/4b33cd8c9b52d3778ffb37dadbe50455d486e4d3))
+* **cards:** validate the developer's own card types in the browser ([#153](https://github.com/kitn-ai/ui/issues/153)) ([c6c83fe](https://github.com/kitn-ai/ui/commit/c6c83fe4cd91355e398aacd9e19ee354cc80fabd))
+* **docs:** the docs site renders element methods, and role's JSDoc drops an em dash ([e5073f2](https://github.com/kitn-ai/ui/commit/e5073f20b55706f5c4052d964ccf9598f0672407))
+* **docs:** the generated references render the exposed element methods ([0f3ee1a](https://github.com/kitn-ai/ui/commit/0f3ee1a1643858d0cc86a31dbbb9038ce1962c97))
+* **elements:** export classifyTool, which our own JSDoc already told consumers to use ([7730779](https://github.com/kitn-ai/ui/commit/7730779eac6a0b001d12e3faa9449583278e9692))
+* **elements:** type-check kai-* props in Vue templates ([7f037c3](https://github.com/kitn-ai/ui/commit/7f037c340005f6b6bfdc8845440ed290855a2422))
+* **mcp:** component_reference serves the 128 exposed element methods ([56ad175](https://github.com/kitn-ai/ui/commit/56ad175b04c232a4a483654c4f454a6216504fd4))
+* **mcp:** derive which elements are card-backed, from the manifest ([5d8a28f](https://github.com/kitn-ai/ui/commit/5d8a28fc93bb3693b8f1531ee4289e9de4f79df2))
+* **mcp:** scaffold Angular and SolidJS ([d5f8a17](https://github.com/kitn-ai/ui/commit/d5f8a173dd780264df5830bc1569491ce8befa62))
+* **mcp:** serve the card schema and a GENERATED tool definition ([58806be](https://github.com/kitn-ai/ui/commit/58806befe0cfd3e51ee4e95a04e16bc5a1058bea))
+* ordered message parts, the wire adapter, and a runnable tool loop ([#145](https://github.com/kitn-ai/ui/issues/145)) ([55b6c70](https://github.com/kitn-ai/ui/commit/55b6c70f1e0fa750e842e7107323db51a69ad6d6))
+* ordered message parts, the wire adapter, and a scaffolder that emits a runnable tool loop ([55b6c70](https://github.com/kitn-ai/ui/commit/55b6c70f1e0fa750e842e7107323db51a69ad6d6))
+* **scaffold:** emit the generative-UI card round trip ([fa202cf](https://github.com/kitn-ai/ui/commit/fa202cf4c2868af4c5544fa812b153ffce1aa67a))
+* **scaffold:** renderSurface keyed on components, archetypes become data ([03299fb](https://github.com/kitn-ai/ui/commit/03299fb233d7ad98f5d8cd99a2cc61a9e73c5fca))
+* **scaffold:** renderSurface keyed on components, archetypes become data ([bbc1996](https://github.com/kitn-ai/ui/commit/bbc199619ca2a36a7379839a4e0470df8f564873))
+* **scaffold:** renderSurface keyed on components, archetypes become data ([#157](https://github.com/kitn-ai/ui/issues/157)) ([03299fb](https://github.com/kitn-ai/ui/commit/03299fb233d7ad98f5d8cd99a2cc61a9e73c5fca))
+* **schemas:** export the card schemas as tool definitions, and map tool calls back to cards ([#151](https://github.com/kitn-ai/ui/issues/151)) ([dad3a89](https://github.com/kitn-ai/ui/commit/dad3a8905c8c5db3bc03549c7168efade6c3983f))
+* **schemas:** make the card payload types first-class, not second-class ([82504c8](https://github.com/kitn-ai/ui/commit/82504c81aed225a700d76457ea8cebfd5377d39e))
+* **schemas:** make the card payload types first-class, not second-class ([dd893f5](https://github.com/kitn-ai/ui/commit/dd893f59ebe88c548f9a7d3f48bc771db5fc507e))
+* **schemas:** make the card payload types first-class, not second-class ([#159](https://github.com/kitn-ai/ui/issues/159)) ([82504c8](https://github.com/kitn-ai/ui/commit/82504c81aed225a700d76457ea8cebfd5377d39e))
+* **scripts:** verify:ssr now server-renders instead of only importing ([#173](https://github.com/kitn-ai/ui/issues/173)) ([4ac3808](https://github.com/kitn-ai/ui/commit/4ac3808032ef71b3147ba206656519b930fee74d))
+* **solid:** close the 33 element gaps on the root entry ([8f085cf](https://github.com/kitn-ai/ui/commit/8f085cf5452dd70025d5bc920926ad6ec9b83f0c))
+* **solid:** export a Props type for every public component ([4ee12d5](https://github.com/kitn-ai/ui/commit/4ee12d53baca89a53db6a0a949315bb58add58b3))
+* **state:** one mock responder, streaming through the real parser ([c442054](https://github.com/kitn-ai/ui/commit/c4420546d4fe8a1d14e34c3d2e3325c2573f6821))
+* sub-project D, the last two conformance gaps, and four guards ([9f56119](https://github.com/kitn-ai/ui/commit/9f56119385de6c5ee8ad558cff163555f6b7149f))
+* the scaffolder emits a runnable card loop, and the MCP serves the schemas ([f89b3df](https://github.com/kitn-ai/ui/commit/f89b3dfb664ab6196b02d55f18815b3c1217f81e))
+* the scaffolder emits a runnable card loop, and the MCP serves the schemas ([#154](https://github.com/kitn-ai/ui/issues/154)) ([f89b3df](https://github.com/kitn-ai/ui/commit/f89b3dfb664ab6196b02d55f18815b3c1217f81e))
+* **types:** export ComposerDoc, Segment and EntityRef from the root entry ([989f7e6](https://github.com/kitn-ai/ui/commit/989f7e68828b6aeafb88b6d3b982b2fd1935d212))
+* **types:** give every kai-* object/array prop a named, importable type ([de1142b](https://github.com/kitn-ai/ui/commit/de1142b7f57836c3b48334cf63deb8b17a2b0d7b))
+
+
+### Bug Fixes
+
+* **agent-tooling:** declare the card-tool envelope and per-host model ids ([87abe75](https://github.com/kitn-ai/ui/commit/87abe75926c493984265e468b6785f0d90dbdceb))
+* **api:** make composedFrom follow element-local helpers and stop naming constants ([923e527](https://github.com/kitn-ai/ui/commit/923e52792b4f68cd706520f27e50122c580b2ed4))
+* **build:** pair every bundled subpath entry with sibling declarations ([fe60da1](https://github.com/kitn-ai/ui/commit/fe60da1cc9cbca4e7c40f0cfbc0f5e7b7537dd5c))
+* **build:** stop shipping React types that resolve into raw src/ ([b53189f](https://github.com/kitn-ai/ui/commit/b53189f0b2172722d96b628978ba1e8fa7270abc))
+* **ci:** stop the storybook retry naming a cause it never checked ([35c414d](https://github.com/kitn-ai/ui/commit/35c414d49920902bdfb6fa7e5625c0cdd68f7b05))
+* **conversations:** make `groups` optional, matching the runtime ([893d08d](https://github.com/kitn-ai/ui/commit/893d08df48bf20dd99041e78312f0a7ca3676313))
+* **conversations:** stop silently dropping a conversation whose group is unknown ([2c04547](https://github.com/kitn-ai/ui/commit/2c04547009104bf91a57654c7f485f094a9935a9))
+* **elements:** make every exposed interaction method callable through the types ([94d604a](https://github.com/kitn-ai/ui/commit/94d604a6c53a916ddbd295803e75a30eb24a102e))
+* **elements:** shadow reflected IDL props BEFORE the registry upgrades the page ([84957a3](https://github.com/kitn-ai/ui/commit/84957a300cfec5aaa53cd680db8ff6ae669fab00))
+* **elements:** split the read and write types for defaulted props ([ad721db](https://github.com/kitn-ai/ui/commit/ad721dbb82c329c2ecdb89b310b648edcfdb0468))
+* eleven checks and documents that asserted something untrue ([d22a2e1](https://github.com/kitn-ai/ui/commit/d22a2e1c6905183b3a93d71ec3db3ff2c930d18b))
+* eleven checks and documents that asserted something untrue ([#155](https://github.com/kitn-ai/ui/issues/155)) ([d22a2e1](https://github.com/kitn-ai/ui/commit/d22a2e1c6905183b3a93d71ec3db3ff2c930d18b))
+* **examples:** the composable demo could never load its bundle ([#170](https://github.com/kitn-ai/ui/issues/170)) ([cf36902](https://github.com/kitn-ai/ui/commit/cf369029c2f8f2e4ba4d265a91d7ae85d481db84))
+* **mcp:** bind the element manifest to the package, not to whatever is above it ([19505ab](https://github.com/kitn-ai/ui/commit/19505ab212c690faa7503d1af8457dfff5353a6a))
+* **mcp:** forward the upstream status, so a 401 is not silence ([2b64a10](https://github.com/kitn-ai/ui/commit/2b64a10edc3498e968b3ede3e65f4bbab1f2fe9d))
+* **mcp:** give every framework a backend route it can actually run ([02cde9b](https://github.com/kitn-ai/ui/commit/02cde9b0773d2e2e1a900206a1ef1a95d61a1e47))
+* **mcp:** make every emitted backend route compile on its real host ([8347e2a](https://github.com/kitn-ai/ui/commit/8347e2a3618f50ff1c9a89d5a67e0f505ef86a65))
+* **mcp:** make the emitted tool stub and (req,res) bridge compile in a stock app ([eb923db](https://github.com/kitn-ai/ui/commit/eb923dbf1fba7bf1e6a602f8fe9c900013de57cf))
+* **message:** keep the speaker off &lt;kai-message&gt; as an ARIA role ([cdb4078](https://github.com/kitn-ai/ui/commit/cdb40784f87aaa9190b56ab870b36c08ed6ff875))
+* **message:** stop the speaker prop from shipping an invalid ARIA role ([c80080e](https://github.com/kitn-ai/ui/commit/c80080e7890f77b44a5f3d4eca076faef9e52528))
+* **mock:** keep the go-live hint out of the no-fetch guard's way ([367f53d](https://github.com/kitn-ai/ui/commit/367f53d947fa8fdf5978e74020f6d63e7768a581))
+* **primitives:** capture cancelAnimationFrame itself, not the view that owns it ([64c6e95](https://github.com/kitn-ai/ui/commit/64c6e954a5c868b0cdbe32869d078ab5038de9f1))
+* **primitives:** dismissRecovery's type stopped being weaker than its body ([71dbacb](https://github.com/kitn-ai/ui/commit/71dbacb3cd0a3869bf5945ba12d52f7bcf8d151b))
+* **react:** stop registerAll() from also fetching every per-element chunk ([d870617](https://github.com/kitn-ai/ui/commit/d8706172a04b3c91e53b865bf128524172a1be08))
+* **scaffold:** emit Svelte 5 runes and $env/dynamic/private, not Svelte 4 ([7eb7d03](https://github.com/kitn-ai/ui/commit/7eb7d03c23aa46eb7551addd20139cb6dbb1e255))
+* **scaffold:** emit the html target's logic as src/main.ts, not an inline script ([9a72e6d](https://github.com/kitn-ai/ui/commit/9a72e6d9a8a920f1ee161efc06ef9552e3be9a6d))
+* **scaffold:** give the Vite-middleware route imports explicit extensions ([c9e4303](https://github.com/kitn-ai/ui/commit/c9e430308fb643a7b45c885499d499028822d7bd))
+* **scaffold:** key the emitted Solid thread by id so a mid-stream expand survives ([442749d](https://github.com/kitn-ai/ui/commit/442749d2d19154594e6f78f06074f09144e1663d))
+* **scaffold:** make the full-page placement actually full-page ([f6c5359](https://github.com/kitn-ai/ui/commit/f6c535926ffb93ae9d0b469e5560b64b62cde23b))
+* **scaffold:** promote Vue's isCustomElement to its own emitted setup step ([711ba51](https://github.com/kitn-ai/ui/commit/711ba51c8aaf4166fd3071c519b88cc7aaf39d19))
+* **schemas:** free the card component types from the Solid tree ([341c00e](https://github.com/kitn-ai/ui/commit/341c00ee3e1c879c1b54bddc44f030aed1b32516))
+* **schemas:** free the card component types from the Solid tree ([#156](https://github.com/kitn-ai/ui/issues/156)) ([341c00e](https://github.com/kitn-ai/ui/commit/341c00ee3e1c879c1b54bddc44f030aed1b32516))
+* **schemas:** free the card component types from the Solid tree, drop dead schema metadata ([4070392](https://github.com/kitn-ai/ui/commit/40703921f586d6aeab6b04d01ca6bf25d483b61a))
+* **schemas:** link and embed payload types were unreachable from the server-safe entry ([#166](https://github.com/kitn-ai/ui/issues/166)) ([6119783](https://github.com/kitn-ai/ui/commit/61197833bc535f9e704af9aecd9368f32df31d2e))
+* **scripts:** four scripts resolved paths against the cwd when they meant their own location ([#168](https://github.com/kitn-ai/ui/issues/168)) ([7e2e4dc](https://github.com/kitn-ai/ui/commit/7e2e4dc10c54e5783436397c7e7261446a4df77b))
+* **scripts:** shorthand expose() members reached no artifact, and union order churned ([29a40ce](https://github.com/kitn-ai/ui/commit/29a40ce4f0a4441869ef0530fa3e3389e1f484c7))
+* **scripts:** shorthand expose() members reached no artifact, and union order churned ([f9d8af9](https://github.com/kitn-ai/ui/commit/f9d8af995ebed02391578060052e772aa8e1c67c))
+* **scripts:** shorthand expose() members reached no artifact, and union order churned ([#163](https://github.com/kitn-ai/ui/issues/163)) ([29a40ce](https://github.com/kitn-ai/ui/commit/29a40ce4f0a4441869ef0530fa3e3389e1f484c7))
+* **scripts:** three AST extractors silently dropped members they did not recognise ([#167](https://github.com/kitn-ai/ui/issues/167)) ([930ddff](https://github.com/kitn-ai/ui/commit/930ddffc6f74dada772635819e6784e9bd0b25b3))
+* **scripts:** three generators silently did nothing on a spaced path ([2fc1b57](https://github.com/kitn-ai/ui/commit/2fc1b574f2ea232061f7f192ca6cd403ab562869))
+* **teardown:** cancelAnimationFrame past one level of indirection ([9b49ca5](https://github.com/kitn-ai/ui/commit/9b49ca54befcd687265a3e7cbddb1ee11f6b0813))
+* **teardown:** cancelAnimationFrame past one level of indirection ([6b479aa](https://github.com/kitn-ai/ui/commit/6b479aa3e219ea8d2a6d8c317f6d528d1ec74509))
+* **teardown:** cancelAnimationFrame past one level of indirection ([#161](https://github.com/kitn-ai/ui/issues/161)) ([9b49ca5](https://github.com/kitn-ai/ui/commit/9b49ca54befcd687265a3e7cbddb1ee11f6b0813))
+* **test:** shrink the chromium hardening block to the one flag that is ours ([ab46334](https://github.com/kitn-ai/ui/commit/ab4633426d01ccbb0d79640ea85b852ff253fe23))
+* **test:** the CI chromium hardening flags never reached the browser ([f5eff42](https://github.com/kitn-ai/ui/commit/f5eff424da68d4568323c500a54160cc91548fdf))
+* **thread:** forward the speaker to the row, so the a11y fix reaches users ([fe97c58](https://github.com/kitn-ai/ui/commit/fe97c58f4e9d491c9a95dc816e7ce1c14b037bff))
+* **thread:** forward the speaker to the row, so the a11y fix reaches users ([b983cba](https://github.com/kitn-ai/ui/commit/b983cba889aee9259b50d4b3152e09065b0ce2e8))
+* **thread:** forward the speaker to the row, so the a11y fix reaches users ([#176](https://github.com/kitn-ai/ui/issues/176)) ([fe97c58](https://github.com/kitn-ai/ui/commit/fe97c58f4e9d491c9a95dc816e7ce1c14b037bff))
+* **thread:** key the message list by id so a mid-stream expand survives ([cb41f5c](https://github.com/kitn-ai/ui/commit/cb41f5c6c7ed44171c8a1cf1b9639d873cd24f3f))
+* **tooling:** resolve [@kitn](https://github.com/kitn).ai/ui/schemas on an unbuilt tree ([fbc4f96](https://github.com/kitn-ai/ui/commit/fbc4f9646535a8d3563e4f709dfd225282c1d36d))
+* **typecheck:** make the fifth pass's exclusion list unable to rot closed ([0f06a35](https://github.com/kitn-ai/ui/commit/0f06a359dc0f1e7ad75e22c0b26ebb5838420a21))
+* **types:** make shipped .d.ts resolve under node16/nodenext ([127ac63](https://github.com/kitn-ai/ui/commit/127ac637b61a46c6deb92e934ed1e4186aeb433d))
+* **types:** stop the generated element interfaces from invalidly extending HTMLElement ([ba8b211](https://github.com/kitn-ai/ui/commit/ba8b2119ac25ba547d6ff370e4d8b6d47d5f47b6))
+* **wire:** report a stream that produced no chunks instead of an empty turn ([1fa4872](https://github.com/kitn-ai/ui/commit/1fa487206e2832c70eb87a945aeaff414f5af898))
+
 ## [0.20.1](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.20.0...@kitn.ai/ui-v0.20.1) (2026-08-10)
 
 
