@@ -4,7 +4,7 @@
 
 **Goal:** a developer builds an app with our components, points a model at it, and (a) gets a real card on screen without hand-writing a tool definition or an envelope mapper, and (b) finds out *quickly and specifically* when the model's output does not match what their app can render.
 
-**Base SHA:** `7eb02de` on `feat/message-parts`. Assert `git rev-parse --short HEAD` before editing (§5.9).
+**Base SHA:** `7eb02de`. No branch name here on purpose: branches get merged and deleted, so any one written down goes stale, while the SHA stays reachable. Run `git branch --contains 7eb02de` if you need to know where this work lives right now. Assert `git rev-parse --short HEAD` before editing (§5.9).
 
 ---
 

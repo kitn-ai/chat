@@ -2,11 +2,15 @@
 
 Last updated 2026-08-11. Supersedes the 2026-08-10 version entirely.
 
-**The epic through PR #147 is MERGED TO MAIN.** The 2026-08-11 work described below is not:
-sub-project D, the guard round, the re-recorded five-configuration matrix and the corrections
-to this document all sit on `feat/message-parts`, ahead of `origin/main`. Check the gap with
-`git rev-list --count origin/main..feat/message-parts` rather than trusting a count written
-here, because a count written here is stale by the next commit (§5.11).
+**The work this document describes as done is MERGED TO MAIN**, through PR #150: the epic,
+sub-project D, the guard round, the re-recorded five-configuration matrix and the harness fixes.
+What is still in flight is the emit contract (§1.2). In-flight work is described by its plan under
+`docs/superpowers/plans/`, and those files carry their own base SHAs.
+
+Read the state from the repo, not from a branch name written here. `git log --oneline origin/main`
+answers what has landed. A branch name cannot, because branches merge and get deleted while a
+sentence naming one stays put, which makes a branch name a worse thing to hardcode here than the
+count this paragraph used to warn about (§5.11).
 
 ---
 
@@ -331,6 +335,35 @@ makes an architecture decision on, and it would have talked them out of the corr
 
 ## 5. Hard-won lessons. These WILL recur.
 
+Every mechanism added in this session is one shape of a single defence: **make the absence of a
+measurement impossible to mistake for a measurement.**
+
+It is a concrete rule and not an abstract one because of where it started. A table cell read
+`n/a`, and everyone, including the people who wrote it, read that as a fact about a provider. It
+was our own request, carrying a thinking budget under the provider's floor, answered with HTTP 200
+and silence (§1.6). Nothing errored. The silence was published as a provider limitation.
+
+Each mechanism reduces to that rule:
+
+- **The truthful matrix exit code.** A run that collected zero cells must not exit 0. An empty
+  result set and a clean one have the same failure count.
+- **The `modelBehaviour` declaration.** An exemption must state what the model does INSTEAD, and
+  must fail when the difference disappears, so a permanent hole cannot pass for a measured result.
+- **The reasoning-coverage guard.** A column declared reasoning-capable that recorded none is a
+  finding, not a silence. Its verdict ordering checks truncation before silence, because a
+  truncated stream has no usage frame and therefore reads as zero reasoning.
+- **The stall diagnostic.** Report observed state, refuse to name a cause. Being confidently
+  specific about the wrong thing costs more than being vague.
+- **The generated-artifact guard.** A generator that exits 0 having written nothing must not read
+  as in sync.
+
+One shape none of them catch, named here so nobody reads the rule as fully mechanised: **coverage
+that exists only because something was missing is coverage on a timer.** The workaround did not
+fail. It succeeded, was correctly deleted, and nothing went red. That is worse than a broken test,
+because there is no moment at which anyone could have caught it.
+
+What follows is where that was learned, one failure at a time.
+
 ### 5.1 The dominant failure mode: checks that pass while covering nothing
 
 This accounted for more defects than bad implementations, by a wide margin. Instances from this epic:
@@ -352,8 +385,15 @@ This accounted for more defects than bad implementations, by a wide margin. Inst
   Completed" from fixture data while the live loop had never run. **Sample data is a check that
   proves nothing, aimed at humans.**
 - The `knownGap` mechanism in the harness built to catch all of this (§4).
-- My own CI poller, twice — treating an empty API response, and an unenumerated status word, as
-  "done".
+- My own CI poller, treating an empty API response as "done".
+- The same poller, treating an unenumerated status word as "done".
+- **The same poller again, and the worst-timed instance in the epic.** I watched required checks
+  with `gh pr checks --watch | tail -20; echo "EXIT=$?"`. `$?` there is **`tail`'s** exit status,
+  not `gh`'s, so it printed success no matter what CI did. Caught only by going to query the check
+  conclusions directly instead of trusting the number, while merging the PR whose headline is four
+  guards against checks that prove nothing. The general form: **a pipeline's exit status describes
+  its last command.** Capture to a file, or read `PIPESTATUS`, when the exit code is the thing you
+  care about.
 - A near-miss worth the line: the obvious implementation of the new `renderPart` variant guard
   **would have been satisfied by a COMMENT.** The prose naming `card / source / file` sits in the
   same emitted file as the branches that have to render them, so a text match cannot tell the
@@ -458,9 +498,9 @@ The hazard holds either way, and it is the same family as §5.1: **success and n
 indistinguishable from the output.** Verify the artifact changed, not that the command exited 0.
 
 This was first written flat ("`nx build ui` does NOT regenerate the derived artifacts"), here and
-in `CLAUDE.md`, generalised from that single observation inside an hour. It is the freshest
-instance of §5.13. The advice survives both observations, so it was safe to state; the mechanism
-was contingent on one run, and the mechanism is the half that had to be corrected.
+in `CLAUDE.md`, generalised from that single observation inside an hour. **That is §5.13 in its
+mechanism-versus-advice form.** The advice survives both observations, so it was safe to state; the
+mechanism was contingent on one run, and the mechanism is the half that had to be corrected.
 
 ### 5.9 Worktree-isolated agents branch from `origin/main`, not from your branch
 
@@ -523,11 +563,25 @@ guard now compares registry against source in both directions. **Make the duplic
 make it fail loudly.** Prose is where that is hardest and where no guard exists, which is why the
 results doc is the instance that got furthest.
 
+**There is a prose-only class of this, and this document keeps producing it.** A count, a
+superlative and a branch name are all facts about the state of things, embedded in prose that
+describes the state of things. Each is a second copy of something the document already expresses,
+and each goes stale on a change that had no reason to touch it: a count when a sibling is added,
+"the freshest instance of" when anything is appended below it, a branch name when the branch merges
+and is deleted. A volatile identifier quoted from memory rather than read from the source is the
+same defect arriving already broken. The fix is the same in every case: **name the thing; do not
+count it, rank it against a set that is still growing, or pin it to a location that moves.** The
+section documenting this keeps committing it, which is the evidence that it is hard rather than
+careless.
+
 ### 5.12 Absence read as a legitimate value
 
-**This and §5.13 are the two lessons from this session that leave this repo**, alongside §5.11.
-The rest above are instances: worth recognising when they recur, but tied to this codebase. These
-two are rules.
+**§5.11, this one, and everything below it are the lessons from this session that leave this
+repo.** The rest above are instances: worth recognising when they recur, but tied to this codebase.
+This is a boundary rather than a count or a list because both have already gone stale here: the
+count when §5.14 was added, the list that replaced it when §5.15 was. That is §5.11 happening twice
+inside the paragraph that points at it. Keep portable lessons at the end of the section and the
+boundary stays true on its own.
 
 Four separate bugs were the same bug: something was absent, and the absence was read as a value.
 
@@ -575,6 +629,101 @@ reached over it for the version that could be wrong. **When an argument is avail
 structural and a contingent form, the contingent one is the one that will need correcting later.**
 Lead with the structural one; keep the dates below it as corroboration for a reader who does not
 accept it.
+
+### 5.14 "Done" and "landed" are different facts
+
+I reported the reasoning-coverage guard as DONE and believed it. A peer session had it in its head
+as shipped too. It was written, tested, committed, and **not in the tree**: it sat on a worktree
+branch cut before the matrix sweep. Nothing in either session's account distinguished "written and
+committed on a branch" from "landed on the working branch".
+
+That is what makes it worse than the lessons above it. Two independent parties held the same belief,
+and neither had anything in hand that could have contradicted it.
+
+It surfaced only by enumerating every `worktree-agent-*` branch and diffing commit SUBJECTS against
+HEAD's log, and that turned up **four** unlanded workstreams, not one. The mechanical trap worth
+recording: **a cherry-pick does not mark its source.** A branch whose work is already in HEAD, picked
+rather than merged, still reports commits ahead, so `git branch --merged` omits it and a raw
+ahead-count counts it. Both call a landed branch unlanded, which is why the count is not the signal
+and the subjects have to be compared.
+
+§5.4 says commit early, because committed work survives someone else's checkout. This is its other
+half: committed is not landed. `git log -1` in the tree you are standing in shows your commit and
+says nothing about whether the branch that ships has it.
+
+Operational form: **never trust your own record of what you landed. Enumerate the branches and diff
+subjects against HEAD.**
+
+### 5.15 Verifying a mechanism is not verifying its constraints, and neither is verifying that it compiles
+
+Three layers, each silent about the ones above it. From building the `modelBehaviour` declaration
+for the conformance matrix:
+
+1. **What it DOES when used correctly.** Watched four ways: declared-and-still-differs goes green;
+   declared-but-now-passes goes red; declared-but-fails-with-a-different-error goes red;
+   declaration-removed goes red.
+2. **What it REFUSES when used wrongly.** Checked only because the actual requirement
+   ("unwritable as a bare note") lives at this layer and not at the first. Shortening the `instead`
+   field to a useless value, and watching the catalog test reject it.
+3. **Whether it is WELL-FORMED at all.** `tsc -b` then caught a `string | null` vs
+   `string | undefined` mismatch. **All five runtime checks had passed against code that does not
+   compile**, because Playwright transpiles specs without typechecking them.
+
+The third is both the easiest to skip, because five greens already felt like enough, and the most
+embarrassing, because a tool will simply tell you.
+
+Operational form: **a constraint system has a layer for what it does, a layer for what it refuses,
+and a layer for whether it is well-formed. Greens at one layer say nothing about the others.**
+
+The same work gained a property for free by watching a bad declaration in isolation: one malformed
+declaration does not disable the others, so the mechanism **fails closed**. An exemption mechanism
+that failed open would go silently green the day someone mistyped a signature.
+
+### 5.16 Writing "measured" next to a claim should force the measurement
+
+An agent asserted from reasoning that `resolveJsonModule` is required for TypeScript to RESOLVE a
+JSON import, reporting TS2307 in both resolution modes without it. I recorded that as settled and
+relayed it onward.
+
+It is wrong. TypeScript 5.x defaults the flag to true under both `bundler` and `nodenext`; the code
+is TS2732, not TS2307; and the ORIGINAL claim it was "correcting" was right.
+
+Two details make it a lesson rather than a mistake:
+
+- It was caught only when the claim was about to be written into a guard header **labelled as
+  measured**. Having to write the word forced the measurement.
+- The first measurement attempt was broken in the same shape. It OMITTED the flag rather than
+  setting it to `false`, got "compiles clean" both ways, and nearly confirmed the error.
+
+Both operational forms are worth keeping. **Writing "measured" beside a claim is a commitment that
+should trigger the measurement, not a description of your confidence.** And **when testing whether
+a flag matters, omitting it and disabling it are different experiments, only one of which tests the
+flag.**
+
+The supervisory half, recorded honestly: I amplified the finding to Rob within minutes of receiving
+it, and it was the third relayed claim that day that did not survive verification. **Speed of relay
+is not free.**
+
+### 5.17 A check that reports the boring branch has been misread, not verified
+
+Building a diagnostic that reports observed state on a timeout, a build race was staged to exercise
+its "dist changed during this run" branch. The diagnostic reported `unchanged`, because the touch
+beat the spec's module load. The report was correct. It was correct about the wrong branch.
+
+The window was widened and the race re-run, rather than accepting it.
+
+This is neither of the failure modes §5.1 and §5.6 name. The check did fire, and the report was not
+wrong. What went wrong is that **the branch the condition was staged to exercise never ran, and the
+output looks like success either way.**
+
+Operational form: **name the branch you expect BEFORE running, then check the output took that
+branch, not merely that the output is sane.** The tell exists only for the person who knew which
+branch they were aiming at, which is why review cannot catch it.
+
+The same diagnostic carries a test asserting it NEVER names a cause, only observed state.
+**Asserting a design constraint in a test beats trusting review to preserve it**, because the
+constraint most likely to decay is the one a well-meaning contributor would violate helpfully.
+Adding a cause to a diagnostic is exactly that shape.
 
 ---
 
