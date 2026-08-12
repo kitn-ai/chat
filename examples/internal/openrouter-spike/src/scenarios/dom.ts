@@ -20,6 +20,7 @@
 // the `Page`/`Locator` objects the runner passes in, which keeps these modules
 // importable from the browser bundle.
 import type { Locator, Page } from '@playwright/test';
+import { WEATHER_CARD_TAG } from '../cards';
 import { ScenarioAssertionError } from './types';
 
 /** Default wait for a piece of rendered state to appear. Generous, because a
@@ -233,6 +234,66 @@ export async function expand(trigger: Locator, panel: Locator, what: string): Pr
     await trigger.page().waitForTimeout(80);
   }
   throw new ScenarioAssertionError(`clicked the ${what} trigger but its panel never became visible`);
+}
+
+// ── the consumer card seam ───────────────────────────────────────────────────
+
+/**
+ * Every `<spike-weather-card>` the THREAD rendered.
+ *
+ * This is the only handle in the harness on the consumer `cardTypes` seam, and
+ * the tag is the whole point: `weather` is not one of the kit's seven built-in
+ * card types, so an element with this name on screen can ONLY have come from
+ * `ThreadView` handing `<kai-thread>` a `cardTypes` entry and `mergeCardTags`
+ * putting it in the map. Scoped to `kai-thread` so it can never count something
+ * the app rendered outside the message list.
+ */
+export function consumerCards(page: Page): Locator {
+  return page.locator(`kai-thread ${WEATHER_CARD_TAG}`);
+}
+
+/**
+ * Assert the seam rendered EXACTLY `n` cards, each showing data that came out of
+ * the tool run.
+ *
+ * The count is not decoration. "A card-producing scenario ran" and "the seam
+ * rendered a card per tool call" are different facts, and only the second one
+ * says the seam works: an upsert bug, a `mergeCardTags` regression that drops the
+ * consumer entry for the second envelope, or a card that renders once and then
+ * stops all read as "a card exists".
+ *
+ * `expect` is scoped INSIDE the card for the reason S13 learned the hard way: the
+ * <kai-tool> panel a few inches up the thread echoes the tool's own output, so an
+ * unscoped `getByText('Light rain')` passes off the panel while the card renders
+ * as empty chrome. Empty chrome is exactly what a payload the card cannot read
+ * produces, which is the failure this is here to catch.
+ */
+export async function seesConsumerCards(
+  page: Page,
+  n: number,
+  expect: string[],
+): Promise<void> {
+  const cards = consumerCards(page);
+  await seesElement(cards, `a <${WEATHER_CARD_TAG}> card`, {
+    because:
+      '`weather` is not a built-in card type — it can only render through the consumer `cardTypes` seam',
+  });
+  // Settle first: the count is the assertion, so reading it the instant the
+  // first card appears would race a second one that is still arriving.
+  await seesAtLeast(page, cards, n, `<${WEATHER_CARD_TAG}> cards`);
+  const seen = await cards.count();
+  if (seen !== n) {
+    fail(
+      `expected exactly ${n} consumer card(s) from the \`cardTypes\` seam, saw ${seen}. ` +
+        'One per distinct observation: `AssistantStream.addCard` upserts on the envelope id.',
+    );
+  }
+  for (let i = 0; i < expect.length; i++) {
+    await seesElement(cards.nth(i).getByText(expect[i]), `"${expect[i]}" inside consumer card ${i + 1}`, {
+      because:
+        "the card must show the TOOL's own output, not just exist — the tool panel above it echoes the same text",
+    });
+  }
 }
 
 /** Fail with a formatted message. Used where a scenario's own logic decides. */
