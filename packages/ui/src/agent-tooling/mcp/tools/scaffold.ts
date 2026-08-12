@@ -3533,13 +3533,27 @@ function renderSolid(components: readonly string[], ctx: RenderCtx): string {
     `// every kit utility class as unused, and the whole UI renders unstyled.`,
     `// (theme.css here, not theme.tokens.css: this app compiles Tailwind itself.)`,
     `import { For, Index, Match, Show, Switch, createMemo, createSignal } from 'solid-js';`,
+    // '@kitn.ai/ui/solid', NOT the root '@kitn.ai/ui', and the difference is
+    // invisible to every compiler on this repo's critical path: src/solid.ts is
+    // `export * from './index'`, so ./solid is a strict SUPERSET of the root and
+    // both specifiers typecheck identically. verify:scaffold's solid project
+    // compiled clean the whole time this was wrong.
+    //
+    // The root is the shared layer EVERY consumer resolves — React, Vue, Svelte
+    // and vanilla included — so it deliberately carries only the chat components,
+    // types and helpers those frameworks can use. The rest of the Solid catalog
+    // lives on ./solid, built as its own bundle so a React app never pays for it.
+    // A Solid app pointed at the root therefore gets the smaller surface and finds
+    // out the hard way, one missing export at a time. The published guide says so
+    // outright ("Import Solid components from @kitn.ai/ui/solid, not from the root
+    // @kitn.ai/ui"), and this generator contradicted it for every Solid scaffold.
     `import {`,
     ...componentImports.map((n) => `  ${n},`),
-    `} from '@kitn.ai/ui';`,
+    `} from '@kitn.ai/ui/solid';`,
     `// The kit's own types, from the same entry the components come from.`,
     `import type { ${attachments
       ? 'AttachmentData, ChatMessage, MessagePart, MessageSource'
-      : 'ChatMessage, MessagePart, MessageSource'} } from '@kitn.ai/ui';`,
+      : 'ChatMessage, MessagePart, MessageSource'} } from '@kitn.ai/ui/solid';`,
     ...wireImportLines({
       typed: false,
       toolLoop: emitToolLoop,
