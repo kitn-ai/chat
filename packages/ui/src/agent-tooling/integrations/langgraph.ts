@@ -97,6 +97,14 @@ async function chatHandler(request: Request): Promise<Response> {
   // Nothing. The agent owns both: ChatOpenAI({ model: 'gpt-4o' }) and the tools
   // array passed to createReactAgent are server-side.
   forwardsFromClient: [],
+  // Four, one per import in the route above. `zod` is the one runNote's prose
+  // forgets: the tool's `schema:` is a z.object(), so an app installed from that
+  // sentence alone fails to build. Deriving this from the imports rather than
+  // from the prose is the point of the field.
+  deps: { npm: ['@langchain/langgraph', '@langchain/openai', '@langchain/core', 'zod'], pip: [] },
+  // No key appears in the route: `new ChatOpenAI(...)` reads OPENAI_API_KEY from
+  // the environment itself. Same invisible-key shape as vercel-ai-sdk.
+  keyExposure: 'needs-proxy',
 };
 
 export default langgraph;

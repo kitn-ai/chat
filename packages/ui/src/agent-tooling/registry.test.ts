@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { integrations, archetypes, getIntegration, getArchetype, listIntegrations, listArchetypes } from './registry';
 import { IntegrationSchema, ArchetypeSchema } from './types';
+import type { Integration } from './types';
 
 // --- Integrations ---
 
@@ -39,7 +40,16 @@ it('includes the zero-config mock integration', () => {
 
 it('every integration validates against IntegrationSchema', () => {
   for (const i of integrations) {
-    expect(IntegrationSchema.safeParse(i).success).toBe(true);
+    const result = IntegrationSchema.safeParse(i);
+    // The message, not just `false`. This assertion used to read `expected false
+    // to be true`, which names neither the integration nor the rule it broke —
+    // and the schema's refinements exist precisely to TELL an author what to
+    // declare and why. Throwing that text away made the guard cost more to
+    // diagnose than the bug it caught.
+    expect(
+      result.success,
+      result.success ? '' : `${i.id}: ${result.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('\n')}`,
+    ).toBe(true);
   }
 });
 
@@ -130,6 +140,133 @@ it('every request field a route reads is declared in forwardsFromClient', () => 
         `${integration.id}: route reads '${field}' off the request body but does not declare it, so the scaffold never sends one`,
       ).toContain(field);
     }
+  }
+});
+
+// --- keyExposure ---
+//
+// The flag `create-kai` reads before deciding where an API key goes. Wrong in the
+// permissive direction, it writes a secret into a browser bundle — and a wrong
+// value COMPILES, so nothing but a check over the declaration itself catches it.
+// The schema refuses a missing flag; these refuse a false one.
+
+const routeSourcesOf = (integration: Integration): string[] => [
+  ...Object.values(integration.routeTemplates),
+  ...(integration.webRoute ? [integration.webRoute] : []),
+];
+
+it('every integration declares keyExposure', () => {
+  for (const integration of integrations) {
+    expect(
+      integration.keyExposure,
+      `${integration.id}: no keyExposure. The CLI would have to guess whether this integration's key may sit in the browser bundle`,
+    ).toBeDefined();
+  }
+});
+
+/**
+ * The permissive-direction guard, stated over `envVars` rather than route source
+ * ON PURPOSE. Three integrations (`langgraph`, `vercel-ai-sdk`, `pydantic-ai`)
+ * hold a key their route text never mentions, because the SDK reads the env var
+ * itself inside `streamText()` / `new ChatOpenAI()` / `Agent(...)`. A grep of the
+ * route would clear all three as keyless, which is the wrong answer in the one
+ * direction that costs a secret.
+ */
+it('no integration that declares a secret env var claims to be frontend-safe', () => {
+  const secretEnvVar = /(?:KEY|TOKEN|SECRET|PASSWORD)$/;
+  for (const integration of integrations) {
+    const secrets = integration.envVars.filter((name) => secretEnvVar.test(name));
+    if (secrets.length === 0) continue;
+    expect(
+      integration.keyExposure,
+      `${integration.id}: declares the secret(s) ${secrets.join(', ')} and claims keyExposure 'frontend-safe', which puts a key in client code`,
+    ).toBe('needs-proxy');
+  }
+});
+
+/** The same claim checked against the route text, which catches a key hardcoded with no `envVars` entry. */
+it('no frontend-safe integration sends a credential from its route', () => {
+  for (const integration of integrations.filter((i) => i.keyExposure === 'frontend-safe')) {
+    for (const code of routeSourcesOf(integration)) {
+      expect(
+        code,
+        `${integration.id}: claims keyExposure 'frontend-safe' but its route sends an authorization header`,
+      ).not.toMatch(/Authorization\s*:|['"]x-api-key['"]\s*:/i);
+    }
+  }
+});
+
+/**
+ * `frontend-safe` is the rare answer, so it is spelled out here as well: an
+ * integration silently JOINING that set is the change worth noticing in review.
+ * Ollama's route fetches localhost with no auth header; mock has no route at all.
+ */
+it('only ollama and mock are frontend-safe', () => {
+  expect(integrations.filter((i) => i.keyExposure === 'frontend-safe').map((i) => i.id).sort()).toEqual(['mock', 'ollama']);
+});
+
+// --- deps ---
+//
+// What `create-kai` installs. The rule is that `deps.npm` IS the set of packages
+// the route imports, so neither half can drift: a missing entry is an app that
+// does not build, a stale one is an install of something nothing uses.
+
+/** `@langchain/core/tools` is the package `@langchain/core`; `node:child_process` is not a package. */
+const packageOf = (specifier: string): string => {
+  const segments = specifier.split('/');
+  return specifier.startsWith('@') ? segments.slice(0, 2).join('/') : segments[0];
+};
+
+const npmImportsOf = (integration: Integration): Set<string> => {
+  const out = new Set<string>();
+  for (const code of routeSourcesOf(integration)) {
+    for (const match of code.matchAll(/(?:^|\n)\s*import\s+(?:[^'"]*?\s+from\s+)?['"]([^'"]+)['"]/g)) {
+      const specifier = match[1];
+      if (specifier.startsWith('.') || specifier.startsWith('node:')) continue;
+      const name = packageOf(specifier);
+      // The kit is already a dependency of every scaffold, so it is never a
+      // gateway dep. This is what keeps cloudflare's worker template (whose only
+      // import is a type from '@kitn.ai/ui/wire') at deps.npm: [].
+      if (name === '@kitn.ai/ui') continue;
+      out.add(name);
+    }
+  }
+  return out;
+};
+
+it('deps.npm is exactly what the routes import', () => {
+  for (const integration of integrations) {
+    expect(
+      [...integration.deps.npm].sort(),
+      `${integration.id}: deps.npm does not match the route's imports`,
+    ).toEqual([...npmImportsOf(integration)].sort());
+  }
+});
+
+/**
+ * Forward direction only. `pip` is a SUPERSET of the python imports because a
+ * python app also needs its ASGI server: nothing imports `uvicorn`, and an app
+ * installed without it cannot start.
+ */
+it('every python import a route makes is declared in deps.pip', () => {
+  const stdlib = new Set(['json', 'os', 'typing', 'asyncio', 'sys', 're', 'time', 'dataclasses']);
+  for (const integration of integrations.filter((i) => i.language === 'python')) {
+    for (const code of routeSourcesOf(integration)) {
+      for (const match of code.matchAll(/(?:^|\n)\s*(?:from\s+([\w.]+)\s+import|import\s+([\w.]+))/g)) {
+        const module = (match[1] ?? match[2]).split('.')[0];
+        if (stdlib.has(module)) continue;
+        expect(
+          integration.deps.pip,
+          `${integration.id}: route imports '${module}' but deps.pip does not list it`,
+        ).toContain(module.replace(/_/g, '-'));
+      }
+    }
+  }
+});
+
+it('only the python integration declares pip deps', () => {
+  for (const integration of integrations.filter((i) => i.language !== 'python')) {
+    expect(integration.deps.pip, `${integration.id}: a TS integration declares pip deps`).toEqual([]);
   }
 });
 

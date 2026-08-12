@@ -69,6 +69,16 @@ const ollama: Integration = {
   // Ollama's OpenAI-compatible endpoint, and the handler forwards `tools`
   // verbatim into that body — so the client sends OpenAI's function envelope.
   clientToolFormat: 'openai',
+  // Nothing. The route is global `fetch` and imports no module; the `ollama`
+  // npm package is not used, and the server itself is installed out of band.
+  deps: { npm: [], pip: [] },
+  // One of the two 'frontend-safe' entries, and it is read off the route rather
+  // than off "it's local, so it's fine": the fetch to localhost:11434 sends
+  // Content-Type and NOTHING else — no Authorization, no key — and envVars is
+  // empty, so there is no secret for a bundle to leak. runNote already documents
+  // the browser-direct path (set OLLAMA_ORIGINS to allow the page origin), which
+  // is the path this value unlocks.
+  keyExposure: 'frontend-safe',
 };
 
 export default ollama;

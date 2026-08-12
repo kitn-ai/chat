@@ -156,6 +156,17 @@ export default {
   // Workers AI id), and the worker route's re-framing reader forwards only the
   // text `response` field, so a tool call could not reach the browser anyway.
   forwardsFromClient: [],
+  // Nothing. The webRoute is global `fetch`, and the worker template's only
+  // import is a type from '@kitn.ai/ui/wire' — the kit itself, which every
+  // scaffold already depends on. Its `Env` is an ambient wrangler type, not an
+  // import, and the Worker skeleton owns wrangler/@cloudflare/workers-types.
+  deps: { npm: [], pip: [] },
+  // The webRoute reads CF_API_TOKEN into an `Authorization: Bearer` header.
+  //
+  // The two routes differ and the stricter one governs: the worker template uses
+  // the `env.AI` binding and holds no token in code at all, but a binding is a
+  // Worker capability, not a browser one. Either way a server is required.
+  keyExposure: 'needs-proxy',
 };
 
 export default cloudflare;

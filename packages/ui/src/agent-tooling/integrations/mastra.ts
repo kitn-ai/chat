@@ -111,6 +111,22 @@ async function chatHandler(request: Request): Promise<Response> {
   docsSlug: 'integrations/harnesses',
   // Nothing. The Mastra agent owns its model and its tools server-side.
   forwardsFromClient: [],
+  // The route's one import.
+  deps: { npm: ['@mastra/client-js'], pip: [] },
+  // THE JUDGEMENT CALL IN THIS TABLE, so it is argued rather than asserted.
+  //
+  // MASTRA_URL is not a secret — it is a base URL, and the schema's SECRET_ENV_VAR
+  // net deliberately does not match it. So the automatic check cannot decide this
+  // one, and 'frontend-safe' would parse cleanly.
+  //
+  // It is still 'needs-proxy', on what the route actually is: this integration
+  // ships a server `chatHandler` that reads `process.env` at module scope, and
+  // nothing else. There is no browser-direct path in it. Declaring it
+  // 'frontend-safe' would have the CLI point a public bundle at an unauthenticated
+  // agent endpoint — a decision a scaffolder must not make silently, even though
+  // no key leaks. The conservative direction is the cheap one: a needless server
+  // hop costs a process, the other error costs the endpoint.
+  keyExposure: 'needs-proxy',
 };
 
 export default mastra;

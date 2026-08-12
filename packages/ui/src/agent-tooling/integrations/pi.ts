@@ -79,6 +79,18 @@ app.listen(3001, () => console.log('chat api: http://localhost:3001/api/chat'));
   // Nothing. Pi runs with its own credentials, model and tools; the bridge
   // forwards a prompt, not a model id.
   forwardsFromClient: [],
+  // `express` only. The bridge's other two imports are excluded by the rule:
+  // `node:child_process` is a builtin and '@kitn.ai/ui/wire' is the kit. Pi
+  // itself is NOT an npm dep of the app — runNote requires it on PATH, and the
+  // route reaches it with spawn('pi'), not an import.
+  deps: { npm: ['express'], pip: [] },
+  // No key anywhere: envVars is empty and Pi uses its own credentials on disk.
+  // This is 'needs-proxy' for the OTHER reason the flag covers — a server-only
+  // capability. The bridge calls spawn(), which no browser can do, and runNote
+  // warns that Pi runs with full user permissions and wants sandboxing before it
+  // is exposed. "No key" is not the same fact as "safe in the browser", and
+  // collapsing the two is exactly how this flag would be got wrong.
+  keyExposure: 'needs-proxy',
 };
 
 export default pi;
