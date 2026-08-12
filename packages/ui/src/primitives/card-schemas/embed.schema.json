@@ -4,8 +4,6 @@
   "title": "EmbedCardData",
   "description": "Lazy media-embed payload (YouTube / Vimeo / generic player URL).",
   "type": "object",
-  "x-kai-card-type": "embed",
-  "x-kai-contract-version": "1",
   "required": ["provider"],
   "additionalProperties": false,
   "properties": {

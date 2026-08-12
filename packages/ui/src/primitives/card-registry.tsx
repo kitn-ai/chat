@@ -13,8 +13,14 @@
 // `@kitn.ai/ui/schemas` can export it; the re-export below keeps every existing
 // importer of this module working unchanged. Do not move them back — see the header
 // of ./card-tags.ts for the measured cost of the alternative (0 -> 1364 tsc errors).
-import type { Component } from 'solid-js';
-import type { CardEnvelope, CardHost } from './card-contract';
+//
+// THE COMPONENT TYPES NOW LIVE IN ./card-component-types — SAME REASON, SECOND TIME.
+// `CardComponent` / `CardComponentMap` are named in the PUBLIC surface of
+// `@kitn.ai/ui/schemas` (src/schemas/registry.ts), so a Node/no-DOM project resolving
+// that entry's types reached this `.tsx` and hit TS6142. The types went to a `.ts`;
+// `BUILTIN_CARD_COMPONENTS` and `mergeCardComponents` stayed, because they are JSX and
+// have nowhere to go. Re-exported below, so this module's surface is unchanged.
+import type { CardComponentMap } from './card-component-types';
 import { Form } from '../components/form';
 import { ConfirmCard } from '../components/confirm-card';
 import { TasksCard } from '../components/tasks-card';
@@ -23,17 +29,16 @@ import { LinkPreview } from '../components/link-preview';
 import { Embed } from '../components/embed';
 import { ArtifactCard, type ArtifactCardData } from '../components/artifact-card';
 
-/** Solid renderer for one envelope. `host` is the resolved CardHost so each wrapper
- *  can bridge its card's emit convention (form/confirm/tasks take `host`;
- *  link/embed take `onEmit`). */
-export type CardComponent = Component<{ envelope: CardEnvelope; host?: CardHost }>;
-export type CardComponentMap = Record<string, CardComponent>;
-
 // The tag half, re-exported so this module's surface is unchanged. Authored in
 // ./card-tags.ts because that file has no Solid below it and can therefore be read
 // from a Node process; this one cannot.
 export { BUILTIN_CARD_TAGS, mergeCardTags } from './card-tags';
 export type { CardTagMap } from './card-tags';
+
+// The component TYPES, re-exported for the same reason. Authored in
+// ./card-component-types.ts because resolving a `.tsx` is what a no-`jsx` project
+// cannot do; the values below stay here because they are JSX.
+export type { CardComponent, CardComponentMap } from './card-component-types';
 
 export const BUILTIN_CARD_COMPONENTS: CardComponentMap = {
   form: (p) => (

@@ -53,12 +53,23 @@
 // SERVER-SAFE
 // -----------
 // This module is imported by a backend route (it is half the point) so it stays free
-// of DOM and of the Solid runtime. `CardComponent`/`CardComponentMap`/`CardTagMap` are
-// TYPE imports from primitives/card-registry.tsx and erase completely; the values in
-// `components` are passed through untouched and never called here. `verify:ssr`
-// imports the built entry under the `node` condition and proves it.
+// of DOM and of the Solid runtime. `CardComponentMap`/`CardTagMap` are TYPE imports
+// and erase completely; the values in `components` are passed through untouched and
+// never called here. `verify:ssr` imports the built entry under the `node` condition
+// and proves the runtime half.
+//
+// It does NOT prove the compile-time half, and the two imports below are deliberately
+// aimed at `.ts` modules rather than at primitives/card-registry.tsx for a reason no
+// runtime guard can see. A type import still has to RESOLVE, and a Node/no-DOM project
+// (tsconfig.mcp.json: `lib: ["ESNext"]`, no `jsx`) cannot resolve a `.tsx` at all:
+// pointing either of these back at card-registry.tsx puts TS6142 on this exact line on
+// any unbuilt tree. Both types are re-exported from card-registry.tsx, so importing
+// them from there LOOKS equivalent and compiles everywhere else. It is not. The check
+// that tells the difference is `tsc --noEmit -p tsconfig.mcp.json` with no dist/
+// present; see the header of primitives/card-component-types.ts.
 
-import type { CardComponentMap, CardTagMap } from '../primitives/card-registry';
+import type { CardComponentMap } from '../primitives/card-component-types';
+import type { CardTagMap } from '../primitives/card-tags';
 import type { JsonSchema } from '../primitives/card-validate';
 import {
   validateCardData,

@@ -4,8 +4,6 @@
   "title": "ArtifactCardData",
   "description": "Generated-artifact viewer payload: a framed preview plus the source files behind it. A deliberately NARROW subset of the Artifact component's props — it says WHAT to show, never how the viewer behaves. Toolbar composition, view-state and the iframe `sandbox` are host-owned and stay off the wire, so a model cannot widen its own sandbox or hide the chrome the user needs to inspect what it built.",
   "type": "object",
-  "x-kai-card-type": "artifact",
-  "x-kai-contract-version": "1",
   "additionalProperties": false,
   "anyOf": [{ "required": ["src"] }, { "required": ["files"] }],
   "properties": {

@@ -4,8 +4,6 @@
   "title": "LinkPreviewData",
   "description": "Rich link / Open-Graph preview payload. The card renders from this; it never fetches.",
   "type": "object",
-  "x-kai-card-type": "link",
-  "x-kai-contract-version": "1",
   "required": ["url"],
   "additionalProperties": false,
   "properties": {
