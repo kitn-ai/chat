@@ -7,10 +7,16 @@ show **how the pieces fit together**, not to drop in one batteries-included
 `<kai-chat>`/`<kai-workspace>` tag. This is the reference every other framework
 example copies.
 
-It runs with **no backend**: replies stream in from a local fake responder
-(`src/chat-data.ts`), so there's no API key and nothing to host. Swap
-`streamFakeReply` for a real model call (Anthropic, OpenAI, your own endpoint)
-and you have a real app.
+It runs with **no backend**: replies stream in from the kit's own mock responder,
+`createMockResponder()` from `@kitn.ai/ui/state` (wired up in `src/chat-data.ts`),
+so there's no API key and nothing to host. The mock yields SSE frames that
+`readOpenAIStream` parses exactly as it parses a real provider's, so the preview
+runs the real streaming path — and swapping `mockResponse(text)` for a real
+`fetch` (Anthropic, OpenAI, your own endpoint) is the only change you make.
+
+Nothing here can be mistaken for a real turn: the stream opens with a `: kai-mock`
+SSE comment, every frame carries a `_kai_mock` field, `model` reports as
+`kai-mock`, and usage is all zeros.
 
 ## How it works
 

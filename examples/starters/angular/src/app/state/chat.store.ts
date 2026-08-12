@@ -12,7 +12,7 @@ import {
  * Angular port of the kit's `useKaiChat` (a React hook), built on the SAME
  * framework-neutral state core (`@kitn.ai/ui/state`) the React hook uses. It owns
  * the message array + the `loading` flag and exposes ergonomic ops. Swap
- * `streamFakeReply` for a real model call to ship a real app.
+ * `mockResponse(text)` for a real `fetch` to ship a real app.
  *
  * `messages` is a plain Angular signal: every op assigns a BRAND-NEW array
  * reference (`messages.set(updater(prev))`), which is exactly what re-renders

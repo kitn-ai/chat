@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { KaiResizableItemElement } from '@kitn.ai/ui/elements';
-  import { CONVERSATIONS, THREADS, SUGGESTIONS, TRIGGERS, newId, streamFakeReply } from './chat-data';
+  import { readOpenAIStream } from '@kitn.ai/ui/wire';
+  import { CONVERSATIONS, THREADS, SUGGESTIONS, TRIGGERS, newId, mockResponse } from './chat-data';
   import type { Theme } from './lib/types';
   import { createChat } from './lib/chat.svelte';
   import { createConversations } from './lib/conversations.svelte';
@@ -24,8 +25,8 @@
    * The pieces are split into `components/` (the UI subcomponents + the example's own
    * moon/sun icons) and `lib/` (`createChat` owns the message array + streaming,
    * `createConversations` the conversation stash, `createVoiceInput` the mic).
-   * Everything else is plain Svelte runes. Swap `streamFakeReply` for a real model
-   * call to ship.
+   * Everything else is plain Svelte runes. Swap `mockResponse(text)` for a real
+   * `fetch` to ship.
    */
   let theme: Theme = $state('dark');
   let collapsed = $state(false);
@@ -44,10 +45,15 @@
     const text = raw.trim();
     if (!text) return;
     // The Composer already cleared its own input; here we just append the user
-    // message and stream the (fake) assistant reply.
+    // message and stream the (mock) assistant reply.
     chat.append({ id: newId(), role: 'user', parts: [{ type: 'text', text }] });
     const stream = chat.streamAssistant();
-    await streamFakeReply(text, (delta) => stream.appendText(delta));
+    // NO BACKEND AND NO PROVIDER. mockResponse() yields canned SSE frames that go
+    // through the SAME reader a real model's response would, so this preview
+    // exercises the real path. To go live, only this one expression changes —
+    // `mockResponse(text)` becomes a POST to your route, with
+    // toOpenAIMessages(chat.messages) as the body. The line below stays.
+    await readOpenAIStream(mockResponse(text), stream);
     stream.done();
   }
 </script>

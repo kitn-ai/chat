@@ -44,7 +44,7 @@ export interface Store {
  * and the Vue `useChat` composable also use. Every message op assigns a BRAND-NEW
  * array reference (`state.messages = updater(prev)`); that fresh reference is
  * exactly what re-renders `<kai-thread>` when the render re-sets its `messages`
- * property. Swap `streamFakeReply` (in main.ts) for a real model call to ship.
+ * property. Swap `mockResponse(text)` (in main.ts) for a real `fetch` to ship.
  */
 export function createStore(): Store {
   const state: AppState = {
