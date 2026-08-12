@@ -11,7 +11,36 @@
     "esModuleInterop": true,
     "noEmit": true,
     "resolveJsonModule": true,
-    "baseUrl": "."
+    "baseUrl": ".",
+    // This pass imports `@kitn.ai/ui/schemas` (manifest.ts, tools/reference.ts,
+    // reference.test.ts) by its PUBLIC specifier on purpose — the MCP emits that
+    // exact string into scaffolded routes. Node/TS resolve it through the package
+    // `exports` map to ./dist, so before this mapping existed the pass reported 12
+    // errors on any tree that had not been built (5x TS2307 plus 7 cascaded
+    // implicit-any/unknown), and was green only after `nx build ui`. A typecheck
+    // with a hidden build prerequisite fails confusingly on a fresh clone; the
+    // sibling trap is the compiled.css one in CLAUDE.md.
+    //
+    // ORDER IS LOAD-BEARING, DO NOT SWAP. TS tries each entry and takes the first
+    // that exists on disk:
+    //   1. ./dist/schemas/index(.d.ts) — the SAME file the `exports` map's `types`
+    //      condition hands a consumer. On a built tree (CI, prepublish) this pass
+    //      therefore checks against the shipped declarations, not the sources, so
+    //      it still catches a .d.ts that does not describe what src does.
+    //   2. ./src/schemas/index.ts — fallback for an unbuilt tree only.
+    // Pointing at src FIRST was measured and is worse: it makes the built tree
+    // resolve to source too, which regresses this pass from green to 1 error,
+    // because the barrel's public surface type-imports CardComponentMap from
+    // primitives/card-registry.TSX and this project deliberately has no `jsx`
+    // (see card-tags.ts for the measured 0 -> 1364 cost of granting it one).
+    //
+    // That .tsx is also why entry 2 is not fully green yet: on an unbuilt tree this
+    // pass reports exactly 1 TS6142 for it. Fixing that needs CardComponent /
+    // CardComponentMap split into a DOM-free .ts the way the tag half already was —
+    // a source change, not a config one.
+    "paths": {
+      "@kitn.ai/ui/schemas": ["./dist/schemas/index", "./src/schemas/index"]
+    }
   },
   "include": ["src/agent-tooling/mcp/**/*.ts"]
 }

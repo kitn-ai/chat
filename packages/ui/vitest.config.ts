@@ -42,6 +42,43 @@ function cssRawPlugin() {
 // More info at: https://storybook.js.org/docs/next/writing-tests/integrations/vitest-addon
 export default defineConfig({
   plugins: [cssRawPlugin(), solidPlugin()],
+  // `@kitn.ai/ui/schemas` -> src, for the test run ONLY.
+  //
+  // src/agent-tooling/mcp/ imports the schemas barrel by its PUBLIC specifier
+  // (manifest.ts, tools/reference.ts, reference.test.ts) rather than by a relative
+  // path, deliberately: the MCP emits that specifier into scaffolded routes, so
+  // writing it here is what keeps the emitted form and the compiled form the same
+  // string. The cost is that Node/Vite resolve it through the package `exports`
+  // map to ./dist/schemas.js, which does not exist until `nx build ui` has run.
+  // On a fresh clone or worktree that made 2 files fail to COLLECT --
+  // reference.test.ts (direct) and server.test.ts (transitively, via
+  // tools/reference.ts) -- with "Failed to resolve import", which reads as a
+  // broken checkout rather than a missing build step. Same shape as the
+  // compiled.css trap documented in CLAUDE.md, and it cost two people a debug
+  // session each before it was written down.
+  //
+  // THIS DOES NOT WEAKEN THE EXPORTS MAP. It rewrites the specifier for vitest and
+  // nothing else: the library builds (vite.config.mcp.ts bundles the MCP against
+  // the BUILT dist/schemas.js, which vite.config.schemas.ts emits one step earlier
+  // in the `build` script) never load this file, and neither does any consumer.
+  // The consumer resolution path stays guarded by verify:schemas, verify:ssr,
+  // verify:tool-schemas, verify:dts / verify:dts:consumer and verify:consumer,
+  // every one of which reads the BUILT entry through the exports map from outside
+  // the repo. If the `./schemas` key regressed, those still fail; only this run
+  // would keep working, and it is not the check that covers them.
+  //
+  // Anchored with ^...$ instead of a bare string on purpose: Vite's string aliases
+  // match by PREFIX, so '@kitn.ai/ui/schemas' would also capture the real
+  // './schemas/*' subpath (@kitn.ai/ui/schemas/confirm.schema.json) and rewrite it
+  // to a path inside index.ts. The regex matches the barrel and only the barrel.
+  resolve: {
+    alias: [
+      {
+        find: /^@kitn\.ai\/ui\/schemas$/,
+        replacement: path.resolve(dirname, 'src/schemas/index.ts'),
+      },
+    ],
+  },
   test: {
     // Allow ?raw / ?inline imports of compiled.css to pass through vitest's CSS interception.
     // vitest:css-disable and vitest:css-empty-post skip files matched by css.include.
