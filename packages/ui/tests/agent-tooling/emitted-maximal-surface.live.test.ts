@@ -340,11 +340,26 @@ describe('the EMITTED maximal surface really composes, end to end', () => {
       // emitted handler merges the composer's own paperclip with the dropzone, and
       // a synthetic event that omitted the field would let a regression to reading
       // only one of them pass.
+      // The attachment carries a `data:` URI because that is what the composer
+      // now stages — `DefaultPromptInput` reads every file with
+      // FileReader.readAsDataURL. It used to be a bare {id,type,filename} here,
+      // which was realistic when `file` parts never reached the wire and stopped
+      // being realistic the moment they did: the encoder refuses an attachment
+      // with no bytes and no address, so a fixture without one would assert a
+      // shape the product cannot produce.
       chatEl.dispatchEvent(
         new CustomEvent('kai-submit', {
           detail: {
             value: 'what shipped lately?',
-            attachments: [{ id: 'from-composer', type: 'file', filename: 'notes.txt' }],
+            attachments: [
+              {
+                id: 'from-composer',
+                type: 'file',
+                filename: 'notes.png',
+                mediaType: 'image/png',
+                url: 'data:image/png;base64,iVBORw0KGgo=',
+              },
+            ],
           },
         }),
       );
@@ -380,7 +395,7 @@ describe('the EMITTED maximal surface really composes, end to end', () => {
         userParts
           .filter((p): p is { type: 'file'; attachment: { filename?: string } } => p.type === 'file')
           .map((p) => p.attachment.filename),
-      ).toEqual(['quarterly-report.pdf', 'notes.txt']);
+      ).toEqual(['quarterly-report.pdf', 'notes.png']);
       // Staging is emptied by the submit, so the next message does not re-send them.
       expect(
         attachmentsEl.shadowRoot.textContent,

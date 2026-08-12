@@ -64,7 +64,23 @@ export interface DefaultPromptInputProps {
   onComposerChange?: (change: ComposerChange) => void;
 }
 
-function fileToAttachment(file: File): AttachmentData {
+/** The staged file as a `data:` URI.
+ *
+ *  NOT `URL.createObjectURL`. An object URL resolves only inside the tab that
+ *  minted it, so it renders a perfect thumbnail here and is meaningless to
+ *  anything downstream — `toOpenAIMessages` / `toAnthropicMessages` refuse it,
+ *  and before they refused it the attachment reached the model as nothing at
+ *  all. A data URI previews identically and is the one form both providers
+ *  actually take. */
+const readAsDataUrl = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error(`Could not read ${file.name}`));
+    reader.readAsDataURL(file);
+  });
+
+async function fileToAttachment(file: File): Promise<AttachmentData> {
   const id =
     typeof crypto !== 'undefined' && crypto.randomUUID
       ? crypto.randomUUID()
@@ -74,7 +90,9 @@ function fileToAttachment(file: File): AttachmentData {
     type: 'file',
     filename: file.name,
     mediaType: file.type || undefined,
-    url: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined,
+    // EVERY file, not just images. A document used to get no `url` at all,
+    // which left it unencodable for exactly the same reason a blob: URL is.
+    url: await readAsDataUrl(file),
   };
 }
 
@@ -83,9 +101,14 @@ export function DefaultPromptInput(props: DefaultPromptInputProps) {
   const attachments = () => props.attachments ?? [];
   const canAttach = () => !!props.onAttachmentsChange;
 
-  const addFiles = (files: FileList | null) => {
+  const addFiles = async (files: FileList | null) => {
     if (!files?.length || !props.onAttachmentsChange) return;
-    props.onAttachmentsChange([...attachments(), ...Array.from(files).map(fileToAttachment)]);
+    // Read all of them before publishing once: a per-file append would make the
+    // list order depend on which file finished reading first.
+    const staged = await Promise.all(Array.from(files).map(fileToAttachment));
+    // Re-read `attachments()` AFTER the await — a second drop while these were
+    // being read would otherwise be overwritten by this call's stale snapshot.
+    props.onAttachmentsChange?.([...attachments(), ...staged]);
   };
   const removeAttachment = (id: string) =>
     props.onAttachmentsChange?.(attachments().filter((a) => a.id !== id));
@@ -157,7 +180,10 @@ export function DefaultPromptInput(props: DefaultPromptInputProps) {
                 multiple
                 class="hidden"
                 onChange={(e) => {
-                  addFiles(e.currentTarget.files);
+                  // Reading is async now, so this is deliberately not awaited.
+                  // `addFiles` captures the FileList synchronously, before its
+                  // first await, so clearing the input below cannot race it.
+                  void addFiles(e.currentTarget.files);
                   e.currentTarget.value = ''; // allow re-picking the same file
                 }}
               />
