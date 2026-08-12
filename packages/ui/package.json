@@ -177,6 +177,7 @@
     "verify:ssr:imports": "node scripts/verify-ssr-imports.mjs",
     "verify:ssr:render": "node scripts/verify-ssr-render.mjs",
     "verify:pack": "node scripts/verify-pack-weight.mjs",
+    "verify:starters": "node scripts/verify-starters.mjs",
     "test": "vitest run",
     "test:react": "vitest run --config vitest.react.config.ts",
     "test:storybook": "vitest run --project=storybook",
