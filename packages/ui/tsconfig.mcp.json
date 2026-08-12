@@ -28,16 +28,21 @@
     //      therefore checks against the shipped declarations, not the sources, so
     //      it still catches a .d.ts that does not describe what src does.
     //   2. ./src/schemas/index.ts — fallback for an unbuilt tree only.
-    // Pointing at src FIRST was measured and is worse: it makes the built tree
-    // resolve to source too, which regresses this pass from green to 1 error,
-    // because the barrel's public surface type-imports CardComponentMap from
-    // primitives/card-registry.TSX and this project deliberately has no `jsx`
-    // (see card-tags.ts for the measured 0 -> 1364 cost of granting it one).
+    // Pointing at src FIRST is still wrong, but no longer for the reason recorded
+    // here before: it makes the BUILT tree resolve to source too, so this pass stops
+    // checking the shipped declarations and checks the sources twice instead. It no
+    // longer costs an ERROR to do it, so entry 1 is held by that reason alone now,
+    // not by a compile failure.
     //
-    // That .tsx is also why entry 2 is not fully green yet: on an unbuilt tree this
-    // pass reports exactly 1 TS6142 for it. Fixing that needs CardComponent /
-    // CardComponentMap split into a DOM-free .ts the way the tag half already was —
-    // a source change, not a config one.
+    // Entry 2 IS fully green as of src/primitives/card-component-types.ts. The
+    // barrel's public surface used to type-import CardComponentMap from
+    // primitives/card-registry.TSX, and this project deliberately has no `jsx`, so an
+    // unbuilt tree reported exactly 1 TS6142. CardComponent / CardComponentMap now
+    // live in that DOM-free .ts the way the tag half already did, and this pass
+    // reports 0 errors with no dist/ present — which is the check that tells the
+    // difference, so run it that way. Granting `jsx` instead was re-measured on this
+    // tree at 130 errors (838 without `jsxImportSource`); see card-tags.ts for the
+    // 1364 figure on the broader case.
     "paths": {
       "@kitn.ai/ui/schemas": ["./dist/schemas/index", "./src/schemas/index"]
     }

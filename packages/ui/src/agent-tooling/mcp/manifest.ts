@@ -21,12 +21,15 @@ import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join, dirname, resolve } from 'node:path';
 // The package's own public entry, by the same specifier the scaffolder tells a
-// consumer's route to use. Not a relative import of src/schemas/index.ts, and that
-// is forced rather than chosen: that barrel re-exports src/schemas/registry.ts,
-// which type-imports `CardComponentMap` from src/primitives/card-registry.TSX.
-// Pulling a .tsx into this pass means giving tsconfig.mcp.json `jsx` +
-// `jsxImportSource` + the DOM lib, which drags the whole Solid component tree into a
-// Node-only project — measured on this tree as 0 errors -> 1364. The built entry
+// consumer's route to use. That is now a CHOICE, and this comment used to say the
+// opposite: the barrel re-exports src/schemas/registry.ts, which type-IMPORTED
+// `CardComponentMap` from src/primitives/card-registry.TSX, and pulling a .tsx into
+// this pass would mean giving tsconfig.mcp.json `jsx` + `jsxImportSource` + the DOM
+// lib, dragging the whole Solid component tree into a Node-only project — measured
+// as 0 errors -> 1364. Those two types moved to the DOM-free
+// src/primitives/card-component-types.ts, so a relative import of the barrel would
+// typecheck here today. It stays on the public specifier anyway, because emitting
+// and consuming the same string is the point of this module. The built entry
 // resolves to dist/schemas/index.d.ts, whose own reference to card-registry is a
 // .d.ts that skipLibCheck skips, so the Node/no-DOM guarantee survives intact.
 //

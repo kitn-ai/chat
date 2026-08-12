@@ -23,11 +23,16 @@
 // SERVER-SAFE, DELIBERATELY
 // -------------------------
 // No DOM, no Solid, no `fetch`. Everything reached from here is data or plain
-// functions; the one import that touches the component layer (`CardComponentMap`, used
-// by ./registry) is a TYPE import and erases. This entry is meant to be imported by a
-// backend route that hands tool definitions to a model, so anything that touches a
-// browser global would defeat its purpose. `verify:ssr` asserts it, by importing the
-// BUILT entry under the `node` condition in its own child process.
+// functions, and as of src/primitives/card-component-types.ts that is true of the
+// TYPES too: nothing reachable from this entry resolves to a `.tsx` any more, so a
+// Node/no-DOM project can read the whole graph from source. (`CardComponentMap` used
+// to come from primitives/card-registry.tsx and was the last exception.) This entry
+// is meant to be imported by a backend route that hands tool definitions to a model,
+// so anything that touches a browser global would defeat its purpose. `verify:ssr`
+// asserts the RUNTIME half, by importing the BUILT entry under the `node` condition
+// in its own child process; the compile-time half is `tsc --noEmit -p
+// tsconfig.mcp.json` on a tree with no dist/, and only that one sees a `.tsx` creep
+// back in.
 //
 // WHAT `verify:ssr` DOES NOT CATCH, MEASURED
 // ------------------------------------------
