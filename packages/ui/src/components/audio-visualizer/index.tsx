@@ -326,6 +326,15 @@ export function AudioVisualizer(props: AudioVisualizerProps): JSX.Element {
     void load()
       .then((m) => { if (!cancelled) setShader(() => m.default); })
       .catch((err) => {
+        // Same `cancelled` check as the `.then` above. The two handlers were
+        // asymmetric: a rejection arriving after this effect was disposed
+        // still warned, even though there is no longer a component to fall
+        // back to and nothing the message could usefully tell anyone. Worse,
+        // the warning surfaces against whatever is running by the time the
+        // rejection lands rather than against the mount that asked for the
+        // chunk, so it reads as a fault in unrelated code -- in a test run,
+        // in an unrelated test.
+        if (cancelled) return;
         console.warn(
           `<kai-audio-visualizer variant="${v}">: failed to load the shader chunk, falling back to bars.`,
           err,
