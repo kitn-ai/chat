@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { createRoot, createEffect } from 'solid-js';
 import { createTween } from './create-tween';
 import { installFakeClock } from '../test-utils/fake-clock';
@@ -349,13 +349,38 @@ describe('named easings as cubic beziers', () => {
 // before the browser ever reaches it. That repeated identically every
 // frame, forever, so the second tween's `step` never fired even once.
 //
-// The shared `installFakeClock` stub used everywhere else in this file
-// cannot reproduce this: it holds a single pending callback, not a real
-// per-registration queue, so it can never represent "two independently
-// scheduled callbacks queued for the same frame" in the first place -- see
-// its own doc. These tests use jsdom's REAL `requestAnimationFrame`
-// (confirmed to support multiple independently pending callbacks, unlike
-// the stub) with real timers instead.
+// These two tests used to drive jsdom's REAL `requestAnimationFrame` with
+// real timers, on the grounds that `installFakeClock` held a single pending
+// callback rather than a per-registration queue and so could not represent
+// two independently scheduled callbacks at all. That premise is stale: the
+// stub holds a real `Map` queue now (see its own doc), and a single
+// `advance()` fires every callback pending before that frame, in
+// registration order -- exactly the shape these tests need.
+//
+// Driving them off REAL requestAnimationFrame was also actively WRONG, and
+// was the cause of a load-sensitive flake in the full suite. `createTween`
+// measures elapsed time as `rafTimestamp - performance.now()`, which is
+// correct in a browser because the two share a time origin per spec. Under
+// vitest + jsdom they DO NOT: jsdom computes its frame timestamp as
+// `performance.now() - windowInitialized` (Window.js), but vitest has by
+// then replaced the global `performance` with jsdom's own window
+// performance, so that subtraction is applied twice. The frame timestamp
+// therefore runs a CONSTANT offset BEHIND `performance.now()` -- measured at
+// ~475ms for a freshly started worker, and 900-1500ms for a file that lands
+// late in a reused worker's life, because the offset is whatever
+// `performance.now()` read when that file's jsdom window was built.
+//
+// `createTween` then computes a NEGATIVE `t` for that whole offset, and
+// `EASINGS.linear` does not clamp below 0, so the tween travels BACKWARDS
+// until the frame clock catches up. Measured directly at this call site
+// during a full-suite run: offset 1145ms -> value 10 (passed), offset
+// 1522ms -> value -0.798 (failed). A fixed 1500ms wall-clock wait is a
+// coin flip on how busy the machine was when the worker booted -- which is
+// exactly the "passes alone, fails in the full suite" signature.
+//
+// The fake clock removes the whole class: it stubs `requestAnimationFrame`
+// AND `performance.now()` off the SAME fake `now`, so there is no origin to
+// disagree about and no wall-clock dependency left.
 describe('createTween: does not depend on its own value merely by being .to()\'d', () => {
   // `createEffect`'s FIRST run is not synchronous even inside `createRoot`
   // (confirmed empirically: it flushes on the next microtask, unlike
@@ -363,13 +388,9 @@ describe('createTween: does not depend on its own value merely by being .to()\'d
   // -- that is why the rest of this file, and variant-wave.test.tsx, never
   // needed this). One `await Promise.resolve()` is enough to observe it.
   //
-  // Disposal is wrapped in try/finally: with real timers and a real
-  // `requestAnimationFrame`, a tween that is never disposed keeps its RAF
-  // loop running past the end of ITS OWN test and into whichever test runs
-  // next, corrupting that test's timing. An assertion failure must not skip
-  // cleanup.
+  // Disposal stays wrapped in try/finally so an assertion failure cannot
+  // skip cleanup and leak a live tween into the next test.
   it('an effect that calls .to() on a tween does not re-run merely because that tween\'s OWN value changes -- and the tween still reaches its target', async () => {
-    vi.unstubAllGlobals(); // real requestAnimationFrame/performance for this test, not the fake clock's single-slot stub.
     let dispose = () => {};
     try {
       let runs = 0;
@@ -385,7 +406,11 @@ describe('createTween: does not depend on its own value merely by being .to()\'d
       await Promise.resolve();
       expect(runs).toBe(1);
 
-      await new Promise((r) => setTimeout(r, 1500));
+      // 20 frames of 10ms covers the 150ms duration with room to spare. Each
+      // one is a real frame for the tween: `step()` runs, writes a value, and
+      // re-arms -- so if `.to()` were tracking this tween's own signal, every
+      // one of these would re-enter the effect.
+      for (let i = 0; i < 20; i++) advance(10);
 
       // The bug, reproduced in isolation: reading `value()` inside `.to()`
       // without `untrack()` made this effect depend on `t`'s own signal, so
@@ -399,7 +424,6 @@ describe('createTween: does not depend on its own value merely by being .to()\'d
   });
 
   it('a SECOND tween .to()\'d from the same effect as a first one still reaches its own target -- the exact shape of the wave shader bug (amplitude worked, frequency stayed stuck at 0 forever)', async () => {
-    vi.unstubAllGlobals();
     let dispose = () => {};
     try {
       const { first, second } = createRoot((d) => {
@@ -414,7 +438,11 @@ describe('createTween: does not depend on its own value merely by being .to()\'d
       });
       await Promise.resolve();
 
-      await new Promise((r) => setTimeout(r, 1500));
+      // Both tweens are independently pending every frame; the stub's queue
+      // fires both per `advance()`, in registration order, which is the
+      // precondition this test needs (a single-slot stub would silently drop
+      // one of them and prove nothing).
+      for (let i = 0; i < 20; i++) advance(10);
 
       expect(first.value()).toBeCloseTo(10, 0);
       // Before the fix, this stayed at EXACTLY 0 forever: the first tween's
