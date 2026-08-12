@@ -94,8 +94,11 @@ export const MODEL_BEHAVIOURS: Record<string, Record<string, ModelBehaviour>> = 
  *  Takes the model and wire the SERVER reported, never a label supplied by the
  *  runner. */
 export function modelBehaviourFor(
-  model: string | undefined,
-  wire: string | undefined,
+  // `null` is deliberate in the accepted set: the harness state reports
+  // `model: string | null`, and a run that could not say which model produced it
+  // must resolve to NO declaration rather than being coerced into a lookup.
+  model: string | null | undefined,
+  wire: string | null | undefined,
   scenarioId: string,
 ): ModelBehaviour | undefined {
   if (!model || !wire) return undefined;
