@@ -48,10 +48,36 @@
 //      against a bare `string` is a real weakening and fails here.
 //   4. SCALAR KINDS. `type: 'string' | 'number' | 'integer' | 'boolean' |
 //      'array' | 'object'` must match what the TS side actually is.
-//   5. REACHABILITY. Each payload type is resolved by FOLLOWING the public
-//      barrels (src/index.ts, src/schemas/index.ts). A type that stops being
-//      publicly exported fails here, because "the name a consumer can import" is
-//      the contract, not "a name that exists in the tree".
+//   5. REACHABILITY, FROM THE SERVER-SAFE ENTRY. Each payload type — and every
+//      named type its declaration depends on — must be exported from
+//      src/schemas/index.ts. Not "from some public barrel": from THAT one.
+//
+//      THIS CHECK USED TO SAY "SOME BARREL", AND THAT IS EXACTLY WHAT IT MISSED.
+//      Resolution followed [src/index.ts, src/schemas/index.ts] and took the
+//      first hit, so a payload type exported only from src/index.ts satisfied it.
+//      `LinkPreviewData` and `EmbedCardData` were in that state for the whole
+//      life of this file: five of the seven payload types reached the server-safe
+//      entry, those two did not, and this suite ran 11 green tests over the gap.
+//      Measured on the tarball, before the fix — a throwaway Node project with
+//      `lib: ["ESNext"]` and no DOM, importing from the published subpath:
+//
+//        probe.ts(5,3): error TS2305: Module '"@kitn.ai/ui/schemas"' has no
+//                       exported member 'EmbedCardData'.
+//        probe.ts(7,3): error TS2305: Module '"@kitn.ai/ui/schemas"' has no
+//                       exported member 'LinkPreviewData'.
+//
+//      src/index.ts is the SOLID-BEARING barrel. A backend route — the only
+//      reader this entry has — cannot import from it, so "reachable from either"
+//      is not the contract and never was. The barrel list is still used to
+//      RESOLVE declarations for the shape walk below, because a declaration has
+//      to be found wherever it lives; the reachability ASSERTION is separate and
+//      names one entry.
+//
+//      The dependency half matters for the same reason one layer in:
+//      `EmbedCardData.provider` is `EmbedProvider`, and a payload type whose
+//      member types are unreachable leaves a consumer unable to name half of
+//      what they are building. Those names are collected off the AST, never
+//      listed.
 //
 // WHAT THIS DOES NOT COVER — read this before trusting a green run
 // ----------------------------------------------------------------
@@ -102,9 +128,19 @@ const ts: typeof import('typescript') = createRequire(import.meta.url)('typescri
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = resolve(HERE, '../..');
 
-/** The public surfaces a consumer can import a payload type from. Resolution
- *  starts here on purpose — see "REACHABILITY" above. */
-const BARRELS = [resolve(PKG_ROOT, 'src/index.ts'), resolve(PKG_ROOT, 'src/schemas/index.ts')];
+/**
+ * `@kitn.ai/ui/schemas` — the server-safe entry, and the ONE surface a backend
+ * route can import a payload type from. The reachability assertion names this
+ * file and nothing else; see "REACHABILITY" above for what the two-barrel form
+ * let through.
+ */
+const SERVER_SAFE_ENTRY = resolve(PKG_ROOT, 'src/schemas/index.ts');
+
+/** Where a DECLARATION may be found for the shape walk. Deliberately wider than
+ *  `SERVER_SAFE_ENTRY`: the walk has to read a type wherever it is authored, and
+ *  conflating "can I read this" with "may a consumer import this" is the bug the
+ *  header describes. */
+const BARRELS = [resolve(PKG_ROOT, 'src/index.ts'), SERVER_SAFE_ENTRY];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Declared divergences
@@ -309,6 +345,11 @@ interface ParsedModule {
   decls: Map<string, TypeDecl>;
   /** `export … { X as Y } from './z'` -> Y -> { module, original: X }. */
   reexports: Map<string, { module: string; original: string }>;
+  /** `import type { X as Y } from './z'` -> Y -> { module, original: X }. Read
+   *  ONLY by the dependency walk, to answer "is this name authored in our tree
+   *  or is it a TypeScript global?" — the shape walk's resolution order is
+   *  deliberately left alone. */
+  imports: Map<string, { module: string; original: string }>;
   /** `export * from './z'` — a form this resolver refuses rather than guesses at. */
   starExports: string[];
 }
@@ -341,11 +382,25 @@ function parseModule(path: string): ParsedModule {
 
   const decls = new Map<string, TypeDecl>();
   const reexports = new Map<string, { module: string; original: string }>();
+  const imports = new Map<string, { module: string; original: string }>();
   const starExports: string[] = [];
 
   for (const stmt of file.statements) {
     if (ts.isTypeAliasDeclaration(stmt) || ts.isInterfaceDeclaration(stmt)) {
       decls.set(stmt.name.text, stmt);
+      continue;
+    }
+    if (ts.isImportDeclaration(stmt) && ts.isStringLiteral(stmt.moduleSpecifier)) {
+      const target = resolveSpecifier(path, stmt.moduleSpecifier.text);
+      const bindings = stmt.importClause?.namedBindings;
+      if (target && bindings && ts.isNamedImports(bindings)) {
+        for (const element of bindings.elements) {
+          imports.set(element.name.text, {
+            module: target,
+            original: (element.propertyName ?? element.name).text,
+          });
+        }
+      }
       continue;
     }
     if (!ts.isExportDeclaration(stmt) || !stmt.moduleSpecifier) continue;
@@ -365,7 +420,7 @@ function parseModule(path: string): ParsedModule {
     }
   }
 
-  const parsed: ParsedModule = { path, file, decls, reexports, starExports };
+  const parsed: ParsedModule = { path, file, decls, reexports, imports, starExports };
   moduleCache.set(path, parsed);
   return parsed;
 }
@@ -405,6 +460,134 @@ function resolvePublicType(name: string): { module: ParsedModule; decl: TypeDecl
     if (found) return found;
   }
   return undefined;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Reachability from the server-safe entry
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Can a backend route importing `@kitn.ai/ui/schemas` name this type? */
+const reachableFromServerSafeEntry = (name: string): boolean =>
+  lookupExported(SERVER_SAFE_ENTRY, name) !== undefined;
+
+/**
+ * Names that resolve to a TypeScript global rather than to a declaration in this
+ * package, and so cannot be exported from anywhere.
+ *
+ * Exhaustive on purpose, exactly like `KEYWORDS_IGNORED` above: a referenced name
+ * that is neither found in this package's tree nor listed here is a hard FAILURE,
+ * because the alternative is a walk that skips what it does not recognise. That
+ * is the difference between this list and the hand-written list of PAYLOAD types
+ * that used to be the bug — this one enumerates the language, not our contract.
+ */
+const TS_GLOBAL_TYPES: Readonly<Record<string, string>> = {
+  Array: 'TypeScript global',
+  ReadonlyArray: 'TypeScript global',
+  Promise: 'TypeScript global',
+  Record: 'TypeScript utility type',
+  Readonly: 'TypeScript utility type',
+  Partial: 'TypeScript utility type',
+  Required: 'TypeScript utility type',
+  Pick: 'TypeScript utility type',
+  Omit: 'TypeScript utility type',
+  Exclude: 'TypeScript utility type',
+  Extract: 'TypeScript utility type',
+  NonNullable: 'TypeScript utility type',
+};
+
+/**
+ * Where a name referenced INSIDE `module` is declared, if this package declares
+ * it at all: the module's own scope — local declarations, then what it imports,
+ * then what it re-exports.
+ *
+ * IT DOES NOT FALL BACK TO THE PUBLIC BARRELS, AND THAT IS THE POINT
+ * ------------------------------------------------------------------
+ * `resolvePublicType` answers "is this name EXPORTED somewhere", which is the
+ * question being audited — using it to decide whether the package DECLARES a
+ * type makes the walk assume its own conclusion. A member type declared in a
+ * sibling module and exported from nowhere is exactly the bug this guard exists
+ * to catch, and a barrel fallback classifies it as foreign ("this package does
+ * not declare it") instead, which is false and points at the wrong fix.
+ *
+ * That is not a hypothetical. It was the first version of this function, and it
+ * silently disabled the `imports` branch below: deleting that branch left every
+ * test green, because the barrel fallback answered instead. Measured again with
+ * the fallback gone, deleting it goes red — see `follows an \`import type\` to
+ * the module that declares it`.
+ *
+ * DORMANT ON THE PAYLOAD WALK TODAY — MEASURED, NOT ASSUMED
+ * ---------------------------------------------------------
+ * Every name the seven payload types reference resolves on the FIRST branch:
+ * `ConfirmAction`, `ChoiceOption`, `ChoiceOptionMedia`, `TasksTask`,
+ * `ArtifactCardFile`, `ArtifactCardTab` and `FormField` are declared beside their
+ * payload in card-data-types.ts, and `EmbedProvider` beside `EmbedCardData` in
+ * embed-providers.ts. Stubbing this function to local declarations alone leaves
+ * the reachability suite green. So the import-following half is covered by its
+ * own test rather than by the payload walk, deliberately: it is what keeps the
+ * guard honest the day a member type is authored one module over.
+ */
+function declarationOf(
+  name: string,
+  module: ParsedModule,
+): { module: ParsedModule; decl: TypeDecl } | undefined {
+  const local = module.decls.get(name);
+  if (local) return { module, decl: local };
+  for (const via of [module.imports.get(name), module.reexports.get(name)]) {
+    if (!via) continue;
+    const found = lookupExported(via.module, via.original);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+interface DependencyScan {
+  /** Named types this package declares, reached transitively from the root. */
+  inTree: string[];
+  /** Referenced names this package does not declare and TS_GLOBAL_TYPES does not
+   *  classify. Never silently skipped — see the reachability suite. */
+  unclassified: string[];
+}
+
+/**
+ * Every named type a declaration depends on, transitively, read off the AST.
+ *
+ * There is no list of member types anywhere in this file and there must never be
+ * one: `ChoiceOption`, `ConfirmAction`, `TasksTask`, `ArtifactCardFile`,
+ * `FormField` and `EmbedProvider` are all found by walking, so a payload type
+ * that grows an eighth member type is covered the moment it is written.
+ */
+function scanDependencies(root: { module: ParsedModule; decl: TypeDecl }): DependencyScan {
+  const inTree = new Set<string>();
+  const unclassified = new Set<string>();
+  const seen = new Set<string>();
+  const queue = [root];
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const key = `${current.module.path}#${current.decl.name.text}`;
+    if (seen.has(key)) continue; // `FormField` is self-referential
+    seen.add(key);
+
+    const visit = (node: import('typescript').Node): void => {
+      if (ts.isTypeReferenceNode(node)) {
+        let entity: import('typescript').EntityName = node.typeName;
+        while (ts.isQualifiedName(entity)) entity = entity.left;
+        const name = entity.text;
+        const declared = declarationOf(name, current.module);
+        if (declared) {
+          inTree.add(name);
+          queue.push(declared);
+        } else if (!(name in TS_GLOBAL_TYPES)) {
+          unclassified.add(name);
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    ts.forEachChild(current.decl, visit);
+  }
+
+  inTree.delete(root.decl.name.text); // the root is asserted on its own
+  return { inTree: [...inTree].sort(), unclassified: [...unclassified].sort() };
 }
 
 // The TS shape vocabulary this check understands. Anything outside it becomes
@@ -813,6 +996,91 @@ describe('card payload types vs src/primitives/card-schemas', () => {
       link: 'LinkPreviewData',
       tasks: 'TasksCardData',
     });
+  });
+
+  it('exports every card payload type, and every type they name, from the SERVER-SAFE entry', () => {
+    // The pair set is derived from `cardSchemas` (see "PAIRS ARE DERIVED"), and
+    // the member types are read off each declaration's AST, so nothing here is a
+    // restatement of names that could fall behind the contract. A new card type
+    // is covered by its schema landing; a new member type by being written.
+    //
+    // What this asserts is narrower and stricter than "publicly exported": the
+    // ONE entry a Node/no-DOM backend can import. The two-barrel form this
+    // replaces is what let `LinkPreviewData` and `EmbedCardData` sit outside the
+    // server-safe entry while 11 tests here ran green.
+    const missing: string[] = [];
+    const unclassified: string[] = [];
+    let namesChecked = 0;
+
+    for (const pair of pairs) {
+      const resolved = resolvePublicType(pair.typeName);
+      if (!resolved) {
+        missing.push(
+          `${pair.cardType}: \`${pair.typeName}\` (via ${pair.via}) is exported from no public barrel at all.`,
+        );
+        continue;
+      }
+
+      namesChecked += 1;
+      if (!reachableFromServerSafeEntry(pair.typeName)) {
+        missing.push(
+          `${pair.cardType}: payload type \`${pair.typeName}\` is NOT exported from ` +
+            `src/schemas/index.ts. A route importing '@kitn.ai/ui/schemas' gets TS2305 for it. ` +
+            `Being exported from src/index.ts does not count — that barrel carries Solid, which ` +
+            `is the entire reason the server-safe one exists.`,
+        );
+      }
+
+      const deps = scanDependencies(resolved);
+      for (const dep of deps.inTree) {
+        namesChecked += 1;
+        if (!reachableFromServerSafeEntry(dep)) {
+          missing.push(
+            `${pair.cardType}: \`${pair.typeName}\` names \`${dep}\`, which is NOT exported from ` +
+              `src/schemas/index.ts. A member type a consumer cannot import leaves them writing ` +
+              `casts against their own payload.`,
+          );
+        }
+      }
+      for (const name of deps.unclassified) {
+        unclassified.push(
+          `${pair.cardType}: \`${pair.typeName}\` references \`${name}\`, for which this walk found no ` +
+            `declaration in the referencing module's scope, and which TS_GLOBAL_TYPES does not classify. ` +
+            `If it is a TypeScript global, classify it there; if this package declares it, teach ` +
+            `\`declarationOf\` to reach it and then export it from src/schemas/index.ts. An unclassified ` +
+            `name is one this walk would otherwise skip in silence.`,
+        );
+      }
+    }
+
+    expect(unclassified).toEqual([]);
+    expect(missing).toEqual([]);
+    // Strictly greater than the pair count: the member types were walked too, so
+    // "nothing wrong" cannot be "nothing examined" wearing the same number.
+    expect(namesChecked).toBeGreaterThan(pairs.length);
+  });
+
+  it('follows an `import type` to the module that declares it', () => {
+    // The `imports` branch of `declarationOf` is dormant on this tree (see its
+    // doc comment — measured, not assumed), and a dormant branch in a guard is
+    // one nobody has watched work. So it is exercised here directly, against a
+    // real module: primitives/link-preview.ts declares `LinkPreviewEnvelope` and
+    // reaches `CardEnvelope` through `import type { CardEnvelope } from
+    // './card-contract'`. Resolving that name from inside link-preview.ts can
+    // only succeed by following the import.
+    const linkPreview = parseModule(resolve(PKG_ROOT, 'src/primitives/link-preview.ts'));
+    expect(linkPreview.decls.has('LinkPreviewEnvelope')).toBe(true);
+    // Not a local declaration, and not a re-export — so the first and third
+    // branches cannot be what answers this.
+    expect(linkPreview.decls.has('CardEnvelope')).toBe(false);
+    expect(linkPreview.reexports.has('CardEnvelope')).toBe(false);
+    expect(linkPreview.imports.get('CardEnvelope')?.module).toBe(
+      resolve(PKG_ROOT, 'src/primitives/card-contract.ts'),
+    );
+
+    const found = declarationOf('CardEnvelope', linkPreview);
+    expect(found?.decl.name.text).toBe('CardEnvelope');
+    expect(found?.module.path).toBe(resolve(PKG_ROOT, 'src/primitives/card-contract.ts'));
   });
 
   it('visits every object node its schema describes, nested ones included', () => {

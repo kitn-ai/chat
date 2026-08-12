@@ -226,6 +226,35 @@ export type {
   TasksTask,
 } from '../primitives/card-data-types';
 
+// The remaining two payload types, `link` and `embed`.
+//
+// They are NOT in card-data-types.ts, and that is deliberate rather than an
+// oversight to be tidied later: that file exists to rescue types that were
+// trapped inside a `.tsx`, and these two never were. `LinkPreviewData` and
+// `EmbedCardData` have always been authored beside the pure logic that consumes
+// them — `resolveLinkMetadata`, `resolveEmbed`/`watchUrl` — in modules that carry
+// no DOM and no Solid, so they were already importable from a Node/no-DOM
+// project. Moving them would buy nothing and would split each type from the
+// functions written against it.
+//
+// Which is precisely how they got missed. The extraction that created
+// card-data-types.ts swept the `.tsx` files, exported what it found HERE, and
+// the two types that needed no rescuing were never on its list — five of seven
+// payload types landed on this entry and nobody noticed the other two, because
+// both are exported from src/index.ts and every check asked only whether a
+// consumer could reach them from SOME public barrel. A backend cannot import
+// from src/index.ts; that is the Solid-bearing one. See the REACHABILITY note in
+// card-type-parity.test.ts, which now enumerates the payload types from
+// `cardSchemas` and requires each to be reachable from THIS entry specifically.
+//
+// `EmbedProvider` comes along because `EmbedCardData.provider` names it, and a
+// member type a consumer cannot import leaves them writing `provider: 'youtube'
+// as EmbedCardData['provider']`. `ResolvedEmbed` and `LinkMetadataFetcher` stay
+// off this entry on purpose — they describe how a card RENDERS and how an app
+// resolves metadata in the browser, neither of which a route builds.
+export type { EmbedCardData, EmbedCardEnvelope, EmbedProvider } from '../primitives/embed-providers';
+export type { LinkPreviewData, LinkPreviewEnvelope } from '../primitives/link-preview';
+
 // The loop, both directions.
 //
 // `cardTools` projects a card schema INTO a provider tool definition;
