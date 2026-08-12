@@ -738,6 +738,63 @@ The same diagnostic carries a test asserting it NEVER names a cause, only observ
 constraint most likely to decay is the one a well-meaning contributor would violate helpfully.
 Adding a cause to a diagnostic is exactly that shape.
 
+### 5.18 ★ The population is narrower than its label
+
+This is the session's second unifying frame, and it is the one to read if you only read one.
+
+§5.1 names *absence read as a legitimate value* — a missing measurement wearing a value's clothes.
+This one is its complement, and it is harder to see because **nothing about it is wrong.** The
+measurement really ran. The assertions really passed. The count is really correct. What is false is
+the label: **the enumerated set is smaller than the name implies**, so a real measurement over a
+real population certifies a population nobody intended.
+
+Five instances, all found in a single day, none of which review had flagged:
+
+| Named | Actually enumerated |
+|---|---|
+| `verify:scaffold` iterates "every integration" | a hand-written `INTEGRATIONS` array — a new integration is simply absent |
+| the element API artifacts expose "every method" | only `PropertyAssignment` AST nodes; every shorthand `expose({ maximize })` member was invisible (128 reported, 131 real) |
+| "6 archetypes × 9 integrations × 8 frameworks" | 6 archetypes resolving to **5 distinct component lists** — `drop-in-chat` and `support-widget` are both exactly `[kai-chat]`, so a sixth of that matrix duplicated another sixth |
+| the fifth tsc pass covers "the package" | minus a quarantine list nothing re-checked for shrinkage |
+| S17's `bubbles().last()` reads "the assistant's reply" | the **echoed user prompt**, for the first 176ms — the click landed at ~50ms |
+
+The last one is the sharpest, because it published. The scenario compared the prompt to itself,
+cleared its own 40-char floor with the prompt's 89 characters, and reported PASS in **five model
+columns**. One of three published claims was never measured anywhere. (The behaviour was correct
+all along — 623 chars total, stopped at 355, held. Correct conclusion, zero evidence.)
+
+**Operational test — the only one that works: add a member and confirm the counts move.** Reading
+the code cannot distinguish "iterates the registry" from "iterates a list that happens to match the
+registry today", because on the day you read it, they are the same list. Every derivation in that
+table matched reality when written. The defect is that it was a *copy* of reality, with no mechanism
+to stay one.
+
+Corollary for anything self-describing: **derive the population from the thing itself, or assert the
+count against it.** `verify:scaffold` now reads the registry; the union-order check derives its
+variant list from the union in `chat-types.ts` rather than restating it. A restated list is a second
+source of truth that only decays.
+
+### 5.19 A validator validates what is PRESENT
+
+axe reported clean on four components that had a semantic state and no ARIA at all. That is not an
+axe failure — a rule engine matches nodes and checks their attributes, so **it cannot see a role
+that was never written.** Zero violations over an empty selector is the §5.1 shape wearing a
+tool's authority.
+
+Anything you would describe as "the linter would have caught it" deserves the question: *would it
+have had a node to match?* Absence has no node.
+
+### 5.20 Verifying a fix in isolation is not verifying it reaches a user
+
+`Message` was given a correct `role`-driven ARIA mapping, unit-tested, merged. It reached nobody:
+`Thread` and `ChatThread` render `<Message class={…}>` and never pass `role` at all, while reading
+`m().role` two lines away for styling. The component test was green and the composed product was
+unchanged.
+
+**Test the seam a user actually renders, not the unit you edited.** For this kit that means the
+element or the composed component — the layer a consumer imports — because every prop-forwarding gap
+lives *between* units and is invisible to both sides' tests.
+
 ---
 
 ## 6. Repo gotchas
