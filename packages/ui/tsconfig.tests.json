@@ -1,0 +1,52 @@
+{
+  "comment": "The FIFTH typecheck pass. Covers the two trees the other four leave completely unchecked: the `tests/` suite (minus `tests/react/`, which tsconfig.react.test.json already owns because it needs react-jsx) and the package-root tooling files (vite.config.*.ts, vitest.config.ts, playwright.*.config.ts, vitest.shims.d.ts). Before this pass existed, `nx typecheck ui` read 548 of the 677 .ts/.tsx files in the package: tsconfig.json includes only `src/**`, tsconfig.react.json only `frameworks/**`, tsconfig.react.test.json only `tests/react/**`, tsconfig.mcp.json only `src/agent-tooling/mcp/**` — so a type error anywhere else shipped green. Strictness is deliberately the same as tsconfig.json (strict + isolatedModules); the JSX config is Solid's, matching the suite. DO NOT relax these options to make the pass green — quarantine a file in `exclude` with a reason instead, so the gap stays visible.",
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "types": ["node", "vite/client", "vitest/globals", "@testing-library/jest-dom"],
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "jsx": "preserve",
+    "jsxImportSource": "solid-js",
+    "baseUrl": "."
+  },
+  "include": ["tests/**/*.ts", "tests/**/*.tsx", "*.ts"],
+  "exclude": [
+    "node_modules",
+    "dist",
+
+    "tests/react",
+
+    "tests/animated-logo.tsx",
+    "tests/components/message.test.tsx",
+    "tests/primitives/card-recovery.test.ts",
+    "tests/remote/host-embed.test.ts",
+    "tests/scripts/display-name.test.ts",
+    "tests/stories/element-controls.test.ts",
+    "vite.config.ts",
+    "vite.config.elements.ts",
+    "vitest.config.ts"
+  ],
+  "quarantine": {
+    "why": "Turning this pass on surfaced 36 pre-existing errors in 9 files — exactly what it was built to find. They are quarantined here rather than papered over with looser compilerOptions, because most need a src-side fix or a call about intent, not a cast in the test. Delete an entry and fix the file; do not add entries without a line here saying what broke.",
+    "tests/animated-logo.tsx": "12 errors. Dead file: an unreferenced React component sitting in the tests root (imports a nonexistent `@/lib/utils`, uses React `className`/`ref` under the Solid JSX pass). Nothing in the repo imports it. Should be deleted, not fixed.",
+    "tests/components/message.test.tsx": "4 errors. Real API drift, not test noise. `<Message role=\"user\">` typechecks against JSX.HTMLAttributes, so `role` is the ARIA attribute and 'user' is not a valid ARIA role — the test puts an invalid role on a div. `<MessageAvatar fallback=\"AI\" />` fails because MessageAvatarProps marks `src`/`alt` required even though the component's whole point is rendering `fallback` when `src` is absent. Both fixes land in src/components/message.tsx.",
+    "tests/primitives/card-recovery.test.ts": "9 errors, all TS2722 'cannot invoke possibly undefined'. dismissRecovery() returns Pick<CardPolicy,'onDismiss'|'onReopen'>, and Pick preserves CardPolicy's `?`, so the return type says the handlers may be missing when the implementation always returns both. The honest fix is the return type in src/primitives/card-recovery.ts, not `!` in the test.",
+    "tests/remote/host-embed.test.ts": "1 error. The test asserts a 'render-error' fault code that is no longer a member of WireFaultCode. Needs a call on whether the code was dropped or renamed.",
+    "tests/scripts/display-name.test.ts": "1 error, TS7016. Imports ../../scripts/_ts-helpers.mjs, which has no declarations. Needs either allowJs on this pass or a .d.mts beside the helper.",
+    "tests/stories/element-controls.test.ts": "2 errors, TS2571. Unnarrowed `unknown` from a JSON/dynamic read. Mechanical.",
+    "vite.config.ts": "3 errors. `import type { OutputBundle, OutputChunk } from 'vite'` — vite declares those locally and does not re-export them, so the import is broken today and `chunk` degrades to unknown. Same bug in vite.config.elements.ts.",
+    "vite.config.elements.ts": "3 errors. Same broken OutputBundle/OutputChunk type import as vite.config.ts.",
+    "vitest.config.ts": "1 error. The storybook browser project passes `launchOptions` inside a browser `instances[]` entry, and BrowserInstanceOption in the installed @vitest/browser-playwright does not declare it. Worth checking whether the CI chromium hardening flags (--disable-dev-shm-usage, --no-sandbox, the memory cap) are actually reaching the browser or being dropped."
+  },
+  "notAlsoCovered": {
+    ".storybook/**": "Left out on purpose. .storybook/preview.ts imports ../dist/kai.es.js — a gitignored build artifact — so the file cannot typecheck before a build, and `nx typecheck ui` must not require one. (For the record, a probe over the three files reports 2 errors: that missing-module import, plus API_HashEntry.title in manager.ts.)",
+    "src/elements/resizable.d.ts": "Not reachable by any pass, including this one, and not for a reason anyone chose: TypeScript drops a .d.ts when a same-named .ts/.tsx sits beside it, and src/elements/resizable.tsx does. The kai-resizable global augmentation it declares is therefore unchecked. Renaming the file (e.g. resizable.globals.d.ts) would fix it."
+  }
+}
