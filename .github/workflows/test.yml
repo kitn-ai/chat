@@ -122,6 +122,39 @@ jobs:
       - name: Card-schema export guard (both surfaces reachable from outside)
         run: pnpm --filter @kitn.ai/ui run verify:schemas
 
+      # Projects every card schema into a provider tool definition, out of the
+      # BUILT dist/schemas.js, and asks whether the result is something the
+      # provider would actually accept. `cardTools()` is what hands a model its
+      # tool list, so a projection emitting a keyword the provider's strict mode
+      # cannot compile surfaces as a 400 from a live API call in production, with
+      # nothing local to look at. Unit tests check the projection's BEHAVIOUR;
+      # this checks the shipped artifact.
+      #
+      # The blind spot it is built not to have is this repo's recurring one: a
+      # single table with a provider flag, passing forever while covering one wire.
+      # So the two documented strict subsets are two separate documents, asserted
+      # to DIFFER, and `minItems` is checked by VALUE rather than by presence --
+      # legal at any value on OpenAI, legal only at 0 or 1 on Anthropic. That is
+      # the rule that silently becomes wrong the day the tables collapse into one,
+      # and it 400s at request time rather than here. Every keyword occurring in
+      # any authored schema must also be CLASSIFIED by BOTH tables, so a keyword
+      # neither provider documents fails instead of passing unnoticed.
+      #
+      # It cannot pass vacuously either. Every built-in card is rejected under
+      # strict on both providers today, so the emit path would never run at all;
+      # two schemas of the guard's own cover it -- one inside both subsets that
+      # MUST emit and be marked `strict: true` on the wire, one with a single
+      # out-of-subset keyword added that MUST throw naming that keyword. That pair
+      # is what separates a refusal from a projection that quietly DROPS the
+      # constraint, which loosens the contract with no local signal: a `maxItems`
+      # deleted on the way out means the model fills a card with more than it was
+      # designed to render and nothing anywhere says so. The schema walker is
+      # written independently of the one in src/, because a guard that reuses the
+      # code it checks proves only that the code agrees with itself. Needs the
+      # build above. <1s, no network.
+      - name: Tool-definition guard (card schemas project to definitions a provider accepts)
+        run: pnpm --filter @kitn.ai/ui run verify:tool-schemas
+
       # Diffs the 79-element registry against the public SolidJS surface, derived
       # from the TS checker and cross-checked against the BUILT entry's runtime
       # keys. Solid is the authored layer, and the framework docs promise the same
@@ -139,7 +172,7 @@ jobs:
       # assert its wording but never its types; this caught an unused import that
       # failed `npm run build` in a stock create-vite app.
       #
-      # Two matrices: the FRONT END (378 archetype x integration x framework
+      # Two matrices: the FRONT END (432 archetype x integration x framework
       # cells) and, since the routes stopped being sliced off and discarded, the
       # BACKEND ROUTE (9 x 11) under three more tsc projects that model the real
       # host -- node/no-DOM for express + Vite middleware, DOM for Next/SvelteKit/
