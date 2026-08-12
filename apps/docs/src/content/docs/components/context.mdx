@@ -7,6 +7,7 @@ import { Aside } from '@astrojs/starlight/components';
 import Playground from '../../../components/Playground.tsx';
 import Example from '../../../components/Example.tsx';
 import PropTable from '../../../components/PropTable.astro';
+import PartTable from '../../../components/PartTable.astro';
 import EventTable from '../../../components/EventTable.astro';
 import ComposedFrom from '../../../components/ComposedFrom.astro';
 import Facts from '../../../components/Facts.astro';
@@ -75,6 +76,12 @@ At 92% the meter turns red — above the default `dangerThreshold` of 0.9.
 `warnThreshold: 0.5`, `dangerThreshold: 0.75` — the meter warns earlier.
 
 <Example client:visible tag="kai-context" data="customThresholds" />
+
+## Styling
+
+The meter inside the hover-card breakdown exposes two `::part`s. Both are in the DOM only while the card is open.
+
+<PartTable tag="kai-context" />
 
 ## Props
 

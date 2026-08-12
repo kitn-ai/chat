@@ -951,6 +951,13 @@ _No events._
 |---|---|---|
 | `kai-threshold-change` | `CustomEvent<{ level: "ok" \| "warn" \| "danger" }>` | Fires when the computed severity level changes (ok → warn → danger or back). `detail.level` is `'ok'`, `'warn'`, or `'danger'`. |
 
+**Styleable parts** (restyle from outside via `kai-context::part(name)`):
+
+| Part | Description |
+|---|---|
+| `::part(track)` | The usage meter track inside the hover-card breakdown. Carries `role="progressbar"` and is in the DOM only while the card is open. Restyle its height, radius, or background from outside. — `kai-context::part(track) { height: 0.5rem }` |
+| `::part(fill)` | The used-tokens portion of that meter. Its width follows `usedTokens / maxTokens`; its default color is the severity hue picked by `warnThreshold` / `dangerThreshold`, so recoloring it from outside replaces that signal. — `kai-context::part(fill) { background: var(--color-tool-blue) }` |
+
 ---
 
 ### `kai-conversations` / `Conversations`

@@ -10,6 +10,8 @@ import {
   MESSAGE_PARTS,
   FILE_TREE_PARTS,
   NAV_PARTS,
+  CONTEXT_PARTS,
+  PROGRESS_BAR_PARTS,
   ELEMENT_COMPOSITION,
   readSlots,
 } from './slots';
@@ -164,6 +166,33 @@ describe('NAV_PARTS registry', () => {
 
   it('is wired into ELEMENT_COMPOSITION under kai-nav', () => {
     expect(ELEMENT_COMPOSITION['kai-nav'].parts).toBe(NAV_PARTS);
+  });
+});
+
+describe('CONTEXT_PARTS registry', () => {
+  it('declares the usage-meter parts, with unique names', () => {
+    const names = CONTEXT_PARTS.map((p) => p.name);
+    expect(names).toEqual(['track', 'fill']);
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  it('every part has a non-empty doc contract', () => {
+    expect(CONTEXT_PARTS.every((p) => p.doc.trim().length > 0)).toBe(true);
+  });
+
+  // Same two NAMES as kai-progress-bar (both render the shared ProgressBar), but a
+  // separate array: the docs are element-specific, and reusing the object would
+  // publish `kai-progress-bar::part(track) { … }` as the recipe on kai-context.
+  it('is a distinct array from PROGRESS_BAR_PARTS, with kai-context recipes', () => {
+    expect(CONTEXT_PARTS).not.toBe(PROGRESS_BAR_PARTS);
+    for (const part of CONTEXT_PARTS) {
+      expect(part.recipe, `${part.name} has no recipe`).toBeDefined();
+      expect(part.recipe).toContain(`kai-context::part(${part.name})`);
+    }
+  });
+
+  it('is wired into ELEMENT_COMPOSITION under kai-context', () => {
+    expect(ELEMENT_COMPOSITION['kai-context'].parts).toBe(CONTEXT_PARTS);
   });
 });
 
@@ -483,9 +512,14 @@ describe('ELEMENT_COMPOSITION registry (single source of truth the build extract
   // expose `kai-chat::part(row)` today (its shadow root renders `components/
   // message.tsx` directly), yet `row` is registered only under `kai-message`. That
   // is a docs-COMPLETENESS gap — a working selector nobody documented — not the
-  // broken-selector gap this guard closes, and enforcing it would fail loudly on
-  // correct code across most of the registry. It stays a documented gap rather
-  // than a half-guard.
+  // broken-selector gap this guard closes, and enforcing it BLANKET would fail
+  // loudly on correct code across most of the registry.
+  //
+  // It is enforced PER ELEMENT instead, for elements whose closure is small enough
+  // that the over-approximation stops costing anything: see CONVERSE_ENFORCED
+  // below. That list is an opt-in, not a backlog. 22 of 80 elements render a part
+  // they do not register today, and most of those readings are inflated by the
+  // over-approximation, so opting one in means reading its tree first.
   const ELEMENTS_DIR = join(SRC, 'elements');
 
   /** The single literal binding a tag to a module. A generic argument list cannot
@@ -667,6 +701,53 @@ describe('ELEMENT_COMPOSITION registry (single source of truth the build extract
     expect(misattributed.sort()).toEqual([]);
   });
 
+  // The CONVERSE of the guard above, opted into per element. The blanket version
+  // is the KNOWN GAP documented at the top of this section: it fails loudly on
+  // correct code across most of the registry, because the closure is an
+  // over-approximation and a shared module like components/message.tsx credits
+  // `row` to four elements that deliberately document it under one.
+  //
+  // For a SMALL closure the over-approximation stops mattering. `kai-context`
+  // reaches exactly one part-declaring module (ui/progress-bar.tsx) and renders
+  // its ProgressBar unconditionally inside the hover-card breakdown, so
+  // "attributed" and "actually rendered" are the same two names, which is why
+  // this element can carry the strict rule the registry as a whole cannot.
+  //
+  // This is the guard for the defect that put CONTEXT_PARTS here: kai-context
+  // exposed ::part(track) and ::part(fill) with NOTHING registered under it, so
+  // every generated artifact (element-meta.json, llms-full.txt,
+  // docs/web-components.md, the kai MCP's component_reference) listed no parts
+  // at all for an element that has two. Both global guards stayed green
+  // throughout, because both names were already registered under
+  // kai-progress-bar and both are really rendered somewhere in src/.
+  const CONVERSE_ENFORCED: Record<string, string> = {
+    'kai-context': 'closure reaches one part-declaring module (ui/progress-bar.tsx)',
+  };
+
+  it('registers every ::part its own tree renders, for elements opted into the converse', () => {
+    const byFile = partNamesByFile();
+    const modules = elementModules();
+    const undocumented: string[] = [];
+    for (const tag of Object.keys(CONVERSE_ENFORCED)) {
+      const entry = modules.get(tag);
+      expect(entry, `${tag} has no defineWebComponent call`).toBeDefined();
+      const rendered = attributedParts(importClosure(entry!), byFile);
+      const def = ELEMENT_COMPOSITION[tag];
+      expect(def, `${tag} is opted into the converse but not in ELEMENT_COMPOSITION`).toBeDefined();
+      const registered = new Set([
+        ...(def.parts ?? []).map((p) => p.name),
+        ...(def.slots ?? []).filter((s) => s.part).map((s) => s.name),
+      ]);
+      // Sanity: an element opted in here must actually render parts, or this
+      // loop passes by having nothing to compare.
+      expect(rendered.size, `${tag} renders no ::part at all`).toBeGreaterThan(0);
+      for (const name of [...rendered].sort()) {
+        if (!registered.has(name)) undocumented.push(`${tag}::part(${name})`);
+      }
+    }
+    expect(undocumented).toEqual([]);
+  });
+
   it('attribution actually discriminates (control: the guard above can fail)', () => {
     const byFile = partNamesByFile();
     const modules = elementModules();
@@ -707,6 +788,7 @@ describe('ELEMENT_COMPOSITION registry (single source of truth the build extract
       'kai-chat',
       'kai-coachmark',
       'kai-command',
+      'kai-context',
       'kai-conversations',
       'kai-dialog',
       'kai-editable-label',
