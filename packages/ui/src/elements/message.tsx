@@ -87,6 +87,21 @@ interface Props extends Record<string, unknown> {
    *  plain string map (not the `CardTagMap` alias) so the generated React
    *  wrapper inlines it instead of emitting an unresolved named type. */
   cardTypes?: Record<string, string>;
+  /** JSON Schemas for the card types this app renders, keyed by envelope type —
+   *  the companion of `cardTypes`, which says what DRAWS a card while this says
+   *  what a VALID one looks like. An OBJECT, so it is a JS property only:
+   *  `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute.
+   *  `createCardRegistry(...).validationSchemas` is exactly this shape.
+   *
+   *  Without it the kit validates its own seven built-ins and leaves your own card
+   *  type — the one your app actually cares about — as the only unchecked thing on
+   *  screen. A schema here WINS over a built-in of the same name.
+   *
+   *  Typed `Record<string, object>` rather than `Record<string, JsonSchema>`
+   *  deliberately: an imported `.json` schema widens `"type"` to `string`, and an
+   *  authored one carries `$schema`/`title`/`description`/`additionalProperties`,
+   *  so the tighter type would reject both of the normal ways to supply one. */
+  cardSchemas?: Record<string, object>;
 }
 
 /** Events fired by `<kai-message>`. */
@@ -115,6 +130,7 @@ defineWebComponent<Props, Events>('kai-message', {
   avatarFallback: undefined,
   avatar: undefined,
   cardTypes: undefined,
+  cardSchemas: undefined,
 }, (props, { dispatch, flag, element, expose }) => {
   const outer = useChatConfig();
   const msg = (): ChatMessage =>
@@ -207,6 +223,7 @@ defineWebComponent<Props, Events>('kai-message', {
     <MessageBody
       parts={msg().parts}
       cardTypes={cardComponentsFromTags(props.cardTypes, (props as { theme?: string }).theme)}
+      cardSchemas={props.cardSchemas}
       isUser={isUser()}
       markdown={useMarkdown()}
       actions={mergedActions()}

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { WireEncodeError, toAnthropicMessages, toOpenAIMessages } from './encode';
 import { consumeModelStream } from './consume';
+import { readOpenAIStream } from './read';
+import { OPENAI_FIXTURES } from './fixtures/openai';
+import { nullSink, replayBytes } from './fixtures/replay';
 import type { AssistantStreamSink, ModelStreamChunk } from './chunk';
 import { appendReasoningPart, appendTextPart, upsertToolPart } from '../state/parts';
 import type { ChatMessage, MessagePart } from '../elements/chat-types';
@@ -306,13 +309,237 @@ describe('toOpenAIMessages', () => {
   });
 
   it('does NOT throw on a reasoning part with no raw', () => {
-    // The verbatim requirement is Anthropic-only. OpenAI chat completions has no
-    // reasoning channel on the way back in at all, so there is nothing to lose.
+    // The verbatim requirement is Anthropic-only. Omitting reasoning on this wire
+    // is accepted by every configuration measured, so an unencodable block is
+    // dropped rather than thrown on.
     expect(() =>
       toOpenAIMessages([
         { id: 'a1', role: 'assistant', parts: [{ type: 'reasoning', text: 'x', index: 0 }] },
       ]),
     ).not.toThrow();
+  });
+});
+
+/**
+ * REASONING BACK ONTO THE OPENAI WIRE, PROVED AGAINST RECORDED STREAMS.
+ *
+ * Two captures carry this whole block, both copied byte-for-byte out of the
+ * spike's live conformance sweep:
+ *
+ *   `reasoning-signed-tool-call`    anthropic/claude-haiku-4.5 on the OPENAI wire.
+ *                                   21 `reasoning_details` entries; the last one
+ *                                   carries the signature and NO text.
+ *   `reasoning-encrypted-summary`   openai/gpt-5.4-mini. 76 `reasoning.summary`
+ *                                   entries at block index 0, then ONE
+ *                                   `reasoning.encrypted` entry at index 1.
+ *
+ * Hand-written frames are deliberately not used for the shapes: a wire test
+ * written from imagination asserts a shape no provider sends. The only synthetic
+ * part in here is the post-tool ORDERING case, which needs a second round the
+ * captures do not contain; its block is copied field-for-field off the recorded
+ * one and the test says so.
+ */
+describe('toOpenAIMessages reasoning', () => {
+  const readFixture = (name: string) => {
+    const sse = OPENAI_FIXTURES[name];
+    if (!sse) throw new Error(`missing fixture openai/${name}`);
+    return readOpenAIStream(replayBytes(sse, 17), nullSink());
+  };
+
+  const reasoningParts = (parts: MessagePart[]) =>
+    parts.filter((p): p is Extract<MessagePart, { type: 'reasoning' }> => p.type === 'reasoning');
+
+  /** The recorded turn as a host holds it AFTER running the tool it announced.
+   *  An unsettled call encodes to nothing, so without this the turn would not
+   *  produce an assistant message at all and there would be nothing to assert. */
+  const settled = (parts: MessagePart[]): MessagePart[] =>
+    parts.map((p) =>
+      p.type === 'tool'
+        ? { ...p, tool: { ...p.tool, state: 'output-available' as const, output: { c: 18 } } }
+        : p,
+    );
+
+  const assistantOf = (parts: MessagePart[], reasoning?: 'omit' | 'include') =>
+    toOpenAIMessages(
+      [user('What is the weather in Paris?'), { id: 'a1', role: 'assistant', parts }],
+      reasoning ? { reasoning } : undefined,
+    );
+
+  it('round-trips a SIGNED reasoning block, signature intact', async () => {
+    const turn = await readFixture('reasoning-signed-tool-call');
+    const part = reasoningParts(turn.parts)[0];
+    const out = assistantOf(settled(turn.parts), 'include');
+
+    // assistant(reasoning + tool_calls) -> tool(result). The reasoning belongs to
+    // the message that ANNOUNCED the call, not to a later one.
+    expect(out.map((m) => m.role)).toEqual(['user', 'assistant', 'tool']);
+    const assistant = out[1];
+    expect(assistant.tool_calls).toHaveLength(1);
+    expect(assistant.reasoning_details).toEqual([
+      {
+        type: 'reasoning.text',
+        text: part.text,
+        signature: part.signature,
+        format: 'anthropic-claude-v1',
+        index: 0,
+      },
+    ]);
+    // The signature is the load-bearing field: stripping it is a hard 400 from
+    // Anthropic upstream, measured, on all four providers OpenRouter tried.
+    expect(assistant.reasoning_details?.[0].signature).toMatch(/^EqkECkgIEBABGAIqQ/);
+  });
+
+  it('emits the REASSEMBLED block, never the textless signature fragment in `raw`', async () => {
+    const turn = await readFixture('reasoning-signed-tool-call');
+    const part = reasoningParts(turn.parts)[0];
+
+    // THE TRAP, asserted on the recorded data itself. `appendReasoningPart`
+    // resolves `raw` last-write-wins and the signature arrives in the FINAL
+    // frame, alone, so `raw` is one fragment and not the block.
+    const fragment = (part.raw?.payload as Record<string, unknown>[])[0];
+    expect(part.raw?.source).toBe('openai.reasoning_details');
+    expect(fragment.text).toBeUndefined();
+    expect(fragment.signature).toEqual(expect.any(String));
+    // ...while the assembled reasoning lives in the part's own fields.
+    expect(part.text.length).toBeGreaterThan(300);
+
+    const entry = assistantOf(settled(turn.parts), 'include')[1].reasoning_details?.[0];
+    // An encoder that echoed `raw`, the way the Anthropic one does, sends the
+    // fragment: same signature, no text. Both halves have to be checked, because
+    // the signature alone passes either way.
+    expect(entry?.text).toBe(part.text);
+    expect(entry).not.toEqual(fragment);
+  });
+
+  it('sends an ENCRYPTED block verbatim and DROPS the unsigned summary beside it', async () => {
+    const turn = await readFixture('reasoning-encrypted-summary');
+    const parts = reasoningParts(turn.parts);
+    // One turn, two block indices: the readable summary and the opaque carrier.
+    expect(parts.map((p) => p.index)).toEqual([0, 1]);
+    expect(parts[0].text.length).toBeGreaterThan(300);
+    expect(parts[1].text).toBe('');
+
+    const encrypted = (parts[1].raw?.payload as Record<string, unknown>[])[0];
+    const out = assistantOf(turn.parts, 'include');
+    const details = out[1].reasoning_details;
+
+    // `data` cannot be rebuilt from text plus signature -- there is no text and no
+    // signature -- so this is the one entry that has to go back exactly as it came.
+    expect(details).toEqual([encrypted]);
+    expect(details?.[0].data).toEqual(expect.any(String));
+    expect(details?.[0].id).toEqual(expect.any(String));
+    // The summary carries no signature and no `data`, so nothing the provider can
+    // verify. It also proves the fragment trap twice over: its own `raw` is the
+    // last summary delta, the single character '.'.
+    expect((parts[0].raw?.payload as Record<string, unknown>[])[0].summary).toBe('.');
+    expect(details).toHaveLength(1);
+  });
+
+  it('DROPS reasoning with text but nothing verifiable, from a real deepseek capture', async () => {
+    const turn = await readFixture('reasoning-both-fields');
+    const part = reasoningParts(turn.parts)[0];
+    expect(part.text.length).toBeGreaterThan(50);
+    expect(part.signature).toBeUndefined();
+    expect((part.raw?.payload as Record<string, unknown>[])[0].format).toBe('unknown');
+
+    const out = assistantOf(turn.parts, 'include');
+    expect(out[1].reasoning_details).toBeUndefined();
+  });
+
+  it('puts a post-tool reasoning block on the assistant message AFTER the tool result', async () => {
+    // The second block is SYNTHETIC: the captures are single-round, so there is no
+    // recorded post-tool block to use. Its fields are copied off the recorded one.
+    const turn = await readFixture('reasoning-signed-tool-call');
+    const first = reasoningParts(turn.parts)[0];
+    const second: MessagePart = {
+      type: 'reasoning',
+      text: 'Paris is 18C, so I can answer now.',
+      index: 0,
+      streamId: 'round-2',
+      signature: 'EqkE-ROUND-2-SIGNATURE',
+      raw: {
+        source: 'openai.reasoning_details',
+        payload: [
+          {
+            type: 'reasoning.text',
+            signature: 'EqkE-ROUND-2-SIGNATURE',
+            format: 'anthropic-claude-v1',
+            index: 0,
+          },
+        ],
+      },
+    };
+    const out = assistantOf([...settled(turn.parts), second, { type: 'text', text: 'It is 18C.' }], 'include');
+
+    expect(out.map((m) => m.role)).toEqual(['user', 'assistant', 'tool', 'assistant']);
+    expect(out[1].reasoning_details?.[0].signature).toBe(first.signature);
+    expect(out[3].content).toBe('It is 18C.');
+    expect(out[3].reasoning_details).toEqual([
+      {
+        type: 'reasoning.text',
+        text: 'Paris is 18C, so I can answer now.',
+        signature: 'EqkE-ROUND-2-SIGNATURE',
+        format: 'anthropic-claude-v1',
+        index: 0,
+      },
+    ]);
+  });
+
+  it('OMITS reasoning by default, on the same thread that carries it', async () => {
+    // The opt-in guarantee. Every configuration measured returns 200 with the
+    // reasoning omitted, and sending it costs ~25% more prompt tokens per round,
+    // so the working path stays the default and nothing changes for a caller that
+    // does not ask.
+    const turn = await readFixture('reasoning-signed-tool-call');
+    const parts = settled(turn.parts);
+    expect(assistantOf(parts)).toEqual(assistantOf(parts, 'omit'));
+    for (const message of assistantOf(parts)) {
+      expect('reasoning_details' in message).toBe(false);
+    }
+  });
+
+  it('leaves a thread with NO reasoning byte-identical, either way', () => {
+    // The regression pin. This is what `toOpenAIMessages` emits today and must
+    // keep emitting: no new key, no reordering, on the path that already works.
+    const thread: ChatMessage[] = [
+      user('What is the weather in Paris?'),
+      {
+        id: 'a1',
+        role: 'assistant',
+        parts: [
+          { type: 'text', text: 'Checking. ' },
+          {
+            type: 'tool',
+            tool: {
+              type: 'get_weather',
+              state: 'output-available',
+              toolCallId: 'c1',
+              input: { city: 'Paris' },
+              rawInput: '{"city":"Paris"}',
+              output: { c: 18 },
+            },
+          },
+          { type: 'text', text: 'It is 18C.' },
+        ],
+      },
+    ];
+    const expected = [
+      { role: 'user', content: 'What is the weather in Paris?' },
+      {
+        role: 'assistant',
+        content: 'Checking. ',
+        tool_calls: [
+          { id: 'c1', type: 'function', function: { name: 'get_weather', arguments: '{"city":"Paris"}' } },
+        ],
+      },
+      { role: 'tool', tool_call_id: 'c1', name: 'get_weather', content: '{"c":18}' },
+      { role: 'assistant', content: 'It is 18C.' },
+    ];
+    expect(toOpenAIMessages(thread)).toEqual(expected);
+    // Asking for reasoning on a thread that has none must not change one byte.
+    expect(JSON.stringify(toOpenAIMessages(thread, { reasoning: 'include' }))).toBe(
+      JSON.stringify(expected),
+    );
   });
 });
 

@@ -8,13 +8,44 @@ import { Dynamic } from 'solid-js/web';
 import type { CardEnvelope } from '../primitives/card-contract';
 import { useCardHost } from '../primitives/card-host';
 import { BUILTIN_CARD_COMPONENTS, mergeCardComponents, type CardComponentMap } from '../primitives/card-registry';
+import type { JsonSchema } from '../primitives/card-validate';
 import { cardValidationMessage, validateCardData, type CardValidationReport } from '../primitives/card-validate-cards';
 import { CardFallback } from './card-fallback';
+
+/**
+ * Consumer card schemas by envelope type: `{ 'pricing-table': pricingSchema }`.
+ *
+ * `object`, NOT `JsonSchema`, and that is measured rather than lazy. A real schema
+ * is either imported from a `.json` file — where TypeScript widens `"type": "object"`
+ * to `string`, which `JsonSchema`'s literal union rejects — or written out with the
+ * `$schema` / `title` / `description` / `additionalProperties` keywords that
+ * `JsonSchema` does not describe at all, which excess-property checking rejects.
+ * Both are the ordinary case, so the tighter type would make the normal way of
+ * supplying a schema a compile error. `src/schemas/index.ts` widens `CardSchema`
+ * for exactly this reason and says so at length (lines 92-110 there).
+ *
+ * The value is handed straight to `validateCardData`, which reads only the keywords
+ * `validateAgainstSchema` implements and ignores the rest.
+ */
+export type CardSchemaMap = Record<string, object>;
 
 export interface CardRendererProps {
   envelope: CardEnvelope;
   /** Add/override type→component entries (merged over the built-ins). */
   types?: CardComponentMap;
+  /**
+   * JSON Schemas for the card types this app renders, keyed by `envelope.type`.
+   * `createCardRegistry(...).validationSchemas` is exactly this shape.
+   *
+   * The companion of `types`, and the half that was missing: `types` says WHAT
+   * draws a `pricing-table`, `schemas` says what a VALID one looks like. Without it
+   * the kit checks its own seven built-ins and leaves the developer's own card —
+   * the one the app actually cares about — as the only unvalidated thing on screen.
+   *
+   * A schema given here WINS over a built-in of the same name, matching
+   * `mergeCardComponents`, where the consumer's entry is spread over ours.
+   */
+  schemas?: CardSchemaMap;
   /**
    * Validate `envelope.data` against the built-in schema for `envelope.type` before
    * rendering. Default `true`.
@@ -28,10 +59,28 @@ export interface CardRendererProps {
    * `dist/index.js` and +775 B gzip on the elements register bundle. That is below
    * the noise floor of a package that already ships a Solid runtime and `marked`.
    *
-   * Set `false` to opt out. A type with no built-in schema (a consumer's own card)
-   * is never validated either way.
+   * Set `false` to opt out. A type with no schema at all — no built-in, and none
+   * supplied through `schemas` — is never validated either way.
    */
   validateCards?: boolean;
+}
+
+/**
+ * True when the consumer registered a schema for this type.
+ *
+ * Spelled out rather than left to `validateCardData` because it is a GATE, not a
+ * lookup: a consumer schema is the one thing that authorises validating a renderer
+ * that is not ours. `hasOwnProperty` (not `in`) so a type named `toString` cannot
+ * pick up `Object.prototype`, and the `typeof` check so a `{ 'x': null }` entry
+ * reads as "not registered" instead of matching and then validating against
+ * nothing. The same predicate lives in elements/cards.tsx for `<kai-cards>`; the
+ * two dispatchers already duplicate this rule (they compare component identity vs
+ * tag identity), so keep them in step.
+ */
+export function hasConsumerSchema(schemas: CardSchemaMap | undefined, type: string): boolean {
+  if (!schemas || !Object.prototype.hasOwnProperty.call(schemas, type)) return false;
+  const s = schemas[type];
+  return typeof s === 'object' && s !== null;
 }
 
 export function CardRenderer(props: CardRendererProps): JSX.Element {
@@ -45,18 +94,34 @@ export function CardRenderer(props: CardRendererProps): JSX.Element {
   // behaviour on the native path, split into two tiers so a card that renders
   // acceptably today is reported without being replaced. Keep the two in step.
   //
-  // ONLY THE BUILT-IN COMPONENT IS VALIDATED, and that is not an optimisation.
+  // WHAT AUTHORISES A CHECK IS A SCHEMA THAT DESCRIBES WHAT IS ON SCREEN.
+  //
   // `types` lets a consumer replace a built-in type's renderer with their own
   // (`types={{ confirm: MyConfirm }}`), and `confirm.schema.json` describes OUR
   // ConfirmCard's data, not theirs. Validating a replaced renderer's payload against
   // our schema would reject shapes that are correct for the component actually on
-  // screen. The identity check is against BUILTIN_CARD_COMPONENTS, which is the same
-  // object `mergeCardComponents` puts in the map when nothing overrode the type, and
-  // the same one elements/message.tsx reuses for a non-overridden built-in.
+  // screen. So OUR schema applies only to OUR component: the identity check is
+  // against BUILTIN_CARD_COMPONENTS, the same object `mergeCardComponents` puts in
+  // the map when nothing overrode the type, and the same one elements/message.tsx
+  // reuses for a non-overridden built-in.
+  //
+  // A schema the CONSUMER registered is the other way round: they wrote it about
+  // their own card, and it is the shape their model was told to emit, so it applies
+  // whichever component draws the type. That covers the case the identity check can
+  // never reach — a `pricing-table` that is nobody's built-in — and it re-enables
+  // the check on an overridden built-in, where the objection was our schema and not
+  // the checking.
   const report = createMemo<CardValidationReport | null>(() => {
     if (props.validateCards === false) return null;
-    if (entry() !== BUILTIN_CARD_COMPONENTS[props.envelope.type]) return null;
-    return validateCardData(props.envelope.type, props.envelope.data);
+    if (
+      !hasConsumerSchema(props.schemas, props.envelope.type) &&
+      entry() !== BUILTIN_CARD_COMPONENTS[props.envelope.type]
+    ) {
+      return null;
+    }
+    // `schemas` is passed even when the gate opened on renderer identity, so a
+    // consumer schema for a built-in type wins over ours — `schemaFor`'s rule.
+    return validateCardData(props.envelope.type, props.envelope.data, props.schemas as Record<string, JsonSchema> | undefined);
   });
 
   // One `error` per distinct problem, both tiers. Keyed on the message rather than
@@ -111,7 +176,14 @@ function UnknownCard(props: { envelope: CardEnvelope }): JSX.Element {
 /** Function sugar: renderCard(env) ≡ <CardRenderer envelope={env} />. */
 export function renderCard(
   envelope: CardEnvelope,
-  opts?: { types?: CardComponentMap; validateCards?: boolean },
+  opts?: { types?: CardComponentMap; schemas?: CardSchemaMap; validateCards?: boolean },
 ): JSX.Element {
-  return <CardRenderer envelope={envelope} types={opts?.types} validateCards={opts?.validateCards} />;
+  return (
+    <CardRenderer
+      envelope={envelope}
+      types={opts?.types}
+      schemas={opts?.schemas}
+      validateCards={opts?.validateCards}
+    />
+  );
 }

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { createRoot, createEffect } from 'solid-js';
 import { createTween } from './create-tween';
 import { installFakeClock } from '../test-utils/fake-clock';
@@ -326,6 +326,127 @@ describe('named easings as cubic beziers', () => {
           previous = current;
         }
       }
+      dispose();
+    });
+  });
+});
+
+// `step()` clamps the TOP of `t` (`Math.min(1, ...)`) but not the bottom, so a
+// frame timestamp that predates the `performance.now()` captured by `to()`
+// hands the easing a NEGATIVE `t`. Per spec that cannot happen in a browser --
+// requestAnimationFrame's timestamp and `performance.now()` share a time
+// origin -- but it happens routinely under vitest + jsdom, where they do not:
+// jsdom computes its frame timestamp as `performance.now() - windowInitialized`
+// against its OWN performance object, while vitest has already replaced the
+// global `performance` with jsdom's. The two disagree by the window's age, so
+// the first frames of every tween arrive "before" it started.
+//
+// With an unclamped easing that runs the tween BACKWARDS. These tests drive
+// exactly that timestamp through every easing. They are the only thing that
+// can ever catch a regression here, because the condition is unreachable in
+// the browser the visualizers actually run in.
+describe('createTween: a frame timestamp that predates the tween origin', () => {
+  const ORIGIN = 1_000_000;
+  const SKEW_MS = 250; // a quarter of the 1s duration used below, i.e. t = -0.25
+
+  /**
+   * Runs `body` against a clock where `performance.now()` is pinned to
+   * `ORIGIN` -- so `to()` captures that as its leg start -- and hands it a
+   * `fireFrameAt(timestamp)` that invokes the single pending
+   * requestAnimationFrame callback with whatever absolute timestamp it is
+   * given, including one in that frame's past. That is the jsdom shape, in
+   * isolation and without real timers.
+   *
+   * These stubs replace the file-scope `installFakeClock()` ones for the
+   * duration of the test; its `afterEach` unstubs both alike.
+   */
+  function withPreOriginFrame(body: (fireFrameAt: (timestamp: number) => void) => void) {
+    let pending: ((t: number) => void) | null = null;
+    vi.stubGlobal('performance', { now: () => ORIGIN });
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      pending = cb as (t: number) => void;
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => {
+      pending = null;
+    });
+
+    body((timestamp) => {
+      const callback = pending;
+      pending = null;
+      // Prove the setup reaches the gap rather than passing vacuously: the
+      // tween must actually have armed a frame to fire.
+      expect(callback).not.toBeNull();
+      callback!(timestamp);
+    });
+  }
+
+  /** A frame timestamp genuinely in the past relative to the captured origin. */
+  const EARLY = ORIGIN - SKEW_MS;
+
+  // `from` and `to` are both non-zero and distinct so "held at the start
+  // value" is distinguishable from "happened to produce 0".
+  const FROM = 0.4;
+  const TO = 0.9;
+
+  // RED before the clamp: `linear` is the identity, so t = -0.25 drove the
+  // value to 0.275 -- BELOW the start, the tween running backwards. The three
+  // cubic-bezier curves already guarded (`if (t <= 0) return 0`), so they were
+  // green before and after; they are here to pin that, and to show the harness
+  // drives all four the same way.
+  it.each(['linear', 'easeIn', 'easeOut', 'easeInOut'] as const)(
+    "'%s' holds at the start value instead of running backwards",
+    (ease) => {
+      createRoot((dispose) => {
+        withPreOriginFrame((fireFrameAt) => {
+          const t = createTween(FROM);
+          t.to(TO, { duration: 1, ease });
+          expect(EARLY).toBeLessThan(performance.now()); // the frame really is in the past
+          fireFrameAt(EARLY);
+          expect(t.value()).toBe(FROM);
+        });
+        dispose();
+      });
+    },
+  );
+
+  // RED before the clamp, and much louder than linear's: `spring` has
+  // `Math.exp(-zeta * omega * t)` in it, so a negative `t` makes the
+  // exponential GROW instead of decay. At t = -0.25 with bounce 0.4 the easing
+  // returned ~5.9, putting the value at ~3.36 -- roughly seven times the
+  // distance to the target, in the wrong direction, on the first frame.
+  it('a spring holds at the start value instead of diverging exponentially', () => {
+    createRoot((dispose) => {
+      withPreOriginFrame((fireFrameAt) => {
+        const t = createTween(FROM);
+        t.to(TO, { type: 'spring', duration: 1, bounce: 0.4 });
+        expect(EARLY).toBeLessThan(performance.now());
+        fireFrameAt(EARLY);
+        expect(t.value()).toBe(FROM);
+      });
+      dispose();
+    });
+  });
+
+  // The clamp must HOLD the tween, not cancel it: an early frame is still a
+  // frame, so the loop has to stay armed and the tween has to animate normally
+  // from its real origin once the timestamps catch up.
+  it('stays armed through an early frame and still lands on the target', () => {
+    createRoot((dispose) => {
+      withPreOriginFrame((fireFrameAt) => {
+        const t = createTween(FROM);
+        t.to(TO, { duration: 1, ease: 'linear' });
+        fireFrameAt(EARLY);
+        expect(t.value()).toBe(FROM);
+        expect(t.animating()).toBe(true);
+
+        fireFrameAt(ORIGIN + 500); // halfway through, measured from the origin
+        expect(t.value()).toBeCloseTo(FROM + (TO - FROM) / 2, 6);
+
+        fireFrameAt(ORIGIN + 1000);
+        expect(t.value()).toBe(TO);
+        expect(t.animating()).toBe(false);
+      });
       dispose();
     });
   });

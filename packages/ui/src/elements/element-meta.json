@@ -1156,6 +1156,14 @@
         "displayType": "undefined | Record<string, string>"
       },
       {
+        "name": "schemas",
+        "type": "undefined | Record<string, object>",
+        "optional": true,
+        "scalar": false,
+        "description": "JSON Schemas for the card types this app renders, keyed by envelope type — the companion of `types`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.schemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type — the one your app actually cares about — as the only unchecked thing on screen. A schema here WINS over a built-in of the same name, matching `mergeCardTags`, where your entry is spread over ours. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `\"type\"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one. See `CardSchemaMap` in components/card-renderer.tsx.",
+        "displayType": "undefined | Record<string, object>"
+      },
+      {
         "name": "policy",
         "type": "undefined | { onSubmit?: undefined | (cardId: string, data: unknown) => void; onAction?: undefined | (cardId: string, action: string, payload?: unknown) => void; onSendPrompt?: undefined | (text: string, opts: { mode: \"compose\" | \"send\"; context?: unknown; }) => void; onOpen?: undefined | (url: string, target: \"tab\" | \"artifact\") => void; onState?: undefined | (cardId: string, patch: unknown) => void; onDismiss?: undefined | (cardId: string) => void; onReopen?: undefined | (cardId: string) => void; onError?: undefined | (cardId: string, message: string) => void; maxSendPromptMode?: undefined | \"compose\" | \"send\" }",
         "optional": true,
@@ -1171,7 +1179,7 @@
         "type": "undefined | false | true",
         "optional": true,
         "scalar": true,
-        "description": "Validate each envelope's `data` against the built-in schema for its type before rendering it. Default `true`; set `validate-cards=\"false\"` (or `el.validateCards = false`) to opt out. A hard failure (wrong type, a missing required field) renders a diagnostic naming the field instead of the card; a soft failure (bounds) renders the card unchanged. Both emit a contract `error` event. On in production too: a model emitting a bad shape is a production failure mode, so stripping the check there would hide it from exactly the person who needs to see it.",
+        "description": "Validate each envelope's `data` against the schema for its type before rendering it — a built-in's own schema, or yours from `schemas`. Default `true`; set `validate-cards=\"false\"` (or `el.validateCards = false`) to opt out. A hard failure (wrong type, a missing required field) renders a diagnostic naming the field instead of the card; a soft failure (bounds) renders the card unchanged. Both emit a contract `error` event. On in production too: a model emitting a bad shape is a production failure mode, so stripping the check there would hide it from exactly the person who needs to see it.",
         "default": "true",
         "displayType": "undefined | false | true"
       }
@@ -1583,6 +1591,14 @@
         "scalar": false,
         "description": "Optional card type -> custom-element tag overrides/additions for `card` parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type.",
         "displayType": "undefined | Record<string, string>"
+      },
+      {
+        "name": "cardSchemas",
+        "type": "undefined | Record<string, object>",
+        "optional": true,
+        "scalar": false,
+        "description": "JSON Schemas for the card types this app renders, keyed by envelope type — the companion of `cardTypes`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type — the one your app actually cares about — as the only unchecked thing on screen. A schema here WINS over a built-in of the same name. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `\"type\"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one.",
+        "displayType": "undefined | Record<string, object>"
       }
     ],
     "events": [
@@ -4686,6 +4702,14 @@
         "scalar": false,
         "description": "Optional card type -> custom-element tag overrides/additions for `card` parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type.",
         "displayType": "undefined | Record<string, string>"
+      },
+      {
+        "name": "cardSchemas",
+        "type": "undefined | Record<string, object>",
+        "optional": true,
+        "scalar": false,
+        "description": "JSON Schemas for the card types this app renders, keyed by envelope type — the companion of `cardTypes`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type — the one your app actually cares about — as the only unchecked thing on screen. A schema here WINS over a built-in of the same name. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `\"type\"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one.",
+        "displayType": "undefined | Record<string, object>"
       }
     ],
     "events": [
@@ -8143,6 +8167,14 @@
         "scalar": false,
         "description": "Optional card type -> custom-element tag overrides/additions for `card` parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type.",
         "displayType": "undefined | Record<string, string>"
+      },
+      {
+        "name": "cardSchemas",
+        "type": "undefined | Record<string, object>",
+        "optional": true,
+        "scalar": false,
+        "description": "JSON Schemas for the card types this app renders, keyed by envelope type — the companion of `cardTypes`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type — the one your app actually cares about — as the only unchecked thing on screen. A schema here WINS over a built-in of the same name. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `\"type\"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one.",
+        "displayType": "undefined | Record<string, object>"
       }
     ],
     "events": [
@@ -8985,6 +9017,14 @@
         "scalar": false,
         "description": "Optional card type -> custom-element tag overrides/additions for `card` parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type.",
         "displayType": "undefined | Record<string, string>"
+      },
+      {
+        "name": "cardSchemas",
+        "type": "undefined | Record<string, object>",
+        "optional": true,
+        "scalar": false,
+        "description": "JSON Schemas for the card types this app renders, keyed by envelope type — the companion of `cardTypes`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type — the one your app actually cares about — as the only unchecked thing on screen. A schema here WINS over a built-in of the same name. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `\"type\"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one.",
+        "displayType": "undefined | Record<string, object>"
       }
     ],
     "events": [

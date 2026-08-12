@@ -54,6 +54,41 @@ export default defineConfig({
         name: 'unit',
         environment: 'jsdom',
         globals: true,
+        // The per-test budget stays at vitest's strict 5000ms default for all
+        // ~215 files. A named handful genuinely cannot fit it -- they invoke
+        // tsc, or transform a heavy module graph, inside a test body -- and
+        // this setup file grants those an explicit, justified, PER-FILE
+        // exception instead of loosening the budget for everything.
+        //
+        // Deliberately not a raised global `testTimeout`: on a suite whose
+        // 99th-percentile test is under a second, 5000ms is already a weak
+        // hang detector, and raising it everywhere to accommodate one 3.8s
+        // compile makes every genuine hang that much slower to surface while
+        // hiding the fact that a few files do very expensive work. See
+        // `test-timeout-budgets.ts` for the measurements and the per-file
+        // reasons.
+        setupFiles: ['./vitest.setup.timeouts.ts'],
+        // Worker count is deliberately left at vitest's default, but if this
+        // suite is flaking or crawling on YOUR machine, `--maxWorkers=4` is
+        // very likely the answer. Measured here on a 10-core box, same suite,
+        // same synthetic load (32 spinning processes):
+        //
+        //                       wall     failures
+        //   default (9 forks)   395.6s   6
+        //   --maxWorkers=4      257.6s   0
+        //
+        // Faster AND clean, which is counter-intuitive until you look at where
+        // the time goes: aggregate `import` was 558s across 9 forks versus
+        // 255s across 4. Nine jsdom forks on ten cores thrash the transform
+        // pipeline rather than sharing it, so cutting workers removes more
+        // contention than it removes parallelism. On an idle machine the same
+        // flag costs only ~12% (94.1s -> 105.6s).
+        //
+        // NOT encoded as config on purpose: that is a result about one
+        // machine's core count, not about this repo. A hard `maxWorkers: 4`
+        // would FORCE oversubscription on a 2-4 core CI runner, and '50%'
+        // would halve parallelism there for contention that runner does not
+        // have. Reach for the flag locally; leave the repo neutral.
         // React wrapper tests run under @vitejs/plugin-react via the separate
         // vitest.react.config.ts (`npm run test:react`). They MUST be excluded
         // here, or the global Solid JSX transform would mis-compile their React

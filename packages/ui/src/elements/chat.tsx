@@ -13,7 +13,7 @@ import type { ModelOption } from '../types';
 
 type Props = Omit<ChatThreadProps,
   'class' | 'onValueChange' | 'onSubmit' | 'onAttachmentsChange' | 'onSuggestionClick' | 'onModelChange'
-  | 'onMessageAction' | 'onSearch' | 'onVoice' | 'controllerRef' | 'cardTypes' | 'messages'> & Record<string, unknown> & {
+  | 'onMessageAction' | 'onSearch' | 'onVoice' | 'controllerRef' | 'cardTypes' | 'cardSchemas' | 'messages'> & Record<string, unknown> & {
     /** The full message thread to render, newest last. Each entry carries its
      *  role, ordered `parts`, and optional actions/avatar/feedback. Set as a JS
      *  property (`el.messages = [...]`); a NEW array reference per streaming
@@ -29,6 +29,21 @@ type Props = Omit<ChatThreadProps,
      *  plain string map (not the `CardTagMap` alias) so the generated React
      *  wrapper inlines it instead of emitting an unresolved named type. */
     cardTypes?: Record<string, string>;
+    /** JSON Schemas for the card types this app renders, keyed by envelope type —
+     *  the companion of `cardTypes`, which says what DRAWS a card while this says
+     *  what a VALID one looks like. An OBJECT, so it is a JS property only:
+     *  `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute.
+     *  `createCardRegistry(...).validationSchemas` is exactly this shape.
+     *
+     *  Without it the kit validates its own seven built-ins and leaves your own card
+     *  type — the one your app actually cares about — as the only unchecked thing on
+     *  screen. A schema here WINS over a built-in of the same name.
+     *
+     *  Typed `Record<string, object>` rather than `Record<string, JsonSchema>`
+     *  deliberately: an imported `.json` schema widens `"type"` to `string`, and an
+     *  authored one carries `$schema`/`title`/`description`/`additionalProperties`,
+     *  so the tighter type would reject both of the normal ways to supply one. */
+    cardSchemas?: Record<string, object>;
   };
 
 interface Events {
@@ -59,7 +74,7 @@ defineWebComponent<Props, Events>('kai-chat', {
   codeTheme: 'github-dark-dimmed', codeHighlight: true, chatTitle: undefined,
   models: undefined, currentModel: undefined, context: undefined, scrollButton: true,
   search: false, voice: false, triggers: undefined, kindIcons: undefined,
-  actionsReveal: 'always', cardTypes: undefined,
+  actionsReveal: 'always', cardTypes: undefined, cardSchemas: undefined,
 }, (props, { dispatch, flag, element, expose }) => {
   // `messages` is an untyped boundary: a consumer can hand it anything at
   // runtime (a pre-0.20.0 `{ id, role, content }` array, in particular). Skip
@@ -108,6 +123,7 @@ defineWebComponent<Props, Events>('kai-chat', {
     kindIcons={props.kindIcons as Record<string, string> | undefined}
     actionsReveal={props.actionsReveal as 'always' | 'hover'}
     cardTypes={cardComponentsFromTags(props.cardTypes as Record<string, string> | undefined, (props as { theme?: string }).theme)}
+    cardSchemas={props.cardSchemas as Record<string, object> | undefined}
     onValueChange={(value) => dispatch('kai-value-change', { value })}
     onSubmit={(detail) => dispatch('kai-submit', detail)}
     onAttachmentsChange={(attachments) => dispatch('kai-attachments-change', { attachments })}

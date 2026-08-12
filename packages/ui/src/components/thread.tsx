@@ -8,6 +8,7 @@ import { Loader } from './loader';
 import type { ChatMessage } from '../elements/chat-types';
 import type { ProseSize } from '../primitives/chat-config';
 import type { CardComponentMap } from '../primitives/card-registry';
+import type { CardSchemaMap } from './card-renderer';
 
 /** Imperative handle exposed via `controllerRef` — the thread's scroll control,
  *  forwarded onto `<kai-thread>` as the `scrollToBottom()` instance method. */
@@ -26,6 +27,13 @@ export interface ThreadProps {
   /** Add/override card type -> component entries, forwarded to `CardRenderer`
    *  for `card` parts. */
   cardTypes?: CardComponentMap;
+  /** JSON Schemas for the card types this app renders, keyed by envelope type,
+   *  forwarded to `CardRenderer` for `card` parts. The companion of `cardTypes`:
+   *  that says what DRAWS a card, this says what a VALID one looks like.
+   *  `createCardRegistry(...).validationSchemas` is exactly this shape. Without it
+   *  the kit checks its own seven built-ins and leaves your own card type
+   *  unvalidated. A schema here WINS over a built-in of the same name. */
+  cardSchemas?: CardSchemaMap;
   /** Show a typing indicator on the pending assistant turn — use while awaiting
    *  the assistant's reply. */
   loading?: boolean;
@@ -137,6 +145,7 @@ export function Thread(props: ThreadProps) {
                       <MessageBody
                         parts={m().parts}
                         cardTypes={props.cardTypes}
+                        cardSchemas={props.cardSchemas}
                         isUser={m().role === 'user'}
                         markdown={m().role === 'assistant'}
                         actions={m().actions}

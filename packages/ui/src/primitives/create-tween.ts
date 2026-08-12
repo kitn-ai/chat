@@ -50,8 +50,22 @@ function cubicBezier(x1: number, y1: number, x2: number, y2: number): (t: number
 
 // Matches motion's named curves so the visualizers feel like their LiveKit
 // counterparts rather than a plausible-looking approximation.
+//
+// Every easing here is TOTAL: it clamps `t` into [0, 1] itself rather than
+// trusting its caller. `cubicBezier` already did (its Newton solve needs `t`
+// in range to converge); `linear` was the bare identity and passed anything
+// straight through. `step()` below clamps the top but not the bottom, so a
+// frame timestamp EARLIER than the origin `to()` captured yields a negative
+// `t` and, through an unclamped easing, a tween that runs backwards.
+//
+// That timestamp cannot occur in a browser -- requestAnimationFrame's
+// timestamp and `performance.now()` share a time origin per spec -- so this is
+// robustness, not a live bug. It does occur under vitest + jsdom, where the
+// two do not share an origin. The clamp lives in the easings rather than at
+// the `step()` call site so the tests can drive a negative `t` through each
+// curve individually and prove which ones guard.
 const EASINGS = {
-  linear: (t: number) => t,
+  linear: (t: number) => Math.min(1, Math.max(0, t)),
   easeIn: cubicBezier(0.42, 0, 1, 1),
   easeOut: cubicBezier(0, 0, 0.58, 1),
   easeInOut: cubicBezier(0.42, 0, 0.58, 1),
@@ -63,8 +77,15 @@ const EASINGS = {
  * `bounce` maps to the damping ratio: 0 is critically damped (no overshoot),
  * higher values overshoot more. Matches the feel of motion's spring defaults
  * closely enough for shader uniforms, without the dependency.
+ *
+ * `t` is clamped at 0 for the same reason the named easings are (see EASINGS),
+ * and the failure here is far louder than theirs: the decay term is
+ * `Math.exp(-zeta * omega * t)`, so a negative `t` makes it GROW rather than
+ * decay. At t = -0.25 with bounce 0.4 this returned ~5.9 instead of something
+ * in [0, ~1.3]. No top clamp: overshooting past 1 is what a spring is for.
  */
 function spring(t: number, bounce: number): number {
+  t = Math.max(0, t);
   const zeta = Math.max(0.05, 1 - Math.min(0.95, bounce));
   const omega = 10;
   const damped = omega * Math.sqrt(Math.max(0, 1 - zeta * zeta));

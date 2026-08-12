@@ -19,6 +19,8 @@ export { toOpenAIMessages, toAnthropicMessages, WireEncodeError } from './encode
 export type {
   AnthropicContentBlock,
   AnthropicWireMessage,
+  OpenAIEncodeOptions,
+  OpenAIReasoningDetail,
   OpenAIToolCall,
   OpenAIWireMessage,
 } from './encode';

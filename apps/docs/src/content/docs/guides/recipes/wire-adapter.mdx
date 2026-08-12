@@ -212,11 +212,46 @@ While the arguments stream, `ToolPart.rawInput` carries the partial JSON, so `<k
 
 ## Extended thinking round-trips
 
-A reasoning part carries the provider's own block on `part.raw`. `toAnthropicMessages` echoes that payload verbatim.
+On the Anthropic wire a reasoning part carries the provider's own block on `part.raw`, and `toAnthropicMessages` echoes that payload verbatim.
 
 This is not a nicety. Anthropic returns 400 if a `thinking` block in the most recent assistant message is modified, reordered, filtered or reconstructed, so an encoder cannot rebuild one from `text` plus `signature`. A reasoning part with no `raw` throws a `WireEncodeError` at encode time, naming the message and the part index, rather than sending a request that fails at the provider.
 
 The practical consequence is in your persistence layer: strip `raw` when you save a message and the next turn will not encode. Keep it.
+
+## Sending reasoning back on the OpenAI wire
+
+That wire does have a choice, so it is an option rather than a rule:
+
+```ts
+import { toOpenAIMessages } from '@kitn.ai/ui/wire';
+
+const res = await fetch('/api/chat', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    messages: toOpenAIMessages(thread, { reasoning: 'include' }),
+    tools: myTools,
+  }),
+});
+```
+
+The default is `'omit'`, which is what every single-argument call already does, and the default is a measurement rather than caution: omitting is accepted by every configuration tested, while including reasoning cost about 25% more prompt tokens per round (665 to 834 on a two-round loop). Raising every consumer's bill is not something a library gets to do as a side effect.
+
+Reach for `'include'` in a multi-round tool loop with a reasoning model. That is the case it pays for: the model's own prior reasoning travels back with the tool results, so it continues from where it left off instead of re-deriving.
+
+What goes on the wire, per part:
+
+| The block | What is sent |
+|---|---|
+| Signed | Reassembled from `part.text` plus `part.signature` |
+| Encrypted | Sent by reference, whole |
+| Neither | Skipped |
+
+Signed blocks are **reassembled, not echoed**. Of 85 reasoning frames in a streamed turn only the final one carries the signature, and that frame has no text, so `part.raw` after a stream is a textless fragment. Echoing it the way the Anthropic encoder does would send a block with no reasoning in it.
+
+The encoder emits a block only when the provider can verify it, and verifiability is a property of the model configuration rather than of individual blocks: one model signs every block, another signs none. So the skip never drops one block out of a run of comparable ones, and against a model that does not sign its reasoning the option is inert. That is a limitation to know about, not a bug to file.
+
+Entries land as `reasoning_details` on the assistant message that owns them, in part order, including the split at a tool boundary: a block that follows a tool call rides on the message after the result, exactly where `toAnthropicMessages` puts one. `OpenAIEncodeOptions` and `OpenAIReasoningDetail` are exported if you need the types.
 
 ## Errors
 

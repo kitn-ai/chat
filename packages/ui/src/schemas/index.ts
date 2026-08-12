@@ -22,17 +22,33 @@
 //
 // SERVER-SAFE, DELIBERATELY
 // -------------------------
-// No DOM, no Solid, no `fetch`. The only import is a TYPE, which erases. This entry
-// is meant to be imported by a backend route that hands tool definitions to a model,
-// so anything that touches a browser global would defeat its purpose. `verify:ssr`
-// asserts it, by importing it under the `node` condition.
+// No DOM, no Solid, no `fetch`. Everything reached from here is data or plain
+// functions; the imports that touch the component layer (`CardComponentMap`,
+// `CardTagMap`, used by ./registry) are TYPE imports and erase. This entry is meant to
+// be imported by a backend route that hands tool definitions to a model, so anything
+// that touches a browser global would defeat its purpose. `verify:ssr` asserts it, by
+// importing the BUILT entry under the `node` condition in its own child process.
 //
 // WHAT IT COSTS, AND WHERE
 // ------------------------
-// The built bundle inlines all 11 documents as authored, descriptions included:
-// dist/schemas.js is 18,160 B minified, 5,800 B gzip (measured, 0.20.1).
+// dist/schemas.js, measured on this tree, not recalled:
 //
-// That number is a SERVER cost and does not touch a client bundle. Nothing in the
+//   42,658 B min / 11,762 B gzip   before ./registry landed
+//   53,656 B min / 14,667 B gzip   now  (+10,998 B / +2,905 B gzip)
+//
+// The `18,160 B / 5,800 B` this comment used to claim was measured at 0.20.1, before
+// tool-defs and provider-subsets were added to the barrel, and had been stale ever
+// since. Corrected here rather than left, because a size claim nobody re-measures is
+// the same class of thing as a guard nobody watches fail.
+//
+// The delta is ./registry plus what it pulls: primitives/card-validate.ts (the
+// validator) and primitives/card-validate-schemas.ts (the LEAN projection). That last
+// one means the seven card schemas appear TWICE in this bundle, authored and lean.
+// Deliberate, and the alternative is worse: validating built-ins against the authored
+// documents here while the browser validates them against the projection would be two
+// behaviours wearing one name. One function, one answer, 4 KB.
+//
+// All of it is a SERVER cost and does not touch a client bundle. Nothing in the
 // component tree imports this entry, so no consumer pays it unless a route or a
 // build script imports it on purpose. If you are here comparing it against the
 // ~1 KB gzip figure in the emit-contract plan, those are different things: that one
@@ -178,6 +194,24 @@ export type {
   ToolProvider,
   UnsupportedCardTool,
 } from './tool-defs';
+
+// The registry: "these are the card types THIS app renders", written once and threaded
+// to both ends (`chat.cardTypes = cards.tags` on the client, `cardTools(cards, …)` on
+// the route). It is what turns the `cardTypes` seam from something a developer CAN use
+// into the path they normally take, which is the only thing that stops it rotting again
+// the way it did when the conformance spike's `spike-artifact` workaround was deleted.
+//
+// `registry.ts` imports `cardSchemas` back out of this module, the same deliberate
+// cycle `tool-defs` has and for the same reason; the read happens inside
+// `createCardRegistry`, never at module init.
+export { createCardRegistry } from './registry';
+export type { CardRegistry, CardRegistrySpec, CustomCardSpec, IncompletePolicy } from './registry';
+
+// Re-exported so a route can check a custom card's data server-side, in the tool loop,
+// with the same tiering the browser dispatchers use, rather than a second validator.
+// `registry.validate()` is the ergonomic form; this is the same function underneath.
+export { cardValidationMessage, validateCardData } from '../primitives/card-validate-cards';
+export type { CardValidationIssue, CardValidationReport, CardValidationTier } from '../primitives/card-validate-cards';
 
 // The two provider subsets, exported rather than kept private, because a developer
 // registering a CUSTOM card schema in Phase 2 needs the same check we run on ours,

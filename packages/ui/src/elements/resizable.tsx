@@ -410,7 +410,9 @@ defineWebComponent<GroupProps, GroupEvents>('kai-resizable', {
 
     // --- Task 3: imperative host methods + declarative maximizedIndex prop ---
 
-    // Imperative host API (assigned onto the element; typed by resizable.d.ts).
+    // Imperative host API (assigned onto the element). resizable.globals.d.ts
+    // means to type this, but its declaration loses to the generated one in
+    // element-types.d.ts — see the header there. Hence the cast below.
     const host = element as unknown as { maximize(i: number): void; restore(): void };
     host.maximize = (i: number) => {
       const it = items()[i]?.el;

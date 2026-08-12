@@ -68,6 +68,60 @@ jobs:
       - name: Consumer packaging guard (registrations survive a real bundler)
         run: pnpm --filter @kitn.ai/ui run verify:consumer
 
+      # Packs the tarball and weighs what a consumer actually downloads. `files`
+      # ships the whole of `src/` on purpose -- consumers read source, and source
+      # maps point into it -- and that blanket include is how 300 KB of generated
+      # JSON (src/components/component-meta.json) rode along to every consumer for
+      # months: nothing imported it, the `exports` map could not even reach it, and
+      # no check looked at what gets PACKED rather than at what gets built.
+      #
+      # Two rules, deliberately different in kind. PRECISE: every packed file
+      # outside dist/ over 64 KiB must be allowlisted with a written reason, so a
+      # new large artifact under src/ becomes a reviewable act instead of an
+      # accident, and the failure names the offender. CRUDE: total unpacked size
+      # under a ceiling -- it names nothing, but it is the only backstop for the
+      # growth rule 1 cannot see, namely many small files or bloat INSIDE dist/,
+      # whose content-hashed chunk names would make an exact allowlist go red on
+      # every rebuild and get bumped reflexively.
+      #
+      # Must come after the build, and hard-fails without dist/ rather than
+      # skipping: absent dist/ the tarball is a fraction of its real size and BOTH
+      # rules would pass vacuously. Currently 818 files / 10.84 MiB against a
+      # 12.5 MiB ceiling. ~1.4s, no network.
+      - name: Pack weight guard (no dead weight ships to consumers)
+        run: pnpm --filter @kitn.ai/ui run verify:pack
+
+      # Walks every emitted .d.ts under dist/ and asserts each relative specifier
+      # resolves to actual DECLARATIONS under BOTH `bundler` and `nodenext`,
+      # delegated to tsc's own resolver -- a guard that re-implements module
+      # resolution is a guard that disagrees with tsc.
+      #
+      # It already ran via `postbuild`, so why a step of its own -- and the honest
+      # answer is narrower than "the cache would skip it". The build target is
+      # cached (`cache: true`, outputs dist/ + storybook-static), and on a cache
+      # HIT nx restores dist/ without running the npm lifecycle, so postbuild does
+      # not run and this would not run with it. But this guard reads ONLY dist/,
+      # so a restored dist/ is byte-identical to one this already passed against
+      # when the entry was written: skipping it there is redundant, not unsound.
+      # And on CI the question is moot today -- no nx cache is persisted between
+      # runs at all (`cache: pnpm` caches the pnpm store, not .nx/cache), so the
+      # build always runs cold and the lifecycle always fires.
+      #
+      # What a standalone step buys is therefore legibility and independence, not
+      # a caught bug. Legibility: a failure lands on a step named for the guard
+      # instead of ~430 lines into build output, where the build's own exit code
+      # is the only signal. Independence: it stops being contingent on the
+      # caching MODEL staying sound -- an `outputs` list that goes stale (a new
+      # emitted directory not declared there) restores a PARTIAL dist/ that
+      # nothing re-checks, and the lifecycle never runs to notice.
+      #
+      # Watched failing rather than assumed to fail: pointing a specifier in
+      # dist/wire/index.d.ts at a file that does not exist turns this red naming
+      # the file and the specifier (TS2307). Needs the build above. ~0.5s, no
+      # network.
+      - name: Declaration boundary guard (every emitted .d.ts specifier resolves)
+        run: pnpm --filter @kitn.ai/ui run verify:dts
+
       # Packs the build, installs it into a throwaway app, and type-checks our
       # SHIPPED .d.ts with a real tsc under BOTH `bundler` and `nodenext`, in both
       # directions: a wrong assignment per public entry MUST error, and correct
@@ -152,6 +206,32 @@ jobs:
       # build above. <1s, no network.
       - name: Tool-definition guard (card schemas project to definitions a provider accepts)
         run: pnpm --filter @kitn.ai/ui run verify:tool-schemas
+
+      # Coverage guard over the CLIENT-side card validator. Every keyword, at every
+      # keyword position, in every card schema must land in exactly one of three
+      # tables: ENFORCED, STRIPPED (annotation/meta, so dropping it is lossless), or
+      # NOT_ENFORCED (a real constraint this validator does not implement, named
+      # with a written reason). Anything else is a hard failure naming the keyword,
+      # the file and the path.
+      #
+      # The hazard is a keyword sitting in a schema LOOKING like it constrains the
+      # model's output while constraining nothing: the kit then claims to validate
+      # something it does not, and a malformed card renders anyway. A silent skip
+      # list would defeat the whole point, which is why the unenforced set must be
+      # written down and justified rather than inferred.
+      #
+      # The ENFORCED set is read out of the BODY of validateAgainstSchema, not out
+      # of the JsonSchema interface, because the interface is a declaration and
+      # drifts in the one direction that matters -- adding `multipleOf?: number` to
+      # it without adding a check to walk() would make a list-based guard call that
+      # keyword enforced while nothing enforced it.
+      #
+      # Same script as the `build:card-validation` generator, run with --check: it
+      # writes nothing and fails on drift, so the checked-in lean projection cannot
+      # silently diverge from the authored schemas. Source-level -- needs neither
+      # the build nor network. ~0.3s.
+      - name: Card-validation coverage guard (no keyword validates nothing)
+        run: pnpm --filter @kitn.ai/ui run verify:card-validation
 
       # Diffs the 79-element registry against the public SolidJS surface, derived
       # from the TS checker and cross-checked against the BUILT entry's runtime
