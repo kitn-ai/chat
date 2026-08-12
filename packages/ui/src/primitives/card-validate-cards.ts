@@ -33,6 +33,28 @@
 // out of bounds renders the card and reports (soft). Both emit `{ kind: 'error' }`,
 // because the developer needs to hear about both; only one changes what the user sees.
 //
+// THE SOFT TIER IS ON BY EVIDENCE, NOT BY CONFIDENCE
+// --------------------------------------------------
+// The plan (2026-08-11-emit-contract.md §9 risk 4) said validation is net-negative if
+// it fires on cards that render fine today, and set the bar at ZERO before the soft
+// tier could default on. That was measured, not assumed:
+// docs/superpowers/specs/2026-08-12-soft-tier-corpus.md.
+//
+// 35 card envelopes recorded from five model configurations across both wires, six
+// card types. ZERO trip the soft tier; zero trip the hard tier. The check was proven
+// live on that same path by seven negative controls (real envelopes mutated into each
+// tier's named failure, each required to trip), and a fifth of the envelopes were
+// confirmed by replaying them through the real app and reading them back off
+// `<kai-thread>.messages`. Margins were wide, not marginal: the worst `link.title`
+// observed was 21 characters against a 300 limit.
+//
+// What that corpus does NOT cover, so it is not claimed: the structured-output path
+// (model-authored envelope JSON, which nothing clamps), live `artifact` cards, and
+// the soft constraints the spike's own tool projection clamps before they can be hit
+// (`tone`/`provider` enums, the generated `id` fields, every `minItems`). If the soft
+// tier ever does turn out to be noisy, that is where to look first, and the fix is the
+// projection rather than the tier.
+//
 // WHAT IS ACTUALLY CHECKED
 // ------------------------
 // The keyword coverage is `validateAgainstSchema`'s, which is a lean subset: `type`,
