@@ -51,6 +51,54 @@ jobs:
       - name: Model-spend guard (no workflow can reach a live model)
         run: node .github/scripts/spike-ci-guard.mjs audit
 
+      # examples/starters/tanstack-start is deliberately NOT a pnpm workspace
+      # member (see pnpm-workspace.yaml): it carries `.npmrc` with
+      # install-links=true so it reproduces a real npm-install consumer path,
+      # which is the entire reason the starter exists. The cost of that is that
+      # it has no nx `test` target and packages/ui's vitest root cannot see it,
+      # so its 43-test static-file-server suite -- the one that pins the
+      # path-traversal guard in serve.mjs, including the block proving the suite
+      # can fail -- ran in NO CI at all. A test nobody runs is not a test.
+      #
+      # It goes HERE, in the required job, ahead of `pnpm install`, because it
+      # needs neither an install nor a build: node's built-in runner, its own
+      # synthesised fixture tree, no dependencies. ~2s, and a break fails the run
+      # before 20 minutes of build have been spent. This is REQUIRED signal --
+      # `test` is the context branch protection requires -- not advisory.
+      #
+      # node's own exit code is this step's exit code: no pipe, no `tail`, no
+      # wrapper shell that could swallow it.
+      - name: TanStack Start static-server guard (path traversal, no install needed)
+        working-directory: examples/starters/tanstack-start
+        run: node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=tap --test-reporter-destination="$RUNNER_TEMP/tanstack-traversal.tap"
+
+      # The step above cannot be trusted on its exit code alone. MEASURED on node
+      # 22.22: `node --test` in a directory it matches no files in prints
+      # "# tests 0" and exits 0 -- "zero tests found" and "all 43 passed" are the
+      # same outcome. So a wrong working-directory, a renamed suite, or a change
+      # to node's discovery glob would turn this into a green step covering
+      # nothing, which is the precise failure mode the suite was written against.
+      #
+      # Hence the second TAP reporter above, written to a file, and this: the run
+      # must REPORT a non-zero test count. An empty run fails here, loudly,
+      # naming what it saw.
+      - name: Traversal guard ran a non-empty suite (0 tests must not read as green)
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const tap = process.env.RUNNER_TEMP + "/tanstack-traversal.tap";
+            const m = /^# tests (\d+)$/m.exec(fs.readFileSync(tap, "utf8"));
+            if (!m) {
+              console.error(`no "# tests" line in ${tap}: the run above emitted no TAP plan at all`);
+              process.exit(1);
+            }
+            if (Number(m[1]) < 1) {
+              console.error(`the traversal suite reported ${m[1]} tests. It exited 0 because node --test treats "matched no files" as success -- check the working-directory and the suite filename.`);
+              process.exit(1);
+            }
+            console.log(`traversal suite reported ${m[1]} tests`);
+          '
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
