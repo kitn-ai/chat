@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-// @ts-expect-error - plain .mjs build script, no type declarations
+// Typed by inference from the .mjs itself — tsconfig.tests.json sets allowJs, so
+// these three arrive with real signatures rather than as `any`. This line carried a
+// `@ts-expect-error` for "plain .mjs build script, no type declarations" until
+// 2026-08-12; with allowJs the directive suppresses nothing and TS2578s.
 import { describeAttempt, readReport, stderrHead } from '../../scripts/run-storybook-tests.mjs';
 
 /**

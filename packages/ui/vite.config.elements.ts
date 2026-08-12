@@ -15,7 +15,11 @@ import solidPlugin from 'vite-plugin-solid';
 import { resolve } from 'node:path';
 import { readFileSync, existsSync } from 'node:fs';
 import { transform } from 'esbuild';
-import type { Plugin, OutputBundle, OutputChunk } from 'vite';
+// Via vite's `Rollup` namespace re-export — see the note in vite.config.ts; the
+// named form is TS2459 and leaves `chunk` unknown.
+import type { Plugin, Rollup } from 'vite';
+type OutputBundle = Rollup.OutputBundle;
+type OutputChunk = Rollup.OutputChunk;
 
 function libMinifyPlugin(): Plugin {
   return {
