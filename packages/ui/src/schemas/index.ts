@@ -142,3 +142,46 @@ export function isCardSchemaName(name: string): name is CardSchemaName {
 // they hand to the kit's validator without a second import.
 export type { JsonSchema, ValidationResult } from '../primitives/card-validate';
 export type { CardEnvelope } from '../primitives/card-contract';
+
+// The loop, both directions.
+//
+// `cardTools` projects a card schema INTO a provider tool definition;
+// `cardFromToolCall` turns the model's call back into a renderable envelope. They
+// are the two halves of one contract and the tool-name convention that joins them
+// lives in ./from-tool-call, spelled once. Exporting `from-tool-call` here is not
+// bookkeeping: `verify:schemas` and `verify:ssr` both read the BUILT entry, so a
+// module missing from this barrel is a module no guard covers.
+export { cardFromToolCall, isCardTool, cardTypeFromToolName, toolNameForCardType, KAI_TOOL_PREFIX } from './from-tool-call';
+
+// `tool-defs` imports `cardSchemas` back out of this module so that
+// `cardTools({ provider })` can default to the built-ins. That cycle is deliberate
+// and safe (the read happens inside a function, never at module init); the comment
+// on `builtInSchemas()` over there explains why, and why it must not be hoisted.
+export {
+  CARD_TOOL_DESCRIPTIONS,
+  UnsupportedCardToolSchemaError,
+  cardTools,
+  toAnthropicTools,
+  toJsonSchemaTools,
+  toOpenAITools,
+} from './tool-defs';
+export type {
+  AnthropicToolDef,
+  CardToolInput,
+  CardToolOptions,
+  CardToolSource,
+  JsonSchemaToolDef,
+  OpenAIToolDef,
+  ToolDef,
+  ToolDefFor,
+  ToolParameters,
+  ToolProvider,
+  UnsupportedCardTool,
+} from './tool-defs';
+
+// The two provider subsets, exported rather than kept private, because a developer
+// registering a CUSTOM card schema in Phase 2 needs the same check we run on ours,
+// and because `verify:tool-schemas` reads them out of the BUILT entry rather than
+// re-deriving them (a guard with its own copy of the table proves nothing).
+export { ANTHROPIC_STRICT, OPENAI_STRICT, checkProviderSubset, providerSubsets } from './provider-subsets';
+export type { KeywordRule, KeywordStatus, ProviderSubset, StrictProviderId, SubsetViolation } from './provider-subsets';
