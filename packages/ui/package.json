@@ -153,6 +153,7 @@
     "verify:dts:consumer": "node scripts/verify-dts-consumer.mjs",
     "verify:generated": "node scripts/verify-generated-sync.mjs",
     "verify:scaffold": "node scripts/verify-scaffold-compiles.mjs",
+    "verify:schemas": "node scripts/verify-schemas-exported.mjs",
     "verify:solid-coverage": "node scripts/verify-solid-coverage.mjs",
     "verify:ssr": "node scripts/verify-ssr-imports.mjs",
     "test": "vitest run",
