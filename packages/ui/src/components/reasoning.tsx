@@ -12,6 +12,12 @@ interface ReasoningContextValue {
    *  content's `id` — the same wiring `Collapsible` uses, so a screen reader can
    *  name the panel this disclosure toggles. */
   contentId: string;
+  /** ReasoningTrigger registers its button here on mount; the content reads it
+   *  when a panel holding focus collapses, so focus has somewhere to land. */
+  registerTrigger: (el: HTMLElement | undefined) => void;
+  /** The registered trigger. Deliberately a plain getter over a mutable
+   *  variable, NOT a signal — registration must not re-run the content effect. */
+  trigger: () => HTMLElement | undefined;
 }
 
 /** Imperative open controller, handed to a parent (the kai-reasoning facade) via
@@ -84,8 +90,22 @@ function Reasoning(props: ReasoningProps) {
 
   const contentId = createUniqueId();
 
+  // The trigger element, for the focus hand-off in ReasoningContent. Read once,
+  // at the moment a panel collapses — a signal would only add a spurious
+  // dependency to the content effect when the trigger mounts.
+  let triggerEl: HTMLElement | undefined;
+
   return (
-    <ReasoningContext.Provider value={{ isOpen, onOpenChange: handleOpenChange, disabled, contentId }}>
+    <ReasoningContext.Provider
+      value={{
+        isOpen,
+        onOpenChange: handleOpenChange,
+        disabled,
+        contentId,
+        registerTrigger: (el) => { triggerEl = el; },
+        trigger: () => triggerEl,
+      }}
+    >
       <div class={local.class}>{local.children}</div>
     </ReasoningContext.Provider>
   );
@@ -98,8 +118,11 @@ export interface ReasoningTriggerProps extends JSX.ButtonHTMLAttributes<HTMLButt
 }
 
 function ReasoningTrigger(props: ReasoningTriggerProps) {
-  const [local, rest] = splitProps(props, ['children', 'class']);
-  const { isOpen, onOpenChange, disabled, contentId } = useReasoningContext();
+  // `ref` is split out rather than left in `rest`: the trigger takes its own ref
+  // to register as the panel's focus-return target, and a spread `ref` would
+  // silently replace it. The consumer's ref is forwarded below instead.
+  const [local, rest] = splitProps(props, ['children', 'class', 'ref']);
+  const { isOpen, onOpenChange, disabled, contentId, registerTrigger } = useReasoningContext();
 
   return (
     // The same disclosure contract as CollapsibleTrigger: an explicit
@@ -109,6 +132,12 @@ function ReasoningTrigger(props: ReasoningTriggerProps) {
     // handles styling and tests hang off. `{...rest}` stays LAST so a consumer
     // can still override any of them.
     <button
+      ref={(el) => {
+        registerTrigger(el);
+        // Solid hands a component's `ref` down as a callback; tolerate a raw
+        // element for the hand-written case.
+        if (typeof local.ref === 'function') (local.ref as (el: HTMLButtonElement) => void)(el);
+      }}
       type="button"
       class={cn('flex cursor-pointer items-center gap-2 text-meta', local.class)}
       disabled={disabled() || undefined}
@@ -143,10 +172,28 @@ export interface ReasoningContentProps extends JSX.HTMLAttributes<HTMLDivElement
 
 function ReasoningContent(props: ReasoningContentProps) {
   const [local, rest] = splitProps(props, ['children', 'class', 'contentClass', 'markdown']);
-  const { isOpen, contentId } = useReasoningContext();
+  const { isOpen, contentId, trigger } = useReasoningContext();
 
   let contentRef: HTMLDivElement | undefined;
   let innerRef: HTMLDivElement | undefined;
+
+  /** Hand focus back to the trigger when the panel about to go inert is holding
+   *  it. Chromium keeps `activeElement` on the now-inert node for the rest of
+   *  the task and then resets the document's focus to `<body>` — so without this
+   *  a user who was inside the panel loses the focus ring entirely and their
+   *  next Tab restarts from the top. `Collapsible` has exactly this gap: it sets
+   *  `bool:inert` and never looks at where focus was. Runs BEFORE the attribute
+   *  lands, so the move is ours rather than the browser's fallback. */
+  const releaseFocus = () => {
+    if (!contentRef) return;
+    // getRootNode(), not `document`: inside the <kai-reasoning> shadow root
+    // document.activeElement only ever resolves to the HOST element.
+    const root = contentRef.getRootNode() as Document | ShadowRoot;
+    const active = root.activeElement;
+    // A disabled trigger cannot take focus; the browser then falls back to
+    // <body>, which is no worse than not trying.
+    if (active && contentRef.contains(active)) trigger()?.focus();
+  };
 
   createEffect(() => {
     if (!contentRef || !innerRef) return;
@@ -159,8 +206,22 @@ function ReasoningContent(props: ReasoningContentProps) {
 
     if (isOpen()) {
       contentRef.style.maxHeight = `${innerRef.scrollHeight}px`;
+      // Dropped in the same tick as the open, NOT on transitionend: the panel is
+      // interactive from the first frame, so an inert outliving the animation can
+      // never swallow the first click or Tab into it.
+      contentRef.removeAttribute('inert');
     } else {
       contentRef.style.maxHeight = '0px';
+      releaseFocus();
+      // Applied in the same tick as the collapse, again NOT on transitionend:
+      // `inert` has no visual effect of its own, so the 150ms max-height
+      // transition still runs to completion underneath it (verified in Chromium:
+      // transitionend fires and the final computed max-height is reached), while
+      // the a11y tree matches the collapsed intent immediately instead of 150ms
+      // late. setAttribute rather than the `inert` IDL property because Solid
+      // routes `inert` through Properties (el.inert = …), which jsdom does not
+      // reflect back to an attribute — the same reason Collapsible uses `bool:`.
+      contentRef.setAttribute('inert', '');
     }
 
     onCleanup(dispose);
@@ -169,10 +230,10 @@ function ReasoningContent(props: ReasoningContentProps) {
   return (
     // `id` matches the trigger's `aria-controls`; `data-state` gives styling and
     // tests an attribute handle on the panel instead of forcing them to read the
-    // animated `max-height`. Deliberately NOT `inert` while collapsed (unlike
-    // CollapsibleContent): this panel animates its own max-height through the
-    // effect above, and changing focusability is a behaviour change, not a11y
-    // wiring. `{...rest}` stays LAST so a consumer can still override.
+    // animated `max-height`. `inert` while collapsed (as CollapsibleContent does)
+    // is owned by the effect above, not bound here — it has to be sequenced
+    // against the focus hand-off, and a second reactive owner would race it.
+    // `{...rest}` stays LAST so a consumer can still override.
     <div
       ref={contentRef}
       id={contentId}

@@ -51,6 +51,24 @@ describe('WaveVisualizer: onError reaches onUnavailable', () => {
 });
 
 describe('WaveVisualizer: state -> uniform mapping', () => {
+  // Two tests below need animation frames to actually elapse. They used to get
+  // them from jsdom's real requestAnimationFrame plus a fixed wall-clock
+  // `setTimeout` wait, which made them flaky under full-suite load: jsdom's
+  // frame timestamp runs a constant offset BEHIND `performance.now()` (they
+  // share an origin only in a real browser), and that offset is however old
+  // the worker process was when this file's jsdom window was built -- ~475ms
+  // for a fresh worker, 900-1500ms for a file scheduled late into a reused
+  // one. `createTween` measures elapsed time as `rafTimestamp -
+  // performance.now()`, so it burns that entire offset going BACKWARDS before
+  // any real progress starts, and a fixed 1500ms wait stops covering it once
+  // the machine is busy. See create-tween.test.ts for the measured numbers.
+  //
+  // The fake clock drives requestAnimationFrame and performance.now() off one
+  // shared fake `now`, so there is no offset and no wall-clock dependency.
+  // The synchronous tests in this block are unaffected: nothing advances the
+  // clock for them, exactly as no real frame had fired for them before.
+  const { advance } = installFakeClock();
+
   type CapturedProps = {
     fragment: string;
     precision?: string;
@@ -240,36 +258,39 @@ describe('WaveVisualizer: state -> uniform mapping', () => {
   // amplitude's own step() kept re-triggering the effect.
   //
   // This test asserts the state this component is SUPPOSED to reach after
-  // real animation frames elapse -- the coordinator's specific ask, and a
-  // gap the earlier synchronous assertions in this file genuinely cannot
-  // see (they check the props object at the instant of mount, before any
+  // animation frames elapse -- the coordinator's specific ask, and a gap the
+  // earlier synchronous assertions in this file genuinely cannot see (they
+  // check the props object at the instant of mount, before any
   // requestAnimationFrame has fired, which reads identically whether
-  // frequency merely "hasn't started yet" or "can never start"). It does
-  // NOT use the shared `installFakeClock` stub, which holds a single
-  // pending callback and so cannot represent two independently scheduled
-  // tweens at all -- see that stub's own doc. But be honest about what it
-  // proves: checked empirically (revert create-tween.ts's fix, keep this
-  // test, rerun), this test still PASSED against the pre-fix code. jsdom's
-  // requestAnimationFrame does not batch one frame's callbacks the way a
-  // real browser does -- confirmed separately: registering two callbacks
-  // where the first cancels the second lets the second complete anyway,
-  // because jsdom does not process them as one atomic batch. The exact
-  // browser race (one callback's synchronous side effect cancelling an
-  // already-queued sibling before it gets its turn) genuinely cannot be
-  // reproduced in jsdom. This test is real coverage of the CORRECT
-  // behavior and would catch a plain regression to the old code, but the
-  // create-tween.test.ts tests are the ones that actually discriminate the
-  // original defect.
-  it('frequency actually reaches a non-zero value over real animation frames while listening, not just amplitude', async () => {
+  // frequency merely "hasn't started yet" or "can never start"). It drives
+  // the shared `installFakeClock` stub, which holds a real per-registration
+  // queue and so fires both the amplitude and the frequency tween on every
+  // `advance()` -- the precondition this test needs. (It used to hold a
+  // single pending callback, which is why this test originally reached for
+  // real requestAnimationFrame instead; see that stub's own doc.)
+  //
+  // But be honest about what it proves: re-checked empirically after the
+  // move to the stub (revert create-tween.ts's `untrack`, keep this test,
+  // rerun) and this test still PASSES against the pre-fix code. Neither
+  // driver reproduces the original browser race, for the same reason:
+  // `advance()` SNAPSHOTS the pending callbacks before invoking any of them,
+  // so a callback that synchronously cancels an already-queued sibling
+  // cannot stop that sibling from running -- and jsdom, separately
+  // confirmed, does not process a frame's callbacks as one atomic batch
+  // either. The exact browser race (one callback's synchronous side effect
+  // cancelling an already-queued sibling before it gets its turn) genuinely
+  // cannot be reproduced in jsdom at all. This test is real coverage of the
+  // CORRECT behavior and would catch a plain regression to the old code, but
+  // the create-tween.test.ts tests are the ones that actually discriminate
+  // the original defect -- and on the fake clock they now discriminate it
+  // harder than they did on real requestAnimationFrame: both of them fail
+  // against the pre-fix code, where previously only the first did.
+  it('frequency actually reaches a non-zero value over animation frames while listening, not just amplitude', async () => {
     const c = await renderWave({ state: 'listening', frozen: false });
 
-    // jsdom's own requestAnimationFrame timestamp does not share an origin
-    // with performance.now() the way a real browser's does (confirmed
-    // empirically: the first callback can report a timestamp several
-    // hundred ms BEHIND performance.now()) -- so the wait here is generous
-    // enough to absorb that skew and still leave the tween's real 200ms
-    // duration room to complete, not a tight bound on the animation itself.
-    await new Promise((r) => setTimeout(r, 1500));
+    // 300ms of frames against a 200ms tween: enough to land it, with no
+    // wall-clock wait and no dependence on how busy the machine is.
+    for (let i = 0; i < 30; i++) advance(10);
 
     const t = waveTargets('listening');
     expect(c.uniforms.uAmplitude?.value).toBeCloseTo(t.amplitude, 2);
@@ -277,18 +298,18 @@ describe('WaveVisualizer: state -> uniform mapping', () => {
     expect(c.uniforms.uFrequency?.value).toBeGreaterThan(1);
   });
 
-  it('frequency tracks 20 + 60 * volume while speaking with a non-zero volume, and keeps tracking it after a real animation frame elapses', async () => {
+  it('frequency tracks 20 + 60 * volume while speaking with a non-zero volume, and keeps tracking it after animation frames elapse', async () => {
     const c = await renderWave({ state: 'speaking', volume: 0.6 });
 
     // The instant (duration: 0) live-volume write happens synchronously at
     // mount, so this much is already covered above without waiting -- but
-    // asserting it again AFTER real frames elapse proves the base-target
-    // effect's non-instant tween (which also fires for `speaking`, see
+    // asserting it again AFTER frames elapse proves the base-target effect's
+    // non-instant tween (which also fires for `speaking`, see
     // variant-wave.tsx) never clobbers the live-volume value once the
-    // requestAnimationFrame machinery actually starts running for real.
+    // requestAnimationFrame machinery actually starts running.
     expect(c.uniforms.uFrequency?.value).toBeCloseTo(20 + 60 * 0.6, 6);
 
-    await new Promise((r) => setTimeout(r, 300));
+    for (let i = 0; i < 30; i++) advance(10);
 
     expect(c.uniforms.uFrequency?.value).toBeCloseTo(20 + 60 * 0.6, 6);
     expect(c.uniforms.uAmplitude?.value).toBeCloseTo(0.015 + 0.4 * 0.6, 6);

@@ -263,13 +263,15 @@ export interface CardsProps extends WebComponentProps {
   types?: Record<string, string>;
   /** Optional CardPolicy handling child events. Property: `el.policy`. */
   policy?: { onSubmit?: (cardId: string, data: unknown) => void; onAction?: (cardId: string, action: string, payload?: unknown) => void; onSendPrompt?: (text: string, opts: { mode: "compose" | "send"; context?: unknown; }) => void; onOpen?: (url: string, target: "tab" | "artifact") => void; onState?: (cardId: string, patch: unknown) => void; onDismiss?: (cardId: string) => void; onReopen?: (cardId: string) => void; onError?: (cardId: string, message: string) => void; maxSendPromptMode?: "compose" | "send" };
+  /** Validate each envelope's `data` against the built-in schema for its type before rendering it. Default `true`; set `validate-cards="false"` (or `el.validateCards = false`) to opt out. A hard failure (wrong type, a missing required field) renders a diagnostic naming the field instead of the card; a soft failure (bounds) renders the card unchanged. Both emit a contract `error` event. On in production too: a model emitting a bad shape is a production failure mode, so stripping the check there would hide it from exactly the person who needs to see it. */
+  validateCards?: boolean;
   /** A child card transitioned to a resolved/deferred state (an action was chosen, a form/tasks submission landed, or it was dismissed) — re-emitted off the host as a non-bubbling convenience event so a consumer can observe resolution centrally without diffing the cards array. `detail` = `{ cardId, resolution }`. (A `reopen` un-resolves a card and has no `CardResolution`, so it does NOT fire this — observe reopen via the underlying bubbling `kai-card` event.) */
   onCardResolved?: (event: CustomEvent<{ cardId: string; resolution: { kind: "action"; action: string; payload?: unknown; at?: undefined | string } | { kind: "submit"; data: unknown; at?: undefined | string } | { kind: "dismissed"; at?: undefined | string } | { kind: "expired"; reason?: undefined | string; at?: undefined | string } }>) => void;
 }
 
 export const Cards = /*#__PURE__*/ createWebComponent<CardsProps>(
   'kai-cards',
-  ["theme","cards","types","policy"],
+  ["theme","cards","types","policy","validateCards"],
   { onCardResolved: 'kai-card-resolved' },
   () => import('@kitn.ai/ui/elements/cards'),
 );

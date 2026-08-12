@@ -4,12 +4,13 @@
 // `kai-card` events through an optional `policy`. The raw events keep bubbling past
 // <kai-cards> (composed) so document-level listeners still work. Unknown types render
 // the Solid CardFallback inline and emit a contract `error`.
-import { For, Show, createEffect, createSignal, on, onCleanup, onMount, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount, type JSX } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
 import { defineWebComponent } from './define';
 import type { CardEnvelope, CardEvent, CardPolicy, CardResolution } from '../primitives/card-contract';
 import { CARD_EVENT_NAME, emitCardEvent, routeCardEvent } from '../primitives/card-routing';
-import { mergeCardTags } from '../primitives/card-registry';
+import { BUILTIN_CARD_TAGS, mergeCardTags } from '../primitives/card-registry';
+import { cardValidationMessage, validateCardData, type CardValidationReport } from '../primitives/card-validate-cards';
 import { CardFallback } from '../components/card-fallback';
 // Register the built-in child card elements so that importing <kai-cards> is self-contained.
 import './form';
@@ -28,6 +29,15 @@ interface Props extends Record<string, unknown> {
   types?: Record<string, string>;
   /** Optional CardPolicy handling child events. Property: `el.policy`. */
   policy?: CardPolicy;
+  /** Validate each envelope's `data` against the built-in schema for its type before
+   *  rendering it. Default `true`; set `validate-cards="false"` (or `el.validateCards
+   *  = false`) to opt out. A hard failure (wrong type, a missing required field)
+   *  renders a diagnostic naming the field instead of the card; a soft failure
+   *  (bounds) renders the card unchanged. Both emit a contract `error` event.
+   *  On in production too: a model emitting a bad shape is a production failure
+   *  mode, so stripping the check there would hide it from exactly the person who
+   *  needs to see it. */
+  validateCards?: boolean;
 }
 
 /** Events fired by `<kai-cards>`. */
@@ -57,9 +67,35 @@ function resolutionFromEvent(e: CardEvent): CardResolution | undefined {
   }
 }
 
-/** A single resolved child: a known kai-* tag (props set imperatively) or the fallback. */
-function CardSlot(props: { envelope: CardEnvelope; tag?: string; theme: string; emit: (e: CardEvent) => void }): JSX.Element {
+/** A single resolved child: a known kai-* tag (props set imperatively), a diagnostic
+ *  for data that cannot render, or the unknown-type fallback. */
+function CardSlot(props: {
+  envelope: CardEnvelope;
+  tag?: string;
+  theme: string;
+  validate: boolean;
+  emit: (e: CardEvent) => void;
+}): JSX.Element {
   let ref: HTMLElement | undefined;
+
+  // MIRRORS src/remote/provider-runtime.ts:139-147, the same way
+  // components/card-renderer.tsx does. The remote (iframe) transport has validated
+  // every incoming envelope since the contract landed and this native one did not,
+  // so the same bad payload was caught in one transport and rendered silently in the
+  // other. Two tiers: `hard` (nothing to render) replaces the card with a diagnostic
+  // naming the field, `soft` (bounds) renders the card untouched. Both emit `error`.
+  //
+  // Only a BUILT-IN tag is validated: `types` lets a consumer point a built-in card
+  // type at their own element (`el.types = { confirm: 'my-confirm-el' }`), and our
+  // schema describes our element's data, not theirs. Same rule as
+  // components/card-renderer.tsx, which compares component identity instead.
+  const report = createMemo<CardValidationReport | null>(() =>
+    props.validate && props.tag === BUILTIN_CARD_TAGS[props.envelope.type]
+      ? validateCardData(props.envelope.type, props.envelope.data)
+      : null,
+  );
+  const invalid = () => report()?.tier === 'hard';
+
   // Set object/string props as DOM properties on the custom element (reactive).
   createEffect(() => {
     if (!ref) return;
@@ -79,19 +115,44 @@ function CardSlot(props: { envelope: CardEnvelope; tag?: string; theme: string; 
       props.emit({ kind: 'error', cardId: props.envelope.id, message: `Unsupported card type: ${props.envelope.type}` });
     }
   });
+  // One `error` per distinct problem, both tiers. Keyed on the message, not on
+  // mount: a consumer re-assigning `el.cards` per stream chunk hands this a new
+  // envelope object each time, so an identity-triggered emit would fire per chunk.
+  let lastEmitted: string | null = null;
+  createEffect(() => {
+    const r = report();
+    if (!props.tag) return; // an unknown TYPE already reported itself in onMount
+    if (!r || r.ok) {
+      lastEmitted = null;
+      return;
+    }
+    const message = cardValidationMessage(r);
+    if (message === lastEmitted) return;
+    lastEmitted = message;
+    props.emit({ kind: 'error', cardId: props.envelope.id, message });
+  });
+
   return (
     <Show
       when={props.tag}
       fallback={<CardFallback type={props.envelope.type} cardId={props.envelope.id} />}
     >
-      {(tag) => <Dynamic component={tag()} ref={ref} />}
+      {(tag) => (
+        <Show
+          when={invalid()}
+          // SOFT and valid both take this branch: the card renders as it does today.
+          fallback={<Dynamic component={tag()} ref={ref} />}
+        >
+          <CardFallback type={props.envelope.type} cardId={props.envelope.id} reason={report()!.summary} />
+        </Show>
+      )}
     </Show>
   );
 }
 
 defineWebComponent<Props, Events>(
   'kai-cards',
-  { cards: undefined, types: undefined, policy: undefined },
+  { cards: undefined, types: undefined, policy: undefined, validateCards: true },
   (props, { element, dispatch, expose }) => {
     // Local working copy of the card list. The `cards` PROP still drives rendering
     // (a new prop array re-seeds this), but holding a settable copy lets the
@@ -161,6 +222,7 @@ defineWebComponent<Props, Events>(
               envelope={env}
               tag={tags()[env.type]}
               theme={theme()}
+              validate={props.validateCards !== false}
               emit={(e) => emitCardEvent(element, e)}
             />
           )}

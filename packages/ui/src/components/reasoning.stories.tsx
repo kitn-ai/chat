@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
-import { fn } from 'storybook/test';
+import { fn, within, expect, waitFor } from 'storybook/test';
 import { action } from 'storybook/actions';
 import { createSignal } from 'solid-js';
 import { Reasoning, ReasoningTrigger, ReasoningContent } from './reasoning';
@@ -110,6 +110,59 @@ export const Controlled: Story = {
     <p>This is a controlled reasoning component that starts open.</p>
   </ReasoningContent>
 </Reasoning>`),
+};
+
+/**
+ * Collapsed content is `inert`: nothing inside it takes focus, and a Tab press
+ * skips straight past it. Runs as a browser test — jsdom parses `inert` but does
+ * not enforce it, so this is the only place the engine's behaviour is proved.
+ */
+export const KeyboardReachability: Story = {
+  render: () => (
+    <div class="space-y-4">
+      <Reasoning>
+        <ReasoningTrigger>View reasoning</ReasoningTrigger>
+        <ReasoningContent>
+          <p>
+            Cross-checking the <a href="#cited" data-testid="inside-link">cited source</a> before answering.
+          </p>
+        </ReasoningContent>
+      </Reasoning>
+      <button type="button" data-testid="after" class="rounded border px-3 py-1 text-sm">
+        Next control
+      </button>
+    </div>
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const toggle = canvas.getByRole('button', { name: /view reasoning/i });
+    const link = canvas.getByTestId('inside-link');
+
+    // Deliberately NOT userEvent.tab(): @testing-library/user-event computes its
+    // own tab order from a static focusable selector that predates `inert`, so it
+    // would walk INTO the collapsed panel no matter what we ship — a check that
+    // proves nothing. focus() is arbitrated by the ENGINE, which does honour
+    // inert, so it is the real assertion here. The literal Tab key is covered by
+    // a Playwright pass over this story.
+
+    // 1. Collapsed: focus() inside an inert subtree is refused outright.
+    //    (This assertion FAILS in jsdom, which parses inert but ignores it.)
+    link.focus();
+    expect(document.activeElement).not.toBe(link);
+
+    // 2. Open: reachable again, immediately — the first interaction after the
+    //    panel opens must not be swallowed by a late inert removal.
+    toggle.click();
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-expanded', 'true'));
+    link.focus();
+    expect(document.activeElement).toBe(link);
+
+    // 3. Collapsing a panel that HOLDS focus lands the user on the trigger — not
+    //    on <body>, which is where inert on its own would dump them.
+    toggle.click();
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-expanded', 'false'));
+    expect(document.activeElement).toBe(toggle);
+  },
 };
 
 /** Auto-opens while streaming, auto-closes when it ends (showcase). */

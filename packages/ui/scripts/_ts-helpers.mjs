@@ -1,7 +1,7 @@
 // Shared TypeScript-compiler helpers for the API extractors
-// (gen-element-api.mjs for web-component facades, gen-component-api.mjs for the
-// SolidJS/UI components). Both walk a `ts.Program`, read a Props/Events type, and
-// render members to a self-contained, fully-expanded display string.
+// (gen-element-api.mjs for the web-component facades). It walks a `ts.Program`,
+// reads a Props/Events type, and renders members to a self-contained,
+// fully-expanded display string.
 //
 // `createTsHelpers(program, checker, { importable })` returns the helper set
 // bound to that program/checker so each generator keeps a single parse.

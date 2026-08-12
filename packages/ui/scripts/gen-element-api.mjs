@@ -66,8 +66,8 @@ if (DOM_MEMBERS.size === 0) throw new Error('gen-element-api: could not resolve 
 const IMPORTS = {};
 const IMPORTABLE = new Set(Object.keys(IMPORTS));
 
-// renderType/membersOf/isScalar/jsdocOf live in _ts-helpers.mjs (shared with
-// gen-component-api.mjs); membersOf here reads a Props/Events *type node*.
+// renderType/membersOf/isScalar/jsdocOf live in _ts-helpers.mjs; membersOf here
+// reads a Props/Events *type node*.
 const { membersOfNode: membersOf, renderType, isScalar, jsdocOf } = createTsHelpers(program, checker, { importable: IMPORTABLE });
 
 // Render a propDefaults object-literal property value to a short display string.
@@ -649,7 +649,4 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   // Regenerate docs/web-components.md tables between <!-- spec:TAG --> markers.
   const { writeWebComponentsMd } = await import('./gen-web-components-md.mjs');
   writeWebComponentsMd(root, elements);
-  // Phase 2: regenerate the SolidJS/UI component spec in the same build pass.
-  const { generate: generateComponents } = await import('./gen-component-api.mjs');
-  generateComponents();
 }

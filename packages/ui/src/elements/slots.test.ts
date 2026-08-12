@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { readdirSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   CHAT_SLOTS,
@@ -253,15 +253,54 @@ describe('ELEMENT_COMPOSITION registry (single source of truth the build extract
   // so both exclusions are provably no-ops at the time they were written.
   const UNSCANNED_DIRS = new Set(['agent-tooling', 'stories']);
 
-  function partNamesInSource(): Set<string> {
-    const found = new Set<string>();
+  // These scans read the tree thousands of times over (the import closures below
+  // revisit shared modules once per element), and the source cannot change mid-run,
+  // so every read is memoized. This is not just speed: unmemoized, the syscall +
+  // regex load in this worker was enough to starve the timing-sensitive tween and
+  // shader-animation suites running in PARALLEL workers, failing three tests in
+  // files this change never touches.
+  const fileCache = new Map<string, string>();
+  function read(p: string): string {
+    let src = fileCache.get(p);
+    if (src === undefined) {
+      src = readFileSync(p, 'utf8');
+      fileCache.set(p, src);
+    }
+    return src;
+  }
+  /** Memoize a 1-arg pure function over the (immutable, for this run) filesystem. */
+  function keyed<T>(fn: (key: string) => T): (key: string) => T {
+    const cache = new Map<string, T>();
+    return (key: string) => {
+      if (!cache.has(key)) cache.set(key, fn(key));
+      return cache.get(key)!;
+    };
+  }
+  /** Same, for a whole-tree scan that takes no argument. */
+  function lazy<T>(fn: () => T): () => T {
+    let value: T | undefined;
+    return () => (value ??= fn());
+  }
+
+  /**
+   * Absolute file path -> the `::part` names that file declares, for every file
+   * the scan counts (files declaring none are omitted).
+   *
+   * This is the ONE place that decides what "declares a part" means. Both the
+   * global guards below and the per-element attribution further down read it, so
+   * they cannot drift apart on the exclusions (`.test.`/`.stories.`, `ui/stat.tsx`,
+   * `UNSCANNED_DIRS`) — a name this map does not carry justifies nothing, anywhere.
+   */
+  const partNamesByFile = lazy((): Map<string, Set<string>> => {
+    const byFile = new Map<string, Set<string>>();
     const scanFile = (p: string, name: string) => {
       if (!name.endsWith('.tsx') && !name.endsWith('.ts')) return;
       if (/\.(test|stories)\.tsx?$/.test(name)) return;
       // `ui/stat.tsx` is an internal-only SolidJS component — there is no
       // `kai-stat` web component, so its parts are intentionally unregistered.
       if (p.endsWith(join('ui', 'stat.tsx'))) return;
-      const src = readFileSync(p, 'utf8');
+      const src = read(p);
+      const found = new Set<string>();
       for (const m of src.matchAll(STATIC_PART_RE)) {
         for (const tok of m[1].split(/\s+/)) found.add(tok);
       }
@@ -269,6 +308,7 @@ describe('ELEMENT_COMPOSITION registry (single source of truth the build extract
         const openBraceIndex = m.index + m[0].length - 1;
         for (const tok of tokensInDynamicPart(src, openBraceIndex)) found.add(tok);
       }
+      if (found.size > 0) byFile.set(p, found);
     };
     // `skip` is passed only at the top level, so the denylist names top-level
     // directories of `src/` and cannot accidentally match a nested one.
@@ -284,6 +324,14 @@ describe('ELEMENT_COMPOSITION registry (single source of truth the build extract
       }
     };
     walk(SRC, UNSCANNED_DIRS);
+    return byFile;
+  });
+
+  function partNamesInSource(): Set<string> {
+    const found = new Set<string>();
+    for (const names of partNamesByFile().values()) {
+      for (const name of names) found.add(name);
+    }
     return found;
   }
 
@@ -346,7 +394,7 @@ describe('ELEMENT_COMPOSITION registry (single source of truth the build extract
 
   it('every indirect-part exception still points at a real passthrough in source', () => {
     for (const [name, rel] of Object.entries(INDIRECT_PART_DECLARATIONS)) {
-      const src = readFileSync(join(SRC, rel), 'utf8');
+      const src = read(join(SRC, rel));
       // The file must still hand a computed value to `part=` … (a FRESH
       // non-global regex: `DYNAMIC_PART_START_RE` is `/g`, and `.test()` on a
       // shared global regex advances `lastIndex` between iterations.)
@@ -382,6 +430,270 @@ describe('ELEMENT_COMPOSITION registry (single source of truth the build extract
       .filter((name) => !inCode.has(name) && !Object.hasOwn(INDIRECT_PART_DECLARATIONS, name))
       .sort();
     expect(stale).toEqual([]);
+  });
+
+  // ── Per-element attribution ───────────────────────────────────────────────
+  //
+  // Everything above is GLOBAL. The reverse guard proves a registered name is
+  // rendered SOMEWHERE under `src/` — never that it is rendered by the element it
+  // is registered under. So `kai-status` can register `::part(row)`, a name only
+  // `components/message.tsx` renders, and stay perfectly green. The consumer then
+  // follows the docs, writes `kai-status::part(row) { … }`, and gets silence: the
+  // selector matches nothing, and a `::part()` that matches nothing is not an
+  // error anywhere — not in CSS, not in the console, not in the build.
+  //
+  // WHY AN IMPORT GRAPH AND NOT A DECLARED `element -> modules` MAP.
+  // A hand-written map is a second registry, and its drift is the invisible kind:
+  // an entry naming too many modules silently re-widens this guard back toward
+  // global and NOTHING fails, which is how a guard ends up proving nothing. The
+  // import graph is DERIVED from the same source the components live in, so it
+  // cannot fall out of step with what an element renders — move a component or
+  // drop an import and the closure moves in that same commit.
+  //
+  // Three facts about this codebase make the graph the right model. None is
+  // assumed: each one is guarded, named below, so if it ever stops holding the
+  // suite says so instead of quietly degrading.
+  //   1. A tag is bound to exactly ONE module, by a single literal
+  //      `defineWebComponent('kai-…', …)` call. `elementModules()` reads those
+  //      calls out of `elements/`; "every composable element resolves to a facade
+  //      module" fails if a registered tag has no such call. The tag -> module
+  //      edge is therefore derived, never declared.
+  //   2. Facades render imported SOLID COMPONENTS into their own shadow root;
+  //      they do not nest `kai-*` elements inside it. This matters because
+  //      `::part()` does NOT pierce a nested custom element without `exportparts`
+  //      — and this repo contains no `exportparts` at all ("no element forwards
+  //      parts…" below pins that). So "rendered by a module this element imports"
+  //      is the ACTUAL styling boundary, not a convenient approximation of a
+  //      wider one.
+  //   3. The graph discriminates. Closures run 6–88 modules out of ~288, and even
+  //      the widest element (`kai-workspace`) reaches only 12 of the 46
+  //      part-declaring files — so a misattribution has real room to be caught.
+  //      "attribution actually discriminates" below is the control for this: it
+  //      fails if closures ever widen to the point that this guard has silently
+  //      become the global one again.
+  //
+  // The closure is a deliberate OVER-approximation: a module can be imported and
+  // only conditionally rendered, so an element is credited with a few names it
+  // renders only in some states. That is the safe direction — it never fails
+  // correct code, which is the direction that gets a guard deleted — and it still
+  // rejects the drift above.
+  //
+  // KNOWN GAP, left open on purpose. This does not prove the converse: that every
+  // part rendered inside an element is registered under it. `kai-chat` really does
+  // expose `kai-chat::part(row)` today (its shadow root renders `components/
+  // message.tsx` directly), yet `row` is registered only under `kai-message`. That
+  // is a docs-COMPLETENESS gap — a working selector nobody documented — not the
+  // broken-selector gap this guard closes, and enforcing it would fail loudly on
+  // correct code across most of the registry. It stays a documented gap rather
+  // than a half-guard.
+  const ELEMENTS_DIR = join(SRC, 'elements');
+
+  /** The single literal binding a tag to a module. A generic argument list cannot
+   *  contain `(`, so `[^(]*?` can never run past the call's own opening paren. */
+  const DEFINE_TAG_RE = /\bdefineWebComponent\s*(?:<[^(]*?>)?\s*\(\s*'([a-z][a-z0-9-]*)'/g;
+
+  /**
+   * An import/export STATEMENT and its specifier. Line-anchored at the statement
+   * keyword and restricted to a clause charset (`[\w*{},\s$]`) that cannot hold
+   * arbitrary code — no parens, dots, or operators — so a match physically cannot
+   * run out of one statement and into unrelated source below it. `\s` covers the
+   * multi-line `import {\n a,\n b,\n} from '…'` form, and the optional `from`
+   * clause covers a bare side-effect `import './x'` (which is how `register-impl`
+   * pulls every element in).
+   *
+   * Anchoring beats the obvious `/\bfrom\s*['"]…['"]/`: that shape also matches
+   * inside comments, and two files here carry exactly that
+   * (`elements/command.tsx` and `elements/menu.tsx` both document
+   * "`import type { … } from './command'`" in a `//` line). Crediting a COMMENT
+   * with an import would widen a closure on the strength of prose.
+   *
+   * Group 1 captures a leading `type`, and type-only statements are dropped: they
+   * are erased at build time and render nothing, so counting them would credit an
+   * element with modules it never mounts. (Measured on this tree, dropping them
+   * narrows closures — kai-chat 82 -> 77 modules — without changing any element's
+   * attributed part set, so it is a tightening with no behaviour change today.)
+   */
+  const IMPORT_STMT_RE =
+    /^[ \t]*(?:import|export)[ \t]+(type[ \t]+)?(?:[\w*{},\s$]*?[ \t]+from[ \t]*)?['"]([^'"]+)['"]/gm;
+  /** `import('./x')` — a real render path here: the audio-visualizer loads its
+   *  shader variants this way, and `variant-wave` is the only route to the
+   *  `canvas` part. Missing these would fail correct code. */
+  const DYNAMIC_IMPORT_RE = /\bimport\(\s*['"]([^'"]+)['"]\s*\)/g;
+
+  /** Resolve a RELATIVE specifier to a file on disk, the way the bundler does.
+   *  A bare specifier is a node_modules package and declares no kit parts. */
+  function resolveImport(fromFile: string, spec: string): string | null {
+    if (!spec.startsWith('.')) return null;
+    const base = resolve(dirname(fromFile), spec);
+    for (const candidate of [
+      `${base}.tsx`, `${base}.ts`,
+      join(base, 'index.tsx'), join(base, 'index.ts'),
+    ]) {
+      if (existsSync(candidate) && statSync(candidate).isFile()) return candidate;
+    }
+    return null;
+  }
+
+  const importsOf = keyed((file: string): string[] => {
+    const src = read(file);
+    const out = new Set<string>();
+    for (const m of src.matchAll(IMPORT_STMT_RE)) {
+      if (m[1]) continue; // type-only: erased at build, renders nothing
+      const resolved = resolveImport(file, m[2]);
+      if (resolved) out.add(resolved);
+    }
+    for (const m of src.matchAll(DYNAMIC_IMPORT_RE)) {
+      const resolved = resolveImport(file, m[1]);
+      if (resolved) out.add(resolved);
+    }
+    return [...out];
+  });
+
+  /** Every module reachable from `entry` by import — the element's component tree. */
+  const importClosure = keyed((entry: string): Set<string> => {
+    const seen = new Set([entry]);
+    const stack = [entry];
+    while (stack.length > 0) {
+      const file = stack.pop()!;
+      for (const dep of importsOf(file)) {
+        if (seen.has(dep)) continue;
+        seen.add(dep);
+        stack.push(dep);
+      }
+    }
+    return seen;
+  });
+
+  /** `kai-*` tag -> the facade module whose `defineWebComponent` call declares it. */
+  const elementModules = lazy((): Map<string, string> => {
+    const out = new Map<string, string>();
+    for (const name of readdirSync(ELEMENTS_DIR)) {
+      if (!name.endsWith('.tsx') && !name.endsWith('.ts')) continue;
+      if (/\.(test|stories)\.tsx?$/.test(name)) continue;
+      const p = join(ELEMENTS_DIR, name);
+      for (const m of read(p).matchAll(DEFINE_TAG_RE)) out.set(m[1], p);
+    }
+    return out;
+  });
+
+  /**
+   * The `::part` names `tag`'s own component tree can render — the union over its
+   * import closure of what each module declares, plus any INDIRECT declaration
+   * whose declaring FILE the closure reaches.
+   *
+   * That last clause is what keeps the `input` exception honest per-element
+   * instead of blanket. `ui/input.tsx` renders `<input part={part}>` and takes the
+   * literal at its call sites, so no scanner sees it — but the exception map
+   * already names the file, so `input` is credited to `kai-input` / `kai-search` /
+   * `kai-editable-label` (all of which import that module) and to nothing else. A
+   * blanket exemption would have excused `input` on all 45 elements.
+   */
+  function attributedParts(closure: Set<string>, byFile: Map<string, Set<string>>): Set<string> {
+    const out = new Set<string>();
+    for (const file of closure) {
+      for (const name of byFile.get(file) ?? []) out.add(name);
+    }
+    for (const [name, rel] of Object.entries(INDIRECT_PART_DECLARATIONS)) {
+      if (closure.has(join(SRC, rel))) out.add(name);
+    }
+    return out;
+  }
+
+  it('every composable element resolves to exactly one facade module', () => {
+    const modules = elementModules();
+    // Sanity: the scan found the real element population, not three stragglers.
+    expect(modules.size).toBeGreaterThan(60);
+    const unresolved = Object.keys(ELEMENT_COMPOSITION)
+      .filter((tag) => !modules.has(tag))
+      .sort();
+    // A registered tag with no `defineWebComponent('<tag>', …)` call means either
+    // the element was renamed/deleted out from under the registry, or the tag is
+    // declared in a shape DEFINE_TAG_RE cannot see — in which case the per-element
+    // guard below would silently skip it. Fail rather than skip.
+    expect(unresolved, 'ELEMENT_COMPOSITION tags with no defineWebComponent call').toEqual([]);
+  });
+
+  it('no element forwards parts out of a nested shadow root (exportparts)', () => {
+    // Fact 2 above, pinned. `::part()` stops at the first shadow boundary unless
+    // the host re-exports a child's parts with `exportparts`. Nothing here does,
+    // which is exactly why "reachable by import" is the correct attribution
+    // boundary. If that changes, this guard's model is wrong for the forwarding
+    // element and attribution must learn to follow the forwarded names — so fail
+    // here, loudly, instead of misattributing quietly.
+    const offenders: string[] = [];
+    const walk = (dir: string, skip?: Set<string>) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const p = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          if (skip?.has(entry.name)) continue;
+          walk(p);
+          continue;
+        }
+        if (!entry.name.endsWith('.tsx') && !entry.name.endsWith('.ts')) continue;
+        if (/\.(test|stories)\.tsx?$/.test(entry.name)) continue;
+        if (/\bexportparts\b/.test(read(p))) offenders.push(relative(SRC, p));
+      }
+    };
+    walk(SRC, UNSCANNED_DIRS);
+    expect(
+      offenders.sort(),
+      'exportparts forwards a nested element\'s parts through the host, so the ' +
+      'import-closure attribution in this file no longer describes the styling ' +
+      'surface. Teach attributedParts() to follow the forwarded names.',
+    ).toEqual([]);
+  });
+
+  it('renders every registered ::part from that element\'s own tree (per-element drift guard)', () => {
+    const byFile = partNamesByFile();
+    const modules = elementModules();
+    expect(byFile.size).toBeGreaterThan(0); // sanity: the scan actually found parts
+
+    const misattributed: string[] = [];
+    for (const [tag, def] of Object.entries(ELEMENT_COMPOSITION)) {
+      const entry = modules.get(tag);
+      if (!entry) continue; // reported by the resolve test above
+      const closure = importClosure(entry);
+      const rendered = attributedParts(closure, byFile);
+      const registered = [
+        ...(def.parts ?? []).map((p) => p.name),
+        ...(def.slots ?? []).filter((s) => s.part).map((s) => s.name),
+      ];
+      for (const name of registered) {
+        if (!rendered.has(name)) misattributed.push(`${tag}::part(${name})`);
+      }
+    }
+    // Names BOTH sides: the element a consumer would write and the part that
+    // would silently match nothing on it.
+    expect(misattributed.sort()).toEqual([]);
+  });
+
+  it('attribution actually discriminates (control: the guard above can fail)', () => {
+    const byFile = partNamesByFile();
+    const modules = elementModules();
+    const partsOf = (tag: string) => attributedParts(importClosure(modules.get(tag)!), byFile);
+
+    // NEGATIVE. `row` lives in `components/message.tsx`, which `kai-status`'s tree
+    // never reaches — so registering `row` under `kai-status` MUST be rejected.
+    // Without this, a closure that quietly widened to "all of src/" would make the
+    // guard above vacuous and every test would still pass.
+    const status = partsOf('kai-status');
+    expect(status.has('dot')).toBe(true);   // its own part is attributed
+    expect(status.has('row')).toBe(false);  // another element's is not
+    expect(status.has('send')).toBe(false);
+
+    // POSITIVE — the false-positive direction, and the one that gets a guard
+    // disabled. `row` is genuinely SHARED: `components/message.tsx` renders it and
+    // four different elements mount that module, so all four must be credited.
+    // A naive "the part must appear in the element's OWN file" rule would fail
+    // three of these on correct code.
+    for (const tag of ['kai-message', 'kai-chat', 'kai-thread', 'kai-workspace']) {
+      expect(partsOf(tag).has('row'), `${tag} should render the shared row part`).toBe(true);
+    }
+
+    // The `input` exception resolves per-element, not blanket: only the elements
+    // whose tree reaches `ui/input.tsx` are credited with it.
+    expect(partsOf('kai-search').has('input')).toBe(true);
+    expect(partsOf('kai-status').has('input')).toBe(false);
   });
 
   it('maps each composable element to its slots/parts arrays', () => {

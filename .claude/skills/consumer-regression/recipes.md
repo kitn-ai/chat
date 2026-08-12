@@ -42,11 +42,11 @@ cd "$PKG" && npx vite build --config vite.config.mcp.ts
 
 ### Post-build churn
 
-`pnpm exec nx build ui` regenerates six checked-in files: `packages/ui/src/components/component-meta.json`, `packages/ui/src/elements/element-meta.json`, `packages/ui/src/elements/element-types.d.ts`, `packages/ui/frameworks/react/index.tsx`, `packages/ui/llms-full.txt`, and `docs/web-components.md`. Check `git status` after the build.
+`pnpm exec nx build ui` regenerates five checked-in files: `packages/ui/src/elements/element-meta.json`, `packages/ui/src/elements/element-types.d.ts`, `packages/ui/frameworks/react/index.tsx`, `packages/ui/llms-full.txt`, and `docs/web-components.md`. Check `git status` after the build.
 
 Two cases:
 - **The shapes genuinely changed on this branch** (new/changed elements, props, or components): the regeneration is real and correct. Commit it as part of the branch's own change, don't discard it.
-- **You're just packing to test, mid-investigation, on a branch where nothing shape-relevant changed:** revert the churn so it doesn't pollute your diff: `git checkout -- <the six paths above>`.
+- **You're just packing to test, mid-investigation, on a branch where nothing shape-relevant changed:** revert the churn so it doesn't pollute your diff: `git checkout -- <the five paths above>`.
 
 Don't reach for a blanket revert without checking which case you're in.
 
