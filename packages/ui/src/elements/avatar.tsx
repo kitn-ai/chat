@@ -6,7 +6,7 @@ interface Props extends Record<string, unknown> {
   src?: string;
   /** Alt text for the image. Defaults to `fallback`. */
   alt?: string;
-  /** Short text shown when there's no image — usually initials (e.g. "JD", "AI"). */
+  /** Short text shown when there's no image, usually initials (e.g. "JD", "AI"). */
   fallback?: string;
   /** Size token: `sm` | `md` (default) | `lg`. */
   size?: 'sm' | 'md' | 'lg';

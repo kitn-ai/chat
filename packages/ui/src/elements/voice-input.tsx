@@ -3,7 +3,7 @@ import { VoiceInput, type VoiceInputController } from '../components/voice-input
 
 interface Props extends Record<string, unknown> {
   /**
-   * Transcriber the host supplies — records audio, returns the text. This is a
+   * Transcriber the host supplies: records audio, returns the text. This is a
    * **function-valued property** (`el.transcribe = async blob => '...'`) because
    * a value-returning callback can't be modelled as a fire-and-forget event.
    */
@@ -24,18 +24,18 @@ interface Props extends Record<string, unknown> {
 
 /** Events fired by `<kai-voice-input>`. */
 interface Events {
-  /** Raw audio captured (before transcription) — for hosts that prefer to
-   *  handle transcription themselves instead of via the `transcribe` property.
-   *  Also the unsupported-fallback signal: no `transcribe`, no SpeechRecognition,
-   *  so only the blob is produced (no text). */
+  /** Raw audio captured (before transcription), for hosts that prefer to handle
+   *  transcription themselves instead of via the `transcribe` property. Also the
+   *  unsupported-fallback signal: no `transcribe`, no SpeechRecognition, so only
+   *  the blob is produced (no text). */
   'kai-audio-captured': { blob: Blob };
-  /** Final transcript — the `transcribe` property resolved, OR native
+  /** Final transcript: the `transcribe` property resolved, OR native
    *  `SpeechRecognition` produced final text (no `transcribe` set). */
   'kai-transcription': { text: string };
   /** Live partial transcript during native recognition (only when `interim` is
    *  set). Fires repeatedly before the final `kai-transcription`. */
   'kai-transcript-interim': { text: string };
-  /** Recording started or stopped — lets the host drive its own UI (waveform,
+  /** Recording started or stopped. Lets the host drive its own UI (waveform,
    *  push-to-talk indicator) in sync with the mic. Fires on real transitions
    *  only (manual click and programmatic start()/stop()), never on mount. */
   'kai-recording-change': { recording: boolean };

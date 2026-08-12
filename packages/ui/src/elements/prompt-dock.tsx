@@ -3,15 +3,15 @@ import { defineWebComponent } from './define';
 import { PromptDock, type PromptDockAppearance, type PromptDockFrame } from '../ui/prompt-dock';
 
 interface Props extends Record<string, unknown> {
-  /** How the tray frames the input — the SPATIAL inset axis: `inset` (default,
-   *  the classic recessed frame on every side) | `edge` (top/bottom inset only;
-   *  the input sits flush left/right so the lips span the full width) | `none`
-   *  (no inset; the lips attach directly as a plain stack). Attribute: `frame`. */
+  /** How the tray frames the input, the SPATIAL inset axis: `inset` (default, the
+   *  classic recessed frame on every side) | `edge` (top/bottom inset only; the
+   *  input sits flush left/right so the lips span the full width) | `none` (no
+   *  inset; the lips attach directly as a plain stack). Attribute: `frame`. */
   frame?: PromptDockFrame;
-  /** How the tray surface looks — the VISUAL axis, orthogonal to `frame`:
-   *  `soft` (default, sunken surface + border + radius) | `outlined`
-   *  (transparent + border + radius) | `filled` (sunken, no border, + radius) |
-   *  `plain` (bare). Attribute: `appearance`. */
+  /** How the tray surface looks, the VISUAL axis orthogonal to `frame`: `soft`
+   *  (default, sunken surface + border + radius) | `outlined` (transparent +
+   *  border + radius) | `filled` (sunken, no border, + radius) | `plain`
+   *  (bare). Attribute: `appearance`. */
   appearance?: PromptDockAppearance;
 }
 

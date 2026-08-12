@@ -31,7 +31,7 @@ export function parseKaiTriggerItemElement(n: Element, char: string, kind: strin
 }
 
 interface Props extends Record<string, unknown> {
-  /** Controlled value — string or a full ComposerDoc (set as JS property). */
+  /** Controlled value: a string or a full ComposerDoc (set as JS property). */
   value?: string | ComposerDoc;
   /** Placeholder text shown when the composer is empty. */
   placeholder?: string;
@@ -43,9 +43,9 @@ interface Props extends Record<string, unknown> {
   maxHeight?: number | string;
   /** Whether pressing Enter (without Shift) submits. Default true. */
   submitOnEnter?: boolean;
-  /** Trigger definitions — set as a JS property. */
+  /** Trigger definitions. Set as a JS property. */
   triggers?: TriggerDef[];
-  /** Keyword highlight rules — set as a JS property. */
+  /** Keyword highlight rules. Set as a JS property. */
   highlights?: HighlightRule[];
   /** Default icon per entity kind (kind → image URL/data-URI) for items without
    *  their own `icon`. Overrides the built-in agent/plugin glyphs. JS property. */
@@ -67,7 +67,7 @@ interface Events {
   /** The active trigger was dismissed (Escape, space, or outside click). */
   'kai-trigger-close': Record<string, never>;
   /** The composer gained focus. `focus`/`blur` are NOT composed natively, so they
-   *  don't escape the shadow root — these re-expose them on the host. (For
+   *  don't escape the shadow root; these re-expose them on the host. (For
    *  `keydown`/`paste`/`focusin`/`focusout`, listen NATIVELY on `<kai-composer>`:
    *  they're composed and already cross the shadow boundary.) */
   'kai-focus': { originalEvent: FocusEvent };
@@ -100,7 +100,7 @@ defineWebComponent<Props, Events>('kai-composer', {
   let controller: ComposerController | undefined;
   expose({
     /** Focus the editable element. `focus`/`blur` are NOT composed natively, so a
-     *  host-level focus() can't reach the editable inside the shadow root — this is
+     *  host-level focus() can't reach the editable inside the shadow root. This is
      *  the only way to focus the composer programmatically. */
     focus: (options?: FocusOptions) => controller?.focus(options),
     /** Blur the editable element. */
@@ -108,9 +108,9 @@ defineWebComponent<Props, Events>('kai-composer', {
     /** Empty the composer to a blank doc (resets the internal value + history
      *  baseline; fires kai-value-change). */
     clear: () => controller?.clear(),
-    /** Submit the current content programmatically — same path as Enter (fires
-     *  kai-submit). Named `send`, not `submit`, to match the shared vocabulary and
-     *  avoid any submit collision. */
+    /** Submit the current content programmatically, on the same path as Enter
+     *  (fires kai-submit). Named `send`, not `submit`, to match the shared
+     *  vocabulary and avoid any submit collision. */
     send: () => controller?.send(),
     /** Insert an atomic entity pill (skill/agent/plugin) at the caret without
      *  typing a trigger (fires kai-entity-add). */

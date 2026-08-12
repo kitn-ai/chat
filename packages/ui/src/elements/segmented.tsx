@@ -9,7 +9,7 @@ import type { KaiSegmentedOption } from './element-data-types';
 interface Props extends Record<string, unknown> {
   /** The selectable segments, left to right. Set as a JS property (array). */
   options: KaiSegmentedOption[];
-  /** Controlled selected `value` — settable and reflected to the `value`
+  /** Controlled selected `value`. Settable and reflected to the `value`
    *  attribute. `el.value = 'preview'` drives it; choosing a segment updates it
    *  and fires `kai-change`. Read `el.value` for live state. */
   value?: string;

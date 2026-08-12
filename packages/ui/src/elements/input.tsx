@@ -6,7 +6,7 @@ interface Props extends Record<string, unknown> {
   /** Native input type: `text` (default) · `email` · `url` · `search` · `tel` ·
    *  `password` · `number`. Single-line only. */
   type?: string;
-  /** Controlled value — settable and reflected to the `value` attribute. `el.value
+  /** Controlled value. Settable and reflected to the `value` attribute. `el.value
    *  = 'hi'` drives it (no event); typing updates it and fires `kai-input`. Read
    *  `el.value` for live state. */
   value?: string;

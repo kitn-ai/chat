@@ -31,7 +31,7 @@ interface Props extends Record<string, unknown> {
 /** Events fired by `<kai-pane>`. All non-bubbling — listen on the element. */
 interface Events {
   /** The maximize/restore control was clicked. `detail.maximized` is the
-   *  intended NEXT state — drive the `maximized` prop yourself from it. */
+   *  intended NEXT state. Drive the `maximized` prop yourself from it. */
   'kai-maximize': { maximized: boolean };
   /** The close (×) control was clicked. */
   'kai-close': void;

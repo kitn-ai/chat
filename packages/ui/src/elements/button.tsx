@@ -4,7 +4,7 @@ import { renderIcon } from '../ui/icon';
 import { defineWebComponent } from './define';
 
 interface Props extends Record<string, unknown> {
-  /** Visual style. `default` (filled), `subtle` (muted text, hover tint — the
+  /** Visual style. `default` (filled), `subtle` (muted text, hover tint, the
    *  toolbar icon look), `ghost` (transparent, hover fill), `outline`, or
    *  `destructive`. Defaults to `default`. */
   variant?: 'default' | 'subtle' | 'ghost' | 'outline' | 'destructive';
@@ -21,7 +21,7 @@ interface Props extends Record<string, unknown> {
   label?: string;
   /** Disable the button (non-interactive, dimmed). */
   disabled?: boolean;
-  /** Stretch the button to the full width of its container (a block button) —
+  /** Stretch the button to the full width of its container (a block button),
    *  e.g. a card CTA or a stacked action. Attribute: `full`. */
   full?: boolean;
   /** Justify the button's content: `start`, `center` (default), or `end`.
@@ -82,7 +82,7 @@ defineWebComponent<Props, Events>('kai-button', {
       element.shadowRoot?.querySelector('button')?.focus(options),
     /** Blur the inner `<button>`. */
     blur: () => element.shadowRoot?.querySelector('button')?.blur(),
-    /** Programmatically activate the button — runs the same path as a user
+    /** Programmatically activate the button. Runs the same path as a user
      *  click and fires kai-click. Forwarding to the inner button means
      *  `disabled` is respected automatically. */
     click: () => element.shadowRoot?.querySelector('button')?.click(),

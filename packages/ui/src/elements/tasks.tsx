@@ -29,7 +29,8 @@ interface Props extends Record<string, unknown> {
  *  contract event — `kai-value-change` is the live selection signal, distinct from
  *  the terminal submit.) */
 interface Events {
-  /** The selection changed on a toggle — the selected ids in input order. */
+  /** The selection changed on a toggle. Carries the selected ids in input
+   *  order. */
   'kai-value-change': { value: string[] };
 }
 
@@ -72,7 +73,7 @@ defineWebComponent<Props, Events>(
       select: (taskIds?: string[]) => controller?.select(taskIds),
       /** Toggle one task by id, honoring the max gate (no `checked` = flip). */
       toggle: (taskId: string, checked?: boolean) => controller?.toggle(taskId, checked),
-      /** Confirm the current selection — emits the `submit` CardEvent + resolves
+      /** Confirm the current selection: emits the `submit` CardEvent + resolves
        *  (only when the min/max gate passes). Named `send`, not `submit`. */
       send: () => controller?.send(),
       /** Focus the task group (select-all checkbox if shown, else the first row). */

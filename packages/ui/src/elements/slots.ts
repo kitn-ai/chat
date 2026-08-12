@@ -27,7 +27,7 @@ export const CHAT_SLOTS: SlotDef[] = [
   { name: 'header-end',       mode: 'inject',  doc: 'Trailing header controls.' },
   { name: 'header',           mode: 'replace', part: true, doc: 'Full custom header; replaces the built-in title/model/context bar.' },
   { name: 'sidebar',          mode: 'inject',  part: true, doc: 'Left column (your nav / conversation list). Fixed width; use compose-your-own for resizable.' },
-  { name: 'empty',            mode: 'replace', doc: 'Custom zero-state rendered in the message area while the thread is empty. Replaces the empty message list only — the composer and any suggestions still render.' },
+  { name: 'empty',            mode: 'replace', doc: 'Custom zero-state rendered in the message area while the thread is empty. Replaces the empty message list only; the composer and any suggestions still render.' },
   { name: 'composer',         mode: 'replace', doc: 'Full custom composer; you own submit + loading, drive the thread via messages.' },
   { name: 'composer-actions', mode: 'inject',  doc: 'Accessory row above the composer.' },
   { name: 'footer',           mode: 'inject',  part: true, doc: 'Row below the composer (disclaimers, token meter).' },
@@ -42,8 +42,8 @@ export const CHAT_SLOTS: SlotDef[] = [
  *  no outer block slot here. (When the input is nested inside `<kai-chat>`'s shadow,
  *  that surrounding hole belongs to `kai-chat` — see `composer-actions`/`footer`.) */
 export const PROMPT_INPUT_SLOTS: SlotDef[] = [
-  { name: 'input-top',     mode: 'inject', doc: 'Inside the card, above the textarea (e.g. an inline status strip). For content above/below the whole card, use your own layout — that is light DOM you control.' },
-  { name: 'toolbar-start', mode: 'inject', doc: 'Leading controls in the input toolbar — where a + menu goes.' },
+  { name: 'input-top',     mode: 'inject', doc: 'Inside the card, above the textarea (e.g. an inline status strip). For content above/below the whole card, use your own layout; that is light DOM you control.' },
+  { name: 'toolbar-start', mode: 'inject', doc: 'Leading controls in the input toolbar, where a + menu goes.' },
   { name: 'toolbar-end',   mode: 'inject', doc: 'Trailing controls in the toolbar, before the Send button.' },
 ];
 
@@ -52,7 +52,7 @@ export const PROMPT_INPUT_SLOTS: SlotDef[] = [
 export const CONVERSATIONS_SLOTS: SlotDef[] = [
   { name: 'header', mode: 'replace', doc: 'Full custom title bar; replaces the built-in toggle / "Chats" / New-chat row.' },
   { name: 'empty',  mode: 'replace', doc: 'Custom zero-state shown when there are no conversations; replaces the built-in "No conversations yet".' },
-  { name: 'footer', mode: 'inject',  doc: 'A row below the list — account, settings, or usage.' },
+  { name: 'footer', mode: 'inject',  doc: 'A row below the list: account, settings, or usage.' },
 ];
 
 /** Styleable `::part`s of `<kai-conversations>`. */
@@ -69,15 +69,15 @@ export const CONVERSATIONS_PARTS: PartDef[] = [
  *  REPLACES the built-in avatar rail (pair it with `avatar="none"` to omit the
  *  rail entirely). These are the keystone of compose-your-own message lists. */
 export const MESSAGE_SLOTS: SlotDef[] = [
-  { name: 'before-body', mode: 'inject',  doc: 'A per-message header at the TOP of the body, above reasoning/tools/content — a model-name label, a role + timestamp line.' },
-  { name: 'after-body',  mode: 'inject',  doc: 'A row at the BOTTOM of the body, below the action bar — a citation/sources row, a token-cost/latency line.' },
+  { name: 'before-body', mode: 'inject',  doc: 'A per-message header at the TOP of the body, above reasoning/tools/content: a model-name label, a role + timestamp line.' },
+  { name: 'after-body',  mode: 'inject',  doc: 'A row at the BOTTOM of the body, below the action bar: a citation/sources row, a token-cost/latency line.' },
   { name: 'avatar',      mode: 'replace', part: true, doc: 'Replaces the built-in avatar rail with your own node. Use `avatar="none"` to omit the rail and let the body span the full row.' },
 ];
 
 /** Slots of `<kai-notice>`. The message is the default slot; these are the named seams. */
 export const NOTICE_SLOTS: SlotDef[] = [
-  { name: 'action', mode: 'inject',  doc: 'A trailing action beside the message — a link or button.' },
-  { name: 'icon',   mode: 'replace', doc: 'A custom leading icon (any inline SVG, inherits `currentColor`). Overrides the severity default and the `icon` prop — the same escape hatch as `kai-button`.' },
+  { name: 'action', mode: 'inject',  doc: 'A trailing action beside the message: a link or button.' },
+  { name: 'icon',   mode: 'replace', doc: 'A custom leading icon (any inline SVG, inherits `currentColor`). Overrides the severity default and the `icon` prop, the same escape hatch as `kai-button`.' },
 ];
 
 /** Slots of `<kai-button>` (the label is the default slot). */
@@ -124,7 +124,7 @@ export const CHAT_PARTS: PartDef[] = [
 export const PROMPT_INPUT_PARTS: PartDef[] = [
   {
     name: 'send',
-    doc: 'The send button. Restyle from outside, or hide it entirely (Enter-only) — hiding is pure CSS, which is why there is no `submit="never"`.',
+    doc: 'The send button. Restyle from outside, or hide it entirely (Enter-only). Hiding is pure CSS, which is why there is no `submit="never"`.',
     recipe: 'kai-prompt-input::part(send) { display: none } /* Enter-only; or restyle: background, border-radius, … */',
   },
 ];
@@ -208,7 +208,7 @@ export const MESSAGE_PARTS: PartDef[] = [
   },
   {
     name: 'citations',
-    doc: 'The citation row rendered from the message’s `source` parts — a wrapped row of chips below the bubble, never inside it. Restyle its spacing or hide it entirely from outside.',
+    doc: 'The citation row rendered from the message’s `source` parts: a wrapped row of chips below the bubble, never inside it. Restyle its spacing or hide it entirely from outside.',
     recipe: 'kai-message::part(citations) { gap: 0.5rem }',
   },
 ];
@@ -217,7 +217,7 @@ export const MESSAGE_PARTS: PartDef[] = [
 export const ATTACHMENTS_PARTS: PartDef[] = [
   {
     name: 'preview',
-    doc: 'The image shown in an attachment’s hover-card preview. Bounded by default (max ~320×256, aspect preserved) so a large image never blows up the card — raise or lower the cap from outside.',
+    doc: 'The image shown in an attachment’s hover-card preview. Bounded by default (max ~320×256, aspect preserved) so a large image never blows up the card. Raise or lower the cap from outside.',
     recipe: 'kai-attachments::part(preview) { max-width: 32rem; max-height: 24rem }',
   },
 ];
@@ -627,7 +627,7 @@ export const ELEMENT_COMPOSITION: Record<string, ElementComposition> = {
   'kai-thread': { slots: THREAD_SLOTS },
   'kai-prompt-input': { slots: PROMPT_INPUT_SLOTS, parts: PROMPT_INPUT_PARTS },
   'kai-button': { slots: BUTTON_SLOTS, parts: BUTTON_PARTS, children: 'The button\'s label. Omit it for an icon-only button (pair with `aria-label`).' },
-  'kai-badge': { parts: BADGE_PARTS, children: 'The badge\'s label — text, or a small inline icon plus text.' },
+  'kai-badge': { parts: BADGE_PARTS, children: 'The badge\'s label: text, or a small inline icon plus text.' },
   'kai-icon': { parts: ICON_PARTS },
   'kai-separator': { parts: SEPARATOR_PARTS },
   'kai-scroll-area': { parts: SCROLL_AREA_PARTS, children: 'The scrollable content.' },
@@ -643,10 +643,10 @@ export const ELEMENT_COMPOSITION: Record<string, ElementComposition> = {
   'kai-card': { slots: CARD_SLOTS, parts: CARD_PARTS, children: 'The card body, below the header/media regions.' },
   'kai-workspace': { slots: WORKSPACE_SLOTS, parts: WORKSPACE_PARTS },
   'kai-nav': { parts: NAV_PARTS },
-  'kai-coachmark': { slots: COACHMARK_SLOTS, parts: COACHMARK_PARTS, children: 'The ANCHOR the coachmark points at — the element it attaches to and positions against. The bubble body is the `content` slot.' },
+  'kai-coachmark': { slots: COACHMARK_SLOTS, parts: COACHMARK_PARTS, children: 'The ANCHOR the coachmark points at: the element it attaches to and positions against. The bubble body is the `content` slot.' },
   'kai-progress-bar': { parts: PROGRESS_BAR_PARTS },
   'kai-file-tree': { parts: FILE_TREE_PARTS },
-  'kai-prompt-dock': { slots: PROMPT_DOCK_SLOTS, parts: PROMPT_DOCK_PARTS, children: 'The input the dock wraps — typically a `<kai-prompt-input>`. The `top`/`bottom` slots are the lips around it.' },
+  'kai-prompt-dock': { slots: PROMPT_DOCK_SLOTS, parts: PROMPT_DOCK_PARTS, children: 'The input the dock wraps, typically a `<kai-prompt-input>`. The `top`/`bottom` slots are the lips around it.' },
   'kai-segmented': { parts: SEGMENTED_PARTS },
   'kai-settings-group': { parts: SETTINGS_GROUP_PARTS, children: 'The `<kai-setting-item>` rows in this group.' },
   'kai-setting-item': { slots: SETTING_ITEM_SLOTS, parts: SETTING_ITEM_PARTS },
@@ -658,7 +658,7 @@ export const ELEMENT_COMPOSITION: Record<string, ElementComposition> = {
   'kai-search': { parts: SEARCH_PARTS },
   'kai-kbd': { parts: KBD_PARTS, children: 'Literal key text, when you are not using the `keys` prop to render key caps.' },
   'kai-editable-label': { parts: EDITABLE_LABEL_PARTS },
-  'kai-empty': { slots: EMPTY_SLOTS, children: 'The empty-state body below the title/description — usually the call to action.' },
+  'kai-empty': { slots: EMPTY_SLOTS, children: 'The empty-state body below the title/description, usually the call to action.' },
   'kai-file-upload': { children: 'Custom dropzone content, replacing the default label (the `label` prop is the fallback).' },
   'kai-popover': { slots: POPOVER_SLOTS, children: 'The popover panel body. The control that opens it is the `trigger` slot.' },
   'kai-resizable': { children: 'The `<kai-resizable-item>` panels, in order. Dividers are inserted between them.' },

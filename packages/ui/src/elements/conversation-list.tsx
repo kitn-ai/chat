@@ -12,8 +12,8 @@ interface Props extends Record<string, unknown> {
    *  than alternatives. Omit for an ungrouped list. Set as a JS property. */
   groups?: ConversationGroup[];
   /** Every conversation the list renders, flat. Each one is filed under the group
-   *  whose `id` equals its `groupId`; one with no `groupId` — or with a `groupId`
-   *  matching no entry in `groups` — falls into a trailing "Ungrouped" section, so
+   *  whose `id` equals its `groupId`; one with no `groupId`, or with a `groupId`
+   *  matching no entry in `groups`, falls into a trailing "Ungrouped" section, so
    *  nothing you pass in is ever dropped. There is no recency bucketing. Set as a
    *  JS property. Omit to supply them as `<kai-conversation>` light-DOM children
    *  instead, or for the empty state. */
@@ -120,7 +120,7 @@ defineWebComponent<Props, Events>('kai-conversations', {
     /** Clear the internal search query (resets the list filter) and fire
      *  kai-search with an empty string. */
     clear: () => controller?.clearSearch(),
-    /** Programmatically select a conversation by id — mirror of the
+    /** Programmatically select a conversation by id. The mirror of the
      *  kai-conversation-select event (a convenience over driving `activeId`). */
     select: (id: string) => dispatch('kai-conversation-select', { id }),
     /** Collapse the rail to its floating reopen button (fires `kai-collapse-toggle`). */

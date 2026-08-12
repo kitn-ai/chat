@@ -16,8 +16,9 @@ interface Props extends Record<string, unknown> {
    *  Chips are unaffected. */
   size?: 'md' | 'lg';
   /** Layout: `'chips'` (default) renders a wrapping row of rounded pills;
-   *  `'list'` renders a vertical, full-width "Ideas for you" list — each row
-   *  is left-aligned with a leading `icon`, a label, and a hover background. */
+   *  `'list'` renders a vertical, full-width "Ideas for you" list where each
+   *  row is left-aligned with a leading `icon`, a label, and a hover
+   *  background. */
   layout?: 'chips' | 'list';
   /** Full-width left-aligned rows instead of pills. */
   block?: boolean;

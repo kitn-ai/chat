@@ -3,7 +3,7 @@ import { ResponseStream, type Mode } from '../components/response-stream';
 
 interface Props extends Record<string, unknown> {
   /** Text to stream. A string, or an `AsyncIterable<string>` (set as a JS
-   *  property — async iterables can't be HTML attributes). */
+   *  property, since async iterables can't be HTML attributes). */
   text?: string | AsyncIterable<string>;
   /** Reveal animation. */
   mode?: Mode;

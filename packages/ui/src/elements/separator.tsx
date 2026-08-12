@@ -3,7 +3,7 @@ import { defineWebComponent } from './define';
 
 interface Props extends Record<string, unknown> {
   /** `horizontal` (default, block + full-width) or `vertical` (a rule inside a
-   *  flex/grid row — it stretches to the row height). */
+   *  flex/grid row, stretching to the row height). */
   orientation?: 'horizontal' | 'vertical';
 }
 

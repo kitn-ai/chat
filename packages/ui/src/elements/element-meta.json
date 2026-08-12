@@ -19,7 +19,7 @@
         "type": "undefined | string",
         "optional": true,
         "scalar": true,
-        "description": "The agent's name — the primary label. Attribute: `name`.",
+        "description": "The agent's name, the primary label. Attribute: `name`.",
         "displayType": "undefined | string"
       },
       {
@@ -35,7 +35,7 @@
         "type": "undefined | false | true",
         "optional": true,
         "scalar": true,
-        "description": "Raise a prominent \"Needs you\" pill plus a glowing amber edge — the attention-routing signal that pulls focus to this agent. Attribute: `needs-attention`.",
+        "description": "Raise a prominent \"Needs you\" pill plus a glowing amber edge. This is the attention-routing signal that pulls focus to this agent. Attribute: `needs-attention`.",
         "displayType": "undefined | false | true"
       },
       {
@@ -43,7 +43,7 @@
         "type": "undefined | { tone: \"working\" | \"idle\" | \"done\" | \"error\" | \"blocked\"; label?: undefined | string; pulse?: undefined | false | true }",
         "optional": true,
         "scalar": false,
-        "description": "Run status — a JS PROPERTY (object), not an attribute. Shape: `{ tone, label?, pulse? }`, where `tone` is one of `working` | `idle` | `done` | `error` | `blocked` (maps to the kit's tool hues), `label` is an optional short string beside the dot, and `pulse` animates the dot. Set it with `el.status = { tone: 'working', label: 'Working', pulse: true }`.",
+        "description": "Run status. A JS PROPERTY (object), not an attribute. Shape: `{ tone, label?, pulse? }`, where `tone` is one of `working` | `idle` | `done` | `error` | `blocked` (maps to the kit's tool hues), `label` is an optional short string beside the dot, and `pulse` animates the dot. Set it with `el.status = { tone: 'working', label: 'Working', pulse: true }`.",
         "typeName": "AgentStatus",
         "typeShape": "{ tone: \"working\" | \"idle\" | \"done\" | \"error\" | \"blocked\"; label?: undefined | string; pulse?: undefined | false | true }",
         "typeImport": "AgentStatus",
@@ -54,7 +54,7 @@
       {
         "name": "kai-activate",
         "detail": null,
-        "description": "The card was activated — clicked, or Enter / Space while focused. Promote this agent back to focus.",
+        "description": "The card was activated by a click, or by Enter / Space while focused. Promote this agent back to focus.",
         "displayDetail": null
       },
       {
@@ -142,7 +142,7 @@
         "type": "undefined | string",
         "optional": true,
         "scalar": true,
-        "description": "Selected file path — syncs the tree highlight, Code source, and preview.",
+        "description": "Selected file path. Syncs the tree highlight, Code source, and preview.",
         "displayType": "undefined | string"
       },
       {
@@ -277,7 +277,7 @@
       {
         "name": "kai-maximize-intent",
         "detail": "{ requested: false | true }",
-        "description": "The maximize PROTOCOL intent, raised as a raw bubbling + composed CustomEvent (not through `dispatch`) so an enclosing `<kai-resizable>` can catch it and maximize the containing panel. Declared here so it is typed and reaches the generated API — listen for it to drive maximize from your own chrome, or re-emit it to trigger one.",
+        "description": "The maximize PROTOCOL intent, raised as a raw bubbling + composed CustomEvent (not through `dispatch`) so an enclosing `<kai-resizable>` can catch it and maximize the containing panel. Declared here so it is typed and reaches the generated API. Listen for it to drive maximize from your own chrome, or re-emit it to trigger one.",
         "displayDetail": "{ requested: false | true }"
       },
       {
@@ -322,7 +322,7 @@
         "name": "navigate",
         "params": "url: string",
         "returns": "void",
-        "description": "Push + load a url in the preview — the path-field submit path (fires kai-navigate)."
+        "description": "Push + load a url in the preview, the path-field submit path (fires kai-navigate)."
       },
       {
         "name": "selectFile",
@@ -334,13 +334,13 @@
         "name": "openExternal",
         "params": "",
         "returns": "void",
-        "description": "Open the current url in a new browser tab (no-op when there's no concrete url). Named openExternal, NOT openInTab — that's a prop (toolbar button visibility)."
+        "description": "Open the current url in a new browser tab (no-op when there's no concrete url). Named openExternal, NOT openInTab, which is a prop (toolbar button visibility)."
       },
       {
         "name": "maximize",
         "params": "",
         "returns": "void",
-        "description": "Enter the maximized view-state (fires kai-maximize-change{maximized:true}). Named maximize, NOT maximized — that's a prop."
+        "description": "Enter the maximized view-state (fires kai-maximize-change{maximized:true}). Named maximize, NOT maximized, which is a prop."
       },
       {
         "name": "restore",
@@ -490,7 +490,7 @@
     "parts": [
       {
         "name": "preview",
-        "doc": "The image shown in an attachment’s hover-card preview. Bounded by default (max ~320×256, aspect preserved) so a large image never blows up the card — raise or lower the cap from outside.",
+        "doc": "The image shown in an attachment’s hover-card preview. Bounded by default (max ~320×256, aspect preserved) so a large image never blows up the card. Raise or lower the cap from outside.",
         "recipe": "kai-attachments::part(preview) { max-width: 32rem; max-height: 24rem }"
       }
     ]
@@ -714,7 +714,7 @@
         "type": "undefined | string",
         "optional": true,
         "scalar": true,
-        "description": "Short text shown when there's no image — usually initials (e.g. \"JD\", \"AI\").",
+        "description": "Short text shown when there's no image, usually initials (e.g. \"JD\", \"AI\").",
         "default": "''",
         "displayType": "undefined | string"
       },
@@ -778,7 +778,7 @@
       {
         "name": "",
         "mode": "inject",
-        "doc": "The badge's label — text, or a small inline icon plus text."
+        "doc": "The badge's label: text, or a small inline icon plus text."
       }
     ],
     "parts": [
@@ -809,7 +809,7 @@
         "type": "undefined | \"default\" | \"subtle\" | \"ghost\" | \"outline\" | \"destructive\"",
         "optional": true,
         "scalar": true,
-        "description": "Visual style. `default` (filled), `subtle` (muted text, hover tint — the toolbar icon look), `ghost` (transparent, hover fill), `outline`, or `destructive`. Defaults to `default`.",
+        "description": "Visual style. `default` (filled), `subtle` (muted text, hover tint, the toolbar icon look), `ghost` (transparent, hover fill), `outline`, or `destructive`. Defaults to `default`.",
         "default": "'default'",
         "displayType": "undefined | \"default\" | \"subtle\" | \"ghost\" | \"outline\" | \"destructive\""
       },
@@ -860,7 +860,7 @@
         "type": "undefined | false | true",
         "optional": true,
         "scalar": true,
-        "description": "Stretch the button to the full width of its container (a block button) — e.g. a card CTA or a stacked action. Attribute: `full`.",
+        "description": "Stretch the button to the full width of its container (a block button), e.g. a card CTA or a stacked action. Attribute: `full`.",
         "default": "false",
         "displayType": "undefined | false | true"
       },
@@ -908,7 +908,7 @@
         "name": "click",
         "params": "",
         "returns": "void",
-        "description": "Programmatically activate the button — runs the same path as a user click and fires kai-click. Forwarding to the inner button means `disabled` is respected automatically."
+        "description": "Programmatically activate the button. Runs the same path as a user click and fires kai-click. Forwarding to the inner button means `disabled` is respected automatically."
       }
     ],
     "composedFrom": [
@@ -968,7 +968,7 @@
         "type": "undefined | \"vertical\" | \"horizontal\" | \"responsive\"",
         "optional": true,
         "scalar": true,
-        "description": "`vertical` (default, media on top) | `horizontal` (media at the start) | `responsive` (horizontal when the card's container is wide enough, else vertical — a container query on the card's own width). Attribute: `orientation`.",
+        "description": "`vertical` (default, media on top) | `horizontal` (media at the start) | `responsive` (horizontal when the card's container is wide enough, else vertical, via a container query on the card's own width). Attribute: `orientation`.",
         "default": "'vertical'",
         "displayType": "undefined | \"vertical\" | \"horizontal\" | \"responsive\""
       },
@@ -1160,7 +1160,7 @@
         "type": "undefined | Record<string, object>",
         "optional": true,
         "scalar": false,
-        "description": "JSON Schemas for the card types this app renders, keyed by envelope type — the companion of `types`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.schemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type — the one your app actually cares about — as the only unchecked thing on screen. A schema here WINS over a built-in of the same name, matching `mergeCardTags`, where your entry is spread over ours. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `\"type\"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one. See `CardSchemaMap` in components/card-renderer.tsx.",
+        "description": "JSON Schemas for the card types this app renders, keyed by envelope type. The companion of `types`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.schemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type, the one your app actually cares about, as the only unchecked thing on screen. A schema here WINS over a built-in of the same name, matching `mergeCardTags`, where your entry is spread over ours. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `\"type\"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one. See `CardSchemaMap` in components/card-renderer.tsx.",
         "displayType": "undefined | Record<string, object>"
       },
       {
@@ -1179,7 +1179,7 @@
         "type": "undefined | false | true",
         "optional": true,
         "scalar": true,
-        "description": "Validate each envelope's `data` against the schema for its type before rendering it — a built-in's own schema, or yours from `schemas`. Default `true`; set `validate-cards=\"false\"` (or `el.validateCards = false`) to opt out. A hard failure (wrong type, a missing required field) renders a diagnostic naming the field instead of the card; a soft failure (bounds) renders the card unchanged. Both emit a contract `error` event. On in production too: a model emitting a bad shape is a production failure mode, so stripping the check there would hide it from exactly the person who needs to see it.",
+        "description": "Validate each envelope's `data` against the schema for its type before rendering it, using a built-in's own schema or yours from `schemas`. Default `true`; set `validate-cards=\"false\"` (or `el.validateCards = false`) to opt out. A hard failure (wrong type, a missing required field) renders a diagnostic naming the field instead of the card; a soft failure (bounds) renders the card unchanged. Both emit a contract `error` event. On in production too: a model emitting a bad shape is a production failure mode, so stripping the check there would hide it from exactly the person who needs to see it.",
         "default": "true",
         "displayType": "undefined | false | true"
       }
@@ -1188,7 +1188,7 @@
       {
         "name": "kai-card-resolved",
         "detail": "{ cardId: string; resolution: { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }",
-        "description": "A child card transitioned to a resolved/deferred state (an action was chosen, a form/tasks submission landed, or it was dismissed) — re-emitted off the host as a non-bubbling convenience event so a consumer can observe resolution centrally without diffing the cards array. `detail` = `{ cardId, resolution }`. (A `reopen` un-resolves a card and has no `CardResolution`, so it does NOT fire this — observe reopen via the underlying bubbling `kai-card` event.)",
+        "description": "A child card transitioned to a resolved/deferred state (an action was chosen, a form/tasks submission landed, or it was dismissed). Re-emitted off the host as a non-bubbling convenience event so a consumer can observe resolution centrally without diffing the cards array. `detail` = `{ cardId, resolution }`. (A `reopen` un-resolves a card and has no `CardResolution`, so it does NOT fire this; observe reopen via the underlying bubbling `kai-card` event.)",
         "displayDetail": "{ cardId: string; resolution: { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }"
       }
     ],
@@ -1197,13 +1197,13 @@
         "name": "resolve",
         "params": "cardId: string, resolution: CardResolution",
         "returns": "void",
-        "description": "Programmatically resolve a child card by id: set that envelope's `resolution` so the child re-renders into its read-only/resolved view — the imperative twin of the consumer mutating the cards array. No-op for an unknown id."
+        "description": "Programmatically resolve a child card by id: set that envelope's `resolution` so the child re-renders into its read-only/resolved view. The imperative twin of the consumer mutating the cards array. No-op for an unknown id."
       },
       {
         "name": "dismiss",
         "params": "cardId: string",
         "returns": "void",
-        "description": "Collapse a card to its re-openable stub from the host side — convenience for `resolve(cardId, { kind: 'dismissed' })`."
+        "description": "Collapse a card to its re-openable stub from the host side. Convenience for `resolve(cardId, { kind: 'dismissed' })`."
       },
       {
         "name": "getCard",
@@ -1253,7 +1253,7 @@
         "type": "undefined | \"single\" | \"multiple\"",
         "optional": true,
         "scalar": true,
-        "description": "Open mode: `'multiple'` (default — any number of steps open at once) or `'single'` (at most one open; opening a step closes the others).",
+        "description": "Open mode: `'multiple'` (default, any number of steps open at once) or `'single'` (at most one open; opening a step closes the others).",
         "displayType": "undefined | \"single\" | \"multiple\""
       },
       {
@@ -1269,7 +1269,7 @@
         "type": "undefined | string | string[]",
         "optional": true,
         "scalar": false,
-        "description": "Uncontrolled INITIAL open step key(s) — seeds which steps render expanded. Ignored once `value` is provided. Set as a JS property.",
+        "description": "Uncontrolled INITIAL open step key(s), seeding which steps render expanded. Ignored once `value` is provided. Set as a JS property.",
         "displayType": "undefined | string | string[]"
       }
     ],
@@ -1277,7 +1277,7 @@
       {
         "name": "kai-value-change",
         "detail": "{ value: string | string[] }",
-        "description": "The open set changed — by user click OR an expand()/collapse()/toggle() call. `value` is a string in `single` mode, a string[] in `multiple` mode. (Maps Radix Accordion's onValueChange.)",
+        "description": "The open set changed, by user click OR an expand()/collapse()/toggle() call. `value` is a string in `single` mode, a string[] in `multiple` mode. (Maps Radix Accordion's onValueChange.)",
         "displayDetail": "{ value: string | string[] }"
       }
     ],
@@ -1286,13 +1286,13 @@
         "name": "expand",
         "params": "index?: number",
         "returns": "void",
-        "description": "Open one step's detail by index, or — with no arg — ALL steps. In `single` mode opening one step closes the others (expand-all keeps the last)."
+        "description": "Open one step's detail by index, or ALL steps when called with no arg. In `single` mode opening one step closes the others (expand-all keeps the last)."
       },
       {
         "name": "collapse",
         "params": "index?: number",
         "returns": "void",
-        "description": "Close one step's detail by index, or — with no arg — ALL steps."
+        "description": "Close one step's detail by index, or ALL steps when called with no arg."
       },
       {
         "name": "toggle",
@@ -1476,7 +1476,7 @@
         "type": "undefined | false | true",
         "optional": true,
         "scalar": true,
-        "description": "Whether the host has `slot=\"header-start\"` content (left of the title) — set by the `<kai-chat>` facade so a custom control forces the header open.",
+        "description": "Whether the host has `slot=\"header-start\"` content (left of the title). Set by the `<kai-chat>` facade so a custom control forces the header open.",
         "displayType": "undefined | false | true"
       },
       {
@@ -1492,7 +1492,7 @@
         "type": "undefined | false | true",
         "optional": true,
         "scalar": true,
-        "description": "REPLACE — full custom header in place of the built-in title/model/context bar.",
+        "description": "REPLACE: full custom header in place of the built-in title/model/context bar.",
         "displayType": "undefined | false | true"
       },
       {
@@ -1500,7 +1500,7 @@
         "type": "undefined | false | true",
         "optional": true,
         "scalar": true,
-        "description": "INJECT — left sidebar column (e.g. a conversation list / your own nav).",
+        "description": "INJECT: left sidebar column (e.g. a conversation list / your own nav).",
         "displayType": "undefined | false | true"
       },
       {
@@ -1508,7 +1508,7 @@
         "type": "undefined | false | true",
         "optional": true,
         "scalar": true,
-        "description": "REPLACE — custom zero-state rendered in the message area while the thread is empty (replaces the empty message list only; the composer and its suggestions still render).",
+        "description": "REPLACE: custom zero-state rendered in the message area while the thread is empty (replaces the empty message list only; the composer and its suggestions still render).",
         "displayType": "undefined | false | true"
       },
       {
@@ -1516,7 +1516,7 @@
         "type": "undefined | false | true",
         "optional": true,
         "scalar": true,
-        "description": "REPLACE — full custom composer in place of the built-in prompt input. The projected content wires its own submit (the data-flow boundary).",
+        "description": "REPLACE: full custom composer in place of the built-in prompt input. The projected content wires its own submit (the data-flow boundary).",
         "displayType": "undefined | false | true"
       },
       {
@@ -1524,7 +1524,7 @@
         "type": "undefined | false | true",
         "optional": true,
         "scalar": true,
-        "description": "INJECT — accessory row just above the composer (e.g. extra actions).",
+        "description": "INJECT: accessory row just above the composer (e.g. extra actions).",
         "displayType": "undefined | false | true"
       },
       {
@@ -1532,7 +1532,7 @@
         "type": "undefined | false | true",
         "optional": true,
         "scalar": true,
-        "description": "INJECT — footer row below the composer (disclaimers, token meter, …).",
+        "description": "INJECT: footer row below the composer (disclaimers, token meter, …).",
         "displayType": "undefined | false | true"
       },
       {
@@ -1549,7 +1549,7 @@
         "type": "undefined | { char: string; kind: string; items?: undefined | { id: string; label: string; icon?: undefined | string; description?: undefined | string; group?: undefined | string; kind?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[] }[]",
         "optional": true,
         "scalar": false,
-        "description": "Rich entity triggers — each `{ char, kind, items }` opens a caret-anchored menu that inserts an atomic pill (`/` skills, `@` agents/plugins). Set as a JS property; forwarded to the input.",
+        "description": "Rich entity triggers. Each `{ char, kind, items }` opens a caret-anchored menu that inserts an atomic pill (`/` skills, `@` agents/plugins). Set as a JS property; forwarded to the input.",
         "typeName": "TriggerDef[]",
         "typeShape": "{ char: string; kind: string; items?: undefined | { id: string; label: string; icon?: undefined | string; description?: undefined | string; group?: undefined | string; kind?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[] }[]",
         "typeImport": "TriggerDef",
@@ -1577,7 +1577,7 @@
         "type": "undefined | { id: string; role: \"user\" | \"assistant\"; parts: ({ type: \"text\"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: \"reasoning\"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: \"tool\"; tool: { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"card\"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"source\"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: \"file\"; attachment: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]",
         "optional": true,
         "scalar": false,
-        "description": "The full message thread to render, newest last. Each entry carries its role, ordered `parts`, and optional actions/avatar/feedback. Set as a JS property (`el.messages = [...]`); a NEW array reference per streaming chunk re-renders (mutating in place does not). Omit for an empty thread. Re-declared here (rather than inherited from `ChatThreadProps`) because the ELEMENT registers a `[]` default and renders the empty state without it, while the SolidJS `<ChatThread>` component still requires it — the facade hands it a validated array either way. Matches `<kai-thread>`.",
+        "description": "The full message thread to render, newest last. Each entry carries its role, ordered `parts`, and optional actions/avatar/feedback. Set as a JS property (`el.messages = [...]`); a NEW array reference per streaming chunk re-renders (mutating in place does not). Omit for an empty thread. Re-declared here (rather than inherited from `ChatThreadProps`) because the ELEMENT registers a `[]` default and renders the empty state without it, while the SolidJS `<ChatThread>` component still requires it. The facade hands it a validated array either way. Matches `<kai-thread>`.",
         "typeName": "ChatMessage[]",
         "typeShape": "{ id: string; role: \"user\" | \"assistant\"; parts: ({ type: \"text\"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: \"reasoning\"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: \"tool\"; tool: { type: string; kind?: undefined | \"image\" | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"card\"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"source\"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: \"file\"; attachment: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]",
         "default": "[]",
@@ -1597,7 +1597,7 @@
         "type": "undefined | Record<string, object>",
         "optional": true,
         "scalar": false,
-        "description": "JSON Schemas for the card types this app renders, keyed by envelope type — the companion of `cardTypes`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type — the one your app actually cares about — as the only unchecked thing on screen. A schema here WINS over a built-in of the same name. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `\"type\"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one.",
+        "description": "JSON Schemas for the card types this app renders, keyed by envelope type. The companion of `cardTypes`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type, the one your app actually cares about, as the only unchecked thing on screen. A schema here WINS over a built-in of the same name. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `\"type\"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one.",
         "displayType": "undefined | Record<string, object>"
       }
     ],
@@ -1656,31 +1656,31 @@
         "name": "focus",
         "params": "options?: FocusOptions",
         "returns": "void",
-        "description": ""
+        "description": "Focus the composer, meaning the contenteditable (or textarea) inside the shadow root. A native `focus()` on the host lands on the host itself and never reaches it, so this is the only way to focus the input programmatically."
       },
       {
         "name": "blur",
         "params": "",
         "returns": "void",
-        "description": ""
+        "description": "Blur whatever currently holds focus inside the shadow root. The companion to `focus()`, for the same reason: a native `blur()` on the host misses the real focus target."
       },
       {
         "name": "clear",
         "params": "",
         "returns": "void",
-        "description": ""
+        "description": "Empty the COMPOSER: drops the draft text and every staged attachment, then fires `kai-value-change` with `''`. It does NOT touch the thread. `messages` is the consumer's own state, so clearing history stays the consumer's call."
       },
       {
         "name": "send",
         "params": "",
         "returns": "void",
-        "description": ""
+        "description": "Submit whatever the composer currently holds, on the same path as Enter or the send button: fires `kai-submit` with that value plus the staged attachments, then drops the attachments. It takes no argument, so to send text the user never typed, set `el.value` first. There is no empty-check, so an empty composer still fires. The draft is cleared afterwards only when `value` is uncontrolled; a controlled host owns its value and clears it itself. Named `send`, not `submit`, to match the shared vocabulary."
       },
       {
         "name": "scrollToBottom",
         "params": "behavior?: ScrollBehavior",
         "returns": "void",
-        "description": ""
+        "description": "Scroll the message viewport to the newest message. Defaults to `'smooth'`; pass `'instant'` to jump without animating."
       }
     ],
     "composedFrom": [
@@ -1717,7 +1717,7 @@
       {
         "name": "empty",
         "mode": "replace",
-        "doc": "Custom zero-state rendered in the message area while the thread is empty. Replaces the empty message list only — the composer and any suggestions still render."
+        "doc": "Custom zero-state rendered in the message area while the thread is empty. Replaces the empty message list only; the composer and any suggestions still render."
       },
       {
         "name": "composer",
@@ -1886,7 +1886,7 @@
         "type": "undefined | string",
         "optional": true,
         "scalar": true,
-        "description": "Controlled selection — the selected option id. When set, the consumer owns the current pick (RadioGroup `value`). Attribute: `value`.",
+        "description": "Controlled selection: the selected option id. When set, the consumer owns the current pick (RadioGroup `value`). Attribute: `value`.",
         "displayType": "undefined | string"
       },
       {
@@ -1925,25 +1925,25 @@
         "name": "select",
         "params": "optionId: string",
         "returns": "void",
-        "description": "Select an option by id locally — no emit, fires kai-value-change (same as a row click). Lets a consumer pre-highlight or drive selection externally."
+        "description": "Select an option by id locally: no emit, fires kai-value-change (same as a row click). Lets a consumer pre-highlight or drive selection externally."
       },
       {
         "name": "send",
         "params": "",
         "returns": "void",
-        "description": "Submit the current selection — emits the `action` verb on kai-card and resolves the card (single-shot). Named `send`, not `submit`, per the shared vocabulary."
+        "description": "Submit the current selection: emits the `action` verb on kai-card and resolves the card (single-shot). Named `send`, not `submit`, per the shared vocabulary."
       },
       {
         "name": "dismiss",
         "params": "",
         "returns": "void",
-        "description": "Trigger the dismiss path — emits `dismiss` on kai-card and optimistically collapses the card to its re-openable stub."
+        "description": "Trigger the dismiss path: emits `dismiss` on kai-card and optimistically collapses the card to its re-openable stub."
       },
       {
         "name": "reopen",
         "params": "",
         "returns": "void",
-        "description": "Re-open a dismissed card from its stub — emits `reopen` on kai-card."
+        "description": "Re-open a dismissed card from its stub: emits `reopen` on kai-card."
       }
     ],
     "composedFrom": [
@@ -2015,7 +2015,7 @@
         "type": "undefined | \"error\" | \"primary\" | \"info\" | \"success\" | \"warning\"",
         "optional": true,
         "scalar": true,
-        "description": "Color tone: `primary` (default, theme accent), `info` (blue), `success` (green), `warning` (amber), or `error` (red) — reusing the kit's tool hues.",
+        "description": "Color tone: `primary` (default, theme accent), `info` (blue), `success` (green), `warning` (amber), or `error` (red), reusing the kit's tool hues.",
         "displayType": "undefined | \"error\" | \"primary\" | \"info\" | \"success\" | \"warning\""
       },
       {
@@ -2074,7 +2074,7 @@
       {
         "name": "",
         "mode": "inject",
-        "doc": "The ANCHOR the coachmark points at — the element it attaches to and positions against. The bubble body is the `content` slot."
+        "doc": "The ANCHOR the coachmark points at: the element it attaches to and positions against. The bubble body is the `content` slot."
       },
       {
         "name": "content",
@@ -2208,7 +2208,7 @@
         "type": "undefined | { id: string; label: string; icon?: undefined | string; description?: undefined | string; shortcut?: undefined | string; group?: undefined | string }[]",
         "optional": true,
         "scalar": false,
-        "description": "Flat list of items. Set as a JS property — not an HTML attribute.",
+        "description": "Flat list of items. Set as a JS property, not an HTML attribute.",
         "typeName": "KaiCommandItem[]",
         "typeShape": "{ id: string; label: string; icon?: undefined | string; description?: undefined | string; shortcut?: undefined | string; group?: undefined | string }[]",
         "typeImport": "KaiCommandItem",
@@ -2235,7 +2235,7 @@
       {
         "name": "kai-active-change",
         "detail": "{ id: undefined | string }",
-        "description": "Fired when the highlighted/active item changes — via Arrow keys or when filtering re-clamps the active row. `id` is the newly active item's id, or `undefined` when no item is active (e.g. the filtered list is empty). Lets a host preview the active item without committing a selection.",
+        "description": "Fired when the highlighted/active item changes, via Arrow keys or when filtering re-clamps the active row. `id` is the newly active item's id, or `undefined` when no item is active (e.g. the filtered list is empty). Lets a host preview the active item without committing a selection.",
         "displayDetail": "{ id: undefined | string }"
       },
       {
@@ -2268,7 +2268,7 @@
         "name": "clear",
         "params": "",
         "returns": "void",
-        "description": "Reset the search query to empty — re-showing all items — and fire `kai-query-change` with `''`. Mirrors the Escape-key behavior."
+        "description": "Reset the search query to empty, re-showing all items, and fire `kai-query-change` with `''`. Mirrors the Escape-key behavior."
       }
     ],
     "composedFrom": [
@@ -2331,7 +2331,7 @@
         "type": "undefined | \"auto\" | \"columns\" | \"tabs\"",
         "optional": true,
         "scalar": true,
-        "description": "Layout: `'auto'` (default — columns when wide, tabs when narrow, by CONTAINER width) | `'columns'` (side-by-side) | `'tabs'` (pills to switch). Attribute: `layout`.",
+        "description": "Layout: `'auto'` (default, columns when wide, tabs when narrow, by CONTAINER width) | `'columns'` (side-by-side) | `'tabs'` (pills to switch). Attribute: `layout`.",
         "default": "'auto'",
         "displayType": "undefined | \"auto\" | \"columns\" | \"tabs\""
       },
@@ -2385,7 +2385,7 @@
         "name": "select",
         "params": "candidateId: string",
         "returns": "void",
-        "description": "Programmatically commit a pick by candidate id — same path as the \"Pick this\" button: fires kai-compare-select and optimistically collapses (single-shot; inert while streaming or already resolved). `select` does NOT collide with the `selection` prop (distinct identifier)."
+        "description": "Programmatically commit a pick by candidate id, on the same path as the \"Pick this\" button: fires kai-compare-select and optimistically collapses (single-shot; inert while streaming or already resolved). `select` does NOT collide with the `selection` prop (distinct identifier)."
       },
       {
         "name": "focus",
@@ -2423,7 +2423,7 @@
         "type": "undefined | string | ({ type: \"text\"; text: string } | { type: \"entity\"; entity: { kind: string; id: string; label: string; icon?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> } })[]",
         "optional": true,
         "scalar": false,
-        "description": "Controlled value — string or a full ComposerDoc (set as JS property).",
+        "description": "Controlled value: a string or a full ComposerDoc (set as JS property).",
         "displayType": "undefined | string | ({ type: \"text\"; text: string } | { type: \"entity\"; entity: { kind: string; id: string; label: string; icon?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> } })[]"
       },
       {
@@ -2475,7 +2475,7 @@
         "type": "undefined | { char: string; kind: string; items?: undefined | { id: string; label: string; icon?: undefined | string; description?: undefined | string; group?: undefined | string; kind?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[] }[]",
         "optional": true,
         "scalar": false,
-        "description": "Trigger definitions — set as a JS property.",
+        "description": "Trigger definitions. Set as a JS property.",
         "typeName": "TriggerDef[]",
         "typeShape": "{ char: string; kind: string; items?: undefined | { id: string; label: string; icon?: undefined | string; description?: undefined | string; group?: undefined | string; kind?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[] }[]",
         "typeImport": "TriggerDef",
@@ -2486,7 +2486,7 @@
         "type": "undefined | (string | { pattern: string; flags?: undefined | string; class?: undefined | string })[]",
         "optional": true,
         "scalar": false,
-        "description": "Keyword highlight rules — set as a JS property.",
+        "description": "Keyword highlight rules. Set as a JS property.",
         "displayType": "undefined | (string | { pattern: string; flags?: undefined | string; class?: undefined | string })[]"
       },
       {
@@ -2520,7 +2520,7 @@
       {
         "name": "kai-focus",
         "detail": "{ originalEvent: FocusEvent }",
-        "description": "The composer gained focus. `focus`/`blur` are NOT composed natively, so they don't escape the shadow root — these re-expose them on the host. (For `keydown`/`paste`/`focusin`/`focusout`, listen NATIVELY on `<kai-composer>`: they're composed and already cross the shadow boundary.)",
+        "description": "The composer gained focus. `focus`/`blur` are NOT composed natively, so they don't escape the shadow root; these re-expose them on the host. (For `keydown`/`paste`/`focusin`/`focusout`, listen NATIVELY on `<kai-composer>`: they're composed and already cross the shadow boundary.)",
         "displayDetail": "{ originalEvent: FocusEvent }"
       },
       {
@@ -2553,7 +2553,7 @@
         "name": "focus",
         "params": "options?: FocusOptions",
         "returns": "void",
-        "description": "Focus the editable element. `focus`/`blur` are NOT composed natively, so a host-level focus() can't reach the editable inside the shadow root — this is the only way to focus the composer programmatically."
+        "description": "Focus the editable element. `focus`/`blur` are NOT composed natively, so a host-level focus() can't reach the editable inside the shadow root. This is the only way to focus the composer programmatically."
       },
       {
         "name": "blur",
@@ -2571,7 +2571,7 @@
         "name": "send",
         "params": "",
         "returns": "void",
-        "description": "Submit the current content programmatically — same path as Enter (fires kai-submit). Named `send`, not `submit`, to match the shared vocabulary and avoid any submit collision."
+        "description": "Submit the current content programmatically, on the same path as Enter (fires kai-submit). Named `send`, not `submit`, to match the shared vocabulary and avoid any submit collision."
       },
       {
         "name": "insertEntity",
@@ -2633,7 +2633,7 @@
         "type": "undefined | false | true",
         "optional": true,
         "scalar": true,
-        "description": "Focus the default action on mount (off by default — no focus-stealing). Attribute: `autofocus`.",
+        "description": "Focus the default action on mount (off by default, so nothing steals focus). Attribute: `autofocus`.",
         "default": "false",
         "displayType": "undefined | false | true"
       },
@@ -2652,25 +2652,25 @@
         "name": "focus",
         "params": "options?: FocusOptions",
         "returns": "void",
-        "description": "Focus the default action button (or the first action if none is default) — the same target `autofocus` focuses on mount, but on demand."
+        "description": "Focus the default action button (or the first action if none is default). The same target `autofocus` focuses on mount, but on demand."
       },
       {
         "name": "confirm",
         "params": "actionId?: string",
         "returns": "void",
-        "description": "Activate an action by id — emits the `action` verb on kai-card and resolves the card (single-shot). With no id, invokes the default action."
+        "description": "Activate an action by id: emits the `action` verb on kai-card and resolves the card (single-shot). With no id, invokes the default action."
       },
       {
         "name": "dismiss",
         "params": "",
         "returns": "void",
-        "description": "Trigger the dismiss path — emits `dismiss` on kai-card and optimistically collapses the card to its re-openable stub."
+        "description": "Trigger the dismiss path: emits `dismiss` on kai-card and optimistically collapses the card to its re-openable stub."
       },
       {
         "name": "reopen",
         "params": "",
         "returns": "void",
-        "description": "Re-open a dismissed card from its stub — emits `reopen` on kai-card."
+        "description": "Re-open a dismissed card from its stub: emits `reopen` on kai-card."
       }
     ],
     "composedFrom": [
@@ -2820,7 +2820,7 @@
         "type": "undefined | { id: string; title: string; groupId?: undefined | string; scope: { type: \"document\" | \"collection\"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | \"transcript\" | \"markdown\"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[]",
         "optional": true,
         "scalar": false,
-        "description": "Every conversation the list renders, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId` — or with a `groupId` matching no entry in `groups` — falls into a trailing \"Ungrouped\" section, so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. Omit to supply them as `<kai-conversation>` light-DOM children instead, or for the empty state.",
+        "description": "Every conversation the list renders, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId`, or with a `groupId` matching no entry in `groups`, falls into a trailing \"Ungrouped\" section, so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. Omit to supply them as `<kai-conversation>` light-DOM children instead, or for the empty state.",
         "typeName": "ConversationSummary[]",
         "typeShape": "{ id: string; title: string; groupId?: undefined | string; scope: { type: \"document\" | \"collection\"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | \"transcript\" | \"markdown\"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[]",
         "default": "[]",
@@ -2901,7 +2901,7 @@
         "name": "select",
         "params": "id: string",
         "returns": "void",
-        "description": "Programmatically select a conversation by id — mirror of the kai-conversation-select event (a convenience over driving `activeId`)."
+        "description": "Programmatically select a conversation by id. The mirror of the kai-conversation-select event (a convenience over driving `activeId`)."
       },
       {
         "name": "collapse",
@@ -2963,7 +2963,7 @@
       {
         "name": "footer",
         "mode": "inject",
-        "doc": "A row below the list — account, settings, or usage."
+        "doc": "A row below the list: account, settings, or usage."
       }
     ],
     "parts": [
@@ -3113,7 +3113,7 @@
         "type": "undefined | string",
         "optional": true,
         "scalar": true,
-        "description": "The label text — settable and reflected to the `value` attribute. Read `el.value` for live state.",
+        "description": "The label text. Settable and reflected to the `value` attribute. Read `el.value` for live state.",
         "displayType": "undefined | string"
       },
       {
@@ -3162,7 +3162,7 @@
         "name": "edit",
         "params": "",
         "returns": "void",
-        "description": ""
+        "description": "Switch the label into its editing field, which autofocuses and selects the current text. Same entry point as a user double-click, and a no-op while `disabled`. Commit with `commit()` or by blurring, abandon with `cancel()` or Escape."
       }
     ],
     "composedFrom": [
@@ -3305,7 +3305,7 @@
       {
         "name": "",
         "mode": "inject",
-        "doc": "The empty-state body below the title/description — usually the call to action."
+        "doc": "The empty-state body below the title/description, usually the call to action."
       },
       {
         "name": "media",
@@ -3334,7 +3334,7 @@
         "type": "undefined | string",
         "optional": true,
         "scalar": true,
-        "description": "The banner label (e.g. \"Was this helpful?\"). Attribute: `bar-title` (`title` is avoided — it's a global HTML attribute).",
+        "description": "The banner label (e.g. \"Was this helpful?\"). Attribute: `bar-title` (`title` is avoided because it is a global HTML attribute).",
         "default": "'Was this helpful?'",
         "displayType": "undefined | string"
       },
@@ -3449,7 +3449,7 @@
         "type": "undefined | string",
         "optional": true,
         "scalar": true,
-        "description": "Selected file path — highlighted in the tree.",
+        "description": "Selected file path, highlighted in the tree.",
         "displayType": "undefined | string"
       },
       {
@@ -3547,7 +3547,7 @@
         "type": "undefined | false | true",
         "optional": true,
         "scalar": true,
-        "description": "Disable the dropzone — no clicking, no drag-and-drop.",
+        "description": "Disable the dropzone: no clicking, no drag-and-drop.",
         "default": "false",
         "displayType": "undefined | false | true"
       },
@@ -3611,7 +3611,7 @@
         "type": "undefined | Record<string, unknown>",
         "optional": true,
         "scalar": false,
-        "description": "The form definition — a JSON Schema (`type:'object'`) + `x-kai-*` UI hints (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { type:'object', properties:{…} }`. Import the `FormDefinition` type from `@kitn.ai/ui` for the full shape (it is self-referential, so the element types it loosely).",
+        "description": "The form definition: a JSON Schema (`type:'object'`) + `x-kai-*` UI hints (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { type:'object', properties:{…} }`. Import the `FormDefinition` type from `@kitn.ai/ui` for the full shape (it is self-referential, so the element types it loosely).",
         "displayType": "undefined | Record<string, unknown>"
       },
       {
@@ -3668,7 +3668,7 @@
       {
         "name": "kai-values-change",
         "detail": "{ values: Record<string, unknown>; valid: false | true }",
-        "description": "The form's values changed on input — current coerced values + validity.",
+        "description": "The form's values changed on input. Carries the current coerced values + validity.",
         "displayDetail": "{ values: Record<string, unknown>; valid: false | true }"
       }
     ],
@@ -3683,7 +3683,7 @@
         "name": "send",
         "params": "",
         "returns": "void",
-        "description": "Validate + submit programmatically — focus the first invalid field on failure, else emit the `submit` CardEvent and resolve. Named `send`, not `submit`."
+        "description": "Validate + submit programmatically: focus the first invalid field on failure, else emit the `submit` CardEvent and resolve. Named `send`, not `submit`."
       },
       {
         "name": "validate",
@@ -3977,7 +3977,7 @@
         "type": "undefined | string",
         "optional": true,
         "scalar": true,
-        "description": "Controlled value — settable and reflected to the `value` attribute. `el.value = 'hi'` drives it (no event); typing updates it and fires `kai-input`. Read `el.value` for live state.",
+        "description": "Controlled value. Settable and reflected to the `value` attribute. `el.value = 'hi'` drives it (no event); typing updates it and fires `kai-input`. Read `el.value` for live state.",
         "displayType": "undefined | string"
       },
       {
@@ -4175,7 +4175,7 @@
         "type": "undefined | string",
         "optional": true,
         "scalar": true,
-        "description": "Shortcut spec — tokens joined by `+` (e.g. `Mod+Shift+K`). Omit it to show default-slot content instead. Display only; the element does not bind keys.",
+        "description": "Shortcut spec: tokens joined by `+` (e.g. `Mod+Shift+K`). Omit it to show default-slot content instead. Display only; the element does not bind keys.",
         "displayType": "undefined | string"
       },
       {
@@ -4409,7 +4409,7 @@
         "type": "undefined | { id?: undefined | string; label?: undefined | string; icon?: undefined | string; shortcut?: undefined | string; checked?: undefined | false | true; radioGroup?: undefined | string; disabled?: undefined | false | true; separator?: undefined | false | true; heading?: undefined | false | true; items?: undefined | Record<string, unknown>[] }[]",
         "optional": true,
         "scalar": false,
-        "description": "Tree of menu items. Set as a JS property — not an HTML attribute.",
+        "description": "Tree of menu items. Set as a JS property, not an HTML attribute.",
         "typeName": "KaiMenuItem[]",
         "typeShape": "{ id?: undefined | string; label?: undefined | string; icon?: undefined | string; shortcut?: undefined | string; checked?: undefined | false | true; radioGroup?: undefined | string; disabled?: undefined | false | true; separator?: undefined | false | true; heading?: undefined | false | true; items?: undefined | { id?: undefined | string; label?: undefined | string; icon?: undefined | string; shortcut?: undefined | string; checked?: undefined | false | true; radioGroup?: undefined | string; disabled?: undefined | false | true; separator?: undefined | false | true; heading?: undefined | false | true; items?: undefined | Record<string, unknown>[] }[] }[]",
         "typeImport": "KaiMenuItem",
@@ -4428,7 +4428,7 @@
         "type": "undefined | string",
         "optional": true,
         "scalar": true,
-        "description": "Built-in trigger: leading icon (a named icon like `\"plus\"`, an image URL/data-URI, or text). Use this instead of slotting `slot=\"trigger\"` for the common case — a slotted trigger overrides it.",
+        "description": "Built-in trigger: leading icon (a named icon like `\"plus\"`, an image URL/data-URI, or text). Use this instead of slotting `slot=\"trigger\"` for the common case; a slotted trigger overrides it.",
         "displayType": "undefined | string"
       },
       {
@@ -4476,7 +4476,7 @@
         "type": "undefined | false | true",
         "optional": true,
         "scalar": true,
-        "description": "Disable the trigger — click/keyboard and `show()` no longer open the menu.",
+        "description": "Disable the trigger: click/keyboard and `show()` no longer open the menu.",
         "displayType": "undefined | false | true"
       }
     ],
@@ -4490,7 +4490,7 @@
       {
         "name": "kai-select",
         "detail": "{ id: string; checked?: undefined | false | true; radioGroup?: undefined | string }",
-        "description": "Fired when the user selects a leaf item. - Plain items: `{ id }`. - Checkbox items: `{ id, checked }` where `checked` is the NEW state. - Radio items: `{ id, radioGroup }` — the consumer marks `id` as the selected one in `radioGroup` and clears the others.",
+        "description": "Fired when the user selects a leaf item. - Plain items: `{ id }`. - Checkbox items: `{ id, checked }` where `checked` is the NEW state. - Radio items: `{ id, radioGroup }`, where the consumer marks `id` as the selected one in `radioGroup` and clears the others.",
         "displayDetail": "{ id: string; checked?: undefined | false | true; radioGroup?: undefined | string }"
       }
     ],
@@ -4708,7 +4708,7 @@
         "type": "undefined | Record<string, object>",
         "optional": true,
         "scalar": false,
-        "description": "JSON Schemas for the card types this app renders, keyed by envelope type — the companion of `cardTypes`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type — the one your app actually cares about — as the only unchecked thing on screen. A schema here WINS over a built-in of the same name. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `\"type\"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one.",
+        "description": "JSON Schemas for the card types this app renders, keyed by envelope type. The companion of `cardTypes`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type, the one your app actually cares about, as the only unchecked thing on screen. A schema here WINS over a built-in of the same name. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `\"type\"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one.",
         "displayType": "undefined | Record<string, object>"
       }
     ],
@@ -4763,12 +4763,12 @@
       {
         "name": "before-body",
         "mode": "inject",
-        "doc": "A per-message header at the TOP of the body, above reasoning/tools/content — a model-name label, a role + timestamp line."
+        "doc": "A per-message header at the TOP of the body, above reasoning/tools/content: a model-name label, a role + timestamp line."
       },
       {
         "name": "after-body",
         "mode": "inject",
-        "doc": "A row at the BOTTOM of the body, below the action bar — a citation/sources row, a token-cost/latency line."
+        "doc": "A row at the BOTTOM of the body, below the action bar: a citation/sources row, a token-cost/latency line."
       },
       {
         "name": "avatar",
@@ -4800,7 +4800,7 @@
       },
       {
         "name": "citations",
-        "doc": "The citation row rendered from the message’s `source` parts — a wrapped row of chips below the bubble, never inside it. Restyle its spacing or hide it entirely from outside.",
+        "doc": "The citation row rendered from the message’s `source` parts: a wrapped row of chips below the bubble, never inside it. Restyle its spacing or hide it entirely from outside.",
         "recipe": "kai-message::part(citations) { gap: 0.5rem }"
       },
       {
@@ -4865,7 +4865,7 @@
         "type": "undefined | false | true",
         "optional": true,
         "scalar": true,
-        "description": "Disable the trigger — click/keyboard and `show()` no longer open the dropdown.",
+        "description": "Disable the trigger: click/keyboard and `show()` no longer open the dropdown.",
         "displayType": "undefined | false | true"
       }
     ],
@@ -5118,12 +5118,12 @@
       {
         "name": "action",
         "mode": "inject",
-        "doc": "A trailing action beside the message — a link or button."
+        "doc": "A trailing action beside the message: a link or button."
       },
       {
         "name": "icon",
         "mode": "replace",
-        "doc": "A custom leading icon (any inline SVG, inherits `currentColor`). Overrides the severity default and the `icon` prop — the same escape hatch as `kai-button`."
+        "doc": "A custom leading icon (any inline SVG, inherits `currentColor`). Overrides the severity default and the `icon` prop, the same escape hatch as `kai-button`."
       }
     ]
   },
@@ -5223,7 +5223,7 @@
       {
         "name": "kai-maximize",
         "detail": "{ maximized: false | true }",
-        "description": "The maximize/restore control was clicked. `detail.maximized` is the intended NEXT state — drive the `maximized` prop yourself from it.",
+        "description": "The maximize/restore control was clicked. `detail.maximized` is the intended NEXT state. Drive the `maximized` prop yourself from it.",
         "displayDetail": "{ maximized: false | true }"
       },
       {
@@ -5607,7 +5607,7 @@
         "type": "undefined | \"none\" | \"inset\" | \"edge\"",
         "optional": true,
         "scalar": true,
-        "description": "How the tray frames the input — the SPATIAL inset axis: `inset` (default, the classic recessed frame on every side) | `edge` (top/bottom inset only; the input sits flush left/right so the lips span the full width) | `none` (no inset; the lips attach directly as a plain stack). Attribute: `frame`.",
+        "description": "How the tray frames the input, the SPATIAL inset axis: `inset` (default, the classic recessed frame on every side) | `edge` (top/bottom inset only; the input sits flush left/right so the lips span the full width) | `none` (no inset; the lips attach directly as a plain stack). Attribute: `frame`.",
         "default": "'inset'",
         "displayType": "undefined | \"none\" | \"inset\" | \"edge\""
       },
@@ -5616,7 +5616,7 @@
         "type": "undefined | \"outlined\" | \"filled\" | \"plain\" | \"soft\"",
         "optional": true,
         "scalar": true,
-        "description": "How the tray surface looks — the VISUAL axis, orthogonal to `frame`: `soft` (default, sunken surface + border + radius) | `outlined` (transparent + border + radius) | `filled` (sunken, no border, + radius) | `plain` (bare). Attribute: `appearance`.",
+        "description": "How the tray surface looks, the VISUAL axis orthogonal to `frame`: `soft` (default, sunken surface + border + radius) | `outlined` (transparent + border + radius) | `filled` (sunken, no border, + radius) | `plain` (bare). Attribute: `appearance`.",
         "default": "'soft'",
         "displayType": "undefined | \"outlined\" | \"filled\" | \"plain\" | \"soft\""
       }
@@ -5635,7 +5635,7 @@
       {
         "name": "",
         "mode": "inject",
-        "doc": "The input the dock wraps — typically a `<kai-prompt-input>`. The `top`/`bottom` slots are the lips around it."
+        "doc": "The input the dock wraps, typically a `<kai-prompt-input>`. The `top`/`bottom` slots are the lips around it."
       },
       {
         "name": "top",
@@ -5765,7 +5765,7 @@
         "type": "undefined | \"auto\" | \"always\"",
         "optional": true,
         "scalar": true,
-        "description": "Send-button visibility. `'always'` (default) always shows it; `'auto'` shows it only when there's text/attachments (an empty composer hides it — Enter still submits). To hide it entirely (Enter-only), it's pure CSS: `::part(send){display:none}` — no prop needed. Restyle via `::part(send)`. The Stop button (`stoppable` + `loading`) is unaffected.",
+        "description": "Send-button visibility. `'always'` (default) always shows it; `'auto'` shows it only when there's text/attachments (an empty composer hides it, though Enter still submits). To hide it entirely (Enter-only), it's pure CSS: `::part(send){display:none}`, no prop needed. Restyle via `::part(send)`. The Stop button (`stoppable` + `loading`) is unaffected.",
         "default": "'always'",
         "displayType": "undefined | \"auto\" | \"always\""
       },
@@ -5794,7 +5794,7 @@
         "type": "undefined | { char: string; kind: string; items?: undefined | { id: string; label: string; icon?: undefined | string; description?: undefined | string; group?: undefined | string; kind?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[] }[]",
         "optional": true,
         "scalar": false,
-        "description": "Rich entity triggers — each `{ char, kind, items }` opens a caret-anchored menu that inserts an atomic pill. Convention: `/` → skills, `@` → agents (plugins are the grouping/provenance of those items). Set as a JS property.",
+        "description": "Rich entity triggers. Each `{ char, kind, items }` opens a caret-anchored menu that inserts an atomic pill. Convention: `/` → skills, `@` → agents (plugins are the grouping/provenance of those items). Set as a JS property.",
         "typeName": "TriggerDef[]",
         "typeShape": "{ char: string; kind: string; items?: undefined | { id: string; label: string; icon?: undefined | string; description?: undefined | string; group?: undefined | string; kind?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[] }[]",
         "typeImport": "TriggerDef",
@@ -5813,7 +5813,7 @@
       {
         "name": "kai-attachments-change",
         "detail": "{ attachments: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[] }",
-        "description": "The staged attachments changed — a file was added (via the paperclip) or removed (per-chip ×). Carries the full current list so a consumer can react in real time (validate, show upload progress, toggle the send button).",
+        "description": "The staged attachments changed: a file was added (via the paperclip) or removed (per-chip ×). Carries the full current list so a consumer can react in real time (validate, show upload progress, toggle the send button).",
         "displayDetail": "{ attachments: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[] }"
       },
       {
@@ -5882,7 +5882,7 @@
         "name": "send",
         "params": "",
         "returns": "void",
-        "description": "Send the current value programmatically — same path as Enter / the send button (fires kai-submit, then clears staged attachments). Named `send`, not `submit`, to avoid colliding with the `submit` prop."
+        "description": "Send the current value programmatically, on the same path as Enter / the send button (fires kai-submit, then clears staged attachments). Named `send`, not `submit`, to avoid colliding with the `submit` prop."
       }
     ],
     "composedFrom": [
@@ -5960,12 +5960,12 @@
       {
         "name": "input-top",
         "mode": "inject",
-        "doc": "Inside the card, above the textarea (e.g. an inline status strip). For content above/below the whole card, use your own layout — that is light DOM you control."
+        "doc": "Inside the card, above the textarea (e.g. an inline status strip). For content above/below the whole card, use your own layout; that is light DOM you control."
       },
       {
         "name": "toolbar-start",
         "mode": "inject",
-        "doc": "Leading controls in the input toolbar — where a + menu goes."
+        "doc": "Leading controls in the input toolbar, where a + menu goes."
       },
       {
         "name": "toolbar-end",
@@ -5976,7 +5976,7 @@
     "parts": [
       {
         "name": "send",
-        "doc": "The send button. Restyle from outside, or hide it entirely (Enter-only) — hiding is pure CSS, which is why there is no `submit=\"never\"`.",
+        "doc": "The send button. Restyle from outside, or hide it entirely (Enter-only). Hiding is pure CSS, which is why there is no `submit=\"never\"`.",
         "recipe": "kai-prompt-input::part(send) { display: none } /* Enter-only; or restyle: background, border-radius, … */"
       }
     ]
@@ -6053,7 +6053,7 @@
         "type": "undefined | false | true",
         "optional": true,
         "scalar": true,
-        "description": "Gate the disclosure trigger — programmatic `show()/hide()/toggle()` still work, but the trigger click no longer toggles.",
+        "description": "Gate the disclosure trigger: programmatic `show()/hide()/toggle()` still work, but the trigger click no longer toggles.",
         "displayType": "undefined | false | true"
       }
     ],
@@ -6195,7 +6195,7 @@
         "type": "undefined | \"none\" | \"line\" | \"grip\"",
         "optional": true,
         "scalar": true,
-        "description": "Divider affordance drawn inside each draggable handle's 8px grab zone: - `line` (default) — a 1px hairline, transparent at rest, tinting on hover/drag. - `grip` — a dotted grip handle. - `none` — no visible divider, just the invisible hit-area. The full grab zone and keyboard/ARIA behavior are identical for all three.",
+        "description": "Divider affordance drawn inside each draggable handle's 8px grab zone: - `line` (default): a 1px hairline, transparent at rest, tinting on hover/drag. - `grip`: a dotted grip handle. - `none`: no visible divider, just the invisible hit-area. The full grab zone and keyboard/ARIA behavior are identical for all three.",
         "default": "'line'",
         "displayType": "undefined | \"none\" | \"line\" | \"grip\""
       }
@@ -6312,7 +6312,7 @@
         "type": "undefined | false | true",
         "optional": true,
         "scalar": true,
-        "description": "Collapse this panel — same layout effect as `hidden` (divider dropped, the rest reflow), but it WORKS as a bare boolean from framework JSX. A plain `<kai-resizable-item collapsed>` in React/Solid/Vue/Svelte collapses the panel at the first render; `hidden` does not, because a JSX boolean sets neither the `hidden` attribute nor the IDL property on a custom element, so the parent never sees it. The facade reflects `collapsed` to a `collapsed` attribute the parent reads. Prefer this over `hidden` for declarative collapse.",
+        "description": "Collapse this panel. Same layout effect as `hidden` (divider dropped, the rest reflow), but it WORKS as a bare boolean from framework JSX. A plain `<kai-resizable-item collapsed>` in React/Solid/Vue/Svelte collapses the panel at the first render; `hidden` does not, because a JSX boolean sets neither the `hidden` attribute nor the IDL property on a custom element, so the parent never sees it. The facade reflects `collapsed` to a `collapsed` attribute the parent reads. Prefer this over `hidden` for declarative collapse.",
         "default": "false",
         "displayType": "undefined | false | true"
       }
@@ -6374,7 +6374,7 @@
         "type": "undefined | string | AsyncIterable<string>",
         "optional": true,
         "scalar": false,
-        "description": "Text to stream. A string, or an `AsyncIterable<string>` (set as a JS property — async iterables can't be HTML attributes).",
+        "description": "Text to stream. A string, or an `AsyncIterable<string>` (set as a JS property, since async iterables can't be HTML attributes).",
         "default": "''",
         "displayType": "undefined | string | AsyncIterable<string>"
       },
@@ -6486,7 +6486,7 @@
         "type": "undefined | false | true",
         "optional": true,
         "scalar": true,
-        "description": "Disable the trigger — click/keyboard and `show()` no longer open the dropdown.",
+        "description": "Disable the trigger: click/keyboard and `show()` no longer open the dropdown.",
         "displayType": "undefined | false | true"
       }
     ],
@@ -6773,7 +6773,7 @@
       {
         "name": "kai-scroll",
         "detail": null,
-        "description": "Emitted when the user clicks the button and `scrollToBottom()` is called. Carries no detail — consumers use it to know a manual scroll occurred.",
+        "description": "Emitted when the user clicks the button and `scrollToBottom()` is called. Carries no detail; consumers use it to know a manual scroll occurred.",
         "displayDetail": null
       }
     ],
@@ -6807,7 +6807,7 @@
         "type": "undefined | string",
         "optional": true,
         "scalar": true,
-        "description": "Controlled query — settable and reflected to the `value` attribute. Read `el.value` for live state.",
+        "description": "Controlled query. Settable and reflected to the `value` attribute. Read `el.value` for live state.",
         "displayType": "undefined | string"
       },
       {
@@ -6880,7 +6880,7 @@
         "name": "focus",
         "params": "",
         "returns": "void",
-        "description": ""
+        "description": "Focus the search input inside the shadow root. A native `focus()` on the host lands on the host itself and never reaches it."
       }
     ],
     "composedFrom": [
@@ -6951,7 +6951,7 @@
         "type": "undefined | string",
         "optional": true,
         "scalar": true,
-        "description": "Controlled selected `value` — settable and reflected to the `value` attribute. `el.value = 'preview'` drives it; choosing a segment updates it and fires `kai-change`. Read `el.value` for live state.",
+        "description": "Controlled selected `value`. Settable and reflected to the `value` attribute. `el.value = 'preview'` drives it; choosing a segment updates it and fires `kai-change`. Read `el.value` for live state.",
         "displayType": "undefined | string"
       },
       {
@@ -7014,7 +7014,7 @@
         "type": "undefined | \"vertical\" | \"horizontal\"",
         "optional": true,
         "scalar": true,
-        "description": "`horizontal` (default, block + full-width) or `vertical` (a rule inside a flex/grid row — it stretches to the row height).",
+        "description": "`horizontal` (default, block + full-width) or `vertical` (a rule inside a flex/grid row, stretching to the row height).",
         "default": "'horizontal'",
         "displayType": "undefined | \"vertical\" | \"horizontal\""
       }
@@ -7316,7 +7316,7 @@
         "type": "undefined | string",
         "optional": true,
         "scalar": true,
-        "description": "Hover-card headline. Attribute: `headline` (`title` is avoided — it's a global HTML attribute that reflects in a CE constructor and breaks it).",
+        "description": "Hover-card headline. Attribute: `headline` (`title` is avoided because it is a global HTML attribute that reflects in a CE constructor and breaks it).",
         "default": "''",
         "displayType": "undefined | string"
       },
@@ -7406,7 +7406,7 @@
         "type": "undefined | false | true",
         "optional": true,
         "scalar": true,
-        "description": "When true, each citation chip is labelled with its 1-based index in the merged (prop + declarative-children) list (`[1]`, `[2]`, …) instead of the per-item `label` or domain fallback. HTML attribute: `numbered` (boolean — bare attribute or `numbered=\"true\"`). JS property: `el.numbered = true`.",
+        "description": "When true, each citation chip is labelled with its 1-based index in the merged (prop + declarative-children) list (`[1]`, `[2]`, …) instead of the per-item `label` or domain fallback. HTML attribute: `numbered` (boolean: a bare attribute or `numbered=\"true\"`). JS property: `el.numbered = true`.",
         "default": "false",
         "displayType": "undefined | false | true"
       }
@@ -7567,7 +7567,7 @@
         "type": "undefined | \"list\" | \"chips\"",
         "optional": true,
         "scalar": true,
-        "description": "Layout: `'chips'` (default) renders a wrapping row of rounded pills; `'list'` renders a vertical, full-width \"Ideas for you\" list — each row is left-aligned with a leading `icon`, a label, and a hover background.",
+        "description": "Layout: `'chips'` (default) renders a wrapping row of rounded pills; `'list'` renders a vertical, full-width \"Ideas for you\" list where each row is left-aligned with a leading `icon`, a label, and a hover background.",
         "default": "'chips'",
         "displayType": "undefined | \"list\" | \"chips\""
       },
@@ -7638,7 +7638,7 @@
         "type": "undefined | false | true",
         "optional": true,
         "scalar": true,
-        "description": "Controlled checked state — settable and reflected to the `checked` attribute. `el.checked = true` (or `<kai-switch checked>`) drives it; the toggle UI updates it and fires `kai-change`. Read `el.checked` for live state.",
+        "description": "Controlled checked state. Settable and reflected to the `checked` attribute. `el.checked = true` (or `<kai-switch checked>`) drives it; the toggle UI updates it and fires `kai-change`. Read `el.checked` for live state.",
         "displayType": "undefined | false | true"
       },
       {
@@ -7910,7 +7910,7 @@
       {
         "name": "kai-value-change",
         "detail": "{ value: string[] }",
-        "description": "The selection changed on a toggle — the selected ids in input order.",
+        "description": "The selection changed on a toggle. Carries the selected ids in input order.",
         "displayDetail": "{ value: string[] }"
       }
     ],
@@ -7931,7 +7931,7 @@
         "name": "send",
         "params": "",
         "returns": "void",
-        "description": "Confirm the current selection — emits the `submit` CardEvent + resolves (only when the min/max gate passes). Named `send`, not `submit`."
+        "description": "Confirm the current selection: emits the `submit` CardEvent + resolves (only when the min/max gate passes). Named `send`, not `submit`."
       },
       {
         "name": "focus",
@@ -8116,7 +8116,7 @@
         "type": "undefined | false | true",
         "optional": true,
         "scalar": true,
-        "description": "Show a typing indicator on the pending assistant turn — set while awaiting the assistant's reply.",
+        "description": "Show a typing indicator on the pending assistant turn. Set it while awaiting the assistant's reply.",
         "default": "false",
         "displayType": "undefined | false | true"
       },
@@ -8186,7 +8186,7 @@
         "type": "undefined | Record<string, object>",
         "optional": true,
         "scalar": false,
-        "description": "JSON Schemas for the card types this app renders, keyed by envelope type — the companion of `cardTypes`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type — the one your app actually cares about — as the only unchecked thing on screen. A schema here WINS over a built-in of the same name. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `\"type\"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one.",
+        "description": "JSON Schemas for the card types this app renders, keyed by envelope type. The companion of `cardTypes`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type, the one your app actually cares about, as the only unchecked thing on screen. A schema here WINS over a built-in of the same name. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `\"type\"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one.",
         "displayType": "undefined | Record<string, object>"
       }
     ],
@@ -8374,7 +8374,7 @@
         "type": "undefined | false | true",
         "optional": true,
         "scalar": true,
-        "description": "Gate the disclosure trigger — programmatic `show()/hide()/toggle()` still work, but the trigger click no longer toggles.",
+        "description": "Gate the disclosure trigger: programmatic `show()/hide()/toggle()` still work, but the trigger click no longer toggles.",
         "displayType": "undefined | false | true"
       }
     ],
@@ -8557,7 +8557,7 @@
         "type": "undefined | (audio: Blob) => Promise<string>",
         "optional": true,
         "scalar": false,
-        "description": "Transcriber the host supplies — records audio, returns the text. This is a **function-valued property** (`el.transcribe = async blob => '...'`) because a value-returning callback can't be modelled as a fire-and-forget event.",
+        "description": "Transcriber the host supplies: records audio, returns the text. This is a **function-valued property** (`el.transcribe = async blob => '...'`) because a value-returning callback can't be modelled as a fire-and-forget event.",
         "displayType": "undefined | (audio: Blob) => Promise<string>"
       },
       {
@@ -8591,13 +8591,13 @@
       {
         "name": "kai-audio-captured",
         "detail": "{ blob: Blob }",
-        "description": "Raw audio captured (before transcription) — for hosts that prefer to handle transcription themselves instead of via the `transcribe` property. Also the unsupported-fallback signal: no `transcribe`, no SpeechRecognition, so only the blob is produced (no text).",
+        "description": "Raw audio captured (before transcription), for hosts that prefer to handle transcription themselves instead of via the `transcribe` property. Also the unsupported-fallback signal: no `transcribe`, no SpeechRecognition, so only the blob is produced (no text).",
         "displayDetail": "{ blob: Blob }"
       },
       {
         "name": "kai-recording-change",
         "detail": "{ recording: false | true }",
-        "description": "Recording started or stopped — lets the host drive its own UI (waveform, push-to-talk indicator) in sync with the mic. Fires on real transitions only (manual click and programmatic start()/stop()), never on mount.",
+        "description": "Recording started or stopped. Lets the host drive its own UI (waveform, push-to-talk indicator) in sync with the mic. Fires on real transitions only (manual click and programmatic start()/stop()), never on mount.",
         "displayDetail": "{ recording: false | true }"
       },
       {
@@ -8609,7 +8609,7 @@
       {
         "name": "kai-transcription",
         "detail": "{ text: string }",
-        "description": "Final transcript — the `transcribe` property resolved, OR native `SpeechRecognition` produced final text (no `transcribe` set).",
+        "description": "Final transcript: the `transcribe` property resolved, OR native `SpeechRecognition` produced final text (no `transcribe` set).",
         "displayDetail": "{ text: string }"
       }
     ],
@@ -8674,7 +8674,7 @@
         "type": "undefined | (text: string) => Promise<Blob>",
         "optional": true,
         "scalar": false,
-        "description": "TTS model seam the host supplies — given text, returns an audio `Blob` to play. This is a **function-valued property** (`el.synthesize = async text => blob`); when set, the native `speechSynthesis` path is bypassed. Mirrors `<kai-voice-input>`'s `transcribe`. A value-returning callback can't be modelled as a fire-and-forget event, hence a property.",
+        "description": "TTS model seam the host supplies: given text, returns an audio `Blob` to play. This is a **function-valued property** (`el.synthesize = async text => blob`); when set, the native `speechSynthesis` path is bypassed. Mirrors `<kai-voice-input>`'s `transcribe`. A value-returning callback can't be modelled as a fire-and-forget event, hence a property.",
         "displayType": "undefined | (text: string) => Promise<Blob>"
       },
       {
@@ -8691,13 +8691,13 @@
       {
         "name": "kai-speaking-change",
         "detail": "{ speaking: false | true }",
-        "description": "Playback started or stopped — drive your own UI in sync. Fires on real transitions only (manual click and programmatic speak()/stop()), never on mount.",
+        "description": "Playback started or stopped. Drive your own UI in sync. Fires on real transitions only (manual click and programmatic speak()/stop()), never on mount.",
         "displayDetail": "{ speaking: false | true }"
       },
       {
         "name": "kai-synthesized",
         "detail": "{ blob: Blob }",
-        "description": "The model path (`synthesize`) resolved audio — the raw `Blob` before playback.",
+        "description": "The model path (`synthesize`) resolved audio: the raw `Blob` before playback.",
         "displayDetail": "{ blob: Blob }"
       }
     ],
@@ -8775,7 +8775,7 @@
         "type": "undefined | { id: string; title: string; groupId?: undefined | string; scope: { type: \"document\" | \"collection\"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | \"transcript\" | \"markdown\"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[]",
         "optional": true,
         "scalar": false,
-        "description": "Every conversation in the sidebar, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId` — or with a `groupId` matching no entry in `groups` — falls into a trailing ungrouped section (headerless when `compact`), so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. Omit for an empty sidebar, or when `no-conversations` replaces the built-in list with your own `sidebar-header` content.",
+        "description": "Every conversation in the sidebar, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId`, or with a `groupId` matching no entry in `groups`, falls into a trailing ungrouped section (headerless when `compact`), so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. Omit for an empty sidebar, or when `no-conversations` replaces the built-in list with your own `sidebar-header` content.",
         "typeName": "ConversationSummary[]",
         "typeShape": "{ id: string; title: string; groupId?: undefined | string; scope: { type: \"document\" | \"collection\"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | \"transcript\" | \"markdown\"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[]",
         "default": "[]",
@@ -9036,7 +9036,7 @@
         "type": "undefined | Record<string, object>",
         "optional": true,
         "scalar": false,
-        "description": "JSON Schemas for the card types this app renders, keyed by envelope type — the companion of `cardTypes`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type — the one your app actually cares about — as the only unchecked thing on screen. A schema here WINS over a built-in of the same name. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `\"type\"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one.",
+        "description": "JSON Schemas for the card types this app renders, keyed by envelope type. The companion of `cardTypes`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type, the one your app actually cares about, as the only unchecked thing on screen. A schema here WINS over a built-in of the same name. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `\"type\"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one.",
         "displayType": "undefined | Record<string, object>"
       }
     ],

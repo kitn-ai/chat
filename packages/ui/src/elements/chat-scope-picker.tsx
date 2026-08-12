@@ -19,7 +19,7 @@ interface Props extends Record<string, unknown> {
   open?: boolean;
   /** Initial open state on mount (uncontrolled seed). */
   defaultOpen?: boolean;
-  /** Disable the trigger — click/keyboard and `show()` no longer open the dropdown. */
+  /** Disable the trigger: click/keyboard and `show()` no longer open the dropdown. */
   disabled?: boolean;
 }
 

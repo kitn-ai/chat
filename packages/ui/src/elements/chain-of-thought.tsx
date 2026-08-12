@@ -23,21 +23,21 @@ interface Props extends Record<string, unknown> {
    *  supply the steps as `<kai-step>` light-DOM children instead; when both are
    *  present the property's steps come first. */
   steps?: Step[];
-  /** Open mode: `'multiple'` (default — any number of steps open at once) or
+  /** Open mode: `'multiple'` (default, any number of steps open at once) or
    *  `'single'` (at most one open; opening a step closes the others). */
   type?: ChainOfThoughtType;
   /** Controlled open step key(s). When set, it WINS over user interaction (the
    *  consumer owns the open set). String in `single` mode, string[] in
    *  `multiple` mode. Set as a JS property. */
   value?: string | string[];
-  /** Uncontrolled INITIAL open step key(s) — seeds which steps render expanded.
-   *  Ignored once `value` is provided. Set as a JS property. */
+  /** Uncontrolled INITIAL open step key(s), seeding which steps render
+   *  expanded. Ignored once `value` is provided. Set as a JS property. */
   defaultValue?: string | string[];
 }
 
 /** Events fired by `<kai-chain-of-thought>`. */
 interface Events {
-  /** The open set changed — by user click OR an expand()/collapse()/toggle()
+  /** The open set changed, by user click OR an expand()/collapse()/toggle()
    *  call. `value` is a string in `single` mode, a string[] in `multiple` mode.
    *  (Maps Radix Accordion's onValueChange.) */
   'kai-value-change': { value: string | string[] };
@@ -111,10 +111,12 @@ defineWebComponent<Props, Events>('kai-chain-of-thought', {
   // the only props are steps/type/value/defaultValue.
   let controller: ChainOfThoughtController | undefined;
   expose({
-    /** Open one step's detail by index, or — with no arg — ALL steps. In `single`
-     *  mode opening one step closes the others (expand-all keeps the last). */
+    /** Open one step's detail by index, or ALL steps when called with no arg. In
+     *  `single` mode opening one step closes the others (expand-all keeps the
+     *  last). */
     expand: (index?: number) => controller?.expand(index),
-    /** Close one step's detail by index, or — with no arg — ALL steps. */
+    /** Close one step's detail by index, or ALL steps when called with no
+     *  arg. */
     collapse: (index?: number) => controller?.collapse(index),
     /** Flip one step's open state by index. */
     toggle: (index?: number) => controller?.toggle(index),

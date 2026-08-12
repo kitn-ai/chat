@@ -4,7 +4,7 @@ import { FileTree, type FileTreeFile } from '../components/file-tree';
 interface Props extends Record<string, unknown> {
   /** The files to render. Set as a JS property (array of `{ path, url?, code?, language?, type?, additions?, deletions?, status? }`). */
   files: FileTreeFile[];
-  /** Selected file path — highlighted in the tree. */
+  /** Selected file path, highlighted in the tree. */
   activeFile?: string;
   /** Folder paths expanded initially. Omit to start with all folders open. */
   defaultExpanded?: string[];

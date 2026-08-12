@@ -96,14 +96,14 @@ interface Props extends Record<string, unknown> {
    *  plain string map (not the `CardTagMap` alias) so the generated React
    *  wrapper inlines it instead of emitting an unresolved named type. */
   cardTypes?: Record<string, string>;
-  /** JSON Schemas for the card types this app renders, keyed by envelope type —
-   *  the companion of `cardTypes`, which says what DRAWS a card while this says
-   *  what a VALID one looks like. An OBJECT, so it is a JS property only:
-   *  `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute.
+  /** JSON Schemas for the card types this app renders, keyed by envelope type. The
+   *  companion of `cardTypes`, which says what DRAWS a card while this says what a
+   *  VALID one looks like. An OBJECT, so it is a JS property only: `el.cardSchemas
+   *  = { 'pricing-table': pricingSchema }`, never an attribute.
    *  `createCardRegistry(...).validationSchemas` is exactly this shape.
    *
    *  Without it the kit validates its own seven built-ins and leaves your own card
-   *  type — the one your app actually cares about — as the only unchecked thing on
+   *  type, the one your app actually cares about, as the only unchecked thing on
    *  screen. A schema here WINS over a built-in of the same name.
    *
    *  Typed `Record<string, object>` rather than `Record<string, JsonSchema>`

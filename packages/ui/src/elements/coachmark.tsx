@@ -17,7 +17,7 @@ interface Props extends Record<string, unknown> {
   /** Floating placement relative to the anchor (default `bottom`). */
   placement?: string;
   /** Color tone: `primary` (default, theme accent), `info` (blue), `success`
-   *  (green), `warning` (amber), or `error` (red) — reusing the kit's tool hues. */
+   *  (green), `warning` (amber), or `error` (red), reusing the kit's tool hues. */
   tone?: 'primary' | 'info' | 'success' | 'warning' | 'error';
   /** Render the arrow that points at the anchor (default `true`). Set
    *  `arrow="false"` for a plain bubble with no pointer. */

@@ -17,8 +17,8 @@ interface Props extends Record<string, unknown> {
   /** Re-hydrate / control the user's pick. Set as a JS PROPERTY:
    *  `el.selection = { chosenId, rejectedIds }`. Renders the collapsed winner. */
   selection?: Record<string, unknown>;
-  /** Layout: `'auto'` (default — columns when wide, tabs when narrow, by CONTAINER
-   *  width) | `'columns'` (side-by-side) | `'tabs'` (pills to switch). Attribute: `layout`. */
+  /** Layout: `'auto'` (default, columns when wide, tabs when narrow, by CONTAINER width) |
+   *  `'columns'` (side-by-side) | `'tabs'` (pills to switch). Attribute: `layout`. */
   layout?: CompareLayout;
   /** Prose/text size for the rendered candidates. Attribute: `prose-size`. */
   proseSize?: ProseSize;
@@ -77,10 +77,11 @@ defineWebComponent<Props, Events>(
     // component's own callbacks still fire (select → onSelect → kai-compare-select).
     let controller: ResponseCompareController | undefined;
     expose({
-      /** Programmatically commit a pick by candidate id — same path as the "Pick
-       *  this" button: fires kai-compare-select and optimistically collapses
-       *  (single-shot; inert while streaming or already resolved). `select` does
-       *  NOT collide with the `selection` prop (distinct identifier). */
+      /** Programmatically commit a pick by candidate id, on the same path as the
+       *  "Pick this" button: fires kai-compare-select and optimistically
+       *  collapses (single-shot; inert while streaming or already resolved).
+       *  `select` does NOT collide with the `selection` prop (distinct
+       *  identifier). */
       select: (candidateId: string) => controller?.select(candidateId),
       /** Focus the current roving tab stop (the focused candidate's "Pick this"
        *  radio) so a consumer can move keyboard focus into the radiogroup. */

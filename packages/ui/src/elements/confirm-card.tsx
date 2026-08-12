@@ -11,8 +11,8 @@ interface Props extends Record<string, unknown> {
   cardId?: string;
   /** Heading rendered in the card chrome (= CardEnvelope.title). Attribute: `heading`. */
   heading?: string;
-  /** Focus the default action on mount (off by default — no focus-stealing).
-   *  Attribute: `autofocus`. */
+  /** Focus the default action on mount (off by default, so nothing steals
+   *  focus). Attribute: `autofocus`. */
   autofocus?: boolean;
   /** Set when the user resolved this card; renders the read-only view. Property:
    *  `el.resolution = { kind:'action', action:'…' }`. */
@@ -48,16 +48,16 @@ defineWebComponent<Props>(
     // `dismiss`/`reopen`).
     let controller: ConfirmController | undefined;
     expose({
-      /** Focus the default action button (or the first action if none is default) —
-       *  the same target `autofocus` focuses on mount, but on demand. */
+      /** Focus the default action button (or the first action if none is default).
+       *  The same target `autofocus` focuses on mount, but on demand. */
       focus: (options?: FocusOptions) => controller?.focus(options),
-      /** Activate an action by id — emits the `action` verb on kai-card and resolves
+      /** Activate an action by id: emits the `action` verb on kai-card and resolves
        *  the card (single-shot). With no id, invokes the default action. */
       confirm: (actionId?: string) => controller?.confirm(actionId),
-      /** Trigger the dismiss path — emits `dismiss` on kai-card and optimistically
+      /** Trigger the dismiss path: emits `dismiss` on kai-card and optimistically
        *  collapses the card to its re-openable stub. */
       dismiss: () => controller?.dismiss(),
-      /** Re-open a dismissed card from its stub — emits `reopen` on kai-card. */
+      /** Re-open a dismissed card from its stub: emits `reopen` on kai-card. */
       reopen: () => controller?.reopen(),
     });
 

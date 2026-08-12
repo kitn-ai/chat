@@ -21,7 +21,7 @@ type Props = Omit<ChatThreadProps,
      *
      *  Re-declared here (rather than inherited from `ChatThreadProps`) because
      *  the ELEMENT registers a `[]` default and renders the empty state without
-     *  it, while the SolidJS `<ChatThread>` component still requires it — the
+     *  it, while the SolidJS `<ChatThread>` component still requires it. The
      *  facade hands it a validated array either way. Matches `<kai-thread>`. */
     messages?: ChatMessage[];
     /** Optional card type -> custom-element tag overrides/additions for `card`
@@ -29,14 +29,14 @@ type Props = Omit<ChatThreadProps,
      *  plain string map (not the `CardTagMap` alias) so the generated React
      *  wrapper inlines it instead of emitting an unresolved named type. */
     cardTypes?: Record<string, string>;
-    /** JSON Schemas for the card types this app renders, keyed by envelope type —
-     *  the companion of `cardTypes`, which says what DRAWS a card while this says
-     *  what a VALID one looks like. An OBJECT, so it is a JS property only:
-     *  `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute.
+    /** JSON Schemas for the card types this app renders, keyed by envelope type. The
+     *  companion of `cardTypes`, which says what DRAWS a card while this says what a
+     *  VALID one looks like. An OBJECT, so it is a JS property only: `el.cardSchemas
+     *  = { 'pricing-table': pricingSchema }`, never an attribute.
      *  `createCardRegistry(...).validationSchemas` is exactly this shape.
      *
      *  Without it the kit validates its own seven built-ins and leaves your own card
-     *  type — the one your app actually cares about — as the only unchecked thing on
+     *  type, the one your app actually cares about, as the only unchecked thing on
      *  screen. A schema here WINS over a built-in of the same name.
      *
      *  Typed `Record<string, object>` rather than `Record<string, JsonSchema>`
@@ -102,10 +102,29 @@ defineWebComponent<Props, Events>('kai-chat', {
   // (focus the composer, clear it, send programmatically, scroll the thread).
   let controller: ChatThreadController | undefined;
   expose({
+    /** Focus the composer, meaning the contenteditable (or textarea) inside the
+     *  shadow root. A native `focus()` on the host lands on the host itself and
+     *  never reaches it, so this is the only way to focus the input
+     *  programmatically. */
     focus: (options?: FocusOptions) => controller?.focus(options),
+    /** Blur whatever currently holds focus inside the shadow root. The companion
+     *  to `focus()`, for the same reason: a native `blur()` on the host misses
+     *  the real focus target. */
     blur: () => (element.shadowRoot?.activeElement as HTMLElement | null)?.blur(),
+    /** Empty the COMPOSER: drops the draft text and every staged attachment, then
+     *  fires `kai-value-change` with `''`. It does NOT touch the thread. `messages`
+     *  is the consumer's own state, so clearing history stays the consumer's call. */
     clear: () => controller?.clear(),
+    /** Submit whatever the composer currently holds, on the same path as Enter or
+     *  the send button: fires `kai-submit` with that value plus the staged
+     *  attachments, then drops the attachments. It takes no argument, so to send
+     *  text the user never typed, set `el.value` first. There is no empty-check,
+     *  so an empty composer still fires. The draft is cleared afterwards only when
+     *  `value` is uncontrolled; a controlled host owns its value and clears it
+     *  itself. Named `send`, not `submit`, to match the shared vocabulary. */
     send: () => controller?.send(),
+    /** Scroll the message viewport to the newest message. Defaults to `'smooth'`;
+     *  pass `'instant'` to jump without animating. */
     scrollToBottom: (behavior?: ScrollBehavior) => controller?.scrollToBottom(behavior),
   });
 

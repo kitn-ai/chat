@@ -3,7 +3,7 @@ import { FeedbackBar, type FeedbackValue, type FeedbackDetail } from '../compone
 
 interface Props extends Record<string, unknown> {
   /** The banner label (e.g. "Was this helpful?"). Attribute: `bar-title`
-   *  (`title` is avoided — it's a global HTML attribute). */
+   *  (`title` is avoided because it is a global HTML attribute). */
   barTitle?: string;
   /** When set, a not-helpful vote opens an optional detail form before the
    *  thank-you confirmation. Attribute: `collect-detail`. */
