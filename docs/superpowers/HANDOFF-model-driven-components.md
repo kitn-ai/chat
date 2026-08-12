@@ -532,9 +532,10 @@ results doc is the instance that got furthest.
 
 ### 5.12 Absence read as a legitimate value
 
-**This and §5.13 are the two lessons from this session that leave this repo**, alongside §5.11.
-The rest above are instances: worth recognising when they recur, but tied to this codebase. These
-two are rules.
+**This, §5.13 and §5.14 are the lessons from this session that leave this repo**, alongside §5.11.
+The rest above are instances: worth recognising when they recur, but tied to this codebase. They
+are named here rather than counted, because the count that used to stand in this sentence went
+stale the moment §5.14 was added, which is §5.11 happening inside the paragraph that points at it.
 
 Four separate bugs were the same bug: something was absent, and the absence was read as a value.
 
