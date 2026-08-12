@@ -2,11 +2,12 @@
  * manifest.ts — reads dist/custom-elements.json (a Custom Elements Manifest)
  * and exposes helpers for the component_reference tool.
  *
- * Resolution strategy (dual-context):
+ * Resolution strategy (dual-context) — each context is an EXACT location, never a
+ * search. See `resolveManifestPath` for why that distinction is the whole point:
  *  1. Bundled bin: dist/mcp.es.js lives in dist/, so custom-elements.json is
- *     a sibling → try ./custom-elements.json relative to import.meta.url.
- *  2. Vitest (source): manifest.ts lives in src/agent-tooling/mcp/, so we walk
- *     up parent directories looking for <dir>/dist/custom-elements.json.
+ *     a sibling → ./custom-elements.json relative to import.meta.url.
+ *  2. Vitest (source): manifest.ts lives at <package>/src/agent-tooling/mcp/, so
+ *     the manifest is <package>/dist/custom-elements.json and nowhere else.
  *
  * It also answers "which of these 80 elements has anything to do with cards", for
  * the card contract component_reference serves. That question lives HERE rather than
@@ -18,7 +19,7 @@
 
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 // The package's own public entry, by the same specifier the scaffolder tells a
 // consumer's route to use. Not a relative import of src/schemas/index.ts, and that
 // is forced rather than chosen: that barrel re-exports src/schemas/registry.ts,
@@ -109,32 +110,95 @@ interface CustomElementsManifest {
 }
 
 // ── Manifest resolution ───────────────────────────────────────────────────────
+//
+// THE MANIFEST IS THIS PACKAGE'S OWN BUILD ARTIFACT, SO IT IS ADDRESSED, NOT SEARCHED
+// FOR. This used to walk up ten parent directories taking the first
+// `<dir>/dist/custom-elements.json` it found, and that is a categorically weaker
+// thing than it looks: "a custom-elements.json exists somewhere above me" and "THIS
+// package's custom-elements.json exists" are different facts, and a walk-up cannot
+// tell them apart. It reports success for both.
+//
+// It was not hypothetical. Measured from an agent git worktree at
+// `<repo>/.claude/worktrees/<agent>/packages/ui/src/agent-tooling/mcp`, the loop
+// climbed past the worktree's own (unbuilt) `packages/ui/dist`, out of the worktree
+// entirely, and bound on iteration 8 to `<repo>/dist/custom-elements.json` — a
+// leftover from the pre-monorepo layout, six weeks stale, 78 tags, and zero elements
+// declaring `cardSchemas`. The consequence is this repo's dominant failure mode in
+// its purest form: on an unbuilt tree the MCP manifest tests did not error, they
+// PASSED, 16 of 17, against an artifact from a tree nobody was working in. Two
+// checkouts could disagree about what they had tested and nothing said so.
+//
+// So the rule here is now: a missing manifest is a HARD FAILURE that names the path
+// it expected. Never a fallback, never a wider search. If this throws, the answer is
+// to build — not to let it find someone else's build.
 
-function resolveManifestPath(): string {
-  const thisFile = fileURLToPath(import.meta.url);
-  const thisDir = dirname(thisFile);
+const PACKAGE_NAME = '@kitn.ai/ui';
+const MANIFEST_FILE = 'custom-elements.json';
 
-  // 1. Bundled bin: sibling in the same directory
-  const sibling = join(thisDir, 'custom-elements.json');
-  if (existsSync(sibling)) {
-    return sibling;
+/**
+ * `<package>/src/agent-tooling/mcp` -> `<package>`. A fixed, exact hop, and it is
+ * CHECKED below rather than trusted: if this module is ever moved to a different
+ * depth the derived root stops being this package and resolution throws, instead of
+ * silently addressing whatever directory happens to sit three levels up.
+ */
+const SOURCE_TO_PACKAGE_ROOT = ['..', '..', '..'] as const;
+
+/** Is `root` the root of THIS package — not merely *a* directory holding a dist/? */
+function isThisPackage(root: string): boolean {
+  const manifest = join(root, 'package.json');
+  if (!existsSync(manifest)) return false;
+  try {
+    return (JSON.parse(readFileSync(manifest, 'utf-8')) as { name?: string }).name === PACKAGE_NAME;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Absolute path to this package's Custom Elements Manifest, or a throw naming what
+ * it looked for.
+ *
+ * `fromDir` exists for the tests and defaults to this module's own directory. It is
+ * the only way to write the check that matters: the guarantee is not "a manifest was
+ * found", it is "THIS package's manifest was found", and the two only come apart
+ * when there is a decoy above the origin. manifest.test.ts builds exactly that tree.
+ */
+export function resolveManifestPath(
+  fromDir: string = dirname(fileURLToPath(import.meta.url)),
+): string {
+  // 1. Bundled bin: dist/mcp.es.js and dist/custom-elements.json are siblings.
+  //    Unambiguous by construction — a sibling cannot be another checkout's artifact.
+  const sibling = join(fromDir, MANIFEST_FILE);
+  if (existsSync(sibling)) return sibling;
+
+  // 2. Source (vitest, tsx): one exact location, derived and then verified.
+  const packageRoot = resolve(fromDir, ...SOURCE_TO_PACKAGE_ROOT);
+  const expected = join(packageRoot, 'dist', MANIFEST_FILE);
+
+  if (!isThisPackage(packageRoot)) {
+    throw new Error(
+      `[${PACKAGE_NAME}] Cannot locate the Custom Elements Manifest: ${packageRoot} is not ` +
+        `the ${PACKAGE_NAME} package root, so ${expected} would not be this package's ` +
+        `manifest even if it existed.\n` +
+        `Resolved from: ${fromDir}\n` +
+        `This module must live at <package>/src/agent-tooling/mcp/ (or be bundled beside ` +
+        `${MANIFEST_FILE} in dist/). Resolution deliberately does NOT search parent ` +
+        `directories — finding some other checkout's manifest is worse than failing.`,
+    );
   }
 
-  // 2. Source/Vitest: walk up parent directories looking for dist/custom-elements.json
-  let dir = thisDir;
-  for (let i = 0; i < 10; i++) {
-    const candidate = join(dir, 'dist', 'custom-elements.json');
-    if (existsSync(candidate)) {
-      return candidate;
-    }
-    const parent = dirname(dir);
-    if (parent === dir) break; // reached filesystem root
-    dir = parent;
+  if (!existsSync(expected)) {
+    throw new Error(
+      `[${PACKAGE_NAME}] Missing build artifact: ${expected}\n` +
+        `Resolved from: ${fromDir}\n` +
+        `The Custom Elements Manifest is generated by the build. Run \`nx build ui\` ` +
+        `(or \`npm run build:api\` in packages/ui) and try again.\n` +
+        `Resolution deliberately does NOT search parent directories: binding to a ` +
+        `neighbouring checkout's manifest would make this succeed against stale data.`,
+    );
   }
 
-  throw new Error(
-    `Could not find custom-elements.json. Searched from: ${thisDir}`,
-  );
+  return expected;
 }
 
 // ── Parsed manifest (module-level cache) ─────────────────────────────────────
