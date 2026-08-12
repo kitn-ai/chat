@@ -23,7 +23,6 @@
 
     "tests/react",
 
-    "tests/components/message.test.tsx",
     "tests/primitives/card-recovery.test.ts",
     "tests/remote/host-embed.test.ts",
     "tests/scripts/display-name.test.ts",
@@ -34,7 +33,7 @@
   ],
   "quarantine": {
     "why": "Turning this pass on surfaced 36 pre-existing errors in 9 files — exactly what it was built to find. 12 of them were one dead file (tests/animated-logo.tsx), now deleted. The remaining 24 are quarantined here rather than papered over with looser compilerOptions, because most need a src-side fix or a call about intent, not a cast in the test. Delete an entry and fix the file; do not add entries without a line here saying what broke.",
-    "tests/components/message.test.tsx": "4 errors. Real API drift, not test noise. `<Message role=\"user\">` typechecks against JSX.HTMLAttributes, so `role` is the ARIA attribute and 'user' is not a valid ARIA role — the test puts an invalid role on a div. `<MessageAvatar fallback=\"AI\" />` fails because MessageAvatarProps marks `src`/`alt` required even though the component's whole point is rendering `fallback` when `src` is absent. Both fixes land in src/components/message.tsx.",
+    "tests/components/message.test.tsx": "FIXED — un-quarantined, this pass now checks the file. Both errors were real API drift and both were fixed in src/components/message.tsx, not papered over in the test. (1) `<Message role=\"user\">` resolved to the ARIA `role` attribute and was spread onto the row, so the rendered div shipped `role=\"user\"` — measured in a real chromium: the AX tree computed `generic` (the invalid token is discarded, so nothing was mis-announced) and axe reported a CRITICAL `aria-roles` violation, 'Role must be one of the valid ARIA roles: user'. `MessageProps` now Omits ARIA's `role` and declares the SPEAKER union instead; `splitProps` consumes it so it never reaches the DOM, and the row gets `role=\"article\"` + an `aria-label` naming the speaker + `data-role`. The public prop name is unchanged. (2) MessageAvatarProps marked `src`/`alt` required even though the component's whole point is rendering `fallback` when `src` is absent; both are optional now, `alt` defaulting to ''.",
     "tests/primitives/card-recovery.test.ts": "9 errors, all TS2722 'cannot invoke possibly undefined'. dismissRecovery() returns Pick<CardPolicy,'onDismiss'|'onReopen'>, and Pick preserves CardPolicy's `?`, so the return type says the handlers may be missing when the implementation always returns both. The honest fix is the return type in src/primitives/card-recovery.ts, not `!` in the test.",
     "tests/remote/host-embed.test.ts": "1 error. The test asserts a 'render-error' fault code that is no longer a member of WireFaultCode. Needs a call on whether the code was dropped or renamed.",
     "tests/scripts/display-name.test.ts": "1 error, TS7016. Imports ../../scripts/_ts-helpers.mjs, which has no declarations. Needs either allowJs on this pass or a .d.mts beside the helper.",
