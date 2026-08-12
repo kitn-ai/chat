@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { cardEmitPlan, scaffold, renderSurface, NO_PROXY_CLAIM, PROXY_REQUIRED_CLAIM } from './tools/scaffold';
-import { getArchetype, getIntegration, listArchetypes, listIntegrations } from '../registry';
+import {
+  getArchetype, getIntegration, listArchetypes, listIntegrations, listSurfaceProbes,
+} from '../registry';
 import { Framework } from '../types';
 import type { Integration } from '../types';
 // The real encoders, used to prove WHY the fabricated sample seed had to go:
@@ -3752,7 +3754,7 @@ describe('the emitted scaffold is built from `deps` and `keyExposure`', () => {
 // so `@kitn.ai/ui/solid` is a strict SUPERSET of the root `@kitn.ai/ui`: every
 // name a Solid surface imports resolves from both, and `verify:scaffold`'s solid
 // tsc project compiles clean either way. The generator emitted the ROOT entry for
-// every Solid scaffold — wrong for every archetype × integration, and in direct
+// every Solid scaffold — wrong for every surface × integration, and in direct
 // contradiction of the published guide, which tells readers "Import Solid
 // components from `@kitn.ai/ui/solid`, not from the root `@kitn.ai/ui`" — and no
 // compiler on this repo's critical path could see it. A structural assertion over
@@ -3815,10 +3817,35 @@ describe('the emitted surface imports its framework\'s kit entry', () => {
   /** Every framework the scaffolder accepts, from the enum rather than a list. */
   const FRAMEWORKS = Framework.options;
 
-  /** Every surface the catalogs can express, from the registry rather than a list. */
+  /**
+   * Every surface the catalogs can express, from the registry rather than a list.
+   *
+   * `listSurfaceProbes()`, NOT `listArchetypes()`, and that is the same axis
+   * correction `verify:scaffold` already made — see the `WHY THESE AND NOT THE
+   * PRESETS` comment on that function. The preset list is the wrong axis here for
+   * the two reasons stated there, and both bite a check that reads emitted
+   * imports:
+   *
+   *   1. It is seven cells over six distinct `components` lists —
+   *      `support-widget` repeats `drop-in-chat`'s and differs only in
+   *      `defaultPlacement`, which changes an inline CSS string and no import. So
+   *      one cell in seven re-checked the previous cell's specifiers.
+   *   2. Every preset is exactly ONE capability, so no preset can express the
+   *      MAXIMAL surface — chat + sources + tool + reasoning + artifact +
+   *      resizable + voice-input + file-upload + attachments. That is the only
+   *      cell where the workspace layout, the tool loop, the card registry and
+   *      the attachment staging are emitted into one file, and it is where an
+   *      import emitted by one capability's branch can collide with another's.
+   *      The specifier check had never seen it.
+   *
+   * The probes are a strict superset: every preset's `components` list is one of
+   * them (chat-only · sources · tool+reasoning · artifact+resizable · voice-input
+   * · file-upload+attachments), plus `every-capability`, which no preset can
+   * reach. So this trades a duplicate cell for the composition and loses nothing.
+   */
   const surfaces = () =>
-    listArchetypes().flatMap((archetype) =>
-      listIntegrations().map((integration) => ({ archetype, integration })),
+    listSurfaceProbes().flatMap((probe) =>
+      listIntegrations().map((integration) => ({ probe, integration })),
     );
 
   it('declares an expected entry for every framework in the enum', () => {
@@ -3837,16 +3864,11 @@ describe('the emitted surface imports its framework\'s kit entry', () => {
   it('imports the kit components from the entry its framework is meant to use', () => {
     for (const framework of FRAMEWORKS) {
       const expected = COMPONENT_ENTRY[framework];
-      for (const { archetype, integration } of surfaces()) {
-        const code = renderSurface({
-          framework,
-          components: archetype.components,
-          integration,
-          placement: archetype.defaultPlacement,
-        });
+      for (const { probe, integration } of surfaces()) {
+        const code = renderSurface({ framework, components: probe.components, integration });
         expect(
           kitImportsOf(code),
-          `${framework} × ${archetype.id} × ${integration.id}: the emitted surface never imports ` +
+          `${framework} × ${probe.id} × ${integration.id}: the emitted surface never imports ` +
             `${expected}, which is where this framework's components come from`,
         ).toContain(expected);
       }
@@ -3866,16 +3888,11 @@ describe('the emitted surface imports its framework\'s kit entry', () => {
    */
   it('never imports the bare root entry, from any framework', () => {
     for (const framework of FRAMEWORKS) {
-      for (const { archetype, integration } of surfaces()) {
-        const code = renderSurface({
-          framework,
-          components: archetype.components,
-          integration,
-          placement: archetype.defaultPlacement,
-        });
+      for (const { probe, integration } of surfaces()) {
+        const code = renderSurface({ framework, components: probe.components, integration });
         expect(
           kitImportsOf(code),
-          `${framework} × ${archetype.id} × ${integration.id}: the emitted surface imports the bare ` +
+          `${framework} × ${probe.id} × ${integration.id}: the emitted surface imports the bare ` +
             `root '@kitn.ai/ui'. Every framework has an entry of its own (${COMPONENT_ENTRY[framework]}); ` +
             `the root is the shared layer every consumer resolves, and tsc accepts it here because the ` +
             `real entry re-exports it — so nothing but this assertion can tell the two apart.`,
