@@ -6,17 +6,31 @@
 // consumer. The bundle must ALSO open with a 'use client' directive or RSC
 // builds reject the hooks it uses. This asserts both so that regression can
 // never silently ship again.
+//
+// Paths are anchored to THIS FILE, not to the cwd. `npm run build` sets the cwd to the
+// package, but CLAUDE.md tells everyone to run from the REPO ROOT, and done that way the
+// cwd-relative version MISDIAGNOSED ITSELF: it reported "not found — run the lib build
+// first" against a tree that had just built green, sending you off to re-run a build
+// that was never the problem. The element lookup below was worse than that, because it
+// is a check rather than a bail: a cwd holding `dist/react.js` but no `dist/elements/`
+// reported all 78 wrappers as pointing at missing files (measured), which is a loud
+// alarm about nothing. Both now resolve against the package.
 import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
+const PKG_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+// Absolute for fs, short for humans: the messages below read the same as they always did.
 const BUNDLE = 'dist/react.js';
+const BUNDLE_PATH = join(PKG_ROOT, BUNDLE);
 const SPECIFIER = /@kitn\.ai\/ui\/elements\/([a-z0-9-]+)/g;
 
 let code;
 try {
-  code = readFileSync(BUNDLE, 'utf8');
+  code = readFileSync(BUNDLE_PATH, 'utf8');
 } catch {
   console.error(
-    `✗ verify-react-wrappers: ${BUNDLE} not found — run the lib build first.`,
+    `✗ verify-react-wrappers: ${BUNDLE_PATH} not found — run the lib build first.`,
   );
   process.exit(1);
 }
@@ -25,7 +39,7 @@ const problems = [];
 
 // 1 + 2. Every per-element specifier must resolve to a real dist/elements file.
 const names = [...new Set([...code.matchAll(SPECIFIER)].map((m) => m[1]))];
-const missing = names.filter((name) => !existsSync(`dist/elements/${name}.js`));
+const missing = names.filter((name) => !existsSync(join(PKG_ROOT, `dist/elements/${name}.js`)));
 if (missing.length > 0) {
   problems.push(
     `  ${missing.length} react wrapper specifier(s) point at non-existent element files:\n` +

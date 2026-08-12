@@ -19,10 +19,20 @@
 // entirely (verified empirically: a static `import './variant-aurora'`
 // added to index.tsx left kai.es.js's 23,964 bytes untouched and only grew
 // register-impl-<hash>.js), so both files are checked here.
+//
+// DIST is anchored to THIS FILE, not to the cwd. `npm run build` sets the cwd to the
+// package, but CLAUDE.md tells everyone to run from the REPO ROOT, and this guard
+// degrades QUIETLY in the wrong direction when the cwd is wrong: `findRegisterImpl`
+// catches the `readdirSync` failure and returns null, i.e. a wrong cwd looks like
+// "found nothing to check" rather than "cannot check". The kai.es.js read then bails
+// with "run the lib build first" against a tree that just built green. A leak detector
+// whose miss-mode is silence has to be pinned to the package it inspects.
 import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const DIST = 'dist';
+const PKG_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const DIST = join(PKG_ROOT, 'dist');
 const KAI_ES = join(DIST, 'kai.es.js');
 
 function findRegisterImpl() {
