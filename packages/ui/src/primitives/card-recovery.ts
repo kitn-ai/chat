@@ -96,9 +96,20 @@ function resolutionOf(cards: CardEnvelope[], cardId: string): CardResolution | u
   return cards.find((c) => c.id === cardId)?.resolution;
 }
 
+// On the return type — `Required<Pick<…>>`, not a bare `Pick`. Both members are
+// optional on CardPolicy, which is right there, where a host supplies one, the other,
+// or neither; but `Pick` carries the `?` across even though the body below returns
+// both handlers on every path, so the declaration said "may be missing" about two
+// things that never are. That was consumer-facing, not internal tidiness: this
+// function is exported from src/index.ts and the MCP scaffolder emits
+// `const { onDismiss, onReopen } = dismissRecovery({…})`, so anyone who destructured
+// and then INVOKED a handler hit TS2722 in code we generated for them. Assigning the
+// result straight into a CardPolicy stays fine either way, both fields being optional
+// there, which is why it stayed invisible. tests/primitives/card-recovery.test.ts pins
+// the runtime side over the full cross-product of the optional options.
 /**
  * Build the `{ onDismiss, onReopen }` policy handlers for the card dismiss/recovery
- * flow over a host store (`get`/`set`).
+ * flow over a host store (`get`/`set`). Both handlers are always returned.
  *
  * - `onDismiss(cardId)` — stamps `{ kind:'dismissed', at }` immutably and, when a
  *   `toast` is injected, shows "Dismissed" with an Undo that restores the card's
@@ -108,7 +119,7 @@ function resolutionOf(cards: CardEnvelope[], cardId: string): CardResolution | u
  */
 export function dismissRecovery(
   opts: DismissRecoveryOptions,
-): Pick<CardPolicy, 'onDismiss' | 'onReopen'> {
+): Required<Pick<CardPolicy, 'onDismiss' | 'onReopen'>> {
   const now = opts.now ?? (() => Date.now());
   const reopenable = opts.isReopenable ?? ((env: ReopenEnv) => defaultIsReopenable(env, opts.staleAfterMs));
   const undoMs = opts.undoMs ?? 6000;

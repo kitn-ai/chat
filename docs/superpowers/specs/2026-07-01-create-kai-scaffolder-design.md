@@ -437,6 +437,62 @@ network.
 This also removes a class of drift where a starter's mock and the scaffolder's mock
 diverge in behaviour and a consumer sees different streaming in the two paths.
 
+### DECIDED, 2026-08-12 — and built (`src/state/mock.ts`)
+
+Two calls the section above left open, both settled deliberately.
+
+**1. The mock produces a WIRE, not folded parts.** `createMockResponder()` returns a
+function yielding SSE frames; the caller hands them to `readOpenAIStream` exactly as
+it would a `fetch()` Response. The cheaper design — yield text deltas, fold them with
+`appendTextPart` — was rejected for three reasons:
+
+- It bypasses the kit's own parser. The zero-config default is the first code path
+  every new developer runs, and under the folding design it exercised none of
+  `sseDataFrames` / `sseJson` / `openaiChatFormat` / `consumeModelStream`. Producing a
+  wire makes the first-run path a live regression test of what every real integration
+  depends on.
+- It keeps the mock and real scaffolds structurally different, so "swap in a real
+  backend" stays a rewrite of the submit handler. They now differ by ONE expression:
+  `mockResponse(value)` vs `await fetch('/api/chat', …)`. Everything else —
+  `createAssistantStream`, `readOpenAIStream`, the try/catch/finally, the abort — is
+  byte-identical, and `realStreamBody` in `scaffold.ts` emits both.
+- The seven hand-rolled copies had already drifted. One replaced `parts` wholesale,
+  silently deleting reasoning/tool parts already on the message.
+
+The frames use the OpenAI chat-completions shape because the mock stands in for the
+consumer's `/api/chat` ROUTE, not for a provider: every catalog integration except
+`mock` re-frames its provider to that shape server-side, so matching it is what keeps
+the swap a one-line change. A bespoke mock `WireFormat` would have meant the
+zero-config path parsed through code that never ships.
+
+**2. It must be unmistakable at the wire level.** This is the more important half.
+This repo has already shipped a fabricated turn that a human demoing it read as
+success — a tool call seeded from fixture data, rendered as "search Completed", and
+POSTed to the provider ahead of the user's own message. A mock indistinguishable from
+a real response is how that happens, and choosing a real provider's frame shape means
+shape alone can no longer distinguish it. So the tells are explicit and layered, each
+visible at a different altitude:
+
+| # | Altitude | Tell |
+|---|---|---|
+| 1 | Raw stream | opens with an SSE comment banner `: kai-mock — NO PROVIDER WAS CONTACTED…`. Comment lines are dropped by `sseDataFrames`, so it is free semantically and unmissable in a capture — and it exercises the comment-skipping path real providers use for keep-alives. |
+| 2 | Every frame | carries `_kai_mock`, a full sentence naming `createMockResponder`. Unknown fields are ignored by the reader, so it costs nothing and survives JSON parsing. |
+| 3 | Field | `model` is `kai-mock`, which no provider serves. A mock frame echoed upstream is REJECTED rather than quietly accepted — the specific failure the fabricated-tool-call bug needed and did not get. |
+| 4 | Turn | usage is all zeros. A real turn that produced text cannot report zero completion tokens, so `turn.usage` disambiguates in the app, not only in the bytes. |
+| 5 | UI | the reply says so in words. The weakest tell and the only one a real model could imitate, which is why it is not the only one. |
+
+A one-time `console.info` on the first turn covers "notice it instantly"; pass
+`announce: false` to silence it.
+
+`@kitn.ai/ui/state` keeps its charter: `mock.ts` imports nothing (not even from
+`wire`), has no DOM and no Solid, and yields `AsyncIterable<string>`, which is
+structurally a `StreamSource`. The dependency runs one way — a caller pairs them.
+
+Still open: the five `examples/starters/*` copies of `streamFakeReply` have NOT been
+migrated yet, and `integrations/mock.ts`'s `streamMapping` prose still claims the
+scaffold "folds tokens onto the message parts, so nothing parses a wire format",
+which is now false.
+
 ## The clone rule
 
 **A recognizable app name appears in the CLI only if it maps to a real, maintained

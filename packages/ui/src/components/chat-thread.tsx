@@ -84,8 +84,8 @@ export interface ChatThreadProps {
   context?: ChatThreadContextUsage;
   /** Show the scroll-to-bottom button inside the scroll area. Default true. */
   scrollButton?: boolean;
-  /** Whether the host has `slot="header-start"` content (left of the title) —
-   *  set by the `<kai-chat>` facade so a custom control forces the header open. */
+  /** Whether the host has `slot="header-start"` content (left of the title). Set
+   *  by the `<kai-chat>` facade so a custom control forces the header open. */
   headerStart?: boolean;
   /** Whether the host has `slot="header-end"` content (right of the controls). */
   headerEnd?: boolean;
@@ -99,24 +99,24 @@ export interface ChatThreadProps {
   //               content owns its own data/events — a slotted (light-DOM) node
   //               can't read this component's reactive state. That boundary is
   //               the whole reason `messages` stays a data prop, not a slot.
-  /** REPLACE — full custom header in place of the built-in title/model/context bar. */
+  /** REPLACE: full custom header in place of the built-in title/model/context bar. */
   headerFull?: boolean;
-  /** INJECT — left sidebar column (e.g. a conversation list / your own nav). */
+  /** INJECT: left sidebar column (e.g. a conversation list / your own nav). */
   sidebar?: boolean;
-  /** REPLACE — custom zero-state rendered in the message area while the thread is empty (replaces the empty message list only; the composer and its suggestions still render). */
+  /** REPLACE: custom zero-state rendered in the message area while the thread is empty (replaces the empty message list only; the composer and its suggestions still render). */
   empty?: boolean;
-  /** REPLACE — full custom composer in place of the built-in prompt input. The
+  /** REPLACE: full custom composer in place of the built-in prompt input. The
    *  projected content wires its own submit (the data-flow boundary). */
   composer?: boolean;
-  /** INJECT — accessory row just above the composer (e.g. extra actions). */
+  /** INJECT: accessory row just above the composer (e.g. extra actions). */
   composerActions?: boolean;
-  /** INJECT — footer row below the composer (disclaimers, token meter, …). */
+  /** INJECT: footer row below the composer (disclaimers, token meter, …). */
   footer?: boolean;
   /** Show a Search (Globe) button in the input toolbar; fires a `search` event. */
   search?: boolean;
   /** Show a Voice (Mic) button in the input toolbar; fires a `voice` event. */
   voice?: boolean;
-  /** Rich entity triggers — each `{ char, kind, items }` opens a caret-anchored
+  /** Rich entity triggers. Each `{ char, kind, items }` opens a caret-anchored
    *  menu that inserts an atomic pill (`/` skills, `@` agents/plugins). Set as a
    *  JS property; forwarded to the input. */
   triggers?: TriggerDef[];
@@ -399,7 +399,7 @@ export function ChatThread(props: ChatThreadProps) {
               </Show>
             </div>
           </div>
-          {/* INJECT — footer row below the composer. */}
+          {/* INJECT: footer row below the composer. */}
           <Show when={props.footer}>
             <div part="footer" class="shrink-0 px-4 pb-3">
               <div class="mx-auto max-w-3xl text-center text-xs text-muted-foreground"><slot name="footer" /></div>

@@ -57,9 +57,9 @@ interface GroupProps extends Record<string, unknown> {
   maximizedIndex?: number | null;
   /**
    * Divider affordance drawn inside each draggable handle's 8px grab zone:
-   * - `line` (default) — a 1px hairline, transparent at rest, tinting on hover/drag.
-   * - `grip` — a dotted grip handle.
-   * - `none` — no visible divider, just the invisible hit-area.
+   * - `line` (default): a 1px hairline, transparent at rest, tinting on hover/drag.
+   * - `grip`: a dotted grip handle.
+   * - `none`: no visible divider, just the invisible hit-area.
    * The full grab zone and keyboard/ARIA behavior are identical for all three.
    */
   handle?: 'line' | 'grip' | 'none';
@@ -610,8 +610,8 @@ interface ItemProps extends Record<string, unknown> {
   /** Hide this panel; its divider is dropped and the rest reflow. */
   hidden?: boolean;
   /**
-   * Collapse this panel — same layout effect as `hidden` (divider dropped, the
-   * rest reflow), but it WORKS as a bare boolean from framework JSX. A plain
+   * Collapse this panel. Same layout effect as `hidden` (divider dropped, the rest
+   * reflow), but it WORKS as a bare boolean from framework JSX. A plain
    * `<kai-resizable-item collapsed>` in React/Solid/Vue/Svelte collapses the panel
    * at the first render; `hidden` does not, because a JSX boolean sets neither the
    * `hidden` attribute nor the IDL property on a custom element, so the parent never

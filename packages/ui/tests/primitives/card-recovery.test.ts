@@ -39,6 +39,41 @@ function makeToast(): RecoveryToast & { last?: Parameters<RecoveryToast['show']>
   return t;
 }
 
+describe('the returned shape', () => {
+  // The declared return type is `Required<Pick<CardPolicy,'onDismiss'|'onReopen'>>`,
+  // which is only honest if the implementation really does hand back both handlers
+  // for EVERY option shape. `Pick` alone kept CardPolicy's `?`, and a consumer who
+  // destructured and invoked hit TS2722 — this asserts the runtime fact the stronger
+  // type now claims, over the full cross-product of the optional options, so the type
+  // cannot quietly out-run the implementation later.
+  const OPTIONALS: Array<[string, Partial<Parameters<typeof dismissRecovery>[0]>]> = [
+    ['toast', { toast: makeToast() }],
+    ['isReopenable', { isReopenable: () => false }],
+    ['staleAfterMs', { staleAfterMs: 5000 }],
+    ['undoMs', { undoMs: 1 }],
+    ['now', { now: () => 0 }],
+  ];
+
+  for (let mask = 0; mask < 1 << OPTIONALS.length; mask++) {
+    const chosen = OPTIONALS.filter((_, i) => mask & (1 << i));
+    const label = chosen.length ? chosen.map(([n]) => n).join('+') : 'get/set only';
+    test(`returns both handlers with ${label}`, () => {
+      const store = makeStore([env('a')]);
+      const policy = dismissRecovery(
+        Object.assign({ get: store.get, set: store.set }, ...chosen.map(([, o]) => o)),
+      );
+      // `in` + typeof, not truthiness: an explicit `onDismiss: undefined` key would
+      // satisfy a destructure and still be exactly the value the old type warned about.
+      expect(Object.keys(policy).sort()).toEqual(['onDismiss', 'onReopen']);
+      expect(typeof policy.onDismiss).toBe('function');
+      expect(typeof policy.onReopen).toBe('function');
+      // Destructure-and-invoke — the consumer/scaffolder shape that produced TS2722.
+      const { onDismiss, onReopen } = policy;
+      expect(() => { onDismiss('a'); onReopen('a'); }).not.toThrow();
+    });
+  }
+});
+
 describe('onDismiss', () => {
   test('writes a `dismissed` resolution immutably (NEW array + envelope ref)', () => {
     const before = [env('a'), env('b')];

@@ -2,26 +2,26 @@ import { defineWebComponent } from './define';
 import { AgentCard, type AgentStatus } from '../ui/agent-card';
 
 interface Props extends Record<string, unknown> {
-  /** The agent's name — the primary label. Attribute: `name`. */
+  /** The agent's name, the primary label. Attribute: `name`. */
   name?: string;
   /** Selected / focused state: highlighted border + surface. Attribute: `active`. */
   active?: boolean;
-  /** Raise a prominent "Needs you" pill plus a glowing amber edge — the
-   *  attention-routing signal that pulls focus to this agent. Attribute:
-   *  `needs-attention`. */
+  /** Raise a prominent "Needs you" pill plus a glowing amber edge. This
+   *  is the attention-routing signal that pulls focus to this agent.
+   *  Attribute: `needs-attention`. */
   needsAttention?: boolean;
-  /** Run status — a JS PROPERTY (object), not an attribute. Shape:
-   *  `{ tone, label?, pulse? }`, where `tone` is one of `working` | `idle` |
-   *  `done` | `error` | `blocked` (maps to the kit's tool hues), `label` is an
-   *  optional short string beside the dot, and `pulse` animates the dot. Set it
-   *  with `el.status = { tone: 'working', label: 'Working', pulse: true }`. */
+  /** Run status. A JS PROPERTY (object), not an attribute. Shape: `{ tone,
+   *  label?, pulse? }`, where `tone` is one of `working` | `idle` | `done` |
+   *  `error` | `blocked` (maps to the kit's tool hues), `label` is an optional
+   *  short string beside the dot, and `pulse` animates the dot. Set it with
+   *  `el.status = { tone: 'working', label: 'Working', pulse: true }`. */
   status?: AgentStatus;
 }
 
 /** Events fired by `<kai-agent-card>`. */
 interface Events {
-  /** The card was activated — clicked, or Enter / Space while focused. Promote
-   *  this agent back to focus. */
+  /** The card was activated by a click, or by Enter / Space while focused.
+   *  Promote this agent back to focus. */
   'kai-activate': void;
   /** The trailing "..." kebab was clicked. The consumer opens its own menu; the
    *  card only surfaces the affordance (the click does not also activate the card). */

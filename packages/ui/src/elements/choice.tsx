@@ -14,7 +14,7 @@ interface Props extends Record<string, unknown> {
   /** Set when the user resolved this card; renders the read-only view. Property:
    *  `el.resolution = { kind:'action', action:'…' }`. */
   resolution?: Record<string, unknown>;
-  /** Controlled selection — the selected option id. When set, the consumer owns
+  /** Controlled selection: the selected option id. When set, the consumer owns
    *  the current pick (RadioGroup `value`). Attribute: `value`. */
   value?: string;
   /** Option id to pre-select on mount (uncontrolled seed). Attribute: `default-value`. */
@@ -68,17 +68,17 @@ defineWebComponent<Props, Events>(
     expose({
       /** Focus the radiogroup roving tab stop (or the Other input when selected). */
       focus: (options?: FocusOptions) => controller?.focus(options),
-      /** Select an option by id locally — no emit, fires kai-value-change (same as
-       *  a row click). Lets a consumer pre-highlight or drive selection externally. */
+      /** Select an option by id locally: no emit, fires kai-value-change (same as a
+       *  row click). Lets a consumer pre-highlight or drive selection externally. */
       select: (optionId: string) => controller?.select(optionId),
-      /** Submit the current selection — emits the `action` verb on kai-card and
+      /** Submit the current selection: emits the `action` verb on kai-card and
        *  resolves the card (single-shot). Named `send`, not `submit`, per the shared
        *  vocabulary. */
       send: () => controller?.send(),
-      /** Trigger the dismiss path — emits `dismiss` on kai-card and optimistically
+      /** Trigger the dismiss path: emits `dismiss` on kai-card and optimistically
        *  collapses the card to its re-openable stub. */
       dismiss: () => controller?.dismiss(),
-      /** Re-open a dismissed card from its stub — emits `reopen` on kai-card. */
+      /** Re-open a dismissed card from its stub: emits `reopen` on kai-card. */
       reopen: () => controller?.reopen(),
     });
 

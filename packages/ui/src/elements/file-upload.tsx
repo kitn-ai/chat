@@ -7,7 +7,7 @@ interface Props extends Record<string, unknown> {
   multiple?: boolean;
   /** `accept` attribute for the file picker (e.g. `image/*`). */
   accept?: string;
-  /** Disable the dropzone — no clicking, no drag-and-drop. */
+  /** Disable the dropzone: no clicking, no drag-and-drop. */
   disabled?: boolean;
   /** Default dropzone label (overridable via the default slot). */
   label?: string;

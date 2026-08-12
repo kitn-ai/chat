@@ -3,7 +3,7 @@ import { defineWebComponent } from './define';
 import { EditableLabel } from '../ui/editable-label';
 
 interface Props extends Record<string, unknown> {
-  /** The label text — settable and reflected to the `value` attribute. Read
+  /** The label text. Settable and reflected to the `value` attribute. Read
    *  `el.value` for live state. */
   value?: string;
   /** Controlled edit state. `el.editing = true` opens the field; reflected to the
@@ -104,7 +104,15 @@ defineWebComponent<Props, Events>('kai-editable-label', {
     }
   };
 
-  expose({ edit: enter, commit, cancel });
+  expose({
+    /** Switch the label into its editing field, which autofocuses and selects the
+     *  current text. Same entry point as a user double-click, and a no-op while
+     *  `disabled`. Commit with `commit()` or by blurring, abandon with `cancel()`
+     *  or Escape. */
+    edit: enter,
+    commit,
+    cancel,
+  });
 
   return (
     <>

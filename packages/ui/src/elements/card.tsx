@@ -7,8 +7,8 @@ interface Props extends Record<string, unknown> {
    *  Attribute: `appearance`. */
   appearance?: CardAppearance;
   /** `vertical` (default, media on top) | `horizontal` (media at the start) |
-   *  `responsive` (horizontal when the card's container is wide enough, else
-   *  vertical — a container query on the card's own width). Attribute: `orientation`. */
+   *  `responsive` (horizontal when the card's container is wide enough, else vertical,
+   *  via a container query on the card's own width). Attribute: `orientation`. */
   orientation?: CardOrientation;
   /** The card width below which a `responsive` card collapses to vertical and the
    *  footer actions stack. A CSS length; default `28rem`. Attribute: `collapse`. */

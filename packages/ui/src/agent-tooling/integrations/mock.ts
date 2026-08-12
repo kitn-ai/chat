@@ -31,6 +31,14 @@ const mock: Integration = {
   docsSlug: 'integrations/mock',
   // Nothing: there is no request at all, the reply is streamed client-side.
   forwardsFromClient: [],
+  // Nothing to install: there is no route to install anything for.
+  deps: { npm: [], pip: [] },
+  // The other 'frontend-safe' entry, and the only one that is true by absence:
+  // no routeTemplates, no webRoute, no envVars. There is no request, no upstream
+  // and no secret, so there is nothing a public bundle could give away. This is
+  // the one place where "declares nothing" genuinely means safe — which is
+  // precisely why it still has to SAY so rather than be left blank.
+  keyExposure: 'frontend-safe',
 };
 
 export default mock;

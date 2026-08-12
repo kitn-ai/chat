@@ -30,8 +30,25 @@ const PLANS: ChoiceCardData = {
 };
 
 async function mount(data: ChoiceCardData, cardId = 'card-choice-1') {
-  const el = document.createElement('kai-choice') as HTMLElement & { data: ChoiceCardData };
+  // No cast: with src/elements/element-types.d.ts in the pass (see tsconfig.tests.json
+  // "tagMapIs") this is a real KaiChoiceElement. It used to read
+  // `as HTMLElement & { data: ChoiceCardData }`, which asserted nothing — the tag map
+  // was absent, so every `kai-*` tag was an opaque HTMLElement and the intersection was
+  // a pure widening the compiler accepts unconditionally. Measured: the identical cast
+  // compiled against 'kai-confirm' and against 'kai-not-a-real-element', and errored
+  // only for 'div' — the one tag tsc actually knew.
+  const el = document.createElement('kai-choice');
   el.setAttribute('card-id', cardId);
+  // @ts-expect-error — a REAL gap in the generated declarations, not test noise, and
+  // deliberately marked rather than cast away. gen-element-types.mjs emits `data?:
+  // Record<string, unknown>` for every card element, and NO exported card interface is
+  // assignable to that (interfaces get no implicit index signature), so a consumer
+  // following this element's own doc comment — "Import `ChoiceCardData` from
+  // `@kitn.ai/ui` for the full shape" — writes `el.data = myChoiceCardData` and gets
+  // TS2322. The payload itself is still fully checked, at `mount`'s parameter, so this
+  // line only moves a known-good value into a badly-typed slot. When the generator
+  // learns the real payload types this directive becomes unused and TS2578 fails the
+  // pass, which is the point: it cannot rot closed.
   el.data = data;
   document.body.appendChild(el);
   await flush();

@@ -399,6 +399,14 @@ async function chatHandler(request: Request): Promise<Response> {
   // request contract, not to the provider it happens to POST to — which is
   // exactly why this is declared here rather than derived from `streamFormat`.
   clientToolFormat: 'openai',
+  // Nothing to install. The route hand-rolls the Messages API over global
+  // `fetch` and its own re-framer, so it imports no module — not even
+  // @anthropic-ai/sdk.
+  deps: { npm: [], pip: [] },
+  // The route reads ANTHROPIC_API_KEY into an `x-api-key` header. Note the
+  // header is NOT `Authorization`, which is why the schema's detector matches
+  // both spellings.
+  keyExposure: 'needs-proxy',
 };
 
 export default anthropic;

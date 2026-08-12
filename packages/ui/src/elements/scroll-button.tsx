@@ -19,7 +19,7 @@ interface Props extends Record<string, unknown> {
 /** Events fired by `<kai-scroll-button>`. */
 interface Events {
   /** Emitted when the user clicks the button and `scrollToBottom()` is
-   *  called. Carries no detail — consumers use it to know a manual scroll
+   *  called. Carries no detail; consumers use it to know a manual scroll
    *  occurred. */
   'kai-scroll': void;
 }

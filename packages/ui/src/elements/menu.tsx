@@ -19,14 +19,14 @@ import type { KaiMenuItem } from './element-data-types';
 export type { KaiMenuItem } from './element-data-types';
 
 interface Props extends Record<string, unknown> {
-  /** Tree of menu items. Set as a JS property — not an HTML attribute. */
+  /** Tree of menu items. Set as a JS property, not an HTML attribute. */
   items?: KaiMenuItem[];
   /** Optional placement hint (unused by the underlying Dropdown which always
    *  positions bottom-start, kept for future extension). */
   placement?: string;
   /** Built-in trigger: leading icon (a named icon like `"plus"`, an image
    *  URL/data-URI, or text). Use this instead of slotting `slot="trigger"` for
-   *  the common case — a slotted trigger overrides it. */
+   *  the common case; a slotted trigger overrides it. */
   triggerIcon?: string;
   /** Built-in trigger: a text label (e.g. `"High"`). */
   triggerLabel?: string;
@@ -40,7 +40,7 @@ interface Props extends Record<string, unknown> {
   open?: boolean;
   /** Initial open state on mount (uncontrolled seed). */
   defaultOpen?: boolean;
-  /** Disable the trigger — click/keyboard and `show()` no longer open the menu. */
+  /** Disable the trigger: click/keyboard and `show()` no longer open the menu. */
   disabled?: boolean;
 }
 
@@ -49,8 +49,8 @@ interface Events {
    * Fired when the user selects a leaf item.
    * - Plain items: `{ id }`.
    * - Checkbox items: `{ id, checked }` where `checked` is the NEW state.
-   * - Radio items: `{ id, radioGroup }` — the consumer marks `id` as the selected
-   *   one in `radioGroup` and clears the others.
+   * - Radio items: `{ id, radioGroup }`, where the consumer marks `id` as the
+   *   selected one in `radioGroup` and clears the others.
    */
   'kai-select': { id: string; checked?: boolean; radioGroup?: string };
   /** The menu opened or closed (by click, keyboard, Escape, outside-click, or a method). */

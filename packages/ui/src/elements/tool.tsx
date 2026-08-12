@@ -13,7 +13,7 @@ interface Props extends Record<string, unknown> {
   open?: boolean;
   /** Initial open state on mount (uncontrolled seed). */
   defaultOpen?: boolean;
-  /** Gate the disclosure trigger — programmatic `show()/hide()/toggle()` still
+  /** Gate the disclosure trigger: programmatic `show()/hide()/toggle()` still
    *  work, but the trigger click no longer toggles. */
   disabled?: boolean;
 }

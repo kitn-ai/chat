@@ -24,9 +24,18 @@
  * It also checks the bookkeeping, which is where entries rot quietly:
  *   • every `exclude` entry is either declared structural or has a quarantine
  *     entry — no silent additions;
+ *   • no `exclude` entry is one `resolved` claims is fixed — that combination reads
+ *     as checked and is not;
  *   • every quarantine entry is actually in `exclude` — no dead metadata;
  *   • every quarantined file exists on disk;
  *   • every entry carries a date, a reason, and an expectation.
+ *
+ * WHEN THE LIST IS EMPTY (it is, as of 2026-08-12) the re-inclusion check has nothing
+ * to re-include, and a check with nothing to do is a check that proves nothing — it
+ * would pass in ~0ms over any tree, and the rot would surface only when someone next
+ * filed an entry. So the empty case runs the same compile over the pass AS SHIPPED and
+ * fails on any error, which keeps the machinery exercised and is the pass's only run
+ * on a fresh tree (see the note about ordering below). It says which mode it took.
  *
  * Run: node scripts/verify-quarantine.mjs   (also runs as part of `npm run typecheck`)
  *
@@ -59,10 +68,53 @@ const config = read.config;
 
 const structural = config.structuralExcludes ?? {};
 const entries = config.quarantine?.entries ?? {};
+const resolved = config.resolved ?? {};
 const excluded = config.exclude ?? [];
+
+/**
+ * Compile the pass with `exclude` replaced by `excludeList`, and return its
+ * diagnostics grouped by package-relative path (node_modules dropped —
+ * skipLibCheck is on, so anything from there is noise this script cannot act on).
+ *
+ * Both branches below go through here on purpose. The re-inclusion check and the
+ * empty-list check are then the SAME code path with a different exclude list, so
+ * the machinery cannot be working for one and quietly broken for the other.
+ *
+ * @param {string[]} excludeList
+ * @returns {{ byFile: Map<string, number[]>, fileCount: number }}
+ */
+function compileWith(excludeList) {
+  const probe = { ...config, exclude: excludeList };
+  const parsed = ts.parseJsonConfigFileContent(probe, ts.sys, pkgDir, undefined, configPath);
+  if (parsed.errors.length) {
+    for (const d of parsed.errors) fail(`tsconfig: ${ts.flattenDiagnosticMessageText(d.messageText, ' ')}`);
+  }
+  const program = ts.createProgram(parsed.fileNames, parsed.options);
+  /** @type {Map<string, number[]>} relative file path -> error codes */
+  const byFile = new Map();
+  for (const d of ts.getPreEmitDiagnostics(program)) {
+    if (!d.file) continue;
+    const rel = path.relative(pkgDir, d.file.fileName);
+    if (rel.includes('node_modules')) continue;
+    if (!byFile.has(rel)) byFile.set(rel, []);
+    byFile.get(rel).push(d.code);
+  }
+  const fileCount = program
+    .getSourceFiles()
+    .map((f) => path.relative(pkgDir, f.fileName))
+    .filter((f) => !f.includes('node_modules') && !f.startsWith('src/')).length;
+  return { byFile, fileCount };
+}
 
 // ---------------------------------------------------------------- bookkeeping
 for (const e of excluded) {
+  if (e in resolved && !(e in entries)) {
+    fail(
+      `exclude has "${e}", but "resolved" says it is FIXED. A resolved entry that stays excluded is ` +
+        `the worst of both: it reads as checked and is not. Remove it from "exclude".`,
+    );
+    continue;
+  }
   if (!(e in structural) && !(e in entries)) {
     fail(
       `exclude has "${e}" with no reason. Add it to "structuralExcludes" (a whole tree another ` +
@@ -104,24 +156,32 @@ const quarantined = Object.keys(entries).filter((f) => {
 // the diagnostics off each one. A quarantined file with nothing to say is an
 // expired IOU.
 if (quarantined.length === 0) {
-  notes.push('No quarantined files. Nothing to re-check — this passes vacuously, as it should.');
+  // NOTHING IS OWED — and that is exactly when this script is most likely to become
+  // a check that proves nothing. With an empty list every line below is dead, so it
+  // would pass in ~0ms whatever state the tree is in, and the next person to file an
+  // entry would be the one who discovers the re-inclusion machinery rotted while
+  // nobody was looking. So run the SAME machinery over the pass exactly as shipped
+  // and assert the result is clean.
+  //
+  // This is not a redundant `tsc -p tsconfig.tests.json`. That command is LAST in
+  // the `&&`-joined typecheck chain, behind tsconfig.mcp.json, which is red on any
+  // unbuilt tree — so on a fresh clone or worktree the fifth pass never runs and
+  // this is the only place it happens at all. Same reason this script goes first.
+  const { byFile, fileCount } = compileWith(excluded);
+  notes.push(
+    `quarantine list is EMPTY — nothing owed, so the re-inclusion check had nothing to re-include.`,
+  );
+  notes.push(
+    `Compiled the pass as shipped instead: ${fileCount} files outside src/, ${byFile.size} with errors.`,
+  );
+  for (const [file, codes] of byFile) {
+    fail(
+      `"${file}" does not compile under the pass (${codes.length}x ${[...new Set(codes.map((c) => `TS${c}`))].sort().join(', ')}). ` +
+        `Fix it. Quarantining it is the fallback, not the first move, and it costs a dated entry in tsconfig.tests.json.`,
+    );
+  }
 } else {
-  const probe = { ...config, exclude: excluded.filter((e) => !(e in entries)) };
-  const parsed = ts.parseJsonConfigFileContent(probe, ts.sys, pkgDir, undefined, configPath);
-  if (parsed.errors.length) {
-    for (const d of parsed.errors) fail(`tsconfig: ${ts.flattenDiagnosticMessageText(d.messageText, ' ')}`);
-  }
-  const program = ts.createProgram(parsed.fileNames, parsed.options);
-  const diagnostics = ts.getPreEmitDiagnostics(program);
-
-  /** @type {Map<string, number[]>} relative file path -> error codes */
-  const byFile = new Map();
-  for (const d of diagnostics) {
-    if (!d.file) continue;
-    const rel = path.relative(pkgDir, d.file.fileName);
-    if (!byFile.has(rel)) byFile.set(rel, []);
-    byFile.get(rel).push(d.code);
-  }
+  const { byFile } = compileWith(excluded.filter((e) => !(e in entries)));
 
   for (const file of quarantined) {
     const got = byFile.get(file) ?? [];
@@ -154,7 +214,7 @@ if (quarantined.length === 0) {
   // quarantined. That is not a failure of this check (the pass covers those
   // files today and they are green), but it is what un-quarantining would cost,
   // so say it rather than swallow it.
-  const collateral = [...byFile.keys()].filter((f) => !quarantined.includes(f) && !f.includes('node_modules'));
+  const collateral = [...byFile.keys()].filter((f) => !quarantined.includes(f));
   for (const f of collateral) notes.push(`note ${f} errors only when the quarantined files are re-included`);
 }
 
@@ -167,7 +227,9 @@ if (failures.length) {
   process.exit(1);
 }
 console.log(
-  quarantined.length === 1
-    ? '\nquarantine check passed — 1 entry, still earning its place.'
-    : `\nquarantine check passed — ${quarantined.length} entries, each still earning its place.`,
+  quarantined.length === 0
+    ? '\nquarantine check passed — no entries owed, and the pass compiles clean without them.'
+    : quarantined.length === 1
+      ? '\nquarantine check passed — 1 entry, still earning its place.'
+      : `\nquarantine check passed — ${quarantined.length} entries, each still earning its place.`,
 );

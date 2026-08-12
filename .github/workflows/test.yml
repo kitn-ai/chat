@@ -290,6 +290,30 @@ jobs:
       - name: Unit tests (jsdom)
         run: pnpm --filter @kitn.ai/ui exec vitest run --project=unit
 
+      # The run-the-emitted-code guards, in the REQUIRED job on purpose.
+      #
+      # They write the `kai` MCP scaffolder's emitted `src/main.ts` to a real module
+      # and EXECUTE it against a mounted <kai-chat> and a stubbed provider stream, so
+      # they are the only layer that can tell a working emit from a plausible-looking
+      # one -- scaffold.test.ts asserts the wording of string literals and
+      # verify:scaffold compiles the output under eight consumer tsconfigs, and
+      # neither can see whether anything reaches the screen.
+      #
+      # A SEPARATE STEP, NOT A SEPARATE JOB. The whole reason these moved out of the
+      # `unit` project is that they cost seconds each (9.6s idle, 32.6s under CPU
+      # starvation) and were distorting a suite whose 99th-percentile test is under a
+      # second. That is an argument about which project owns them, not about whether
+      # they gate a merge: they must stay inside the one required context, next to the
+      # build they depend on, or splitting them out would have traded a slow check for
+      # no check. Needs the build above (src/elements/compiled.css). ~10s.
+      #
+      # `tests/agent-tooling/emitted-project-wiring.test.ts`, which runs in the `unit`
+      # project above, fails if this step stops naming --project=emitted, if the
+      # project's include glob stops matching any file, or if one of these tests is
+      # written outside the directory the project owns.
+      - name: Emitted-code guards (the scaffolder's output actually RUNS)
+        run: pnpm --filter @kitn.ai/ui exec vitest run --project=emitted
+
       - name: React adapter tests
         run: pnpm --filter @kitn.ai/ui test:react
 

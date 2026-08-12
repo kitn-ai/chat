@@ -7,7 +7,7 @@ interface Props extends Record<string, unknown> {
   /** Speak automatically when `text` is set/changed. */
   autoplay?: boolean;
   /**
-   * TTS model seam the host supplies — given text, returns an audio `Blob` to
+   * TTS model seam the host supplies: given text, returns an audio `Blob` to
    * play. This is a **function-valued property** (`el.synthesize = async text =>
    * blob`); when set, the native `speechSynthesis` path is bypassed. Mirrors
    * `<kai-voice-input>`'s `transcribe`. A value-returning callback can't be
@@ -20,10 +20,10 @@ interface Props extends Record<string, unknown> {
 
 /** Events fired by `<kai-voice-output>`. */
 interface Events {
-  /** Playback started or stopped — drive your own UI in sync. Fires on real
-   *  transitions only (manual click and programmatic speak()/stop()), never on mount. */
+  /** Playback started or stopped. Drive your own UI in sync. Fires on real transitions
+   *  only (manual click and programmatic speak()/stop()), never on mount. */
   'kai-speaking-change': { speaking: boolean };
-  /** The model path (`synthesize`) resolved audio — the raw `Blob` before playback. */
+  /** The model path (`synthesize`) resolved audio: the raw `Blob` before playback. */
   'kai-synthesized': { blob: Blob };
 }
 

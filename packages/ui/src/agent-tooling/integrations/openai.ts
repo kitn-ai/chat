@@ -77,6 +77,11 @@ const openai: Integration = {
   // The handler forwards `tools` unconverted to /v1/chat/completions — this IS
   // the OpenAI wire, so the client sends OpenAI's own function envelope.
   clientToolFormat: 'openai',
+  // Nothing to install. The route is global `fetch` and imports no module at all.
+  deps: { npm: [], pip: [] },
+  // The route reads OPENAI_API_KEY and puts it in an `Authorization: Bearer`
+  // header. A static bundle carrying that is a published key.
+  keyExposure: 'needs-proxy',
 };
 
 export default openai;

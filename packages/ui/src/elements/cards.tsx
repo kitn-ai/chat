@@ -29,14 +29,14 @@ interface Props extends Record<string, unknown> {
    *  Typed as a plain string map (not the `CardTagMap` alias) so the generated React
    *  wrapper inlines it instead of emitting an unresolved named type. */
   types?: Record<string, string>;
-  /** JSON Schemas for the card types this app renders, keyed by envelope type —
-   *  the companion of `types`, which says what DRAWS a card while this says what a
-   *  VALID one looks like. An OBJECT, so it is a JS property only:
-   *  `el.schemas = { 'pricing-table': pricingSchema }`, never an attribute.
+  /** JSON Schemas for the card types this app renders, keyed by envelope type. The
+   *  companion of `types`, which says what DRAWS a card while this says what a
+   *  VALID one looks like. An OBJECT, so it is a JS property only: `el.schemas = {
+   *  'pricing-table': pricingSchema }`, never an attribute.
    *  `createCardRegistry(...).validationSchemas` is exactly this shape.
    *
    *  Without it the kit validates its own seven built-ins and leaves your own card
-   *  type — the one your app actually cares about — as the only unchecked thing on
+   *  type, the one your app actually cares about, as the only unchecked thing on
    *  screen. A schema here WINS over a built-in of the same name, matching
    *  `mergeCardTags`, where your entry is spread over ours.
    *
@@ -49,25 +49,25 @@ interface Props extends Record<string, unknown> {
   /** Optional CardPolicy handling child events. Property: `el.policy`. */
   policy?: CardPolicy;
   /** Validate each envelope's `data` against the schema for its type before
-   *  rendering it — a built-in's own schema, or yours from `schemas`.
-   *  Default `true`; set `validate-cards="false"` (or `el.validateCards
-   *  = false`) to opt out. A hard failure (wrong type, a missing required field)
-   *  renders a diagnostic naming the field instead of the card; a soft failure
-   *  (bounds) renders the card unchanged. Both emit a contract `error` event.
-   *  On in production too: a model emitting a bad shape is a production failure
-   *  mode, so stripping the check there would hide it from exactly the person who
-   *  needs to see it. */
+   *  rendering it, using a built-in's own schema or yours from `schemas`. Default
+   *  `true`; set `validate-cards="false"` (or `el.validateCards = false`) to opt
+   *  out. A hard failure (wrong type, a missing required field) renders a
+   *  diagnostic naming the field instead of the card; a soft failure (bounds)
+   *  renders the card unchanged. Both emit a contract `error` event. On in
+   *  production too: a model emitting a bad shape is a production failure mode,
+   *  so stripping the check there would hide it from exactly the person who needs
+   *  to see it. */
   validateCards?: boolean;
 }
 
 /** Events fired by `<kai-cards>`. */
 interface Events {
-  /** A child card transitioned to a resolved/deferred state (an action was chosen,
-   *  a form/tasks submission landed, or it was dismissed) — re-emitted off the host
-   *  as a non-bubbling convenience event so a consumer can observe resolution
-   *  centrally without diffing the cards array. `detail` = `{ cardId, resolution }`.
-   *  (A `reopen` un-resolves a card and has no `CardResolution`, so it does NOT fire
-   *  this — observe reopen via the underlying bubbling `kai-card` event.) */
+  /** A child card transitioned to a resolved/deferred state (an action was chosen, a
+   *  form/tasks submission landed, or it was dismissed). Re-emitted off the host as
+   *  a non-bubbling convenience event so a consumer can observe resolution centrally
+   *  without diffing the cards array. `detail` = `{ cardId, resolution }`. (A
+   *  `reopen` un-resolves a card and has no `CardResolution`, so it does NOT fire
+   *  this; observe reopen via the underlying bubbling `kai-card` event.) */
   'kai-card-resolved': { cardId: string; resolution: CardResolution };
 }
 
@@ -227,11 +227,11 @@ defineWebComponent<Props, Events>(
       );
     expose({
       /** Programmatically resolve a child card by id: set that envelope's
-       *  `resolution` so the child re-renders into its read-only/resolved view — the
+       *  `resolution` so the child re-renders into its read-only/resolved view. The
        *  imperative twin of the consumer mutating the cards array. No-op for an
        *  unknown id. */
       resolve: (cardId: string, resolution: CardResolution) => resolveCard(cardId, resolution),
-      /** Collapse a card to its re-openable stub from the host side — convenience for
+      /** Collapse a card to its re-openable stub from the host side. Convenience for
        *  `resolve(cardId, { kind: 'dismissed' })`. */
       dismiss: (cardId: string) => resolveCard(cardId, { kind: 'dismissed' }),
       /** Return the live child element node for a card id (or null) so consumers can

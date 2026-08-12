@@ -10,6 +10,7 @@ import {
 import type { CardSchemaName, ToolProvider } from '@kitn.ai/ui/schemas';
 import type { Tool } from './types';
 import { cardHostTags, cardTagForType, cardTypeForTag, getElement, listElements } from '../manifest';
+import type { CemMember } from '../manifest';
 
 /**
  * component_reference — look up AI/UI (kai-*) web components, their props,
@@ -30,6 +31,33 @@ const JS_ONLY_TYPE_PATTERNS = /\[\]|\{|Record</;
 
 function isJsOnlyType(typeText: string | undefined): boolean {
   return typeText ? JS_ONLY_TYPE_PATTERNS.test(typeText) : false;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The imperative half of the interaction surface
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A CEM member of `kind: 'method'`.
+ *
+ * `CemMember` in manifest.ts types what EVERY member carries. `parameters` and
+ * `return` exist only on methods, and gen-element-api.mjs writes the AUTHORED
+ * parameter list into a single `parameters[0].name` rather than splitting it, so
+ * the signature is rebuilt from those two fields rather than read off one.
+ */
+interface CemMethodMember extends CemMember {
+  kind: 'method';
+  parameters?: { name: string }[];
+  return?: { type?: { text?: string } };
+}
+
+function isPublicMethod(member: CemMember): member is CemMethodMember {
+  return member.kind === 'method' && member.privacy === 'public';
+}
+
+/** `maximize(index: number): void` — the call as a consumer types it. */
+function methodSignature(method: CemMethodMember): string {
+  return `${method.name}(${method.parameters?.[0]?.name ?? ''}): ${method.return?.type?.text ?? 'void'}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -282,6 +310,25 @@ function formatReference(tag: string, provider: ToolProvider): string {
     }
   }
 
+  // ── Methods ───────────────────────────────────────────────────────────────
+  // The input half of the interaction surface. These were in the manifest and in
+  // the shipped types and rendered in NO reference, so the only way to find one
+  // was to read the kit's source.
+  const methods = (el.members ?? []).filter(isPublicMethod);
+  if (methods.length > 0) {
+    lines.push(
+      '',
+      '### Methods (call these on the element instance)',
+      `Get the element (\`const el = document.querySelector('${tag}')\`), then call it. ` +
+        'Methods drive the element from your code; the events above report back what the ' +
+        'user did. Both are public API.',
+    );
+    for (const method of methods) {
+      const desc = method.description?.trim() ?? '';
+      lines.push(`- **${methodSignature(method)}**${desc ? ` — ${desc}` : ''}`);
+    }
+  }
+
   // ── CSS custom properties ─────────────────────────────────────────────────
   const cssProps = el.cssProperties ?? [];
   if (cssProps.length > 0) {
@@ -331,7 +378,7 @@ function formatReference(tag: string, provider: ToolProvider): string {
 export const reference: Tool = {
   name: 'component_reference',
   description:
-    'Look up AI/UI (kai-*) web components: their tags, props, events, and usage examples. ' +
+    'Look up AI/UI (kai-*) web components: their tags, props, events, imperative methods, and usage examples. ' +
     'For a card-backed element it also returns the card\'s JSON Schema and a ready-to-send ' +
     'tool definition generated from it — pass `provider` to get that provider\'s envelope.',
   inputSchema: z.object({

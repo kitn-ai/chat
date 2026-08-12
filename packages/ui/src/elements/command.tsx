@@ -9,7 +9,7 @@ import type { KaiCommandItem } from './element-data-types';
 export type { KaiCommandItem } from './element-data-types';
 
 interface Props extends Record<string, unknown> {
-  /** Flat list of items. Set as a JS property — not an HTML attribute. */
+  /** Flat list of items. Set as a JS property, not an HTML attribute. */
   items?: KaiCommandItem[];
   /** Placeholder text for the search input. */
   placeholder?: string;
@@ -22,7 +22,7 @@ interface Events {
   'kai-select': { id: string };
   /** Fired on every keystroke in the search input. */
   'kai-query-change': { value: string };
-  /** Fired when the highlighted/active item changes — via Arrow keys or when
+  /** Fired when the highlighted/active item changes, via Arrow keys or when
    *  filtering re-clamps the active row. `id` is the newly active item's id, or
    *  `undefined` when no item is active (e.g. the filtered list is empty). Lets a
    *  host preview the active item without committing a selection. */
@@ -154,7 +154,7 @@ defineWebComponent<Props, Events>('kai-command', {
       element.shadowRoot
         ?.querySelector<HTMLInputElement>('input[role="combobox"], input')
         ?.blur(),
-    /** Reset the search query to empty — re-showing all items — and fire
+    /** Reset the search query to empty, re-showing all items, and fire
      *  `kai-query-change` with `''`. Mirrors the Escape-key behavior. */
     clear: () => {
       setQuery('');

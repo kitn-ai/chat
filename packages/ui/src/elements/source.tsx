@@ -12,8 +12,9 @@ interface SourceProps extends Record<string, unknown> {
   href?: string;
   /** Trigger label (defaults to the domain). */
   label?: string;
-  /** Hover-card headline. Attribute: `headline` (`title` is avoided — it's a
-   *  global HTML attribute that reflects in a CE constructor and breaks it). */
+  /** Hover-card headline. Attribute: `headline` (`title` is avoided because it
+   *  is a global HTML attribute that reflects in a CE constructor and breaks
+   *  it). */
   headline?: string;
   /** Hover-card body text describing the source. */
   description?: string;
@@ -58,8 +59,8 @@ interface SourceListProps extends Record<string, unknown> {
    * merged (prop + declarative-children) list (`[1]`, `[2]`, …) instead of the
    * per-item `label` or domain fallback.
    *
-   * HTML attribute: `numbered` (boolean — bare attribute or `numbered="true"`).
-   * JS property:   `el.numbered = true`.
+   * HTML attribute: `numbered` (boolean: a bare attribute or
+   * `numbered="true"`). JS property:   `el.numbered = true`.
    */
   numbered?: boolean;
 }

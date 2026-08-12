@@ -36,9 +36,9 @@ export interface DefaultPromptInputProps {
   /** Show a Voice (Mic) button in the left toolbar; calls `onVoice`. */
   voice?: boolean;
   /** Send-button visibility. `'always'` (default) always shows it; `'auto'` shows
-   *  it only when there's text/attachments (an empty composer hides it — Enter
-   *  still submits). To hide it entirely (Enter-only), it's pure CSS:
-   *  `::part(send){display:none}` — no prop needed. Restyle via `::part(send)`.
+   *  it only when there's text/attachments (an empty composer hides it, though
+   *  Enter still submits). To hide it entirely (Enter-only), it's pure CSS:
+   *  `::part(send){display:none}`, no prop needed. Restyle via `::part(send)`.
    *  The Stop button (stoppable + loading) is unaffected. */
   submit?: 'always' | 'auto';
   onValueChange: (v: string) => void;

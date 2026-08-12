@@ -3,9 +3,9 @@ import { defineWebComponent } from './define';
 import { Switch } from '../ui/switch';
 
 interface Props extends Record<string, unknown> {
-  /** Controlled checked state — settable and reflected to the `checked`
-   *  attribute. `el.checked = true` (or `<kai-switch checked>`) drives it; the
-   *  toggle UI updates it and fires `kai-change`. Read `el.checked` for live state. */
+  /** Controlled checked state. Settable and reflected to the `checked` attribute.
+   *  `el.checked = true` (or `<kai-switch checked>`) drives it; the toggle UI updates
+   *  it and fires `kai-change`. Read `el.checked` for live state. */
   checked?: boolean;
   /** Initial checked state on mount (uncontrolled seed). Bare attribute
    *  (`<kai-switch default-checked>`) turns it on. */

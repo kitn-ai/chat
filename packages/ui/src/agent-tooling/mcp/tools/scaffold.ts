@@ -140,131 +140,17 @@ function placementStyle(placement: string): PlacementStyle {
   }
 }
 
-// ── suggestions + mock streaming ───────────────────────────────────────────────
+// ── suggestions ───────────────────────────────────────────────────────────────
 
 /** Default starter prompts so the suggestions feature always shows. */
 const DEFAULT_SUGGESTIONS = ["What's new?", 'How can you help?'];
-
-/** A canned assistant reply the mock integration streams back token-by-token. */
-const MOCK_REPLY =
-  "Hi! I'm a local preview — no backend or API key needed. Swap `integration` for a real provider (openrouter, ollama, …) and I'll talk to a real model.";
 
 /** Render a string[] as a JS array literal (JSON-quoted — keeps apostrophes readable). */
 function jsArray(items: string[]): string {
   return '[' + items.map((s) => JSON.stringify(s)).join(', ') + ']';
 }
 
-/**
- * The streaming fold, emitted into the `mock` scaffold only.
- *
- * Real backends now import the wire adapter (see `realStreamBody`), which folds
- * deltas through `createAssistantStream`. The mock path has no backend and must
- * add no imports, so it keeps the inlined copy.
- *
- * The naive `{ ...m, parts: [{ type: 'text', text: answer }] }` is the old
- * flat-string fold wearing parts clothing. It is harmless while the target
- * message starts at `parts: []`, but it DELETES every part already on the
- * message, and the agentic archetype seeds exactly such a message
- * (`SAMPLE_AGENTIC_MESSAGE` carries reasoning + a tool call), so the first
- * consumer who streams into a seeded message loses them silently.
- *
- * `@kitn.ai/ui/state` exports this same function as `appendTextPart`. It is
- * emitted inline rather than imported so a scaffold stays copy-paste readable
- * and adds no import to wire up.
- *
- * `typed` annotates the signature for strict-TS frameworks, reusing the local
- * `ChatMessage` type those scaffolds already declare (see `chatMessageType`);
- * plain-JS contexts (html) take the bare form.
- */
-function appendTextHelper(pad: string, typed: boolean): string[] {
-  const sig = typed
-    ? `(parts: ChatMessage['parts'], delta: string): ChatMessage['parts'] =>`
-    : `(parts, delta) =>`;
-  return [
-    `${pad}// Fold each delta onto the message's TRAILING text part, opening a new one`,
-    `${pad}// when the last part is not text. Do NOT replace parts wholesale: that drops`,
-    `${pad}// any reasoning/tool/card parts already on the message. This is exactly`,
-    `${pad}// appendTextPart from @kitn.ai/ui/state, inlined.`,
-    `${pad}const appendText = ${sig} {`,
-    `${pad}  const last = parts[parts.length - 1];`,
-    `${pad}  return last?.type === 'text'`,
-    `${pad}    ? [...parts.slice(0, -1), { ...last, text: last.text + delta }]`,
-    `${pad}    : [...parts, { type: 'text', text: delta }];`,
-    `${pad}};`,
-  ];
-}
-
-/**
- * The shared client-side mock stream body, parameterised by how each framework
- * commits a messages update. Two operations keep the contract correct:
- *   - `commitInitial(expr)` appends the user + empty-assistant pair.
- *   - `commitMap(mapBody)` replaces messages with `prev.map((m) => mapBody)` —
- *     each framework supplies how `prev` resolves (the React functional updater,
- *     or the live local variable for html/vue/svelte) so the streamed content is
- *     applied to the LATEST array, never a stale snapshot.
- * Each commit produces a NEW array (and a new object for the streamed message)
- * so kai-chat re-renders per chunk.
- *
- * Indented with `pad` so it drops cleanly into each framework's onSubmit.
- */
-function mockStreamBody(opts: {
-  pad: string;
-  /** read the current messages array (for building `history`) */
-  read: string;
-  /** commit the initial user + empty-assistant pair */
-  commitInitial: (expr: string) => string;
-  /** commit a `prev.map(...)` update; `mapBody` is the body of `.map((m) => …)` */
-  commitMap: (mapBody: string) => string;
-  /** set loading true/false */
-  setLoading: (v: 'true' | 'false') => string;
-  /**
-   * Emit `as const` on role literals so they narrow to 'user'|'assistant' under
-   * strict TS. Set to true for TypeScript frameworks (react/next); false for
-   * plain-JS contexts (html) where `as const` is invalid syntax.
-   */
-  strictRoles?: boolean;
-  /**
-   * Where the submitted text comes from. Every kai-* target reads it off the
-   * `kai-submit` CustomEvent; `solid` renders the SolidJS `PromptInput`, which
-   * has no such event — its submitted text is the controlled input signal.
-   */
-  valueSource?: string;
-  /** Lines emitted right after the value is read and guarded (solid clears its
-   *  controlled textarea there). */
-  afterValue?: string[];
-}): string {
-  const {
-    pad, read, commitInitial, commitMap, setLoading, strictRoles = false,
-    valueSource = 'e.detail.value', afterValue = [],
-  } = opts;
-  const asConst = strictRoles ? ' as const' : '';
-  // Under strict TS, an un-annotated array literal widens the part's `type` to
-  // `string`, so the later `setMessages([...history, …])` fails TS2322. Plain-JS
-  // contexts (html) have no type to annotate with.
-  const historyType = strictRoles ? ': ChatMessage[]' : '';
-  const mapBody = `(m.id === assistantId ? { ...m, parts: appendText(m.parts, tok) } : m)`;
-  return [
-    `${pad}const value = ${valueSource}.trim();`,
-    `${pad}if (!value) return;`,
-    ...afterValue.map((l) => `${pad}${l}`),
-    `${pad}const history${historyType} = [...${read}, { id: crypto.randomUUID(), role: 'user'${asConst}, parts: [{ type: 'text', text: value }] }];`,
-    `${pad}const assistantId = crypto.randomUUID();`,
-    `${pad}${commitInitial(`[...history, { id: assistantId, role: 'assistant'${asConst}, parts: [] }]`)}`,
-    `${pad}${setLoading('true')}`,
-    `${pad}// No backend: stream a canned reply client-side, one token at a time.`,
-    `${pad}const reply = ${JSON.stringify(MOCK_REPLY)};`,
-    `${pad}const tokens = reply.split(/(\\s+)/);`,
-    ...appendTextHelper(pad, strictRoles),
-    `${pad}for (const tok of tokens) {`,
-    `${pad}  await new Promise((r) => setTimeout(r, 24));`,
-    `${pad}  // new array + object reference per chunk so kai-chat re-renders`,
-    `${pad}  ${commitMap(mapBody)}`,
-    `${pad}}`,
-    `${pad}${setLoading('false')}`,
-  ].join('\n');
-}
-
-// ── real-backend streaming: import the adapter, do not re-hand-roll it ─────────
+// ── streaming: import the adapter, do not re-hand-roll it ─────────────────────
 
 /**
  * How one framework exposes the turn's thread — the array every round of the
@@ -400,14 +286,22 @@ function realStreamBody(opts: {
   cards?: boolean;
   /** how this framework exposes the turn's thread (tool-loop shape only) */
   thread: ThreadBinding;
-  /** where the submitted text comes from — see `mockStreamBody.valueSource` */
+  /** where the submitted text comes from — every kai-* target reads it off the
+   *  `kai-submit` CustomEvent; `solid` renders the SolidJS `PromptInput`, which
+   *  has no such event, so its submitted text is the controlled input signal. */
   valueSource?: string;
   /** lines emitted right after the value is read and guarded */
   afterValue?: string[];
+  /**
+   * The `mock` integration. Swaps ONLY the source of the stream — the canned
+   * responder instead of `fetch('/api/chat')` — and leaves every other line
+   * identical. That identity is the point: see `mockRequest`.
+   */
+  mock?: boolean;
 }): string {
   const {
     pad, read, commitSet, setterAdapter, setLoading, bodyPayload, strictRoles = false, toolLoop, thread,
-    cards = false, valueSource = 'e.detail.value', afterValue = [],
+    cards = false, valueSource = 'e.detail.value', afterValue = [], mock = false,
   } = opts;
   const asConst = strictRoles ? ' as const' : '';
   // Under strict TS an un-annotated array literal widens the part's `type` to
@@ -425,7 +319,38 @@ function realStreamBody(opts: {
   const threadExpr = toolLoop ? thread.live : 'history';
   const setter = toolLoop ? thread.setter : setterAdapter;
 
-  const request = (indent: string): string[] => [
+  /**
+   * The mock's request. Note what it is NOT: it is not a different streaming
+   * strategy, it is the same two lines with a different source expression.
+   *
+   * `mockResponse(value)` yields SSE frames that `readOpenAIStream` parses
+   * exactly as it parses a provider's, so the no-backend preview exercises the
+   * kit's real reader rather than a hand-rolled fold — and swapping to a real
+   * backend is replacing this one expression with the `fetch` below.
+   *
+   * It is also, deliberately, impossible to mistake for a real response: the
+   * stream opens with a `: kai-mock` SSE comment, every frame carries a
+   * `_kai_mock` marker, the model reports as `kai-mock` and the turn reports
+   * zero tokens. See `createMockResponder` in @kitn.ai/ui/state.
+   */
+  const mockRequest = (indent: string): string[] => [
+    `${indent}// NO BACKEND AND NO PROVIDER. mockResponse() returns canned SSE frames that`,
+    `${indent}// are read by the SAME parser a real model's response goes through, so this`,
+    `${indent}// preview exercises the real path. Every frame is marked as a mock (a`,
+    `${indent}// ': kai-mock' banner, a _kai_mock field, model 'kai-mock', zero usage), so`,
+    `${indent}// nothing here can be mistaken for a real turn.`,
+    `${indent}//`,
+    `${indent}// TO GO LIVE, only this one line changes: \`res\` becomes the POST to your`,
+    `${indent}// route, with toOpenAIMessages(${threadExpr}) as the body. Rather than copy`,
+    `${indent}// that request into a comment here — where it would drift from the real`,
+    `${indent}// one — scaffold again with a provider (integration: 'openrouter', 'ollama',`,
+    `${indent}// …) and the emitted code is the exact replacement, backend route included.`,
+    `${indent}// Everything below this line is already the real path and stays as it is.`,
+    `${indent}const res = mockResponse(value);`,
+    `${indent}const turn = await readOpenAIStream(res, stream);`,
+  ];
+
+  const realRequest = (indent: string): string[] => [
     `${indent}const res = await fetch('/api/chat', {`,
     `${indent}  method: 'POST',`,
     `${indent}  headers: { 'Content-Type': 'application/json' },`,
@@ -437,6 +362,8 @@ function realStreamBody(opts: {
     `${indent}// instead, which is the catch below.`,
     `${indent}const turn = await readOpenAIStream(res, stream);`,
   ];
+
+  const request = mock ? mockRequest : realRequest;
 
   return [
     `${pad}const value = ${valueSource}.trim();`,
@@ -716,8 +643,15 @@ export function cardEmitPlan(
  * `type SetMessages` is React-only for the same reason: it annotates the `set`
  * adapter in `REACT_THREAD`, which no other framework needs.
  *
- * `typed` pulls in the kit's own `ChatMessage` for the strict-TS frameworks (see
- * `chatMessageDecl`); the plain-JS html target must not emit a type import.
+ * `typed` pulls in the kit's own `ChatMessage` for the strict-TS frameworks; the
+ * plain-JS html target must not emit a type import, and `solid` takes the same
+ * type from `@kitn.ai/ui` alongside its components.
+ *
+ * The `mock` integration imports from here too. It used to import nothing at all
+ * and hand-declare a narrow local `ChatMessage` instead — a subset with no
+ * `raw`/`rawInput` and no `source`/`file` part variants, which a message the kit
+ * itself produced did not satisfy. Now that the mock streams through
+ * `readOpenAIStream` like everything else, it takes the real type.
  */
 function wireImportLines(opts: {
   pad?: string;
@@ -730,16 +664,23 @@ function wireImportLines(opts: {
   cards?: boolean;
   /** the tools array calls cardTools() as well */
   cardTools?: boolean;
+  /** the `mock` integration → import the shared responder, not a fetch encoder */
+  mock?: boolean;
 }): string[] {
-  const { pad = '', typed, toolLoop = false, setMessagesType = false, cards = false, cardTools: emitsCardTools = false } = opts;
+  const { pad = '', typed, toolLoop = false, setMessagesType = false, cards = false, cardTools: emitsCardTools = false, mock = false } = opts;
   const stateNames = [
     'createAssistantStream',
+    // The mock's canned reply comes from the kit, not from a copy pasted into
+    // this file. One implementation, shared with create-kai and the starters.
+    ...(mock ? ['createMockResponder'] : []),
     ...(typed ? ['type ChatMessage'] : []),
     ...(typed && setMessagesType ? ['type SetMessages'] : []),
   ].join(', ');
+  // `noUnusedLocals` is enforced over the emitted scaffolds (verify:scaffold), so
+  // the mock must NOT name toOpenAIMessages: it has no request body to encode.
   const wireNames = [
     'readOpenAIStream',
-    'toOpenAIMessages',
+    ...(mock ? [] : ['toOpenAIMessages']),
     ...(toolLoop ? ['applyToolOutput', 'applyToolFailure'] : []),
   ].join(', ');
   // Same noUnusedLocals rule as above, one entry finer: `cardTools` is named only
@@ -757,6 +698,24 @@ function wireImportLines(opts: {
     // Server-safe: no DOM, no Solid runtime. The same import works in the route
     // when the registry moves to its own cards.ts.
     ...(cards ? [`${pad}import { ${schemaNames} } from '@kitn.ai/ui/schemas';`] : []),
+  ];
+}
+
+/**
+ * The mock responder, declared at MODULE scope.
+ *
+ * Module scope rather than inside the submit handler because the responder owns
+ * the cursor into its canned replies: rebuilt per turn it would answer with the
+ * first reply forever, and the seeded conversation would stop making sense on
+ * the second message.
+ */
+function mockResponderInit(pad = ''): string[] {
+  return [
+    `${pad}// The kit's own mock responder — no backend, no key, no network. It streams`,
+    `${pad}// canned SSE frames through the same reader a real provider's response uses,`,
+    `${pad}// and marks every one of them as a mock. Shared with create-kai and the`,
+    `${pad}// starters, so there is one implementation of this and not seven.`,
+    `${pad}const mockResponse = createMockResponder();`,
   ];
 }
 
@@ -778,39 +737,6 @@ function realBodyPayload(opts: { defaultModel?: string; tools: boolean }): (thre
     return `{ ${fields.join(', ')} }`;
   };
 }
-
-/**
- * SCAF-4/SCAF-11: the local ChatMessage type, emitted by the `mock` scaffold only.
- *
- * mock imports nothing, so it has to declare the shape it uses. A real backend
- * hands its messages to `toOpenAIMessages`, so it takes the kit's own type from
- * the import block instead: this local subset has no `rawInput`, `raw`,
- * `signature` or `index` on a tool and no `source`/`file` part variants, so a
- * message the kit itself produced would not satisfy it.
- */
-const LOCAL_CHAT_MESSAGE_TYPE = `type ChatMessage = { id: string; role: 'user' | 'assistant'; parts: ({ type: 'text'; text: string } | { type: 'reasoning'; text: string; label?: string } | { type: 'tool'; tool: { type: string; state: 'input-streaming' | 'input-available' | 'output-available' | 'output-error'; input?: Record<string, unknown>; output?: Record<string, unknown>; toolCallId?: string } })[] };`;
-
-function chatMessageDecl(isMock: boolean, pad = ''): string[] {
-  return isMock ? [`${pad}${LOCAL_CHAT_MESSAGE_TYPE}`] : [];
-}
-
-/**
- * The `html` target's mock message type, DERIVED from the element rather than
- * restated.
- *
- * Every other mock target hand-writes `LOCAL_CHAT_MESSAGE_TYPE` because it has
- * nothing to derive from. This one does: the code assigns straight to
- * `chat.messages`, and the kit ships `KaiChatElement`, so indexing that property
- * gives the exact message type the assignment target accepts. A hand-written
- * subset would be assignable INTO the element and then fail on the way back out —
- * `chat.messages.map((m) => …appendText(m.parts)…)` reads the element's wider
- * part union, which a narrow local type cannot accept.
- */
-const HTML_CHAT_MESSAGE_TYPE = [
-  `// The message type, taken from the element it is assigned to rather than`,
-  `// restated — so it cannot drift out of step with what <kai-chat> accepts.`,
-  `type ChatMessage = KaiChatElement['messages'][number];`,
-];
 
 // ── SCAF-8: per-integration default model ids ─────────────────────────────────
 
@@ -1325,17 +1251,16 @@ function htmlModule(ctx: RenderCtx, archetype: Archetype): string {
     `// The kit ships the element interfaces, so one cast at the lookup below types`,
     `// every property assignment that follows.`,
     `import type { ${elementTypes} } from '@kitn.ai/ui/elements';`,
-    ...(ctx.isMock
-      ? []
-      : wireImportLines({
-          typed: annotatesChatMessage,
-          toolLoop: ctx.emitToolLoop,
-          cards: ctx.emitCards,
-          cardTools: ctx.cardProvider !== null,
-        })),
+    ...wireImportLines({
+      typed: annotatesChatMessage,
+      toolLoop: ctx.emitToolLoop,
+      cards: ctx.emitCards,
+      cardTools: ctx.cardProvider !== null,
+      mock: ctx.isMock,
+    }),
     `import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
     ``,
-    ...(ctx.isMock ? [...HTML_CHAT_MESSAGE_TYPE, ``] : []),
+    ...(ctx.isMock ? [...mockResponderInit(), ``] : []),
     ...modelLines,
     ...cardsLines,
     ...toolsLines,
@@ -1370,24 +1295,6 @@ function htmlModule(ctx: RenderCtx, archetype: Archetype): string {
     `void init();`,
   ];
 
-  if (ctx.isMock) {
-    return [
-      ...head,
-      `  // No backend: stream a canned reply client-side (no fetch, no API key).`,
-      ...listenerOpen,
-      mockStreamBody({
-        pad: '    ',
-        read: 'chat.messages',
-        commitInitial: (expr) => `chat.messages = ${expr};`,
-        // chat.messages is live (no React snapshot) — map over it directly
-        commitMap: (mapBody) => `chat.messages = chat.messages.map((m) => ${mapBody});`,
-        setLoading: (v) => `chat.loading = ${v};`,
-        strictRoles: true,
-      }),
-      ...footer,
-    ].join('\n');
-  }
-
   return [
     ...head,
     `  // messages is a JS PROPERTY (objects can't be HTML attributes)`,
@@ -1407,6 +1314,7 @@ function htmlModule(ctx: RenderCtx, archetype: Archetype): string {
         '(fn) => { chat.messages = fn(chat.messages); }',
         'chat.messages ?? []',
       ),
+      mock: ctx.isMock,
     }),
     ...footer,
   ].join('\n');
@@ -1509,7 +1417,7 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
   }
   const companions = companionJsxLines.join('\n');
 
-  const chatMessageType = chatMessageDecl(isMock);
+  const mockInit = isMock ? mockResponderInit() : [];
 
   // SCAF-9: no fabricated seed — see SAMPLE_AGENTIC_MESSAGE for the three ways
   // one broke a real app.
@@ -1557,30 +1465,22 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
   const cardPropsNote = (pad: string): string[] =>
     ctx.emitCards ? jsxComment(CARD_PROP_COMMENT, pad) : [];
 
-  // onSubmit body: mock streams a canned reply client-side; otherwise fetch /api/chat.
-  const onSubmitBody = isMock
-    ? mockStreamBody({
-        pad: '    ',
-        read: 'messages',
-        commitInitial: (expr) => `setMessages(${expr});`,
-        // functional updater so each token maps over the LATEST array, not the snapshot
-        commitMap: (mapBody) => `setMessages((prev) => prev.map((m) => ${mapBody}));`,
-        setLoading: (v) => `setLoading(${v});`,
-        strictRoles: true,
-      })
-    : realStreamBody({
-        pad: '    ',
-        read: 'messages',
-        commitSet: (expr) => `setMessages(${expr});`,
-        // useState's setter IS a SetMessages: both are (updater) => void.
-        setterAdapter: 'setMessages',
-        setLoading: (v) => `setLoading(${v});`,
-        bodyPayload: realBodyPayload({ defaultModel, tools: emitTools }),
-        strictRoles: true,
-        toolLoop: emitToolLoop,
-        cards: ctx.emitCards,
-        thread: REACT_THREAD,
-      });
+  // onSubmit body. The mock and the real backend differ by ONE expression — the
+  // stream's source — and share every other line: see `realStreamBody`.
+  const onSubmitBody = realStreamBody({
+    pad: '    ',
+    read: 'messages',
+    commitSet: (expr) => `setMessages(${expr});`,
+    // useState's setter IS a SetMessages: both are (updater) => void.
+    setterAdapter: 'setMessages',
+    setLoading: (v) => `setLoading(${v});`,
+    bodyPayload: realBodyPayload({ defaultModel, tools: emitTools }),
+    strictRoles: true,
+    toolLoop: emitToolLoop,
+    cards: ctx.emitCards,
+    thread: REACT_THREAD,
+    mock: isMock,
+  });
 
   // SCAF-2: Next.js App Router requires 'use client' for components that use hooks/interactivity.
   const useClientDirective = framework === 'next' ? [`'use client';`, ``] : [];
@@ -1609,15 +1509,14 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
       `import dynamic from 'next/dynamic';`,
       // The adapter is pure parsing + pure state; both entries are SSR-import-safe,
       // so they stay static imports even though the ELEMENTS have to be dynamic.
-      ...(isMock
-        ? []
-        : wireImportLines({
-          typed: true,
-          toolLoop: emitToolLoop,
-          setMessagesType: emitToolLoop,
-          cards: ctx.emitCards,
-          cardTools: ctx.cardProvider !== null,
-        })),
+      ...wireImportLines({
+        typed: true,
+        toolLoop: emitToolLoop,
+        setMessagesType: emitToolLoop,
+        cards: ctx.emitCards,
+        cardTools: ctx.cardProvider !== null,
+        mock: isMock,
+      }),
       `import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
       `// <kai-*> are client-only custom elements (the server has no customElements`,
       `// registry) → load client-only so hydration doesn't mismatch. The package itself`,
@@ -1627,7 +1526,7 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
       ...nextConfigNote,
       `// ${archetype.title} — ${p.note}. empty-state hint: ${emptyHint}`,
       ...(p.altNote ?? []).map((l) => `// ${l}`),
-      ...chatMessageType,
+      ...mockInit,
       ``,
       ...cardsInit,
       `export default function App() {`,
@@ -1700,21 +1599,20 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
     `import '@kitn.ai/ui/elements';  // registers <kai-*> — required, must come first`,
     `import { useState } from 'react';`,
     `import { ${importList} } from '@kitn.ai/ui/react';`,
-    ...(isMock
-      ? []
-      : wireImportLines({
-          typed: true,
-          toolLoop: emitToolLoop,
-          setMessagesType: emitToolLoop,
-          cards: ctx.emitCards,
-          cardTools: ctx.cardProvider !== null,
-        })),
+    ...wireImportLines({
+      typed: true,
+      toolLoop: emitToolLoop,
+      setMessagesType: emitToolLoop,
+      cards: ctx.emitCards,
+      cardTools: ctx.cardProvider !== null,
+      mock: isMock,
+    }),
     `import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
     ``,
     ...nextConfigNote,
     `// ${archetype.title} — ${p.note}. empty-state hint: ${emptyHint}`,
     ...(p.altNote ?? []).map((l) => `// ${l}`),
-    ...chatMessageType,
+    ...mockInit,
     ``,
     ...cardsInit,
     `export default function App() {`,
@@ -1805,31 +1703,22 @@ function renderVue(archetype: Archetype, ctx: RenderCtx): string {
   }
   const companions = companionLines.join('\n');
 
-  const onSubmitBody = isMock
-    ? mockStreamBody({
-        pad: '    ',
-        read: 'messages.value',
-        commitInitial: (expr) => `messages.value = ${expr};`,
-        // messages.value is live — map over it directly
-        commitMap: (mapBody) => `messages.value = messages.value.map((m) => ${mapBody});`,
-        setLoading: (v) => `loading.value = ${v};`,
-        strictRoles: true,
-      })
-    : realStreamBody({
-        pad: '    ',
-        read: 'messages.value',
-        commitSet: (expr) => `messages.value = ${expr};`,
-        setterAdapter: '(fn) => { messages.value = fn(messages.value); }',
-        setLoading: (v) => `loading.value = ${v};`,
-        bodyPayload: realBodyPayload({ defaultModel, tools: emitTools }),
-        strictRoles: true,
-        toolLoop: emitToolLoop,
-        cards: ctx.emitCards,
-        thread: liveThreadBinding('messages.value', '(fn) => { messages.value = fn(messages.value); }'),
-      });
+  const onSubmitBody = realStreamBody({
+    pad: '    ',
+    read: 'messages.value',
+    commitSet: (expr) => `messages.value = ${expr};`,
+    setterAdapter: '(fn) => { messages.value = fn(messages.value); }',
+    setLoading: (v) => `loading.value = ${v};`,
+    bodyPayload: realBodyPayload({ defaultModel, tools: emitTools }),
+    strictRoles: true,
+    toolLoop: emitToolLoop,
+    cards: ctx.emitCards,
+    thread: liveThreadBinding('messages.value', '(fn) => { messages.value = fn(messages.value); }'),
+    mock: isMock,
+  });
 
   // SCAF-10: ChatMessage declaration for strict-TS Vue consumers.
-  const chatMessageType = chatMessageDecl(isMock);
+  const mockInit = isMock ? mockResponderInit() : [];
 
   // SCAF-8: model const at module scope so onSubmit closes over it.
   const modelInit = defaultModel
@@ -1927,18 +1816,17 @@ function renderVue(archetype: Archetype, ctx: RenderCtx): string {
     `     not, and that warning is Vue asking you for exactly that config. -->`,
     `<script setup lang="ts">`,
     `import '@kitn.ai/ui/elements';  // registers <kai-*> — required, must come first`,
-    ...(isMock
-      ? []
-      : wireImportLines({
-          typed: true,
-          toolLoop: emitToolLoop,
-          cards: ctx.emitCards,
-          cardTools: ctx.cardProvider !== null,
-        })),
+    ...wireImportLines({
+      typed: true,
+      toolLoop: emitToolLoop,
+      cards: ctx.emitCards,
+      cardTools: ctx.cardProvider !== null,
+      mock: isMock,
+    }),
     `import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
     vueImports,
     ``,
-    ...chatMessageType,
+    ...mockInit,
     ``,
     ...cardsInit,
     ...sampleSeed,
@@ -2004,31 +1892,22 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
   }
   const companionLines = companionLinesList.join('\n');
 
-  const onSubmitBody = isMock
-    ? mockStreamBody({
-        pad: '    ',
-        read: 'messages',
-        commitInitial: (expr) => `messages = ${expr};`,
-        // `messages` is a live local — reassign to map over the latest array
-        commitMap: (mapBody) => `messages = messages.map((m) => ${mapBody});`,
-        setLoading: (v) => `loading = ${v};`,
-        strictRoles: true,
-      })
-    : realStreamBody({
-        pad: '    ',
-        read: 'messages',
-        commitSet: (expr) => `messages = ${expr};`,
-        setterAdapter: '(fn) => { messages = fn(messages); }',
-        setLoading: (v) => `loading = ${v};`,
-        bodyPayload: realBodyPayload({ defaultModel, tools: emitTools }),
-        strictRoles: true,
-        toolLoop: emitToolLoop,
-        cards: ctx.emitCards,
-        thread: liveThreadBinding('messages', '(fn) => { messages = fn(messages); }'),
-      });
+  const onSubmitBody = realStreamBody({
+    pad: '    ',
+    read: 'messages',
+    commitSet: (expr) => `messages = ${expr};`,
+    setterAdapter: '(fn) => { messages = fn(messages); }',
+    setLoading: (v) => `loading = ${v};`,
+    bodyPayload: realBodyPayload({ defaultModel, tools: emitTools }),
+    strictRoles: true,
+    toolLoop: emitToolLoop,
+    cards: ctx.emitCards,
+    thread: liveThreadBinding('messages', '(fn) => { messages = fn(messages); }'),
+    mock: isMock,
+  });
 
   // SCAF-10: ChatMessage declaration for strict-TS Svelte consumers.
-  const chatMessageType = chatMessageDecl(isMock, '  ');
+  const mockInit = isMock ? mockResponderInit('  ') : [];
 
   // SCAF-8: model const at script scope so onSubmit closes over it.
   const modelInit = defaultModel
@@ -2118,18 +1997,17 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
     // declared below: an always-on import would be unused (and fail noUnusedLocals)
     // on every archetype without kai-sources.
     `  import type { ${hasSourcesCompanion ? 'KaiChatElement, KaiSourcesElement' : 'KaiChatElement'} } from '@kitn.ai/ui/elements';`,
-    ...(isMock
-      ? []
-      : wireImportLines({
-          pad: '  ',
-          typed: true,
-          toolLoop: emitToolLoop,
-          cards: ctx.emitCards,
-          cardTools: ctx.cardProvider !== null,
-        })),
+    ...wireImportLines({
+      pad: '  ',
+      typed: true,
+      toolLoop: emitToolLoop,
+      cards: ctx.emitCards,
+      cardTools: ctx.cardProvider !== null,
+      mock: isMock,
+    }),
     `  import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
     `  import { onMount } from 'svelte';`,
-    ...chatMessageType,
+    ...mockInit,
     `  // \`bind:this\` writes to this binding, so under runes it must be $state.`,
     `  let chatEl = $state<KaiChatElement | undefined>(undefined);`,
     `  // SCAF-15: kai-* register via an async dynamic import (SSR-safety). Gate the`,
@@ -2236,7 +2114,7 @@ function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
   }
   const companions = companionJsxLines.join('\n');
 
-  const chatMessageType = chatMessageDecl(isMock);
+  const mockInit = isMock ? mockResponderInit() : [];
 
   // SCAF-9: no fabricated seed — see SAMPLE_AGENTIC_MESSAGE.
   const sampleMessagesInit = [
@@ -2275,28 +2153,20 @@ function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
   const cardPropsNote = (pad: string): string[] =>
     ctx.emitCards ? jsxComment(CARD_PROP_COMMENT, pad) : [];
 
-  const onSubmitBody = isMock
-    ? mockStreamBody({
-        pad: '    ',
-        read: 'messages',
-        commitInitial: (expr) => `setMessages(${expr});`,
-        commitMap: (mapBody) => `setMessages((prev) => prev.map((m) => ${mapBody}));`,
-        setLoading: (v) => `setLoading(${v});`,
-        strictRoles: true,
-      })
-    : realStreamBody({
-        pad: '    ',
-        read: 'messages',
-        commitSet: (expr) => `setMessages(${expr});`,
-        // useState's setter IS a SetMessages: both are (updater) => void.
-        setterAdapter: 'setMessages',
-        setLoading: (v) => `setLoading(${v});`,
-        bodyPayload: realBodyPayload({ defaultModel, tools: emitTools }),
-        strictRoles: true,
-        toolLoop: emitToolLoop,
-        cards: ctx.emitCards,
-        thread: REACT_THREAD,
-      });
+  const onSubmitBody = realStreamBody({
+    pad: '    ',
+    read: 'messages',
+    commitSet: (expr) => `setMessages(${expr});`,
+    // useState's setter IS a SetMessages: both are (updater) => void.
+    setterAdapter: 'setMessages',
+    setLoading: (v) => `setLoading(${v});`,
+    bodyPayload: realBodyPayload({ defaultModel, tools: emitTools }),
+    strictRoles: true,
+    toolLoop: emitToolLoop,
+    cards: ctx.emitCards,
+    thread: REACT_THREAD,
+    mock: isMock,
+  });
 
   // File path guidance for TanStack Start (file-based routing)
   const filePathNote = [
@@ -2318,20 +2188,19 @@ function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
     // Elements registration: the library is SSR-import-safe; top-level import is safe here
     `import '@kitn.ai/ui/elements';  // registers <kai-*> — required, must come first`,
     `import { ${importList} } from '@kitn.ai/ui/react'`,
-    ...(isMock
-      ? []
-      : wireImportLines({
-          typed: true,
-          toolLoop: emitToolLoop,
-          setMessagesType: emitToolLoop,
-          cards: ctx.emitCards,
-          cardTools: ctx.cardProvider !== null,
-        })),
+    ...wireImportLines({
+      typed: true,
+      toolLoop: emitToolLoop,
+      setMessagesType: emitToolLoop,
+      cards: ctx.emitCards,
+      cardTools: ctx.cardProvider !== null,
+      mock: isMock,
+    }),
     `import '@kitn.ai/ui/theme.tokens.css'  // compiled token defaults`,
     ``,
     `// ${archetype.title} — ${p.note}. empty-state hint: ${emptyHint}`,
     ...(p.altNote ?? []).map((l) => `// ${l}`),
-    ...chatMessageType,
+    ...mockInit,
     ``,
     ...cardsInit,
     `// ssr: false keeps the Solid-based web component client-only.`,
@@ -2460,28 +2329,19 @@ function renderAngular(archetype: Archetype, ctx: RenderCtx): string {
   const commit = (value: string) => `this.messages.set(${value});`;
   const setter = '(fn) => this.messages.set(fn(this.messages()))';
 
-  const onSubmitBody = isMock
-    ? mockStreamBody({
-        pad: '    ',
-        read,
-        commitInitial: (expr) => commit(expr),
-        // the signal reads back live — map over the current value, not a snapshot
-        commitMap: (mapBody) => commit(`${read}.map((m) => ${mapBody})`),
-        setLoading: (v) => `this.loading.set(${v});`,
-        strictRoles: true,
-      })
-    : realStreamBody({
-        pad: '    ',
-        read,
-        commitSet: (expr) => commit(expr),
-        setterAdapter: setter,
-        setLoading: (v) => `this.loading.set(${v});`,
-        bodyPayload: realBodyPayload({ defaultModel, tools: emitTools }),
-        strictRoles: true,
-        toolLoop: emitToolLoop,
-        cards: ctx.emitCards,
-        thread: accessorThreadBinding(read, commit, setter),
-      });
+  const onSubmitBody = realStreamBody({
+    pad: '    ',
+    read,
+    commitSet: (expr) => commit(expr),
+    setterAdapter: setter,
+    setLoading: (v) => `this.loading.set(${v});`,
+    bodyPayload: realBodyPayload({ defaultModel, tools: emitTools }),
+    strictRoles: true,
+    toolLoop: emitToolLoop,
+    cards: ctx.emitCards,
+    thread: accessorThreadBinding(read, commit, setter),
+    mock: isMock,
+  });
 
   // Module scope, exactly like vue: a class can hold neither a bare `const` nor a
   // `function` declaration, and the methods below close over all three.
@@ -2581,18 +2441,17 @@ function renderAngular(archetype: Archetype, ctx: RenderCtx): string {
     `import { CUSTOM_ELEMENTS_SCHEMA, Component, ElementRef, afterNextRender, signal, viewChild } from '@angular/core';`,
     `import '@kitn.ai/ui/elements';  // registers <kai-*> — required, must come first`,
     `import type { ${elementTypes} } from '@kitn.ai/ui/elements';`,
-    ...(isMock
-      ? []
-      : wireImportLines({
-          typed: true,
-          toolLoop: emitToolLoop,
-          cards: ctx.emitCards,
-          cardTools: ctx.cardProvider !== null,
-        })),
+    ...wireImportLines({
+      typed: true,
+      toolLoop: emitToolLoop,
+      cards: ctx.emitCards,
+      cardTools: ctx.cardProvider !== null,
+      mock: isMock,
+    }),
     ``,
     `// ${archetype.title} — ${p.note}. empty-state hint: ${emptyHint}`,
     ...(p.altNote ?? []).map((l) => `// ${l}`),
-    ...chatMessageDecl(isMock),
+    ...(isMock ? mockResponderInit() : []),
     ``,
     ...modelInit,
     ...cardsInit,
@@ -2751,32 +2610,21 @@ function renderSolid(archetype: Archetype, ctx: RenderCtx): string {
   // exactly the `SetMessages` shape createAssistantStream wants.
   const setter = '(fn) => setMessages((prev) => fn(prev))';
 
-  const onSubmitBody = isMock
-    ? mockStreamBody({
-        pad: '    ',
-        read,
-        commitInitial: (expr) => commit(expr),
-        // the signal reads back live — map over the current value, not a snapshot
-        commitMap: (mapBody) => commit(`${read}.map((m) => ${mapBody})`),
-        setLoading: (v) => `setLoading(${v});`,
-        strictRoles: true,
-        valueSource: 'input()',
-        afterValue: [`setInput('');`],
-      })
-    : realStreamBody({
-        pad: '    ',
-        read,
-        commitSet: (expr) => commit(expr),
-        setterAdapter: setter,
-        setLoading: (v) => `setLoading(${v});`,
-        bodyPayload: realBodyPayload({ defaultModel, tools: emitTools }),
-        strictRoles: true,
-        toolLoop: emitToolLoop,
-        cards: ctx.emitCards,
-        thread: accessorThreadBinding(read, commit, setter),
-        valueSource: 'input()',
-        afterValue: [`setInput('');`],
-      });
+  const onSubmitBody = realStreamBody({
+    pad: '    ',
+    read,
+    commitSet: (expr) => commit(expr),
+    setterAdapter: setter,
+    setLoading: (v) => `setLoading(${v});`,
+    bodyPayload: realBodyPayload({ defaultModel, tools: emitTools }),
+    strictRoles: true,
+    toolLoop: emitToolLoop,
+    cards: ctx.emitCards,
+    thread: accessorThreadBinding(read, commit, setter),
+    valueSource: 'input()',
+    afterValue: [`setInput('');`],
+    mock: isMock,
+  });
 
   const modelInit = defaultModel
     ? [
@@ -2960,18 +2808,18 @@ function renderSolid(archetype: Archetype, ctx: RenderCtx): string {
     `} from '@kitn.ai/ui';`,
     `// The kit's own types, from the same entry the components come from.`,
     `import type { ChatMessage, MessagePart, MessageSource } from '@kitn.ai/ui';`,
-    ...(isMock
-      ? []
-      : wireImportLines({
-          typed: false,
-          toolLoop: emitToolLoop,
-          cards: ctx.emitCards,
-          cardTools: ctx.cardProvider !== null,
-        })),
+    ...wireImportLines({
+      typed: false,
+      toolLoop: emitToolLoop,
+      cards: ctx.emitCards,
+      cardTools: ctx.cardProvider !== null,
+      mock: isMock,
+    }),
     ``,
     `// ${archetype.title} — ${p.note}. empty-state hint: ${emptyHint}`,
     ...(p.altNote ?? []).map((l) => `// ${l}`),
     ``,
+    ...(isMock ? [...mockResponderInit(), ``] : []),
     ...cardsInit,
     `// Narrow a part to ONE variant, or false. One read, one cast — and the JSX`,
     `// below re-runs it on every delta, which is what keeps a growing text or`,

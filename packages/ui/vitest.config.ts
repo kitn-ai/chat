@@ -5,6 +5,12 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { storybookTest } from '@storybook/addon-vitest/vitest-plugin';
 import { playwright } from '@vitest/browser-playwright';
+import {
+  EMITTED_CODE_TESTS,
+  EMITTED_CODE_TESTS_EXCLUDE,
+  EMITTED_CODE_TIMEOUT,
+  EMITTED_PROJECT,
+} from './emitted-code-tests';
 const dirname = typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath(import.meta.url));
 
 // Makes `*.css?raw` and `*.css?inline` imports return real file content in vitest.
@@ -26,14 +32,20 @@ function cssRawPlugin() {
   };
 }
 
-// Two Vitest projects:
-//   • (default) jsdom unit tests
+// Three Vitest projects:
+//   • `unit` — jsdom unit tests, the fast inner loop
+//   • `emitted` — run-the-emitted-code guards: they write the `kai` MCP scaffolder's
+//     output to a real module and EXECUTE it, so they are integration tests and cost
+//     seconds each. Split out of `unit` so its 5000ms default stays a meaningful hang
+//     detector; see `emitted-code-tests.ts` for the measurements and the budget.
 //   • `storybook` — every *.stories.tsx runs as a browser test (play functions,
 //     smoke render, and axe a11y) via @storybook/addon-vitest + Playwright.
 //
 // Run them:
-//   npm test               # all projects (unit + storybook)
-//   npm run test:storybook # stories-as-tests only (vitest run --project=storybook)
+//   npm test                             # all projects (unit + emitted + storybook)
+//   vitest run --project=unit            # the fast inner loop
+//   vitest run --project=emitted         # the emitted-code guards
+//   npm run test:storybook               # stories-as-tests only
 //
 // a11y-in-test: @storybook/addon-a11y is registered in .storybook/main.ts and
 // the default `a11y.test` is set in .storybook/preview.ts (currently 'error' =
@@ -134,7 +146,37 @@ export default defineConfig({
         // their duplicated test files must never be collected by the main run.
         // `tests/e2e/**` are standalone Playwright specs (`npm run test:e2e`), NOT
         // vitest tests — collecting them throws "test() called here" under vitest.
-        exclude: ['**/node_modules/**', '**/.claude/**', 'tests/react/**', '**/tests/react/**', 'tests/e2e/**', '**/tests/e2e/**']
+        // EMITTED_CODE_TESTS_EXCLUDE hands the run-the-emitted-code guards to the
+        // `emitted` project below. Same constant on both sides, used in opposite
+        // directions, so the include and the exclude cannot drift into a file that
+        // runs twice or a file that runs nowhere.
+        exclude: ['**/node_modules/**', '**/.claude/**', 'tests/react/**', '**/tests/react/**', 'tests/e2e/**', '**/tests/e2e/**', ...EMITTED_CODE_TESTS_EXCLUDE]
+      }
+    }, {
+      extends: true,
+      test: {
+        // Run-the-emitted-code guards. They take what the `kai` MCP scaffolder emits
+        // into a consumer's repo, write it to a real module and EXECUTE it — the only
+        // layer that can tell a working emit from a plausible-looking one, and by
+        // construction seconds of Vite transform plus a driven streaming loop rather
+        // than milliseconds of assertion.
+        //
+        // Same jsdom environment and the same plugins as `unit` (hence `extends`),
+        // deliberately NOT a separate config file like vitest.react.config.ts: that
+        // one exists because React tests need a different JSX transform, and these
+        // need exactly the Solid one `unit` already has. What differs is the BUDGET,
+        // which is a project, not a config.
+        //
+        // No `setupFiles`. `vitest.setup.timeouts.ts` applies the per-file exceptions
+        // in `test-timeout-budgets.ts`, which are a device for keeping ONE strict
+        // default honest in a suite of ~2600 fast tests. There is no strict default to
+        // protect here, so the budget is stated once for the project.
+        name: EMITTED_PROJECT,
+        environment: 'jsdom',
+        globals: true,
+        include: [EMITTED_CODE_TESTS],
+        testTimeout: EMITTED_CODE_TIMEOUT,
+        hookTimeout: EMITTED_CODE_TIMEOUT,
       }
     }, {
       extends: true,

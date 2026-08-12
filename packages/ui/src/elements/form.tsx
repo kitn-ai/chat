@@ -3,7 +3,7 @@ import { Form, type FormController, type FormDefinition } from '../components/fo
 import type { CardResolution } from '../primitives/card-contract';
 
 interface Props extends Record<string, unknown> {
-  /** The form definition — a JSON Schema (`type:'object'`) + `x-kai-*` UI hints
+  /** The form definition: a JSON Schema (`type:'object'`) + `x-kai-*` UI hints
    *  (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { type:'object',
    *  properties:{…} }`. Import the `FormDefinition` type from `@kitn.ai/ui` for
    *  the full shape (it is self-referential, so the element types it loosely). */
@@ -27,7 +27,8 @@ interface Props extends Record<string, unknown> {
  *  contract event — `kai-values-change` is the live change signal, distinct from the
  *  terminal submit.) */
 interface Events {
-  /** The form's values changed on input — current coerced values + validity. */
+  /** The form's values changed on input. Carries the current coerced values +
+   *  validity. */
   'kai-values-change': { values: Record<string, unknown>; valid: boolean };
 }
 
@@ -56,7 +57,7 @@ defineWebComponent<Props, Events>('kai-form', {
   expose({
     /** Focus the first control, or the first INVALID control after a failed validation. */
     focus: (options?: FocusOptions) => controller?.focus(options),
-    /** Validate + submit programmatically — focus the first invalid field on failure,
+    /** Validate + submit programmatically: focus the first invalid field on failure,
      *  else emit the `submit` CardEvent and resolve. Named `send`, not `submit`. */
     send: () => controller?.send(),
     /** Run client-side validation now and return `{ valid, errors? }` WITHOUT submitting. */

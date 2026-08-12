@@ -65,6 +65,10 @@ const openrouter: Integration = {
   // /chat/completions body, unconverted — so the client must send OpenAI's own
   // `{ type: 'function', function: { parameters } }` envelope.
   clientToolFormat: 'openai',
+  // Nothing to install. The route is global `fetch` and imports no module.
+  deps: { npm: [], pip: [] },
+  // The route reads OPENROUTER_API_KEY into an `Authorization: Bearer` header.
+  keyExposure: 'needs-proxy',
 };
 
 export default openrouter;

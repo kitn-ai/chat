@@ -16,7 +16,7 @@ interface Props extends Record<string, unknown> {
    *  Seeds the starting tab; the user can then switch freely without the consumer
    *  re-asserting a controlled `tab`. */
   defaultTab?: ArtifactTab;
-  /** Selected file path — syncs the tree highlight, Code source, and preview. */
+  /** Selected file path. Syncs the tree highlight, Code source, and preview. */
   activeFile?: string;
   /** iframe `sandbox` override. Secure default `allow-scripts allow-forms` (NOT `allow-same-origin`). */
   sandbox?: string;
@@ -61,7 +61,7 @@ interface Events extends Record<string, unknown> {
   /** The maximize PROTOCOL intent, raised as a raw bubbling + composed CustomEvent
    *  (not through `dispatch`) so an enclosing `<kai-resizable>` can catch it and
    *  maximize the containing panel. Declared here so it is typed and reaches the
-   *  generated API — listen for it to drive maximize from your own chrome, or
+   *  generated API. Listen for it to drive maximize from your own chrome, or
    *  re-emit it to trigger one. */
   'kai-maximize-intent': { requested: boolean };
 }
@@ -114,17 +114,17 @@ defineWebComponent<Props, Events>('kai-artifact', {
     reload: () => controller?.reload(),
     /** Navigate to the `src` home url (no-op when there's no `src`). */
     home: () => controller?.home(),
-    /** Push + load a url in the preview — the path-field submit path (fires kai-navigate). */
+    /** Push + load a url in the preview, the path-field submit path (fires kai-navigate). */
     navigate: (url: string) => controller?.navigate(url),
     /** Select a file by path: highlights the tree, shows its source, navigates the
      *  preview (fires kai-file-select + kai-navigate). Named selectFile to avoid the
      *  `activeFile` prop. */
     selectFile: (path: string) => controller?.selectFile(path),
     /** Open the current url in a new browser tab (no-op when there's no concrete url).
-     *  Named openExternal, NOT openInTab — that's a prop (toolbar button visibility). */
+     *  Named openExternal, NOT openInTab, which is a prop (toolbar button visibility). */
     openExternal: () => controller?.openExternal(),
     /** Enter the maximized view-state (fires kai-maximize-change{maximized:true}).
-     *  Named maximize, NOT maximized — that's a prop. */
+     *  Named maximize, NOT maximized, which is a prop. */
     maximize: () => controller?.maximize(),
     /** Exit the maximized view-state (fires kai-maximize-change{maximized:false}). */
     restore: () => controller?.restore(),

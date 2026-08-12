@@ -233,6 +233,25 @@ function renderElement(el) {
       : '_No events._',
   );
 
+  // The imperative half of the interaction surface. An agent reading this file to
+  // wire an element could previously see every prop and every event and no way to
+  // drive the thing from code.
+  if (el.methods?.length) {
+    const [first] = el.methods;
+    out.push('');
+    out.push(
+      [
+        `**Methods** (call on the element instance: \`document.querySelector('${el.tag}').${first.name}(${first.params ? '…' : ''})\`):`,
+        '',
+        '| Method | Signature | Description |',
+        '|---|---|---|',
+        el.methods
+          .map((m) => `| \`${m.name}\` | \`${escapeCell(`(${m.params}): ${m.returns}`)}\` | ${escapeCell(m.description)} |`)
+          .join('\n'),
+      ].join('\n'),
+    );
+  }
+
   if (el.slots?.length) {
     out.push('');
     out.push(
@@ -390,6 +409,12 @@ function fromElements(elements) {
       detail: e.detail ? `CustomEvent<${e.detail}>` : 'CustomEvent',
       description: e.description,
     })),
+    methods: (el.methods ?? []).map((m) => ({
+      name: m.name,
+      params: m.params,
+      returns: m.returns,
+      description: m.description,
+    })),
     slots: el.slots,
     parts: el.parts,
     declarativeChildren: el.declarativeChildren,
@@ -418,6 +443,18 @@ function fromManifest(cem) {
         detail: e.type?.text ?? 'CustomEvent',
         description: e.description ?? '',
       })),
+      // Must stay in step with `fromElements` above. This path is the standalone
+      // fallback, and a field it forgets does not fail — it silently writes a
+      // THINNER llms-full.txt over the full one (see the header note and CLAUDE.md).
+      // The CEM packs the whole authored parameter list into `parameters[0].name`.
+      methods: (d.members || [])
+        .filter((m) => m.kind === 'method')
+        .map((m) => ({
+          name: m.name,
+          params: m.parameters?.[0]?.name ?? '',
+          returns: m.return?.type?.text ?? 'void',
+          description: m.description ?? '',
+        })),
       slots: (d.slots || []).map((s) => ({ name: s.name, doc: s.description ?? '' })),
       parts: (d.cssParts || []).map((p) => ({ name: p.name, doc: p.description ?? '', recipe: p.recipe })),
       declarativeChildren: (d.declarativeChildren || []).map((c) => ({

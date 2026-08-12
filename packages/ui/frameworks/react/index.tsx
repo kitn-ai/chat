@@ -21,15 +21,15 @@ export { useVoiceInput } from './use-voice-input';
 
 
 export interface AgentCardProps extends WebComponentProps {
-  /** The agent's name — the primary label. Attribute: `name`. */
+  /** The agent's name, the primary label. Attribute: `name`. */
   name?: string;
   /** Selected / focused state: highlighted border + surface. Attribute: `active`. */
   active?: boolean;
-  /** Raise a prominent "Needs you" pill plus a glowing amber edge — the attention-routing signal that pulls focus to this agent. Attribute: `needs-attention`. */
+  /** Raise a prominent "Needs you" pill plus a glowing amber edge. This is the attention-routing signal that pulls focus to this agent. Attribute: `needs-attention`. */
   needsAttention?: boolean;
-  /** Run status — a JS PROPERTY (object), not an attribute. Shape: `{ tone, label?, pulse? }`, where `tone` is one of `working` | `idle` | `done` | `error` | `blocked` (maps to the kit's tool hues), `label` is an optional short string beside the dot, and `pulse` animates the dot. Set it with `el.status = { tone: 'working', label: 'Working', pulse: true }`. */
+  /** Run status. A JS PROPERTY (object), not an attribute. Shape: `{ tone, label?, pulse? }`, where `tone` is one of `working` | `idle` | `done` | `error` | `blocked` (maps to the kit's tool hues), `label` is an optional short string beside the dot, and `pulse` animates the dot. Set it with `el.status = { tone: 'working', label: 'Working', pulse: true }`. */
   status?: { tone: "working" | "idle" | "done" | "error" | "blocked"; label?: string; pulse?: boolean };
-  /** The card was activated — clicked, or Enter / Space while focused. Promote this agent back to focus. */
+  /** The card was activated by a click, or by Enter / Space while focused. Promote this agent back to focus. */
   onActivate?: (event: CustomEvent) => void;
   /** The trailing "..." kebab was clicked. The consumer opens its own menu; the card only surfaces the affordance (the click does not also activate the card). */
   onMenu?: (event: CustomEvent) => void;
@@ -51,7 +51,7 @@ export interface ArtifactProps extends WebComponentProps {
   tab?: "preview" | "code";
   /** Uncontrolled INITIAL tab (used only when `tab` is unset). Default `preview`. Seeds the starting tab; the user can then switch freely without the consumer re-asserting a controlled `tab`. */
   defaultTab?: "preview" | "code";
-  /** Selected file path — syncs the tree highlight, Code source, and preview. */
+  /** Selected file path. Syncs the tree highlight, Code source, and preview. */
   activeFile?: string;
   /** iframe `sandbox` override. Secure default `allow-scripts allow-forms` (NOT `allow-same-origin`). */
   sandbox?: string;
@@ -83,7 +83,7 @@ export interface ArtifactProps extends WebComponentProps {
   onFileSelect?: (event: CustomEvent<{ path: string }>) => void;
   /** Artifact's own maximize button toggled (consumer-observable; non-bubbling). */
   onMaximizeChange?: (event: CustomEvent<{ maximized: boolean }>) => void;
-  /** The maximize PROTOCOL intent, raised as a raw bubbling + composed CustomEvent (not through `dispatch`) so an enclosing `<kai-resizable>` can catch it and maximize the containing panel. Declared here so it is typed and reaches the generated API — listen for it to drive maximize from your own chrome, or re-emit it to trigger one. */
+  /** The maximize PROTOCOL intent, raised as a raw bubbling + composed CustomEvent (not through `dispatch`) so an enclosing `<kai-resizable>` can catch it and maximize the containing panel. Declared here so it is typed and reaches the generated API. Listen for it to drive maximize from your own chrome, or re-emit it to trigger one. */
   onMaximizeIntent?: (event: CustomEvent<{ requested: boolean }>) => void;
   /** Fired when the preview navigates. `detail.url` = the new location. */
   onNavigate?: (event: CustomEvent<{ url: string }>) => void;
@@ -169,7 +169,7 @@ export interface AvatarProps extends WebComponentProps {
   src?: string;
   /** Alt text for the image. Defaults to `fallback`. */
   alt?: string;
-  /** Short text shown when there's no image — usually initials (e.g. "JD", "AI"). */
+  /** Short text shown when there's no image, usually initials (e.g. "JD", "AI"). */
   fallback?: string;
   /** Size token: `sm` | `md` (default) | `lg`. */
   size?: "sm" | "md" | "lg";
@@ -195,7 +195,7 @@ export const Badge = /*#__PURE__*/ createWebComponent<BadgeProps>(
 );
 
 export interface ButtonProps extends WebComponentProps {
-  /** Visual style. `default` (filled), `subtle` (muted text, hover tint — the toolbar icon look), `ghost` (transparent, hover fill), `outline`, or `destructive`. Defaults to `default`. */
+  /** Visual style. `default` (filled), `subtle` (muted text, hover tint, the toolbar icon look), `ghost` (transparent, hover fill), `outline`, or `destructive`. Defaults to `default`. */
   variant?: "default" | "subtle" | "ghost" | "outline" | "destructive";
   /** Size token. `icon` / `icon-sm` are square (for icon-only buttons); `sm` / `md` / `lg` size text buttons. Defaults to `md`. */
   size?: "sm" | "md" | "lg" | "icon" | "icon-sm";
@@ -207,7 +207,7 @@ export interface ButtonProps extends WebComponentProps {
   label?: string;
   /** Disable the button (non-interactive, dimmed). */
   disabled?: boolean;
-  /** Stretch the button to the full width of its container (a block button) — e.g. a card CTA or a stacked action. Attribute: `full`. */
+  /** Stretch the button to the full width of its container (a block button), e.g. a card CTA or a stacked action. Attribute: `full`. */
   full?: boolean;
   /** Justify the button's content: `start`, `center` (default), or `end`. Combine with `full` for a full-width, left-aligned button. */
   align?: "start" | "center" | "end";
@@ -227,7 +227,7 @@ export const Button = /*#__PURE__*/ createWebComponent<ButtonProps>(
 export interface CardProps extends WebComponentProps {
   /** Surface treatment: `outlined` (default) | `filled` | `plain` | `accent`. Attribute: `appearance`. */
   appearance?: "outlined" | "filled" | "plain" | "accent";
-  /** `vertical` (default, media on top) | `horizontal` (media at the start) | `responsive` (horizontal when the card's container is wide enough, else vertical — a container query on the card's own width). Attribute: `orientation`. */
+  /** `vertical` (default, media on top) | `horizontal` (media at the start) | `responsive` (horizontal when the card's container is wide enough, else vertical, via a container query on the card's own width). Attribute: `orientation`. */
   orientation?: "vertical" | "horizontal" | "responsive";
   /** The card width below which a `responsive` card collapses to vertical and the footer actions stack. A CSS length; default `28rem`. Attribute: `collapse`. */
   collapse?: string;
@@ -261,13 +261,13 @@ export interface CardsProps extends WebComponentProps {
   cards?: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }[];
   /** Optional type→tag overrides/additions (merged over the built-ins). Property: `el.types`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type. */
   types?: Record<string, string>;
-  /** JSON Schemas for the card types this app renders, keyed by envelope type — the companion of `types`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.schemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type — the one your app actually cares about — as the only unchecked thing on screen. A schema here WINS over a built-in of the same name, matching `mergeCardTags`, where your entry is spread over ours. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `"type"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one. See `CardSchemaMap` in components/card-renderer.tsx. */
+  /** JSON Schemas for the card types this app renders, keyed by envelope type. The companion of `types`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.schemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type, the one your app actually cares about, as the only unchecked thing on screen. A schema here WINS over a built-in of the same name, matching `mergeCardTags`, where your entry is spread over ours. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `"type"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one. See `CardSchemaMap` in components/card-renderer.tsx. */
   schemas?: Record<string, object>;
   /** Optional CardPolicy handling child events. Property: `el.policy`. */
   policy?: { onSubmit?: (cardId: string, data: unknown) => void; onAction?: (cardId: string, action: string, payload?: unknown) => void; onSendPrompt?: (text: string, opts: { mode: "compose" | "send"; context?: unknown; }) => void; onOpen?: (url: string, target: "tab" | "artifact") => void; onState?: (cardId: string, patch: unknown) => void; onDismiss?: (cardId: string) => void; onReopen?: (cardId: string) => void; onError?: (cardId: string, message: string) => void; maxSendPromptMode?: "compose" | "send" };
-  /** Validate each envelope's `data` against the schema for its type before rendering it — a built-in's own schema, or yours from `schemas`. Default `true`; set `validate-cards="false"` (or `el.validateCards = false`) to opt out. A hard failure (wrong type, a missing required field) renders a diagnostic naming the field instead of the card; a soft failure (bounds) renders the card unchanged. Both emit a contract `error` event. On in production too: a model emitting a bad shape is a production failure mode, so stripping the check there would hide it from exactly the person who needs to see it. */
+  /** Validate each envelope's `data` against the schema for its type before rendering it, using a built-in's own schema or yours from `schemas`. Default `true`; set `validate-cards="false"` (or `el.validateCards = false`) to opt out. A hard failure (wrong type, a missing required field) renders a diagnostic naming the field instead of the card; a soft failure (bounds) renders the card unchanged. Both emit a contract `error` event. On in production too: a model emitting a bad shape is a production failure mode, so stripping the check there would hide it from exactly the person who needs to see it. */
   validateCards?: boolean;
-  /** A child card transitioned to a resolved/deferred state (an action was chosen, a form/tasks submission landed, or it was dismissed) — re-emitted off the host as a non-bubbling convenience event so a consumer can observe resolution centrally without diffing the cards array. `detail` = `{ cardId, resolution }`. (A `reopen` un-resolves a card and has no `CardResolution`, so it does NOT fire this — observe reopen via the underlying bubbling `kai-card` event.) */
+  /** A child card transitioned to a resolved/deferred state (an action was chosen, a form/tasks submission landed, or it was dismissed). Re-emitted off the host as a non-bubbling convenience event so a consumer can observe resolution centrally without diffing the cards array. `detail` = `{ cardId, resolution }`. (A `reopen` un-resolves a card and has no `CardResolution`, so it does NOT fire this; observe reopen via the underlying bubbling `kai-card` event.) */
   onCardResolved?: (event: CustomEvent<{ cardId: string; resolution: { kind: "action"; action: string; payload?: unknown; at?: undefined | string } | { kind: "submit"; data: unknown; at?: undefined | string } | { kind: "dismissed"; at?: undefined | string } | { kind: "expired"; reason?: undefined | string; at?: undefined | string } }>) => void;
 }
 
@@ -281,13 +281,13 @@ export const Cards = /*#__PURE__*/ createWebComponent<CardsProps>(
 export interface ChainOfThoughtProps extends WebComponentProps {
   /** The reasoning steps. Set as a JS property. Compound sub-parts collapse to this one data model (Route 1). Each `{ label, content?, id? }`. Omit to supply the steps as `<kai-step>` light-DOM children instead; when both are present the property's steps come first. */
   steps?: { label: string; content?: string; id?: string }[];
-  /** Open mode: `'multiple'` (default — any number of steps open at once) or `'single'` (at most one open; opening a step closes the others). */
+  /** Open mode: `'multiple'` (default, any number of steps open at once) or `'single'` (at most one open; opening a step closes the others). */
   type?: "single" | "multiple";
   /** Controlled open step key(s). When set, it WINS over user interaction (the consumer owns the open set). String in `single` mode, string[] in `multiple` mode. Set as a JS property. */
   value?: string | string[];
-  /** Uncontrolled INITIAL open step key(s) — seeds which steps render expanded. Ignored once `value` is provided. Set as a JS property. */
+  /** Uncontrolled INITIAL open step key(s), seeding which steps render expanded. Ignored once `value` is provided. Set as a JS property. */
   defaultValue?: string | string[];
-  /** The open set changed — by user click OR an expand()/collapse()/toggle() call. `value` is a string in `single` mode, a string[] in `multiple` mode. (Maps Radix Accordion's onValueChange.) */
+  /** The open set changed, by user click OR an expand()/collapse()/toggle() call. `value` is a string in `single` mode, a string[] in `multiple` mode. (Maps Radix Accordion's onValueChange.) */
   onValueChange?: (event: CustomEvent<{ value: string | string[] }>) => void;
 }
 
@@ -329,35 +329,35 @@ export interface ChatProps extends WebComponentProps {
   context?: { usedTokens: number; maxTokens: number; inputTokens?: number; outputTokens?: number; estimatedCost?: number };
   /** Show the scroll-to-bottom button inside the scroll area. Default true. */
   scrollButton?: boolean;
-  /** Whether the host has `slot="header-start"` content (left of the title) — set by the `<kai-chat>` facade so a custom control forces the header open. */
+  /** Whether the host has `slot="header-start"` content (left of the title). Set by the `<kai-chat>` facade so a custom control forces the header open. */
   headerStart?: boolean;
   /** Whether the host has `slot="header-end"` content (right of the controls). */
   headerEnd?: boolean;
-  /** REPLACE — full custom header in place of the built-in title/model/context bar. */
+  /** REPLACE: full custom header in place of the built-in title/model/context bar. */
   headerFull?: boolean;
-  /** INJECT — left sidebar column (e.g. a conversation list / your own nav). */
+  /** INJECT: left sidebar column (e.g. a conversation list / your own nav). */
   sidebar?: boolean;
-  /** REPLACE — custom zero-state rendered in the message area while the thread is empty (replaces the empty message list only; the composer and its suggestions still render). */
+  /** REPLACE: custom zero-state rendered in the message area while the thread is empty (replaces the empty message list only; the composer and its suggestions still render). */
   empty?: boolean;
-  /** REPLACE — full custom composer in place of the built-in prompt input. The projected content wires its own submit (the data-flow boundary). */
+  /** REPLACE: full custom composer in place of the built-in prompt input. The projected content wires its own submit (the data-flow boundary). */
   composer?: boolean;
-  /** INJECT — accessory row just above the composer (e.g. extra actions). */
+  /** INJECT: accessory row just above the composer (e.g. extra actions). */
   composerActions?: boolean;
-  /** INJECT — footer row below the composer (disclaimers, token meter, …). */
+  /** INJECT: footer row below the composer (disclaimers, token meter, …). */
   footer?: boolean;
   /** Show a Voice (Mic) button in the input toolbar; fires a `voice` event. */
   voice?: boolean;
-  /** Rich entity triggers — each `{ char, kind, items }` opens a caret-anchored menu that inserts an atomic pill (`/` skills, `@` agents/plugins). Set as a JS property; forwarded to the input. */
+  /** Rich entity triggers. Each `{ char, kind, items }` opens a caret-anchored menu that inserts an atomic pill (`/` skills, `@` agents/plugins). Set as a JS property; forwarded to the input. */
   triggers?: { char: string; kind: string; items?: { id: string; label: string; icon?: string; description?: string; group?: string; kind?: string; promptText?: string; data?: Record<string, unknown> }[] }[];
   /** Default icon per entity kind (kind → image src) for pills/menu items. */
   kindIcons?: Record<string, string>;
   /** Whether each message's action bar is always visible (`'always'`, default) or only revealed on hover of that message row (`'hover'`). */
   actionsReveal?: "always" | "hover";
-  /** The full message thread to render, newest last. Each entry carries its role, ordered `parts`, and optional actions/avatar/feedback. Set as a JS property (`el.messages = [...]`); a NEW array reference per streaming chunk re-renders (mutating in place does not). Omit for an empty thread. Re-declared here (rather than inherited from `ChatThreadProps`) because the ELEMENT registers a `[]` default and renders the empty state without it, while the SolidJS `<ChatThread>` component still requires it — the facade hands it a validated array either way. Matches `<kai-thread>`. */
+  /** The full message thread to render, newest last. Each entry carries its role, ordered `parts`, and optional actions/avatar/feedback. Set as a JS property (`el.messages = [...]`); a NEW array reference per streaming chunk re-renders (mutating in place does not). Omit for an empty thread. Re-declared here (rather than inherited from `ChatThreadProps`) because the ELEMENT registers a `[]` default and renders the empty state without it, while the SolidJS `<ChatThread>` component still requires it. The facade hands it a validated array either way. Matches `<kai-thread>`. */
   messages?: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: string; index?: number; streamId?: string; signature?: string; raw?: { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: "image" | "command" | "file-change" | "search" | "fetch" | "mcp" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } }; raw?: { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }; raw?: { source: string; payload: unknown } } | { type: "source"; source: { id?: string; url?: string; title?: string; snippet?: string; index?: number }; raw?: { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }; raw?: { source: string; payload: unknown } })[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" }[];
   /** Optional card type -> custom-element tag overrides/additions for `card` parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type. */
   cardTypes?: Record<string, string>;
-  /** JSON Schemas for the card types this app renders, keyed by envelope type — the companion of `cardTypes`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type — the one your app actually cares about — as the only unchecked thing on screen. A schema here WINS over a built-in of the same name. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `"type"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one. */
+  /** JSON Schemas for the card types this app renders, keyed by envelope type. The companion of `cardTypes`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type, the one your app actually cares about, as the only unchecked thing on screen. A schema here WINS over a built-in of the same name. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `"type"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one. */
   cardSchemas?: Record<string, object>;
   /** The staged attachments changed (file added or removed). Carries the full current list so a consumer can react in real time. */
   onAttachmentsChange?: (event: CustomEvent<{ attachments: { id: string; type: "file" | "source-document"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[] }>) => void;
@@ -413,7 +413,7 @@ export interface ChoiceProps extends WebComponentProps {
   heading?: string;
   /** Set when the user resolved this card; renders the read-only view. Property: `el.resolution = { kind:'action', action:'…' }`. */
   resolution?: Record<string, unknown>;
-  /** Controlled selection — the selected option id. When set, the consumer owns the current pick (RadioGroup `value`). Attribute: `value`. */
+  /** Controlled selection: the selected option id. When set, the consumer owns the current pick (RadioGroup `value`). Attribute: `value`. */
   value?: string;
   /** Option id to pre-select on mount (uncontrolled seed). Attribute: `default-value`. */
   defaultValue?: string;
@@ -441,7 +441,7 @@ export interface CoachmarkProps extends WebComponentProps {
   badge?: string;
   /** Floating placement relative to the anchor (default `bottom`). */
   placement?: string;
-  /** Color tone: `primary` (default, theme accent), `info` (blue), `success` (green), `warning` (amber), or `error` (red) — reusing the kit's tool hues. */
+  /** Color tone: `primary` (default, theme accent), `info` (blue), `success` (green), `warning` (amber), or `error` (red), reusing the kit's tool hues. */
   tone?: "error" | "primary" | "info" | "success" | "warning";
   /** Render the arrow that points at the anchor (default `true`). Set `arrow="false"` for a plain bubble with no pointer. */
   arrow?: boolean;
@@ -479,13 +479,13 @@ export const CodeBlock = /*#__PURE__*/ createWebComponent<CodeBlockProps>(
 );
 
 export interface CommandProps extends WebComponentProps {
-  /** Flat list of items. Set as a JS property — not an HTML attribute. */
+  /** Flat list of items. Set as a JS property, not an HTML attribute. */
   items?: { id: string; label: string; icon?: string; description?: string; shortcut?: string; group?: string }[];
   /** Placeholder text for the search input. */
   placeholder?: string;
   /** Label shown when no items match the current query. */
   emptyLabel?: string;
-  /** Fired when the highlighted/active item changes — via Arrow keys or when filtering re-clamps the active row. `id` is the newly active item's id, or `undefined` when no item is active (e.g. the filtered list is empty). Lets a host preview the active item without committing a selection. */
+  /** Fired when the highlighted/active item changes, via Arrow keys or when filtering re-clamps the active row. `id` is the newly active item's id, or `undefined` when no item is active (e.g. the filtered list is empty). Lets a host preview the active item without committing a selection. */
   onActiveChange?: (event: CustomEvent<{ id: undefined | string }>) => void;
   /** Fired on every keystroke in the search input. */
   onQueryChange?: (event: CustomEvent<{ value: string }>) => void;
@@ -507,7 +507,7 @@ export interface CompareProps extends WebComponentProps {
   compareId?: string;
   /** Re-hydrate / control the user's pick. Set as a JS PROPERTY: `el.selection = { chosenId, rejectedIds }`. Renders the collapsed winner. */
   selection?: Record<string, unknown>;
-  /** Layout: `'auto'` (default — columns when wide, tabs when narrow, by CONTAINER width) | `'columns'` (side-by-side) | `'tabs'` (pills to switch). Attribute: `layout`. */
+  /** Layout: `'auto'` (default, columns when wide, tabs when narrow, by CONTAINER width) | `'columns'` (side-by-side) | `'tabs'` (pills to switch). Attribute: `layout`. */
   layout?: "auto" | "columns" | "tabs";
   /** Prose/text size for the rendered candidates. Attribute: `prose-size`. */
   proseSize?: "sm" | "lg" | "xs" | "base";
@@ -531,7 +531,7 @@ export const Compare = /*#__PURE__*/ createWebComponent<CompareProps>(
 );
 
 export interface ComposerProps extends WebComponentProps {
-  /** Controlled value — string or a full ComposerDoc (set as JS property). */
+  /** Controlled value: a string or a full ComposerDoc (set as JS property). */
   value?: string | ({ type: "text"; text: string } | { type: "entity"; entity: { kind: string; id: string; label: string; icon?: string; promptText?: string; data?: Record<string, unknown> } })[];
   /** Placeholder text shown when the composer is empty. */
   placeholder?: string;
@@ -543,9 +543,9 @@ export interface ComposerProps extends WebComponentProps {
   maxHeight?: string | number;
   /** Whether pressing Enter (without Shift) submits. Default true. */
   submitOnEnter?: boolean;
-  /** Trigger definitions — set as a JS property. */
+  /** Trigger definitions. Set as a JS property. */
   triggers?: { char: string; kind: string; items?: { id: string; label: string; icon?: string; description?: string; group?: string; kind?: string; promptText?: string; data?: Record<string, unknown> }[] }[];
-  /** Keyword highlight rules — set as a JS property. */
+  /** Keyword highlight rules. Set as a JS property. */
   highlights?: (string | { pattern: string; flags?: string; class?: string })[];
   /** Default icon per entity kind (kind → image URL/data-URI) for items without their own `icon`. Overrides the built-in agent/plugin glyphs. JS property. */
   kindIcons?: Record<string, string>;
@@ -555,7 +555,7 @@ export interface ComposerProps extends WebComponentProps {
   onEntityAdd?: (event: CustomEvent<{ entity: { kind: string; id: string; label: string; icon?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> } }>) => void;
   /** An entity pill was deleted from the composer. */
   onEntityRemove?: (event: CustomEvent<{ entity: { kind: string; id: string; label: string; icon?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> } }>) => void;
-  /** The composer gained focus. `focus`/`blur` are NOT composed natively, so they don't escape the shadow root — these re-expose them on the host. (For `keydown`/`paste`/`focusin`/`focusout`, listen NATIVELY on `<kai-composer>`: they're composed and already cross the shadow boundary.) */
+  /** The composer gained focus. `focus`/`blur` are NOT composed natively, so they don't escape the shadow root; these re-expose them on the host. (For `keydown`/`paste`/`focusin`/`focusout`, listen NATIVELY on `<kai-composer>`: they're composed and already cross the shadow boundary.) */
   onFocus?: (event: CustomEvent<{ originalEvent: FocusEvent }>) => void;
   /** The user submitted the composer (Enter or programmatic submit). */
   onSubmit?: (event: CustomEvent<{ doc: ({ type: "text"; text: string } | { type: "entity"; entity: { kind: string; id: string; label: string; icon?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> } })[]; text: string; entities: { kind: string; id: string; label: string; icon?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[] }>) => void;
@@ -581,7 +581,7 @@ export interface ConfirmProps extends WebComponentProps {
   cardId?: string;
   /** Heading rendered in the card chrome (= CardEnvelope.title). Attribute: `heading`. */
   heading?: string;
-  /** Focus the default action on mount (off by default — no focus-stealing). Attribute: `autofocus`. */
+  /** Focus the default action on mount (off by default, so nothing steals focus). Attribute: `autofocus`. */
   autofocus?: boolean;
   /** Set when the user resolved this card; renders the read-only view. Property: `el.resolution = { kind:'action', action:'…' }`. */
   resolution?: Record<string, unknown>;
@@ -615,7 +615,7 @@ export const Context = /*#__PURE__*/ createWebComponent<ContextProps>(
 export interface ConversationsProps extends WebComponentProps {
   /** The list's section headers (`{ id, name, sortOrder, createdAt }`), rendered in array order. A group carries no conversations of its own; it is matched against `conversations` by id, so the two props are complementary rather than alternatives. Omit for an ungrouped list. Set as a JS property. */
   groups?: { id: string; userId?: string; teamId?: string; name: string; sortOrder: number; createdAt: string }[];
-  /** Every conversation the list renders, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId` — or with a `groupId` matching no entry in `groups` — falls into a trailing "Ungrouped" section, so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. Omit to supply them as `<kai-conversation>` light-DOM children instead, or for the empty state. */
+  /** Every conversation the list renders, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId`, or with a `groupId` matching no entry in `groups`, falls into a trailing "Ungrouped" section, so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. Omit to supply them as `<kai-conversation>` light-DOM children instead, or for the empty state. */
   conversations?: { id: string; title: string; groupId?: string; scope: { type: "document" | "collection"; documentId?: string; filters?: { tags?: string[]; authors?: string[]; contentType?: "transcript" | "markdown"; dateRange?: { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: string }[];
   /** The id of the currently-open conversation, highlighted in the list. */
   activeId?: string;
@@ -659,7 +659,7 @@ export const Dialog = /*#__PURE__*/ createWebComponent<DialogProps>(
 );
 
 export interface EditableLabelProps extends WebComponentProps {
-  /** The label text — settable and reflected to the `value` attribute. Read `el.value` for live state. */
+  /** The label text. Settable and reflected to the `value` attribute. Read `el.value` for live state. */
   value?: string;
   /** Controlled edit state. `el.editing = true` opens the field; reflected to the `editing` attribute. */
   editing?: boolean;
@@ -709,7 +709,7 @@ export const Empty = /*#__PURE__*/ createWebComponent<EmptyProps>(
 );
 
 export interface FeedbackBarProps extends WebComponentProps {
-  /** The banner label (e.g. "Was this helpful?"). Attribute: `bar-title` (`title` is avoided — it's a global HTML attribute). */
+  /** The banner label (e.g. "Was this helpful?"). Attribute: `bar-title` (`title` is avoided because it is a global HTML attribute). */
   barTitle?: string;
   /** When set, a not-helpful vote opens an optional detail form before the thank-you confirmation. Attribute: `collect-detail`. */
   collectDetail?: boolean;
@@ -741,7 +741,7 @@ export const FeedbackBar = /*#__PURE__*/ createWebComponent<FeedbackBarProps>(
 export interface FileTreeProps extends WebComponentProps {
   /** The files to render. Set as a JS property (array of `{ path, url?, code?, language?, type?, additions?, deletions?, status? }`). */
   files: { path: string; url?: undefined | string; code?: undefined | string; language?: undefined | string; type?: undefined | "html" | "pdf" | "image" | "other"; additions?: undefined | number; deletions?: undefined | number; status?: undefined | "added" | "modified" | "deleted" | "renamed" | "untracked" }[];
-  /** Selected file path — highlighted in the tree. */
+  /** Selected file path, highlighted in the tree. */
   activeFile?: string;
   /** Folder paths expanded initially. Omit to start with all folders open. */
   defaultExpanded?: string[];
@@ -763,7 +763,7 @@ export interface FileUploadProps extends WebComponentProps {
   multiple?: boolean;
   /** `accept` attribute for the file picker (e.g. `image/*`). */
   accept?: string;
-  /** Disable the dropzone — no clicking, no drag-and-drop. */
+  /** Disable the dropzone: no clicking, no drag-and-drop. */
   disabled?: boolean;
   /** Default dropzone label (overridable via the default slot). */
   label?: string;
@@ -779,7 +779,7 @@ export const FileUpload = /*#__PURE__*/ createWebComponent<FileUploadProps>(
 );
 
 export interface FormProps extends WebComponentProps {
-  /** The form definition — a JSON Schema (`type:'object'`) + `x-kai-*` UI hints (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { type:'object', properties:{…} }`. Import the `FormDefinition` type from `@kitn.ai/ui` for the full shape (it is self-referential, so the element types it loosely). */
+  /** The form definition: a JSON Schema (`type:'object'`) + `x-kai-*` UI hints (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { type:'object', properties:{…} }`. Import the `FormDefinition` type from `@kitn.ai/ui` for the full shape (it is self-referential, so the element types it loosely). */
   data?: Record<string, unknown>;
   /** Stable card id correlating every emitted CardEvent. Attribute: `card-id`. */
   cardId?: string;
@@ -793,7 +793,7 @@ export interface FormProps extends WebComponentProps {
   defaultValues?: Record<string, unknown>;
   /** Disable all fields + submit. Attribute: `disabled`. */
   disabled?: boolean;
-  /** The form's values changed on input — current coerced values + validity. */
+  /** The form's values changed on input. Carries the current coerced values + validity. */
   onValuesChange?: (event: CustomEvent<{ values: Record<string, unknown>; valid: boolean }>) => void;
 }
 
@@ -863,7 +863,7 @@ export const Image = /*#__PURE__*/ createWebComponent<ImageProps>(
 export interface InputProps extends WebComponentProps {
   /** Native input type: `text` (default) · `email` · `url` · `search` · `tel` · `password` · `number`. Single-line only. */
   type?: string;
-  /** Controlled value — settable and reflected to the `value` attribute. `el.value = 'hi'` drives it (no event); typing updates it and fires `kai-input`. Read `el.value` for live state. */
+  /** Controlled value. Settable and reflected to the `value` attribute. `el.value = 'hi'` drives it (no event); typing updates it and fires `kai-input`. Read `el.value` for live state. */
   value?: string;
   /** Placeholder shown when empty. */
   placeholder?: string;
@@ -903,7 +903,7 @@ export const Input = /*#__PURE__*/ createWebComponent<InputProps>(
 );
 
 export interface KbdProps extends WebComponentProps {
-  /** Shortcut spec — tokens joined by `+` (e.g. `Mod+Shift+K`). Omit it to show default-slot content instead. Display only; the element does not bind keys. */
+  /** Shortcut spec: tokens joined by `+` (e.g. `Mod+Shift+K`). Omit it to show default-slot content instead. Display only; the element does not bind keys. */
   keys?: string;
   /** `mac` uses ⌘/⌥, `other` uses Ctrl. `auto` (default) sniffs the OS. */
   platform?: "auto" | "other" | "mac";
@@ -967,11 +967,11 @@ export const Markdown = /*#__PURE__*/ createWebComponent<MarkdownProps>(
 );
 
 export interface MenuProps extends WebComponentProps {
-  /** Tree of menu items. Set as a JS property — not an HTML attribute. */
+  /** Tree of menu items. Set as a JS property, not an HTML attribute. */
   items?: { id?: string; label?: string; icon?: string; shortcut?: string; checked?: boolean; radioGroup?: string; disabled?: boolean; separator?: boolean; heading?: boolean; items?: Record<string, unknown>[] }[];
   /** Optional placement hint (unused by the underlying Dropdown which always positions bottom-start, kept for future extension). */
   placement?: string;
-  /** Built-in trigger: leading icon (a named icon like `"plus"`, an image URL/data-URI, or text). Use this instead of slotting `slot="trigger"` for the common case — a slotted trigger overrides it. */
+  /** Built-in trigger: leading icon (a named icon like `"plus"`, an image URL/data-URI, or text). Use this instead of slotting `slot="trigger"` for the common case; a slotted trigger overrides it. */
   triggerIcon?: string;
   /** Built-in trigger: a text label (e.g. `"High"`). */
   triggerLabel?: string;
@@ -983,11 +983,11 @@ export interface MenuProps extends WebComponentProps {
   open?: boolean;
   /** Initial open state on mount (uncontrolled seed). */
   defaultOpen?: boolean;
-  /** Disable the trigger — click/keyboard and `show()` no longer open the menu. */
+  /** Disable the trigger: click/keyboard and `show()` no longer open the menu. */
   disabled?: boolean;
   /** The menu opened or closed (by click, keyboard, Escape, outside-click, or a method). */
   onOpenChange?: (event: CustomEvent<{ open: boolean }>) => void;
-  /** Fired when the user selects a leaf item. - Plain items: `{ id }`. - Checkbox items: `{ id, checked }` where `checked` is the NEW state. - Radio items: `{ id, radioGroup }` — the consumer marks `id` as the selected one in `radioGroup` and clears the others. */
+  /** Fired when the user selects a leaf item. - Plain items: `{ id }`. - Checkbox items: `{ id, checked }` where `checked` is the NEW state. - Radio items: `{ id, radioGroup }`, where the consumer marks `id` as the selected one in `radioGroup` and clears the others. */
   onSelect?: (event: CustomEvent<{ id: string; checked?: undefined | boolean; radioGroup?: undefined | string }>) => void;
 }
 
@@ -1001,7 +1001,7 @@ export const Menu = /*#__PURE__*/ createWebComponent<MenuProps>(
 export interface MessageProps extends WebComponentProps {
   /** The full message object. Set as a JS property. */
   message?: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: string; index?: number; streamId?: string; signature?: string; raw?: { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: "image" | "command" | "file-change" | "search" | "fetch" | "mcp" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } }; raw?: { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }; raw?: { source: string; payload: unknown } } | { type: "source"; source: { id?: string; url?: string; title?: string; snippet?: string; index?: number }; raw?: { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }; raw?: { source: string; payload: unknown } })[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" };
-  /** Who is speaking: `'user'` or `'assistant'`. Convenience for simple cases when not passing a `message` object. This is the SEMANTIC role of the message, not an ARIA role — and the name collides with the global ARIA `role` attribute, which is why the facade lifts it off the host (see `liftRoleOffHost`). Neither speaker is a valid ARIA role, so a `role="user"` left on `<kai-message>` is a CRITICAL axe `aria-roles` violation. The accessible role lives on the row inside the shadow root instead: `role="article"` plus an `aria-label` naming the speaker, matching the SolidJS `<Message>` component. */
+  /** Who is speaking: `'user'` or `'assistant'`. Convenience for simple cases when not passing a `message` object. This is the SEMANTIC role of the message, not an ARIA role. The name collides with the global ARIA `role` attribute, which is why the facade lifts it off the host (see `liftRoleOffHost`). Neither speaker is a valid ARIA role, so a `role="user"` left on `<kai-message>` is a CRITICAL axe `aria-roles` violation. The accessible role lives on the row inside the shadow root instead: `role="article"` plus an `aria-label` naming the speaker, matching the SolidJS `<Message>` component. */
   role?: "user" | "assistant";
   /** Force markdown on/off. Defaults to on for assistant, off for user. */
   markdown?: boolean;
@@ -1021,7 +1021,7 @@ export interface MessageProps extends WebComponentProps {
   avatar?: string;
   /** Optional card type -> custom-element tag overrides/additions for `card` parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type. */
   cardTypes?: Record<string, string>;
-  /** JSON Schemas for the card types this app renders, keyed by envelope type — the companion of `cardTypes`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type — the one your app actually cares about — as the only unchecked thing on screen. A schema here WINS over a built-in of the same name. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `"type"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one. */
+  /** JSON Schemas for the card types this app renders, keyed by envelope type. The companion of `cardTypes`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type, the one your app actually cares about, as the only unchecked thing on screen. A schema here WINS over a built-in of the same name. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `"type"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one. */
   cardSchemas?: Record<string, object>;
   /** An action button was clicked. `action` is the built-in name or custom id. `state` is present only for the toggleable feedback votes: `'on'` when a like/dislike is set, `'off'` when re-tapped to clear. */
   onMessageAction?: (event: CustomEvent<{ messageId: string; action: string; state?: undefined | "on" | "off" }>) => void;
@@ -1043,7 +1043,7 @@ export interface ModelSwitcherProps extends WebComponentProps {
   open?: boolean;
   /** Initial open state on mount (uncontrolled seed). */
   defaultOpen?: boolean;
-  /** Disable the trigger — click/keyboard and `show()` no longer open the dropdown. */
+  /** Disable the trigger: click/keyboard and `show()` no longer open the dropdown. */
   disabled?: boolean;
   /** A model was selected. */
   onModelChange?: (event: CustomEvent<{ modelId: string }>) => void;
@@ -1119,7 +1119,7 @@ export interface PaneProps extends WebComponentProps {
   onClose?: (event: CustomEvent) => void;
   /** The dock control was clicked (only present when `show-dock`). */
   onDock?: (event: CustomEvent) => void;
-  /** The maximize/restore control was clicked. `detail.maximized` is the intended NEXT state — drive the `maximized` prop yourself from it. */
+  /** The maximize/restore control was clicked. `detail.maximized` is the intended NEXT state. Drive the `maximized` prop yourself from it. */
   onMaximize?: (event: CustomEvent<{ maximized: boolean }>) => void;
   /** The split control was clicked (only present when `show-split`). */
   onSplit?: (event: CustomEvent) => void;
@@ -1195,9 +1195,9 @@ export const ProgressBar = /*#__PURE__*/ createWebComponent<ProgressBarProps>(
 );
 
 export interface PromptDockProps extends WebComponentProps {
-  /** How the tray frames the input — the SPATIAL inset axis: `inset` (default, the classic recessed frame on every side) | `edge` (top/bottom inset only; the input sits flush left/right so the lips span the full width) | `none` (no inset; the lips attach directly as a plain stack). Attribute: `frame`. */
+  /** How the tray frames the input, the SPATIAL inset axis: `inset` (default, the classic recessed frame on every side) | `edge` (top/bottom inset only; the input sits flush left/right so the lips span the full width) | `none` (no inset; the lips attach directly as a plain stack). Attribute: `frame`. */
   frame?: "none" | "inset" | "edge";
-  /** How the tray surface looks — the VISUAL axis, orthogonal to `frame`: `soft` (default, sunken surface + border + radius) | `outlined` (transparent + border + radius) | `filled` (sunken, no border, + radius) | `plain` (bare). Attribute: `appearance`. */
+  /** How the tray surface looks, the VISUAL axis orthogonal to `frame`: `soft` (default, sunken surface + border + radius) | `outlined` (transparent + border + radius) | `filled` (sunken, no border, + radius) | `plain` (bare). Attribute: `appearance`. */
   appearance?: "outlined" | "filled" | "plain" | "soft";
 }
 
@@ -1227,17 +1227,17 @@ export interface PromptInputProps extends WebComponentProps {
   voice?: boolean;
   /** When set and `loading` is true, the send button is replaced by a Stop button (square icon, "Stop" aria-label). Clicking it fires `kai-stop`. */
   stoppable?: boolean;
-  /** Send-button visibility. `'always'` (default) always shows it; `'auto'` shows it only when there's text/attachments (an empty composer hides it — Enter still submits). To hide it entirely (Enter-only), it's pure CSS: `::part(send){display:none}` — no prop needed. Restyle via `::part(send)`. The Stop button (`stoppable` + `loading`) is unaffected. */
+  /** Send-button visibility. `'always'` (default) always shows it; `'auto'` shows it only when there's text/attachments (an empty composer hides it, though Enter still submits). To hide it entirely (Enter-only), it's pure CSS: `::part(send){display:none}`, no prop needed. Restyle via `::part(send)`. The Stop button (`stoppable` + `loading`) is unaffected. */
   submit?: "auto" | "always";
   /** When `false`, hides the built-in paperclip attach button even though the element otherwise supports attachments. Use this when a `+` menu in `toolbar-start` already exposes "Add files", to avoid a duplicate control. Defaults to `true`. */
   attach?: boolean;
   /** Attachments to seed the input with (so a consumer can pre-populate staged files without an upload). Set as a JS property; the element then manages its own attachment state from there (add via the paperclip, remove per chip). */
   attachments?: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }[];
-  /** Rich entity triggers — each `{ char, kind, items }` opens a caret-anchored menu that inserts an atomic pill. Convention: `/` → skills, `@` → agents (plugins are the grouping/provenance of those items). Set as a JS property. */
+  /** Rich entity triggers. Each `{ char, kind, items }` opens a caret-anchored menu that inserts an atomic pill. Convention: `/` → skills, `@` → agents (plugins are the grouping/provenance of those items). Set as a JS property. */
   triggers?: { char: string; kind: string; items?: { id: string; label: string; icon?: string; description?: string; group?: string; kind?: string; promptText?: string; data?: Record<string, unknown> }[] }[];
   /** Default icon per entity kind (kind → image URL/data-URI) for pills/menu items without their own `icon`. Overrides the built-in agent/plugin glyphs. JS property. */
   kindIcons?: Record<string, string>;
-  /** The staged attachments changed — a file was added (via the paperclip) or removed (per-chip ×). Carries the full current list so a consumer can react in real time (validate, show upload progress, toggle the send button). */
+  /** The staged attachments changed: a file was added (via the paperclip) or removed (per-chip ×). Carries the full current list so a consumer can react in real time (validate, show upload progress, toggle the send button). */
   onAttachmentsChange?: (event: CustomEvent<{ attachments: { id: string; type: "file" | "source-document"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[] }>) => void;
   /** The Search (Globe) toolbar button was clicked. */
   onSearch?: (event: CustomEvent<Record<string, never>>) => void;
@@ -1275,7 +1275,7 @@ export interface ReasoningProps extends WebComponentProps {
   streaming?: boolean;
   /** Render `text` as markdown. */
   markdown?: boolean;
-  /** Gate the disclosure trigger — programmatic `show()/hide()/toggle()` still work, but the trigger click no longer toggles. */
+  /** Gate the disclosure trigger: programmatic `show()/hide()/toggle()` still work, but the trigger click no longer toggles. */
   disabled?: boolean;
   /** The reasoning block expanded or collapsed (via the trigger, streaming auto-open, or a method). */
   onOpenChange?: (event: CustomEvent<{ open: boolean }>) => void;
@@ -1311,7 +1311,7 @@ export interface ResizableProps extends WebComponentProps {
   orientation?: "vertical" | "horizontal";
   /** Which item index is maximized (null = none). Declarative source of truth. */
   maximizedIndex?: null | number;
-  /** Divider affordance drawn inside each draggable handle's 8px grab zone: - `line` (default) — a 1px hairline, transparent at rest, tinting on hover/drag. - `grip` — a dotted grip handle. - `none` — no visible divider, just the invisible hit-area. The full grab zone and keyboard/ARIA behavior are identical for all three. */
+  /** Divider affordance drawn inside each draggable handle's 8px grab zone: - `line` (default): a 1px hairline, transparent at rest, tinting on hover/drag. - `grip`: a dotted grip handle. - `none`: no visible divider, just the invisible hit-area. The full grab zone and keyboard/ARIA behavior are identical for all three. */
   handle?: "none" | "line" | "grip";
   /** Fired on drag-end / keyboard resize / visibility change. `detail.sizes` = panel sizes in percent. */
   onChange?: (event: CustomEvent<{ sizes: number[] }>) => void;
@@ -1339,7 +1339,7 @@ export interface ResizableItemProps extends WebComponentProps {
   locked?: boolean;
   /** Hide this panel; its divider is dropped and the rest reflow. */
   hidden?: boolean;
-  /** Collapse this panel — same layout effect as `hidden` (divider dropped, the rest reflow), but it WORKS as a bare boolean from framework JSX. A plain `<kai-resizable-item collapsed>` in React/Solid/Vue/Svelte collapses the panel at the first render; `hidden` does not, because a JSX boolean sets neither the `hidden` attribute nor the IDL property on a custom element, so the parent never sees it. The facade reflects `collapsed` to a `collapsed` attribute the parent reads. Prefer this over `hidden` for declarative collapse. */
+  /** Collapse this panel. Same layout effect as `hidden` (divider dropped, the rest reflow), but it WORKS as a bare boolean from framework JSX. A plain `<kai-resizable-item collapsed>` in React/Solid/Vue/Svelte collapses the panel at the first render; `hidden` does not, because a JSX boolean sets neither the `hidden` attribute nor the IDL property on a custom element, so the parent never sees it. The facade reflects `collapsed` to a `collapsed` attribute the parent reads. Prefer this over `hidden` for declarative collapse. */
   collapsed?: boolean;
   onChange?: (event: CustomEvent<unknown>) => void;
   onMaximizeChange?: (event: CustomEvent<unknown>) => void;
@@ -1354,7 +1354,7 @@ export const ResizableItem = /*#__PURE__*/ createWebComponent<ResizableItemProps
 );
 
 export interface ResponseStreamProps extends WebComponentProps {
-  /** Text to stream. A string, or an `AsyncIterable<string>` (set as a JS property — async iterables can't be HTML attributes). */
+  /** Text to stream. A string, or an `AsyncIterable<string>` (set as a JS property, since async iterables can't be HTML attributes). */
   text?: string | AsyncIterable<string>;
   /** Reveal animation. */
   mode?: "typewriter" | "fade";
@@ -1384,7 +1384,7 @@ export interface ScopePickerProps extends WebComponentProps {
   open?: boolean;
   /** Initial open state on mount (uncontrolled seed). */
   defaultOpen?: boolean;
-  /** Disable the trigger — click/keyboard and `show()` no longer open the dropdown. */
+  /** Disable the trigger: click/keyboard and `show()` no longer open the dropdown. */
   disabled?: boolean;
   /** The scope dropdown opened or closed (by click, keyboard, Escape, outside-click, or a method). */
   onOpenChange?: (event: CustomEvent<{ open: boolean }>) => void;
@@ -1442,7 +1442,7 @@ export interface ScrollButtonProps extends WebComponentProps {
   variant?: "default" | "ghost" | "outline";
   /** Button size token. Defaults to `'icon'` (square). */
   size?: "sm" | "md" | "lg" | "icon" | "icon-sm";
-  /** Emitted when the user clicks the button and `scrollToBottom()` is called. Carries no detail — consumers use it to know a manual scroll occurred. */
+  /** Emitted when the user clicks the button and `scrollToBottom()` is called. Carries no detail; consumers use it to know a manual scroll occurred. */
   onScroll?: (event: CustomEvent) => void;
 }
 
@@ -1454,7 +1454,7 @@ export const ScrollButton = /*#__PURE__*/ createWebComponent<ScrollButtonProps>(
 );
 
 export interface SearchProps extends WebComponentProps {
-  /** Controlled query — settable and reflected to the `value` attribute. Read `el.value` for live state. */
+  /** Controlled query. Settable and reflected to the `value` attribute. Read `el.value` for live state. */
   value?: string;
   /** Placeholder. Defaults to `Search…`. */
   placeholder?: string;
@@ -1484,7 +1484,7 @@ export const Search = /*#__PURE__*/ createWebComponent<SearchProps>(
 export interface SegmentedProps extends WebComponentProps {
   /** The selectable segments, left to right. Set as a JS property (array). */
   options: { value: string; label: string; icon?: undefined | string }[];
-  /** Controlled selected `value` — settable and reflected to the `value` attribute. `el.value = 'preview'` drives it; choosing a segment updates it and fires `kai-change`. Read `el.value` for live state. */
+  /** Controlled selected `value`. Settable and reflected to the `value` attribute. `el.value = 'preview'` drives it; choosing a segment updates it and fires `kai-change`. Read `el.value` for live state. */
   value?: string;
   /** Control density: `sm` or `md`. Defaults to `md`. */
   size?: "sm" | "md";
@@ -1500,7 +1500,7 @@ export const Segmented = /*#__PURE__*/ createWebComponent<SegmentedProps>(
 );
 
 export interface SeparatorProps extends WebComponentProps {
-  /** `horizontal` (default, block + full-width) or `vertical` (a rule inside a flex/grid row — it stretches to the row height). */
+  /** `horizontal` (default, block + full-width) or `vertical` (a rule inside a flex/grid row, stretching to the row height). */
   orientation?: "vertical" | "horizontal";
 }
 
@@ -1574,7 +1574,7 @@ export interface SourceProps extends WebComponentProps {
   href?: string;
   /** Trigger label (defaults to the domain). */
   label?: string;
-  /** Hover-card headline. Attribute: `headline` (`title` is avoided — it's a global HTML attribute that reflects in a CE constructor and breaks it). */
+  /** Hover-card headline. Attribute: `headline` (`title` is avoided because it is a global HTML attribute that reflects in a CE constructor and breaks it). */
   headline?: string;
   /** Hover-card body text describing the source. */
   description?: string;
@@ -1594,7 +1594,7 @@ export interface SourcesProps extends WebComponentProps {
   sources?: { href: string; title?: string; description?: string; label?: string; showFavicon?: boolean }[];
   /** Show favicons on all items (per-item `showFavicon` overrides). */
   showFavicon?: boolean;
-  /** When true, each citation chip is labelled with its 1-based index in the merged (prop + declarative-children) list (`[1]`, `[2]`, …) instead of the per-item `label` or domain fallback. HTML attribute: `numbered` (boolean — bare attribute or `numbered="true"`). JS property: `el.numbered = true`. */
+  /** When true, each citation chip is labelled with its 1-based index in the merged (prop + declarative-children) list (`[1]`, `[2]`, …) instead of the per-item `label` or domain fallback. HTML attribute: `numbered` (boolean: a bare attribute or `numbered="true"`). JS property: `el.numbered = true`. */
   numbered?: boolean;
 }
 
@@ -1630,7 +1630,7 @@ export interface SuggestionsProps extends WebComponentProps {
   variant?: "default" | "ghost" | "outline";
   /** Row height for `layout="list"`: `'md'` (default) or `'lg'` for taller rows. Chips are unaffected. */
   size?: "md" | "lg";
-  /** Layout: `'chips'` (default) renders a wrapping row of rounded pills; `'list'` renders a vertical, full-width "Ideas for you" list — each row is left-aligned with a leading `icon`, a label, and a hover background. */
+  /** Layout: `'chips'` (default) renders a wrapping row of rounded pills; `'list'` renders a vertical, full-width "Ideas for you" list where each row is left-aligned with a leading `icon`, a label, and a hover background. */
   layout?: "list" | "chips";
   /** Full-width left-aligned rows instead of pills. */
   block?: boolean;
@@ -1648,7 +1648,7 @@ export const Suggestions = /*#__PURE__*/ createWebComponent<SuggestionsProps>(
 );
 
 export interface SwitchProps extends WebComponentProps {
-  /** Controlled checked state — settable and reflected to the `checked` attribute. `el.checked = true` (or `<kai-switch checked>`) drives it; the toggle UI updates it and fires `kai-change`. Read `el.checked` for live state. */
+  /** Controlled checked state. Settable and reflected to the `checked` attribute. `el.checked = true` (or `<kai-switch checked>`) drives it; the toggle UI updates it and fires `kai-change`. Read `el.checked` for live state. */
   checked?: boolean;
   /** Initial checked state on mount (uncontrolled seed). Bare attribute (`<kai-switch default-checked>`) turns it on. */
   defaultChecked?: boolean;
@@ -1712,7 +1712,7 @@ export interface TasksProps extends WebComponentProps {
   disabled?: boolean;
   /** Display-only: rows can't be toggled and show the default cursor (no pointer, hover, or focus affordances). Keeps the look as-is. Attribute: `readonly`. */
   readonly?: boolean;
-  /** The selection changed on a toggle — the selected ids in input order. */
+  /** The selection changed on a toggle. Carries the selected ids in input order. */
   onValueChange?: (event: CustomEvent<{ value: string[] }>) => void;
 }
 
@@ -1762,7 +1762,7 @@ export const ThinkingBar = /*#__PURE__*/ createWebComponent<ThinkingBarProps>(
 export interface ThreadProps extends WebComponentProps {
   /** The full message thread to render, newest last. Each entry carries its role, ordered `parts`, and optional actions/avatar/feedback. Set as a JS property (`el.messages = [...]`); a NEW array reference per streaming chunk re-renders (mutating in place does not). */
   messages?: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: string; index?: number; streamId?: string; signature?: string; raw?: { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: "image" | "command" | "file-change" | "search" | "fetch" | "mcp" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } }; raw?: { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }; raw?: { source: string; payload: unknown } } | { type: "source"; source: { id?: string; url?: string; title?: string; snippet?: string; index?: number }; raw?: { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }; raw?: { source: string; payload: unknown } })[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" }[];
-  /** Show a typing indicator on the pending assistant turn — set while awaiting the assistant's reply. */
+  /** Show a typing indicator on the pending assistant turn. Set it while awaiting the assistant's reply. */
   loading?: boolean;
   /** Body/prose font scale for rendered markdown (`'xs' | 'sm' | 'base' | 'lg'`). Defaults to `'sm'`. */
   proseSize?: "sm" | "lg" | "xs" | "base";
@@ -1778,7 +1778,7 @@ export interface ThreadProps extends WebComponentProps {
   class?: string;
   /** Optional card type -> custom-element tag overrides/additions for `card` parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type. */
   cardTypes?: Record<string, string>;
-  /** JSON Schemas for the card types this app renders, keyed by envelope type — the companion of `cardTypes`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type — the one your app actually cares about — as the only unchecked thing on screen. A schema here WINS over a built-in of the same name. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `"type"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one. */
+  /** JSON Schemas for the card types this app renders, keyed by envelope type. The companion of `cardTypes`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type, the one your app actually cares about, as the only unchecked thing on screen. A schema here WINS over a built-in of the same name. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `"type"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one. */
   cardSchemas?: Record<string, object>;
   /** A message's action button was clicked. `action` is the built-in name (`copy` / `like` / `dislike` / `regenerate` / `edit`) or a custom id. `state` is present only for the toggleable feedback votes: `'on'` when a like/dislike is set, `'off'` when re-tapped to clear. */
   onMessageAction?: (event: CustomEvent<{ messageId: string; action: string; state?: undefined | "on" | "off" }>) => void;
@@ -1826,7 +1826,7 @@ export interface ToolProps extends WebComponentProps {
   open?: boolean;
   /** Initial open state on mount (uncontrolled seed). */
   defaultOpen?: boolean;
-  /** Gate the disclosure trigger — programmatic `show()/hide()/toggle()` still work, but the trigger click no longer toggles. */
+  /** Gate the disclosure trigger: programmatic `show()/hide()/toggle()` still work, but the trigger click no longer toggles. */
   disabled?: boolean;
   /** The panel expanded or collapsed (by trigger click or a method). */
   onOpenChange?: (event: CustomEvent<{ open: boolean }>) => void;
@@ -1866,7 +1866,7 @@ export const Tooltip = /*#__PURE__*/ createWebComponent<TooltipProps>(
 );
 
 export interface VoiceInputProps extends WebComponentProps {
-  /** Transcriber the host supplies — records audio, returns the text. This is a **function-valued property** (`el.transcribe = async blob => '...'`) because a value-returning callback can't be modelled as a fire-and-forget event. */
+  /** Transcriber the host supplies: records audio, returns the text. This is a **function-valued property** (`el.transcribe = async blob => '...'`) because a value-returning callback can't be modelled as a fire-and-forget event. */
   transcribe?: (audio: Blob) => Promise<string>;
   /** Disable the mic button (non-interactive). */
   disabled?: boolean;
@@ -1874,13 +1874,13 @@ export interface VoiceInputProps extends WebComponentProps {
   recognitionLang?: string;
   /** Emit live partial transcripts (`kai-transcript-interim`) during native recognition. Attribute: `interim`. No-op on the transcribe/fallback paths. */
   interim?: boolean;
-  /** Raw audio captured (before transcription) — for hosts that prefer to handle transcription themselves instead of via the `transcribe` property. Also the unsupported-fallback signal: no `transcribe`, no SpeechRecognition, so only the blob is produced (no text). */
+  /** Raw audio captured (before transcription), for hosts that prefer to handle transcription themselves instead of via the `transcribe` property. Also the unsupported-fallback signal: no `transcribe`, no SpeechRecognition, so only the blob is produced (no text). */
   onAudioCaptured?: (event: CustomEvent<{ blob: Blob }>) => void;
-  /** Recording started or stopped — lets the host drive its own UI (waveform, push-to-talk indicator) in sync with the mic. Fires on real transitions only (manual click and programmatic start()/stop()), never on mount. */
+  /** Recording started or stopped. Lets the host drive its own UI (waveform, push-to-talk indicator) in sync with the mic. Fires on real transitions only (manual click and programmatic start()/stop()), never on mount. */
   onRecordingChange?: (event: CustomEvent<{ recording: boolean }>) => void;
   /** Live partial transcript during native recognition (only when `interim` is set). Fires repeatedly before the final `kai-transcription`. */
   onTranscriptInterim?: (event: CustomEvent<{ text: string }>) => void;
-  /** Final transcript — the `transcribe` property resolved, OR native `SpeechRecognition` produced final text (no `transcribe` set). */
+  /** Final transcript: the `transcribe` property resolved, OR native `SpeechRecognition` produced final text (no `transcribe` set). */
   onTranscription?: (event: CustomEvent<{ text: string }>) => void;
 }
 
@@ -1896,13 +1896,13 @@ export interface VoiceOutputProps extends WebComponentProps {
   text?: string;
   /** Speak automatically when `text` is set/changed. */
   autoplay?: boolean;
-  /** TTS model seam the host supplies — given text, returns an audio `Blob` to play. This is a **function-valued property** (`el.synthesize = async text => blob`); when set, the native `speechSynthesis` path is bypassed. Mirrors `<kai-voice-input>`'s `transcribe`. A value-returning callback can't be modelled as a fire-and-forget event, hence a property. */
+  /** TTS model seam the host supplies: given text, returns an audio `Blob` to play. This is a **function-valued property** (`el.synthesize = async text => blob`); when set, the native `speechSynthesis` path is bypassed. Mirrors `<kai-voice-input>`'s `transcribe`. A value-returning callback can't be modelled as a fire-and-forget event, hence a property. */
   synthesize?: (text: string) => Promise<Blob>;
   /** Disable the button (non-interactive). */
   disabled?: boolean;
-  /** Playback started or stopped — drive your own UI in sync. Fires on real transitions only (manual click and programmatic speak()/stop()), never on mount. */
+  /** Playback started or stopped. Drive your own UI in sync. Fires on real transitions only (manual click and programmatic speak()/stop()), never on mount. */
   onSpeakingChange?: (event: CustomEvent<{ speaking: boolean }>) => void;
-  /** The model path (`synthesize`) resolved audio — the raw `Blob` before playback. */
+  /** The model path (`synthesize`) resolved audio: the raw `Blob` before playback. */
   onSynthesized?: (event: CustomEvent<{ blob: Blob }>) => void;
 }
 
@@ -1916,7 +1916,7 @@ export const VoiceOutput = /*#__PURE__*/ createWebComponent<VoiceOutputProps>(
 export interface WorkspaceProps extends WebComponentProps {
   /** The sidebar's section headers, rendered in array order. A group carries no conversations of its own; it is matched against `conversations` by id, so the two props are complementary rather than alternatives. Omit for an ungrouped sidebar. Set as a JS property. */
   groups?: { id: string; userId?: string; teamId?: string; name: string; sortOrder: number; createdAt: string }[];
-  /** Every conversation in the sidebar, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId` — or with a `groupId` matching no entry in `groups` — falls into a trailing ungrouped section (headerless when `compact`), so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. Omit for an empty sidebar, or when `no-conversations` replaces the built-in list with your own `sidebar-header` content. */
+  /** Every conversation in the sidebar, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId`, or with a `groupId` matching no entry in `groups`, falls into a trailing ungrouped section (headerless when `compact`), so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. Omit for an empty sidebar, or when `no-conversations` replaces the built-in list with your own `sidebar-header` content. */
   conversations?: { id: string; title: string; groupId?: string; scope: { type: "document" | "collection"; documentId?: string; filters?: { tags?: string[]; authors?: string[]; contentType?: "transcript" | "markdown"; dateRange?: { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: string }[];
   /** Id of the open conversation, highlighted in the sidebar. */
   activeId?: string;
@@ -1959,7 +1959,7 @@ export interface WorkspaceProps extends WebComponentProps {
   noConversations?: boolean;
   /** Optional card type -> custom-element tag overrides/additions for `card` parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type. */
   cardTypes?: Record<string, string>;
-  /** JSON Schemas for the card types this app renders, keyed by envelope type — the companion of `cardTypes`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type — the one your app actually cares about — as the only unchecked thing on screen. A schema here WINS over a built-in of the same name. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `"type"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one. */
+  /** JSON Schemas for the card types this app renders, keyed by envelope type. The companion of `cardTypes`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type, the one your app actually cares about, as the only unchecked thing on screen. A schema here WINS over a built-in of the same name. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `"type"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one. */
   cardSchemas?: Record<string, object>;
   /** A conversation was selected in the sidebar. */
   onConversationSelect?: (event: CustomEvent<{ id: string }>) => void;

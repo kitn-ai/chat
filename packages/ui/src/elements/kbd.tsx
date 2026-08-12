@@ -2,7 +2,7 @@ import { defineWebComponent } from './define';
 import { Kbd, type KbdPlatform } from '../ui/kbd';
 
 interface Props extends Record<string, unknown> {
-  /** Shortcut spec — tokens joined by `+` (e.g. `Mod+Shift+K`). Omit it to show
+  /** Shortcut spec: tokens joined by `+` (e.g. `Mod+Shift+K`). Omit it to show
    *  default-slot content instead. Display only; the element does not bind keys. */
   keys?: string;
   /** `mac` uses ⌘/⌥, `other` uses Ctrl. `auto` (default) sniffs the OS. */

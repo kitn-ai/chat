@@ -29,21 +29,6 @@
  *   variant-wave                   334ms   TIMEOUT
  *   variant-custom                 246ms   TIMEOUT
  *   highlighter                    277ms    841ms
- *   emitted-card-path.live        9635ms  32621ms  (blew a 30s INLINE budget)
- *
- * That last row is the reason a 30-second budget is not enough for it, and it
- * could only be measured by REMOVING the inline 30000 it used to carry: with
- * the cap in place both starved runs stopped at the cap and reported 30004ms,
- * which reads as "just over" and hides that the real cost is 32.6s. The number
- * above is what it actually costs when starved, not where it was truncated.
- *
- * One caveat on that row's idle figure, since the rest of the column is honest
- * about its conditions. It was taken at a 1-minute load average of 11.5 — the
- * quietest window that opened in 45 minutes on a machine running a pool of
- * parallel agents — not at true idle, and its starved runs stack the 32
- * spinners on top of that same residual load. So 9635ms is a slight OVER-
- * estimate of idle and 32621ms a slight over-estimate of starved. Both err
- * toward caution, which is the right direction for a budget.
  *
  * `element-types-lib-check` is the clearest case: it spends 75% of the default
  * budget on an idle machine with zero contention, so it needs only a 33%
@@ -58,19 +43,25 @@
  * shader files must genuinely load their real module graph. A test that is
  * slow because it sleeps or polls does NOT belong here — fix the test.
  *
- * `emitted-card-path.live` is the entry to be uneasy about, so read this before
- * adding its neighbour. It passes the stated test — its 9.6s is a real Vite
- * transform of a real module graph, and its polling is bounded at ~1.05s by
- * construction (a 100x10ms loop that breaks on the second round), so under a
- * tenth of the cost and NOT the reason it is slow. But it costs 2.5x the next
- * slowest file here and is the only entry that needs more than 30 seconds, and
- * that is a fact about where it lives rather than about the test: it RUNS
- * emitted consumer code end to end, which is an integration test wearing a unit
- * test's filename. The honest fix is a separate vitest project for run-the-
- * emitted-code guards, with its own budget, so the `unit` default stays a
- * meaningful hang detector. That needs `vitest.config.ts`, so it is recorded
- * here rather than done here. Do not read this entry as a precedent for
- * parking further multi-second integration work in `unit`.
+ * `emitted-card-path.live` USED TO BE the entry to be uneasy about, and what
+ * happened to it is the precedent worth keeping. It measured 9635ms idle and
+ * 32621ms starved — 2.5x the next slowest file here and the only entry that ever
+ * needed more than 30 seconds — because it RUNS emitted consumer code end to end,
+ * which is an integration test wearing a unit test's filename. This header called
+ * the fix a separate vitest project for run-the-emitted-code guards, with its own
+ * budget; that project now exists (`emitted`), the file runs there, and the entry
+ * MOVED with it rather than being left behind.
+ *
+ * Left behind is the failure worth naming, because it would have looked fine:
+ * `vitest.setup.timeouts.ts` is registered on the `unit` project only, so an entry
+ * here for a file that no longer runs in `unit` grants nothing, and the guard in
+ * `test-timeout-budgets.test.ts` only checks that entries point at files that
+ * EXIST. A stale entry would have stayed green forever while protecting nothing —
+ * the same shape this header warns about for `audio-visualizer/index.test.tsx`.
+ *
+ * See `emitted-code-tests.ts` for that project's budget and the measurements
+ * behind it. Do not read this table as a precedent for parking multi-second
+ * integration work in `unit`; that is what the other project is for.
  *
  * WHAT THIS CANNOT FIX. Only vitest's own per-test clock is raised here.
  * `waitFor` from @solidjs/testing-library carries its OWN, much tighter 1000ms
@@ -103,27 +94,7 @@ const COMPILES_TYPESCRIPT = 30_000;
  */
 const TRANSFORMS_A_MODULE_GRAPH = 20_000;
 
-/**
- * Transforms a heavy module graph and then RUNS it, which is strictly more than
- * `TRANSFORMS_A_MODULE_GRAPH` buys: the emitted module is written to disk and
- * imported (pulling the whole `src/elements/chat` component tree plus `state`,
- * `wire` and `schemas` through Vite), then driven through a two-round streaming
- * tool loop against a mounted custom element.
- *
- * 60s is ~1.8x the worst MEASURED starved run (32621ms) and ~6x idle (9635ms).
- * The margin is deliberately stated rather than tuned: the number comes from
- * the measurement plus that multiplier, NOT from raising it until the file
- * stopped flaking, which would only ever track today's load.
- */
-const TRANSFORMS_AND_RUNS_A_MODULE_GRAPH = 60_000;
-
 export const TEST_TIMEOUT_BUDGETS: readonly TestTimeoutBudget[] = [
-  {
-    file: 'tests/agent-tooling/emitted-card-path.live.test.ts',
-    timeout: TRANSFORMS_AND_RUNS_A_MODULE_GRAPH,
-    because:
-      'imports and RUNS the scaffolder emitted module — the whole elements/chat graph through Vite — then drives a two-round streaming tool loop over it; 9.6s idle, 32.6s starved',
-  },
   {
     file: 'tests/elements/element-types-lib-check.test.ts',
     timeout: COMPILES_TYPESCRIPT,

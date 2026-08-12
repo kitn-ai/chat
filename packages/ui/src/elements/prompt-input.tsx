@@ -37,9 +37,9 @@ interface Props extends Record<string, unknown> {
    *  button (square icon, "Stop" aria-label). Clicking it fires `kai-stop`. */
   stoppable?: boolean;
   /** Send-button visibility. `'always'` (default) always shows it; `'auto'` shows
-   *  it only when there's text/attachments (an empty composer hides it — Enter
-   *  still submits). To hide it entirely (Enter-only), it's pure CSS:
-   *  `::part(send){display:none}` — no prop needed. Restyle via `::part(send)`.
+   *  it only when there's text/attachments (an empty composer hides it, though
+   *  Enter still submits). To hide it entirely (Enter-only), it's pure CSS:
+   *  `::part(send){display:none}`, no prop needed. Restyle via `::part(send)`.
    *  The Stop button (`stoppable` + `loading`) is unaffected. */
   submit?: 'always' | 'auto';
   /** When `false`, hides the built-in paperclip attach button even though the
@@ -51,9 +51,9 @@ interface Props extends Record<string, unknown> {
    *  files without an upload). Set as a JS property; the element then manages its
    *  own attachment state from there (add via the paperclip, remove per chip). */
   attachments?: AttachmentData[];
-  /** Rich entity triggers — each `{ char, kind, items }` opens a caret-anchored
-   *  menu that inserts an atomic pill. Convention: `/` → skills, `@` → agents
-   *  (plugins are the grouping/provenance of those items). Set as a JS property. */
+  /** Rich entity triggers. Each `{ char, kind, items }` opens a caret-anchored menu
+   *  that inserts an atomic pill. Convention: `/` → skills, `@` → agents (plugins
+   *  are the grouping/provenance of those items). Set as a JS property. */
   triggers?: TriggerDef[];
   /** Default icon per entity kind (kind → image URL/data-URI) for pills/menu items
    *  without their own `icon`. Overrides the built-in agent/plugin glyphs. JS property. */
@@ -69,7 +69,7 @@ interface Events {
   /** The input changed (fires on every edit). Carries the flattened `value`
    *  plus the structured `doc` + `entities`. */
   'kai-value-change': { value: string; doc: ComposerDoc; entities: EntityRef[] };
-  /** The staged attachments changed — a file was added (via the paperclip) or
+  /** The staged attachments changed: a file was added (via the paperclip) or
    *  removed (per-chip ×). Carries the full current list so a consumer can react
    *  in real time (validate, show upload progress, toggle the send button). */
   'kai-attachments-change': { attachments: AttachmentData[] };
@@ -198,9 +198,9 @@ defineWebComponent<Props, Events>('kai-prompt-input', {
       handleChange('');
       if (attachments().length) { setAttachments([]); dispatch('kai-attachments-change', { attachments: [] }); }
     },
-    /** Send the current value programmatically — same path as Enter / the send
-     *  button (fires kai-submit, then clears staged attachments). Named `send`,
-     *  not `submit`, to avoid colliding with the `submit` prop. */
+    /** Send the current value programmatically, on the same path as Enter / the
+     *  send button (fires kai-submit, then clears staged attachments). Named
+     *  `send`, not `submit`, to avoid colliding with the `submit` prop. */
     send: () => handleSubmit(),
   });
 

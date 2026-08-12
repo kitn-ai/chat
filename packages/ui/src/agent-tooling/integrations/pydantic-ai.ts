@@ -50,6 +50,21 @@ async def chat(req: ChatRequest):
   // Nothing. Agent('openai:gpt-4o') pins the model and the agent registers its
   // own tools, both server-side.
   forwardsFromClient: [],
+  // The only python integration, so the only non-empty `pip`. Three of the four
+  // are the route's own imports (`pydantic_ai` is imported under its module
+  // name and installed under its hyphenated one); `uvicorn` is the ASGI server
+  // from runNote, which nothing imports and without which the app cannot run.
+  // That asymmetry is why the pip guard checks imports ⊆ declared and not the
+  // reverse.
+  deps: { npm: [], pip: ['pydantic-ai', 'fastapi', 'pydantic', 'uvicorn'] },
+  // Agent('openai:gpt-4o') reads OPENAI_API_KEY inside the python process.
+  //
+  // Worth being precise about, because this one looks like an exception: the
+  // FastAPI app sets CORS to allow_origins=['*'] and the browser fetches it
+  // DIRECTLY on :8000, with no JS proxy in front. That still is not
+  // 'frontend-safe' — the flag asks where the SECRET lives, and it lives in the
+  // python process. The FastAPI service IS the server hop.
+  keyExposure: 'needs-proxy',
 };
 
 export default pydanticAi;

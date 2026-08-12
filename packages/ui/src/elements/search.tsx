@@ -6,7 +6,7 @@ import { Loader } from '../components/loader';
 import { renderIcon } from '../ui/icon';
 
 interface Props extends Record<string, unknown> {
-  /** Controlled query — settable and reflected to the `value` attribute. Read
+  /** Controlled query. Settable and reflected to the `value` attribute. Read
    *  `el.value` for live state. */
   value?: string;
   /** Placeholder. Defaults to `Search…`. */
@@ -123,6 +123,8 @@ defineWebComponent<Props, Events>('kai-search', {
   };
 
   expose({
+    /** Focus the search input inside the shadow root. A native `focus()` on the
+     *  host lands on the host itself and never reaches it. */
     focus: () => getInput()?.focus(),
     clear,
   });

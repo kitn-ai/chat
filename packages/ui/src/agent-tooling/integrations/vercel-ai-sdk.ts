@@ -100,6 +100,16 @@ async function chatHandler(request: Request): Promise<Response> {
   // Nothing. The route pins model: 'openai/gpt-4o' in the streamText() call and
   // defines any tools there too, so neither belongs in the front end.
   forwardsFromClient: [],
+  // `ai` only. A direct provider (e.g. @ai-sdk/openai) is the alternative path
+  // described in runNote, not what this route imports, so it is not listed: the
+  // rule is what the emitted code actually imports.
+  deps: { npm: ['ai'], pip: [] },
+  // Grep the route for a key and you find NOTHING — no header, no process.env.
+  // The AI SDK reads AI_GATEWAY_API_KEY out of the environment itself, inside
+  // streamText(). This is the case that makes inference from route source
+  // unsafe and the declaration necessary; `envVars` is what the schema's safety
+  // net can still see.
+  keyExposure: 'needs-proxy',
 };
 
 export default vercelAiSdk;
