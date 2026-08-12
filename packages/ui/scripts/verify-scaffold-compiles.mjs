@@ -23,9 +23,10 @@
 // HOW IT STAYS HONEST
 // -------------------
 // A green run proves nothing if the types resolved to `any`. Before the real
-// matrix, `selfTest()` compiles two files that MUST fail (a wrong-type
-// assignment and an unused import). If either one passes, the harness is broken
-// rather than the scaffolder, and this script exits non-zero saying so.
+// matrix, `selfTest()` compiles probes that MUST fail: a wrong-type assignment
+// and an unused import in every project, plus a host-typings probe in each route
+// project. If any of them compiles, the harness is broken rather than the
+// scaffolder, and this script exits non-zero saying so.
 //
 // SCOPE
 // -----
@@ -34,17 +35,21 @@
 // 'full-page' on purpose: it only ever changes an inline CSS string, so the
 // extra 3x compiles the same types again.
 //
-// ROUTES: 9 integrations × 11 frameworks. The framework axis is WIDER here than
-// the front end's seven — `html` and `fastapi` cannot host a route but still
-// emit one to run elsewhere, and `express`/`worker` are backend-only targets a
-// consumer can ask for directly. The archetype axis is absent because
-// `chooseRoute` never reads the archetype; `assertRoutesAreArchetypeIndependent`
-// proves that rather than assuming it, so the day a route starts varying by
-// archetype this stops silently checking one sixth of the matrix.
+// ROUTES: 9 integrations × 11 frameworks = 99 cells, of which 77 reach tsc: the
+// 11 `mock` cells carry no backend by design (it streams in the browser) and the
+// 11 `pydantic-ai` cells are Python, so they go to `pythonCheck` instead. The
+// framework axis is WIDER here than the front end's eight because `express`,
+// `worker` and `fastapi` are backend-only targets a consumer can ask for
+// directly. `html` and `fastapi` cannot host a route of their own but still emit
+// one to run elsewhere, which is why they are in the matrix rather than skipped.
+// The archetype axis is absent because `chooseRoute` never reads the archetype;
+// `assertRoutesAreArchetypeIndependent` proves that rather than assuming it, so
+// the day a route starts varying by archetype this stops silently checking one
+// sixth of the matrix.
 //
-// Three tsc PROJECTS, not one, because two frameworks cannot share a tsconfig
-// with the react-jsx family without failing for harness reasons rather than real
-// ones:
+// The FRONT END compiles under three tsc PROJECTS, not one, because two
+// frameworks cannot share a tsconfig with the react-jsx family without failing
+// for harness reasons rather than real ones:
 //   · angular — needs `experimentalDecorators` for @Component.
 //   · solid   — needs `jsx: preserve` + `jsxImportSource: solid-js`; under
 //               react-jsx every Solid component would be checked against React's
@@ -130,8 +135,9 @@
 //
 // COST AND WHERE IT RUNS
 // ----------------------
-// ~16s wall clock for the 432 front-end cells plus the 99 routes: one esbuild
-// bundle, then six `tsc` passes with skipLibCheck over symlinked node_modules.
+// ~16s wall clock for the front-end cells plus the routes: one esbuild bundle,
+// then a `tsc` pass per project for the self-test and a second per project for
+// the matrix, all with skipLibCheck over symlinked node_modules.
 // Routes are most of the added time, and about a third of it is the
 // archetype-independence re-check (495 extra generations, no compiles).
 //
