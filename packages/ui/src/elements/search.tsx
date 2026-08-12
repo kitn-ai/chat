@@ -126,6 +126,9 @@ defineWebComponent<Props, Events>('kai-search', {
     /** Focus the search input inside the shadow root. A native `focus()` on the
      *  host lands on the host itself and never reaches it. */
     focus: () => getInput()?.focus(),
+    /** Empty the field and fire `kai-search` with an empty value immediately,
+     *  cancelling any debounced search still in flight, then return focus to the
+     *  input. Same path as the trailing clear button. */
     clear,
   });
 

@@ -2,17 +2,17 @@
  * GUARD — every imperative method an element exposes must be RENDERED in the
  * documentation artifacts, not merely be callable.
  *
- * `element-methods-typed.test.ts` proves the 128 exposed methods reach the
- * generated TYPES. That left them discoverable only by reading source: the
- * generators wrote props and events into `llms-full.txt`, `docs/web-components.md`
- * and the `kai` MCP's `component_reference`, and dropped `el.methods` on the floor
- * in all three. A promised `kai-resizable.maximize()` that no artifact mentions is
- * worse than one that was never typed.
+ * `element-methods-typed.test.ts` proves the exposed methods reach the generated
+ * TYPES. That left them discoverable only by reading source: the generators wrote
+ * props and events into `llms-full.txt`, `docs/web-components.md` and the `kai`
+ * MCP's `component_reference`, and dropped `el.methods` on the floor in all three.
+ * A promised `kai-resizable.maximize()` that no artifact mentions is worse than one
+ * that was never typed.
  *
  * WHY THIS IS NOT A PRESENCE CHECK
  * --------------------------------
- * "some methods rendered" and "all 128 rendered" are different facts and only the
- * second is the deliverable, so every artifact is checked with SET EQUALITY per
+ * "some methods rendered" and "all of them rendered" are different facts and only
+ * the second is the deliverable, so every artifact is checked with SET EQUALITY per
  * element against `element-meta.json` — the same model the generators consume —
  * and then against the total. Nothing here restates a count: bump the model and
  * the expectation moves with it. A generator that renders one element's methods,
@@ -21,11 +21,27 @@
  * The floors below (>30 elements, >100 methods) exist because every loop in this
  * file iterates the model: a model that collapsed to two methods would make the
  * whole file pass while covering nothing.
+ *
+ * AND WHY THAT WAS STILL NOT ENOUGH
+ * ---------------------------------
+ * Every check described above runs OVER THE MODEL, so none of them can see a method
+ * the extractor never put in it. `gen-element-api.mjs` read only
+ * `PropertyAssignment` members out of `expose({ … })`, so the three written in
+ * SHORTHAND form (`expose({ clear })`) entered nothing: `kai-search.clear`,
+ * `kai-editable-label.commit` and `kai-editable-label.cancel` were callable, unit
+ * tested, and present in zero artifacts. Not blank rows, INVISIBLE ones, which is
+ * why the no-doc-comment guard below was green the whole time. The reported total
+ * was 128 and the true one 131.
+ *
+ * The first describe block therefore re-derives the method set FROM THE FACADE
+ * SOURCES, with its own parse, and holds the model to it. That is the only check
+ * here that can fail when the extractor drops something on the floor.
  */
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 
 const pkgRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const repoRoot = resolve(pkgRoot, '..', '..');
@@ -49,6 +65,133 @@ const TOTAL_METHODS = withMethods.reduce((n, e) => n + e.methods!.length, 0);
 
 /** Names the model says this element exposes, sorted. */
 const expectedFor = (el: ElementMeta) => [...el.methods!.map((m) => m.name)].sort();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The model itself, re-derived from source.
+//
+// An INDEPENDENT parse of the facades — deliberately not the generator's, and
+// deliberately not `element-meta.json` — so "the extractor missed a member" is
+// something a check can actually see. Both numbers below are derived: the helper's
+// method names come from parsing the helper, not from a literal 3, and the totals
+// come from counting, not from a literal 131.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ELEMENTS_DIR = resolve(pkgRoot, 'src/elements');
+/** Same file set the generator walks (see gen-element-api.mjs). */
+const SKIP = new Set(['define.tsx', 'register.ts', 'register-impl.ts', 'css.ts', 'chat-types.ts', 'default-input.tsx']);
+const facadeFiles = readdirSync(ELEMENTS_DIR)
+  .filter((f) => (f.endsWith('.tsx') || f.endsWith('.ts')) && !f.endsWith('.stories.tsx') && !SKIP.has(f))
+  .map((f) => resolve(ELEMENTS_DIR, f));
+
+const parse = (file: string) =>
+  ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.ESNext, true, ts.ScriptKind.TSX);
+
+/** Every member name in every `expose({ … })` literal under `scope`, WHATEVER form
+ *  it was written in. A spread would mean members this parse cannot name, so it is
+ *  a hard failure rather than a silent skip. */
+function exposedNames(scope: ts.Node): string[] {
+  const names: string[] = [];
+  const visit = (n: ts.Node) => {
+    if (
+      ts.isCallExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === 'expose' &&
+      n.arguments[0] && ts.isObjectLiteralExpression(n.arguments[0])
+    ) {
+      for (const p of (n.arguments[0] as ts.ObjectLiteralExpression).properties) {
+        if (ts.isSpreadAssignment(p)) throw new Error(`expose({ ...spread }) cannot be counted: ${p.getText()}`);
+        names.push((p.name as ts.Identifier | ts.StringLiteral).text);
+      }
+    }
+    ts.forEachChild(n, visit);
+  };
+  visit(scope);
+  return names;
+}
+
+/** The names `wireDisclosure()` contributes, read off the helper's own expose
+ *  literal so this never restates them. */
+const HELPER_NAMES: Record<string, string[]> = {
+  wireDisclosure: exposedNames(parse(resolve(ELEMENTS_DIR, 'disclosure.ts'))),
+};
+
+/** How many times `name(` is called under `scope`. */
+function callCount(scope: ts.Node, name: string): number {
+  let n = 0;
+  const visit = (node: ts.Node) => {
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === name) n++;
+    ts.forEachChild(node, visit);
+  };
+  visit(scope);
+  return n;
+}
+
+/** tag -> the method names its `defineWebComponent` render callback exposes.
+ *  Scoped per call, so a module declaring two elements cannot pool them. */
+const SOURCE_METHODS: Map<string, string[]> = (() => {
+  const out = new Map<string, string[]>();
+  for (const file of facadeFiles) {
+    const sf = parse(file);
+    const visit = (n: ts.Node) => {
+      if (
+        ts.isCallExpression(n) && ts.isIdentifier(n.expression) &&
+        n.expression.text === 'defineWebComponent' && n.arguments[0] && ts.isStringLiteralLike(n.arguments[0])
+      ) {
+        const tag = (n.arguments[0] as ts.StringLiteralLike).text;
+        const render = n.arguments[2];
+        const names = render ? [...exposedNames(render)] : [];
+        if (render) {
+          for (const [helper, contributed] of Object.entries(HELPER_NAMES)) {
+            for (let i = 0; i < callCount(render, helper); i++) names.push(...contributed);
+          }
+        }
+        out.set(tag, names.sort());
+      }
+      ts.forEachChild(n, visit);
+    };
+    visit(sf);
+  }
+  return out;
+})();
+
+const SOURCE_TOTAL = [...SOURCE_METHODS.values()].reduce((n, names) => n + names.length, 0);
+
+describe('every method the facades expose reaches the model', () => {
+  it('the independent parse found a real surface, not an empty one', () => {
+    // Floors, so a parse that silently stopped working cannot make the equality
+    // below pass by matching an equally-empty model.
+    expect(SOURCE_METHODS.size).toBeGreaterThan(70);
+    expect(HELPER_NAMES.wireDisclosure.length).toBeGreaterThan(2);
+    expect(SOURCE_TOTAL).toBeGreaterThan(100);
+  });
+
+  it('element-meta.json lists exactly the methods the source exposes, per element', () => {
+    const modelMethods = new Map(meta.map((e) => [e.tag, [...(e.methods ?? []).map((m) => m.name)].sort()]));
+    const mismatched: string[] = [];
+    for (const [tag, names] of SOURCE_METHODS) {
+      const got = modelMethods.get(tag) ?? [];
+      if (got.join(',') !== names.join(',')) mismatched.push(`${tag}: model [${got}] source [${names}]`);
+    }
+    expect(mismatched).toEqual([]);
+  });
+
+  it('and the totals agree', () => {
+    expect(TOTAL_METHODS).toBe(SOURCE_TOTAL);
+  });
+
+  it('a method written in SHORTHAND form is extracted like any other', () => {
+    // The regression: `expose({ clear })` is a ShorthandPropertyAssignment, not a
+    // PropertyAssignment, and the extractor read only the latter. Named here so the
+    // shape stays covered even if these three elements change.
+    const shorthand: [string, string][] = [
+      ['kai-search', 'clear'],
+      ['kai-editable-label', 'commit'],
+      ['kai-editable-label', 'cancel'],
+    ];
+    for (const [tag, name] of shorthand) {
+      expect(SOURCE_METHODS.get(tag), `${tag} must still exist`).toContain(name);
+      expect(meta.find((e) => e.tag === tag)?.methods?.map((m) => m.name) ?? [], `${tag}.${name}()`).toContain(name);
+    }
+  });
+});
 
 describe('the method model is big enough for the loops below to mean anything', () => {
   it('has methods on many elements', () => {

@@ -49,6 +49,129 @@ export function createTsHelpers(program, checker, { importable = new Set() } = {
     return !!d && program.isSourceFileDefaultLibrary(d.getSourceFile());
   };
 
+  // ---- deterministic union order --------------------------------------------
+  // `type.types` comes back in CHECKER-ID order, and a type's id is assigned when
+  // the checker FIRST interns it — so the order tracks the module graph, not the
+  // source. Adding one unrelated module (measured: a new module reached through
+  // the first facade's props) re-ordered `ConfirmTone` from the authored
+  // `"default" | "warning" | "danger"` to `"danger" | "default" | "warning"` in
+  // element-meta.json, element-types.d.ts, llms-full.txt and the React wrappers at
+  // once, and `ContextSeverity` the same way.
+  //
+  // Two real costs. `verify:generated` diffs a fresh run against the COMMITTED
+  // artifacts, so an order flip fails that gate for a change that had nothing to
+  // do with it. And this repo reads DIFF SIZE as the tell for a generator that
+  // silently rewrote an artifact with less data (the gen-llms.mjs incident); a
+  // baseline that churns on every unrelated commit destroys that signal.
+  //
+  // SORTING WOULD BE DETERMINISTIC AND WRONG. Authored order carries meaning here:
+  // `"sm" | "md" | "lg"` is a size scale, `"ok" | "warn" | "danger"` a severity
+  // ramp, `"button" | "submit" | "reset"` the HTML order. 482 of the model's 594
+  // unions would move under an alphabetical sort, and the docs, the .d.ts tooltips
+  // and the MCP catalog all render this string verbatim. So the order is recovered
+  // from the SOURCE instead — the union's type-alias declaration, or the
+  // declaration the type was read from — and validated: unless the authored node
+  // accounts for every non-nullish constituent, it is not used at all.
+  //
+  // Constituents the authored node cannot name (the `undefined` that `?` adds)
+  // sort FIRST, by rendered text. That is where the checker put them, so the
+  // existing artifacts do not churn on the way in.
+  const NULLISH = ts.TypeFlags.Undefined | ts.TypeFlags.Null | ts.TypeFlags.Void;
+  const unwrapParenNode = (n) => (n && ts.isParenthesizedTypeNode(n) ? unwrapParenNode(n.type) : n);
+
+  /** Every node that could be the authored `A | B | C` for this type, best first.
+   *  Speculative on purpose: a candidate that turns out to describe a DIFFERENT
+   *  type is discarded by the coverage test in authoredRanks, so casting the net
+   *  wide costs nothing and a missed candidate costs the authored order. */
+  function unionNodeCandidates(type, decl) {
+    const out = [];
+    const seenNodes = new Set();
+    const push = (n) => {
+      const u = unwrapParenNode(n);
+      if (!u || seenNodes.has(u)) return;
+      seenNodes.add(u);
+      if (ts.isUnionTypeNode(u)) out.push(u);
+      // `foo?: ('a' | 'b')[]` — renderType recurses into the ELEMENT type carrying
+      // the array's own declaration.
+      else if (ts.isArrayTypeNode(u)) push(u.elementType);
+      // `variant?: LoaderVariant`. An OPTIONAL property's type is
+      // `LoaderVariant | undefined`, which is a DIFFERENT type from the alias, so
+      // it carries no aliasSymbol and the alias branch above never fires — the
+      // single biggest hole, and the one that put `size?: 'sm' | 'md' | 'lg'`
+      // into alphabetical order. Follow the reference to the alias by hand.
+      else if (ts.isTypeReferenceNode(u)) {
+        let sym = checker.getSymbolAtLocation(ts.isQualifiedName(u.typeName) ? u.typeName.right : u.typeName);
+        try { if (sym && sym.flags & ts.SymbolFlags.Alias) sym = checker.getAliasedSymbol(sym); } catch { /* unresolved */ }
+        for (const d of sym?.declarations ?? []) if (ts.isTypeAliasDeclaration(d)) push(d.type);
+        // ...and through a generic WRAPPER. floating-ui spells its placement type
+        // `Prettify<Side | AlignedPlacement>`, so the alias body is a reference,
+        // not a union, and the 12 members have no authored node anywhere else.
+        for (const a of u.typeArguments ?? []) push(a);
+      }
+    };
+    // `type Tone = 'ok' | 'warn' | 'danger'`, wherever it was referenced from.
+    for (const d of type.aliasSymbol?.declarations ?? []) if (ts.isTypeAliasDeclaration(d)) push(d.type);
+    if (decl) {
+      push(decl.type);                       // PropertySignature / parameter / variable
+      push(decl.initializer?.type);          // `theme: 'auto' as 'light' | 'dark' | 'auto'`
+      push(decl);                            // membersOfNode passes the type node itself
+    }
+    return out;
+  }
+
+  /** constituent type -> position in the authored source, or null when no candidate
+   *  node accounts for the whole union. */
+  function authoredRanks(type, decl, depth) {
+    if (depth > 4) return null;
+    for (const node of unionNodeCandidates(type, decl)) {
+      const rank = new Map();
+      let n = 0;
+      const walk = (tn) => {
+        const inner = unwrapParenNode(tn);
+        if (ts.isUnionTypeNode(inner)) { inner.types.forEach(walk); return; }
+        let t;
+        try { t = checker.getTypeFromTypeNode(inner); } catch { return; }
+        if (!t) return;
+        // A constituent that is itself a union (an alias reference, `boolean`) is
+        // spliced in at this position, in ITS OWN authored order.
+        if (t.flags & ts.TypeFlags.Union) {
+          for (const s of orderedUnionTypes(t, undefined, depth + 1)) if (!rank.has(s)) rank.set(s, n++);
+          return;
+        }
+        if (!rank.has(t)) rank.set(t, n++);
+      };
+      node.types.forEach(walk);
+      // ALL-OR-NOTHING. A partial match means this node describes a different type
+      // and its positions are meaningless. Nullish constituents are exempt: `?`
+      // adds them after the fact and no authored node ever names them.
+      if (type.types.every((t) => rank.has(t) || t.flags & NULLISH)) return rank;
+    }
+    return null;
+  }
+
+  /** `type.types` in a stable order. Three bands, in this order:
+   *    0  nullish the author never wrote (the `undefined` that `?` adds)
+   *    1  everything the authored node accounts for, in ITS order
+   *    2  anything left, by rendered text
+   *  Band 0 exists because that is where the checker has always put those, so the
+   *  committed artifacts do not churn on the way in. A nullish constituent the
+   *  author DID write (`string | undefined`) is ranked and keeps its place. */
+  function orderedUnionTypes(type, decl, depth = 0) {
+    const rank = authoredRanks(type, decl, depth);
+    return type.types
+      .map((t) => {
+        const ranked = rank?.has(t);
+        return {
+          t,
+          band: ranked ? 1 : t.flags & NULLISH ? 0 : 2,
+          rank: ranked ? rank.get(t) : 0,
+          key: checker.typeToString(t),
+        };
+      })
+      .sort((a, b) => a.band - b.band || a.rank - b.rank || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
+      .map((x) => x.t);
+  }
+
   // Render a type to a self-contained, fully-expanded string: every named
   // (non-lib, non-importable) object type is inlined so the output drags no
   // imports into a consumer's compilation. Unions de-dup; arrays parenthesize
@@ -62,7 +185,9 @@ export function createTsHelpers(program, checker, { importable = new Set() } = {
   // The path is copied per branch (`new Set(seen)`), so a type used by two
   // sibling props is NOT mistaken for a cycle — only a true ancestor triggers it.
   function renderType(type, decl, seen = new Set()) {
-    if (type.isUnion()) return [...new Set(type.types.map((t) => renderType(t, decl, seen)))].join(' | ');
+    if (type.isUnion()) {
+      return [...new Set(orderedUnionTypes(type, decl).map((t) => renderType(t, decl, seen)))].join(' | ');
+    }
     if (checker.isArrayType(type)) {
       const elem = checker.getTypeArguments(type)[0];
       const rendered = renderType(elem, decl, seen);
@@ -81,9 +206,14 @@ export function createTsHelpers(program, checker, { importable = new Set() } = {
       if (id != null && seen.has(id)) return 'Record<string, unknown>';
       const next = id != null ? new Set(seen).add(id) : seen;
       const props = type.getProperties().map((s) => {
-        const t = checker.getTypeOfSymbolAtLocation(s, s.valueDeclaration ?? decl);
+        // The property's OWN declaration, not the outer one. The type was already
+        // read at `s.valueDeclaration`; passing the outer decl down meant a nested
+        // union (`role: 'user' | 'assistant'` inside an inlined `ChatMessage`)
+        // could not reach the node that authored it, and fell back to text order.
+        const at = s.valueDeclaration ?? s.declarations?.[0] ?? decl;
+        const t = checker.getTypeOfSymbolAtLocation(s, at);
         const opt = s.flags & ts.SymbolFlags.Optional ? '?' : '';
-        return `${propKey(s.name)}${opt}: ${renderType(t, decl, next)}`;
+        return `${propKey(s.name)}${opt}: ${renderType(t, at, next)}`;
       });
       return `{ ${props.join('; ')} }`;
     }
