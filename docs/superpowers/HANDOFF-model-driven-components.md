@@ -1,13 +1,24 @@
 # HANDOFF: model-driven components
 
-Last updated 2026-08-12. **Verified against `origin/main` at `665350a`.** Supersedes the
+Last updated 2026-08-12. **Verified against `origin/main` at `476a16b`.** Supersedes the
 2026-08-11 version entirely.
 
 That SHA is the point of the line, not decoration. This document is a claim about the state of a
 tree, and without knowing which tree, a later reader cannot tell drift from disagreement.
-`git log --oneline 665350a..origin/main` measures exactly how stale this is. Every count and every
+`git log --oneline 476a16b..origin/main` measures exactly how stale this is. Every count and every
 "done" below was read off that tree; nothing was carried forward from the previous version on
 trust, and several things that were carried forward turned out to be wrong.
+
+**This document went stale between being written and being merged, which is the failure it is
+about.** It was derived against `665350a`; four PRs (#182–#185) landed before it could merge, and
+re-deriving against `476a16b` moved **seventeen** figures across §0–§4. One was structural rather
+than incremental — #185 replaced the scaffolder's archetype axis with a surface axis, so the
+front-end matrix went 528 → 616 and the three structural checks went 66 → 77 each — and the rest
+moved because a suite grew, a gate was added, or a count was simply wrong (§2's deprecation table
+said five versions where the registry says six). Two items §1.3 recorded as BLOCKED were unblocked
+by the same PR, and one §1.4 item had half closed itself. **That is the rate to plan for: about one
+figure in three, over a single day of merged work.** Re-derive the section; do not patch the one
+number somebody tells you about, because the number you are told is rarely the only one that moved.
 
 **The work this document describes as done is MERGED TO MAIN**, through PR #178, and
 **`@kitn.ai/ui@0.21.0` is published** (§2). That now includes the whole emit contract, which the
@@ -35,7 +46,7 @@ See `docs/superpowers/specs/2026-08-11-cross-model-conformance-results.md`. Read
 that number: the harness's shared locator was selecting the wrong bubble, and five of those cells
 were passing without measuring anything.
 
-**Goal 1's delivery layer is repaired and guarded.** Scaffolds COMPILE across eight frameworks (528
+**Goal 1's delivery layer is repaired and guarded.** Scaffolds COMPILE across eight frameworks (616
 front ends) and backend routes are type-checked against real host tsconfigs, so the emitted code no
 longer teaches a bug. State the next part precisely, because the gap between the two is where this
 repo keeps getting caught: the emitted code is **EXECUTED for the `html` target only** — all three
@@ -52,8 +63,9 @@ validated in the browser, the scaffolder emitting a loop that runs, the MCP serv
 The 2026-08-11 version of this document called it "START HERE"; that is no longer true and the
 section is now a record rather than a task.
 
-What is at the head of the queue is **`create-kai`** (§1.3). Its remaining work is gated on gaps in
-the integration catalog, not on CLI code.
+What is at the head of the queue is **`create-kai`** (§1.3), whose two catalog blockers were closed
+by #185 — and **the attachment wire gap** (§1.7), which is the one open defect in this document that
+a user can hit on the default path without doing anything unusual.
 
 ---
 
@@ -89,7 +101,7 @@ Recorded here so nobody re-opens them, and because the details are contracts a c
   of the text bubble, not inside it) and `file` (collapsed into one `<Attachments>` row).
   **It is guarded structurally, not merely fixed.** `verify:scaffold` parses the `MessagePart`
   union out of `src/elements/chat-types.ts` with the TypeScript compiler API and requires a
-  `partAs(part(), '<variant>')` branch per variant across all 66 Solid cells. Watched failing three
+  `partAs(part(), '<variant>')` branch per variant across all 77 Solid cells. Watched failing three
   ways, one of them an emitted front end of `''`, because an empty `.tsx` compiles clean and tsc
   would have waved it through.
 
@@ -148,10 +160,12 @@ tools: cardTools(cards, { provider })        // server: what the model is OFFERE
   The overridden-built-in rule survives intact — their schema present, theirs applies and ours
   never does; no schema and an overridden renderer, no validation.
 - **#10 the scaffolder emits a loop that RUNS and the MCP serves the schemas.** `verify:scaffold`
-  states the guarantee in its own words: 160 of 528 scaffolds emit the full round trip, 368 emit
+  states the guarantee in its own words: 160 of 616 scaffolds emit the full round trip, 456 emit
   none of it, and **all 64 that declare a tools array put card tools in it.** That last clause is
   the silent hole — a tools array offered to a model with no card in it — and it is asserted
-  independently of the emit plan rather than derived from it.
+  independently of the emit plan rather than derived from it. The 160 and the 64 did not move when
+  the matrix grew to 616; only the "emit none of it" count did, which is the arithmetic you want,
+  because the new surfaces are attachment surfaces rather than card ones.
 - **#11 `openai` and `anthropic` catalog integrations exist** (11 integrations now, not 9), and
   `clientToolFormat` is declared per integration. It replaced a table keyed on `streamFormat`,
   which is a response-shape field being asked a request-shape question and broke the moment a
@@ -200,7 +214,7 @@ from `packages/ui/src/agent-tooling/`, bundled at build time. Two sources of tru
 **What shipped, in #165: the zero-config path, React only.** Enter through every prompt gives
 React, full-screen, conversation history and the local mock, and it streams. In
 `src/frameworks.ts`, one of eight entries is `status: 'ready'`; the other seven are `'planned'`.
-The CLI's build, typecheck and 50 tests run in the required `test` job, and the build is not
+The CLI's build, typecheck and 52 tests run in the required `test` job, and the build is not
 optional because the tests read `dist/templates` and fail loudly rather than passing on an empty
 template set.
 
@@ -227,18 +241,33 @@ this CLI rather than housekeeping.
    `} from '@kitn.ai/ui'` rather than `@kitn.ai/ui/solid` (#94, being fixed). `scaffold.ts` carries
    zero references to the `./solid` entry today, and the Solid STARTER has the same defect (§1.4,
    #69). One mistake, two emitters.
-2. **The gateway slice — BLOCKED.** The spec's three-way gateway grouping is not derivable: the
-   catalog has no declared field for "needs an out-of-band process", and every derivation matching
-   the spec's split today does so by accident. Left ungrouped rather than shipped as a grouping
-   that looks derived and is not.
-3. **The feature multi-select — BLOCKED.** `attachments` is unemittable, because no archetype
-   composes `kai-file-upload` / `kai-attachments`, so the feature has nothing to emit. The
-   multi-select is the v2 spec's central revision, so this is not cosmetic, and an option that
-   silently no-ops is worse than an absent one.
+2. **The gateway slice — NO LONGER BLOCKED, and deliberately not done.** Read the change in status
+   carefully, because "unblocked" and "deferred" are both true and they are different facts. #185
+   added `Integration.outOfBand` (`'none' | 'local-server' | 'local-binary' | 'language-runtime'`),
+   declared per integration with a `superRefine` that refuses an entry declaring nothing plus three
+   route-source nets that refuse a false `'none'`; `listGatewayGroups()` in the kit registry now
+   returns the spec's three headings from declared fields alone. `create-kai`'s own prompt stays
+   FLAT anyway, and its comment says why: `WIRED_GATEWAYS` is `{ mock }` in this slice, so grouping
+   a list where ten of eleven entries are unselectable would add headings to a menu with one live
+   item. Switching to `listGatewayGroups()` is the companion to widening `WIRED_GATEWAYS`, not a
+   task of its own. **One correction fell out of the derivation and is worth carrying:** the spec's
+   third group listed LangGraph and was wrong — its emitted route compiles the graph in process and
+   asks for a key and nothing else, so it files under "Bring a key".
+3. **The feature multi-select — UNBLOCKED.** #185 registered an `attachments` preset (`kai-chat` +
+   `kai-file-upload` + `kai-attachments`, matching the CLI spec's own feature table), so
+   `listCapabilityGroups` sees a fifth capability, `renderSurface` has a branch, and `verify:scaffold`
+   compiles it. `create-kai` reports the feature as `renderer` rather than `unavailable` **and
+   nothing in the CLI was edited to make that true** — the derivation reported that the world
+   changed, which is what that design was for. A different gap took its place and is narrower:
+   `conversations` is `COMPOSED_ONLY`, because `renderSurface` has no `kai-conversations` branch.
 4. **The coding-agent wiring step** (`.mcp.json` + `AGENTS.md`). Unblocked, not started.
 
-**The headline: v1 is gated on CATALOG COMPLETENESS, not on CLI code.** Two of the four next steps
-are blocked on catalog gaps, and both were reported rather than papered over.
+**The headline has changed, and the old one is worth reading before the new one.** This section
+used to say *v1 is gated on CATALOG COMPLETENESS, not on CLI code*, with two of four next steps
+blocked on catalog gaps. **Both gaps closed in a single PR**, so that headline is retired: v1 is now
+gated on CLI code — the seven remaining frameworks and the wiring step — plus widening
+`WIRED_GATEWAYS`. The two blockers were reported rather than papered over, and that is precisely why
+they were cheap to close.
 
 **One open decision, awaiting Rob — do not record it as taken.** v1 shipping all eight frameworks
 was a scope call made in his absence. The spec excluded Angular and Solid on the grounds that no
@@ -285,11 +314,17 @@ forward:**
   (`resizable.tsx`) is where that shows.
 - **#63** the docs harness still greps source. Nothing under `apps/docs/scripts/docs-alignment/`
   reads `declarativeChildren`.
-- **#64** the defensive defaults are still there: `segmented.tsx` has `props.options ?? []`,
-  `file-tree.tsx` defaults `files: []`.
+- **#64** is now HALF closed, and re-deriving it is what found that. `segmented.tsx` no longer
+  defaults `options` at all — it reads `merged.options` directly, so a caller omitting it fails
+  where the mistake is. `file-tree.tsx` still carries `mergeProps({ files: [] })`. One site, not
+  two.
 - **#68** promote the Solid mid-stream repro into CI.
-- **#69** the Solid STARTER still imports from the root entry (`from "@kitn.ai/ui"`) while the
-  guide says `./solid`. Same defect as the scaffolder's Solid branch (§1.3).
+- **#69** the Solid STARTER still imports from the root entry — two sites in
+  `examples/starters/solid/src/App.tsx` — while the guide says `./solid`. Same defect as the
+  scaffolder's Solid branch (§1.3). **#183 did NOT close this and could not have**, which is the
+  useful part: `verify:starters` now builds all eight starters in the required job, and this starter
+  builds fine, because the root entry really does serve those symbols. A compile gate cannot see a
+  specifier that works but contradicts the documentation.
 - **`docs/web-components.md:5` still claims 27 elements.** `element-meta.json` has 80. Hand-written
   prose inside a generated file, which is precisely why `verify:generated` cannot see it: the
   regeneration reproduces the stale sentence byte-identically and the drift check passes (§5.2).
@@ -368,6 +403,98 @@ a pass with no code change.
   to prove itself"; #70 has since SHIPPED (§1.5), so this is now the missing proof for code that is
   in the tree rather than a prerequisite for code that is not. Sketch in the investigation doc, §7.
 
+### 1.7 ★ Attachments are a THREE-LAYER gap, and the layers must land together
+
+Open as of `476a16b`. Every layer below was read off the tree rather than carried in from the
+session that found it, and one claim did not survive that check — recorded at the bottom, because a
+finding you could not reproduce is worth as much as the ones you could.
+
+**Layer 1 — encoding.** `toOpenAIMessages` and `toAnthropicMessages` both drop `file` parts. Not an
+oversight; both say so at the site. `wire/encode.ts` above `toOpenAIMessages`: *"`card`, `source`
+and `file` parts are never encoded; they are kit-side. File attachments are a documented v1
+limitation, which is why a user turn carrying only an attachment encodes to nothing and is
+skipped."* The Anthropic encoder's `default:` branch repeats it. **So an attachment-only turn
+encodes to nothing at all.**
+
+The type is the harder half, and it is the reason this is not a one-line fix:
+`OpenAIWireMessage.content` is declared `string | null`. Multimodal content is an ARRAY of parts on
+both providers, so layer 1 cannot be fixed inside the encoder — it needs the public wire type
+widened, which is a breaking change to an exported interface and ripples into every route that reads
+`.content`.
+
+**Layer 2 — route re-mapping.** Which is where that ripple lands. Of the 11 integrations, four
+forward `messages` verbatim and would carry array content through untouched (`openai`, `openrouter`,
+`ollama`, `cloudflare`), and `mock` emits no route at all. The remaining six touch `content` on the
+way past — five of them assuming it is a string:
+
+| integration | what it does | effect on array content |
+| --- | --- | --- |
+| `anthropic` | `pushUser([{ type: 'text', text: message.content }])` | array lands in a `text` field |
+| `vercel-ai-sdk` | `content: message.content ?? ''` at four sites | flattened |
+| `mastra` | `const content = m.content ?? ''` | flattened |
+| `pi` | `messages.at(-1)?.content ?? ''` as a prompt string | flattened, and history dropped anyway |
+| `pydantic-ai` | `prompt = messages[-1].content`, typed `content: str` | flattened (python) |
+| `langgraph` | `{ ...m, content: m.content ?? '' }` | **passes through** — only `null` is coerced |
+
+So five of eleven integrations — **55 of the 121 route cells** — would drop attachments at runtime
+even with a fixed encoder. `langgraph` is the honest edge case: its route does not flatten, but its
+own comment records that LangChain's `MessageContent` coercion accepts string only, so it is
+untested rather than safe.
+
+**Layer 3 — production. This is the load-bearing one:** *the kit cannot produce an attachment its
+own encoder would accept.* `packages/ui/src/elements/default-input.tsx:77` — the built-in paperclip
+that every `<kai-chat>` renders, unconditionally, because `ChatThread` always passes
+`onAttachmentsChange` and no prop turns it off:
+
+```ts
+url: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined,
+```
+
+An image gets a `blob:` URL, which is scoped to the tab that created it and unresolvable by anyone
+else, so no provider can fetch it. **A document gets no `url` at all.** The scaffolder's emitted
+`toAttachment` has the same defect with a different shape — `url: URL.createObjectURL(file)` for
+*every* file, so documents get a blob URL rather than none. Neither is a form any model can consume.
+
+**Why they have to land together.** Fixing the encoder alone is worse than shipping nothing:
+today an attachment is silently dropped, and afterwards the DEFAULT path — the built-in paperclip,
+no consumer code involved — hands the encoder a `blob:` URL or an undefined one and converts a
+silent drop into a hard throw. The order that works is layer 3, then 1, then 2.
+
+**`ATTACHMENT_WIRE_NOTE` is a DATED claim, not a standing fact.** #185 emits this into every
+attachment scaffold:
+
+```
+// The staged files ride along on the message as `file` parts, so they RENDER
+// in the thread. They are NOT sent to the model: toOpenAIMessages /
+// toAnthropicMessages do not encode `file` parts (a stated v1 limit of
+// @kitn.ai/ui/wire), so nothing here reaches the provider.
+```
+
+True at `476a16b`. **False the moment layer 1 lands**, and it is emitted into user code, so it will
+outlive the limitation it describes and start teaching the opposite. It is on the fix's critical
+path, not a follow-up. This document has already been burned by exactly this shape: §1.5 was still
+steering readers away from #70 after #70 had shipped.
+
+**What each test project can see, and the evidence for it.** The `emitted` project is the only one
+that EXECUTES the scaffolder's output — it writes the emitted `main.ts` to a real module, imports it
+(the module ends in `void init()`), and drives a mounted `<kai-chat>` out to a stubbed `fetch`. The
+unit suite never runs that code: `scaffold.test.ts` asserts over the emitted STRINGS, so it can
+check wording and never behaviour. That gap is not theoretical — I broke the attachment bridge
+deliberately (made `URL.createObjectURL` throw) and watched the projects disagree:
+`--project=unit` stayed green at 2,858/2,858 while `--project=emitted` went red with
+
+```
+a dropped file never reached <kai-attachments> — the dropzone is mounted but nothing stages
+TypeError: createObjectURL is not a function
+```
+
+**One correction to the report that reached me.** It cited that failure as `expected +0 to be 2`,
+from the fetch-round counter, "because fetch never fired". That assertion is real —
+`expect(round).toBe(2)` in `emitted-maximal-surface.live.test.ts` — but it is **not** the one that
+fires for a broken attachment bridge: the staging assertion sits ~20 lines earlier and catches it
+first. The structural claim (only the emitted project sees this layer) held; the fingerprint did
+not. Cite the staging message.
+
 ---
 
 ## 2. Shipped to npm
@@ -396,11 +523,14 @@ registry, 2026-08-12:
 | versions | class | message points at |
 | --- | --- | --- |
 | 0.14.1, 0.15.0, 0.15.1 | **raw TypeScript as the package entry** — `exports "."` pointed at `./src/index.ts`, so Node cannot import it and bundlers must transpile `node_modules` | fixed in 0.16.0 |
-| 0.16.0 → 0.19.0 (5 versions) | **registration chunk tree-shaken** — blank page, no `kai-*` elements register, silent console | fixed in 0.20.0 |
+| 0.16.0 → 0.19.0 (6 versions) | **registration chunk tree-shaken** — blank page, no `kai-*` elements register, silent console | fixed in 0.20.0 |
 | 0.20.0 | **root entry throws under Node** — `Client-only API called on the server side`, so SSR and any server-side import fail | fixed in 0.20.1 |
 
 **0.20.1 and 0.21.0 are the only clean versions.** Every message names its defect, its fix version,
-and directs the reader to 0.21.0.
+and directs the reader to 0.21.0. Re-read off the registry per version at `476a16b`: 12 published,
+10 carrying a deprecation message, and the middle row is **six** versions (0.16.0, 0.17.0, 0.18.0,
+0.18.1, 0.18.2, 0.19.0) — it read "5" until this pass. The row total was right and the row itself
+was wrong, which is the arithmetic that survives review longest.
 
 Three defect classes, and they are worth reading as three rather than as ten deprecations, because
 each is a different lesson about what the package promises:
@@ -430,10 +560,12 @@ says, and §5.11 is about exactly that. **Recount it, do not adjust it.** The co
 sed -n '/^  test:/,/^  storybook:/p' .github/workflows/test.yml | grep -c '^      - name:'
 ```
 
-which returns 28 today, of which 3 are setup (install, build, install-playwright) and **25 gate a
-merge**. Three unnamed `uses:` steps do checkout and toolchain setup.
+which returns **30** today, of which 4 are setup (install, build, the npm cache for the standalone
+starters, install-playwright) and **26 gate a merge**. Three unnamed `uses:` steps do checkout and
+toolchain setup. It returned 28/3/25 one day earlier; #183 added both a guard and a cache step,
+which is why the setup count is not a constant either.
 
-**Every guard here was watched failing before being trusted.** If you add a 26th, do the same or do
+**Every guard here was watched failing before being trusted.** If you add a 27th, do the same or do
 not bother.
 
 | # | step | catches | notes |
@@ -444,7 +576,7 @@ not bother.
 | 4 | `verify:generated` | a derived artifact out of sync with its source | sentinel-seeded, so a generator that no-ops cannot read as in sync; never goes through NX |
 | 5 | `nx typecheck ui` | types | `verify:quarantine` FIRST, then 5 tsc passes (6 stages) |
 | 6 | `verify:consumer` | registrations survive a real Vite 8 / Rolldown consumer bundle | 79/79 tags, installed into a throwaway app outside the repo |
-| 7 | `verify:pack` | dead weight shipping to consumers | every packed file outside `dist/` over 64 KiB must be allowlisted with a written reason; 818 files / 10.84 MiB against a 12.5 MiB ceiling |
+| 7 | `verify:pack` | dead weight shipping to consumers | every packed file outside `dist/` over 64 KiB must be allowlisted with a written reason; 831 files / 11.44 MiB against a 12.5 MiB ceiling, 6 allowlisted |
 | 8 | `verify:dts` | an emitted `.d.ts` specifier that does not resolve | delegated to tsc's own resolver, both resolution modes |
 | 9 | `verify:dts:consumer` | shipped `.d.ts` type-check under bundler AND nodenext, both directions | needs network |
 | 10 | `verify:ssr` | every entry imports AND every component RENDERS under `node` | two guards chained: 9 entries, then 127 components on `.` and 166 on `./solid` through `renderToString` in a DOM-free child process |
@@ -452,14 +584,15 @@ not bother.
 | 12 | `verify:tool-schemas` | a projected tool definition a provider would reject | two independently written keyword tables, asserted to DIFFER; `minItems` checked by VALUE, not presence |
 | 13 | `verify:card-validation` | a schema keyword that validates nothing | every keyword must land in ENFORCED / STRIPPED / NOT_ENFORCED; ENFORCED is read out of the validator's BODY, not its interface |
 | 14 | `verify:solid-coverage` | an element with no writable Solid equivalent | 80-element catalog against `@kitn.ai/ui/solid` — **not the root entry any more**, since the full Solid surface moved off `.`; also every public component ships a `<Name>Props` |
-| 15 | `verify:scaffold` | emitted code that does not compile on its real host | 528 front ends (6 surface probes x 11 integrations x 8 TS frameworks, **both catalog axes derived from the registry**) + 99 backend routes under 3 host tsconfigs; 66 html / 66 angular / 66 solid structural, the solid ones per `MessagePart` variant |
-| 16 | `verify:docs` | a doc snippet that does not compile against the shipped API | BLOCKING, gates on `high` only; anti-theatre self-test runs first |
-| 17 | unit | 2,835 tests / 237 files | jsdom, `--project=unit` |
-| 18 | emitted | the scaffolder's output actually RUNS | 3 files, **`html` target only** — card path, maximal surface, mock path. EXECUTES the emitted `main.ts` against a mounted surface. A separate PROJECT, deliberately not a separate JOB |
-| 19–20 | spike typecheck + tests | the conformance harness's own suite, incl. the `cardTypes` seam guard | 84 tests, node-only, no key, no browser, ~4s total |
-| 21–23 | create-kai build + typecheck + tests | the CLI, incl. the published-kit contract gate | 50 tests; the build is required first or the tests read an empty template set |
-| 24 | React adapter tests | the generated React wrappers | |
-| 25 | cross-origin e2e | the host/provider postMessage handshake across two real origins | what jsdom and same-origin storybook cannot see |
+| 15 | `verify:scaffold` | emitted code that does not compile on its real host | 616 front ends (7 surface probes × 11 integrations × 8 TS frameworks, **both catalog axes derived from the registry**) + 99 of 121 backend routes under 3 host tsconfigs (11 python, 11 `mock` with no route by design); 77 html / 77 angular / 77 solid structural, the solid ones per `MessagePart` variant; plus 56 preset renders proved byte-identical to `renderSurface` |
+| 16 | `verify:starters` | a starter that stops compiling, shipping into every scaffolded project | **NEW in #183.** Builds all 8 starters with the command a user runs, typechecks the one whose build cannot (tanstack-start). Roster DERIVED from the directory + each app's own kit dependency; an unclassifiable starter is a hard failure, not a skip |
+| 17 | `verify:docs` | a doc snippet that does not compile against the shipped API | BLOCKING, gates on `high` only; anti-theatre self-test runs first |
+| 18 | unit | 2,858 tests / 239 files | jsdom, `--project=unit` |
+| 19 | emitted | the scaffolder's output actually RUNS | 3 files, **`html` target only** — card path, maximal surface, mock path. EXECUTES the emitted `main.ts` against a mounted surface. A separate PROJECT, deliberately not a separate JOB |
+| 20–21 | spike typecheck + tests | the conformance harness's own suite, incl. the `cardTypes` seam guard | 93 tests / 8 files, node-only, no key, no browser, ~1s |
+| 22–24 | create-kai build + typecheck + tests | the CLI, incl. the published-kit contract gate | 52 tests; the build is required first or the tests read an empty template set |
+| 25 | React adapter tests | the generated React wrappers | |
+| 26 | cross-origin e2e | the host/provider postMessage handshake across two real origins | what jsdom and same-origin storybook cannot see |
 
 **Advisory, NOT gating.** Verified against the ruleset API rather than from the workflow files:
 ruleset `18328421` requires only the `test` context. So the storybook browser shards, the
@@ -476,6 +609,17 @@ types that error at everything; "right code compiles" alone is satisfied by type
 the pattern is worth naming: #3 exists because #2's runner exits 0 on zero matches, #4's sentinel
 exists because a deleted generator reads as in sync, and #11's `readdirSync` exists because a
 literal count covers the schemas you thought of. Each one is a guard over a guard.
+
+**The strongest argument for #19 being its own project is that it sees a layer nothing else does.**
+Guards #15 and #18 are both blind to it, in opposite directions: `verify:scaffold` COMPILES the
+emitted code and a scaffold can compile perfectly while rendering nothing, and the unit suite's
+`scaffold.test.ts` asserts over the emitted STRINGS, so it can check wording and never behaviour.
+Only #19 executes the emitted `main.ts` — imports it, so `void init()` runs — against a mounted
+`<kai-chat>` and out to a stubbed `fetch`. Measured rather than asserted: breaking the emitted
+attachment bridge on purpose left `--project=unit` green at 2,858/2,858 and turned `--project=emitted`
+red on *"a dropped file never reached `<kai-attachments>` — the dropzone is mounted but nothing
+stages"*. That is the whole case for the project, and it is why a green `--project=unit` locally is
+not the merge gate. §1.7 has the full account.
 
 ---
 
@@ -534,6 +678,21 @@ red twice with the locator reverted.
 of the same two canned fixtures.** The results doc carries its own footnote on this and is owned
 elsewhere; do not read five columns of `pass` on that row as five measurements. Nothing in
 `packages/ui/src/` was at fault or changed.
+
+**S17 has since been rewritten again, in #184, and the second repair is the more interesting one.**
+Keep the two facts apart: the PUBLISHED cells stay vacuous, because they were recorded under the old
+scenario, while the scenario now in the tree asserts something neither version could. Fixing the
+locator left S17 measuring only what the SCREEN shows, and the screen cannot see the thing the
+scenario is named after — `AssistantStream.abort` makes the fold ignore later deltas, so a build
+that settles the message WITHOUT aborting the fetch renders identically: text stops, the closing
+sentence never appears, the socket stays open and the bytes keep arriving. Confirmed by disabling
+each half of `stop()` in turn; only disabling BOTH used to turn it red, so the half that matters
+most was untested. S17 now carries three claims — growth ceases, the closing sentence never renders
+(a claim no measurement window can fake, unlike a character budget), and **the fetch was aborted,
+observed SERVER-side** via the proxy's `/api/replay-report`. The post-click character budget was
+tried and deliberately removed: at 190 characters it failed 1 run in 5 under a 6x-throttled
+renderer, because what such a bound measures is how long the CLICK took to dispatch, not how long
+the stream kept flowing.
 
 ### Things about it you must know before touching it
 
@@ -1153,6 +1312,22 @@ Added since 2026-08-11:
 - The CLI itself: `packages/create-kai/README.md`
 - **Timing figures and how they were contaminated:** `packages/ui/emitted-code-tests.ts` and
   `packages/ui/test-timeout-budgets.ts`. Read these before quoting any duration from this period.
+
+Added at `476a16b` (#182–#185), and each of these is the SOURCE for a count this document quotes
+rather than a restatement of it — read the script, not the sentence:
+
+- The scaffolder gate's own scope comment, incl. why the archetype axis became a surface axis and
+  why writing an expected cell count here would restore the coupling it exists to break:
+  `packages/ui/scripts/verify-scaffold-compiles.mjs` (header)
+- The starter gate, incl. what a compile floor cannot prove: `packages/ui/scripts/verify-starters.mjs`
+- The derived capability/surface axes: `packages/ui/src/agent-tooling/archetypes.ts`
+  (`listCapabilityGroups`, `listSurfaceProbes`)
+- The derived gateway grouping and where it diverges from the CLI spec on purpose:
+  `packages/ui/src/agent-tooling/registry.ts` (`listGatewayGroups`)
+- The attachment wire limitation as emitted to consumers (§1.7):
+  `packages/ui/src/agent-tooling/mcp/tools/scaffold.ts` (`ATTACHMENT_WIRE_NOTE`)
+- S17's server-observed abort (§4): `examples/internal/openrouter-spike/src/scenarios/replay-report.ts`
+  and `HARNESS.md`
   Every timing measurement taken between Aug 11 22:10 and Aug 12 10:05 local came off a box with
   four of ten cores pinned by orphaned CPU burners, so no "idle" baseline from that window is idle.
   The `--maxWorkers=4` recommendation derived in it is **WITHDRAWN, not annotated**, because unlike
