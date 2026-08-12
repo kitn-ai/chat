@@ -11,11 +11,31 @@ const vercelAiSdk: Integration = {
   // scaffolder wraps it in the target framework's own route declaration.
   routeTemplates: {},
   webRoute: `import { streamText } from 'ai';
-import type { ModelMessage, AssistantContent, ToolResultPart } from 'ai';
+import type { ModelMessage, AssistantContent, UserContent, FilePart, ToolResultPart } from 'ai';
 
 // Next.js only: add \`export const maxDuration = 30\` to the route file to allow
 // long streaming responses. It is a Next route-segment config, not part of the
 // handler, so it lives in the file rather than in here.
+
+/**
+ * One attachment to an AI SDK FilePart.
+ *
+ * \`data\` takes the BARE shorthand — a base64 string, or a URL object for a
+ * remote file — rather than the newer tagged \`{ type: 'data' | 'url' }\` form.
+ * Both are accepted by the installed SDK; the shorthand is also what AI SDK v5
+ * and v6 accept, so this route keeps compiling if the app pins an older \`ai\`.
+ *
+ * Images arrive as \`image_url\` and become FileParts too. \`ImagePart\` still
+ * exists but is deprecated in favour of exactly this.
+ */
+function toFilePart(part: Extract<WirePart, { kind: 'file' }>): FilePart {
+  return {
+    type: 'file',
+    mediaType: part.mediaType,
+    ...(part.filename === undefined ? {} : { filename: part.filename }),
+    data: part.source.type === 'data' ? part.source.data : new URL(part.source.url),
+  };
+}
 
 // The kit's wire format is OpenAI-shaped (tool_calls on the assistant message,
 // a flat content string on the tool message). The AI SDK's ModelMessage is not:
@@ -25,22 +45,35 @@ import type { ModelMessage, AssistantContent, ToolResultPart } from 'ai';
 function toModelMessages(messages: ChatRequestBody['messages']): ModelMessage[] {
   return messages.map((message): ModelMessage => {
     switch (message.role) {
+      // A system prompt is text-only on every wire, so the array form collapses.
       case 'system':
-      case 'user':
-        return { role: message.role, content: message.content ?? '' };
+        return { role: 'system', content: wireText(message.content) };
+      case 'user': {
+        const parts = wireParts(message.content);
+        // Plain string for an ordinary turn: identical to what this route sent
+        // before attachments existed, and the shape the SDK docs lead with.
+        if (parts.every((p) => p.kind === 'text')) {
+          return { role: 'user', content: wireText(message.content) };
+        }
+        const content: UserContent = parts.map((p) =>
+          p.kind === 'text' ? { type: 'text' as const, text: p.text } : toFilePart(p),
+        );
+        return { role: 'user', content };
+      }
       case 'tool': {
         const result: ToolResultPart = {
           type: 'tool-result',
           toolCallId: message.tool_call_id ?? '',
           toolName: message.name ?? '',
-          output: { type: 'text', value: message.content ?? '' },
+          output: { type: 'text', value: wireText(message.content) },
         };
         return { role: 'tool', content: [result] };
       }
       case 'assistant': {
-        if (!message.tool_calls?.length) return { role: 'assistant', content: message.content ?? '' };
+        const text = wireText(message.content);
+        if (!message.tool_calls?.length) return { role: 'assistant', content: text };
         const content: AssistantContent = [];
-        if (message.content) content.push({ type: 'text', text: message.content });
+        if (text) content.push({ type: 'text', text });
         for (const call of message.tool_calls) {
           content.push({
             type: 'tool-call',

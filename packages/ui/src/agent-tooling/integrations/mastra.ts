@@ -35,17 +35,43 @@ async function chatHandler(request: Request): Promise<Response> {
   // is never null. A 'tool' wire message is OUR client-side tool bookkeeping;
   // this agent owns its tools server-side (forwardsFromClient is empty), so it
   // has no schema for that shape and the entry is dropped rather than guessed.
-  type MastraMessage = { role: 'system'; content: string } | { role: 'user'; content: string } | { role: 'assistant'; content: string };
+  //
+  // Only the USER role takes content parts: a system prompt is text by
+  // definition, and an assistant turn here is replayed history, not a new
+  // upload. \`data\` uses the bare base64-or-URL shorthand, which every AI SDK
+  // major Mastra accepts understands.
+  type MastraFilePart = { type: 'file'; data: string | URL; mediaType: string; filename?: string };
+  type MastraUserContent = string | Array<{ type: 'text'; text: string } | MastraFilePart>;
+  type MastraMessage = { role: 'system'; content: string } | { role: 'user'; content: MastraUserContent } | { role: 'assistant'; content: string };
   const mastraMessages: MastraMessage[] = [];
   for (const m of messages) {
-    const content = m.content ?? '';
     // Each branch constructs a literal with ONE fixed role, not m.role (which is
     // still typed as the 4-way union): a union-VALUED field on a single object
     // does not structurally match a union of role-discriminated objects, so
     // widening back to m.role here would reintroduce the original TS2345.
-    if (m.role === 'system') mastraMessages.push({ role: 'system', content });
-    else if (m.role === 'user') mastraMessages.push({ role: 'user', content });
-    else if (m.role === 'assistant') mastraMessages.push({ role: 'assistant', content });
+    if (m.role === 'system') mastraMessages.push({ role: 'system', content: wireText(m.content) });
+    else if (m.role === 'assistant') mastraMessages.push({ role: 'assistant', content: wireText(m.content) });
+    else if (m.role === 'user') {
+      const parts = wireParts(m.content);
+      // Plain string unless the turn actually carries an attachment.
+      if (parts.every((p) => p.kind === 'text')) {
+        mastraMessages.push({ role: 'user', content: wireText(m.content) });
+      } else {
+        mastraMessages.push({
+          role: 'user',
+          content: parts.map((p) =>
+            p.kind === 'text'
+              ? { type: 'text' as const, text: p.text }
+              : {
+                  type: 'file' as const,
+                  mediaType: p.mediaType,
+                  ...(p.filename === undefined ? {} : { filename: p.filename }),
+                  data: p.source.type === 'data' ? p.source.data : new URL(p.source.url),
+                },
+          ),
+        });
+      }
+    }
   }
 
   let agentStream: Awaited<ReturnType<ReturnType<typeof mastra.getAgent>['stream']>>;

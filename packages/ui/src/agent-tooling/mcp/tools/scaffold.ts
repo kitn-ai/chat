@@ -4397,6 +4397,85 @@ const CHAT_REQUEST_BODY_DECL = [
 ];
 
 /**
+ * Attachments, on the way IN.
+ *
+ * A user turn's `content` is a plain string until it carries a file, at which
+ * point `toOpenAIMessages` emits the ARRAY form. Every route that re-maps
+ * messages into some other SDK's shape has to handle both, and the three that do
+ * (anthropic, mastra, vercel-ai-sdk) were each written when only the string form
+ * existed — so each one would have quietly dropped the attachment while still
+ * compiling, which is the same defect the encoder was just fixed for.
+ *
+ * These two helpers are the shared half of that: flattening the wire shape is
+ * identical everywhere, while the target shape is not, so each route maps
+ * `WirePart[]` into its own SDK itself rather than inheriting a lowest common
+ * denominator.
+ *
+ * Only injected into routes that actually call them — the eight pass-through
+ * integrations forward `messages` untouched and need none of this, and an unused
+ * declaration is a hard error under the gate's `--noUnusedLocals`.
+ */
+const CONTENT_PARTS_DECL = [
+  `/** Where an attachment's bytes are: inline base64, or an address the PROVIDER`,
+  ` *  fetches. Never both. */`,
+  `type WireFileSource = { type: 'data'; data: string } | { type: 'url'; url: string };`,
+  ``,
+  `/** One piece of a turn, with the string and array content forms flattened into`,
+  ` *  a single shape. */`,
+  `type WirePart =`,
+  `  | { kind: 'text'; text: string }`,
+  `  | { kind: 'file'; mediaType: string; filename?: string; source: WireFileSource };`,
+  ``,
+  `const DATA_URI = /^data:([^;,]+);base64,([\\s\\S]*)$/;`,
+  ``,
+  `/**`,
+  ` * Flatten a wire message's content into parts.`,
+  ` *`,
+  ` * An image sent by URL has no media type here — \`image_url\` carries only the`,
+  ` * address — so it reports the top-level segment \`'image'\`, which is all a URL`,
+  ` * source needs. Only images can reach that branch: the kit refuses to encode a`,
+  ` * remote PDF rather than guess at one.`,
+  ` */`,
+  `function wireParts(content: OpenAIWireMessage['content']): WirePart[] {`,
+  `  if (content == null) return [];`,
+  `  if (typeof content === 'string') return content === '' ? [] : [{ kind: 'text', text: content }];`,
+  `  return content.map((part): WirePart => {`,
+  `    if (part.type === 'text') return { kind: 'text', text: part.text };`,
+  `    if (part.type === 'image_url') {`,
+  `      const asData = DATA_URI.exec(part.image_url.url);`,
+  `      return asData`,
+  `        ? { kind: 'file', mediaType: asData[1], source: { type: 'data', data: asData[2] } }`,
+  `        : { kind: 'file', mediaType: 'image', source: { type: 'url', url: part.image_url.url } };`,
+  `    }`,
+  `    const asData = DATA_URI.exec(part.file.file_data);`,
+  `    if (!asData) {`,
+  `      // LOUD on purpose. \`file_data\` is a data URI on this wire; anything else`,
+  `      // cannot be turned into bytes without fetching it, and forwarding a turn`,
+  `      // with the attachment quietly missing is the bug this whole path exists`,
+  `      // to prevent.`,
+  `      throw new Error(`,
+  `        'Unsupported file content part: file_data must be a data: URI of the form data:<media type>;base64,<data>.',`,
+  `      );`,
+  `    }`,
+  `    return {`,
+  `      kind: 'file',`,
+  `      mediaType: asData[1],`,
+  `      filename: part.file.filename,`,
+  `      source: { type: 'data', data: asData[2] },`,
+  `    };`,
+  `  });`,
+  `}`,
+  ``,
+  `/** Just the text of a turn. System, assistant and tool messages are text-only`,
+  ` *  on this wire, so this collapses the array form for them. */`,
+  `function wireText(content: OpenAIWireMessage['content']): string {`,
+  `  return wireParts(content)`,
+  `    .map((p) => (p.kind === 'text' ? p.text : ''))`,
+  `    .join('');`,
+  `}`,
+];
+
+/**
  * Slot the body type in just above `chatHandler`.
  *
  * Not at the very top: a fragment may open with its own imports (langgraph,
@@ -4406,11 +4485,16 @@ const CHAT_REQUEST_BODY_DECL = [
  * written it.
  */
 function withChatRequestBody(fragment: string): string {
+  // The content helpers ride along only where the route calls them; see
+  // CONTENT_PARTS_DECL for why an unconditional injection would not compile.
+  const decl = /\bwire(?:Parts|Text)\s*\(/.test(fragment)
+    ? [...CHAT_REQUEST_BODY_DECL, ``, ...CONTENT_PARTS_DECL]
+    : CHAT_REQUEST_BODY_DECL;
   const lines = fragment.split('\n');
   let at = lines.findIndex((l) => /^(?:export\s+)?async function chatHandler\b/.test(l));
-  if (at < 0) return [...CHAT_REQUEST_BODY_DECL, ``, ...lines].join('\n');
+  if (at < 0) return [...decl, ``, ...lines].join('\n');
   while (at > 0 && /^\s*(?:\/\/|\/\*|\*)/.test(lines[at - 1])) at -= 1;
-  return [...lines.slice(0, at), ...CHAT_REQUEST_BODY_DECL, ``, ...lines.slice(at)].join('\n');
+  return [...lines.slice(0, at), ...decl, ``, ...lines.slice(at)].join('\n');
 }
 
 /** Wrap an integration's portable handler in the target framework's declaration. */
