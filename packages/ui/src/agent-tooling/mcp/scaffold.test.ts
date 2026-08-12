@@ -3102,8 +3102,10 @@ describe('scaffold — the card round trip is emitted, never restated', () => {
       expect(plan!.tools, `${integration.id}: expected a tools array`).toBe(true);
       expect(
         plan!.provider,
-        `${integration.id} forwards a tools array but its streamFormat '${integration.streamFormat}' is not ` +
-          'mapped in CARD_TOOL_PROVIDERS, so the scaffold would offer the model no card tool at all',
+        `${integration.id} forwards a tools array but declares no clientToolFormat, so the scaffold would ` +
+          'offer the model no card tool at all. State the envelope its route expects — and read the route ' +
+          'first: one that CONVERTS the array server-side wants the shape it converts FROM, not its own ' +
+          "provider's (streamFormat is the RESPONSE stream and does not answer this).",
       ).not.toBeNull();
       const code = await front('react', 'agentic', integration.id);
       expect(code, `${integration.id}: wrong provider emitted`).toContain(
@@ -3129,5 +3131,148 @@ describe('scaffold — the card round trip is emitted, never restated', () => {
       'cardTools',
     );
     expect(code, 'called cardTools with no tools array to put it in').not.toMatch(/\.\.\.cardTools\(/);
+  });
+});
+
+/**
+ * SCAF-8, the half tsc cannot reach: the emitted model id has to be an id the
+ * host that scaffold's own route POSTs to will actually answer.
+ *
+ * WHY A COMPILE PROVES NOTHING HERE. `const model = 'openai/gpt-4o-mini'` and
+ * `const model = 'gpt-4o-mini'` are the same type. The whole matrix in
+ * verify-scaffold-compiles.mjs went green on the first of those while
+ * api.openai.com answered it with a 404 — a scaffold generated for the provider
+ * it names could not run against that provider, and every gate in the repo said
+ * fine. Compilation is not behaviour.
+ *
+ * SO THIS READS THE EMITTED DOCUMENT, BOTH HALVES, and checks them against each
+ * other rather than against a restated table:
+ *   · the id comes out of the FRONT END's `const model = '…'`
+ *   · the host comes out of the BACKEND ROUTE's own `fetch('…')`
+ * Neither is a value this file supplies, so the check cannot pass by agreeing
+ * with itself — the only thing stated here is what each host's id SPACE looks
+ * like, which is the fact that was wrong.
+ *
+ * An unrecognised host is a hard failure, not a skip, for the same reason the
+ * scaffold gate hard-fails an unrecognised runtime label: a new integration that
+ * quietly matched nothing would restore exactly the blind spot this closes.
+ */
+describe("scaffold — the emitted model id belongs to its route's host", () => {
+  /**
+   * Model-id SHAPE per API host. Shape, not a value list: pinning the exact
+   * strings would just restate CLIENT_MODEL_IDS and would go stale on the next
+   * model release, while the id space of a host is the stable fact — OpenRouter
+   * namespaces by vendor, first-party APIs do not, and Anthropic's ids are all
+   * `claude-*`. Getting the SPACE wrong is what 404s.
+   */
+  const HOST_ID_SPACES: {
+    host: string;
+    expected: string;
+    accepts: (id: string) => boolean;
+  }[] = [
+    {
+      host: 'openrouter.ai',
+      expected: "a vendor-prefixed 'vendor/model' slug, e.g. 'openai/gpt-4o-mini'",
+      accepts: (id) => /^[^/\s]+\/[^/\s]+$/.test(id),
+    },
+    {
+      host: 'api.openai.com',
+      // The exact defect: the prefixed form is an OpenRouter slug and this host
+      // 404s it.
+      expected: "a bare id with NO vendor prefix, e.g. 'gpt-4o-mini' (never 'openai/gpt-4o-mini')",
+      accepts: (id) => !id.includes('/') && !id.startsWith('claude-'),
+    },
+    {
+      host: 'api.anthropic.com',
+      expected: "an Anthropic id, e.g. 'claude-opus-5' / 'claude-sonnet-5' / 'claude-haiku-4-5'",
+      accepts: (id) => /^claude-[a-z0-9.-]+$/.test(id),
+    },
+    {
+      host: 'localhost:11434',
+      expected: "a local Ollama tag, e.g. 'llama3.2'",
+      accepts: (id) => !id.includes('/'),
+    },
+  ];
+
+  const emit = async (integrationId: string) => {
+    const out = await scaffold.handler({
+      useCase: 'agentic',
+      integration: integrationId,
+      placement: 'full-page',
+      framework: 'react',
+    });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+    const [frontEnd, backend = ''] = text.split('=== (2) BACKEND ROUTE ===');
+    return { frontEnd, backend };
+  };
+
+  it('every integration that forwards a model emits one valid for the host it POSTs to', async () => {
+    const forwarding = listIntegrations().filter((i) => i.forwardsFromClient.includes('model'));
+    // Anti-vacuity: if the catalog stopped forwarding `model` anywhere, the loop
+    // below would pass by running zero times.
+    expect(forwarding.length, 'no integration forwards a model — this check is vacuous').toBeGreaterThan(0);
+
+    for (const integration of forwarding) {
+      const { frontEnd, backend } = await emit(integration.id);
+
+      const id = frontEnd.match(/const model = '([^']+)'/)?.[1];
+      expect(
+        id,
+        `${integration.id}: declares forwardsFromClient: ['model'] but the scaffold emits no \`const model\` — ` +
+          'the field would be sent as undefined',
+      ).toBeDefined();
+
+      // The host the emitted route really calls, read off its own fetch().
+      const hosts = [...backend.matchAll(/fetch\(\s*['"`]([^'"`]+)['"`]/g)]
+        .map((m) => {
+          try {
+            return new URL(m[1]).host;
+          } catch {
+            return '';
+          }
+        })
+        .filter(Boolean);
+      expect(hosts.length, `${integration.id}: emitted route calls no absolute URL — cannot tell which host`)
+        .toBeGreaterThan(0);
+
+      const space = HOST_ID_SPACES.find((s) => hosts.includes(s.host));
+      expect(
+        space,
+        `${integration.id}: emitted route POSTs to ${hosts.join(', ')}, which has no entry in HOST_ID_SPACES. ` +
+          'Add one stating what that host\'s model ids look like — a host nobody has described is a host whose ' +
+          'ids nothing is checking.',
+      ).toBeDefined();
+
+      expect(
+        space!.accepts(id!),
+        `${integration.id}: emits model id '${id}' but its route POSTs to ${space!.host}, which wants ` +
+          `${space!.expected}. This compiles and then 404s at runtime.`,
+      ).toBe(true);
+    }
+  });
+
+  it('the id space rules reject the ids of the OTHER hosts', () => {
+    // Proves the rules DISCRIMINATE. Each `accepts` is checked against a
+    // representative id from every other host; a rule that waved everything
+    // through would pass the test above no matter what the scaffolder emitted,
+    // which is the failure mode this whole file exists to catch.
+    const samples: Record<string, string> = {
+      'openrouter.ai': 'openai/gpt-4o-mini',
+      'api.openai.com': 'gpt-4o-mini',
+      'api.anthropic.com': 'claude-opus-5',
+    };
+    for (const [host, id] of Object.entries(samples)) {
+      const own = HOST_ID_SPACES.find((s) => s.host === host)!;
+      expect(own.accepts(id), `${host} rejects its OWN id '${id}'`).toBe(true);
+    }
+    // The specific cross-host confusions that shipped, or could:
+    const openai = HOST_ID_SPACES.find((s) => s.host === 'api.openai.com')!;
+    expect(openai.accepts('openai/gpt-4o-mini'), 'api.openai.com accepted an OpenRouter slug').toBe(false);
+    expect(openai.accepts('claude-opus-5'), 'api.openai.com accepted an Anthropic id').toBe(false);
+    const anthropic = HOST_ID_SPACES.find((s) => s.host === 'api.anthropic.com')!;
+    expect(anthropic.accepts('gpt-4o-mini'), 'api.anthropic.com accepted an OpenAI id').toBe(false);
+    expect(anthropic.accepts('openai/gpt-4o-mini'), 'api.anthropic.com accepted an OpenRouter slug').toBe(false);
+    const openrouter = HOST_ID_SPACES.find((s) => s.host === 'openrouter.ai')!;
+    expect(openrouter.accepts('gpt-4o-mini'), 'openrouter.ai accepted an unprefixed id').toBe(false);
   });
 });

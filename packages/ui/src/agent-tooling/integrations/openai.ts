@@ -11,10 +11,10 @@ const openai: Integration = {
   // scaffolder wraps it in whatever the target framework routes with.
   routeTemplates: {},
   webRoute: `async function chatHandler(request: Request): Promise<Response> {
-  // The model is pinned below, not sent by the browser. tools IS forwarded: it
-  // is undefined unless the front end declared any, and JSON.stringify drops it,
-  // so the same handler serves a tool archetype and a plain chat.
-  const { messages, tools } = await readChatRequest(request);
+  // Both model and tools come from the browser. \`tools\` is undefined unless the
+  // front end declared any, and JSON.stringify drops it, so the same handler
+  // serves a tool archetype and a plain chat.
+  const { model, messages, tools } = await readChatRequest(request);
 
   const upstream = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -22,7 +22,11 @@ const openai: Integration = {
       Authorization: \`Bearer \${process.env.OPENAI_API_KEY}\`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ model: 'gpt-4o-mini', messages, tools, stream: true }),
+    // Model ids here carry NO vendor prefix: 'gpt-4o-mini', never
+    // 'openai/gpt-4o-mini' — the prefixed form is an OpenRouter slug and this
+    // host answers it with a 404. The front end's \`model\` const is the one to
+    // edit; it is seeded from CLIENT_MODEL_IDS.openai.
+    body: JSON.stringify({ model, messages, tools, stream: true }),
   });
 
   // FORWARD THE STATUS. Returning 200 here is how a missing key turns into
@@ -62,15 +66,17 @@ const openai: Integration = {
   runNote:
     "Set OPENAI_API_KEY (platform.openai.com). Model ids have NO vendor prefix: 'gpt-4o-mini', not 'openai/gpt-4o-mini' — the prefixed form is an OpenRouter slug and api.openai.com answers it with a 404. Change the pinned model in the route.",
   docsSlug: 'integrations/connect-any-model',
-  // 'tools' only, and the omission of 'model' is deliberate rather than an
-  // oversight. The scaffolder's shared default for a forwarded model is
-  // 'openai/gpt-4o-mini' (CLIENT_MODEL_IDS in mcp/tools/scaffold.ts), which is
-  // an OpenRouter slug: api.openai.com 404s it. Emitting an editable const that
-  // ships a broken default is the exact dead-const defect forwardsFromClient was
-  // added to kill, so the model stays pinned in the route until scaffold.ts
-  // carries a correct per-integration default. 'tools' IS forwarded, which is
-  // what lets an agentic scaffold fill its kai-tool panel.
-  forwardsFromClient: ['tools'],
+  // 'model' was withheld until scaffold.ts could seed it correctly: the shared
+  // fallback is 'openai/gpt-4o-mini', an OpenRouter slug that api.openai.com
+  // 404s, and shipping an editable const with a broken default is the exact
+  // dead-const defect forwardsFromClient exists to prevent. CLIENT_MODEL_IDS now
+  // carries a per-integration entry ('gpt-4o-mini'), so the const is real and the
+  // route reads it. 'tools' is what lets an agentic scaffold fill its kai-tool
+  // panel.
+  forwardsFromClient: ['model', 'tools'],
+  // The handler forwards `tools` unconverted to /v1/chat/completions — this IS
+  // the OpenAI wire, so the client sends OpenAI's own function envelope.
+  clientToolFormat: 'openai',
 };
 
 export default openai;

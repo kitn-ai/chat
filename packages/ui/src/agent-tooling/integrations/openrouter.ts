@@ -61,6 +61,10 @@ const openrouter: Integration = {
   docsSlug: 'integrations/connect-any-model',
   // The route forwards both, so a scaffold's editable consts reach the gateway.
   forwardsFromClient: ['model', 'tools'],
+  // The handler puts the client's `tools` straight into an OpenAI-compatible
+  // /chat/completions body, unconverted — so the client must send OpenAI's own
+  // `{ type: 'function', function: { parameters } }` envelope.
+  clientToolFormat: 'openai',
 };
 
 export default openrouter;

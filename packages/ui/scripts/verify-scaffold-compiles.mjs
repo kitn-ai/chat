@@ -30,11 +30,19 @@
 //
 // SCOPE
 // -----
-// WARNING: `INTEGRATIONS` below is a HAND-WRITTEN list, not the registry. It is
-// therefore one-directional: adding a catalog entry does NOT add coverage, and
-// nothing fails to say so — `openai` and `anthropic` were added to the catalog
-// and this gate stayed green at the old 432/99 counts until the list was edited
-// by hand. Derive it from `listIntegrations()` when you next touch this file.
+// The integration and archetype axes are DERIVED from `listIntegrations()` /
+// `listArchetypes()` at run time (see `loadCatalogAxes`). They used to be
+// hand-written arrays, which made this gate one-directional: adding a catalog
+// entry did NOT add coverage and nothing failed to say so — `openai` and
+// `anthropic` both landed in the catalog and compiled ZERO times while this
+// script printed success at its old 432/99 counts. Registering an integration
+// now moves the cell counts by itself.
+//
+// Cell counts are therefore NOT fixed, and the figures below are illustrative of
+// the current catalog rather than a target to hold: writing an expected count
+// here would restore the same coupling, since the hand that adds an integration
+// would be the hand that updates the number. The script prints what it actually
+// ran; read that, not this comment.
 //
 // FRONT END: 6 archetypes × 11 integrations × 8 TS frameworks = 528 compiled
 // cells, at one placement. `placement` is the fourth axis and is left at
@@ -205,7 +213,21 @@ const KEEP = process.argv.includes('--keep');
 const filterIdx = process.argv.indexOf('--filter');
 const FILTER = filterIdx > -1 ? process.argv[filterIdx + 1] : null;
 
-const ARCHETYPES = ['drop-in-chat', 'support-widget', 'knowledge-base', 'agentic', 'workspace', 'voice'];
+/**
+ * The two catalog axes, DERIVED from the registry in `main()` — never listed here.
+ *
+ * These were hand-written arrays, and that made the gate one-directional in the
+ * worst way: adding a catalog entry did not add coverage, and nothing failed to
+ * say so. `openai` and `anthropic` were both added to the catalog and compiled
+ * ZERO times while this script reported success at its old 432/99 counts. A gate
+ * that covers a list instead of a system is indistinguishable from a passing one.
+ *
+ * They stay `let` + empty because every reader is inside a function `main()`
+ * calls after `loadCatalogAxes()` has filled them; nothing runs at module scope.
+ * `assertCatalogAxes()` refuses to proceed on an empty axis, so a registry that
+ * failed to load degrades to a loud failure rather than a zero-cell green run.
+ */
+let ARCHETYPES = [];
 /**
  * EVERY integration, not a representative pair.
  *
@@ -224,20 +246,11 @@ const ARCHETYPES = ['drop-in-chat', 'support-widget', 'knowledge-base', 'agentic
  *
  * The other axis, `placement`, is deliberately left at one value: it only ever
  * changes an inline CSS string, so the extra 3x buys no type coverage.
+ *
+ * Derived from `listIntegrations()`, so "every integration" is a fact rather
+ * than a claim — see the note on ARCHETYPES above.
  */
-const INTEGRATIONS = [
-  'openai',
-  'anthropic',
-  'openrouter',
-  'vercel-ai-sdk',
-  'langgraph',
-  'cloudflare',
-  'ollama',
-  'mastra',
-  'pi',
-  'pydantic-ai',
-  'mock',
-];
+let INTEGRATIONS = [];
 /**
  * TS-visible frameworks. `html` is one of them now.
  *
@@ -792,7 +805,7 @@ async function solidPartCoverageCheck(scaffold) {
  *     A tools array handed to a model with no card tool in it is the silent hole:
  *     the model is never told a card exists, so it never emits one, and nothing
  *     anywhere says why. This is what fails when a new integration forwards tools
- *     with a `streamFormat` that CARD_TOOL_PROVIDERS does not map.
+ *     without declaring a `clientToolFormat`.
  *   · at least one cell must expect cards and at least one must not. A predicate
  *     stuck at `false` would make every other assertion here vacuously true, which
  *     is precisely the shape of check this repo keeps shipping.
@@ -890,8 +903,8 @@ async function cardRoundTripCheck(scaffold, cardEmitPlan) {
             failures.push(
               `${label}: declares a \`tools\` array and never calls cardTools(). The model is offered ` +
                 'no card tool, so it can never emit one and nothing says why. If this integration is ' +
-                'new, map its `streamFormat` in CARD_TOOL_PROVIDERS (mcp/tools/scaffold.ts) to the ' +
-                'tool envelope its provider takes.',
+                'new, set `clientToolFormat` on it to the envelope its ROUTE expects — read the route ' +
+                'first: one that converts the array server-side wants the shape it converts FROM.',
             );
           } else if (!CARD_PROVIDERS.includes(m[1])) {
             failures.push(`${label}: cardTools provider '${m[1]}' is not one of ${CARD_PROVIDERS.join(', ')}`);
@@ -1505,12 +1518,54 @@ async function routeCheck(scaffold) {
   console.log('  ✓ every emitted backend route compiles under its real host tsconfig');
 }
 
+/**
+ * Fill the two catalog axes from the registry itself.
+ *
+ * Bundled with esbuild for the same reason the scaffolder is: it is TypeScript
+ * importing TypeScript, and this script is plain node.
+ *
+ * The counts are PRINTED, not asserted against a number written here. A written
+ * expectation would have to be edited by the same hand that adds an integration
+ * — which is exactly the coupling that let two of them land uncovered. What is
+ * asserted is that the axes are non-empty and that the registry is the source:
+ * if the registry grows, the printed cell counts move on their own.
+ */
+async function loadCatalogAxes(esbuild) {
+  const bundle = join(tmp, 'registry.bundle.mjs');
+  await esbuild.build({
+    entryPoints: [resolve(ROOT, 'src/agent-tooling/registry.ts')],
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    outfile: bundle,
+    logLevel: 'error',
+  });
+  const mod = await import(pathToFileURL(bundle).href);
+  if (typeof mod.listIntegrations !== 'function' || typeof mod.listArchetypes !== 'function')
+    fail(
+      'the catalog no longer exports `listIntegrations` / `listArchetypes`.\n' +
+        '  This matrix derives its integration and archetype axes from them. Refusing to fall\n' +
+        '  back to a hand-written list: that is the exact defect that let `openai` and\n' +
+        '  `anthropic` compile zero times while this gate reported success.',
+    );
+  INTEGRATIONS = mod.listIntegrations().map((i) => i.id);
+  ARCHETYPES = mod.listArchetypes().map((a) => a.id);
+  // Anti-vacuity. An empty axis makes every matrix below a zero-cell green run.
+  if (INTEGRATIONS.length === 0) fail('the registry lists no integrations — every matrix here would be empty.');
+  if (ARCHETYPES.length === 0) fail('the registry lists no archetypes — every matrix here would be empty.');
+  console.log(
+    `  · catalog axes from the registry: ${INTEGRATIONS.length} integrations × ${ARCHETYPES.length} archetypes ` +
+      `(${INTEGRATIONS.join(', ')})`,
+  );
+}
+
 async function main() {
   console.log('  · bundling the scaffolder with esbuild');
   const bundle = join(tmp, 'scaffold.bundle.mjs');
   // The JS API, not the .bin shim: pnpm does not always link binaries where a
   // hard-coded path expects them.
   const esbuild = await import('esbuild');
+  await loadCatalogAxes(esbuild);
   await esbuild.build({
     entryPoints: [resolve(ROOT, 'src/agent-tooling/mcp/tools/scaffold.ts')],
     bundle: true,

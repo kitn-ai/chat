@@ -293,9 +293,9 @@ function reframeToOpenAISse(body: ReadableStream<Uint8Array>): ReadableStream<Ui
 }
 
 async function chatHandler(request: Request): Promise<Response> {
-  // The model is pinned below, not sent by the browser. tools IS forwarded, in
-  // OpenAI function form, and converted here.
-  const { messages, tools } = await readChatRequest(request);
+  // Both model and tools come from the browser. \`tools\` arrives in OpenAI
+  // function form and is converted to this API's shape below.
+  const { model, messages, tools } = await readChatRequest(request);
   const { system, messages: anthropicMessages } = toAnthropicBody(messages);
   const anthropicTools = toAnthropicTools(tools);
 
@@ -307,7 +307,11 @@ async function chatHandler(request: Request): Promise<Response> {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'claude-opus-5',
+      // Model ids here are Anthropic's own — 'claude-opus-5', 'claude-sonnet-5',
+      // 'claude-haiku-4-5'. An OpenAI id or an OpenRouter 'vendor/model' slug is
+      // a 404. The front end's \`model\` const is the one to edit; it is seeded
+      // from CLIENT_MODEL_IDS.anthropic.
+      model,
       // REQUIRED. OpenAI defaults it; this API 400s without it. It caps thinking
       // AND response text together, so raise it if you turn thinking on.
       max_tokens: 4096,
@@ -379,13 +383,22 @@ async function chatHandler(request: Request): Promise<Response> {
   runNote:
     "Set ANTHROPIC_API_KEY (console.anthropic.com). The route pins claude-opus-5; claude-sonnet-5 and claude-haiku-4-5 are the cheaper swaps. Four things this API does NOT share with the OpenAI one, all of them 400s: system is a top-level field and not a message, max_tokens is required, tool_choice is an object ({ type: 'auto' }) and not a string, and tool schemas use input_schema rather than function.parameters. Extended thinking: on claude-opus-5 and the other current models budget_tokens is REMOVED (400) — use thinking: { type: 'adaptive', display: 'summarized' } with output_config.effort, and note that display defaults to 'omitted', which streams empty thinking blocks that look exactly like no reasoning at all. On older models (claude-haiku-4-5, claude-sonnet-4-5) budget_tokens still applies and must be >= 1024 with max_tokens strictly greater.",
   docsSlug: 'integrations/connect-any-model',
-  // 'tools' only, and the omission of 'model' is deliberate. The scaffolder's
-  // shared default for a forwarded model is 'openai/gpt-4o-mini'
-  // (CLIENT_MODEL_IDS in mcp/tools/scaffold.ts), which api.anthropic.com rejects
-  // outright. Emitting an editable const that ships a broken default is the dead-
-  // const defect forwardsFromClient exists to prevent, so the model stays pinned
-  // in the route until scaffold.ts carries a correct per-integration default.
-  forwardsFromClient: ['tools'],
+  // 'model' was withheld until scaffold.ts could seed it correctly: the shared
+  // fallback is 'openai/gpt-4o-mini', which api.anthropic.com rejects outright,
+  // and shipping an editable const with a broken default is the dead-const defect
+  // forwardsFromClient exists to prevent. CLIENT_MODEL_IDS now carries a real
+  // Anthropic id, so the const is live and the route reads it.
+  forwardsFromClient: ['model', 'tools'],
+  // 'openai', NOT 'anthropic' — and this is the counter-intuitive one, so read
+  // `toAnthropicTools` above before changing it. This route CONVERTS the array
+  // server-side: it reads `raw.function.name` and `raw.function.parameters` off
+  // each entry, i.e. the OpenAI envelope, and rebuilds it as
+  // `{ name, description, input_schema }`. Sending Anthropic's own shape from the
+  // client would leave `.function` undefined, so every tool would go upstream
+  // with a blank name and an empty schema. The envelope belongs to the ROUTE's
+  // request contract, not to the provider it happens to POST to — which is
+  // exactly why this is declared here rather than derived from `streamFormat`.
+  clientToolFormat: 'openai',
 };
 
 export default anthropic;

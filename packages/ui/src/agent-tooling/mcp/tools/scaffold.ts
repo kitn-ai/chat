@@ -625,45 +625,53 @@ function bearsCards(archetype: Archetype): boolean {
  * directly. Emitting the wrong one is not a style problem — the provider 400s, or
  * (worse) ignores the tool and the card silently never arrives.
  *
- * Keyed on `streamFormat`, which is a field the catalog already declares, rather
- * than on an integration id list that would go stale the day one is added. The map
- * is EXHAUSTIVE over the enum and `native` maps to `null` on purpose: "the route
- * speaks its provider's own protocol" does not answer which tool envelope that
- * provider takes, and guessing OpenAI there is how an Anthropic route would end up
- * being handed `{ type: 'function', … }`.
+ * READ OFF THE INTEGRATION, not inferred. This used to be a table keyed on
+ * `streamFormat`, and that table was wrong in a way only `anthropic` made
+ * visible: `streamFormat` describes the RESPONSE stream, the tool envelope is a
+ * REQUEST concern, and the two only looked correlated while every integration
+ * that forwarded tools happened to be `openai-sse`. `anthropic` is
+ * `streamFormat: 'native'`, the table mapped `native` to `null`, and a null here
+ * means a scaffold that hands the model a tools array with no card in it.
  *
- * `null` means the scaffold emits no card tools, and `cardRoundTripCheck` in
- * scripts/verify-scaffold-compiles.mjs turns that into a RED gate for any
- * integration that forwards a tools array, so a new host cannot quietly opt itself
- * out of the card contract by existing. `scaffold.test.ts` asserts the same thing
- * against the real catalog, so it is caught by `npm test` too, with no build.
+ * Nor is the fix "key on the provider instead". Anthropic's emitted route
+ * CONVERTS the array itself — `toAnthropicTools` reads `raw.function.name` and
+ * `raw.function.parameters` — so it wants the OPENAI envelope even though it
+ * POSTs to api.anthropic.com. Only the route knows its own request contract, so
+ * the integration declares it (`clientToolFormat`), exactly as it already
+ * declares `forwardsFromClient`.
  *
- * WHICH ROWS ARE REACHABLE TODAY, SAID OUT LOUD SO THE TABLE IS NOT READ AS
- * PROVEN COVERAGE. Only `openai-sse` is: `openrouter` and `ollama` are the two
- * integrations that forward a tools array, and both are `openai-sse`. The
- * `ai-sdk` row is written and NOT exercised, because `vercel-ai-sdk` declares
- * `forwardsFromClient: []` — its route builds tools server-side — so the emit
- * contract's "emit the jsonschema form for the Vercel AI SDK" cannot be satisfied
- * from the client side until that integration forwards them. The `anthropic`
- * value is unreachable for the same shape of reason: no catalog integration
- * speaks Anthropic's wire yet. Both rows are a lookup, not a tested branch.
+ * `null` here means the integration does not forward a tools array at all, which
+ * is the honest state for langgraph/mastra/pi/vercel-ai-sdk (their routes own the
+ * tool list server-side). It can no longer mean "forwards tools, envelope
+ * unknown": `IntegrationSchema` rejects that combination at the catalog boundary,
+ * `assertCardToolFormat` below refuses to emit it, and `scaffold.test.ts` +
+ * `cardRoundTripCheck` both assert it against the real registry.
  */
-const CARD_TOOL_PROVIDERS: Record<Integration['streamFormat'], 'openai' | 'anthropic' | 'jsonschema' | null> = {
-  // Every route that forwards a tools array today (openrouter, ollama) POSTs it to
-  // an OpenAI-compatible /chat/completions verbatim — read their handlers, not
-  // assumed: both destructure `tools` out of the request and put it straight into
-  // the upstream body.
-  'openai-sse': 'openai',
-  // The Vercel AI SDK wants the schema, not a provider envelope:
-  // `tool({ inputSchema: jsonSchema(def.schema) })`.
-  'ai-sdk': 'jsonschema',
-  // The provider's own protocol. Which tool envelope that is depends on WHICH
-  // provider, and this field does not say.
-  native: null,
-};
-
 function cardToolProviderFor(integration: Integration): 'openai' | 'anthropic' | 'jsonschema' | null {
-  return CARD_TOOL_PROVIDERS[integration.streamFormat] ?? null;
+  return integration.clientToolFormat ?? null;
+}
+
+/**
+ * The emit-time hard stop.
+ *
+ * The schema refinement catches a malformed catalog entry, but `Integration`
+ * values also arrive from tests and from callers that build one by hand, so the
+ * emit path refuses rather than trusting that. Throwing here is the point: the
+ * failure this guards is SILENT by nature — a tools array with no card tool in it
+ * produces a model that is never told a card exists, so it never emits one, and
+ * nothing anywhere says why. A thrown error naming the integration is strictly
+ * better than a scaffold that looks fine and renders nothing.
+ */
+function assertCardToolFormat(integration: Integration): 'openai' | 'anthropic' | 'jsonschema' {
+  const provider = cardToolProviderFor(integration);
+  if (provider === null) {
+    throw new Error(
+      `Integration '${integration.id}' forwards a 'tools' array but declares no clientToolFormat, so the ` +
+        `scaffold would offer the model no card tool at all. Set clientToolFormat on the integration to the ` +
+        `envelope its route expects: 'openai' | 'anthropic' | 'jsonschema'.`,
+    );
+  }
+  return provider;
 }
 
 /**
@@ -806,11 +814,33 @@ const HTML_CHAT_MESSAGE_TYPE = [
 
 // ── SCAF-8: per-integration default model ids ─────────────────────────────────
 
-/** Default model id per integration that forwards one. Anything else falls back
- *  to a generic OpenAI-compatible id, which is safe: a route that forwards the
- *  client's model is by definition pointed at an OpenAI-compatible endpoint. */
+/**
+ * Default model id per integration whose route forwards one.
+ *
+ * THE ID IS HOST-SPECIFIC, and there is no such thing as a safe generic one.
+ * This used to fall through to `'openai/gpt-4o-mini'` for anything unlisted, on
+ * the reasoning that "a route that forwards the client's model is by definition
+ * pointed at an OpenAI-compatible endpoint". That was false twice over the
+ * moment a first-party provider landed: `openai/gpt-4o-mini` is an OPENROUTER
+ * slug — api.openai.com 404s the prefixed form, and api.anthropic.com rejects it
+ * outright — so a scaffold generated for the provider it names could not run
+ * against it.
+ *
+ * tsc cannot see any of this; every one of those strings compiles. The guard is
+ * `scaffold.test.ts` → "the emitted model id is valid for the host its route
+ * POSTs to", which reads the id out of the EMITTED scaffold and the host out of
+ * the route source, so a new integration cannot reintroduce a wrong one.
+ */
 const CLIENT_MODEL_IDS: Record<string, string> = {
+  // Vendor-prefixed `vendor/model`: OpenRouter's own id space, and the ONLY one
+  // of the three where the prefix belongs.
   openrouter: 'openai/gpt-4o-mini',
+  // No vendor prefix. This is what the route already pinned, so moving the knob
+  // to the client changes the wire not at all.
+  openai: 'gpt-4o-mini',
+  // Anthropic's id space. Matches what the route pinned; 'claude-sonnet-5' and
+  // 'claude-haiku-4-5' are the cheaper swaps (see this integration's runNote).
+  anthropic: 'claude-opus-5',
 };
 
 /**
@@ -826,7 +856,19 @@ const CLIENT_MODEL_IDS: Record<string, string> = {
  */
 function defaultModelFor(integration: Integration): string | undefined {
   if (!integration.forwardsFromClient.includes('model')) return undefined;
-  return CLIENT_MODEL_IDS[integration.id] ?? 'openai/gpt-4o-mini';
+  const id = CLIENT_MODEL_IDS[integration.id];
+  // No fallback, deliberately — the old `?? 'openai/gpt-4o-mini'` is what let a
+  // first-party provider inherit an OpenRouter slug and emit a scaffold that
+  // 404s on its own host. A model id is a per-host fact; an integration that
+  // forwards one has to say which.
+  if (id === undefined) {
+    throw new Error(
+      `Integration '${integration.id}' forwards the client's 'model' but has no CLIENT_MODEL_IDS entry, so the ` +
+        `scaffold would emit a model id that is not valid for the host its route POSTs to. Add one in ` +
+        `mcp/tools/scaffold.ts.`,
+    );
+  }
+  return id;
 }
 
 /**
@@ -1237,7 +1279,7 @@ function htmlModule(ctx: RenderCtx, archetype: Archetype): string {
   // `runTool` is a function declaration rather than something wedged into init().
   const modelLines = ctx.defaultModel
     ? [
-        `// SCAF-8: change this model id to any provider/model string you want to use.`,
+        `// SCAF-8: change this model id to another id THIS PROVIDER accepts.`,
         `const model = '${ctx.defaultModel}';`,
         ``,
       ]
@@ -1495,7 +1537,7 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
 
   // SCAF-8: model const for integrations that forward model to the upstream provider.
   const modelInit = defaultModel
-    ? `  // SCAF-8: change this to any provider/model string you want to use.\n  const model = '${defaultModel}';`
+    ? `  // SCAF-8: change this model id to another id THIS PROVIDER accepts.\n  const model = '${defaultModel}';`
     : '';
 
   const toolsInit = emitTools ? toolSchemaLines('  ', ctx.cardProvider).join('\n') : '';
@@ -1792,7 +1834,7 @@ function renderVue(archetype: Archetype, ctx: RenderCtx): string {
   // SCAF-8: model const at module scope so onSubmit closes over it.
   const modelInit = defaultModel
     ? [
-        `// SCAF-8: change this to any provider/model string you want to use.`,
+        `// SCAF-8: change this model id to another id THIS PROVIDER accepts.`,
         `const model = '${defaultModel}';`,
       ]
     : [];
@@ -1991,7 +2033,7 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
   // SCAF-8: model const at script scope so onSubmit closes over it.
   const modelInit = defaultModel
     ? [
-        `  // SCAF-8: change this to any provider/model string you want to use.`,
+        `  // SCAF-8: change this model id to another id THIS PROVIDER accepts.`,
         `  const model = '${defaultModel}';`,
       ]
     : [];
@@ -2219,7 +2261,7 @@ function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
       : '';
 
   const modelInit = defaultModel
-    ? `  // SCAF-8: change this to any provider/model string you want to use.\n  const model = '${defaultModel}';`
+    ? `  // SCAF-8: change this model id to another id THIS PROVIDER accepts.\n  const model = '${defaultModel}';`
     : '';
 
   const toolsInit = emitTools ? toolSchemaLines('  ', ctx.cardProvider).join('\n') : '';
@@ -2445,7 +2487,7 @@ function renderAngular(archetype: Archetype, ctx: RenderCtx): string {
   // `function` declaration, and the methods below close over all three.
   const modelInit = defaultModel
     ? [
-        `// SCAF-8: change this to any provider/model string you want to use.`,
+        `// SCAF-8: change this model id to another id THIS PROVIDER accepts.`,
         `const model = '${defaultModel}';`,
         ``,
       ]
@@ -2738,7 +2780,7 @@ function renderSolid(archetype: Archetype, ctx: RenderCtx): string {
 
   const modelInit = defaultModel
     ? [
-        `  // SCAF-8: change this to any provider/model string you want to use.`,
+        `  // SCAF-8: change this model id to another id THIS PROVIDER accepts.`,
         `  const model = '${defaultModel}';`,
       ]
     : [];
@@ -3910,7 +3952,13 @@ function compose(
   // is still wired to the client (cardTypes/cardSchemas) while the model is not
   // offered a card tool — which is the honest state for langgraph/mastra/pi, whose
   // routes own their tool list server-side.
-  const cardProvider = emitCards && emitTools ? cardToolProviderFor(integration) : null;
+  // `assertCardToolFormat`, not `cardToolProviderFor`: reaching here with both
+  // flags true means a tools array IS going into the request body, so an
+  // undeclared envelope is a scaffold that silently ships no card tool. Fail
+  // loudly instead. (`cardEmitPlan` keeps returning null for the same case on
+  // purpose — it is a planning function the guards read, and its job is to let
+  // them report the gap in their own words rather than blow up first.)
+  const cardProvider = emitCards && emitTools ? assertCardToolFormat(integration) : null;
   const frontend = renderFrontend(
     framework,
     archetype,
