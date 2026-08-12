@@ -261,11 +261,17 @@ export function useDismiss(opts: UseDismissOptions) {
       const inside = opts.refs().some((el) => el && el.contains(target));
       if (!inside) opts.onDismiss('outside');
     };
-    document.addEventListener('keydown', onKey);
-    document.addEventListener('pointerdown', onPointer, true);
+    // Captured at SETUP and closed over, never re-resolved as a global inside
+    // `onCleanup`: cleanup can run after the host removed the DOM globals (a
+    // `kai-*` release is deferred one microtask past detachment, so an
+    // environment teardown gets in between), and a bare `document` there throws.
+    // See tests/components/teardown-without-dom-globals.test.tsx.
+    const doc = document;
+    doc.addEventListener('keydown', onKey);
+    doc.addEventListener('pointerdown', onPointer, true);
     onCleanup(() => {
-      document.removeEventListener('keydown', onKey);
-      document.removeEventListener('pointerdown', onPointer, true);
+      doc.removeEventListener('keydown', onKey);
+      doc.removeEventListener('pointerdown', onPointer, true);
     });
   });
 }

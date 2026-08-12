@@ -388,6 +388,12 @@ export function ToastRegion(props: ToastRegionProps) {
   createEffect(() => {
     const t = props.target;
     if (!t || typeof window === 'undefined') { setAnchor(null); return; }
+    // Captured at SETUP and closed over, never re-resolved as a global inside
+    // `onCleanup`: cleanup can run after the host removed the DOM globals (a
+    // `kai-*` release is deferred one microtask past detachment, so an
+    // environment teardown gets in between), and a bare `window` there throws.
+    // See tests/components/teardown-without-dom-globals.test.tsx.
+    const win = window;
     const update = () => {
       const r = t.getBoundingClientRect();
       setAnchor({ top: r.top, left: r.left, right: r.right, bottom: r.bottom, width: r.width });
@@ -395,12 +401,12 @@ export function ToastRegion(props: ToastRegionProps) {
     update();
     const ro = new ResizeObserver(update);
     ro.observe(t);
-    window.addEventListener('scroll', update, true);
-    window.addEventListener('resize', update);
+    win.addEventListener('scroll', update, true);
+    win.addEventListener('resize', update);
     onCleanup(() => {
       ro.disconnect();
-      window.removeEventListener('scroll', update, true);
-      window.removeEventListener('resize', update);
+      win.removeEventListener('scroll', update, true);
+      win.removeEventListener('resize', update);
     });
   });
 
