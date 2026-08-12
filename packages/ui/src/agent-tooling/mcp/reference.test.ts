@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { cardSchemas, cardSchemaNames, cardTools } from '@kitn.ai/ui/schemas';
+import { BUILTIN_CARD_TAGS, cardSchemas, cardSchemaNames, cardTools } from '@kitn.ai/ui/schemas';
 import type { AnthropicToolDef, JsonSchemaToolDef, OpenAIToolDef } from '@kitn.ai/ui/schemas';
 import { reference } from './tools/reference';
 import { cardTagForType, cardHostTags } from './manifest';
@@ -197,9 +197,14 @@ describe('component_reference — card contract', () => {
     }
   });
 
-  // The eighth-card-type guard. `cardTagForType` derives the association from
-  // `cardSchemaNames` x the manifest's tag list; this is what makes the derivation
-  // fail LOUDLY rather than silently dropping a card whose tag breaks the convention.
+  // The eighth-card-type guard, and BOTH halves of it matter.
+  //
+  // `cardTagForType` reads `BUILTIN_CARD_TAGS` (the kit's own map, via
+  // @kitn.ai/ui/schemas) and drops any entry the element manifest does not register,
+  // so there are two ways an eighth card type can go wrong and this asserts against
+  // each: the type is missing from the map (`toBeDefined` fails), or the map names a
+  // tag nobody registered (`toContain` fails). Either way it is a red test rather
+  // than a card that silently loses its schema in the reference.
   it('resolves every built-in card type to exactly one real element tag', async () => {
     const all = (await textFor({ name: 'list' })).split('\n').map((l) => l.trim());
     for (const type of cardSchemaNames) {
@@ -207,9 +212,21 @@ describe('component_reference — card contract', () => {
       expect(tag, `card type "${type}" has no element tag`).toBeDefined();
       expect(all, `${tag!} is not a registered element`).toContain(tag!);
     }
-    // The one built-in whose tag is NOT `kai-<type>`; if the derivation ever
-    // degrades to string concatenation this is what catches it.
+    // The one built-in whose tag is NOT `kai-<type>`. It is spelled out because it is
+    // the entry that made the old convention-based derivation a guess, and because it
+    // is what catches a regression back to string concatenation.
     expect(cardTagForType('link')).toBe('kai-link-preview');
     expect(cardTagForType('not-a-card')).toBeUndefined();
+  });
+
+  // The map is the authority, not this file's idea of it. Asserting the exact seven
+  // keys would just be a second copy of `BUILTIN_CARD_TAGS`; what has to hold is that
+  // every type with a SCHEMA has a tag in it, since those are the ones the reference
+  // serves a tool definition for.
+  it('reads BUILTIN_CARD_TAGS rather than re-deriving a map of its own', () => {
+    for (const type of cardSchemaNames) {
+      expect(BUILTIN_CARD_TAGS[type], `${type} is missing from BUILTIN_CARD_TAGS`).toBeDefined();
+      expect(cardTagForType(type)).toBe(BUILTIN_CARD_TAGS[type]);
+    }
   });
 });

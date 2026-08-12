@@ -23,18 +23,40 @@
 // SERVER-SAFE, DELIBERATELY
 // -------------------------
 // No DOM, no Solid, no `fetch`. Everything reached from here is data or plain
-// functions; the imports that touch the component layer (`CardComponentMap`,
-// `CardTagMap`, used by ./registry) are TYPE imports and erase. This entry is meant to
-// be imported by a backend route that hands tool definitions to a model, so anything
-// that touches a browser global would defeat its purpose. `verify:ssr` asserts it, by
-// importing the BUILT entry under the `node` condition in its own child process.
+// functions; the one import that touches the component layer (`CardComponentMap`, used
+// by ./registry) is a TYPE import and erases. This entry is meant to be imported by a
+// backend route that hands tool definitions to a model, so anything that touches a
+// browser global would defeat its purpose. `verify:ssr` asserts it, by importing the
+// BUILT entry under the `node` condition in its own child process.
+//
+// WHAT `verify:ssr` DOES NOT CATCH, MEASURED
+// ------------------------------------------
+// It checks the BUILT bundle, so it only sees what survives tree-shaking — and
+// rollup is good enough here that it does not see the mistake you would actually
+// make. Measured, not assumed: pointing the `BUILTIN_CARD_TAGS` re-export below at
+// src/primitives/card-registry.TSX instead of card-tags.ts produces a byte-identical
+// dist/schemas.js with zero `solid-js` references, and imports clean under `node`.
+// Rollup compiles the whole Solid component tree (build time 0.2s -> 3.9s) and then
+// discards all of it, because only the tag map is reachable.
+//
+// So the `.ts` split is NOT holding a runtime guard up, and must not be described as
+// if it were. What it buys is that this entry's server-safety stops depending on
+// tree-shaking staying perfect: one module-scope side effect anywhere under
+// components/ and the discarded tree stops being discardable. Removing the dependency
+// beats relying on it being elided.
 //
 // WHAT IT COSTS, AND WHERE
 // ------------------------
 // dist/schemas.js, measured on this tree, not recalled:
 //
 //   42,658 B min / 11,762 B gzip   before ./registry landed
-//   53,656 B min / 14,667 B gzip   now  (+10,998 B / +2,905 B gzip)
+//   53,658 B min / 14,669 B gzip   after ./registry  (+11,000 B / +2,907 B gzip)
+//   53,864 B min / 14,739 B gzip   now, with BUILTIN_CARD_TAGS  (+206 B / +70 B gzip)
+//
+// The middle row is this comment's previous "53,656 / 14,667", re-measured rather than
+// carried forward; the 2-byte drift is what a claim costs when it is copied instead of
+// taken again. The last row is the tag map below, measured by building this entry with
+// and without that one export line.
 //
 // The `18,160 B / 5,800 B` this comment used to claim was measured at 0.20.1, before
 // tool-defs and provider-subsets were added to the barrel, and had been stale ever
@@ -212,6 +234,29 @@ export type { CardRegistry, CardRegistrySpec, CustomCardSpec, IncompletePolicy }
 // `registry.validate()` is the ergonomic form; this is the same function underneath.
 export { cardValidationMessage, validateCardData } from '../primitives/card-validate-cards';
 export type { CardValidationIssue, CardValidationReport, CardValidationTier } from '../primitives/card-validate-cards';
+
+// `CardEnvelope.type` -> the `kai-*` element that renders it — exported because a
+// server-side reader needed it and was inventing its own answer instead.
+//
+// src/agent-tooling/mcp/manifest.ts used to RE-DERIVE this map from the element
+// manifest by convention (`kai-<type>`, else the single `kai-<type>-*`). The
+// derivation was correct — it even got `link` -> `kai-link-preview` right, via the
+// prefix branch — but it was a second copy of a fact the repo already held, kept
+// honest only by a test. It re-derived because the authoritative map shared a module
+// with `BUILTIN_CARD_COMPONENTS`, which is nothing but Solid, and the MCP is a
+// Node/no-DOM project (tsconfig.mcp.json: `lib: ["ESNext"]`, no `jsx` — giving it one
+// measures 0 errors -> 1364). src/primitives/card-tags.ts is that data on its own, so
+// the map is now readable from source by anything, with or without a DOM.
+//
+// See "WHAT `verify:ssr` DOES NOT CATCH" above before describing the split as a
+// bundle-safety fix: it is a dependency-graph fix, and the bundle is identical either
+// way today.
+//
+// `mergeCardTags` is deliberately NOT re-exported here: merging a consumer's overrides
+// is a rendering concern, it already ships from the main entry, and this one is for
+// routes.
+export { BUILTIN_CARD_TAGS } from '../primitives/card-tags';
+export type { CardTagMap } from '../primitives/card-tags';
 
 // The two provider subsets, exported rather than kept private, because a developer
 // registering a CUSTOM card schema in Phase 2 needs the same check we run on ours,

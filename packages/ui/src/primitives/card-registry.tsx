@@ -4,6 +4,15 @@
 //   - CardTagMap drives the <kai-cards> web component (child kai-* elements).
 // Built-ins cover the 7 contract card types; consumers extend/override via a `types`
 // prop (merged OVER the built-ins). kai-card (bare shell) is intentionally NOT a target.
+//
+// THE TAG HALF NOW LIVES IN ./card-tags — AND MUST STAY THERE.
+// `BUILTIN_CARD_TAGS` / `mergeCardTags` / `CardTagMap` are plain data with no Solid in
+// them, but while they shared this module with `BUILTIN_CARD_COMPONENTS` no Node/no-DOM
+// project could import them AS SOURCE, and the `kai` MCP re-derived the map by
+// convention as a result. ./card-tags.ts is that data on its own so
+// `@kitn.ai/ui/schemas` can export it; the re-export below keeps every existing
+// importer of this module working unchanged. Do not move them back — see the header
+// of ./card-tags.ts for the measured cost of the alternative (0 -> 1364 tsc errors).
 import type { Component } from 'solid-js';
 import type { CardEnvelope, CardHost } from './card-contract';
 import { Form } from '../components/form';
@@ -20,18 +29,11 @@ import { ArtifactCard, type ArtifactCardData } from '../components/artifact-card
 export type CardComponent = Component<{ envelope: CardEnvelope; host?: CardHost }>;
 export type CardComponentMap = Record<string, CardComponent>;
 
-/** Web-component layer: envelope type → kai-* tag name. */
-export type CardTagMap = Record<string, string>;
-
-export const BUILTIN_CARD_TAGS: CardTagMap = {
-  form: 'kai-form',
-  confirm: 'kai-confirm',
-  'tasks': 'kai-tasks',
-  choice: 'kai-choice',
-  link: 'kai-link-preview',
-  embed: 'kai-embed',
-  artifact: 'kai-artifact',
-};
+// The tag half, re-exported so this module's surface is unchanged. Authored in
+// ./card-tags.ts because that file has no Solid below it and can therefore be read
+// from a Node process; this one cannot.
+export { BUILTIN_CARD_TAGS, mergeCardTags } from './card-tags';
+export type { CardTagMap } from './card-tags';
 
 export const BUILTIN_CARD_COMPONENTS: CardComponentMap = {
   form: (p) => (
@@ -68,8 +70,4 @@ export const BUILTIN_CARD_COMPONENTS: CardComponentMap = {
 /** Built-ins with the consumer's overrides merged on top (consumer wins). */
 export function mergeCardComponents(types?: CardComponentMap): CardComponentMap {
   return types ? { ...BUILTIN_CARD_COMPONENTS, ...types } : { ...BUILTIN_CARD_COMPONENTS };
-}
-
-export function mergeCardTags(types?: CardTagMap): CardTagMap {
-  return types ? { ...BUILTIN_CARD_TAGS, ...types } : { ...BUILTIN_CARD_TAGS };
 }
