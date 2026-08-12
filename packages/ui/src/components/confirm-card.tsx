@@ -21,29 +21,33 @@ import { useCardHost } from '../primitives/card-host';
 import { AlertTriangle, Check, X } from 'lucide-solid';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Types (confirm.schema.json) — see src/primitives/card-schemas/confirm.schema.json
+// Types (confirm.schema.json) — AUTHORED IN ../primitives/card-data-types.ts.
+//
+// They used to be declared here, and moving them is the fourth instance of the
+// split card-tags.ts and card-component-types.ts already made twice: a type
+// import still has to RESOLVE, so while these lived in a `.tsx` no Node/no-DOM
+// project could name them (TS6142), which meant `@kitn.ai/ui/schemas` could not
+// re-export them and a TypeScript backend building a card envelope got
+// `data: unknown` while Python and Go read the full shape out of the published
+// JSON Schemas. They are also `type` aliases rather than `interface`s now, which
+// is what makes `el.data = myConfirmCardData` compile — see that file's header
+// for both measurements. Re-exported here, so this module's surface is unchanged.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type ConfirmActionStyle = 'primary' | 'default' | 'destructive';
-export type ConfirmTone = 'default' | 'warning' | 'danger';
+import type {
+  ConfirmAction,
+  ConfirmActionStyle,
+  ConfirmCardData,
+  ConfirmTone,
+} from '../primitives/card-data-types';
 
-export interface ConfirmAction {
-  id: string;
-  label: string;
-  style?: ConfirmActionStyle;
-  payload?: unknown;
-  default?: boolean;
-}
-
-export interface ConfirmCardData {
-  heading?: string;
-  body?: string;
-  tone?: ConfirmTone;
-  actions: ConfirmAction[]; // 1..4
-  dismissible?: boolean;
-}
-
-export type ConfirmCardEnvelope = CardEnvelope<'confirm', ConfirmCardData>;
+export type {
+  ConfirmAction,
+  ConfirmActionStyle,
+  ConfirmCardData,
+  ConfirmCardEnvelope,
+  ConfirmTone,
+} from '../primitives/card-data-types';
 
 export const CONFIRM_CARD_TYPE = 'confirm' as const;
 

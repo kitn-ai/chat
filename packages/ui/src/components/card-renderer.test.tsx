@@ -16,6 +16,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup } from '@solidjs/testing-library';
 import { CardRenderer } from './card-renderer';
+import { cardFromToolCall } from '../schemas/from-tool-call';
 import { CardProvider } from '../primitives/card-host';
 import type { CardContext, CardEnvelope } from '../primitives/card-contract';
 
@@ -144,6 +145,63 @@ describe('CardRenderer: the cases the cards themselves do not handle', () => {
     const { container, onError } = mount({ tab: 'preview' }, { type: 'artifact' });
     expect(onError).not.toHaveBeenCalled();
     expect(diagnostic(container)).toBeNull();
+  });
+});
+
+/**
+ * The other half of `isCardTool`'s rule, joined to the half that states it.
+ *
+ * `schemas/from-tool-call.ts` accepts ANY `kai_`-prefixed name on purpose —
+ * "generate narrowly, accept broadly, let the renderer be the layer that says a type
+ * is unknown" — and pays for that permissiveness with a promise it makes in prose:
+ * "a genuinely unknown type is named on screen by the fallback". Until this test
+ * existed the two halves lived in two files joined by a COMMENT (from-tool-call.test.ts
+ * cites `card-renderer.test.tsx:38` by line number), and a citation is not a check:
+ * the accept side could keep passing while the surface side regressed to a blank, and
+ * nothing would go red.
+ *
+ * Worth stating what was measured on 2026-08-12, because the opposite was believed:
+ * the surface side WORKS today, and did before this test. `cardFromToolCall('kai_bogus',
+ * …)` renders `CardFallback` naming the type through every host — `<kai-chat>`,
+ * `<kai-thread>`, `<kai-message>` and `<kai-cards>` — each with exactly one
+ * `[data-card-fallback]` carrying `role="alert"` and the text "Unsupported card type:
+ * bogus". The belief that it rendered NOTHING came from misreading the header of
+ * `tests/agent-tooling/emitted-card-path.live.test.ts`, which says that pointing its
+ * fixture at an unregistered type "leaves the text assertion GREEN and fails only on
+ * [data-action-id]". That is a true statement about THAT FILE'S assertion scoping —
+ * the tool panel echoes the model's arguments a few inches up the thread, so an
+ * unscoped text match cannot tell a drawn card from an undrawn one — and it says
+ * nothing about whether a fallback drew. It did.
+ */
+describe('CardRenderer: an unknown type from a TOOL CALL surfaces', () => {
+  it('names the type on screen and emits one error, from a real cardFromToolCall envelope', () => {
+    // Built by the function a consumer's tool loop actually calls, NOT hand-written,
+    // so this fails if `cardFromToolCall` ever starts gating on the built-ins (which
+    // would send the call to `runTool` and make the card vanish silently instead).
+    const fromTool = cardFromToolCall('kai_bogus', { anything: 1 }, { id: 'call_abc' });
+    expect(fromTool).not.toBeNull();
+    expect(fromTool!.type).toBe('bogus');
+
+    const onError = vi.fn();
+    const { container } = render(() => (
+      <CardProvider context={CTX} policy={{ onError: (id, m) => onError(id, m) }}>
+        <CardRenderer envelope={fromTool!} />
+      </CardProvider>
+    ));
+
+    // SURFACED, not merely present: the type is named in the visible text and the
+    // node is an alert, so a screen reader gets it too. Asserting only that some
+    // node exists would pass on empty chrome, which is the failure `artifact` had.
+    const fb = container.querySelector('[data-card-fallback]');
+    expect(fb).not.toBeNull();
+    expect(fb).toHaveAttribute('role', 'alert');
+    expect(fb).toHaveTextContent('Unsupported card type: bogus');
+    expect(diagnostic(container)).toBeNull(); // unknown TYPE, not invalid DATA
+
+    // And the id is the provider's tool_call_id verbatim, so the app can attribute
+    // the diagnostic back to the call that produced it.
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledWith('call_abc', 'Unsupported card type: bogus');
   });
 });
 

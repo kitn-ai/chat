@@ -453,7 +453,7 @@ export interface KaiChoiceElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
   /** The choice definition (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { prompt, options:[…], allowOther?, submitLabel? }`. Import `ChoiceCardData` from `@kitn.ai/ui` for the full shape. */
-  data?: Record<string, unknown>;
+  data?: { prompt?: string; options: { id: string; label: string; description?: string; media?: { image?: string; imageAlt?: string; icon?: string }; meta?: string; recommended?: boolean; disabled?: boolean; payload?: unknown }[]; allowOther?: boolean | { label?: string; placeholder?: string }; submitLabel?: string; dismissible?: boolean };
   /** Stable card id correlating every emitted CardEvent. Attribute: `card-id`. */
   cardId?: string;
   /** Heading rendered in the card chrome (= CardEnvelope.title). Attribute: `heading`. */
@@ -595,7 +595,7 @@ export interface KaiConfirmElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
   /** The confirm definition (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { body, tone, actions:[…] }`. Import `ConfirmCardData` from `@kitn.ai/ui` for the full shape. */
-  data?: Record<string, unknown>;
+  data?: { heading?: string; body?: string; tone?: "default" | "warning" | "danger"; actions: { id: string; label: string; style?: "default" | "destructive" | "primary"; payload?: unknown; default?: boolean }[]; dismissible?: boolean };
   /** Stable card id correlating every emitted CardEvent. Attribute: `card-id`. */
   cardId?: string;
   /** Heading rendered in the card chrome (= CardEnvelope.title). Attribute: `heading`. */
@@ -750,8 +750,8 @@ export interface KaiFileUploadElement extends HTMLElement {
 export interface KaiFormElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
-  /** The form definition: a JSON Schema (`type:'object'`) + `x-kai-*` UI hints (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { type:'object', properties:{…} }`. Import the `FormDefinition` type from `@kitn.ai/ui` for the full shape (it is self-referential, so the element types it loosely). */
-  data?: Record<string, unknown>;
+  /** The form definition: a JSON Schema (`type:'object'`) + `x-kai-*` UI hints (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { type:'object', properties:{…} }`. Import the `FormDefinition` type from `@kitn.ai/ui` for the full shape. It IS self-referential (`FormField.properties` is another `FormField` map), and the generated `element-types.d.ts` inlines every named type, so the shipped declaration bottoms out in a `Record<string, unknown>` placeholder one level down rather than carrying the recursion. That is why `FormDefinition` is a `type` alias: an interface gets no implicit index signature, so it would not be assignable to that placeholder. */
+  data?: { type: "object"; title?: string; description?: string; required?: string[]; properties: Record<string, { type: "string" | "number" | "boolean" | "object" | "integer" | "array"; title?: string; description?: string; default?: unknown; enum?: unknown[]; format?: "email" | "uri" | "url" | "date" | "date-time" | "time"; minimum?: number; maximum?: number; minLength?: number; maxLength?: number; pattern?: string; minItems?: number; maxItems?: number; items?: Record<string, unknown> | { enum: unknown[] }; properties?: Record<string, Record<string, unknown>>; required?: string[]; readOnly?: boolean; "x-kai-widget"?: "textarea" | "slider" | "rating" | "radio" | "select" | "checkbox" | "password" | "switch"; "x-kai-placeholder"?: string; "x-kai-step"?: number }>; "x-kai-order"?: string[]; "x-kai-inlineMax"?: number; "x-kai-submitLabel"?: string; "x-kai-dismissible"?: boolean; "x-kai-actions"?: { id: string; label: string; variant?: "default" | "ghost" | "outline" }[] };
   /** Stable card id correlating every emitted CardEvent. Attribute: `card-id`. */
   cardId?: string;
   /** Heading rendered in the card chrome (= CardEnvelope.title). Attribute: `heading`. */
@@ -1455,7 +1455,7 @@ export interface KaiTasksElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
   /** The tasks definition (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { tasks:[…], selectAll, confirmLabel, … }`. Import `TasksCardData` from `@kitn.ai/ui` for the full shape. */
-  data?: Record<string, unknown>;
+  data?: { mode?: "select" | "progress"; heading?: string; tasks: { id: string; label: string; description?: string; checked?: boolean; disabled?: boolean }[]; selectAll?: boolean; confirmLabel?: string; allowEmpty?: boolean; min?: number; max?: number; dismissible?: boolean };
   /** Stable card id correlating every emitted CardEvent. Attribute: `card-id`. */
   cardId?: string;
   /** Heading rendered in the card chrome (= CardEnvelope.title). Attribute: `heading`. */
@@ -2170,7 +2170,7 @@ export interface KaiChoiceElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
   /** The choice definition (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { prompt, options:[…], allowOther?, submitLabel? }`. Import `ChoiceCardData` from `@kitn.ai/ui` for the full shape. */
-  data?: Record<string, unknown>;
+  data?: { prompt?: string; options: { id: string; label: string; description?: string; media?: { image?: string; imageAlt?: string; icon?: string }; meta?: string; recommended?: boolean; disabled?: boolean; payload?: unknown }[]; allowOther?: boolean | { label?: string; placeholder?: string }; submitLabel?: string; dismissible?: boolean };
   /** Stable card id correlating every emitted CardEvent. Attribute: `card-id`. */
   cardId?: string;
   /** Heading rendered in the card chrome (= CardEnvelope.title). Attribute: `heading`. */
@@ -2276,7 +2276,7 @@ export interface KaiConfirmElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
   /** The confirm definition (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { body, tone, actions:[…] }`. Import `ConfirmCardData` from `@kitn.ai/ui` for the full shape. */
-  data?: Record<string, unknown>;
+  data?: { heading?: string; body?: string; tone?: "default" | "warning" | "danger"; actions: { id: string; label: string; style?: "default" | "destructive" | "primary"; payload?: unknown; default?: boolean }[]; dismissible?: boolean };
   /** Stable card id correlating every emitted CardEvent. Attribute: `card-id`. */
   cardId?: string;
   /** Heading rendered in the card chrome (= CardEnvelope.title). Attribute: `heading`. */
@@ -2401,8 +2401,8 @@ export interface KaiFileUploadElementProps {
 export interface KaiFormElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
-  /** The form definition: a JSON Schema (`type:'object'`) + `x-kai-*` UI hints (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { type:'object', properties:{…} }`. Import the `FormDefinition` type from `@kitn.ai/ui` for the full shape (it is self-referential, so the element types it loosely). */
-  data?: Record<string, unknown>;
+  /** The form definition: a JSON Schema (`type:'object'`) + `x-kai-*` UI hints (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { type:'object', properties:{…} }`. Import the `FormDefinition` type from `@kitn.ai/ui` for the full shape. It IS self-referential (`FormField.properties` is another `FormField` map), and the generated `element-types.d.ts` inlines every named type, so the shipped declaration bottoms out in a `Record<string, unknown>` placeholder one level down rather than carrying the recursion. That is why `FormDefinition` is a `type` alias: an interface gets no implicit index signature, so it would not be assignable to that placeholder. */
+  data?: { type: "object"; title?: string; description?: string; required?: string[]; properties: Record<string, { type: "string" | "number" | "boolean" | "object" | "integer" | "array"; title?: string; description?: string; default?: unknown; enum?: unknown[]; format?: "email" | "uri" | "url" | "date" | "date-time" | "time"; minimum?: number; maximum?: number; minLength?: number; maxLength?: number; pattern?: string; minItems?: number; maxItems?: number; items?: Record<string, unknown> | { enum: unknown[] }; properties?: Record<string, Record<string, unknown>>; required?: string[]; readOnly?: boolean; "x-kai-widget"?: "textarea" | "slider" | "rating" | "radio" | "select" | "checkbox" | "password" | "switch"; "x-kai-placeholder"?: string; "x-kai-step"?: number }>; "x-kai-order"?: string[]; "x-kai-inlineMax"?: number; "x-kai-submitLabel"?: string; "x-kai-dismissible"?: boolean; "x-kai-actions"?: { id: string; label: string; variant?: "default" | "ghost" | "outline" }[] };
   /** Stable card id correlating every emitted CardEvent. Attribute: `card-id`. */
   cardId?: string;
   /** Heading rendered in the card chrome (= CardEnvelope.title). Attribute: `heading`. */
@@ -3014,7 +3014,7 @@ export interface KaiTasksElementProps {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
   /** The tasks definition (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { tasks:[…], selectAll, confirmLabel, … }`. Import `TasksCardData` from `@kitn.ai/ui` for the full shape. */
-  data?: Record<string, unknown>;
+  data?: { mode?: "select" | "progress"; heading?: string; tasks: { id: string; label: string; description?: string; checked?: boolean; disabled?: boolean }[]; selectAll?: boolean; confirmLabel?: string; allowEmpty?: boolean; min?: number; max?: number; dismissible?: boolean };
   /** Stable card id correlating every emitted CardEvent. Attribute: `card-id`. */
   cardId?: string;
   /** Heading rendered in the card chrome (= CardEnvelope.title). Attribute: `heading`. */
@@ -3351,7 +3351,7 @@ export interface KaiConfirmElementEvents {
 
 export interface KaiContextElementEvents {
   /** Fires when the computed severity level changes (ok → warn → danger or back). `detail.level` is `'ok'`, `'warn'`, or `'danger'`. */
-  onKaiThresholdChange?: (event: CustomEvent<{ level: "ok" | "warn" | "danger" }>) => void;
+  onKaiThresholdChange?: (event: CustomEvent<{ level: "danger" | "ok" | "warn" }>) => void;
 }
 
 export interface KaiConversationsElementEvents {

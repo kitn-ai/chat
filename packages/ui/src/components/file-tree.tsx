@@ -18,28 +18,17 @@ import {
   File as FileIcon,
 } from 'lucide-solid';
 
-/** A single artifact file the tree can show + the preview can load. */
-export interface FileTreeFile {
-  /** Tree label/key. Folders are built from `/`-delimited segments. */
-  path: string;
-  /** Where the preview loads it (CDN/S3/dev-server/API). */
-  url?: string;
-  /** Source for the Code tab. */
-  code?: string;
-  /** Language id for syntax highlighting (e.g. `html`, `css`, `tsx`). */
-  language?: string;
-  /** Kind — drives the icon + whether Code applies. */
-  type?: 'html' | 'pdf' | 'image' | 'other';
-  /** Lines added vs the base. Rendered as a trailing `+N` stat (success hue,
-   *  tabular-nums). Only shown when present; omit for a plain file row. */
-  additions?: number;
-  /** Lines removed vs the base. Rendered as a trailing `-N` stat (error hue). */
-  deletions?: number;
-  /** Change status vs the base. Drives a small trailing status letter in the
-   *  conventional VCS hue (added=green, modified=amber, deleted=red,
-   *  renamed=blue, untracked=muted). Only shown when present. */
-  status?: 'added' | 'modified' | 'deleted' | 'renamed' | 'untracked';
-}
+/** A single artifact file the tree can show + the preview can load.
+ *
+ *  AUTHORED IN ../primitives/card-data-types.ts as `ArtifactCardFile`, and aliased
+ *  here rather than declared, so there is ONE shape and not a copy of one. It has
+ *  to live in that `.ts` because `ArtifactCardData.files` reaches it: a type import
+ *  still has to RESOLVE, and a Node/no-DOM project (tsconfig.mcp.json has no `jsx`
+ *  on purpose) cannot resolve a `.tsx` at all — so leaving this declaration here
+ *  would put TS6142 back on any backend that names an artifact card payload. See
+ *  that file's header. */
+export type { ArtifactCardFile as FileTreeFile } from '../primitives/card-data-types';
+import type { ArtifactCardFile as FileTreeFile } from '../primitives/card-data-types';
 
 /** A change status a file can carry. */
 export type FileStatus = NonNullable<FileTreeFile['status']>;

@@ -44,53 +44,20 @@ import {
 // Types (the JSON-Schema subset kai-form renders) — see form.schema.json.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** A field definition (the JSON Schema subset kai-form renders). */
-export interface FormField {
-  type: 'string' | 'number' | 'integer' | 'boolean' | 'array' | 'object';
-  title?: string;
-  description?: string;
-  default?: unknown;
-  enum?: unknown[];
-  format?: 'email' | 'uri' | 'url' | 'date' | 'date-time' | 'time';
-  minimum?: number;
-  maximum?: number;
-  minLength?: number;
-  maxLength?: number;
-  pattern?: string;
-  minItems?: number;
-  maxItems?: number;
-  items?: FormField | { enum: unknown[] };
-  properties?: Record<string, FormField>;
-  required?: string[];
-  readOnly?: boolean;
-  'x-kai-widget'?:
-    | 'textarea'
-    | 'slider'
-    | 'rating'
-    | 'radio'
-    | 'select'
-    | 'checkbox'
-    | 'password'
-    | 'switch';
-  'x-kai-placeholder'?: string;
-  'x-kai-step'?: number;
-}
+// AUTHORED IN ../primitives/card-data-types.ts. See the note in confirm-card.tsx,
+// or that file's header, for why they left a `.tsx` and why they are `type`
+// aliases. `FormField` in particular CANNOT be an interface: it is
+// self-referential, so the element-types generator can only inline it down to a
+// `Record<string, unknown>` placeholder, and an interface is not assignable to
+// that. Re-exported here unchanged.
 
-/** The form definition = CardEnvelope.data for type:'form'. */
-export interface FormDefinition {
-  type: 'object';
-  title?: string;
-  description?: string;
-  required?: string[];
-  properties: Record<string, FormField>;
-  'x-kai-order'?: string[];
-  'x-kai-inlineMax'?: number;
-  'x-kai-submitLabel'?: string;
-  'x-kai-dismissible'?: boolean;
-  'x-kai-actions'?: { id: string; label: string; variant?: 'default' | 'ghost' | 'outline' }[];
-}
+import type { FormDefinition, FormField } from '../primitives/card-data-types';
 
-export type FormCardEnvelope = CardEnvelope<'form', FormDefinition>;
+export type {
+  FormCardEnvelope,
+  FormDefinition,
+  FormField,
+} from '../primitives/card-data-types';
 
 /** The internal widget identifiers `widgetFor` resolves to. */
 export type WidgetKind =

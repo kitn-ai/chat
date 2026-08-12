@@ -186,6 +186,46 @@ export function isCardSchemaName(name: string): name is CardSchemaName {
 export type { JsonSchema, ValidationResult } from '../primitives/card-validate';
 export type { CardEnvelope } from '../primitives/card-contract';
 
+// The card PAYLOAD types — `CardEnvelope.data`, one per built-in card type — so a
+// TypeScript backend can NAME the shape it is building instead of assembling an
+// `unknown` and hoping.
+//
+// This is the point of the whole entry, restated at the type level. We publish
+// `./schemas/*.json` precisely so a Python or Go route can generate models for
+// these payloads, and until this block existed TypeScript — the language the kit
+// is authored in — was the one that could not: the types lived inside their
+// components' `.tsx`, so naming one from a Node/no-DOM project was TS6142 and
+// re-exporting one from here would have dragged the Solid tree into this entry's
+// graph. They are authored in ../primitives/card-data-types.ts now, which has no
+// DOM and no Solid below it, so this costs the entry nothing — see that file's
+// header, and note that the check which can tell the difference is
+// `tsc --noEmit -p tsconfig.mcp.json` on a tree with no dist/ present.
+//
+// Types only: they erase, so this adds nothing to dist/schemas.js.
+export type {
+  ArtifactCardData,
+  ArtifactCardEnvelope,
+  ArtifactCardFile,
+  ArtifactCardTab,
+  ChoiceAllowOther,
+  ChoiceCardData,
+  ChoiceCardEnvelope,
+  ChoiceOption,
+  ChoiceOptionMedia,
+  ConfirmAction,
+  ConfirmActionStyle,
+  ConfirmCardData,
+  ConfirmCardEnvelope,
+  ConfirmTone,
+  FormCardEnvelope,
+  FormDefinition,
+  FormField,
+  TasksCardData,
+  TasksCardEnvelope,
+  TasksCardResult,
+  TasksTask,
+} from '../primitives/card-data-types';
+
 // The loop, both directions.
 //
 // `cardTools` projects a card schema INTO a provider tool definition;

@@ -872,7 +872,7 @@ A dropdown that lets the user switch between available models.
 
 | Event | `detail` | Description |
 |-------|-----------|-------------|
-| `kai-threshold-change` | `{ level: "ok" | "warn" | "danger" }` | Fires when the computed severity level changes (ok → warn → danger or back). `detail.level` is `'ok'`, `'warn'`, or `'danger'`. |
+| `kai-threshold-change` | `{ level: "danger" | "ok" | "warn" }` | Fires when the computed severity level changes (ok → warn → danger or back). `detail.level` is `'ok'`, `'warn'`, or `'danger'`. |
 
 #### Composed from
 
