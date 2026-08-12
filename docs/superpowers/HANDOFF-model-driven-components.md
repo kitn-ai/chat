@@ -354,6 +354,13 @@ This accounted for more defects than bad implementations, by a wide margin. Inst
 - The `knownGap` mechanism in the harness built to catch all of this (§4).
 - My own CI poller, twice — treating an empty API response, and an unenumerated status word, as
   "done".
+- **A third from the same poller, and the worst-timed one in the epic.** I watched required checks
+  with `gh pr checks --watch | tail -20; echo "EXIT=$?"`. `$?` there is **`tail`'s** exit status,
+  not `gh`'s, so it printed success no matter what CI did. Caught only by going to query the check
+  conclusions directly instead of trusting the number, while merging the PR whose headline is four
+  guards against checks that prove nothing. The general form: **a pipeline's exit status describes
+  its last command.** Capture to a file, or read `PIPESTATUS`, when the exit code is the thing you
+  care about.
 - A near-miss worth the line: the obvious implementation of the new `renderPart` variant guard
   **would have been satisfied by a COMMENT.** The prose naming `card / source / file` sits in the
   same emitted file as the branches that have to render them, so a text match cannot tell the
@@ -575,6 +582,30 @@ reached over it for the version that could be wrong. **When an argument is avail
 structural and a contingent form, the contingent one is the one that will need correcting later.**
 Lead with the structural one; keep the dates below it as corroboration for a reader who does not
 accept it.
+
+### 5.14 "Done" and "landed" are different facts
+
+I reported the reasoning-coverage guard as DONE and believed it. A peer session had it in its head
+as shipped too. It was written, tested, committed, and **not in the tree**: it sat on a worktree
+branch cut before the matrix sweep. Nothing in either session's account distinguished "written and
+committed on a branch" from "landed on the working branch".
+
+That is what makes it worse than the lessons above it. Two independent parties held the same belief,
+and neither had anything in hand that could have contradicted it.
+
+It surfaced only by enumerating every `worktree-agent-*` branch and diffing commit SUBJECTS against
+HEAD's log, and that turned up **four** unlanded workstreams, not one. The mechanical trap worth
+recording: **a cherry-pick does not mark its source.** A branch whose work is already in HEAD, picked
+rather than merged, still reports commits ahead, so `git branch --merged` omits it and a raw
+ahead-count counts it. Both call a landed branch unlanded, which is why the count is not the signal
+and the subjects have to be compared.
+
+§5.4 says commit early, because committed work survives someone else's checkout. This is its other
+half: committed is not landed. `git log -1` in the tree you are standing in shows your commit and
+says nothing about whether the branch that ships has it.
+
+Operational form: **never trust your own record of what you landed. Enumerate the branches and diff
+subjects against HEAD.**
 
 ---
 
