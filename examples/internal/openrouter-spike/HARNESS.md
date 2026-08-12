@@ -179,6 +179,107 @@ A `live` scenario replayed before it has ever been recorded reports as
 failing assertion, and reporting the two the same way is how a suite starts lying
 about its coverage.
 
+## A 200 is not proof of reasoning
+
+Every cell in the matrix can be green while a whole column recorded no reasoning
+at all. No scenario asserts that the model **thought**, only that what it produced
+rendered. So a configuration declared reasoning-capable must have produced
+reasoning in its **recorded fixtures**, and `harness/reasoning-coverage.mjs`
+asserts that per column, over the committed streams: no key, no network, no
+browser.
+
+```bash
+node harness/reasoning-coverage.mjs                 # the spike's own fixtures
+node harness/reasoning-coverage.mjs /path/fixtures  # any recorded set
+```
+
+It runs on every `pnpm test` (`server/reasoning-coverage.test.ts`, the copy that
+cannot be skipped) and again at the end of a sweep, so a live run fails at the
+moment of recording rather than at the next CI run.
+
+The failure that motivated it was **HTTP 200 with silence**. OpenRouter derives an
+Anthropic thinking budget as a percentage of `max_tokens`; the harness caps
+`max_tokens` at 900 for cost, so the derived budget landed under Anthropic's
+1024-token floor and the provider answered 200 with no thinking at all. Nothing
+errored, so every check that asked "did the request fail?" said no.
+`anthropic/claude-haiku-4.5` on the OpenAI wire recorded zero reasoning across all
+13 scenarios for an entire sweep, and the results doc published that silence as a
+provider limitation. `server/thinking-budget.test.ts` pins the request SHAPE; this
+pins the OUTCOME, which is the half that survives the next provider's floor.
+
+### Every column declares
+
+`harness/models.mjs` is the catalog, and each entry declares its `wire` and its
+`reasons`. Neither is inferred, and neither has a default: a column missing either
+is a hard failure (`UNDECLARED`), not a silent skip, so a new model cannot join the
+matrix and quietly opt out of coverage. `reasons: false` is held to account in the
+other direction too, because a wrong `false` is how a real regression hides behind
+an exemption.
+
+The claim is per **column**, not per scenario. Models legitimately decline to think
+on a given turn (DeepSeek does, on two of its thirteen), so a per-scenario
+requirement would be flaky, and a flaky guard gets deleted. The bug this catches
+was a column at exactly zero. The per-scenario breakdown is printed anyway, so a
+partial regression is still visible to a reader.
+
+### The verdicts
+
+| verdict | what it says |
+|---|---|
+| `OK` | the column matches its declaration, in both directions |
+| `SILENT` | declared `reasons: true`, recorded zero thinking tokens anywhere |
+| `MISLABELLED` | declared `reasons: false` and thought anyway |
+| `WRONG-FIELD` | usage frames present, this wire's thinking field absent |
+| `TRUNCATED` | a recording does not end with `data: [DONE]` |
+| `UNREADABLE` | recordings carry no usage frame at all |
+| `UNDECLARED` | the catalog entry is missing `wire` or `reasons` |
+| *(no fixtures)* | `UNRECORDED`: a missing measurement, never a pass and never a failure |
+
+They are separate verdicts because they send a reader to different places, and two
+of the distinctions are the whole point.
+
+**`TRUNCATED` is checked before `SILENT`.** Usage is the last thing in a stream, so
+a stream cut mid-flight carries no usage frame and reads as zero reasoning.
+`recordFixture` writes from a `finally` block, so that stream still lands on disk:
+short, well-formed, and saying nothing about having failed. Filed as `SILENT` it
+would send a reader hunting a thinking budget that was never the problem. A dead
+connection must not be reported as a quiet model.
+
+**`WRONG-FIELD` is not `SILENT`,** because the two wires spell the field
+differently:
+
+| wire | thinking-token count |
+|---|---|
+| openai | `usage.completion_tokens_details.reasoning_tokens` |
+| anthropic | `usage.output_tokens_details.thinking_tokens` |
+
+A guard keyed only on `reasoning_tokens` reads zero for the entire
+`-anthropic-wire` column, whose thinking has worked the whole time, and reports a
+**wire** difference as a model failure. `usageFieldFor` therefore switches
+exhaustively on the declared wire and throws on anything else: a third dialect has
+to be a hard failure, never a silent zero.
+
+`UNRECORDED` is the same line the matrix draws between `skip` and `FAIL`. A column
+with nothing recorded is a missing measurement, so it is never reported as a pass
+and never counted as a failure.
+
+### Only `live/` carries usage
+
+Every usage assertion is scoped to `fixtures/live/**`. The canned streams under
+`fixtures/canned/` and `fixtures/canned-anthropic/` are hand-generated for
+behaviours no prompt can provoke, and they carry **no usage frame by design**. A
+glob over `fixtures/` would weigh every canned file against the recorded usage
+frames and scream truncation at a set that was never recorded, which is this
+guard's own defect class one directory over.
+
+### The audit is wider than the run, deliberately
+
+`node harness/run-matrix.mjs --scenarios S01-plain-text` narrows the sweep, but the
+audit still reads **every recording on disk** for that column. Its subject is the
+committed fixture set the results doc is written from, not the subset that happened
+to run. Scoping it to the run would let a one-scenario sweep report a green column
+on evidence it never looked at.
+
 ## The key
 
 Unchanged, and the harness never touches it. `server/openrouter-proxy.ts` reads

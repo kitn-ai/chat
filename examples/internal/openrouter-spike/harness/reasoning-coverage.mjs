@@ -113,8 +113,10 @@ export function fixtureDirFor(model, wire) {
 
 /** Every clean recording ends with this, in all three dialects the spike has
  *  seen: OpenAI's, DeepSeek's, and the Anthropic Skin's (which closes
- *  `message_stop`, `event: data`, then this). Verified across all 138 committed
- *  fixtures — 138 of 138.
+ *  `message_stop`, `event: data`, then this). The premise is measured, not
+ *  assumed: `server/reasoning-coverage.test.ts` walks every recording under
+ *  `fixtures/live/` and asserts not one of them is unterminated, so the claim
+ *  tracks whatever is committed instead of a count written down here.
  *
  *  It is the only marker there is. `recordFixture` writes from a `finally`
  *  block, so a stream that dies mid-flight is still written to disk, and the
