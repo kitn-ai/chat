@@ -365,6 +365,23 @@ jobs:
       - name: Spike tests (incl. the consumer cardTypes seam guard)
         run: pnpm --filter @kitn.ai/ui-example-openrouter-spike test
 
+      # create-kai's own suite. The build must run first and is not optional:
+      # the tests read `dist/templates`, and without it they fail loudly with
+      # "run build first" rather than passing on an empty template set. That
+      # build also fails when any devDependency range disagrees with
+      # packages/ui, which is not pedantry -- a `@types/node` range copied from
+      # a starter once downgraded the HOISTED @types/node 26 -> 22 across the
+      # whole workspace under node-linker=hoisted, and timed out an unrelated
+      # project. ~6s total.
+      - name: create-kai build (bundles templates + the shared catalogs)
+        run: pnpm --filter create-kai run build
+
+      - name: create-kai typecheck
+        run: pnpm --filter create-kai run typecheck
+
+      - name: create-kai tests (incl. the published-kit contract gate)
+        run: pnpm --filter create-kai exec vitest run
+
       - name: React adapter tests
         run: pnpm --filter @kitn.ai/ui test:react
 

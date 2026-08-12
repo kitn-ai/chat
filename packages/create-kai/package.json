@@ -1,0 +1,62 @@
+{
+  "name": "create-kai",
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Scaffold a runnable @kitn.ai/ui chat app. `npm create kai@latest`",
+  "license": "MIT",
+  "homepage": "https://ui.kitn.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kitn-ai/ui.git",
+    "directory": "packages/create-kai"
+  },
+  "bugs": {
+    "url": "https://github.com/kitn-ai/ui/issues"
+  },
+  "keywords": [
+    "create-kai",
+    "kitn",
+    "ai",
+    "chat",
+    "scaffold",
+    "cli",
+    "web-components"
+  ],
+  "nx": {
+    "name": "create-kai",
+    "targets": {
+      "test": {
+        "dependsOn": ["build", "^build"]
+      },
+      "typecheck": {
+        "dependsOn": ["^build"]
+      }
+    }
+  },
+  "engines": {
+    "node": ">=20.19"
+  },
+  "bin": {
+    "create-kai": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verify:pack": "node scripts/verify-pack.mjs",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "devDependencies": {
+    "@clack/prompts": "^0.11.0",
+    "@kitn.ai/ui": "workspace:*",
+    "@types/node": "^26.0.0",
+    "esbuild": "^0.28.1",
+    "picocolors": "^1.1.1",
+    "typescript": "^5.5.0",
+    "vitest": "^4.1.0"
+  }
+}
