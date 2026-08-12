@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { createRoot, createEffect } from 'solid-js';
 import { createTween } from './create-tween';
 import { installFakeClock } from '../test-utils/fake-clock';
