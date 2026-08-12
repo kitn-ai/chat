@@ -2,12 +2,12 @@ import { type JSX, Show, createContext, createMemo, useContext } from 'solid-js'
 import { HoverCardRoot, HoverCardTrigger, HoverCardContent } from '../ui/hover-card';
 import { cn } from '../utils/cn';
 import { Button } from '../ui/button';
+import { ProgressBar, type ProgressTone } from '../ui/progress-bar';
 
 const ICON_RADIUS = 10;
 const ICON_VIEWBOX = 24;
 const ICON_CENTER = 12;
 const ICON_STROKE_WIDTH = 2;
-const PERCENT_MAX = 100;
 
 /** Default fraction (0–1) at which the meter transitions to the warning colour. */
 export const DEFAULT_WARN_THRESHOLD = 0.7;
@@ -206,7 +206,6 @@ export function ContextContentHeader(props: ContextContentHeaderProps) {
   const displayPct = createMemo(() => fmtPercent.format(usedPercent()));
   const used = createMemo(() => fmtCompact.format(ctx.usedTokens));
   const total = createMemo(() => fmtCompact.format(ctx.maxTokens));
-  const barWidth = createMemo(() => `${Math.min(usedPercent() * PERCENT_MAX, PERCENT_MAX)}%`);
 
   const severity = createMemo<ContextSeverity>(() => {
     const pct = usedPercent();
@@ -215,11 +214,16 @@ export function ContextContentHeader(props: ContextContentHeaderProps) {
     return 'ok';
   });
 
-  const colorClass = createMemo(() => {
+  // Severity used to pick a bare hue class and nothing else, so the meter was a
+  // pair of styled divs: no role, no value, invisible to assistive tech. Map it to
+  // the shared ProgressBar's semantic `tone` instead and let that primitive supply
+  // `role="progressbar"` + aria-valuenow/min/max, rather than hand-rolling those
+  // onto the divs.
+  const tone = createMemo<ProgressTone>(() => {
     const s = severity();
-    if (s === 'danger') return 'bg-red-400';
-    if (s === 'warn') return 'bg-yellow-400';
-    return 'bg-primary';
+    if (s === 'danger') return 'error';
+    if (s === 'warn') return 'warning';
+    return 'primary';
   });
 
   return (
@@ -232,12 +236,14 @@ export function ContextContentHeader(props: ContextContentHeaderProps) {
           </p>
         </div>
         <div class="space-y-2">
-          <div class="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-            <div
-              class={cn('h-full rounded-full transition-all', colorClass())}
-              style={{ width: barWidth() }}
-            />
-          </div>
+          {/* Values are the raw token counts, so a screen reader announces
+              "190,000 of 200,000" rather than a bare percentage. */}
+          <ProgressBar
+            value={ctx.usedTokens}
+            max={ctx.maxTokens}
+            tone={tone()}
+            aria-label="Context usage"
+          />
         </div>
       </Show>
     </div>
