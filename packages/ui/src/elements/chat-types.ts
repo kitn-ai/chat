@@ -70,7 +70,14 @@ export type MessagePart =
        *  is not unique within `parts`. Set by the wire adapter, one value per
        *  `consumeModelStream` call. See `appendReasoningPart`. */
       streamId?: string;
-      /** Informational only. `raw` is the round-trip channel, not this. */
+      /** Load-bearing on the OpenAI wire, informational on the Anthropic one.
+       *  `toOpenAIMessages({ reasoning: 'include' })` REBUILDS a signed
+       *  `reasoning_details` entry from `text` plus this, because `raw` after a
+       *  streamed turn is a textless fragment: only the final frame carries the
+       *  signature and it has no text, and `appendReasoningPart` resolves `raw`
+       *  last-write-wins. `toAnthropicMessages` ignores this field and echoes
+       *  `raw.payload` verbatim — a thinking block rebuilt from text plus
+       *  signature is a hard 400. */
       signature?: string;
       raw?: RawOrigin;
     }
