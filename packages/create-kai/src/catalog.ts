@@ -85,20 +85,25 @@ export interface GatewayChoice {
  * registry's own order, which already leads with the two keys a developer is
  * most likely to already hold.
  *
- * NOT GROUPED, and that is a deliberate omission rather than an oversight. The
- * spec asks for three groups, with the third being "exactly the set that needs
- * an out-of-band process" (Ollama, LangGraph, Mastra, Pydantic AI, Pi). No field
- * on `Integration` declares that, and every derivation that reproduces the
- * spec's five-and-five split today does so by accident:
- *   · `category` cuts across it — `provider` holds both OpenAI (key) and Ollama
- *     (a local server), `framework` holds both Vercel AI SDK (key) and LangGraph.
- *   · `deps.npm` non-empty catches LangGraph and Mastra but also catches
- *     Vercel AI SDK, which needs the `ai` package and no separate process.
- *   · `envVars` non-empty puts LangGraph and Pydantic AI (both `OPENAI_API_KEY`)
- *     in the key group and Ollama in neither.
- * Only `runNote` says it, in prose no code should parse. So the grouping waits
- * on a declared field — see the report accompanying this slice — and the prompt
- * shows each gateway's own `runNote` instead of a group it inferred.
+ * STILL NOT GROUPED HERE, but the reason has changed and the blocker is gone.
+ *
+ * This function used to carry a paragraph explaining that the spec's three-way
+ * grouping could not be derived: no field on `Integration` declared "needs an
+ * out-of-band process", and `category` / `deps` / `envVars` each cut across the
+ * split. That is fixed upstream — `Integration.outOfBand` now declares it, with
+ * a schema refinement that refuses an entry declaring nothing and refuses a
+ * false `'none'`, and `listGatewayGroups()` in the kit registry returns the three
+ * headings ready to render.
+ *
+ * ONE CORRECTION worth carrying forward: the spec's third group listed LangGraph,
+ * and that was wrong. Its emitted route compiles the graph in process
+ * (`createReactAgent` over a `new ChatOpenAI(...)`) and its `runNote` asks for a
+ * key and nothing else, so `listGatewayGroups()` files it under "Bring a key".
+ *
+ * This function stays flat because `WIRED_GATEWAYS` is `{ mock }` in this slice:
+ * grouping a list where ten of eleven entries are not selectable would add
+ * headings to a menu with one live item. Switching to `listGatewayGroups()` is
+ * the natural companion to widening `WIRED_GATEWAYS`, not a separate task.
  */
 export function listGateways(): GatewayChoice[] {
   const all = listIntegrations();

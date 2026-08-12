@@ -52,7 +52,8 @@ describe('catalog reuse', () => {
 describe('renderer component set (derived, not restated)', () => {
   it('is derived from the kit\'s capability groups', () => {
     const known = rendererComponents();
-    // These four capabilities are what the archetype catalog reports today.
+    // The five capabilities the archetype catalog reports today. The last pair
+    // arrived without this file being touched — see the sibling test below.
     expect(known.has('kai-chat')).toBe(true);
     expect(known.has('kai-sources')).toBe(true);
     expect(known.has('kai-tool')).toBe(true);
@@ -60,15 +61,38 @@ describe('renderer component set (derived, not restated)', () => {
     expect(known.has('kai-artifact')).toBe(true);
     expect(known.has('kai-resizable')).toBe(true);
     expect(known.has('kai-voice-input')).toBe(true);
+    expect(known.has('kai-file-upload')).toBe(true);
+    expect(known.has('kai-attachments')).toBe(true);
+  });
+
+  /**
+   * THE DERIVATION MOVING IS THE POINT, so it is asserted rather than absorbed.
+   *
+   * `kai-file-upload` / `kai-attachments` were in the negative list below for
+   * this whole file's life: real registered elements that no archetype composed,
+   * so `listCapabilityGroups()` did not report them and `renderSurface` had no
+   * branch. The kit gained an `attachments` preset composing both, and this set
+   * grew with no edit to `catalog.ts` or `features.ts` — which is the property
+   * "derived, not restated" names. A hand-written list would have needed the
+   * same hand to notice.
+   */
+  it('grew when the kit composed a new capability, with no edit here', () => {
+    const known = rendererComponents();
+    for (const component of ['kai-file-upload', 'kai-attachments']) {
+      expect(
+        known.has(component),
+        `${component} is registered and composed by a kit preset, but the derived set does not ` +
+          'report it — the CLI has stopped tracking the archetype catalog',
+      ).toBe(true);
+    }
   });
 
   it('does NOT claim components no renderer branches on', () => {
-    // The whole point of the gate. `kai-file-upload` and `kai-attachments` are
-    // real registered elements, so a components list containing them is not an
-    // error — `renderSurface` would accept it and emit nothing for them.
+    // The whole point of the gate, and `kai-conversations` is what still proves
+    // it: a real registered element that no archetype composes, so a components
+    // list containing it is not an error — `renderSurface` accepts the list and
+    // emits the tag bare, with nothing wired to it.
     const known = rendererComponents();
-    expect(known.has('kai-file-upload')).toBe(false);
-    expect(known.has('kai-attachments')).toBe(false);
     expect(known.has('kai-conversations')).toBe(false);
   });
 });
@@ -84,17 +108,85 @@ describe('feature availability', () => {
     }
   });
 
-  it('reports attachments as unavailable — a gap, discovered not hard-coded', () => {
-    // REPORTED GAP: no archetype composes kai-file-upload / kai-attachments, so
-    // `listCapabilityGroups()` does not report them and no renderer emits them.
-    // Adding an archetype that uses them flips this with no edit to the CLI.
-    expect(featureEmit(FEATURES.find((f) => f.id === 'attachments')!, react)).toBe('unavailable');
-    expect(availableFeatures(react).map((f) => f.id)).not.toContain('attachments');
+  /**
+   * `attachments` USED to be this file's reported gap. It is not one any more,
+   * and the replacement asserts WHY rather than just flipping the expected
+   * string: the feature is emittable exactly because every component it names is
+   * one the archetype catalog reports. Pinning that link means a future edit that
+   * marks it available for some other reason — a special case, a hard-coded id —
+   * still fails here.
+   */
+  it('routes attachments through the renderer, and only because the catalog says so', () => {
+    const attachments = FEATURES.find((f) => f.id === 'attachments')!;
+    const known = rendererComponents();
+    for (const component of attachments.components) {
+      expect(
+        known.has(component),
+        `${component} is not in the derived renderer set, so 'attachments' must not be offered`,
+      ).toBe(true);
+    }
+    expect(featureEmit(attachments, react)).toBe('renderer');
+    expect(availableFeatures(react).map((f) => f.id)).toContain('attachments');
   });
 
-  it('does not offer conversation history where no composed starter exists', () => {
-    const next = getFramework('nextjs')!;
-    expect(featureEmit(FEATURES.find((f) => f.id === 'conversations')!, next)).toBe('unavailable');
+  /**
+   * THE REPORTED GAP THAT REMAINS, and it is a different KIND of gap from the one
+   * `attachments` was: not "nothing renders these components" but "only a
+   * hand-written starter composes this surface". `renderSurface` has no
+   * `kai-conversations` branch, so a framework with no composed workspace shell
+   * has no way to produce the sidebar — Next, TanStack Start and Solid are the
+   * three, and this is what stops the CLI emitting them a project that runs
+   * without the feature they asked for.
+   *
+   * Asserted over ALL non-composed frameworks rather than one, so turning a
+   * composed shell on for one of them does not quietly leave the other two
+   * unchecked.
+   */
+  it('reports conversation history as unavailable wherever no composed starter exists', () => {
+    const conversations = FEATURES.find((f) => f.id === 'conversations')!;
+    const nonComposed = FRAMEWORKS.filter((f) => !f.composedWorkspace);
+    expect(
+      nonComposed.map((f) => f.id),
+      'every framework now has a composed workspace, so this gap is closed and this test has no subject',
+    ).not.toHaveLength(0);
+    for (const framework of nonComposed) {
+      expect(featureEmit(conversations, framework), `${framework.id}`).toBe('unavailable');
+      expect(availableFeatures(framework).map((f) => f.id)).not.toContain('conversations');
+    }
+  });
+
+  /**
+   * THE COMPONENTS-BASED UNAVAILABILITY PATH, WHICH NO SHIPPED FEATURE TRIPS ANY
+   * MORE — stated plainly rather than left to look like coverage it is not.
+   *
+   * Every feature in `FEATURES` now names components the catalog reports, so the
+   * `unavailable` branch in `featureEmit` that reads `rendererComponents()` has
+   * no subject in the shipped catalog. Deleting the test would drop the guard on
+   * a branch that is still live and still the thing standing between a user and
+   * a project that silently lacks what they picked; keeping it pointed at a
+   * shipped feature would mean inventing a gap that does not exist.
+   *
+   * So it drives the pure function with a SYNTHETIC feature. That tests the
+   * mechanism honestly and claims nothing about the product, and the second
+   * assertion records the current state of the catalog so that a real
+   * components-unavailable feature landing later is visible rather than silent.
+   */
+  it('refuses a feature whose components no renderer branches on (mechanism, no shipped subject)', () => {
+    const synthetic = {
+      id: 'not-a-shipped-feature',
+      label: 'Synthetic',
+      hint: 'exists only in this test',
+      components: ['kai-conversations'],
+      default: false,
+    } as const;
+    expect(featureEmit(synthetic, react)).toBe('unavailable');
+
+    // The state of the real catalog, recorded. If this ever fails, a shipped
+    // feature has become components-unavailable and deserves its own test.
+    const componentsUnavailable = FEATURES.filter(
+      (f) => featureEmit(f, react) === 'unavailable',
+    ).map((f) => f.id);
+    expect(componentsUnavailable).toEqual([]);
   });
 });
 
@@ -128,9 +220,28 @@ describe('resolveSurface', () => {
     if (!result.ok) expect(result.reason).toMatch(/cannot combine/);
   });
 
+  /**
+   * Was `resolveSurface(['attachments'], react)`, which is now a legal request.
+   * The subject moved to the gap that is still real: `conversations` on a
+   * framework with no composed workspace shell. Reachable by a user —
+   * `--framework nextjs` is accepted by the arg parser, not filtered to the
+   * ready set — so this is a live refusal, not dead code.
+   *
+   * The reason is asserted, not just `ok === false`. Three later checks in
+   * `generate` also refuse, and a bare falsy assertion would pass if this one
+   * stopped firing and a different rule caught the request instead.
+   */
   it('refuses an unavailable feature', () => {
-    const result = resolveSurface(['attachments'], react);
+    const next = getFramework('nextjs')!;
+    const result = resolveSurface(['conversations'], next);
     expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toMatch(/cannot be emitted/);
+      expect(result.reason).toMatch(/hand-composed workspace starter/);
+      // The message must not blame the renderer for `kai-resizable`, which a
+      // renderer plainly does branch on — the sentence this replaces did.
+      expect(result.reason).not.toMatch(/no renderer branches on .*kai-resizable/);
+    }
   });
 
   it('treats no features as the bare chat rather than an error', () => {

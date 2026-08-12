@@ -96,22 +96,78 @@ export const DEFAULT_FEATURES: readonly string[] = FEATURES.filter((f) => f.defa
 export type FeatureEmit = 'composed' | 'renderer' | 'unavailable';
 
 /**
- * `attachments` is `unavailable` today, and that is a REPORTED GAP rather than a
- * decision: `kai-file-upload` and `kai-attachments` are real registered
- * elements, but no archetype composes them, so `listCapabilityGroups()` does not
- * report them and `renderSurface` has no branch that emits them. This function
- * discovers that rather than hard-coding it — add an archetype using those
- * components (or a renderer branch reflected in one) and the feature becomes
- * available with no edit here.
+ * The features that ONLY the hand-composed workspace starter can produce, named
+ * once so `featureEmit` and the refusal message below cannot disagree about
+ * which they are.
+ *
+ * `conversations` is here because `renderSurface` has no `kai-conversations`
+ * branch: it takes any components list, and a tag it does not branch on is not
+ * an error, just a tag it emits bare with nothing wired to it. So the sidebar
+ * comes from the reviewed starter or it does not come at all.
+ *
+ * The way OUT of this set is the same one `attachments` took (see below): a
+ * preset in the kit's archetype catalog composing the components, which puts
+ * them in `listCapabilityGroups()` and gives `renderSurface` a real branch.
+ */
+const COMPOSED_ONLY: ReadonlySet<string> = new Set(['conversations']);
+
+/**
+ * DISCOVERED, NOT HARD-CODED — and `attachments` is the proof rather than the
+ * example.
+ *
+ * This function used to report `attachments` as `unavailable`, because
+ * `kai-file-upload` / `kai-attachments` were real registered elements that no
+ * archetype composed: `listCapabilityGroups()` did not report them, so
+ * `renderSurface` had no branch and emitting the feature would have produced a
+ * project that compiled, ran, and did not have the feature in it. The comment
+ * here said "add an archetype using those components and the feature becomes
+ * available with no edit here". That happened, upstream in the kit, and this
+ * file was not edited — the feature is `renderer` now because the derivation
+ * says so.
+ *
+ * The gap that remains is `conversations`, and it is a DIFFERENT gap: not
+ * "nothing renders these components" but "only a hand-written starter composes
+ * this surface", which is why the two paths below report separately.
  */
 export function featureEmit(feature: FeatureDef, framework: FrameworkDef): FeatureEmit {
-  // The composed workspace IS conversation history; it is the only source of a
-  // `kai-conversations` surface today.
-  if (feature.id === 'conversations') {
+  if (COMPOSED_ONLY.has(feature.id)) {
     return framework.composedWorkspace ? 'composed' : 'unavailable';
   }
   const known = rendererComponents();
   return feature.components.every((c) => known.has(c)) ? 'renderer' : 'unavailable';
+}
+
+/**
+ * Why a feature cannot be emitted, in the words a user should see.
+ *
+ * Split by CAUSE rather than printed as one sentence covering both, because the
+ * single sentence this replaces was wrong the moment `conversations` became the
+ * only unavailable feature: it read "no renderer branches on kai-conversations /
+ * kai-resizable", and a renderer plainly does branch on `kai-resizable`. A
+ * refusal that misstates its own reason sends the reader after the wrong fix.
+ *
+ * Returns null when the feature IS emittable, so the caller cannot print a
+ * reason for a feature that has none.
+ */
+export function featureUnavailableReason(
+  feature: FeatureDef,
+  framework: FrameworkDef,
+): string | null {
+  if (featureEmit(feature, framework) !== 'unavailable') return null;
+  if (COMPOSED_ONLY.has(feature.id)) {
+    return (
+      `feature '${feature.id}' cannot be emitted for ${framework.label}: it comes from the ` +
+      `hand-composed workspace starter and ${framework.label} has none. No renderer emits a ` +
+      `${feature.components[0]} surface, so there is nothing to generate in its place.`
+    );
+  }
+  const known = rendererComponents();
+  const missing = feature.components.filter((c) => !known.has(c));
+  return (
+    `feature '${feature.id}' cannot be emitted for ${framework.label}: no renderer branches on ` +
+    `${missing.join(' / ')}, so the emitted project would compile and run without the feature ` +
+    `in it. Compose those components in a kit archetype and this resolves itself.`
+  );
 }
 
 /** The features the prompt offers for a given framework. */
@@ -140,15 +196,8 @@ export function resolveSurface(
   for (const id of featureIds) {
     const feature = getFeature(id);
     if (!feature) return { ok: false, reason: `unknown feature '${id}'` };
-    const emit = featureEmit(feature, framework);
-    if (emit === 'unavailable') {
-      return {
-        ok: false,
-        reason:
-          `feature '${id}' cannot be emitted for ${framework.label}: no renderer branches on ` +
-          `${feature.components.join(' / ')} and no starter composes them`,
-      };
-    }
+    const unavailable = featureUnavailableReason(feature, framework);
+    if (unavailable) return { ok: false, reason: unavailable };
     chosen.push(feature);
   }
 
