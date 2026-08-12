@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { BUILTIN_CARD_TAGS, cardSchemas, cardSchemaNames, cardTools } from '@kitn.ai/ui/schemas';
 import type { AnthropicToolDef, JsonSchemaToolDef, OpenAIToolDef } from '@kitn.ai/ui/schemas';
 import { reference } from './tools/reference';
@@ -228,5 +231,83 @@ describe('component_reference — card contract', () => {
       expect(BUILTIN_CARD_TAGS[type], `${type} is missing from BUILTIN_CARD_TAGS`).toBeDefined();
       expect(cardTagForType(type)).toBe(BUILTIN_CARD_TAGS[type]);
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The interaction API: exposed methods
+//
+// `expose({ … })` methods reached the CEM and the generated types, and
+// `component_reference` rendered neither: it filtered `members` down to
+// `kind: 'field'` and dropped the rest on the floor. This is the artifact a
+// coding agent actually consults, so a method it does not mention may as well
+// not exist.
+//
+// Expectations come from src/elements/element-meta.json — the sibling artifact
+// of the manifest this tool reads, written by the same generator run. Nothing is
+// restated here: a method added to a facade moves both sides at once, and a
+// method that reaches only ONE of the two artifacts fails instead of half-shipping.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('component_reference — exposed methods', () => {
+  interface MethodMeta { name: string; params: string; returns: string }
+  interface ElementMeta { tag: string; methods?: MethodMeta[] }
+
+  // Same resolution manifest.ts uses to find the CEM, for the same reason: this
+  // file runs from source under vitest and from nowhere else.
+  const elementMeta: ElementMeta[] = JSON.parse(
+    readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), '../../elements/element-meta.json'),
+      'utf8',
+    ),
+  );
+  const withMethods = elementMeta.filter((e) => e.methods?.length);
+  const TOTAL_METHODS = withMethods.reduce((n, e) => n + e.methods!.length, 0);
+
+  /** The `### Methods …` section of a reference, up to the next `###`. */
+  const methodsSection = (text: string): string | undefined =>
+    /\n### Methods\b([\s\S]*?)(?=\n### |$)/.exec(text)?.[1];
+
+  /** The method names that section lists, sorted. */
+  const listed = (text: string): string[] => {
+    const section = methodsSection(text);
+    if (!section) return [];
+    return [...section.matchAll(/^- \*\*([\w$]+)\(/gm)].map((m) => m[1]).sort();
+  };
+
+  it('the model is big enough for the loop below to mean anything', () => {
+    expect(withMethods.length).toBeGreaterThan(30);
+    expect(TOTAL_METHODS).toBeGreaterThan(100);
+  });
+
+  it('serves kai-resizable.maximize with its authored signature and doc', async () => {
+    const text = await textFor({ name: 'kai-resizable' });
+    expect(text).toMatch(/### Methods/);
+    expect(text).toContain('**maximize(index: number): void**');
+    expect(text).toContain('**restore(): void**');
+    expect(text).toMatch(/Imperatively maximize/);
+  });
+
+  it(`serves all ${TOTAL_METHODS} methods, each on its own element`, async () => {
+    const wrong: string[] = [];
+    let served = 0;
+
+    for (const el of withMethods) {
+      const got = listed(await textFor({ name: el.tag }));
+      served += got.length;
+      const want = [...el.methods!.map((m) => m.name)].sort();
+      if (got.join(',') !== want.join(',')) wrong.push(`${el.tag}: got [${got}] want [${want}]`);
+    }
+
+    expect(wrong).toEqual([]);
+    expect(served).toBe(TOTAL_METHODS);
+  });
+
+  it('an element that exposes nothing gets no Methods section', async () => {
+    // resizable.tsx declares kai-resizable AND kai-resizable-item; only the group
+    // exposes maximize/restore.
+    const item = elementMeta.find((e) => e.tag === 'kai-resizable-item');
+    expect(item?.methods ?? []).toEqual([]);
+    expect(methodsSection(await textFor({ name: 'kai-resizable-item' }))).toBeUndefined();
   });
 });
