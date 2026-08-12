@@ -197,11 +197,18 @@ const ARCHETYPES = ['drop-in-chat', 'support-widget', 'knowledge-base', 'agentic
 /**
  * EVERY integration, not a representative pair.
  *
- * The integration axis is the one that changes emitted CODE: `requestBody`
- * decides whether a `model` const and a `tools` array are declared and
- * referenced, and each of those is an unused-local away from failing a stock
- * `npm run build`. It was ['openrouter', 'mock'] and covered neither the
- * declare-nothing path nor eight of the nine catalog entries.
+ * The integration axis is the one that changes emitted CODE. Each catalog
+ * entry's `forwardsFromClient` drives `defaultModelFor` and `emitsToolSchemas`,
+ * and `realBodyPayload` (all three in `mcp/tools/scaffold.ts`) puts `model` and
+ * `tools` in the POST body only when the emitted code declares them. Each of
+ * those consts is an unused-local away from failing a stock `npm run build`.
+ *
+ * Listing every entry is what reaches every shape `forwardsFromClient` produces:
+ * an integration forwarding both consts, one forwarding tools alone, the ones
+ * forwarding neither because their route picks the model and builds the tools
+ * server-side, and `mock`, which takes the `isMock` branch and declares nothing
+ * because it has no backend to POST to. The earlier ['openrouter', 'mock'] pair
+ * reached the forwards-both shape and the mock branch, and no others.
  *
  * The other axis, `placement`, is deliberately left at one value: it only ever
  * changes an inline CSS string, so the extra 3x buys no type coverage.
