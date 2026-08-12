@@ -7,6 +7,12 @@ export type { SetMessages, AssistantStream } from './stream';
 export { appendTextPart, appendReasoningPart, upsertToolPart, upsertCardPart, fingerprint } from './parts';
 export type { ReasoningOpts } from './parts';
 
+// The zero-config mock. Produces SSE frames rather than folding parts directly,
+// so the no-backend preview runs through the SAME parser a real provider does —
+// and is deliberately impossible to mistake for one. See ./mock.
+export { createMockResponder, DEFAULT_MOCK_REPLIES, MOCK_BANNER, MOCK_MARKER, MOCK_MARKER_KEY, MOCK_MODEL_ID } from './mock';
+export type { MockResponder, MockResponderOptions } from './mock';
+
 // The content-model types every signature above mentions. Without these a
 // consumer importing only from '@kitn.ai/ui/state' cannot annotate the very
 // values these helpers take and return (the missing-annotation gap that made an

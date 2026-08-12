@@ -591,7 +591,11 @@ describe('scaffold', () => {
     });
     const text = (out.content as { type: string; text: string }[])[0].text;
     expect(text).toContain("role: 'user' as const");
-    expect(text).toContain("role: 'assistant' as const");
+    // No assistant literal to narrow any more: createAssistantStream builds the
+    // in-flight assistant message itself, so the scaffold only ever writes the
+    // USER one. Asserting an 'assistant' literal here would now be asserting a
+    // hand-rolled message the mock no longer needs to construct.
+    expect(text).not.toContain("role: 'assistant'");
   });
 
   it('next mock scaffold emits role as const for strict-TS message literals (SCAF-7)', async () => {
@@ -603,7 +607,11 @@ describe('scaffold', () => {
     });
     const text = (out.content as { type: string; text: string }[])[0].text;
     expect(text).toContain("role: 'user' as const");
-    expect(text).toContain("role: 'assistant' as const");
+    // No assistant literal to narrow any more: createAssistantStream builds the
+    // in-flight assistant message itself, so the scaffold only ever writes the
+    // USER one. Asserting an 'assistant' literal here would now be asserting a
+    // hand-rolled message the mock no longer needs to construct.
+    expect(text).not.toContain("role: 'assistant'");
   });
 
   // SCAF-13A: vue mock scaffold must emit role as const (strict-TS union narrowing)
@@ -616,7 +624,11 @@ describe('scaffold', () => {
     });
     const text = (out.content as { type: string; text: string }[])[0].text;
     expect(text).toContain("role: 'user' as const");
-    expect(text).toContain("role: 'assistant' as const");
+    // No assistant literal to narrow any more: createAssistantStream builds the
+    // in-flight assistant message itself, so the scaffold only ever writes the
+    // USER one. Asserting an 'assistant' literal here would now be asserting a
+    // hand-rolled message the mock no longer needs to construct.
+    expect(text).not.toContain("role: 'assistant'");
   });
 
   // SCAF-13B: svelte scaffold must type chatEl as KaiChatElement (not bare HTMLElement)
@@ -656,7 +668,11 @@ describe('scaffold', () => {
     });
     const text = (out.content as { type: string; text: string }[])[0].text;
     expect(text).toContain("role: 'user' as const");
-    expect(text).toContain("role: 'assistant' as const");
+    // No assistant literal to narrow any more: createAssistantStream builds the
+    // in-flight assistant message itself, so the scaffold only ever writes the
+    // USER one. Asserting an 'assistant' literal here would now be asserting a
+    // hand-rolled message the mock no longer needs to construct.
+    expect(text).not.toContain("role: 'assistant'");
   });
 
   // Issue 4 — mock integration streams client-side with zero config.
@@ -670,10 +686,11 @@ describe('scaffold', () => {
     const text = (out.content as { type: string; text: string }[])[0].text;
     // renders a kai-chat surface (React wrapper)
     expect(text).toMatch(/<Chat\b|<kai-chat/);
-    // no backend call
+    // no backend call — not even a commented-out one, which is why the "go live"
+    // note points at re-scaffolding rather than pasting a request in a comment.
     expect(text).not.toContain("fetch('/api");
-    // a canned reply is streamed client-side
-    expect(text).toMatch(/local preview|no backend or API key needed/i);
+    // the reply comes from the kit's shared responder, not a copy in this file
+    expect(text).toContain('createMockResponder()');
     // backend block says no backend/key needed
     expect(text).toMatch(/No backend or API key needed/i);
   });
@@ -688,8 +705,10 @@ describe('scaffold', () => {
     const text = (out.content as { type: string; text: string }[])[0].text;
     expect(text).toMatch(/<kai-chat/);
     expect(text).not.toContain("fetch('/api");
-    // token-by-token loop present
-    expect(text).toMatch(/setTimeout/);
+    // The cadence lives in the responder now, not in a setTimeout loop pasted
+    // into the consumer's file — that inlined loop is what drifted seven ways.
+    expect(text).not.toMatch(/setTimeout/);
+    expect(text).toContain('const res = mockResponse(value);');
   });
 
   // ── Round-1 field-test fix regressions ──────────────────────────────────
@@ -928,14 +947,41 @@ describe('scaffold', () => {
     });
   }
 
-  // ── SCAF-11: emitted ChatMessage type must use the library's strict state union ──
+  // ── SCAF-11: the emitted ChatMessage type ────────────────────────────────────
   //
-  // The LOCAL type is emitted by the `mock` scaffold only. A real backend now
-  // imports the kit's own ChatMessage (it hands messages to toOpenAIMessages, and
-  // the local subset would reject a message the kit produced). These three keep
-  // the local declaration honest; the sibling test below covers the real path.
+  // There is no longer a local one. `mock` used to hand-declare a narrow subset
+  // because it imported nothing; these tests kept that subset honest (a strict
+  // `state` union, an optional reasoning `label`, never a bare `state: string`).
+  //
+  // Now that the mock streams through readOpenAIStream it imports the kit's own
+  // ChatMessage like every real backend, which makes the subset unnecessary AND
+  // removes the drift it carried: it had no `raw`/`rawInput` on a tool and no
+  // `source`/`file` part variants, so a message the kit itself produced did not
+  // satisfy it. The check that replaces all three is that NO target re-declares
+  // it — asserted for mock here and for real backends in the sibling test below.
 
-  it('SCAF-11: agentic (react, mock) ChatMessage type uses strict state union, not bare string', async () => {
+  it('SCAF-11: mock imports the kit ChatMessage instead of re-declaring a subset', async () => {
+    for (const useCase of ['agentic', 'knowledge-base', 'drop-in-chat'] as const) {
+      const out = await scaffold.handler({
+        useCase,
+        integration: 'mock',
+        placement: 'side',
+        framework: 'react',
+      });
+      const text = (out.content as { type: string; text: string }[])[0].text;
+      expect(text, `${useCase}: missing the kit ChatMessage import`).toMatch(
+        /import \{[^}]*\btype ChatMessage\b[^}]*\} from '@kitn\.ai\/ui\/state';/,
+      );
+      expect(text, `${useCase}: re-declares a local ChatMessage`).not.toMatch(
+        /type ChatMessage = \{/,
+      );
+      expect(text, `${useCase}: re-declares ChatMessage off the element`).not.toContain(
+        "type ChatMessage = KaiChatElement['messages'][number]",
+      );
+    }
+  });
+
+  it('SCAF-11: the agentic sample fixture uses a valid tool state', async () => {
     const out = await scaffold.handler({
       useCase: 'agentic',
       integration: 'mock',
@@ -943,36 +989,11 @@ describe('scaffold', () => {
       framework: 'react',
     });
     const text = (out.content as { type: string; text: string }[])[0].text;
-    // Must include the 4-value state union — not bare `state: string`
-    expect(text).toContain("'input-streaming' | 'input-available' | 'output-available' | 'output-error'");
-    // Must NOT use the loose `state: string` form
-    expect(text).not.toMatch(/state:\s*string/);
-    // reasoning must carry the optional label field
-    expect(text).toContain('label?: string');
-  });
-
-  it('SCAF-11: agentic sample message state value is a valid union member (output-available)', async () => {
-    const out = await scaffold.handler({
-      useCase: 'agentic',
-      integration: 'mock',
-      placement: 'side',
-      framework: 'react',
-    });
-    const text = (out.content as { type: string; text: string }[])[0].text;
-    // The seeded sample data must use a union-member state value
-    expect(text).toContain("'output-available'");
-  });
-
-  it('SCAF-11: knowledge-base (react, mock) ChatMessage type also uses strict state union', async () => {
-    const out = await scaffold.handler({
-      useCase: 'knowledge-base',
-      integration: 'mock',
-      placement: 'full-page',
-      framework: 'react',
-    });
-    const text = (out.content as { type: string; text: string }[])[0].text;
-    expect(text).toContain("'input-streaming' | 'input-available' | 'output-available' | 'output-error'");
-    expect(text).not.toMatch(/state:\s*string/);
+    // The seed is emitted as a JSON literal in a comment, so the state value is
+    // double-quoted. This used to pass on the single-quoted spelling in the local
+    // TYPE declaration rather than on the sample data it names — the type is gone
+    // and the assertion now reads the fixture it is actually about.
+    expect(text).toContain('"state":"output-available"');
   });
 
   it('SCAF-11: a real backend imports the kit ChatMessage instead of re-declaring a subset', async () => {
@@ -1201,7 +1222,11 @@ describe('scaffold', () => {
     });
     const text = (out.content as { type: string; text: string }[])[0].text;
     expect(text).toContain("role: 'user' as const");
-    expect(text).toContain("role: 'assistant' as const");
+    // No assistant literal to narrow any more: createAssistantStream builds the
+    // in-flight assistant message itself, so the scaffold only ever writes the
+    // USER one. Asserting an 'assistant' literal here would now be asserting a
+    // hand-rolled message the mock no longer needs to construct.
+    expect(text).not.toContain("role: 'assistant'");
   });
 
   it('tanstack-start emits theme.tokens.css (not bare theme.css)', async () => {
@@ -1704,7 +1729,10 @@ describe('scaffold', () => {
     // The module is the TypeScript half: typed element handle, typed message type.
     expect(mod).toContain("import type { KaiChatElement } from '@kitn.ai/ui/elements'");
     expect(mod).toContain("document.getElementById('chat') as KaiChatElement");
-    expect(mod).toContain("type ChatMessage = KaiChatElement['messages'][number]");
+    // ChatMessage comes from the package, not from a local alias off the element.
+    // The alias existed because the mock imported nothing; it streams through
+    // readOpenAIStream now, so it takes the kit's own type like every other target.
+    expect(mod).toMatch(/import \{[^}]*\btype ChatMessage\b[^}]*\} from '@kitn\.ai\/ui\/state';/);
 
     // The TS18003 workaround is obsolete — src/main.ts is itself the tsc input.
     expect(text, 'vite-env.d.ts is no longer needed').not.toMatch(/vite-env\.d\.ts/);
@@ -1821,10 +1849,13 @@ describe('scaffold', () => {
   // reasoning + tool parts SAMPLE_AGENTIC_MESSAGE seeds, so the first consumer
   // to stream into a seeded message loses them silently.
   //
-  // The `mock` path still inlines the fold (it must add no imports). A real
-  // backend gets the same guarantee from createAssistantStream, which folds
-  // through appendTextPart, the function this inline copy was copied FROM.
-  it('every mock streaming path folds onto the trailing text part, never replacing parts wholesale', async () => {
+  // THIS USED TO CHECK THE MOCK'S OWN INLINE COPY of that fold, because the mock
+  // added no imports and carried its own. It no longer has one: the mock streams
+  // through createAssistantStream like every real backend, so the guarantee comes
+  // from appendTextPart — the function the inline copy was copied FROM, and the
+  // one place it can now be got wrong. What is worth pinning at THIS layer is
+  // that no scaffold reintroduces a hand-rolled fold beside it.
+  it('no mock scaffold hand-rolls a fold: they all drive createAssistantStream', async () => {
     for (const framework of ['react', 'vue', 'svelte', 'html', 'next', 'tanstack-start'] as const) {
       const out = await scaffold.handler({
         framework, useCase: 'drop-in-chat', integration: 'mock', placement: 'full-page',
@@ -1836,17 +1867,19 @@ describe('scaffold', () => {
       expect(ownCode, `${label}: streams by replacing parts wholesale`).not.toMatch(
         /\.\.\.m, parts: \[\{ type: .text., text: (answer|accumulated)/,
       );
-      // The fold itself, plus the helper it calls.
-      expect(ownCode, `${label}: missing the appendText fold`).toMatch(
-        /\.\.\.m, parts: appendText\(m\.parts, (tok|delta)\)/,
-      );
-      expect(ownCode, `${label}: missing the appendText helper definition`).toContain(
+      // No inline fold of ANY kind — that is the drift this consolidation removed.
+      expect(ownCode, `${label}: reintroduced an inline appendText helper`).not.toContain(
         'const appendText =',
       );
-      // The helper must open a NEW text part when the last part is not text,
-      // which is what keeps a post-tool answer out of the pre-tool text.
-      expect(ownCode, `${label}: fold does not open a new trailing text part`).toContain(
-        "[...parts, { type: 'text', text: delta }]",
+      expect(ownCode, `${label}: reintroduced a per-token map over messages`).not.toMatch(
+        /\.\.\.m, parts: appendText\(/,
+      );
+      // The fold comes from the kit, driven by the same stream the real path uses.
+      expect(ownCode, `${label}: does not drive createAssistantStream`).toContain(
+        'const stream = createAssistantStream(',
+      );
+      expect(ownCode, `${label}: does not read through the kit's SSE reader`).toContain(
+        'await readOpenAIStream(res, stream);',
       );
     }
   });
@@ -2065,21 +2098,43 @@ describe('scaffolds import the wire adapter for real backends', () => {
     expect(emitted).not.toContain("p.type === 'text' ? p.text");
   });
 
-  it.each(REAL_FRAMEWORKS)('%s mock scaffolds stay import-free and inline', async (framework) => {
+  /**
+   * INVERTED, deliberately. This used to assert that mock scaffolds were
+   * "import-free and inline" — no `@kitn.ai/ui/wire`, no `readOpenAIStream`, and
+   * their own `const appendText =`. That was the design, and it is the design
+   * that produced seven divergent copies of one fold and a zero-config default
+   * which exercised none of the parsing every real integration depends on.
+   *
+   * The mock now imports the kit's shared responder and reads through the kit's
+   * own SSE reader, so what is worth asserting is the opposite of what was here.
+   */
+  it.each(REAL_FRAMEWORKS)('%s mock scaffolds import the shared responder, not a copy', async (framework) => {
     const out = await scaffold.handler({
       framework,
       useCase: 'drop-in-chat',
       integration: 'mock',
       placement: 'full-page',
     });
-    // Scoped to the emitted CODE. mock's streamMapping now names the adapter as
-    // what takes over on the swap to a real backend, and that sentence is not an
-    // import.
     const code = frontEnd(out);
-    expect(code).not.toContain('@kitn.ai/ui/wire');
-    expect(code).not.toContain('readOpenAIStream');
-    // The inlined appendTextPart is still what folds the canned reply.
-    expect(code).toContain('const appendText =');
+    // ONE implementation: the responder comes from the package.
+    expect(code).toMatch(/import \{[^}]*\bcreateMockResponder\b[^}]*\} from '@kitn\.ai\/ui\/state';/);
+    expect(code).toContain('const mockResponse = createMockResponder();');
+    // …and it is read by the SAME reader a provider's response goes through.
+    expect(code).toContain("from '@kitn.ai/ui/wire'");
+    expect(code).toContain('await readOpenAIStream(res, stream);');
+    // No second copy of the fold, and no re-hand-rolled reader.
+    expect(code).not.toContain('const appendText =');
+    expect(code).not.toContain('getReader()');
+    expect(code).not.toContain("startsWith('data:')");
+    // `toOpenAIMessages` must not be IMPORTED: there is no request body to encode,
+    // and a stock tsconfig's noUnusedLocals turns an unused name into a build
+    // error in the consumer's app rather than a harmless extra import. Scoped to
+    // the import line on purpose — the go-live note names the function in a
+    // comment, which is guidance, not an unused binding.
+    // Leading whitespace allowed: svelte emits its imports indented inside <script>.
+    const wireImport = code.match(/^\s*import \{([^}]*)\} from '@kitn\.ai\/ui\/wire';$/m);
+    expect(wireImport, 'no @kitn.ai/ui/wire import found').not.toBeNull();
+    expect(wireImport![1]).not.toContain('toOpenAIMessages');
     expect(code).toContain('parts:');
   });
 
@@ -2483,7 +2538,16 @@ describe('real-backend scaffolds send what the panel needs and survive a failure
     expect(abortAt, `${framework}: abort after the finally`).toBeLessThan(finallyAt);
   });
 
-  it('mock scaffolds stay catch-free: there is no request to fail', async () => {
+  /**
+   * INVERTED. "mock scaffolds stay catch-free: there is no request to fail" was
+   * true of the inline fold and is false now: the mock drives the same
+   * createAssistantStream through the same reader, so it gets — and needs — the
+   * same settling. `stream.done()` in the finally is what releases the message
+   * and the loading flag, and abort() is what settles it if the reply throws
+   * mid-parse. A mock that skipped this would leave a permanently spinning
+   * composer on any error inside the responder.
+   */
+  it('mock scaffolds settle exactly like a real backend', async () => {
     const code = frontEnd(
       await scaffold.handler({
         framework: 'react',
@@ -2492,7 +2556,16 @@ describe('real-backend scaffolds send what the panel needs and survive a failure
         placement: 'full-page',
       }),
     );
-    expect(code).not.toContain('stream.abort(');
+    expect(code).toMatch(/^\s*\} catch \(err\) \{$/m);
+    expect(code).toContain(
+      "stream.abort(err instanceof Error ? err.message : 'Request failed');",
+    );
+    expect(code).toContain('stream.done();');
+    const catchAt = code.indexOf('} catch (err) {');
+    const finallyAt = code.indexOf('} finally {', catchAt);
+    const abortAt = code.indexOf('stream.abort(');
+    expect(abortAt, 'abort outside the catch').toBeGreaterThan(catchAt);
+    expect(abortAt, 'abort after the finally').toBeLessThan(finallyAt);
   });
 });
 
