@@ -129,8 +129,39 @@ export function createTween(initial: number): {
   let raf = 0;
   let disposed = false;
 
+  /**
+   * `cancelAnimationFrame`, captured at SETUP.
+   *
+   * `stop()` below runs at dispose, and dispose is not guaranteed to happen
+   * while the page that mounted this tween is still standing -- a host can tear
+   * its DOM globals down in between (`component-register`'s
+   * `disconnectedCallback` defers a microtask; a test environment deletes the
+   * globals synchronously right after detaching). A bare `cancelAnimationFrame`
+   * there throws from a promise nobody holds, so it surfaces as an unhandled
+   * rejection that fails a run in which every test passed. See
+   * tests/components/teardown-without-dom-globals.test.tsx.
+   *
+   * The FUNCTION, not the view. The `const win = window` capture that fixes a
+   * bare `document` does nothing here: `window === globalThis` -- measured, in
+   * jsdom and in real Chromium/WebKit alike -- and the teardown deletes these
+   * keys off that very object, so `win.cancelAnimationFrame` is undefined by
+   * the time cleanup runs. It only trades the ReferenceError for a TypeError.
+   * `.bind` pins the receiver the WebIDL operation is specified on; Chromium
+   * and WebKit both accept a detached call (measured), so the bind is belt and
+   * braces against an engine that does not, at zero cost.
+   *
+   * GUARDED because "setup" for this primitive is the component body, and a
+   * server render executes component bodies. Node has no `cancelAnimationFrame`
+   * at all, so an unguarded capture here would trade the disposal crash for an
+   * SSR crash -- measured, not hypothesised. Nothing can be scheduled without
+   * `requestAnimationFrame` either, so the no-op fallback is exactly right.
+   */
+  const cancelFrame = typeof cancelAnimationFrame === 'function'
+    ? cancelAnimationFrame.bind(globalThis)
+    : () => {};
+
   const stop = () => {
-    if (raf) cancelAnimationFrame(raf);
+    if (raf) cancelFrame(raf);
     raf = 0;
   };
 

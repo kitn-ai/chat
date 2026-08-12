@@ -382,6 +382,35 @@ export function ShaderCanvas(props: ShaderCanvasProps): JSX.Element {
   let drawFrame: ((now: number) => void) | null = null;
   /** The pending animation frame id, or 0 when the loop is stopped. */
   let raf = 0;
+  /**
+   * `cancelAnimationFrame`, captured at SETUP.
+   *
+   * `stopLoop()` below runs at dispose (via `release()`), and dispose is not
+   * guaranteed to happen while the page that mounted this canvas is still
+   * standing -- `component-register`'s `disconnectedCallback` defers a
+   * microtask, and a test environment tears its DOM globals down in between.
+   * A bare `cancelAnimationFrame` there throws from a promise nobody holds, so
+   * it surfaces as an unhandled rejection that fails a run in which every test
+   * passed. See tests/components/teardown-without-dom-globals.test.tsx.
+   *
+   * The FUNCTION, not the view. The `const win = window` capture that fixes a
+   * bare `document` does nothing here: `window === globalThis` -- measured, in
+   * jsdom and in real Chromium/WebKit alike -- and the teardown deletes these
+   * keys off that very object, so `win.cancelAnimationFrame` is undefined by
+   * the time cleanup runs. It only trades the ReferenceError for a TypeError.
+   * `.bind` pins the receiver the WebIDL operation is specified on; Chromium
+   * and WebKit both accept a detached call (measured), so the bind is belt and
+   * braces against an engine that does not, at zero cost.
+   *
+   * GUARDED because "setup" for this component is its body, and a server render
+   * executes component bodies. Node has no `cancelAnimationFrame` at all, so an
+   * unguarded capture here would trade the disposal crash for an SSR crash --
+   * measured, not hypothesised. Nothing can be scheduled without
+   * `requestAnimationFrame` either, so the no-op fallback is exactly right.
+   */
+  const cancelFrame = typeof cancelAnimationFrame === 'function'
+    ? cancelAnimationFrame.bind(globalThis)
+    : () => {};
 
   /** The assembled source and the uniform snapshot it was assembled from. */
   let build: { source: string; uniforms: Record<string, UniformSpec> } | null = null;
@@ -460,7 +489,8 @@ export function ShaderCanvas(props: ShaderCanvasProps): JSX.Element {
 
   const stopLoop = () => {
     if (raf === 0) return;
-    cancelAnimationFrame(raf);
+    // Captured at setup -- see `cancelFrame`. This line runs at dispose.
+    cancelFrame(raf);
     raf = 0;
     // Bank what was drawn so `iTime` resumes from here, not from zero.
     elapsedMs += Math.max(0, performance.now() - runStartedAt);
