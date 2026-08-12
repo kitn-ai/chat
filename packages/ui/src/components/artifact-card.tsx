@@ -3,48 +3,22 @@
 // bridge from its observation callbacks onto the frozen Card Contract.
 import { createUniqueId, untrack, Show, type JSX } from 'solid-js';
 import type { CardHost } from '../primitives/card-contract';
-import { Artifact, type ArtifactFile, type ArtifactTab } from './artifact';
+import { Artifact } from './artifact';
 
-/** The `artifact` card payload: a deliberately NARROW subset of `ArtifactProps`.
- *
- *  A card envelope is written by a model, so the surface it can reach has to be
- *  the part that describes WHAT to show, not how the viewer behaves. Toolbar
- *  composition (`showNav`/`showTabs`/…), view-state (`maximized`), the iframe
- *  `sandbox` and the imperative `controllerRef` are all host concerns and stay
- *  off the wire — a model must not be able to widen its own sandbox or hide the
- *  chrome the user needs to inspect what it built. */
-export interface ArtifactCardData {
-  /** URL the preview iframe frames. */
-  src?: string;
-  /** Files for the Code tab's tree (+ each file's preview `url`). */
-  files?: ArtifactFile[];
-  /** Which view the card OPENS on: `preview` (default) or `code`.
-   *
-   *  Seed only, and deliberately so. This card exists to be revised — `addCard`
-   *  upserts on `envelope.id` — and a revision hands the same live component a
-   *  new envelope. Were this wired to `Artifact`'s CONTROLLED `tab` prop, every
-   *  revision would re-assert it and yank a user who had switched views back to
-   *  the model's choice. A model cannot move the user between tabs after the
-   *  first render; the user's choice wins. */
-  tab?: ArtifactTab;
-  /** Path of the file selected in the tree when the card first renders.
-   *
-   *  Seed only, for the same reason as `tab`, but achieved differently:
-   *  `Artifact` has a `defaultTab` prop to seed the tab and no `defaultActiveFile`
-   *  counterpart, so this is read ONCE via `untrack` at setup and handed over as
-   *  a static value. That leaves `Artifact`'s unconditional
-   *  `createEffect(() => setActiveFile(local.activeFile))` with nothing reactive
-   *  to track, so it runs once instead of resetting the user's selection on
-   *  every revision. Keep it static — passing `props.data.activeFile` straight
-   *  through would silently restore that bug. */
-  activeFile?: string;
-  /** Friendly address shown INSTEAD of the real url. Use when `src` is not
-   *  consumer-facing (e.g. a `data:` blob) so a clean address is shown. */
-  displayUrl?: string;
-  /** Frame height. A bare number is px; a string is any CSS length. Defaults to
-   *  `DEFAULT_ARTIFACT_CARD_HEIGHT` — see the note on ArtifactCard. */
-  height?: number | string;
-}
+// `ArtifactCardData` is AUTHORED IN ../primitives/card-data-types.ts, along with
+// `ArtifactCardFile` — the same declaration `FileTree`/`Artifact` use, which is
+// why nothing here restates the file shape. See the note in confirm-card.tsx, or
+// that file's header, for why the card payload types left a `.tsx` and why they
+// are `type` aliases. Re-exported here unchanged.
+
+import type { ArtifactCardData } from '../primitives/card-data-types';
+
+export type {
+  ArtifactCardData,
+  ArtifactCardEnvelope,
+  ArtifactCardFile,
+  ArtifactCardTab,
+} from '../primitives/card-data-types';
 
 /** Height the artifact card falls back to. Tall enough that a framed page is
  *  actually legible in a thread, short enough to leave the conversation visible. */

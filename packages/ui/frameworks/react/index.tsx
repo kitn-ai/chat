@@ -406,7 +406,7 @@ export const Checkpoint = /*#__PURE__*/ createWebComponent<CheckpointProps>(
 
 export interface ChoiceProps extends WebComponentProps {
   /** The choice definition (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { prompt, options:[…], allowOther?, submitLabel? }`. Import `ChoiceCardData` from `@kitn.ai/ui` for the full shape. */
-  data?: Record<string, unknown>;
+  data?: { prompt?: string; options: { id: string; label: string; description?: string; media?: { image?: string; imageAlt?: string; icon?: string }; meta?: string; recommended?: boolean; disabled?: boolean; payload?: unknown }[]; allowOther?: boolean | { label?: string; placeholder?: string }; submitLabel?: string; dismissible?: boolean };
   /** Stable card id correlating every emitted CardEvent. Attribute: `card-id`. */
   cardId?: string;
   /** Heading rendered in the card chrome (= CardEnvelope.title). Attribute: `heading`. */
@@ -576,7 +576,7 @@ export const Composer = /*#__PURE__*/ createWebComponent<ComposerProps>(
 
 export interface ConfirmProps extends WebComponentProps {
   /** The confirm definition (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { body, tone, actions:[…] }`. Import `ConfirmCardData` from `@kitn.ai/ui` for the full shape. */
-  data?: Record<string, unknown>;
+  data?: { heading?: string; body?: string; tone?: "default" | "warning" | "danger"; actions: { id: string; label: string; style?: "default" | "destructive" | "primary"; payload?: unknown; default?: boolean }[]; dismissible?: boolean };
   /** Stable card id correlating every emitted CardEvent. Attribute: `card-id`. */
   cardId?: string;
   /** Heading rendered in the card chrome (= CardEnvelope.title). Attribute: `heading`. */
@@ -602,7 +602,7 @@ export interface ContextProps extends WebComponentProps {
   /** Fraction (0–1) above which the meter turns red. Defaults to `0.9` (90%). */
   dangerThreshold?: number;
   /** Fires when the computed severity level changes (ok → warn → danger or back). `detail.level` is `'ok'`, `'warn'`, or `'danger'`. */
-  onThresholdChange?: (event: CustomEvent<{ level: "ok" | "warn" | "danger" }>) => void;
+  onThresholdChange?: (event: CustomEvent<{ level: "danger" | "ok" | "warn" }>) => void;
 }
 
 export const Context = /*#__PURE__*/ createWebComponent<ContextProps>(
@@ -779,8 +779,8 @@ export const FileUpload = /*#__PURE__*/ createWebComponent<FileUploadProps>(
 );
 
 export interface FormProps extends WebComponentProps {
-  /** The form definition: a JSON Schema (`type:'object'`) + `x-kai-*` UI hints (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { type:'object', properties:{…} }`. Import the `FormDefinition` type from `@kitn.ai/ui` for the full shape (it is self-referential, so the element types it loosely). */
-  data?: Record<string, unknown>;
+  /** The form definition: a JSON Schema (`type:'object'`) + `x-kai-*` UI hints (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { type:'object', properties:{…} }`. Import the `FormDefinition` type from `@kitn.ai/ui` for the full shape. It IS self-referential (`FormField.properties` is another `FormField` map), and the generated `element-types.d.ts` inlines every named type, so the shipped declaration bottoms out in a `Record<string, unknown>` placeholder one level down rather than carrying the recursion. That is why `FormDefinition` is a `type` alias: an interface gets no implicit index signature, so it would not be assignable to that placeholder. */
+  data?: { type: "object"; title?: string; description?: string; required?: string[]; properties: Record<string, { type: "string" | "number" | "boolean" | "object" | "integer" | "array"; title?: string; description?: string; default?: unknown; enum?: unknown[]; format?: "email" | "uri" | "url" | "date" | "date-time" | "time"; minimum?: number; maximum?: number; minLength?: number; maxLength?: number; pattern?: string; minItems?: number; maxItems?: number; items?: Record<string, unknown> | { enum: unknown[] }; properties?: Record<string, Record<string, unknown>>; required?: string[]; readOnly?: boolean; "x-kai-widget"?: "textarea" | "slider" | "rating" | "radio" | "select" | "checkbox" | "password" | "switch"; "x-kai-placeholder"?: string; "x-kai-step"?: number }>; "x-kai-order"?: string[]; "x-kai-inlineMax"?: number; "x-kai-submitLabel"?: string; "x-kai-dismissible"?: boolean; "x-kai-actions"?: { id: string; label: string; variant?: "default" | "ghost" | "outline" }[] };
   /** Stable card id correlating every emitted CardEvent. Attribute: `card-id`. */
   cardId?: string;
   /** Heading rendered in the card chrome (= CardEnvelope.title). Attribute: `heading`. */
@@ -1697,7 +1697,7 @@ export const Tabs = /*#__PURE__*/ createWebComponent<TabsProps>(
 
 export interface TasksProps extends WebComponentProps {
   /** The tasks definition (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { tasks:[…], selectAll, confirmLabel, … }`. Import `TasksCardData` from `@kitn.ai/ui` for the full shape. */
-  data?: Record<string, unknown>;
+  data?: { mode?: "select" | "progress"; heading?: string; tasks: { id: string; label: string; description?: string; checked?: boolean; disabled?: boolean }[]; selectAll?: boolean; confirmLabel?: string; allowEmpty?: boolean; min?: number; max?: number; dismissible?: boolean };
   /** Stable card id correlating every emitted CardEvent. Attribute: `card-id`. */
   cardId?: string;
   /** Heading rendered in the card chrome (= CardEnvelope.title). Attribute: `heading`. */

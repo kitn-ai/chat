@@ -209,7 +209,20 @@ export type {
 export { Artifact } from './components/artifact';
 export type { ArtifactProps, ArtifactFile, ArtifactTab } from './components/artifact';
 export { ArtifactCard, DEFAULT_ARTIFACT_CARD_HEIGHT } from './components/artifact-card';
-export type { ArtifactCardProps, ArtifactCardData } from './components/artifact-card';
+// `ArtifactCardFile` is the SAME declaration `FileTreeFile` and `ArtifactFile`
+// alias, authored in primitives/card-data-types.ts because `ArtifactCardData.files`
+// reaches it and that module has to stay resolvable from a Node/no-DOM project.
+// It is exported here under its authored name because that is the name the
+// generated element metadata records for `kai-artifact.files` / `kai-file-tree.files`,
+// and tests/elements/prop-types-exported.ts requires every named prop type to be
+// importable from this entry. The two aliases stay exported above, unchanged.
+export type {
+  ArtifactCardProps,
+  ArtifactCardData,
+  ArtifactCardEnvelope,
+  ArtifactCardFile,
+  ArtifactCardTab,
+} from './components/artifact-card';
 
 // Layer 3: AI/Feature Components
 export {

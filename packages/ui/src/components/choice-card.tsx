@@ -24,37 +24,25 @@ import { useCardHost } from '../primitives/card-host';
 import { Check, X } from 'lucide-solid';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Types (choice.schema.json) — see src/primitives/card-schemas/choice.schema.json
+// Types (choice.schema.json) — AUTHORED IN ../primitives/card-data-types.ts.
+// See the note in confirm-card.tsx, or that file's header, for why they left a
+// `.tsx` and why they are `type` aliases. Re-exported here unchanged.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export interface ChoiceOptionMedia {
-  image?: string;
-  imageAlt?: string;
-  icon?: string;
-}
+import type {
+  ChoiceAllowOther,
+  ChoiceCardData,
+  ChoiceOption,
+  ChoiceOptionMedia,
+} from '../primitives/card-data-types';
 
-export interface ChoiceOption {
-  id: string; // required, unique within the card
-  label: string; // required
-  description?: string;
-  media?: ChoiceOptionMedia;
-  meta?: string; // trailing freeform text (e.g. price/badge)
-  recommended?: boolean; // renders a "Recommended" pill
-  disabled?: boolean; // not selectable; skipped in keyboard nav
-  payload?: unknown; // echoed back in the emitted action
-}
-
-export type ChoiceAllowOther = boolean | { label?: string; placeholder?: string };
-
-export interface ChoiceCardData {
-  prompt?: string; // optional question/body above the options
-  options: ChoiceOption[]; // 1..N
-  allowOther?: ChoiceAllowOther; // free-text escape
-  submitLabel?: string; // label for the Submit button (default 'Submit')
-  dismissible?: boolean; // show a close affordance that emits `dismiss`
-}
-
-export type ChoiceCardEnvelope = CardEnvelope<'choice', ChoiceCardData>;
+export type {
+  ChoiceAllowOther,
+  ChoiceCardData,
+  ChoiceCardEnvelope,
+  ChoiceOption,
+  ChoiceOptionMedia,
+} from '../primitives/card-data-types';
 
 export const CHOICE_CARD_TYPE = 'choice' as const;
 

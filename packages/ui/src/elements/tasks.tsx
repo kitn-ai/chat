@@ -6,7 +6,7 @@ interface Props extends Record<string, unknown> {
   /** The tasks definition (the CardEnvelope.data). Set as a JS PROPERTY:
    *  `el.data = { tasks:[…], selectAll, confirmLabel, … }`. Import
    *  `TasksCardData` from `@kitn.ai/ui` for the full shape. */
-  data?: Record<string, unknown>;
+  data?: TasksCardData;
   /** Stable card id correlating every emitted CardEvent. Attribute: `card-id`. */
   cardId?: string;
   /** Heading rendered in the card chrome (= CardEnvelope.title). Attribute: `heading`. */
@@ -86,7 +86,7 @@ defineWebComponent<Props, Events>(
 
     return (
       <TasksCard
-        data={props.data as TasksCardData | undefined}
+        data={props.data}
         cardId={props.cardId ?? (element.id || 'kai-tasks')}
         heading={props.heading}
         resolution={props.resolution as CardResolution | undefined}

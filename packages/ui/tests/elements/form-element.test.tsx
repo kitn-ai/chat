@@ -39,10 +39,15 @@ async function mount(data: FormDefinition, cardId = 'card-feedback-7f3') {
   // not fail, because without the tag map every `kai-*` tag was an opaque HTMLElement.
   const el = document.createElement('kai-form');
   el.setAttribute('card-id', cardId);
-  // @ts-expect-error — the generated `data?: Record<string, unknown>` rejects every
-  // exported card interface (no implicit index signature), so this is the error a
-  // consumer hits following the element's own "import FormDefinition" doc comment.
-  // Marked, not cast away: fixing the generator makes it unused and fails the pass.
+  // Bare, no cast, no directive — the documented consumer workflow, and it compiles
+  // as of 2026-08-12. It carried an `@ts-expect-error` while the generated prop was
+  // `data?: Record<string, unknown>`, which no exported card INTERFACE was assignable
+  // to. `FormDefinition` is the load-bearing one of the four: it is SELF-REFERENTIAL,
+  // so the generator inlines it down to a `Record<string, unknown>` placeholder one
+  // level in, and only a `type` alias (which gets an implicit index signature) is
+  // assignable to that — an interface would still fail here however the facade
+  // declared its prop. See the long note in choice-element.test.tsx, and keep this
+  // line bare so it can still fail.
   el.data = data;
   document.body.appendChild(el);
   await flush();

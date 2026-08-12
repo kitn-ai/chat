@@ -39,16 +39,23 @@ async function mount(data: ChoiceCardData, cardId = 'card-choice-1') {
   // only for 'div' — the one tag tsc actually knew.
   const el = document.createElement('kai-choice');
   el.setAttribute('card-id', cardId);
-  // @ts-expect-error — a REAL gap in the generated declarations, not test noise, and
-  // deliberately marked rather than cast away. gen-element-types.mjs emits `data?:
-  // Record<string, unknown>` for every card element, and NO exported card interface is
-  // assignable to that (interfaces get no implicit index signature), so a consumer
-  // following this element's own doc comment — "Import `ChoiceCardData` from
-  // `@kitn.ai/ui` for the full shape" — writes `el.data = myChoiceCardData` and gets
-  // TS2322. The payload itself is still fully checked, at `mount`'s parameter, so this
-  // line only moves a known-good value into a badly-typed slot. When the generator
-  // learns the real payload types this directive becomes unused and TS2578 fails the
-  // pass, which is the point: it cannot rot closed.
+  // THE LINE THIS FILE EXISTS TO KEEP HONEST. Bare, no cast, no directive: exactly
+  // what a consumer writes after reading this element's own doc comment ("Import
+  // `ChoiceCardData` from `@kitn.ai/ui` for the full shape").
+  //
+  // It carried an `@ts-expect-error` until 2026-08-12, and the gap was real rather
+  // than test noise: gen-element-types.mjs emitted `data?: Record<string, unknown>`
+  // for every card element and NO exported card INTERFACE is assignable to that,
+  // because TypeScript gives an interface no implicit index signature. So the
+  // documented workflow was TS2322. Two changes fixed it together — the payload
+  // types moved to primitives/card-data-types.ts as `type` ALIASES (which do get an
+  // implicit index signature), and the element facades now declare `data?:
+  // ChoiceCardData` so the generator inlines the real shape instead of a bare
+  // Record. The directive going unused (TS2578) is what forced this note to be
+  // rewritten, which was the point of marking it rather than casting it away.
+  //
+  // KEEP IT BARE. A cast here would make this line unable to fail again, the same
+  // way `as HTMLElement & { data: ChoiceCardData }` did before the tag map arrived.
   el.data = data;
   document.body.appendChild(el);
   await flush();

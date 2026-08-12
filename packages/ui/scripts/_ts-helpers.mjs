@@ -14,6 +14,27 @@ import ts from 'typescript';
 export const displayNameFromClass = (className) =>
   className.replace(/^Kai/, '').replace(/Element$/, '');
 
+/**
+ * A property name as it must be written INSIDE an emitted type literal.
+ *
+ * Bare when it is a valid JS identifier, quoted otherwise. Not cosmetic: these
+ * strings are pasted into `src/elements/element-types.d.ts` and
+ * `frameworks/react/index.tsx`, and a hyphen is a MINUS SIGN to the parser, so an
+ * unquoted `x-kai-widget?: 'textarea' | …` is not a loosely-typed member — it is a
+ * syntax error that takes the rest of the file with it. Measured when
+ * `FormDefinition` first got inlined (it is the only payload type with hyphenated
+ * keys, which is why this went unnoticed while every inlined type happened to have
+ * identifier-safe members): compiling the generated `.d.ts` reported 60 errors
+ * starting `TS1131: Property or signature expected` at the first `x-kai-*` key, and
+ * 0 with this applied.
+ *
+ * `JSON.stringify` for the quoting so an embedded quote or backslash is escaped
+ * rather than pasted through. Numeric-looking keys are quoted too: `{ 0: X }` and
+ * `{ "0": X }` mean the same thing to TypeScript, so quoting is never wrong here,
+ * only occasionally redundant.
+ */
+export const propKey = (name) => (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) ? name : JSON.stringify(name));
+
 export function createTsHelpers(program, checker, { importable = new Set() } = {}) {
   const isScalar = (t) => {
     if (t.isUnion?.()) return t.types.every(isScalar);
@@ -62,7 +83,7 @@ export function createTsHelpers(program, checker, { importable = new Set() } = {
       const props = type.getProperties().map((s) => {
         const t = checker.getTypeOfSymbolAtLocation(s, s.valueDeclaration ?? decl);
         const opt = s.flags & ts.SymbolFlags.Optional ? '?' : '';
-        return `${s.name}${opt}: ${renderType(t, decl, next)}`;
+        return `${propKey(s.name)}${opt}: ${renderType(t, decl, next)}`;
       });
       return `{ ${props.join('; ')} }`;
     }
@@ -129,7 +150,7 @@ export function createTsHelpers(program, checker, { importable = new Set() } = {
       const props = t.getProperties().map((s) => {
         const pt = checker.getTypeOfSymbolAtLocation(s, s.valueDeclaration ?? s.declarations?.[0]);
         const opt = s.flags & ts.SymbolFlags.Optional ? '?' : '';
-        return `${s.name}${opt}: ${renderType(pt, s.valueDeclaration)}`;
+        return `${propKey(s.name)}${opt}: ${renderType(pt, s.valueDeclaration)}`;
       });
       return `{ ${props.join('; ')} }${suffix}`;
     }

@@ -6,7 +6,7 @@ interface Props extends Record<string, unknown> {
   /** The confirm definition (the CardEnvelope.data). Set as a JS PROPERTY:
    *  `el.data = { body, tone, actions:[…] }`. Import `ConfirmCardData` from
    *  `@kitn.ai/ui` for the full shape. */
-  data?: Record<string, unknown>;
+  data?: ConfirmCardData;
   /** Stable card id correlating every emitted CardEvent. Attribute: `card-id`. */
   cardId?: string;
   /** Heading rendered in the card chrome (= CardEnvelope.title). Attribute: `heading`. */
@@ -63,7 +63,7 @@ defineWebComponent<Props>(
 
     return (
       <ConfirmCard
-        data={props.data as ConfirmCardData | undefined}
+        data={props.data}
         cardId={props.cardId ?? (element.id || 'kai-confirm')}
         heading={props.heading}
         autofocus={flag('autofocus')}

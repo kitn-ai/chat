@@ -36,10 +36,12 @@ async function mount(data: TasksCardData, cardId = 'card-plan-42') {
   // not fail, because without the tag map every `kai-*` tag was an opaque HTMLElement.
   const el = document.createElement('kai-tasks');
   el.setAttribute('card-id', cardId);
-  // @ts-expect-error — the generated `data?: Record<string, unknown>` rejects every
-  // exported card interface (no implicit index signature), so this is the error a
-  // consumer hits following the element's own "import TasksCardData" doc comment.
-  // Marked, not cast away: fixing the generator makes it unused and fails the pass.
+  // Bare, no cast, no directive — the documented consumer workflow, and it compiles
+  // as of 2026-08-12. It carried an `@ts-expect-error` while the generated prop was
+  // `data?: Record<string, unknown>`, which no exported card INTERFACE was assignable
+  // to; the payload types are `type` aliases in primitives/card-data-types.ts now and
+  // the facade declares `data?: TasksCardData`. See the long note in
+  // choice-element.test.tsx, and keep this line bare so it can still fail.
   el.data = data;
   document.body.appendChild(el);
   await flush();

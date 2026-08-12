@@ -24,42 +24,19 @@ import { useCardHost } from '../primitives/card-host';
 import { Check, Circle, CircleCheck, X } from 'lucide-solid';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Types (tasks.schema.json) — see src/primitives/card-schemas/tasks.schema.json
+// Types (tasks.schema.json) — AUTHORED IN ../primitives/card-data-types.ts.
+// See the note in confirm-card.tsx, or that file's header, for why they left a
+// `.tsx` and why they are `type` aliases. Re-exported here unchanged.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export interface TasksTask {
-  id: string;
-  label: string;
-  description?: string;
-  checked?: boolean;
-  disabled?: boolean;
-}
+import type { TasksCardData, TasksCardResult, TasksTask } from '../primitives/card-data-types';
 
-export interface TasksCardData {
-  /**
-   * `select` (default) = checkbox rows + a confirm button that emits the contract
-   * `submit`. `progress` = an onboarding/checklist look: a header `done / total`
-   * count, circular indicators, per-item title + muted description, and NO confirm
-   * button (checking a row is itself the terminal action). Both share the same
-   * selection model (toggle by id, the `max` gate, `kai-value-change`); `progress`
-   * is purely a presentational variant.
-   */
-  mode?: 'select' | 'progress';
-  heading?: string;
-  tasks: TasksTask[]; // >=1
-  selectAll?: boolean;
-  confirmLabel?: string;
-  allowEmpty?: boolean;
-  min?: number;
-  max?: number;
-  dismissible?: boolean; // show a close affordance that emits `dismiss`
-}
-
-export interface TasksCardResult {
-  selected: string[];
-}
-
-export type TasksCardEnvelope = CardEnvelope<'tasks', TasksCardData>;
+export type {
+  TasksCardData,
+  TasksCardEnvelope,
+  TasksCardResult,
+  TasksTask,
+} from '../primitives/card-data-types';
 
 export const TASKS_CARD_TYPE = 'tasks' as const;
 

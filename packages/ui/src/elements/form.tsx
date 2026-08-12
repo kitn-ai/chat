@@ -6,8 +6,15 @@ interface Props extends Record<string, unknown> {
   /** The form definition: a JSON Schema (`type:'object'`) + `x-kai-*` UI hints
    *  (the CardEnvelope.data). Set as a JS PROPERTY: `el.data = { type:'object',
    *  properties:{…} }`. Import the `FormDefinition` type from `@kitn.ai/ui` for
-   *  the full shape (it is self-referential, so the element types it loosely). */
-  data?: Record<string, unknown>;
+   *  the full shape.
+   *
+   *  It IS self-referential (`FormField.properties` is another `FormField` map),
+   *  and the generated `element-types.d.ts` inlines every named type, so the
+   *  shipped declaration bottoms out in a `Record<string, unknown>` placeholder
+   *  one level down rather than carrying the recursion. That is why
+   *  `FormDefinition` is a `type` alias: an interface gets no implicit index
+   *  signature, so it would not be assignable to that placeholder. */
+  data?: FormDefinition;
   /** Stable card id correlating every emitted CardEvent. Attribute: `card-id`. */
   cardId?: string;
   /** Heading rendered in the card chrome (= CardEnvelope.title). Attribute: `heading`. */
@@ -72,7 +79,7 @@ defineWebComponent<Props, Events>('kai-form', {
 
   return (
     <Form
-      data={props.data as FormDefinition | undefined}
+      data={props.data}
       cardId={props.cardId ?? (element.id || 'kai-form')}
       heading={props.heading}
       resolution={props.resolution as CardResolution | undefined}
