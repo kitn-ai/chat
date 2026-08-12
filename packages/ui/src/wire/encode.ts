@@ -12,12 +12,46 @@ export interface OpenAIToolCall {
   function: { name: string; arguments: string };
 }
 
+/** One `reasoning_details` entry. Provider-owned open shape, kept as a record
+ *  for the same reason `AnthropicContentBlock` is: an opaque entry has to pass
+ *  through UNTOUCHED, and a closed type would be a list of the fields we happen
+ *  to have seen. */
+export type OpenAIReasoningDetail = Record<string, unknown>;
+
 export interface OpenAIWireMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string | null;
   tool_calls?: OpenAIToolCall[];
   tool_call_id?: string;
   name?: string;
+  /** Only ever present when `toOpenAIMessages` was asked for it. See
+   *  `OpenAIEncodeOptions.reasoning`. */
+  reasoning_details?: OpenAIReasoningDetail[];
+}
+
+export interface OpenAIEncodeOptions {
+  /**
+   * Whether to send the assistant's own reasoning back with the thread.
+   *
+   * DEFAULT `'omit'`, and that default is a measurement, not caution. Omitting
+   * reasoning is accepted by every configuration tested -- five live omission
+   * trials plus 28 recorded live requests per configuration across the spike's
+   * conformance sweep, zero 400s -- so the path that ships today demonstrably
+   * works, while including reasoning cost about 25% more prompt tokens per round
+   * when measured (665 -> 834 on a two-round loop). A library does not get to
+   * raise every consumer's bill and add a new provider-validation surface as a
+   * side effect of a bug fix.
+   *
+   * `'include'` is for a multi-round TOOL loop, which is where OpenRouter says it
+   * pays: "when you post tool results, including the original reasoning ensures
+   * the model can continue its reasoning from where it left off". Measured
+   * accepted (HTTP 200) for a signed Anthropic block and for an OpenAI encrypted
+   * block, over the OpenAI-compatible wire.
+   *
+   * The Anthropic wire has no such knob because it has no such choice: a filtered
+   * or rebuilt thinking block there is a hard 400.
+   */
+  reasoning?: 'omit' | 'include';
 }
 
 /** Anthropic content blocks are an open, provider-owned union. Keeping them as
@@ -105,6 +139,91 @@ const toolResultOf = (tool: SettledTool): OpenAIWireMessage => ({
   content: tool.errorText ?? JSON.stringify(tool.output),
 });
 
+type ReasoningPart = Extract<MessagePart, { type: 'reasoning' }>;
+
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/**
+ * The provider's own `reasoning_details` entry for this block, if the part came
+ * from the OpenAI wire at all.
+ *
+ * WHAT THIS IS NOT: the block. `part.raw` holds the LAST delta that touched this
+ * part, because `appendReasoningPart` resolves `raw` last-write-wins, and every
+ * reasoning-carrying provider streams its blocks in fragments. So this entry is
+ * read for its SHAPE -- type, format, id, index, and an opaque payload if it has
+ * one -- and never for its text.
+ *
+ * A delta carrying several entries at once is rare but legal, so the entry is
+ * matched on the part's own block index first; that is the only correlator there
+ * is. The last one wins otherwise, which is the entry `raw` was captured from.
+ */
+function detailOf(part: ReasoningPart): Record<string, unknown> | undefined {
+  if (part.raw?.source !== 'openai.reasoning_details') return undefined;
+  const payload = part.raw.payload;
+  if (!Array.isArray(payload)) return undefined;
+  const records = payload.filter(isRecord);
+  const matched = records.filter((d) => d.index === part.index);
+  const pool = matched.length > 0 ? matched : records;
+  return pool[pool.length - 1];
+}
+
+/**
+ * ONE reasoning part to ONE `reasoning_details` entry, or nothing.
+ *
+ * Three cases, and every one of them is in a recorded fixture:
+ *
+ * 1. OPAQUE (`reasoning.encrypted`, `openai/gpt-5.4-mini`). The `data` blob is
+ *    the block; there is no text and no signature to rebuild it from, and it
+ *    arrives whole in a single frame, so `raw` really is the block here. It goes
+ *    back BY REFERENCE, untouched.
+ *
+ * 2. SIGNED (`reasoning.text` with a signature, an Anthropic model over this
+ *    wire). REASSEMBLED from `part.text` and `part.signature`, never echoed.
+ *    Echoing `raw` sends the final frame, which carries the signature and NO
+ *    text -- measured: of 85 reasoning frames in one turn, only the last has the
+ *    signature and it has no text. The signature is the load-bearing field:
+ *    stripping it is a hard 400 (`Invalid signature in thinking block`) from all
+ *    four providers OpenRouter tried, while mutating the text was accepted.
+ *
+ * 3. NEITHER (`deepseek` `format: "unknown"`, and the `reasoning.summary`
+ *    entries that ride alongside gpt-5.4-mini's encrypted block). SKIPPED.
+ *    Nothing measured supports sending these: the two accepted round-trips were
+ *    a signed block and an encrypted one, and every measured 400 was a provider
+ *    failing to verify a block it was handed. Omission, by contrast, is proven
+ *    accepted everywhere. `format: "unknown"` is OpenRouter saying it could not
+ *    attribute the block to a round-trippable format, and re-sending a summary
+ *    OpenAI itself treats as a display artifact spends tokens on nothing.
+ *
+ * On the sequence rule -- "the entire sequence of consecutive reasoning blocks
+ * must match the outputs generated by the model" -- case 3 is the one place this
+ * is READ rather than proven. It holds up because verifiability is a
+ * per-configuration property in all 40 recorded reasoning turns, never a
+ * per-block one: Haiku signs every block, deepseek signs none, gpt-5.4-mini
+ * signs none but carries `data`. So the skip never filters one block out of a
+ * run of comparable ones. For gpt-5.4-mini it drops the summary at block index 0
+ * and keeps the encrypted carrier at index 1, which is exactly the single-entry
+ * payload the live probe sent and got a 200 for.
+ */
+function reasoningDetailOf(part: ReasoningPart): OpenAIReasoningDetail | undefined {
+  const detail = detailOf(part);
+  if (!detail) return undefined;
+
+  if (detail.type === 'reasoning.encrypted' || typeof detail.data === 'string') return detail;
+
+  if (typeof part.signature !== 'string' || part.signature === '') return undefined;
+
+  const type = typeof detail.type === 'string' ? detail.type : 'reasoning.text';
+  // The readable field is named for the entry type: `summary` entries carry
+  // `summary`, everything else carries `text`.
+  const textKey = type === 'reasoning.summary' ? 'summary' : 'text';
+  const out: OpenAIReasoningDetail = { type, [textKey]: part.text, signature: part.signature };
+  if (typeof detail.format === 'string') out.format = detail.format;
+  if (typeof detail.id === 'string') out.id = detail.id;
+  if (detail.index !== undefined) out.index = detail.index;
+  return out;
+}
+
 /**
  * ChatMessage[] to an OpenAI chat-completions `messages` array.
  *
@@ -128,12 +247,28 @@ const toolResultOf = (tool: SettledTool): OpenAIWireMessage => ({
  * with no `tool_calls`: OpenAI treats `content` as required unless `tool_calls`
  * is present, and strict-compatible endpoints reject it.
  *
- * `reasoning`, `card`, `source` and `file` parts are not encoded. OpenAI chat
- * completions has no reasoning channel on the way back in, and the other three
- * are kit-side. File attachments are a documented v1 limitation, which is why a
- * user turn carrying only an attachment encodes to nothing and is skipped.
+ * REASONING IS OPT-IN, and off by default. OpenRouter's OpenAI-compatible
+ * endpoint does have a channel on the way back in -- `reasoning_details` on the
+ * assistant message -- and `{ reasoning: 'include' }` uses it, one entry per
+ * reasoning part, in part order, reassembled by `reasoningDetailOf` rather than
+ * echoed out of `part.raw`. Read that function for which blocks make it and why.
+ * The default omits, because omitting is measured-accepted everywhere and costs
+ * about 25% fewer prompt tokens per round; see `OpenAIEncodeOptions.reasoning`.
+ *
+ * Reasoning alone still encodes to NOTHING. A block is content the model already
+ * produced, not a reason to send a turn, so a message carrying reasoning and no
+ * text and no settled tool is skipped exactly as before, rather than becoming
+ * `{ content: null }` with no `tool_calls`.
+ *
+ * `card`, `source` and `file` parts are never encoded; they are kit-side. File
+ * attachments are a documented v1 limitation, which is why a user turn carrying
+ * only an attachment encodes to nothing and is skipped.
  */
-export function toOpenAIMessages(messages: ChatMessage[]): OpenAIWireMessage[] {
+export function toOpenAIMessages(
+  messages: ChatMessage[],
+  options: OpenAIEncodeOptions = {},
+): OpenAIWireMessage[] {
+  const includeReasoning = options.reasoning === 'include';
   const out: OpenAIWireMessage[] = [];
 
   for (const message of messages) {
@@ -145,19 +280,28 @@ export function toOpenAIMessages(messages: ChatMessage[]): OpenAIWireMessage[] {
 
     let text = '';
     let pending: SettledTool[] = [];
+    let reasoning: OpenAIReasoningDetail[] = [];
 
     /** Emit the assistant message for everything buffered so far, then the
-     *  result message for each call it announced, in the same order. */
+     *  result message for each call it announced, in the same order.
+     *
+     *  The early return leaves any buffered reasoning where it is on purpose:
+     *  nothing was emitted, so those blocks still belong to a message that has
+     *  not been written yet. In practice it is unreachable with reasoning
+     *  buffered, because the only mid-loop `flush()` runs with `pending`
+     *  non-empty. */
     const flush = (): void => {
       if (text === '' && pending.length === 0) return;
       out.push({
         role: 'assistant',
         content: text === '' ? null : text,
+        ...(reasoning.length > 0 ? { reasoning_details: reasoning } : {}),
         ...(pending.length > 0 ? { tool_calls: pending.map(toolCallOf) } : {}),
       });
       for (const tool of pending) out.push(toolResultOf(tool));
       text = '';
       pending = [];
+      reasoning = [];
     };
 
     for (const part of message.parts) {
@@ -166,6 +310,15 @@ export function toOpenAIMessages(messages: ChatMessage[]): OpenAIWireMessage[] {
         // call and its result have to be on the wire before this text is.
         if (pending.length > 0) flush();
         text += part.text;
+        continue;
+      }
+      if (part.type === 'reasoning') {
+        if (!includeReasoning) continue;
+        // A block after a call belongs to the round that READ the result, for the
+        // same reason text does. Same rule as `toAnthropicMessages`.
+        if (pending.length > 0) flush();
+        const detail = reasoningDetailOf(part);
+        if (detail) reasoning.push(detail);
         continue;
       }
       if (part.type === 'tool' && isSettled(part.tool)) pending.push(part.tool);
