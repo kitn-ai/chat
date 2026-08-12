@@ -7,6 +7,17 @@ import * as UseAudioAnalysisModule from '../../primitives/use-audio-analysis';
 
 afterEach(cleanup);
 
+// Set whenever something asks a canvas for a drawing context during a test.
+// Only a REAL shader variant does that (via ShaderCanvas); every mocked
+// variant in this file returns null and touches no canvas. It is recorded as
+// a flag rather than probed from the DOM afterwards because the evidence does
+// not survive: a real shader that mounts in jsdom finds no WebGL, calls
+// `onUnavailable`, and the dispatcher swaps it back to bars -- which removes
+// the canvas again. Checking `container.querySelector('canvas')` after the
+// fact therefore reports false in BOTH the cases below, which is precisely
+// how the two got confused in the first place.
+let sawRealShaderMount = false;
+
 beforeEach(() => {
   vi.stubGlobal('matchMedia', (q: string) => ({
     matches: false,
@@ -14,9 +25,58 @@ beforeEach(() => {
     addEventListener: () => {},
     removeEventListener: () => {},
   }));
+
+  sawRealShaderMount = false;
+  // Returning null matches what jsdom effectively answers here anyway (it has
+  // no canvas backend), so this changes no behaviour -- ShaderCanvas takes the
+  // same no-WebGL path either way. It just makes the attempt observable, and
+  // as a side effect silences jsdom's "Not implemented: getContext" noise.
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => {
+    sawRealShaderMount = true;
+    return null;
+  });
 });
 
 afterEach(() => vi.unstubAllGlobals());
+
+/**
+ * Runs a shader-mount wait and, if it gives up, says WHY.
+ *
+ * `waitFor` rethrows its LAST assertion error on timeout, never anything that
+ * mentions time (dom-testing-library's `handleTimeout`), and it times out on
+ * its own `asyncUtilTimeout` of 1000ms, which is independent of vitest's
+ * `testTimeout`. So the two quite different ways these waits fail -- the
+ * mocked chunk not resolving inside that budget, and `vi.doMock` not applying
+ * at all so the REAL variant mounted instead -- both print an identical
+ * `expected false to be true` that points at a component which may be
+ * perfectly fine.
+ *
+ * That ambiguity has already cost one investigation. The failure is rare (one
+ * occurrence in 34 full-suite runs) so it cannot be cornered by re-running,
+ * and neither the message nor the stack said which case it was.
+ * `sawRealShaderMount` separates them: true means the real variant mounted and
+ * asked for a GL context, so the mock did not apply; false means the mocked
+ * module simply never arrived in time. Recording that one bit makes the next
+ * occurrence decisive instead of another hunt.
+ *
+ * This only changes what a FAILING wait reports. A passing one is untouched.
+ */
+async function reportingMountFailure(
+  what: string,
+  container: HTMLElement,
+  wait: () => Promise<unknown>,
+): Promise<void> {
+  try {
+    await wait();
+  } catch (err) {
+    throw new Error(
+      `${what} never mounted. Real shader mounted instead (mock did not apply): ` +
+        `${sawRealShaderMount}; bars rendered: ` +
+        `${container.querySelectorAll('[part~="bar"]').length}`,
+      { cause: err },
+    );
+  }
+}
 
 describe('AudioVisualizer dispatch', () => {
   it('renders bars by default', () => {
@@ -154,7 +214,9 @@ describe('AudioVisualizer shader reports itself unavailable', () => {
     // actually mount (and therefore have already called `onUnavailable`)
     // before checking that bars are STILL what's showing, or this assertion
     // would pass trivially regardless of whether the fix exists.
-    await waitFor(() => expect(waveMounted).toBe(true));
+    await reportingMountFailure('the mocked wave variant', container, () =>
+      waitFor(() => expect(waveMounted).toBe(true)),
+    );
     expect(container.querySelectorAll('[part~="bar"]').length).toBeGreaterThan(0);
 
     // Not a flicker: an unrelated prop change must not retry the shader (it
@@ -183,12 +245,14 @@ describe('AudioVisualizer shader reports itself unavailable', () => {
     }));
 
     const [variant, setVariant] = createSignal<'wave' | 'aurora'>('wave');
-    render(() => <AudioVisualizer variant={variant()} />);
+    const { container } = render(() => <AudioVisualizer variant={variant()} />);
 
     // Establish that wave really did mount and report itself unavailable
     // before switching, so the next assertion is proof of a RESET, not just
     // aurora happening to succeed on its own.
-    await waitFor(() => expect(waveMounted).toBe(true));
+    await reportingMountFailure('the mocked wave variant', container, () =>
+      waitFor(() => expect(waveMounted).toBe(true)),
+    );
 
     setVariant('aurora');
 
@@ -196,7 +260,9 @@ describe('AudioVisualizer shader reports itself unavailable', () => {
     // `<Show>` gate would stay permanently closed and aurora's component
     // would never actually be instantiated here, regardless of its own chunk
     // loading fine -- this would time out rather than fail fast.
-    await waitFor(() => expect(auroraMounted).toBe(true));
+    await reportingMountFailure('the mocked aurora variant', container, () =>
+      waitFor(() => expect(auroraMounted).toBe(true)),
+    );
   });
 });
 
@@ -310,11 +376,13 @@ describe('AudioVisualizer volume from caller-supplied bands', () => {
       },
     }));
 
-    render(() => (
+    const { container } = render(() => (
       <AudioVisualizer variant="wave" bands={[0.1, 0.2, 0.3]} stream={{} as MediaStream} />
     ));
 
-    await waitFor(() => expect(mounted).toBe(true));
+    await reportingMountFailure('the mocked wave variant', container, () =>
+      waitFor(() => expect(mounted).toBe(true)),
+    );
     expect(AudioContextSpy).not.toHaveBeenCalled();
   });
 });
