@@ -62,6 +62,47 @@ describe('the method model is big enough for the loops below to mean anything', 
   });
 });
 
+/**
+ * Every rendered method must also SAY something.
+ *
+ * The checks above prove each method reaches every artifact with its signature.
+ * They say nothing about the description column, and that gap shipped: once
+ * methods started rendering, `kai-chat`'s focus/blur/clear/send/scrollToBottom,
+ * `kai-editable-label.edit` and `kai-search.focus` rendered as rows with an empty
+ * description in four artifacts at once. Five of the seven were on the element
+ * most consumers meet first. A blank row is worse than an absent one: it asserts
+ * the method exists and then tells the reader nothing about what calling it does.
+ *
+ * The description is read from the JSDoc on the `expose({ ... })` property by
+ * gen-element-api.mjs, so this fails the moment a method is exposed without one.
+ */
+describe('every exposed method carries a doc comment', () => {
+  it('no method renders with an empty description', () => {
+    const undocumented = withMethods.flatMap((el) =>
+      el.methods!.filter((m) => !m.description?.trim()).map((m) => `${el.tag}.${m.name}()`),
+    );
+    expect(undocumented).toEqual([]);
+  });
+
+  it('the descriptions are sentences, not placeholders', () => {
+    // Deliberately a LOW bar. House style wants terse docs ("Resume paused
+    // playback." is 3 words and is the right length), so this rejects only a
+    // stub — "TODO", "clear", a bare repeat of the method name — and never
+    // pushes anyone to pad a good short sentence.
+    const tooThin = withMethods.flatMap((el) =>
+      el.methods!
+        .filter((m) => {
+          const d = m.description.trim();
+          return d.split(/\s+/).length < 3 || d.length < 15 || d.toLowerCase() === m.name.toLowerCase();
+        })
+        .map((m) => `${el.tag}.${m.name}(): ${JSON.stringify(m.description)}`),
+    );
+    expect(tooThin).toEqual([]);
+    // Derived from the model, not restated: the loop above must have had work to do.
+    expect(TOTAL_METHODS).toBeGreaterThan(100);
+  });
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Markdown artifacts: llms-full.txt and docs/web-components.md
 // ─────────────────────────────────────────────────────────────────────────────
