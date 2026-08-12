@@ -14,7 +14,7 @@
 
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -513,6 +513,9 @@ export function generate(elementsInput) {
 }
 
 // Run standalone: read the manifest from disk.
-if (import.meta.url === `file://${process.argv[1]}`) {
+// pathToFileURL, NOT `file://${process.argv[1]}`: import.meta.url percent-encodes and
+// a path does not, so on a checkout under `/My Repo/` the hand-built string never
+// matched and this exited 0 without writing llms.txt or llms-full.txt.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   generate();
 }
