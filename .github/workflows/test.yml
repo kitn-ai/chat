@@ -140,13 +140,27 @@ jobs:
       - name: Consumer types guard (shipped .d.ts type-check under bundler + nodenext)
         run: pnpm --filter @kitn.ai/ui run verify:dts:consumer
 
-      # Imports EVERY public entry in the exports map under Node's `node`
-      # condition, one child process each. Nothing in the repo ever imported the
-      # BUILT package on a server, so `import '@kitn.ai/ui'` threw "Client-only
-      # API called on the server side" in every published version through 0.20.0
-      # -- a hard SSR/prerender/RSC failure for any consumer touching a value
-      # export. Needs the build above. ~4s, no network.
-      - name: Server-import guard (every entry imports under `node`)
+      # TWO guards, chained; `verify:ssr` runs both and fails on either.
+      #
+      # verify-ssr-imports.mjs imports EVERY public entry in the exports map
+      # under Node's `node` condition, one child process each. Nothing in the
+      # repo ever imported the BUILT package on a server, so `import
+      # '@kitn.ai/ui'` threw "Client-only API called on the server side" in every
+      # published version through 0.20.0 -- a hard SSR/prerender/RSC failure for
+      # any consumer touching a value export.
+      #
+      # verify-ssr-render.mjs then RENDERS every component the server entries
+      # export, through Solid's renderToString in a DOM-free child process,
+      # because importable is not the same as renderable. Watched failing, not
+      # assumed: planting `document.documentElement.dataset.theme` at
+      # component-BODY scope in `Skeleton` left the import guard at 9/9 green and
+      # exit 0 while a real server render of the same build threw "document is
+      # not defined". The render guard turns that red naming the global, the
+      # component and the entry. It also self-tests on every run -- it renders a
+      # canary that MUST be caught and one that MUST produce markup -- so a
+      # harness that quietly stopped measuring goes red instead of green.
+      # Needs the build above. ~5s, no network.
+      - name: Server guard (every entry imports AND every component renders under `node`)
         run: pnpm --filter @kitn.ai/ui run verify:ssr
 
       # Resolves the card JSON Schemas the way a consumer would, from a temp
