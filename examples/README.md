@@ -81,18 +81,21 @@ These predate the starter-set refresh and consume the kit their own way.
 Both are ES-module web-component pages: they must be **served over HTTP** (opening
 them as a `file://` page fails, because browsers block ES-module loading from a
 `null` origin, so nothing registers and you get empty boxes). Serve the **repo
-root** with any static server:
+root**:
 
 ```bash
-npx serve .        # serve the repo root over HTTP (or: python3 -m http.server 8000)
+pnpm build:ui                            # once, to produce packages/ui/dist/
+pnpm --filter @kitn.ai/ui run examples   # serves the repo root on http://localhost:8000
 ```
 
-Then open `http://localhost:3000/examples/demos/composable/index.html` or
-`.../examples/demos/widget/index.html` (adjust the port to whatever your server prints).
+Then open `http://localhost:8000/examples/demos/composable/index.html` or
+`.../examples/demos/widget/index.html`.
 
-Caveat: these older demos load a repo-root `dist/kai.es.js` bundle. The current
-kit build writes to `packages/ui/dist/`, not the repo root, so you may need to
-produce that repo-root bundle manually before they render.
+`demos/composable/` loads the local build at `packages/ui/dist/kai.es.js`, so
+build the kit first and rebuild after you change it. `demos/widget/` pulls the
+published package from unpkg instead, so it needs a network connection but no
+build. Any static server rooted at the repo works as well (`npx serve .`); adjust
+the port to whatever it prints.
 
 ### Framework and meta-framework apps
 

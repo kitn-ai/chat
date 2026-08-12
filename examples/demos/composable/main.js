@@ -1,5 +1,5 @@
 // Composable web-components showcase — wiring for the demo page.
-// (The kit itself is registered by ../../../dist/kai.es.js, imported in the HTML.)
+// (The kit itself is registered by ../../../packages/ui/dist/kai.es.js, imported in the HTML.)
 
 // ── boot guard: if the bundle didn't register the elements, show how to run it ──
 setTimeout(() => {
@@ -36,6 +36,14 @@ document.getElementById('console-clear').addEventListener('click', (e) => {
   logBody.innerHTML = '<span class="empty">Cleared.</span>';
   logCount = 0; countEl.textContent = '0'; countEl.dataset.n = '0';
 });
+
+// ── wait for registration before touching any element ──
+// The bundle registers the kai-* elements from a dynamic import, so they are not
+// defined yet when this module first runs, and a property written before an
+// element upgrades is discarded. Everything below sets array/object data as JS
+// properties, so it all has to wait. The boot guard above is already scheduled,
+// so a bundle that never arrives still surfaces the error panel.
+await customElements.whenDefined('kai-chat');
 
 // ── shared sample data ──
 const models = [
