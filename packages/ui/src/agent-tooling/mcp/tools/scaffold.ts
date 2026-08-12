@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { Tool } from './types';
 import { Placement, Framework } from '../../types';
-import type { Integration, Archetype } from '../../types';
+import type { Integration } from '../../types';
 import {
   getArchetype,
   getIntegration,
@@ -12,15 +12,33 @@ import {
 /**
  * scaffold — the keystone tool. Composes a working chat surface from four axes:
  *
- *   useCase (archetype) × integration × placement × framework
+ *   components × integration × placement × framework
  *
  * and emits three labeled blocks an AI consumer can paste straight in:
- *   (1) Front-end  — the archetype's kai-* components, rendered for the chosen
+ *   (1) Front-end  — the surface's kai-* components, rendered for the chosen
  *                    framework and sized for the placement, wired with the
  *                    `messages` property + `kai-submit` per the Streaming recipe.
  *   (2) Backend    — the integration's route template for the framework (with a
  *                    language-aware fallback when there's no exact match).
  *   (3) Run note   — how to run it + the env vars to set.
+ *
+ * THE SURFACE AXIS IS A COMPONENTS LIST, NOT AN ARCHETYPE ID, AND THAT IS THE
+ * POINT OF THIS FILE'S SHAPE.
+ *
+ * It used to be an archetype id, and that made the six presets the whole of the
+ * expressible space: `agentic` and `workspace` differ by nothing except which
+ * components compose, so a builder who wanted both — a resizable artifact pane
+ * that ALSO renders the tool calls that produced the artifact — could not ask for
+ * it, and neither could `create-kai`'s feature multi-select. Adding a seventh
+ * preset for every such combination is 2^n presets in the limit.
+ *
+ * So `renderSurface({ framework, components, integration })` is the renderer, the
+ * archetypes are DATA over it (a preset is a named components list plus a default
+ * placement), and there is exactly one of each. `create-kai` imports the same
+ * function rather than growing a second one — a parallel renderer is the specific
+ * failure this extraction exists to prevent, which is why
+ * `assertPresetsAreData` in scripts/verify-scaffold-compiles.mjs asserts that a
+ * preset request and a components request emit byte-identical surfaces.
  *
  * The handler is called directly in tests (bypassing MCP's zod validation), so it
  * validates `useCase` + `integration` against the registry itself and returns
@@ -515,9 +533,9 @@ function toolRunnerLines(pad: string, typed: boolean): string[] {
   ];
 }
 
-/** True when the archetype renders a tool panel, so the scaffold needs the loop. */
-function hasToolPanel(archetype: Archetype): boolean {
-  return archetype.components.includes('kai-tool');
+/** True when the surface renders a tool panel, so the scaffold needs the loop. */
+function hasToolPanel(components: readonly string[]): boolean {
+  return components.includes('kai-tool');
 }
 
 /**
@@ -525,20 +543,20 @@ function hasToolPanel(archetype: Archetype): boolean {
  * `createCardRegistry` declaration, `cardTools()` in the tools array, and
  * `cardFromToolCall()` in the tool loop.
  *
- * CARDS FOLD INTO `agentic`. THERE IS NO SEVENTH ARCHETYPE, AND THAT IS A CHOICE.
- * A card is a tool call the model makes and the app draws instead of executing, so
- * "the model reaches for a tool" is the same capability `agentic` already stands
- * for, and a `cards` archetype would add 72 front-end cells to `verify:scaffold`
- * (one archetype x 9 integrations x 8 frameworks) to say it twice.
+ * CARDS FOLD INTO `kai-tool`. THERE IS NO SEPARATE CARD COMPONENT, AND THAT IS A
+ * CHOICE. A card is a tool call the model makes and the app draws instead of
+ * executing, so "the model reaches for a tool" is the same capability `kai-tool`
+ * already stands for, and a distinct card capability would add another surface's
+ * worth of front-end cells to `verify:scaffold` to say it twice.
  *
  * Written as its own predicate rather than being spelled `hasToolPanel` at each
  * call site even though it returns exactly that today. The fold is a decision with
- * ONE place to change: point this at a different archetype and the registry, the
+ * ONE place to change: point this at a different component and the registry, the
  * tools and the loop line move together. Inlining `hasToolPanel` would scatter the
  * decision over eight renderers and make moving it a search-and-replace.
  */
-function bearsCards(archetype: Archetype): boolean {
-  return hasToolPanel(archetype);
+function bearsCards(components: readonly string[]): boolean {
+  return hasToolPanel(components);
 }
 
 /**
@@ -602,14 +620,22 @@ function assertCardToolFormat(integration: Integration): 'openai' | 'anthropic' 
 }
 
 /**
- * What the scaffolder INTENDS to emit for one (archetype, integration) pair, so a
+ * What the scaffolder INTENDS to emit for one (components, integration) pair, so a
  * guard can check the eight renderers against the decision instead of restating it.
  *
  * Exported for `cardRoundTripCheck` in scripts/verify-scaffold-compiles.mjs and
- * for scaffold.test.ts. It reads the same three predicates `compose` reads and
- * nothing else, which is the point: the failure it exists to catch is one of the
- * eight framework renderers not following the decision, and the check would be
+ * for scaffold.test.ts. It reads the same three predicates `renderSurface` reads
+ * and nothing else, which is the point: the failure it exists to catch is one of
+ * the eight framework renderers not following the decision, and the check would be
  * worthless if the guard hard-coded "the agentic archetype, 8 integrations".
+ *
+ * KEYED ON A COMPONENTS LIST, not an archetype id, for the same reason
+ * `renderSurface` is. A guard that took an archetype id could only ever check the
+ * six presets, so the surfaces the feature multi-select makes reachable — the ones
+ * with no preset — would emit cards with nothing asserting they did. The archetype
+ * axis was also the narrower one: `getArchetype` returns `undefined` for anything
+ * not in the catalog, so the guard could not have been pointed at a new surface
+ * without first shipping a catalog entry for it.
  *
  * It cannot catch the emitter and the plan being wrong TOGETHER, so it is not the
  * only check: `cardRoundTripCheck` also asserts, without consulting this function,
@@ -617,15 +643,14 @@ function assertCardToolFormat(integration: Integration): 'openai' | 'anthropic' 
  * array offered to a model with no card in it is the silent hole.
  */
 export function cardEmitPlan(
-  useCaseId: string,
+  components: readonly string[],
   integrationId: string,
 ): { cards: boolean; tools: boolean; provider: 'openai' | 'anthropic' | 'jsonschema' | null } | null {
-  const archetype = getArchetype(useCaseId);
   const integration = getIntegration(integrationId);
-  if (!archetype || !integration) return null;
+  if (!integration || components.length === 0) return null;
   const isMock = integration.id === 'mock';
-  const cards = !isMock && bearsCards(archetype);
-  const tools = !isMock && emitsToolSchemas(archetype, integration);
+  const cards = !isMock && bearsCards(components);
+  const tools = !isMock && emitsToolSchemas(components, integration);
   return { cards, tools, provider: cards && tools ? cardToolProviderFor(integration) : null };
 }
 
@@ -813,8 +838,8 @@ function defaultModelFor(integration: Integration): string | undefined {
  * moving cards to an archetype without `kai-tool` keeps emitting their tools
  * instead of silently dropping them.
  */
-function emitsToolSchemas(archetype: Archetype, integration: Integration): boolean {
-  const needsToolsArray = hasToolPanel(archetype) || bearsCards(archetype);
+function emitsToolSchemas(components: readonly string[], integration: Integration): boolean {
+  const needsToolsArray = hasToolPanel(components) || bearsCards(components);
   return needsToolsArray && integration.forwardsFromClient.includes('tools');
 }
 
@@ -984,9 +1009,9 @@ const MESSAGE_EMBEDDED_TAGS = new Set(['kai-tool', 'kai-reasoning']);
  */
 const WORKSPACE_STRUCTURAL_TAGS = new Set(['kai-resizable', 'kai-artifact']);
 
-/** True when the archetype is the resizable split workspace (chat + artifact). */
-function isWorkspace(archetype: Archetype): boolean {
-  return archetype.components.includes('kai-resizable') && archetype.components.includes('kai-artifact');
+/** True when the surface is the resizable split workspace (chat + artifact). */
+function isWorkspace(components: readonly string[]): boolean {
+  return components.includes('kai-resizable') && components.includes('kai-artifact');
 }
 
 /**
@@ -1068,17 +1093,32 @@ interface RenderCtx {
   p: PlacementStyle;
   emptyHint: string;
   suggestions: string[];
+  /**
+   * The human label in the emitted banner comment, DERIVED from the components
+   * (see `surfaceLabel`) rather than passed in from a preset's `title`.
+   *
+   * That is deliberate and it is what makes archetypes data. A renderer that took
+   * a caller-supplied title would emit different bytes for the same components
+   * depending on who asked, so `renderSurface(components)` and
+   * `scaffold({ useCase })` could not be compared for equality — and that equality
+   * is the single check standing between this file and a second renderer growing
+   * back (see `assertPresetsAreData` in scripts/verify-scaffold-compiles.mjs).
+   * The preset's title is still printed, in the provenance header `compose`
+   * writes ABOVE the surface, where it describes where the request came from
+   * instead of what was rendered.
+   */
+  label: string;
   /** mock = stream the reply client-side (no fetch, no backend, no key) */
   isMock: boolean;
   /** SCAF-8: non-undefined when the integration forwards a model param */
   defaultModel?: string;
-  /** the archetype renders kai-tool AND the route forwards a tools array, so the
+  /** the surface renders kai-tool AND the route forwards a tools array, so the
    *  scaffold declares the schemas that make a tool call possible */
   emitTools: boolean;
-  /** the archetype renders kai-tool and there is a backend to call, so the live
+  /** the surface renders kai-tool and there is a backend to call, so the live
    *  multi-round loop (and the `runTool` stub it calls) is emitted */
   emitToolLoop: boolean;
-  /** the archetype bears cards and there is a model to ask for one, so the
+  /** the surface bears cards and there is a model to ask for one, so the
    *  registry + the loop's cardFromToolCall arm + the cardTypes/cardSchemas
    *  wiring are emitted */
   emitCards: boolean;
@@ -1097,10 +1137,25 @@ interface RenderCtx {
  * SCAF-14: workspace structural types (kai-resizable, kai-artifact) are emitted
  * as a properly composed split layout — chat in one pane, artifact in the other.
  */
-function componentTags(archetype: Archetype, chatFill: string): string {
-  // SCAF-14: workspace is a structural/layout archetype — emit a runnable split.
-  if (isWorkspace(archetype)) {
-    return [
+function componentTags(components: readonly string[], chatFill: string): string {
+  const companionTags = components.filter(
+    (t) => t !== 'kai-chat' && !MESSAGE_EMBEDDED_TAGS.has(t) && !WORKSPACE_STRUCTURAL_TAGS.has(t),
+  );
+  const hasEmbedded = components.some((t) => MESSAGE_EMBEDDED_TAGS.has(t));
+  const hasStandaloneCompanions = companionTags.length > 0;
+
+  const lines: string[] = [];
+  // SCAF-14: workspace is a structural/layout surface — emit a runnable split.
+  //
+  // This used to `return` here, which dropped every standalone companion on the
+  // floor: a surface with kai-sources AND the workspace pair rendered the split
+  // and nothing else. No archetype could reach that combination (`workspace` is
+  // the only preset with the pair and it carries no companions), so the bug was
+  // unreachable until the surface axis became a components list. Building the
+  // chat block into `lines` instead means the companion loop below runs either
+  // way, which is the property that was missing rather than a special case.
+  if (isWorkspace(components)) {
+    lines.push(
       `  <!-- SCAF-14: workspace split — chat pane left, artifact preview right. -->`,
       `  <!-- kai-resizable needs kai-resizable-item children to render panels. -->`,
       `  <kai-resizable orientation="horizontal" style="display:block;width:100%;height:100%">`,
@@ -1112,17 +1167,10 @@ function componentTags(archetype: Archetype, chatFill: string): string {
       `      <kai-artifact id="artifact" src="https://example.com" style="width:100%;height:100%"></kai-artifact>`,
       `    </kai-resizable-item>`,
       `  </kai-resizable>`,
-    ].join('\n');
+    );
+  } else {
+    lines.push(`  <kai-chat id="chat" suggestion-mode="submit" style="${chatFill}"></kai-chat>`);
   }
-
-  const companionTags = archetype.components.filter(
-    (t) => t !== 'kai-chat' && !MESSAGE_EMBEDDED_TAGS.has(t) && !WORKSPACE_STRUCTURAL_TAGS.has(t),
-  );
-  const hasEmbedded = archetype.components.some((t) => MESSAGE_EMBEDDED_TAGS.has(t));
-  const hasStandaloneCompanions = companionTags.length > 0;
-
-  const lines: string[] = [];
-  lines.push(`  <kai-chat id="chat" suggestion-mode="submit" style="${chatFill}"></kai-chat>`);
 
   if (hasEmbedded) {
     lines.push(
@@ -1178,9 +1226,9 @@ function componentTags(archetype: Archetype, chatFill: string): string {
  * carried. That error existed only because deleting the template's `src/main.ts`
  * left `src/` with no `.ts` files at all; this scaffold now IS `src/main.ts`.
  */
-function htmlModule(ctx: RenderCtx, archetype: Archetype): string {
-  const hasEmbedded = archetype.components.some((t) => MESSAGE_EMBEDDED_TAGS.has(t));
-  const hasSources = archetype.components.includes('kai-sources');
+function htmlModule(ctx: RenderCtx, components: readonly string[]): string {
+  const hasEmbedded = components.some((t) => MESSAGE_EMBEDDED_TAGS.has(t));
+  const hasSources = components.includes('kai-sources');
 
   // SCAF-9: the agentic archetype explains where tool + reasoning parts come
   // from. It no longer SEEDS a fabricated turn — see `SAMPLE_AGENTIC_MESSAGE`.
@@ -1333,7 +1381,7 @@ function htmlModule(ctx: RenderCtx, archetype: Archetype): string {
  * replacing the vanilla-ts template's own entry is specific to `html`, so only
  * that is gated on `isViteHtmlTarget`.
  */
-function renderHtml(archetype: Archetype, ctx: RenderCtx, isViteHtmlTarget: boolean): string {
+function renderHtml(components: readonly string[], ctx: RenderCtx, isViteHtmlTarget: boolean): string {
   const { p, emptyHint } = ctx;
   const scriptNote = isViteHtmlTarget
     ? [
@@ -1348,10 +1396,10 @@ function renderHtml(archetype: Archetype, ctx: RenderCtx, isViteHtmlTarget: bool
       ];
   return [
     `<!-- index.html — paste this into <body>. -->`,
-    `<!-- ${archetype.title} — ${p.note} -->`,
+    `<!-- ${ctx.label} — ${p.note} -->`,
     ...(p.altNote ?? []).map((l) => `<!-- ${l} -->`),
     `<div style="${p.style}">`,
-    componentTags(archetype, p.chatFill),
+    componentTags(components, p.chatFill),
     `</div>`,
     ...scriptNote,
     `<script type="module" src="/src/main.ts"></script>`,
@@ -1359,7 +1407,7 @@ function renderHtml(archetype: Archetype, ctx: RenderCtx, isViteHtmlTarget: bool
     `<!-- empty-state hint: ${emptyHint} -->`,
     ``,
     `// ── src/main.ts ──────────────────────────────────────────────────────────────`,
-    htmlModule(ctx, archetype),
+    htmlModule(ctx, components),
   ].join('\n');
 }
 
@@ -1374,15 +1422,15 @@ function toPascalCase(tag: string): string {
 }
 
 /** JSX usage for react/next: uses the official @kitn.ai/ui/react wrappers. */
-function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): string {
+function renderJsx(components: readonly string[], ctx: RenderCtx, framework: string): string {
   const { p, emptyHint, suggestions, isMock, defaultModel, emitTools, emitToolLoop } = ctx;
 
-  const hasEmbedded = archetype.components.some((t) => MESSAGE_EMBEDDED_TAGS.has(t));
-  const workspace = isWorkspace(archetype);
+  const hasEmbedded = components.some((t) => MESSAGE_EMBEDDED_TAGS.has(t));
+  const workspace = isWorkspace(components);
 
   // SCAF-9: exclude message-embedded tags from import list.
   // SCAF-14: workspace uses Resizable+ResizableItem+Artifact — keep them in the import list.
-  const renderableTags = archetype.components.filter((t) => !MESSAGE_EMBEDDED_TAGS.has(t));
+  const renderableTags = components.filter((t) => !MESSAGE_EMBEDDED_TAGS.has(t));
   // For workspace: replace 'kai-resizable' with 'kai-resizable-item' so we get ResizableItem too.
   const importTags = workspace
     ? [...new Set([...renderableTags.filter((t) => t !== 'kai-resizable'), 'kai-resizable', 'kai-resizable-item'])]
@@ -1391,7 +1439,7 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
   const importList = wrapperNames.join(', ');
 
   // SCAF-9: standalone companion tags (not kai-chat, not message-embedded, not workspace-structural).
-  const standaloneCompanionTags = archetype.components.filter(
+  const standaloneCompanionTags = components.filter(
     (t) => t !== 'kai-chat' && !MESSAGE_EMBEDDED_TAGS.has(t) && !WORKSPACE_STRUCTURAL_TAGS.has(t),
   );
 
@@ -1524,7 +1572,7 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
       ...dynamicImports,
       ``,
       ...nextConfigNote,
-      `// ${archetype.title} — ${p.note}. empty-state hint: ${emptyHint}`,
+      `// ${ctx.label} — ${p.note}. empty-state hint: ${emptyHint}`,
       ...(p.altNote ?? []).map((l) => `// ${l}`),
       ...mockInit,
       ``,
@@ -1566,6 +1614,11 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
             `          <Artifact src="https://example.com" files={[{ path: 'index.html', url: 'https://example.com' }]} style={{ width: '100%', height: '100%' }} />`,
             `        </ResizableItem>`,
             `      </Resizable>`,
+            // Standalone companions are siblings of the SPLIT, not of the chat:
+            // the split owns chat + artifact, and a sources panel or a voice input
+            // belongs beside it. Dropping them here is what the workspace branch
+            // used to do — see WORKSPACE_STRUCTURAL_TAGS.
+            companions,
           ]
         : [
             ...cardPropsNote('      '),
@@ -1610,7 +1663,7 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
     `import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
     ``,
     ...nextConfigNote,
-    `// ${archetype.title} — ${p.note}. empty-state hint: ${emptyHint}`,
+    `// ${ctx.label} — ${p.note}. empty-state hint: ${emptyHint}`,
     ...(p.altNote ?? []).map((l) => `// ${l}`),
     ...mockInit,
     ``,
@@ -1652,6 +1705,8 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
           `          <Artifact src="https://example.com" files={[{ path: 'index.html', url: 'https://example.com' }]} style={{ width: '100%', height: '100%' }} />`,
           `        </ResizableItem>`,
           `      </Resizable>`,
+          // Siblings of the SPLIT — see the same line in the other JSX branch.
+          companions,
         ]
       : [
           ...cardPropsNote('      '),
@@ -1675,16 +1730,16 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
 }
 
 /** Vue: bind messages/suggestions as properties, listen for kai-submit with @. */
-function renderVue(archetype: Archetype, ctx: RenderCtx): string {
+function renderVue(components: readonly string[], ctx: RenderCtx): string {
   const { p, emptyHint, suggestions, isMock, defaultModel, emitTools, emitToolLoop } = ctx;
 
   // SCAF-9: exclude message-embedded tags from companion rendering.
   // SCAF-14: also exclude workspace structural tags (handled by the workspace block below).
-  const workspace = isWorkspace(archetype);
-  const standaloneCompanionTags = archetype.components.filter(
+  const workspace = isWorkspace(components);
+  const standaloneCompanionTags = components.filter(
     (t) => t !== 'kai-chat' && !MESSAGE_EMBEDDED_TAGS.has(t) && !WORKSPACE_STRUCTURAL_TAGS.has(t),
   );
-  const hasEmbedded = archetype.components.some((t) => MESSAGE_EMBEDDED_TAGS.has(t));
+  const hasEmbedded = components.some((t) => MESSAGE_EMBEDDED_TAGS.has(t));
 
   const companionLines: string[] = [];
   if (hasEmbedded) {
@@ -1794,6 +1849,8 @@ function renderVue(archetype: Archetype, ctx: RenderCtx): string {
         `        <kai-artifact src="https://example.com" style="width:100%;height:100%"></kai-artifact>`,
         `      </kai-resizable-item>`,
         `    </kai-resizable>`,
+        // Siblings of the SPLIT — see the same line in renderJsx.
+        companions,
       ]
     : [
         `    <kai-chat`,
@@ -1808,7 +1865,7 @@ function renderVue(archetype: Archetype, ctx: RenderCtx): string {
       ];
 
   return [
-    `<!-- vue — ${archetype.title} — ${p.note}. empty-state hint: ${emptyHint} -->`,
+    `<!-- vue — ${ctx.label} — ${p.note}. empty-state hint: ${emptyHint} -->`,
     ...(p.altNote ?? []).map((l) => `<!-- ${l} -->`),
     `<!-- SCAF-3: pair this with the vite.config.ts in block (0) above. Without its`,
     `     isCustomElement, every kai-* tag logs "[Vue warn]: Failed to resolve`,
@@ -1863,16 +1920,16 @@ function renderVue(archetype: Archetype, ctx: RenderCtx): string {
 }
 
 /** Svelte: use bind:this to set array/object properties reactively; on:kai-submit for the event. */
-function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
+function renderSvelte(components: readonly string[], ctx: RenderCtx): string {
   const { p, emptyHint, suggestions, isMock, defaultModel, emitTools, emitToolLoop } = ctx;
 
   // SCAF-9: exclude message-embedded tags from companion rendering.
   // SCAF-14: also exclude workspace structural tags (handled by the workspace block below).
-  const workspace = isWorkspace(archetype);
-  const standaloneCompanionTags = archetype.components.filter(
+  const workspace = isWorkspace(components);
+  const standaloneCompanionTags = components.filter(
     (t) => t !== 'kai-chat' && !MESSAGE_EMBEDDED_TAGS.has(t) && !WORKSPACE_STRUCTURAL_TAGS.has(t),
   );
-  const hasEmbedded = archetype.components.some((t) => MESSAGE_EMBEDDED_TAGS.has(t));
+  const hasEmbedded = components.some((t) => MESSAGE_EMBEDDED_TAGS.has(t));
   const hasSourcesCompanion = standaloneCompanionTags.includes('kai-sources');
 
   const companionLinesList: string[] = [];
@@ -1978,6 +2035,8 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
         `      <kai-artifact src="https://example.com" style="width:100%;height:100%"></kai-artifact>`,
         `    </kai-resizable-item>`,
         `  </kai-resizable>`,
+        // Siblings of the SPLIT — see the same line in renderJsx.
+        companionLines,
       ]
     : [
         `  <kai-chat bind:this={chatEl} suggestion-mode="submit" style="${p.chatFill}" onkai-submit={onSubmit}></kai-chat>`,
@@ -1985,7 +2044,7 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
       ];
 
   return [
-    `<!-- svelte — ${archetype.title} — ${p.note}. empty-state hint: ${emptyHint} -->`,
+    `<!-- svelte — ${ctx.label} — ${p.note}. empty-state hint: ${emptyHint} -->`,
     ...(p.altNote ?? []).map((l) => `<!-- ${l} -->`),
     `<!-- SCAF-5: Svelte 5 RUNES ($state / $effect, onkai-submit). \`sv create\` forces`,
     `     runes mode project-wide (see the compilerOptions in its vite.config.ts), so the`,
@@ -2068,7 +2127,7 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
  * `src/server/chat.ts`, which can never answer a `fetch('/api/chat')`: the two
  * halves of the same scaffold contradicted each other.
  */
-function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
+function renderTanstackStart(components: readonly string[], ctx: RenderCtx): string {
   const { p, emptyHint, suggestions, isMock, defaultModel, emitTools, emitToolLoop } = ctx;
 
   // TanStack Start is React — reuse all the React composition logic:
@@ -2080,17 +2139,17 @@ function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
   //   4. No `import '@kitn.ai/ui/elements'` needed as a top-level import (same as next's dynamic approach
   //      is not needed here — the library is SSR-import-safe, but we include elements for safety)
 
-  const hasEmbedded = archetype.components.some((t) => MESSAGE_EMBEDDED_TAGS.has(t));
-  const workspace = isWorkspace(archetype);
+  const hasEmbedded = components.some((t) => MESSAGE_EMBEDDED_TAGS.has(t));
+  const workspace = isWorkspace(components);
 
-  const renderableTags = archetype.components.filter((t) => !MESSAGE_EMBEDDED_TAGS.has(t));
+  const renderableTags = components.filter((t) => !MESSAGE_EMBEDDED_TAGS.has(t));
   const importTags = workspace
     ? [...new Set([...renderableTags.filter((t) => t !== 'kai-resizable'), 'kai-resizable', 'kai-resizable-item'])]
     : renderableTags;
   const wrapperNames = importTags.map(toPascalCase);
   const importList = wrapperNames.join(', ');
 
-  const standaloneCompanionTags = archetype.components.filter(
+  const standaloneCompanionTags = components.filter(
     (t) => t !== 'kai-chat' && !MESSAGE_EMBEDDED_TAGS.has(t) && !WORKSPACE_STRUCTURAL_TAGS.has(t),
   );
 
@@ -2198,7 +2257,7 @@ function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
     }),
     `import '@kitn.ai/ui/theme.tokens.css'  // compiled token defaults`,
     ``,
-    `// ${archetype.title} — ${p.note}. empty-state hint: ${emptyHint}`,
+    `// ${ctx.label} — ${p.note}. empty-state hint: ${emptyHint}`,
     ...(p.altNote ?? []).map((l) => `// ${l}`),
     ...mockInit,
     ``,
@@ -2247,6 +2306,8 @@ function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
           `          <Artifact src="https://example.com" files={[{ path: 'index.html', url: 'https://example.com' }]} style={{ width: '100%', height: '100%' }} />`,
           `        </ResizableItem>`,
           `      </Resizable>`,
+          // Siblings of the SPLIT — see the same line in the other JSX branch.
+          companions,
         ]
       : [
           ...cardPropsNote('      '),
@@ -2295,14 +2356,14 @@ function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
  * The thread is an Angular signal, which reads back synchronously, so this uses
  * `accessorThreadBinding` and not React's turn-scoped `thread` copy.
  */
-function renderAngular(archetype: Archetype, ctx: RenderCtx): string {
+function renderAngular(components: readonly string[], ctx: RenderCtx): string {
   const { p, emptyHint, suggestions, isMock, defaultModel, emitTools, emitToolLoop } = ctx;
 
-  const workspace = isWorkspace(archetype);
-  const standaloneCompanionTags = archetype.components.filter(
+  const workspace = isWorkspace(components);
+  const standaloneCompanionTags = components.filter(
     (t) => t !== 'kai-chat' && !MESSAGE_EMBEDDED_TAGS.has(t) && !WORKSPACE_STRUCTURAL_TAGS.has(t),
   );
-  const hasEmbedded = archetype.components.some((t) => MESSAGE_EMBEDDED_TAGS.has(t));
+  const hasEmbedded = components.some((t) => MESSAGE_EMBEDDED_TAGS.has(t));
   const hasSourcesCompanion = standaloneCompanionTags.includes('kai-sources');
 
   const companionLines: string[] = [];
@@ -2419,6 +2480,8 @@ function renderAngular(archetype: Archetype, ctx: RenderCtx): string {
         `          <kai-artifact src="https://example.com" style="width:100%;height:100%"></kai-artifact>`,
         `        </kai-resizable-item>`,
         `      </kai-resizable>`,
+        // Siblings of the SPLIT — see the same line in renderJsx.
+        ...companionLines,
       ]
     : [...chatTag('      '), ...companionLines];
 
@@ -2449,7 +2512,7 @@ function renderAngular(archetype: Archetype, ctx: RenderCtx): string {
       mock: isMock,
     }),
     ``,
-    `// ${archetype.title} — ${p.note}. empty-state hint: ${emptyHint}`,
+    `// ${ctx.label} — ${p.note}. empty-state hint: ${emptyHint}`,
     ...(p.altNote ?? []).map((l) => `// ${l}`),
     ...(isMock ? mockResponderInit() : []),
     ``,
@@ -2552,11 +2615,11 @@ function renderAngular(archetype: Archetype, ctx: RenderCtx): string {
  * Solid signals read back synchronously, so this uses `accessorThreadBinding`
  * and not React's turn-scoped `thread` copy.
  */
-function renderSolid(archetype: Archetype, ctx: RenderCtx): string {
+function renderSolid(components: readonly string[], ctx: RenderCtx): string {
   const { p, emptyHint, suggestions, isMock, defaultModel, emitTools, emitToolLoop } = ctx;
 
-  const workspace = isWorkspace(archetype);
-  const standaloneCompanionTags = archetype.components.filter(
+  const workspace = isWorkspace(components);
+  const standaloneCompanionTags = components.filter(
     (t) => t !== 'kai-chat' && !MESSAGE_EMBEDDED_TAGS.has(t) && !WORKSPACE_STRUCTURAL_TAGS.has(t),
   );
   const hasSources = standaloneCompanionTags.includes('kai-sources');
@@ -2816,7 +2879,7 @@ function renderSolid(archetype: Archetype, ctx: RenderCtx): string {
       mock: isMock,
     }),
     ``,
-    `// ${archetype.title} — ${p.note}. empty-state hint: ${emptyHint}`,
+    `// ${ctx.label} — ${p.note}. empty-state hint: ${emptyHint}`,
     ...(p.altNote ?? []).map((l) => `// ${l}`),
     ``,
     ...(isMock ? [...mockResponderInit(), ``] : []),
@@ -3069,23 +3132,99 @@ function jsxStyle(style: string): string {
     .join(', ');
 }
 
-function renderFrontend(
-  framework: string,
-  archetype: Archetype,
-  placement: string,
-  emptyHint: string,
-  suggestions: string[],
-  isMock: boolean,
-  defaultModel: string | undefined,
-  emitTools: boolean,
-  emitToolLoop: boolean,
-  emitCards: boolean,
-  cardProvider: 'openai' | 'anthropic' | 'jsonschema' | null,
-): string {
+/**
+ * A human label for a components list, for the emitted banner comment.
+ *
+ * Derived, never passed in — see `RenderCtx.label`. `kai-chat` is dropped because
+ * every surface has it, so naming it in every banner says nothing; a surface that
+ * is ONLY the chat says so.
+ */
+function surfaceLabel(components: readonly string[]): string {
+  const rest = components.filter((c) => c !== 'kai-chat');
+  if (rest.length === 0) return 'chat';
+  return `chat + ${rest.map((c) => c.replace(/^kai-/, '')).join(' + ')}`;
+}
+
+/** What `renderSurface` needs to emit one chat surface. */
+export interface SurfaceRequest {
+  /** html | react | next | vue | svelte | angular | solid | tanstack-start */
+  framework: string;
+  /**
+   * The `kai-*` components this surface composes — THE AXIS, not an archetype id.
+   *
+   * A list rather than a preset name is the whole point of this function. The six
+   * archetypes are six points in this space and the CLI's feature multi-select
+   * reaches the rest of it, so a renderer keyed on a preset id could only ever
+   * emit what someone had already thought to name. `kai-chat` is expected to be
+   * present; everything else is a capability.
+   */
+  components: readonly string[];
+  /** The backend this surface talks to. `mock` takes the no-backend branch. */
+  integration: Integration;
+  /** full-page | side | docked-widget | inline. Defaults to full-page. */
+  placement?: string;
+  /** Starter prompts for the empty thread. Defaults to `DEFAULT_SUGGESTIONS`. */
+  suggestions?: string[];
+  /** Audience hint — tweaks the empty-state comment only. */
+  audience?: string;
+}
+
+/**
+ * THE ONE RENDERER. Emits the front-end block for a chat surface.
+ *
+ * Shared by the `kai` MCP (via `compose`, which wraps it in the backend route and
+ * the run note) and, by design, by `create-kai`. There is deliberately no second
+ * entry point keyed on an archetype: `compose` resolves a preset to its
+ * `components` and calls this, so a preset is DATA over this function rather than
+ * a parallel path through it. `assertPresetsAreData` in
+ * scripts/verify-scaffold-compiles.mjs holds that open by requiring the two
+ * request shapes to emit byte-identical surfaces.
+ *
+ * It takes the `integration` rather than the six booleans it derives from it,
+ * because those derivations ARE the contract between the surface and the wire —
+ * whether a tools array is forwarded, whether there is a backend to POST a second
+ * round to, which envelope a card tool takes — and a caller that computed them
+ * itself would be free to compute them differently. `create-kai` gets them right
+ * by not being asked.
+ */
+export function renderSurface(req: SurfaceRequest): string {
+  const { framework, components, integration } = req;
+  const placement = req.placement || 'full-page';
+  const suggestions = req.suggestions?.length ? req.suggestions : DEFAULT_SUGGESTIONS;
+  const emptyHint = req.audience
+    ? `tuned for ${req.audience} — keep the empty state and tone audience-appropriate`
+    : 'add an empty-state prompt that fits your product';
+
+  const isMock = integration.id === 'mock';
+  // SCAF-8: compute the default model only for non-mock integrations that forward model.
+  const defaultModel = isMock ? undefined : defaultModelFor(integration);
+  const emitTools = !isMock && emitsToolSchemas(components, integration);
+  // The loop needs a backend to POST the second round to; `mock` has none.
+  // It does NOT require `emitTools`: an integration that builds its tools
+  // server-side (langgraph, mastra, pi) still streams tool calls back, and the
+  // loop that answers them is the same loop.
+  const emitToolLoop = !isMock && hasToolPanel(components);
+  // Cards need a MODEL to ask for one, so `mock` (which streams a canned reply in
+  // the browser and never sees a tool call) is out for the same reason the loop is.
+  const emitCards = !isMock && bearsCards(components);
+  // Only shape card tools when the array is really forwarded AND we know which
+  // envelope this route's provider takes. Either half missing means the registry
+  // is still wired to the client (cardTypes/cardSchemas) while the model is not
+  // offered a card tool — which is the honest state for langgraph/mastra/pi, whose
+  // routes own their tool list server-side.
+  // `assertCardToolFormat`, not `cardToolProviderFor`: reaching here with both
+  // flags true means a tools array IS going into the request body, so an
+  // undeclared envelope is a scaffold that silently ships no card tool. Fail
+  // loudly instead. (`cardEmitPlan` keeps returning null for the same case on
+  // purpose — it is a planning function the guards read, and its job is to let
+  // them report the gap in their own words rather than blow up first.)
+  const cardProvider = emitCards && emitTools ? assertCardToolFormat(integration) : null;
+
   const ctx: RenderCtx = {
     p: placementStyle(placement),
     emptyHint,
     suggestions,
+    label: surfaceLabel(components),
     isMock,
     defaultModel,
     emitTools,
@@ -3096,24 +3235,24 @@ function renderFrontend(
   switch (framework) {
     case 'react':
     case 'next':
-      return renderJsx(archetype, ctx, framework);
+      return renderJsx(components, ctx, framework);
     case 'vue':
-      return renderVue(archetype, ctx);
+      return renderVue(components, ctx);
     case 'svelte':
-      return renderSvelte(archetype, ctx);
+      return renderSvelte(components, ctx);
     case 'angular':
-      return renderAngular(archetype, ctx);
+      return renderAngular(components, ctx);
     case 'solid':
-      return renderSolid(archetype, ctx);
+      return renderSolid(components, ctx);
     case 'tanstack-start':
-      return renderTanstackStart(archetype, ctx);
+      return renderTanstackStart(components, ctx);
     case 'html':
     default:
       // html, and any backend-only framework (fastapi/express/worker) gets the
       // framework-agnostic web-components surface. The Vite/tsc setup note
       // (SCAF-19) only applies to the actual `html` target — the backend-only
       // frameworks aren't paired with a `tsc && vite build` script.
-      return renderHtml(archetype, ctx, framework === 'html');
+      return renderHtml(components, ctx, framework === 'html');
   }
 }
 
@@ -3771,60 +3910,42 @@ function setupBlock(framework: string): string | undefined {
 
 // ── compose ───────────────────────────────────────────────────────────────────
 
+/**
+ * The three labeled blocks the MCP tool returns: the surface, the backend route
+ * and the run note.
+ *
+ * It owns NO rendering. `renderSurface` emits block (1) and `chooseRoute` picks
+ * block (2); what is left here is the provenance header and the assembly. That
+ * split is what lets `create-kai` reuse the renderer without inheriting the MCP's
+ * output format, which is the reason this extraction exists.
+ *
+ * `preset` is provenance only — the archetype id and title, when the request came
+ * in as `useCase`. It is printed in the header and NEVER reaches `renderSurface`,
+ * so it cannot change a single byte of the emitted surface.
+ */
 function compose(
-  archetype: Archetype,
+  components: readonly string[],
   integration: Integration,
   placement: string,
   framework: string,
   suggestions: string[],
   audience?: string,
+  preset?: { id: string; title: string },
 ): string {
-  const audienceHint = audience
-    ? `tuned for ${audience} — keep the empty state and tone audience-appropriate`
-    : 'add an empty-state prompt that fits your product';
-
-  const isMock = integration.id === 'mock';
-  // SCAF-8: compute the default model only for non-mock integrations that forward model.
-  const defaultModel = isMock ? undefined : defaultModelFor(integration);
-  const emitTools = !isMock && emitsToolSchemas(archetype, integration);
-  // The loop needs a backend to POST the second round to; `mock` has none.
-  // It does NOT require `emitTools`: an integration that builds its tools
-  // server-side (langgraph, mastra, pi) still streams tool calls back, and the
-  // loop that answers them is the same loop.
-  const emitToolLoop = !isMock && hasToolPanel(archetype);
-  // Cards need a MODEL to ask for one, so `mock` (which streams a canned reply in
-  // the browser and never sees a tool call) is out for the same reason the loop is.
-  const emitCards = !isMock && bearsCards(archetype);
-  // Only shape card tools when the array is really forwarded AND we know which
-  // envelope this route's provider takes. Either half missing means the registry
-  // is still wired to the client (cardTypes/cardSchemas) while the model is not
-  // offered a card tool — which is the honest state for langgraph/mastra/pi, whose
-  // routes own their tool list server-side.
-  // `assertCardToolFormat`, not `cardToolProviderFor`: reaching here with both
-  // flags true means a tools array IS going into the request body, so an
-  // undeclared envelope is a scaffold that silently ships no card tool. Fail
-  // loudly instead. (`cardEmitPlan` keeps returning null for the same case on
-  // purpose — it is a planning function the guards read, and its job is to let
-  // them report the gap in their own words rather than blow up first.)
-  const cardProvider = emitCards && emitTools ? assertCardToolFormat(integration) : null;
-  const frontend = renderFrontend(
+  const frontend = renderSurface({
     framework,
-    archetype,
+    components,
+    integration,
     placement,
-    audienceHint,
     suggestions,
-    isMock,
-    defaultModel,
-    emitTools,
-    emitToolLoop,
-    emitCards,
-    cardProvider,
-  );
+    audience,
+  });
+  const isMock = integration.id === 'mock';
   const route = isMock ? undefined : chooseRoute(integration, framework);
 
   const header = [
-    `# AI/UI scaffold — ${archetype.title} × ${integration.title}`,
-    `combo: ${archetype.id} × ${integration.id} × ${placement} × ${framework}`,
+    `# AI/UI scaffold — ${preset ? preset.title : surfaceLabel(components)} × ${integration.title}`,
+    `combo: ${preset ? preset.id : components.join('+')} × ${integration.id} × ${placement} × ${framework}`,
     `stream: ${integration.streamMapping}`,
   ].join('\n');
 
@@ -4083,13 +4204,20 @@ function rejectIntegration(id: string): string {
 
 function rejectUseCase(id: string): string {
   const valid = listArchetypes()
-    .map((a) => `${a.id} (${a.title})`)
+    .map((a) => `${a.id} (${a.title}: ${a.components.join(', ')})`)
     .join(', ');
   return [
-    `Unknown useCase: "${id}".`,
+    id ? `Unknown useCase: "${id}".` : `No surface given: pass either \`components\` or \`useCase\`.`,
     ``,
-    `Valid useCases (archetypes): ${valid}.`,
-    `Pick one of those ids and call scaffold again.`,
+    `Valid useCases (presets): ${valid}.`,
+    ``,
+    // The presets are six points, not the space. A harness that only ever learns
+    // the six ids will ask for the nearest one instead of the surface it wants,
+    // so the rejection that teaches the id list is the right place to say so.
+    `These are PRESETS over the real axis, which is \`components\`. To compose a surface no`,
+    `preset names, pass the list directly, e.g. components: ["kai-chat", "kai-tool",`,
+    `"kai-reasoning", "kai-artifact", "kai-resizable"] for a workspace that also renders its`,
+    `tool calls. Pick a preset id or pass \`components\`, then call scaffold again.`,
   ].join('\n');
 }
 
@@ -4098,18 +4226,33 @@ function rejectUseCase(id: string): string {
 export const scaffold: Tool = {
   name: 'scaffold',
   description:
-    'Scaffold a working AI/UI chat surface from four axes: useCase (archetype) × integration × placement × framework. ' +
+    'Scaffold a working AI/UI chat surface from: components (or a useCase preset) × integration × placement × framework. ' +
     'Emits a copy-pasteable front-end (kai-* components wired with messages + kai-submit + starter suggestions), the backend ' +
-    'route for the chosen framework, and a run note with env vars. Use integration: "mock" for a zero-config local preview.',
+    'route for the chosen framework, and a run note with env vars. Use integration: "mock" for a zero-config local preview. ' +
+    'Pass `components` to compose any feature set; `useCase` is a named preset over the same axis and the two cannot disagree.',
   inputSchema: z.object({
     // useCase + integration are dynamic catalog ids — kept as strings and
     // validated against the registry in the handler (the handler is called
     // directly in tests, bypassing this schema). Use component_reference / the
     // catalogs to discover valid ids.
+    //
+    // `useCase` is OPTIONAL because `components` can carry the surface instead —
+    // the archetypes are six points in the components space, not the space. A
+    // request must still name one of the two, and the handler says so when it
+    // names neither.
     useCase: z
       .string()
+      .optional()
       .describe(
-        'Archetype id, e.g. "drop-in-chat", "support-widget", "knowledge-base", "agentic", "workspace", "voice".',
+        'Archetype PRESET id, e.g. "drop-in-chat", "support-widget", "knowledge-base", "agentic", "workspace", "voice". ' +
+          'Shorthand for the preset\'s `components`. Omit it and pass `components` to compose a surface no preset names.',
+      ),
+    components: z
+      .array(z.string())
+      .optional()
+      .describe(
+        'The kai-* components this surface composes, e.g. ["kai-chat", "kai-tool", "kai-reasoning", "kai-artifact", "kai-resizable"]. ' +
+          'The real axis: any combination is renderable, not just the six presets. Include "kai-chat". Wins over `useCase` when both are given.',
       ),
     integration: z
       .string()
@@ -4136,7 +4279,6 @@ export const scaffold: Tool = {
       .describe('Optional audience hint (tweaks the empty-state comment only).'),
   }),
   handler: async (args) => {
-    const useCase = String(args.useCase ?? '');
     const integrationId = String(args.integration ?? '');
     const placement = String(args.placement ?? '');
     const framework = String(args.framework ?? 'html');
@@ -4147,16 +4289,39 @@ export const scaffold: Tool = {
         ? args.suggestions.map(String)
         : DEFAULT_SUGGESTIONS;
 
-    // Validate against the registry BEFORE composing — graceful, self-correcting text.
-    const archetype = getArchetype(useCase);
-    if (!archetype) return text(rejectUseCase(useCase));
+    // The surface arrives one of two ways, and `components` wins: it is the axis,
+    // and `useCase` is a preset over it. A caller that passes an explicit list has
+    // said something more specific than a preset name can.
+    const explicit = Array.isArray(args.components)
+      ? args.components.map(String).filter(Boolean)
+      : undefined;
+
+    let components: readonly string[];
+    let preset: { id: string; title: string } | undefined;
+    let effectivePlacement = placement;
+
+    if (explicit && explicit.length > 0) {
+      components = explicit;
+      // No preset means no `defaultPlacement` to fall back to. Full-page is the
+      // same default `renderSurface` applies, stated here so the header prints
+      // the placement that was really used.
+      effectivePlacement = placement || 'full-page';
+    } else {
+      const useCase = String(args.useCase ?? '');
+      // Validate against the registry BEFORE composing — graceful, self-correcting text.
+      const archetype = getArchetype(useCase);
+      if (!archetype) return text(rejectUseCase(useCase));
+      components = archetype.components;
+      preset = { id: archetype.id, title: archetype.title };
+      // Fall back to the archetype's default placement only if none was provided.
+      effectivePlacement = placement || archetype.defaultPlacement;
+    }
 
     const integration = getIntegration(integrationId);
     if (!integration) return text(rejectIntegration(integrationId));
 
-    // Fall back to the archetype's default placement only if none was provided.
-    const effectivePlacement = placement || archetype.defaultPlacement;
-
-    return text(compose(archetype, integration, effectivePlacement, framework, suggestions, audience));
+    return text(
+      compose(components, integration, effectivePlacement, framework, suggestions, audience, preset),
+    );
   },
 };

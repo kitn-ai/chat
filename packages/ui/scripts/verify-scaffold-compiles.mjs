@@ -30,8 +30,8 @@
 //
 // SCOPE
 // -----
-// The integration and archetype axes are DERIVED from `listIntegrations()` /
-// `listArchetypes()` at run time (see `loadCatalogAxes`). They used to be
+// The integration and surface axes are DERIVED from `listIntegrations()` /
+// `listSurfaceProbes()` at run time (see `loadCatalogAxes`). They used to be
 // hand-written arrays, which made this gate one-directional: adding a catalog
 // entry did NOT add coverage and nothing failed to say so — `openai` and
 // `anthropic` both landed in the catalog and compiled ZERO times while this
@@ -44,10 +44,36 @@
 // would be the hand that updates the number. The script prints what it actually
 // ran; read that, not this comment.
 //
-// FRONT END: 6 archetypes × 11 integrations × 8 TS frameworks = 528 compiled
+// FRONT END: 6 surfaces × 11 integrations × 8 TS frameworks = 528 compiled
 // cells, at one placement. `placement` is the fourth axis and is left at
 // 'full-page' on purpose: it only ever changes an inline CSS string, so the
 // extra 3x compiles the same types again.
+//
+// THE SURFACE AXIS IS A COMPONENTS LIST, NOT AN ARCHETYPE ID, and that swap is
+// worth reading carefully because the cell count did NOT move — 528 before, 528
+// after — while the coverage did.
+//
+// Before: the six archetype ids. That is five distinct `components` lists, not
+// six, because `support-widget` and `drop-in-chat` carry the same components and
+// differ only in `defaultPlacement`, which this matrix pins. So one cell in six
+// re-compiled the previous cell's types, and the printed 528 overstated what was
+// covered by exactly that much.
+//
+// After: `listSurfaceProbes()` — none, each capability alone, and ALL of them.
+// Six distinct lists, so the duplicate is gone, and the cell it freed is spent on
+// the maximal surface: chat + sources + tool + reasoning + artifact + resizable +
+// voice-input. That one is the whole reason the axis changed. No archetype can
+// express it — `workspace` has no `kai-tool` so it emits no card round trip, and
+// `agentic` has no artifact pane — so it is simultaneously the surface a builder
+// most obviously wants (a workspace that renders the tool calls that produced the
+// artifact), the surface `create-kai`'s feature multi-select makes reachable, and
+// the only cell where `isWorkspace`'s split layout and the tool loop + card
+// registry are emitted into the same file. It had never been compiled.
+//
+// `assertSurfacesAreDistinct` fails if the axis ever degenerates back into
+// repeated cells, and `assertPresetsAreData` keeps the six presets checked —
+// harder than before, by requiring each to be byte-identical to `renderSurface`
+// over its own components rather than merely compiling on its own.
 //
 // ROUTES: 11 integrations × 11 frameworks = 121 cells, of which 99 reach tsc: the
 // 11 `mock` cells carry no backend by design (it streams in the browser) and the
@@ -57,7 +83,7 @@
 // directly. `html` and `fastapi` cannot host a route of their own but still emit
 // one to run elsewhere, which is why they are in the matrix rather than skipped.
 // The archetype axis is absent because `chooseRoute` never reads the archetype;
-// `assertRoutesAreArchetypeIndependent` proves that rather than assuming it, so
+// `assertRoutesAreSurfaceIndependent` proves that rather than assuming it, so
 // the day a route starts varying by archetype this stops silently checking one
 // sixth of the matrix.
 //
@@ -214,7 +240,7 @@ const filterIdx = process.argv.indexOf('--filter');
 const FILTER = filterIdx > -1 ? process.argv[filterIdx + 1] : null;
 
 /**
- * The two catalog axes, DERIVED from the registry in `main()` — never listed here.
+ * The catalog axes, DERIVED from the registry in `main()` — never listed here.
  *
  * These were hand-written arrays, and that made the gate one-directional in the
  * worst way: adding a catalog entry did not add coverage, and nothing failed to
@@ -227,7 +253,39 @@ const FILTER = filterIdx > -1 ? process.argv[filterIdx + 1] : null;
  * `assertCatalogAxes()` refuses to proceed on an empty axis, so a registry that
  * failed to load degrades to a loud failure rather than a zero-cell green run.
  */
-let ARCHETYPES = [];
+
+/**
+ * THE SURFACE AXIS — `[{ id, components }]`, from `listSurfaceProbes()`.
+ *
+ * It used to be the six archetype IDS, and that was the wrong axis for two
+ * reasons that only became visible once `renderSurface` started taking a
+ * components list:
+ *
+ *   1. It covered five distinct surfaces, not six. `support-widget` and
+ *      `drop-in-chat` carry identical `components` and differ only in
+ *      `defaultPlacement`, which this matrix pins to 'full-page' — so one cell in
+ *      every six compiled the same types a second time.
+ *   2. It covered NO combination. Every preset is exactly one capability, so the
+ *      surfaces a components list makes reachable — a workspace that also renders
+ *      its tool calls, chat with sources AND voice — were emitted by nothing here.
+ *      The renderer could produce them; the gate could not ask for them, because
+ *      `useCase` is resolved through `getArchetype` and returns `undefined` for a
+ *      surface with no preset.
+ *
+ * `listSurfaceProbes()` derives none + each capability alone + all of them, so it
+ * is six cells again — but six DISTINCT ones, and the sixth is the composition.
+ * See that function for why not the power set, and for the gap it accepts.
+ *
+ * The presets have not stopped being checked: `assertPresetsAreData` renders each
+ * one and requires it to be byte-identical to `renderSurface` over its own
+ * components. That is a stronger statement than compiling them separately, and it
+ * is what keeps a second renderer from growing back.
+ */
+let SURFACES = [];
+/** The archetype preset ids — `assertPresetsAreData` only. NOT a compile axis. */
+let PRESETS = [];
+/** `{ [presetId]: components }`, from the registry — the other half of that check. */
+let PRESET_COMPONENTS = {};
 /**
  * EVERY integration, not a representative pair.
  *
@@ -248,7 +306,7 @@ let ARCHETYPES = [];
  * changes an inline CSS string, so the extra 3x buys no type coverage.
  *
  * Derived from `listIntegrations()`, so "every integration" is a fact rather
- * than a claim — see the note on ARCHETYPES above.
+ * than a claim — see the note on SURFACES above.
  */
 let INTEGRATIONS = [];
 /**
@@ -613,12 +671,12 @@ function selfTest(project = 'default') {
 async function angularStructureCheck(scaffold) {
   const failures = [];
   let checked = 0;
-  for (const useCase of ARCHETYPES) {
+  for (const surface of SURFACES) {
     for (const integration of INTEGRATIONS) {
-      const label = `${useCase}__${integration}__angular`;
+      const label = `${surface.id}__${integration}__angular`;
       if (FILTER && !label.includes(FILTER)) continue;
       checked++;
-      const out = await scaffold.handler({ useCase, integration, placement: 'full-page', framework: 'angular' });
+      const out = await scaffold.handler({ components: surface.components, integration, placement: "full-page", framework: "angular" });
       // Drop whole-line `//` comments first. The emitted prose talks ABOUT
       // <kai-chat> and about property bindings, and counting those as markup
       // makes every assertion below meaningless.
@@ -746,12 +804,12 @@ async function solidPartCoverageCheck(scaffold) {
   const variants = messagePartVariants();
   const failures = [];
   let checked = 0;
-  for (const useCase of ARCHETYPES) {
+  for (const surface of SURFACES) {
     for (const integration of INTEGRATIONS) {
-      const label = `${useCase}__${integration}__solid`;
+      const label = `${surface.id}__${integration}__solid`;
       if (FILTER && !label.includes(FILTER)) continue;
       checked++;
-      const out = await scaffold.handler({ useCase, integration, placement: 'full-page', framework: 'solid' });
+      const out = await scaffold.handler({ components: surface.components, integration, placement: "full-page", framework: "solid" });
       const body = renderPartBody(frontEnd(out.content[0].text));
       if (body === null) {
         failures.push(
@@ -792,7 +850,7 @@ async function solidPartCoverageCheck(scaffold) {
  * WHAT IT IS DERIVED FROM, AND WHY THAT MATTERS
  * --------------------------------------------
  * The expectation per cell comes from the scaffolder's own `cardEmitPlan`, over
- * the full ARCHETYPES x INTEGRATIONS x FRAMEWORKS product. No count is written
+ * the full SURFACES x INTEGRATIONS x FRAMEWORKS product. No count is written
  * down here: "the agentic archetype, 8 integrations, 8 frameworks = 64" would go
  * stale the day cards move or an integration lands, and would pass while doing so.
  * The realistic defect this catches is one of the EIGHT framework renderers not
@@ -832,21 +890,22 @@ async function cardRoundTripCheck(scaffold, cardEmitPlan) {
   let withoutCards = 0;
   let withTools = 0;
 
-  for (const useCase of ARCHETYPES) {
+  for (const surface of SURFACES) {
     for (const integration of INTEGRATIONS) {
-      const plan = cardEmitPlan(useCase, integration);
+      const plan = cardEmitPlan(surface.components, integration);
       if (!plan) {
         cleanup();
         fail(
-          `cardEmitPlan('${useCase}', '${integration}') returned null — the archetype or the\n` +
-            '  integration is not in the registry, so this check would silently skip the cell.',
+          `cardEmitPlan([${surface.components.join(', ')}], '${integration}') returned null — the\n` +
+            '  surface is empty or the integration is not in the registry, so this check would\n' +
+            '  silently skip the cell.',
         );
       }
       for (const framework of FRAMEWORKS) {
-        const label = `${useCase}__${integration}__${framework}`;
+        const label = `${surface.id}__${integration}__${framework}`;
         if (FILTER && !label.includes(FILTER)) continue;
         checked++;
-        const out = await scaffold.handler({ useCase, integration, placement: 'full-page', framework });
+        const out = await scaffold.handler({ components: surface.components, integration, placement: "full-page", framework });
         const whole = out.content[0].text;
         // Comments TALK about cards at length, and a claim standing in for the code
         // is the exact defect under test — so whole-line `//` and `<!-- -->` prose
@@ -1011,12 +1070,12 @@ const HTML_MODULE_SEPARATOR = '// ── src/main.ts ──';
 async function htmlStructureCheck(scaffold) {
   const failures = [];
   let checked = 0;
-  for (const useCase of ARCHETYPES) {
+  for (const surface of SURFACES) {
     for (const integration of INTEGRATIONS) {
-      const label = `${useCase}__${integration}__html`;
+      const label = `${surface.id}__${integration}__html`;
       if (FILTER && !label.includes(FILTER)) continue;
       checked++;
-      const out = await scaffold.handler({ useCase, integration, placement: 'full-page', framework: 'html' });
+      const out = await scaffold.handler({ components: surface.components, integration, placement: "full-page", framework: "html" });
       const text = out.content[0].text;
 
       const chats = (text.match(/<kai-chat id="chat"/g) ?? []).length;
@@ -1297,33 +1356,44 @@ function assertRelativeImportsHaveExtensions(label, files, failures) {
 }
 
 /**
- * Block (2) must not depend on the archetype.
+ * Block (2) must not depend on the SURFACE.
  *
- * The route matrix skips the archetype axis because `chooseRoute` only ever
- * reads (integration, framework). That is true today and cheap to keep true, but
- * if it stopped being true this check would silently be compiling one sixth of
- * the real matrix and still reporting a full pass. So prove it, per integration
- * and framework, against every archetype.
+ * The route matrix skips the surface axis because `chooseRoute` only ever reads
+ * (integration, framework). That is true today and cheap to keep true, but if it
+ * stopped being true this check would silently be compiling one sixth of the real
+ * matrix and still reporting a full pass. So prove it, per integration and
+ * framework, against every surface.
+ *
+ * It re-checks the SURFACES, not the presets, for the same reason the front-end
+ * matrix compiles them: the maximal surface is the one most likely to break the
+ * independence — it is the only cell where a route could see a components list no
+ * preset produces — and it did not exist on the old axis.
  */
-async function assertRoutesAreArchetypeIndependent(scaffold, reference) {
+async function assertRoutesAreSurfaceIndependent(scaffold, reference) {
   const drift = [];
   for (const [label, expected] of reference) {
     const [, integration, framework] = label.split('__');
-    for (const useCase of ARCHETYPES.slice(1)) {
-      const out = await scaffold.handler({ useCase, integration, placement: 'full-page', framework });
-      if (backEnd(out.content[0].text) !== expected) drift.push(`${integration} × ${framework}: differs for archetype '${useCase}'`);
+    for (const surface of SURFACES.slice(1)) {
+      const out = await scaffold.handler({
+        components: surface.components,
+        integration,
+        placement: 'full-page',
+        framework,
+      });
+      if (backEnd(out.content[0].text) !== expected)
+        drift.push(`${integration} × ${framework}: differs for surface '${surface.id}'`);
     }
   }
   if (drift.length) {
     for (const d of drift.slice(0, 10)) console.log(`  ✗ ${d}`);
     cleanup();
     fail(
-      `${drift.length} route(s) vary by ARCHETYPE, but the route matrix compiles one archetype per\n` +
-        '  (integration, framework). Add the archetype axis to routeCheck, or this gate is\n' +
+      `${drift.length} route(s) vary by SURFACE, but the route matrix compiles one surface per\n` +
+        '  (integration, framework). Add the surface axis to routeCheck, or this gate is\n' +
         '  now checking a fraction of the routes it claims to.',
     );
   }
-  console.log(`  ✓ routes are archetype-independent (${reference.size} × ${ARCHETYPES.length - 1} re-checked)`);
+  console.log(`  ✓ routes are surface-independent (${reference.size} × ${SURFACES.length - 1} re-checked)`);
 }
 
 /**
@@ -1401,7 +1471,7 @@ async function routeCheck(scaffold) {
 
   for (const c of cells) {
     const out = await scaffold.handler({
-      useCase: ARCHETYPES[0],
+      components: SURFACES[0].components,
       integration: c.integration,
       placement: 'full-page',
       framework: c.framework,
@@ -1480,7 +1550,7 @@ async function routeCheck(scaffold) {
   }
   console.log('  ✓ every relative import in an emitted route carries an explicit extension (TS2835)');
 
-  await assertRoutesAreArchetypeIndependent(scaffold, reference);
+  await assertRoutesAreSurfaceIndependent(scaffold, reference);
   if (noRoute.length) console.log(`  · ${noRoute.length} cases have no backend by design (mock streams in the browser)`);
   if (pythonCells.length) pythonCheck(pythonCells);
 
@@ -1541,21 +1611,138 @@ async function loadCatalogAxes(esbuild) {
     logLevel: 'error',
   });
   const mod = await import(pathToFileURL(bundle).href);
-  if (typeof mod.listIntegrations !== 'function' || typeof mod.listArchetypes !== 'function')
+  if (
+    typeof mod.listIntegrations !== 'function' ||
+    typeof mod.listArchetypes !== 'function' ||
+    typeof mod.listSurfaceProbes !== 'function'
+  )
     fail(
-      'the catalog no longer exports `listIntegrations` / `listArchetypes`.\n' +
-        '  This matrix derives its integration and archetype axes from them. Refusing to fall\n' +
+      'the catalog no longer exports `listIntegrations` / `listArchetypes` / `listSurfaceProbes`.\n' +
+        '  This matrix derives its integration and surface axes from them. Refusing to fall\n' +
         '  back to a hand-written list: that is the exact defect that let `openai` and\n' +
         '  `anthropic` compile zero times while this gate reported success.',
     );
   INTEGRATIONS = mod.listIntegrations().map((i) => i.id);
-  ARCHETYPES = mod.listArchetypes().map((a) => a.id);
+  SURFACES = mod.listSurfaceProbes();
+  PRESETS = mod.listArchetypes().map((a) => a.id);
+  PRESET_COMPONENTS = Object.fromEntries(mod.listArchetypes().map((a) => [a.id, a.components]));
   // Anti-vacuity. An empty axis makes every matrix below a zero-cell green run.
   if (INTEGRATIONS.length === 0) fail('the registry lists no integrations — every matrix here would be empty.');
-  if (ARCHETYPES.length === 0) fail('the registry lists no archetypes — every matrix here would be empty.');
+  if (SURFACES.length === 0) fail('the registry derives no surface probes — every matrix here would be empty.');
+  if (PRESETS.length === 0) fail('the registry lists no archetypes — `assertPresetsAreData` would check nothing.');
+  assertSurfacesAreDistinct();
   console.log(
-    `  · catalog axes from the registry: ${INTEGRATIONS.length} integrations × ${ARCHETYPES.length} archetypes ` +
-      `(${INTEGRATIONS.join(', ')})`,
+    `  · catalog axes from the registry: ${INTEGRATIONS.length} integrations × ${SURFACES.length} surfaces ` +
+      `(${SURFACES.map((s) => s.id).join(', ')})`,
+  );
+}
+
+/**
+ * The surface axis must not degenerate into repeated cells.
+ *
+ * This is the check the OLD axis would have failed. `support-widget` and
+ * `drop-in-chat` carry identical `components`, and with `placement` pinned to
+ * 'full-page' they emitted the same surface — so one archetype cell in six was
+ * compiling types the previous cell had already compiled, and the printed count
+ * overstated the coverage by that much for as long as the matrix existed.
+ *
+ * `listSurfaceProbes` dedupes by construction today. Asserting it anyway is the
+ * point: the derivation reads a catalog that humans edit, and the failure mode is
+ * silent — a duplicated surface costs compile time and reports as a bigger matrix,
+ * never as a red. Also refuses a surface that dropped `kai-chat`, which would
+ * compile a chat app with no chat in it.
+ */
+function assertSurfacesAreDistinct() {
+  const byComponents = new Map();
+  for (const s of SURFACES) {
+    if (!s.components.includes('kai-chat'))
+      fail(`surface '${s.id}' has no kai-chat: [${s.components.join(', ')}]. That is not a chat surface.`);
+    const key = [...s.components].sort().join(',');
+    const prior = byComponents.get(key);
+    if (prior)
+      fail(
+        `surfaces '${prior}' and '${s.id}' have the same components ([${s.components.join(', ')}]).\n` +
+          '  They compile identical types, so one of them is buying nothing while inflating the\n' +
+          '  cell count this gate prints.',
+      );
+    byComponents.set(key, s.id);
+  }
+}
+
+/**
+ * ARCHETYPES ARE DATA, AND THIS IS WHAT HOLDS THAT OPEN.
+ *
+ * The extraction that made `renderSurface` components-keyed is only worth
+ * anything if there is exactly ONE renderer. The failure it guards against is not
+ * hypothetical or subtle: it is somebody adding a preset-shaped fast path — a
+ * `switch (useCase)`, a special case for `workspace`, a second render function
+ * `create-kai` imports instead — and everything staying green, because the preset
+ * cells and the components cells would each be checked against themselves.
+ *
+ * So: for every preset, the surface rendered from its ID must be BYTE-IDENTICAL
+ * to the surface rendered from its own `components`. Byte-identical, not
+ * equivalent — the preset's title and id appear only in the provenance header
+ * `compose` writes above block (1), never inside it, precisely so this comparison
+ * can be exact rather than fuzzy. A normalizing comparison here would be the same
+ * kind of check-that-proves-nothing the rest of this file exists to avoid.
+ *
+ * Run over every framework, because a second renderer would most plausibly appear
+ * in ONE of them.
+ */
+async function assertPresetsAreData(scaffold, presetComponents) {
+  const drift = [];
+  let checked = 0;
+  for (const preset of PRESETS) {
+    const components = presetComponents[preset];
+    if (!components || components.length === 0) {
+      cleanup();
+      fail(
+        `preset '${preset}' resolved to no components, so this check would compare a surface\n` +
+          '  against nothing and pass. The registry is the source for both sides.',
+      );
+    }
+    for (const framework of FRAMEWORKS) {
+      const label = `${preset}__${framework}`;
+      if (FILTER && !label.includes(FILTER)) continue;
+      checked++;
+      // Same integration on both sides: the axis under test is the SURFACE, and
+      // `openrouter` forwards both `model` and `tools`, so it exercises the most
+      // conditional emission of any entry.
+      const viaPreset = await scaffold.handler({
+        useCase: preset,
+        integration: 'openrouter',
+        placement: 'full-page',
+        framework,
+      });
+      const viaComponents = await scaffold.handler({
+        components,
+        integration: 'openrouter',
+        placement: 'full-page',
+        framework,
+      });
+      const a = frontEnd(viaPreset.content[0].text);
+      const b = frontEnd(viaComponents.content[0].text);
+      if (a === null || b === null) {
+        cleanup();
+        fail(`${label}: a scaffold has no "=== (1) FRONT-END" block, so nothing was compared.`);
+      }
+      if (a !== b) drift.push(label);
+    }
+  }
+  if (drift.length) {
+    for (const d of drift.slice(0, 10)) console.log(`  ✗ ${d}`);
+    cleanup();
+    fail(
+      `${drift.length} preset(s) render a DIFFERENT surface than their own components list.\n` +
+        '  That means a second, preset-keyed render path exists. The whole point of\n' +
+        '  renderSurface({ components }) is that there is one renderer and the archetypes are\n' +
+        '  data over it — `create-kai` imports the same function, so a preset-only path is a\n' +
+        '  surface the CLI can never emit.',
+    );
+  }
+  console.log(
+    `  ✓ ${checked} preset renders are byte-identical to renderSurface over their own components ` +
+      `(${PRESETS.length} presets × ${FRAMEWORKS.length} frameworks) — archetypes are data`,
   );
 }
 
@@ -1584,25 +1771,26 @@ async function main() {
     );
 
   for (const project of Object.keys(PROJECTS)) selfTest(project);
+  await assertPresetsAreData(scaffold, PRESET_COMPONENTS);
   await htmlStructureCheck(scaffold);
   await angularStructureCheck(scaffold);
   await solidPartCoverageCheck(scaffold);
   await cardRoundTripCheck(scaffold, cardEmitPlan);
 
   const cases = [];
-  for (const useCase of ARCHETYPES)
+  for (const surface of SURFACES)
     for (const integration of INTEGRATIONS)
       for (const framework of FRAMEWORKS) {
-        const label = `${useCase}__${integration}__${framework}`;
+        const label = `${surface.id}__${integration}__${framework}`;
         if (FILTER && !label.includes(FILTER)) continue;
-        cases.push({ useCase, integration, framework, label });
+        cases.push({ components: surface.components, integration, framework, label });
       }
 
   console.log(`  · generating ${cases.length} scaffolds`);
   const skipped = [];
   for (const c of cases) {
     const out = await scaffold.handler({
-      useCase: c.useCase,
+      components: c.components,
       integration: c.integration,
       placement: 'full-page',
       framework: c.framework,
