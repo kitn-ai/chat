@@ -167,6 +167,7 @@
     "verify:scaffold": "node scripts/verify-scaffold-compiles.mjs",
     "verify:schemas": "node scripts/verify-schemas-exported.mjs",
     "verify:solid-coverage": "node scripts/verify-solid-coverage.mjs",
+    "verify:tool-schemas": "node scripts/verify-tool-schemas.mjs",
     "verify:ssr": "node scripts/verify-ssr-imports.mjs",
     "test": "vitest run",
     "test:react": "vitest run --config vitest.react.config.ts",
