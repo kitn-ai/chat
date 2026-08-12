@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { scaffold } from './tools/scaffold';
+import { cardEmitPlan, scaffold } from './tools/scaffold';
 import { getIntegration, listIntegrations } from '../registry';
 // The real encoders, used to prove WHY the fabricated sample seed had to go:
 // one of them throws on it, the other quietly sends it.
@@ -2770,7 +2770,18 @@ describe('scaffold — solid', () => {
       expect(f, `no partAs branch for ${kind}`).toContain(`partAs(part(), '${kind}')`);
     }
     expect(f).toContain('<Tool toolPart={p().tool} />');
-    expect(f).toContain('<CardRenderer envelope={p().envelope} />');
+    // The card branch takes the app's registry when there IS one. `agentic` bears
+    // cards, so the render call carries `types`/`schemas` — the Solid half of
+    // <kai-chat>'s cardTypes/cardSchemas. Without them a developer's own card type
+    // draws the fallback and is never validated, which is the whole seam.
+    expect(f).toContain('<CardRenderer');
+    expect(f).toContain('envelope={p().envelope}');
+    expect(f).toContain('types={cards.components}');
+    expect(f).toContain('schemas={cards.validationSchemas}');
+    // An archetype with no registry to hand it still renders every card, plainly.
+    const plain = front(await emit('drop-in-chat'));
+    expect(plain).toContain('<CardRenderer envelope={p().envelope} />');
+    expect(plain).not.toContain('types={cards.components}');
     expect(f).toContain('<Attachment data={fp.attachment}>');
   });
 
@@ -2989,5 +3000,134 @@ describe('scaffold — capability parity across every front-end framework', () =
         .split('=== (3) RUN NOTE ===')[0];
       expect(route, `${framework}: no warning for a Python service`).toContain('will NOT run');
     }
+  });
+});
+
+/**
+ * The generative-UI card round trip.
+ *
+ * These assert WORDING, which is all a string-literal emitter can be asserted on
+ * from here: `verify:scaffold` compiles the same output under eight real consumer
+ * tsconfigs, and `emitted-card-path.live.test.ts` actually RUNS it against a
+ * canned model stream and reads the card out of the shadow DOM. Three layers,
+ * because each one is blind to the other two — a scaffold can read correctly,
+ * compile cleanly, and still render nothing.
+ *
+ * The one thing asserted here that neither other layer can see is the RESTATEMENT
+ * ban: the emitted code must CALL the kit's functions and must never write a card
+ * schema out again. A restated schema compiles and runs perfectly, and is the
+ * exact drift this whole contract exists to prevent.
+ */
+describe('scaffold — the card round trip is emitted, never restated', () => {
+  const FRONTENDS = ['html', 'react', 'next', 'vue', 'svelte', 'angular', 'solid', 'tanstack-start'] as const;
+
+  const front = async (framework: string, useCase = 'agentic', integration = 'openrouter') => {
+    const out = await scaffold.handler({ useCase, integration, placement: 'full-page', framework });
+    return (out.content as { type: string; text: string }[])[0].text.split('=== (2) BACKEND ROUTE ===')[0];
+  };
+
+  it('every framework emits registry -> cardTools -> cardFromToolCall, calling the kit', async () => {
+    for (const framework of FRONTENDS) {
+      const code = await front(framework);
+      expect(code, `${framework}: no registry`).toContain('createCardRegistry({');
+      expect(code, `${framework}: no generated tool defs`).toContain("cardTools(cards, { provider: 'openai' })");
+      expect(code, `${framework}: the loop never maps a card tool call`).toContain(
+        'cardFromToolCall(call.name, call.input ?? {}, { id: call.id })',
+      );
+      expect(code, `${framework}: the card is never added to the stream`).toContain('stream.addCard(card);');
+      expect(code, `${framework}: no import`).toContain("from '@kitn.ai/ui/schemas'");
+    }
+  });
+
+  it('nothing about a card SHAPE is restated — the schema stays the schema', async () => {
+    // The five-copies problem this contract exists to kill. A scaffold that spelled
+    // out confirm's fields would compile, run, render, and then drift the first time
+    // the card contract moved, with nothing anywhere to say so.
+    for (const framework of FRONTENDS) {
+      const code = await front(framework);
+      // Confirm's own property names, as they appear in confirm.schema.json. `search`
+      // legitimately writes `type: 'object'` / `required: [...]` for the ONE tool the
+      // scaffold hand-declares, so those generic keywords are not the tell; the card's
+      // field names are.
+      for (const field of ['dismissible', 'x-kai-control', 'ConfirmCardData']) {
+        expect(code, `${framework}: restates confirm's \`${field}\``).not.toContain(field);
+      }
+      // And the tool NAME comes off toolNameForCardType, never a literal.
+      expect(code, `${framework}: hard-codes a kai_ tool name`).not.toMatch(/name: 'kai_/);
+    }
+  });
+
+  it('the two card props are JS PROPERTIES, never attributes', async () => {
+    for (const framework of FRONTENDS) {
+      const code = await front(framework);
+      // Solid renders the components directly, so its half of the contract is
+      // <CardRenderer types/schemas> rather than <kai-chat>'s cardTypes/cardSchemas.
+      const wiring =
+        framework === 'solid'
+          ? ['types={cards.components}', 'schemas={cards.validationSchemas}']
+          : ['cards.tags', 'cards.validationSchemas'];
+      for (const needle of wiring) expect(code, `${framework}: ${needle} unwired`).toContain(needle);
+      for (const prop of ['cardTypes', 'cardSchemas']) {
+        expect(code, `${framework}: ${prop} as an attribute`).not.toMatch(new RegExp(`(?:^|\\s)${prop}="`, 'm'));
+      }
+    }
+  });
+
+  it('mock emits no card round trip: there is no model to ask for one', async () => {
+    for (const framework of FRONTENDS) {
+      const code = await front(framework, 'agentic', 'mock');
+      expect(code, `${framework}: mock declares a registry`).not.toContain('createCardRegistry(');
+      expect(code, `${framework}: mock maps card tool calls`).not.toContain('cardFromToolCall(');
+    }
+  });
+
+  /**
+   * The catalog-derived half, and the one that survives a new integration.
+   *
+   * `cardTools()` takes `provider` as a REQUIRED argument because the three tool
+   * envelopes are different documents. An integration whose route forwards a tools
+   * array but whose stream format is unmapped would emit a `tools` array with no
+   * card in it: the model is never told a card exists, never emits one, and nothing
+   * anywhere says why. Derived from `listIntegrations()`, so the day the `anthropic`
+   * integration lands this goes red until its envelope is stated.
+   */
+  it('every integration that forwards a tools array has a card-tool provider', async () => {
+    const forwarding = listIntegrations().filter((i) => i.forwardsFromClient.includes('tools'));
+    // Anti-vacuity: if the catalog stopped declaring `tools` anywhere, the loop below
+    // would pass by running zero times.
+    expect(forwarding.length, 'no integration forwards a tools array — this check is vacuous').toBeGreaterThan(0);
+    for (const integration of forwarding) {
+      const plan = cardEmitPlan('agentic', integration.id);
+      expect(plan, `${integration.id}: not in the registry`).not.toBeNull();
+      expect(plan!.tools, `${integration.id}: expected a tools array`).toBe(true);
+      expect(
+        plan!.provider,
+        `${integration.id} forwards a tools array but its streamFormat '${integration.streamFormat}' is not ` +
+          'mapped in CARD_TOOL_PROVIDERS, so the scaffold would offer the model no card tool at all',
+      ).not.toBeNull();
+      const code = await front('react', 'agentic', integration.id);
+      expect(code, `${integration.id}: wrong provider emitted`).toContain(
+        `cardTools(cards, { provider: '${plan!.provider}' })`,
+      );
+    }
+  });
+
+  it('an integration whose route builds its own tools still wires the client half', async () => {
+    // langgraph owns its tool list server-side (forwardsFromClient is empty), so there
+    // is no client tools array to put card tools in — but an envelope arriving from
+    // that agent still has to draw, so the registry and the loop's mapping stay.
+    const code = await front('react', 'agentic', 'langgraph');
+    expect(code).toContain('createCardRegistry({');
+    expect(code).toContain('cardFromToolCall(');
+    // Asserted on the IMPORT LINE, not on the whole file: the emitted prose names
+    // `cardTools(cards, …)` while explaining what the registry is for, and matching
+    // that would be a comment standing in for the code — in the direction that
+    // makes the test pass for the wrong reason.
+    const imported = code.match(/^import \{(.+)\} from '@kitn\.ai\/ui\/schemas';$/m)?.[1] ?? '';
+    expect(imported, 'nothing to import from @kitn.ai/ui/schemas').toContain('createCardRegistry');
+    expect(imported, 'imported cardTools with nothing to call it on (TS6133 in a stock app)').not.toContain(
+      'cardTools',
+    );
+    expect(code, 'called cardTools with no tools array to put it in').not.toMatch(/\.\.\.cardTools\(/);
   });
 });
