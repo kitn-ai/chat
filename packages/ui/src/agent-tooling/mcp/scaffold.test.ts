@@ -2365,8 +2365,14 @@ describe('real-backend scaffolds send what the panel needs and survive a failure
       expect(route, `${integration}: route never reads tools`).toMatch(
         /const \{[^}]*\btools\b[^}]*\} = await readChatRequest\(request\);/,
       );
+      // `[\s\S]*?` rather than `[^}]*`: a route that CONVERTS the body before
+      // sending it (anthropic maps OpenAI tool schemas onto `input_schema`) has
+      // nested braces between `JSON.stringify({` and `tools`, which a
+      // no-close-brace class cannot cross. It stayed non-greedy so the match
+      // still has to find `tools` inside the upstream body and not somewhere
+      // later in the file.
       expect(route, `${integration}: route never sends tools`).toMatch(
-        /JSON\.stringify\(\{[^}]*\btools\b[^}]*\}\)/,
+        /JSON\.stringify\(\{[\s\S]*?\btools\b[\s\S]*?\}\)/,
       );
     },
   );

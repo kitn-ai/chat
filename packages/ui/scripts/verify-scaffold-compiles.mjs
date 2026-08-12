@@ -30,12 +30,18 @@
 //
 // SCOPE
 // -----
-// FRONT END: 6 archetypes × 9 integrations × 8 TS frameworks = 432 compiled
+// WARNING: `INTEGRATIONS` below is a HAND-WRITTEN list, not the registry. It is
+// therefore one-directional: adding a catalog entry does NOT add coverage, and
+// nothing fails to say so — `openai` and `anthropic` were added to the catalog
+// and this gate stayed green at the old 432/99 counts until the list was edited
+// by hand. Derive it from `listIntegrations()` when you next touch this file.
+//
+// FRONT END: 6 archetypes × 11 integrations × 8 TS frameworks = 528 compiled
 // cells, at one placement. `placement` is the fourth axis and is left at
 // 'full-page' on purpose: it only ever changes an inline CSS string, so the
 // extra 3x compiles the same types again.
 //
-// ROUTES: 9 integrations × 11 frameworks = 99 cells, of which 77 reach tsc: the
+// ROUTES: 11 integrations × 11 frameworks = 121 cells, of which 99 reach tsc: the
 // 11 `mock` cells carry no backend by design (it streams in the browser) and the
 // 11 `pydantic-ai` cells are Python, so they go to `pythonCheck` instead. The
 // framework axis is WIDER here than the front end's eight because `express`,
@@ -214,6 +220,8 @@ const ARCHETYPES = ['drop-in-chat', 'support-widget', 'knowledge-base', 'agentic
  * changes an inline CSS string, so the extra 3x buys no type coverage.
  */
 const INTEGRATIONS = [
+  'openai',
+  'anthropic',
   'openrouter',
   'vercel-ai-sdk',
   'langgraph',
