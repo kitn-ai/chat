@@ -1,5 +1,5 @@
 event: message_start
-data: {"type":"message_start","message":{"id":"gen-1786476946-Zo2aniKW38nNvaDpB9ih","type":"message","role":"assistant","container":null,"content":[],"model":"anthropic/claude-haiku-4.5","stop_reason":null,"stop_details":null,"stop_sequence":null,"usage":{"input_tokens":795,"output_tokens":8,"output_tokens_details":null,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"inference_geo":null,"server_tool_use":null,"service_tier":null,"speed":"standard"},"provider":"Amazon Bedrock"}}
+data: {"type":"message_start","message":{"id":"gen-1786489302-pPpFVw5Xk6UzQm3Y0apO","type":"message","role":"assistant","container":null,"content":[],"model":"anthropic/claude-haiku-4.5","stop_reason":null,"stop_details":null,"stop_sequence":null,"usage":{"input_tokens":795,"output_tokens":8,"output_tokens_details":null,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"inference_geo":null,"server_tool_use":null,"service_tier":null,"speed":"standard"},"provider":"Amazon Bedrock"}}
 
 event: content_block_start
 data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}
@@ -8,112 +8,109 @@ event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"The user is asking for a checklist"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" for shipping a release an"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" for shipping a release. They"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"d wants to be"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" want to be"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" able to tick off the"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" able to tick off which steps to run"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" steps."}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":". This is"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" This is exactly"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" a perfect"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" what"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" use case for the"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" the plan"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" plan_tasks function,"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"_tasks function"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" which renders"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" is designed for -"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" a checklist that"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" it shows"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" the"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" a chec"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" user can interact"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"klist that"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" with.\n\nI shoul"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" users can interact"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"d create a comprehensive but"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" with."}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" reasonable"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\n\nI should create a reasonable"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" checklist for"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" checklist for shipping a release."}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" shipping a software"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" Common"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" release."}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" steps"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" Typical steps"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" woul"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" would include:\n1"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"d include:\n1. Create"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":". Final"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"/tag"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" testing"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" a release version"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"/QA\n2. Version"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\n2. Run"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" tests/"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"validation\n3. Buil"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"d/"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"package the"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" release\n4. Deploy"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" to production\n5."}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" Verify"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" deployment"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" bump"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"/"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"notify"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"ta"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" users\n\nLet"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"gging\n3. Buil"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" me create a soli"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"d/compile"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"d checklist with "}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\n4. Documentation"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" update"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\n5. Deploy"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"/ship"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\n\nLet"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" me create a practical"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" checklist with"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" "}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"4"}}
@@ -122,37 +119,25 @@ event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"-5 steps"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" ("}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" that cover"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"the"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" the main release"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" function"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" shipping"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" accepts "}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" process."}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"2"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"-5"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" tasks"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":")."}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"ErwFCkgIEBABGAIqQEIeeSJdXBTt9P3p80BcLnQHdBzzfPy1nUq50eI1JOsn9++96Z3dcgjPWC7UZSDzQl4FF/5X5pEiI0kk5WXJZVASDBPFya3QiqOM0uERyRoMpUUjkIuaFKLpdKGTIjAJlY4GDCTRgZy+MIaG7a7reS0sGZrPKSTV0l4O5hiMsg2TP3nbL1rTS+P0XsIxO9IqoQSk5Ur+SDOJJqCebCVXw3YVLQZvGIo7CqDS8X8mHPFJHj191c49eft2lgvvkRZuBtvQMIjuSfhLHFT1uevM/J89s7xGaqqzCXMgocuzxgPQ+qLCOOEdlXrcq7duzH7gVQPjXtdDOdMU+37t3RzMVhLhgK+71ptu+jV/ZG+C53clHCMsLwUEjAz3Bui4upK2S+zOMRpnr0OMlXyNebgkO4qboTNe80hH9H1Y7JV8YKJwmsYEMOEYP6exMD63yuzH3in2YFORpoidu0s19DLFkcydQQQDeogFFJS+qAcyXazzYX12Lih4MuESuFJtGvvjSAHPKIBhh7nfwh1lgB88odWMvgYd8ZM2utS4k5IxRvbdFxHNZ2IIXK/o6MbMN7O3hwEUE3fGmqRnEVx3PafVOxBlIU3MGdPIU5R8JSlUEi6W4APntTMVZb2eA6NkpnP+7UVxtU9l7aFytXmjVrz/N1IHDzY5ZGgLAqTuPKrQgiJIIpvsLy7ZNkSVYnABRYHEF3YTzPKX9Vu9Pw+R/XYJaFiihEri5QkL3eo4DF8NsDSB3kuL2Z9t8w/vVilv3m/VOUKfz7PUHYVFfF0QjMyWR7etNLZ1YoRx4HSnIdtn3gyw8ufW7jxSreO0QEp8GGOLh1nnUdYS6VIHdTjISCs+bi/GZNMsCiKkbibOvftM++YI3I9LHKlnYWWJBFpD3FiKGgLMSZC5RwLARJCn3CGoPHOI3BgB"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"EscFCkgIEBABGAIqQMWimb7xTbZkZ75ldFlop/q88BTX3kHYTXoG73GvR8C4CekL0RuTbtu/u9Jfi7P/1ZgqpM1eGRFaglpr51uWC5ESDARMAs5qK6Yqph9dBRoM4Hoa7XvHvoUF8303IjAbhI3KjiYbKgK5bGQrFIWrI/5bVwc0r50FBxGu3zWpwbi1gaESoYNOEa5u5sGlyIcqrAQso+IsgBZ/bbQv03A4DL4vM6vDyvaghejStPdnCAtAkdEaoQg7OiCMyxOGcqKlczMpP3tkYc+7AchQ1zZW0NwEGnBW3wNjUUSiGf70JTwK3StLKq0eRbpRvODlgj3VzDyir4xFedbW2dw9ft08loagt8HUI09gqPj3jdh2Q1ciEwvZiEqBo7x1pE/FEnisXy0raoLf7hkHk44s6C4qgm3RQ6bMNaDP90NnGXQh42wMLrhm5unwtvVxJPm2zosTm6SbVsMAh0Jvn9rcjO62DiVe51S39S3f3Aob/6WEy1i/HGgwdkWuD8mbfFKbpnnUn5TzaYSrpR1Eu5u8va+V32Sf00BaEx/7HkAx+J4QQ4q4oPuuK4xnLVnaBUAZgnZ8oYk3ep7g6pVJeFC9E/g+1A6IwrXoq/HJgfLgrtEA99lhc1ShVDxrVBVypZmOsxTtRYqBUXGmI2InaQ9xZIsvcfSNDXm1t8h7hoXo9Ab2eBZR4yYwSSL6EGV7jWdWMfp+WFPO2IBnsjcTw+UD7BWhFtC4UDSFbG/A7LO8Isoi7b55G2IauE8o3gJSO/7j3zLJVkDvF7T5ZSvL2UJYBd/XElpY+cU9vTvis4IXIfU+N6az/kDH3QAKgCD5NMIr2RgVOkw5/QxMxdgxuIlBjoIH1HrTI7ZLKJ++ihG3tDTAxKywudPZQk9UgUIAPD+8E6OLi5f3GgQ43ST7y6534C1nikOicPlrybR+BMJ+XRgFGAE="}}
 
 event: content_block_stop
 data: {"type":"content_block_stop","index":0}
 
 event: content_block_start
-data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_bdrk_01D4A48qFimT7h7UHLX11ZvJ","caller":{"type":"direct"},"name":"plan_tasks","input":{}}}
+data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_bdrk_01XLtLM8b3UazMKw9ZztP9Ei","caller":{"type":"direct"},"name":"plan_tasks","input":{}}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"heading\": \"Release"}}
@@ -161,109 +146,16 @@ event: content_block_delta
 data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" Shipping Checklist"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\", \"tasks\": [\n  {"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\", \"tasks\": ["}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\n  {"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\n    \"label"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\": \"Run"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" full"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" test suite an"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"d Q"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"A\",\n    \"description\": \""}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"Execute"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" automate"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"d tests an"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"d manual"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" Q"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"A verification"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\""}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\n  },\n  {\n    "}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\"label\": \"Create release tag an"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"d changelog"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\",\n    \"description\": \"Tag"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" the commit"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" an"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"d "}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"document changes"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" in"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" release notes\"\n  },\n  "}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\n    \"label\": \"Buil"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"d an"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"d package release\",\n    \"description\":"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" \"Compile"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" bin"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"aries/"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"artifacts"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" and verify"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" integrity"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\"\n  },\n  {"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\n    \"label\": \"Deploy to production"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\": \"Run final tests and QA"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\","}}
@@ -272,40 +164,118 @@ event: content_block_delta
 data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\n    \"description\": \"Execute"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" deployment pipeline"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" all automate"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" and monitor"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"d tests an"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" for"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"d perform"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" errors"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" manual"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\"\n  },\n  {"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" QA verification"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\n    \"label\": \"Verify an"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\""}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"d notify"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\n  },\n  {\n    "}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" stakeholders\",\n    \"description\":"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\"label\": \"Update version and changelog"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" \"Confirm deployment health"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\",\n    \"description\": \""}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" and communicate release"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"Bump"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" to"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" version number and "}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" users"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"document all"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" changes in release"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" notes\"\n  },\n  {"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\n    \"label\": \"Buil"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"d and create"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" release artifacts"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\",\n    \"description\": \""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"Compile code"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":", run"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" buil"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"d pipeline"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":", and generate"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" distrib"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"utable packages\"\n  },\n  "}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\n    \"label\": \"Tag"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" and push"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" to repository\",\n    \"description\":"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" \"Create git tag"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" for the release and push to version"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" control\"\n  },\n  {"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\n    \"label\": \"Deploy to"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" production"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\","}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\n    \"description\": \"Ship"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" the release to production an"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"d verify it's"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":" live"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\"\n  }\n]"}}
@@ -317,7 +287,7 @@ event: content_block_stop
 data: {"type":"content_block_stop","index":1}
 
 event: message_delta
-data: {"type":"message_delta","delta":{"container":null,"stop_details":null,"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":795,"output_tokens":382,"output_tokens_details":{"thinking_tokens":136},"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"server_tool_use":null,"service_tier":null,"speed":"standard","cost":0.002705,"is_byok":false,"cost_details":{"upstream_inference_cost":0.002705,"upstream_inference_prompt_cost":0.000795,"upstream_inference_completions_cost":0.00191}},"context_management":null}
+data: {"type":"message_delta","delta":{"container":null,"stop_details":null,"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":795,"output_tokens":392,"output_tokens_details":{"thinking_tokens":139},"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"server_tool_use":null,"service_tier":null,"speed":"standard","cost":0.002755,"is_byok":false,"cost_details":{"upstream_inference_cost":0.002755,"upstream_inference_prompt_cost":0.000795,"upstream_inference_completions_cost":0.00196}},"context_management":null}
 
 event: message_stop
 data: {"type":"message_stop"}

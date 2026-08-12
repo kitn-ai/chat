@@ -124,9 +124,9 @@ describe('MESSAGE_SLOTS registry', () => {
 });
 
 describe('MESSAGE_PARTS registry', () => {
-  it('declares row / bubble / content / actions, with unique names', () => {
+  it('declares row / bubble / content / actions / citations, with unique names', () => {
     const names = MESSAGE_PARTS.map((p) => p.name);
-    expect(names).toEqual(['row', 'bubble', 'content', 'actions']);
+    expect(names).toEqual(['row', 'bubble', 'content', 'actions', 'citations']);
     expect(new Set(names).size).toBe(names.length);
   });
 
@@ -226,31 +226,64 @@ describe('ELEMENT_COMPOSITION registry (single source of truth the build extract
     return tokens;
   }
 
+  const SRC = join(HERE, '..');
+
+  // The scan walks ALL of `src/` and skips a DENYLIST, rather than walking an
+  // allowlist of roots. An allowlist silently drops any top-level directory
+  // nobody remembered to add, which is exactly how a `part="card artifact"`
+  // living in `primitives/` stayed invisible until the file happened to MOVE
+  // into `components/` -- the guard reported success the whole time while
+  // covering nothing for that directory. A denylist fails the other way: a new
+  // directory is scanned by default, and the only way to lose coverage is to
+  // name the directory here, in the diff, on purpose.
+  //
+  // Both entries below are for source that is NOT part of any `kai-*` element's
+  // shadow DOM, so a `part=` in them is not a styling surface we owe consumers
+  // documentation for:
+  //   - `agent-tooling/` is the `kai` MCP scaffolder. The code it EMITS lives in
+  //     string literals; a `part=` there belongs to the consumer app it
+  //     generates, not to a kit element.
+  //   - `stories/` is Storybook demo/doc pages -- the same category the existing
+  //     `.stories.tsx` filename filter already excludes; this just covers the
+  //     non-`.stories` helpers that sit in that directory.
+  // Excluding these matters in BOTH directions: counting them would manufacture
+  // forward-guard failures that tempt bogus registry entries, and it would WEAKEN
+  // the reverse guard by letting a template string "justify" a registered name
+  // that no element actually renders. Neither directory contains a `part=` today,
+  // so both exclusions are provably no-ops at the time they were written.
+  const UNSCANNED_DIRS = new Set(['agent-tooling', 'stories']);
+
   function partNamesInSource(): Set<string> {
     const found = new Set<string>();
-    const walk = (dir: string) => {
+    const scanFile = (p: string, name: string) => {
+      if (!name.endsWith('.tsx') && !name.endsWith('.ts')) return;
+      if (/\.(test|stories)\.tsx?$/.test(name)) return;
+      // `ui/stat.tsx` is an internal-only SolidJS component — there is no
+      // `kai-stat` web component, so its parts are intentionally unregistered.
+      if (p.endsWith(join('ui', 'stat.tsx'))) return;
+      const src = readFileSync(p, 'utf8');
+      for (const m of src.matchAll(STATIC_PART_RE)) {
+        for (const tok of m[1].split(/\s+/)) found.add(tok);
+      }
+      for (const m of src.matchAll(DYNAMIC_PART_START_RE)) {
+        const openBraceIndex = m.index + m[0].length - 1;
+        for (const tok of tokensInDynamicPart(src, openBraceIndex)) found.add(tok);
+      }
+    };
+    // `skip` is passed only at the top level, so the denylist names top-level
+    // directories of `src/` and cannot accidentally match a nested one.
+    const walk = (dir: string, skip?: Set<string>) => {
       for (const entry of readdirSync(dir, { withFileTypes: true })) {
         const p = join(dir, entry.name);
         if (entry.isDirectory()) {
+          if (skip?.has(entry.name)) continue;
           walk(p);
           continue;
         }
-        if (!entry.name.endsWith('.tsx') && !entry.name.endsWith('.ts')) continue;
-        if (/\.(test|stories)\.tsx?$/.test(entry.name)) continue;
-        // `ui/stat.tsx` is an internal-only SolidJS component — there is no
-        // `kai-stat` web component, so its parts are intentionally unregistered.
-        if (p.endsWith(join('ui', 'stat.tsx'))) continue;
-        const src = readFileSync(p, 'utf8');
-        for (const m of src.matchAll(STATIC_PART_RE)) {
-          for (const tok of m[1].split(/\s+/)) found.add(tok);
-        }
-        for (const m of src.matchAll(DYNAMIC_PART_START_RE)) {
-          const openBraceIndex = m.index + m[0].length - 1;
-          for (const tok of tokensInDynamicPart(src, openBraceIndex)) found.add(tok);
-        }
+        scanFile(p, entry.name);
       }
     };
-    for (const d of ['elements', 'ui', 'components']) walk(join(HERE, '..', d));
+    walk(SRC, UNSCANNED_DIRS);
     return found;
   }
 
@@ -269,6 +302,86 @@ describe('ELEMENT_COMPOSITION registry (single source of truth the build extract
     expect(inCode.size).toBeGreaterThan(0); // sanity: the scan actually found parts
     const missing = [...inCode].filter((name) => !registered.has(name)).sort();
     expect(missing).toEqual([]);
+  });
+
+  // Parts whose `part="…"` value reaches the DOM through a local helper's
+  // PARAMETER instead of a literal JSX attribute, so the scan structurally
+  // cannot see them. `ui/input.tsx` renders one shared `<input part={part}>` via
+  // `const inputEl = (cls: string, part: string) => …` and passes the literal at
+  // the two CALL SITES -- `inputEl(…, 'field input')` and `inputEl(ROW_INPUT,
+  // 'input')`. Those literals are function arguments, not `part=` attributes, so
+  // neither the static nor the dynamic matcher above ever sees `input`, even
+  // though every `kai-input` / `kai-search` / `kai-editable-label` on the page
+  // really does expose `::part(input)`.
+  //
+  // This is an exception to the REVERSE guard only -- the forward guard is
+  // unaffected. It is deliberately not "fixed" by teaching the scanner to chase
+  // string literals into call expressions: harvesting every part-shaped literal
+  // out of a file that happens to contain a `part={…}` passthrough would also
+  // swallow class strings (`'flex w-full items-center'` tokenizes just like a
+  // part list), which would let almost any registered name find a bogus match
+  // and gut the reverse guard everywhere. An over-clever regex "parser" is also
+  // the exact failure documented at the top of this block.
+  //
+  // Each entry names the file that renders it, and the test below re-derives
+  // that evidence from source, so a stale exception FAILS instead of quietly
+  // excusing a part that has since been deleted.
+  const INDIRECT_PART_DECLARATIONS: Record<string, string> = {
+    input: join('ui', 'input.tsx'),
+  };
+
+  /** Tokens from string literals in `src` that are pure part-token lists —
+   *  the shape a `part` value has when it is passed as a function argument. */
+  function partLikeLiteralTokens(src: string): Set<string> {
+    const out = new Set<string>();
+    for (const m of src.matchAll(STRING_LITERAL_RE)) {
+      const literal = m[1] ?? m[2] ?? '';
+      const tokens = literal.trim().split(/\s+/);
+      if (tokens.length > 0 && tokens.every((t) => TOKEN_RE.test(t))) {
+        for (const t of tokens) out.add(t);
+      }
+    }
+    return out;
+  }
+
+  it('every indirect-part exception still points at a real passthrough in source', () => {
+    for (const [name, rel] of Object.entries(INDIRECT_PART_DECLARATIONS)) {
+      const src = readFileSync(join(SRC, rel), 'utf8');
+      // The file must still hand a computed value to `part=` … (a FRESH
+      // non-global regex: `DYNAMIC_PART_START_RE` is `/g`, and `.test()` on a
+      // shared global regex advances `lastIndex` between iterations.)
+      expect(src, `${rel} no longer passes a value to part={…}`).toMatch(/\bpart=\{/);
+      // … and must still contain the exempted name as a standalone token in a
+      // part-shaped string literal (the call-site argument).
+      expect(
+        [...partLikeLiteralTokens(src)],
+        `${rel} no longer supplies the "${name}" part token`,
+      ).toContain(name);
+    }
+  });
+
+  it('declares every registered ::part somewhere in the source (reverse drift guard)', () => {
+    // The other half of the pair above. Without it the registry can name parts
+    // that no longer exist: deleting `part="row"` from components/message.tsx
+    // left `kai-message::part(row)` registered with a full styling recipe and
+    // every test still passed. The "declares row / bubble / content / actions"
+    // test is NOT this guard -- it pins the registry against a hardcoded list,
+    // i.e. against itself, which a stale entry satisfies perfectly.
+    //
+    // This compares the registry to the FILESYSTEM (`partNamesInSource` reads
+    // `src/` and never looks at ELEMENT_COMPOSITION), so it cannot be satisfied
+    // by the registry agreeing with itself.
+    const inCode = partNamesInSource();
+    const registered = registeredPartNames();
+    expect(registered.size).toBeGreaterThan(0); // sanity: the registry is non-empty
+    expect(inCode.size).toBeGreaterThan(0); // sanity: the scan actually found parts
+    // `Object.hasOwn`, not `name in …`: `in` walks the prototype chain, so a part
+    // legitimately named `constructor` (it matches TOKEN_RE) would be silently
+    // excused by a key this map never declared.
+    const stale = [...registered]
+      .filter((name) => !inCode.has(name) && !Object.hasOwn(INDIRECT_PART_DECLARATIONS, name))
+      .sort();
+    expect(stale).toEqual([]);
   });
 
   it('maps each composable element to its slots/parts arrays', () => {

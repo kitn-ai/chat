@@ -5,11 +5,12 @@ import { cn } from "../utils/cn";
 import { Markdown } from "./markdown";
 import { Button } from "../ui/button";
 import { actionIcon, BUILTIN_ACTION_LABEL } from "../ui/action-icons";
-import type { ChatMessageAction, CustomAction, FeedbackVote, MessagePart } from "../elements/chat-types";
+import type { ChatMessageAction, CustomAction, FeedbackVote, MessagePart, MessageSource } from "../elements/chat-types";
 import { useChatConfig, textClass } from "../primitives/chat-config";
 import { Reasoning, ReasoningTrigger, ReasoningContent } from "./reasoning";
 import { Tool } from "./tool";
 import { Attachments, Attachment, AttachmentPreview, AttachmentInfo } from "./attachments";
+import { Source, SourceTrigger, SourceContent, SourceList } from "./source";
 import { CardRenderer } from "./card-renderer";
 import type { CardComponentMap } from "../primitives/card-registry";
 
@@ -256,10 +257,10 @@ function MessageActionBar(props: MessageActionBarProps) {
 
 export interface MessageBodyProps {
   /** The message's ordered parts (text, reasoning, tool, card, source, file),
-   *  rendered in a single pass in the order they appear. `source` parts carry
-   *  citation data but render no UI yet (the citation row is a later
-   *  sub-project), so they are matched nowhere below and fall through to no
-   *  output, on purpose, not by omission. */
+   *  rendered in a single pass in the order they appear. A run of consecutive
+   *  `source` parts renders as ONE citation row (`part="citations"`), placed
+   *  OUTSIDE the message bubble so a citation is never confused with a link the
+   *  model typed into its prose. */
   parts: MessagePart[];
   /** Add/override card type -> component entries, forwarded to `CardRenderer`
    *  for `card` parts. */
@@ -292,15 +293,18 @@ export interface MessageBodyProps {
   afterBody?: JSX.Element;
 }
 
-/** One render group over an ordered `parts` array: a run of consecutive `file`
- *  parts collapses into a single `'files'` group so they share one
+/** One render group over an ordered `parts` array. Two part types collapse runs:
+ *  consecutive `file` parts become a single `'files'` group so they share one
  *  `<Attachments>` row (matching the pre-parts layout) instead of each opening
- *  its own; every other part is its own `'single'` group. Pure and
- *  order-preserving: it only decides where the `<Attachments>` wrapper
- *  boundaries fall, never reorders or drops anything. */
+ *  its own, and consecutive `source` parts become a single `'sources'` group so
+ *  the N citations one search produced are ONE wrapped row rather than N stacked
+ *  rows. Every other part is its own `'single'` group. Pure and order-preserving:
+ *  it only decides where the wrapper boundaries fall, never reorders or drops
+ *  anything, so a group sits exactly where its parts sat in `parts`. */
 export type MessagePartGroup =
-  | { kind: 'single'; part: Exclude<MessagePart, { type: 'file' }> }
-  | { kind: 'files'; parts: Extract<MessagePart, { type: 'file' }>[] };
+  | { kind: 'single'; part: Exclude<MessagePart, { type: 'file' } | { type: 'source' }> }
+  | { kind: 'files'; parts: Extract<MessagePart, { type: 'file' }>[] }
+  | { kind: 'sources'; parts: Extract<MessagePart, { type: 'source' }>[] };
 
 export function groupMessageParts(parts: MessagePart[]): MessagePartGroup[] {
   const groups: MessagePartGroup[] = [];
@@ -314,9 +318,34 @@ export function groupMessageParts(parts: MessagePart[]): MessagePartGroup[] {
       groups.push({ kind: 'files', parts: [part] });
       continue;
     }
+    if (part.type === 'source') {
+      const last = groups[groups.length - 1];
+      if (last?.kind === 'sources') {
+        groups[groups.length - 1] = { kind: 'sources', parts: [...last.parts, part] };
+        continue;
+      }
+      groups.push({ kind: 'sources', parts: [part] });
+      continue;
+    }
     groups.push({ kind: 'single', part });
   }
   return groups;
+}
+
+/** The citation chip's label. `index` when the model numbered its citations;
+ *  otherwise `undefined` so `SourceTrigger` falls back to the domain. A source
+ *  with NO url has no domain to fall back to, so its title (then a generic word)
+ *  stands in rather than rendering an empty chip. */
+function citationLabel(s: MessageSource): string | number | undefined {
+  if (s.index !== undefined) return s.index;
+  if (s.url) return undefined;
+  return s.title || 'Source';
+}
+
+/** The hover card's headline. Every field is optional, so fall back through
+ *  title -> url -> a generic word. */
+function citationTitle(s: MessageSource): string {
+  return s.title || s.url || 'Source';
 }
 
 /** Narrow a group to one variant IN A SINGLE READ.
@@ -345,8 +374,9 @@ function partAs<T extends MessagePart['type']>(
 
 /**
  * The shared message body: the message's `parts` rendered in a single ordered
- * pass (text, reasoning, tool calls, generative-UI cards, and file attachments
- * interleaved exactly as they appear), followed by the action bar. This is the
+ * pass (text, reasoning, tool calls, generative-UI cards, citations and file
+ * attachments interleaved exactly as they appear), followed by the action bar.
+ * Runs of `source` and `file` parts each collapse into one row. This is the
  * single source of truth for how a message renders, consumed by `ChatThread`
  * (the `<For>` over `messages`), the standalone `<kai-message>` facade, and (in
  * future) `kai-compare` for each candidate. Pure/prop-driven: all interaction
@@ -409,6 +439,32 @@ function MessageBody(props: MessageBodyProps) {
                 </Attachments>
               )}
             </Match>
+            <Match when={groupAs(group(), 'sources')}>
+              {(g) => (
+                // OUTSIDE the bubble, deliberately. A citation nested inside
+                // `MessageContent` is indistinguishable from a link the MODEL
+                // typed into its prose — which is exactly how the first version
+                // of the S12 conformance check passed while proving nothing.
+                // `SourceList` is its own container, so the row is a sibling of
+                // the content part, and `part="citations"` lets a consumer target
+                // it through the shadow boundary.
+                <SourceList part="citations" class={props.isUser ? 'justify-end' : undefined}>
+                  {/* Reference-keyed <For> is right HERE, as with files: the
+                      run's part objects are carried over untouched by the folds. */}
+                  <For each={g().parts}>
+                    {(sp) => (
+                      <Source href={sp.source.url}>
+                        <SourceTrigger label={citationLabel(sp.source)} />
+                        <SourceContent
+                          title={citationTitle(sp.source)}
+                          description={sp.source.snippet ?? ''}
+                        />
+                      </Source>
+                    )}
+                  </For>
+                </SourceList>
+              )}
+            </Match>
             <Match when={groupAs(group(), 'single')}>
               {(g) => {
                 // An ACCESSOR, never a captured value: the row outlives the
@@ -456,12 +512,9 @@ function MessageBody(props: MessageBodyProps) {
                     <Match when={partAs(part(), 'card')}>
                       {(p) => <CardRenderer envelope={p().envelope} types={props.cardTypes} />}
                     </Match>
-                    {/* `source` parts get an explicit no-op match: the citation
-                        row is a later sub-project, so this is a one-line swap
-                        when it ships. This keeps `fallback` meaning "genuinely
-                        unknown variant" rather than doing double duty for
-                        source too. */}
-                    <Match when={partAs(part(), 'source')}>{null}</Match>
+                    {/* No `source` match here on purpose: source parts never
+                        reach a 'single' group — they are collapsed into a
+                        'sources' run above and rendered as one citation row. */}
                   </Switch>
                 );
               }}

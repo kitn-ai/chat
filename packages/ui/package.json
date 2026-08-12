@@ -151,6 +151,7 @@
     "verify:consumer": "node scripts/verify-consumer-sideeffects.mjs",
     "verify:dts": "node scripts/verify-dts-boundaries.mjs",
     "verify:dts:consumer": "node scripts/verify-dts-consumer.mjs",
+    "verify:generated": "node scripts/verify-generated-sync.mjs",
     "verify:scaffold": "node scripts/verify-scaffold-compiles.mjs",
     "verify:solid-coverage": "node scripts/verify-solid-coverage.mjs",
     "verify:ssr": "node scripts/verify-ssr-imports.mjs",

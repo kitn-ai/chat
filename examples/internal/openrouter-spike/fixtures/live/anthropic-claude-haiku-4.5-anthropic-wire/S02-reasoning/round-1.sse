@@ -1,5 +1,5 @@
 event: message_start
-data: {"type":"message_start","message":{"id":"gen-1786476909-1wrGD4VKaHmmvmLQv8cr","type":"message","role":"assistant","container":null,"content":[],"model":"anthropic/claude-haiku-4.5","stop_reason":null,"stop_details":null,"stop_sequence":null,"usage":{"input_tokens":108,"output_tokens":1,"output_tokens_details":null,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"inference_geo":null,"server_tool_use":null,"service_tier":null,"speed":"standard"},"provider":"Amazon Bedrock"}}
+data: {"type":"message_start","message":{"id":"gen-1786489262-AMczXGtjV998a6Iw9B8O","type":"message","role":"assistant","container":null,"content":[],"model":"anthropic/claude-haiku-4.5","stop_reason":null,"stop_details":null,"stop_sequence":null,"usage":{"input_tokens":108,"output_tokens":1,"output_tokens_details":null,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"inference_geo":null,"server_tool_use":null,"service_tier":null,"speed":"standard"},"provider":"Amazon Bedrock"}}
 
 event: content_block_start
 data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}
@@ -8,127 +8,100 @@ event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"This"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" is a straightforward question about leap years"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" is a straightforward question about leap"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"."}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\n\nLet"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" years. Let"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" me think through it"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" step by step:\n\n1. A"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" step by step.\n\nA leap year"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" regular"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" is a year that is divisible by"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" year has 365 days (approximately"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" 4, except for years divis"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":","}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"ible by 100 ("}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" since"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"which"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" Earth"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" are not leap years unless"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"'s"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" they're also divisible by 400"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" orbit is ~"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":").\n\nIn"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"365.25 days)\n2"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" a regular"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":". A leap year adds"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" year, there"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" an extra day to account"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" are 365 days.\n\nIn"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" for the ~"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" a leap year, February"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"0"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" has 29 days instead of "}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":".25 day disc"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"28 days"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"repancy"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":". So"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\n3."}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" we"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" Leap years occur every 4 years"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" add one"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":", with"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" extra day."}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" some"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\n\nTherefore, a"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" exceptions:"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" leap year has"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\n   - Years divisible by "}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":":"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"100 are NOT"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\n365"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" leap years\n   -"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" + 1 = 366"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" EXCEPT years divisible by 400 "}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" days\n\nThis is a"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"ARE leap years"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" straightforward fact"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\n4. When"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"ual answer -"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" a leap"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" no"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" year occurs, we"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" tools needed."}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" add February"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" 29th"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\n5. So"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" a leap year has 365"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" +"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" 1 = 366 days"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"\n\nThe answer"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" is 366 days."}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"EqoFCkgIEBABGAIqQMUJACvPVHMuGpUgDsNOIHwPhWbwd1ILJD4JcO15rTTP522Mf+VF6eYVA+jpwiqRI6SgH9y5uGZ0wgqVFBR+ba8SDLNo+n/cKlvMq+H7aRoMbMCA/OqUE1bFBoSgIjDOKaB9EpmZ2qhD3SVzv6xnMPl3b4nHTfjTs9m8oJlqvtn91sEtS8v/I8GT9gNeLWUqjwRF9noHhlaChff/V9N456B8q+xzGrw7C/Y+aRAsl9VPj0Hi/jovT7L53l9zhq8V/c6vMX7bZbHwbBW/OtD0UvOSS2exzcXHIj1CsoRlli2+ObzxoDb10TGCG//7hvXA17eBp3A30EfidzCPDnj6pSW/tCuh0pLM1DwJ0ecL2fxwem/+r+atmCxun/i9JM/qRwZj5UxKz8piBEKBUoqi5fY+zIDhkCSuo2f1Ryc9aPbxX+lb0J4rI6ldBbuBzc7vqagfRZPG/WNSByGevqJ72nIh6RNmT9GgjJW+VzKzPvUq6bR1sylmAloTmwR8h++HxQB6NmTydhDpSCn1Iaj06gq8hf3w7uP09oco/wlzNCDmTPFP3FJcyuAG/xnGf6bjS2sDsYx95EvwsP69l3YTAZZ5UF/40D1iJiQsYU7BpzBpYqwMHWE2lp/IbyOO9nuyLSuP1L8d0+FreBVYmMFOgawsjX9hgP2tVu4vK6kru0VUl/UctleVVSbPgm0jDdSE7m0gFW2GUFQB84P7xaRGIIJ/gTaK7wCDpXFBUju+7OcO0rPjVQRn1R6OEUOEsiIBF+Q7AnYQvuXPuPctbA581N5F6R4B53a5b9scjyeoz3WPO8DVH/VwARSFv/k4bLtthfihCOEMGmf0cRqn1k3PdvKfkv7zONCZFbDGlsz9scGYlyEpInRoZV9WuPJgPlGdHxgB"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"EvwECkgIEBABGAIqQBsDuzPkP9BOTkrBEwy77nNKBwTg7g2StmOcYXXzsFqTcsUHpWsgIHW61m3oOn4zY1CE0pIgoQgW6joIhiRnDDISDAq1Sg1QEl7fEc+8PRoMoEMWh3GnKc1C4TgZIjAh5/N12a0aOtFQQ86x8hmQxxwsvhc62i/8vzJmdtfvS9AyaxBpMPfFT41OUJnuxDIq4QOoRoSsov6TNnaEeeDpjJCcvitXlEwoUb0JhGLHPGKgjKn0eo2UoT0N/owQ2UNO8rqRdUWyK//W7fNCa/nIqoOLfC5YD3C8evJv+FT/xmJkjpwJgedWxInHqRFYsfeGre8Kgv87mGekP/FMrp300tgLX2xRUjGeJfgrArwgE7D6ba3x08bl8orF8BVp08dT/imoCH/2h4oDyJA4f+3VGgNzL4INFSFAJLrPILqigLCiQYBe9De4oWiVT+X/l400jcwXtvPYaAsJ9WgehNU7xvi+Gadbn50Uv88JtXSsCd0FtL0ms9Q/lmVjMCEmTDwHicky3K53ySma2GsnUxwI9OykXxbcaYrQ0rln+SyHURLVqmJQHvWCvdLpkIQ8rGZ6eT33H9vzze1QbNnSvF7vbS0RwL/hAG9ruHRtVogQJkjgUJJw2Ni+SOYKSWDRswrN4yx974oF3espGySfJeVTQCHzTl0djAElEK8UlFQOTuMi+VkCvcodRIpMB7mnxKDkGTudgKulRILnpPy+NwhMo69eOHBU7xV9QxBSAI8eWnKC3ZH2NdsBcb1xkBCk4dWgCOJjSSpBweLJpIAbpBFQu8tWFJPWQovHCIUJg+dkwS6u2YQ7OtZfS5B7TsNpjMC5JpZtGAE="}}
 
 event: content_block_stop
 data: {"type":"content_block_stop","index":0}
@@ -137,103 +110,112 @@ event: content_block_start
 data: {"type":"content_block_start","index":1,"content_block":{"type":"text","text":"","citations":[]}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"#"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"**"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" Leap Year Days"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"Thinking"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"\n\n**"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" it"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"Step"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" through:**"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" by"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"\n\n1"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" step:**"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":". A regular"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"\n1. A regular year has **"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" year has 365 days\n2"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"365 days**"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":". A leap year occurs"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"\n2. Earth"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" every 4 years an"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"'s orbit is approximately **365.25"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"d has an"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" days**,"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" extra day in February\n3. February"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" not"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" goes"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" a"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" from 28 days"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" whole number\n3. To"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" to 29 days in a leap"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" account for that"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" year\n4. Therefore:"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" extra"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" 365 + 1 ="}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" ~"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" 366 days\n\n**Answer:**"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"0.25 day, we ad"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"\n\nA leap year has **"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"d an extra day every"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"366 days**"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" 4 years\n4. This"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":". The"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" extra"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" extra day is adde"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" day is **"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"d to February"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"February 29th**\n5."}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":", which"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" Therefore"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" has 29 days instea"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":":"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"d of the"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" "}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" usual"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"365 + 1 = **"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" 28."}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"366 days**\n\n**"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" Leap years help"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"Answer:"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" keep our calendar aligned with Earth's orbit"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" A"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" around the sun, which"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" leap year has 366 days.**"}}
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" takes"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" approximately"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" 365.25"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":" days."}}
 
 event: content_block_stop
 data: {"type":"content_block_stop","index":1}
 
 event: message_delta
-data: {"type":"message_delta","delta":{"container":null,"stop_details":null,"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":108,"output_tokens":281,"output_tokens_details":{"thinking_tokens":133},"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"server_tool_use":null,"service_tier":null,"speed":"standard","cost":0.001513,"is_byok":false,"cost_details":{"upstream_inference_cost":0.001513,"upstream_inference_prompt_cost":0.000108,"upstream_inference_completions_cost":0.001405}},"context_management":null}
+data: {"type":"message_delta","delta":{"container":null,"stop_details":null,"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":108,"output_tokens":277,"output_tokens_details":{"thinking_tokens":121},"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"server_tool_use":null,"service_tier":null,"speed":"standard","cost":0.001493,"is_byok":false,"cost_details":{"upstream_inference_cost":0.001493,"upstream_inference_prompt_cost":0.000108,"upstream_inference_completions_cost":0.001385}},"context_management":null}
 
 event: message_stop
 data: {"type":"message_stop"}

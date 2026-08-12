@@ -1,59 +1,23 @@
 import type { Scenario } from './types';
 import { pickTools } from '../tools';
-import { controlledPanel, expand, fail, seesElement, seesText, toolTrigger } from './dom';
+import { fail, seesElement, seesText, toolTrigger } from './dom';
 
 /**
  * S12 — citations.
  *
- * EXPECTED TO FAIL, by construction. `search_docs` produces `source` parts and
- * `AssistantStream.addSource` puts them on the message in stream order, so the
- * DATA is correct and the wire half works. But `message.tsx` matches `source`
- * parts to `null` on purpose — the citation row is a later sub-project — so
- * nothing reaches the screen.
+ * This used to be a `knownGap`: `search_docs` produced `source` parts and
+ * `AssistantStream.addSource` put them on the message in stream order, so the
+ * DATA was right and the wire half worked — but `message.tsx` matched `source`
+ * parts to `null` on purpose and nothing reached the screen.
  *
- * The assertion below is written as if the row already shipped. When it does,
- * this scenario goes green and `knownGap` comes off. Until then a red S12 is the
- * gap being measured rather than assumed.
+ * `source` parts now render as a grouped citation row (`part="citations"`)
+ * OUTSIDE the message bubble, so the assertion below — which was always written
+ * as if the row already shipped — is an ordinary assertion now.
  */
 export const s12Citations: Scenario = {
   id: 'S12-citations',
   title: 'Citations from a search tool',
   proves: 'source parts render as a citation the user can see and follow',
-  knownGap: {
-    what: 'message.tsx renders `source` parts as null (an explicit no-op <Match>): the parts arrive, the citation row does not exist yet',
-    /**
-     * The gap is "the parts arrive and render nothing", so the parts have to
-     * ARRIVE before their non-rendering means anything. A stream that produced
-     * no search call at all fails here instead, which is what a broken run
-     * deserves.
-     *
-     * What this can and cannot see, stated plainly: the citation row is the
-     * missing feature, so there is no rendered citation to point at, and the
-     * closest visible evidence is the tool panel's own output. `runTool`
-     * ('search_docs' in src/tools.ts) returns its `sources` from exactly the
-     * `results` it renders into that output, and `useSpikeChat` calls
-     * `stream.addSource` once per result unconditionally. So doc URLs in the
-     * panel means source parts on the message. It does not re-prove the kit's
-     * `addSource` fold — that is `@kitn.ai/ui/state`'s own suite — and it is not
-     * meant to.
-     */
-    async reached(page) {
-      const trigger = toolTrigger(page, 'search_docs');
-      await seesElement(trigger, 'a search_docs tool panel', {
-        because: 'a citation cannot be missing from a turn that never searched',
-      });
-      await seesText(page, 'Completed', { because: 'the search tool itself must still complete' });
-
-      // Its OUTPUT, not just a green chip: the doc URLs in the panel are the
-      // same list the app turns into `source` parts.
-      const panel = await controlledPanel(page, trigger);
-      await expand(trigger, panel, 'search_docs tool');
-      await seesText(page, /ui\.kitn\.ai\//, {
-        because: 'the search results ARE the sources — no results, no source parts, nothing to render',
-      });
-    },
-    signature: /no citation rendered outside the message body/,
-  },
   prompt: 'How does theming work in @kitn.ai/ui? Cite your sources.',
   tools: pickTools('search_docs'),
   mode: 'live',

@@ -674,17 +674,35 @@ export function runTool(name: string, input: Record<string, unknown>): ToolRun {
       const artifactId = toStr(input.artifactId, 'artifact-1');
       const title = toStr(input.title, 'Draft');
       const body = toStr(input.body, '');
+      // The `artifact` card's payload is a deliberately NARROW subset of the
+      // Artifact viewer's props (see the kit's artifact.schema.json): `src`
+      // and/or `files`, never a free-form `{title, body}`. So a text document
+      // travels as a FILE and the card opens on the Code view, which is where
+      // the document itself is legible.
+      //
+      // This is not a detail. `{title, body}` renders a card with a heading, a
+      // toolbar and NOTHING in it — and S13 still went green, because "v2" was
+      // visible in the <kai-tool> panel echoing these very arguments three
+      // inches up the thread. The card must carry the prose it claims to show.
+      const path = `${artifactId}.md`;
       // NOTE the envelope id: it is the model's OWN artifactId, deliberately
-      // stable across revisions. `AssistantStream.addCard` ignores it and
-      // appends anyway — there is no id-keyed card upsert the way `upsertTool`
-      // works for tool parts. S13 measures exactly that.
+      // stable across revisions. `AssistantStream.addCard` upserts on it, so a
+      // second call REPLACES the card instead of stacking a second one. S13
+      // measures exactly that.
       return {
         output: { status: 'open', artifactId, title, chars: body.length },
         card: {
           type: 'artifact',
           id: artifactId,
           title,
-          data: { title, body },
+          data: {
+            files: [{ path, code: body, language: 'markdown', type: 'other' }],
+            // Seeds only — a revision must not yank a user who has switched
+            // view or file. Same path each time, so the selection survives.
+            tab: 'code',
+            activeFile: path,
+            displayUrl: path,
+          },
         },
       };
     }

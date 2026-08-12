@@ -31,6 +31,33 @@ jobs:
       - name: Build (element bundle + provider subpath)
         run: pnpm exec nx build ui
 
+      # Re-runs the generators and fails if any checked-in derived artifact
+      # differs -- element-meta.json, element-types.d.ts, icon-names.json, the
+      # React wrappers, llms.txt / llms-full.txt and docs/web-components.md.
+      # fc40a10 registered a new ::part(citations) and regenerated none of them;
+      # nothing went red, and because the `kai` MCP's component_reference and the
+      # docs site's PartTable.astro read those files, a part that existed in the
+      # SHIPPED element was invisible to every tool a developer would use to find
+      # it. A human noticing does not scale.
+      #
+      # This deliberately does NOT lean on the build step above. `nx build ui`
+      # runs the generators via postbuild, but their side effects land in the
+      # SOURCE tree and the NX cache does not restore those, so on a cache HIT
+      # the target prints "Successfully ran target build" and leaves the tree
+      # stale -- a cached build is indistinguishable from a successful one. This
+      # step invokes build:api directly and never goes through NX, so no cache
+      # state can affect its result.
+      #
+      # It also cannot pass vacuously: each artifact is seeded with a single-use
+      # random sentinel before the run and must come back without it, so a
+      # generator that was deleted, renamed, dropped an output or no-op'd fails
+      # here instead of reading as "in sync". src/components/component-meta.json
+      # is excluded -- it churns with TS-type-expansion noise on every run by
+      # design and is not used at runtime. The guard restores every file it
+      # touches, pass or fail. No build needed, no network. ~20s.
+      - name: Generated artifacts in sync with their source
+        run: pnpm --filter @kitn.ai/ui run verify:generated
+
       - name: Typecheck
         run: pnpm exec nx typecheck ui
 

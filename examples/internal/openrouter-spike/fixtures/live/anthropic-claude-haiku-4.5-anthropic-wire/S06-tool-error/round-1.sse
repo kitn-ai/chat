@@ -1,41 +1,41 @@
 event: message_start
-data: {"type":"message_start","message":{"id":"gen-1786476928-67RYqWkRrFOSbEOVm4m1","type":"message","role":"assistant","container":null,"content":[],"model":"anthropic/claude-haiku-4.5","stop_reason":null,"stop_details":null,"stop_sequence":null,"usage":{"input_tokens":709,"output_tokens":8,"output_tokens_details":null,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"inference_geo":null,"server_tool_use":null,"service_tier":null,"speed":"standard"},"provider":"Amazon Bedrock"}}
+data: {"type":"message_start","message":{"id":"gen-1786489280-4FO73v2OC8UA91idWLkI","type":"message","role":"assistant","container":null,"content":[],"model":"anthropic/claude-haiku-4.5","stop_reason":null,"stop_details":null,"stop_sequence":null,"usage":{"input_tokens":709,"output_tokens":6,"output_tokens_details":null,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"inference_geo":null,"server_tool_use":null,"service_tier":null,"speed":"standard"},"provider":"Amazon Bedrock"}}
 
 event: content_block_start
 data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"The user is asking me to deploy the"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"The user wants to deploy the"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" api service to production. I"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" api"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" have"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" service to production. I have"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" a tool available"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" a tool"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" called `"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"fail_deploy` which"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"fail_deploy` that is"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" is"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" meant"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" for"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" for deploy"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" deploy"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"/ship/release requests. According"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"/ship/release requests. The instructions"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" to my"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" say to \""}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" instructions, I should \""}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"Use"}}
@@ -47,28 +47,19 @@ event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" of this demo is to show the tool"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" UI\""}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" UI\" and I"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" and specifically"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" mentions"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" to"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" \"use"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" should use"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" fail"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"_deploy:"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"_deploy \""}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" for any deploy/ship/release request"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"for any deploy/ship/release request"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":".\"\n\nThe target"}}
@@ -80,37 +71,40 @@ event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"d be \"production\" since"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" the"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" they"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" user specifie"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" specifie"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"d production environment"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"d that"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":".\n\nLet"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":". Let"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" me call"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" the fail_deploy function"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" the fail"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" with target"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"_deploy function with"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"=\"production\"."}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" target"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"Eo8FCkgIEBABGAIqQBTcROMiwiECLGL65tIFVzOhto+g/1qEI0XMFsx5fZrR28vObcTKz5aCoCfJlgYNHjEhCUcXY9Lne7PNLesTIPMSDEHTkBsvYg2LEp3kzRoMeMb42qTFDG0sdtcaIjArv1xtcC9ZM/OM45ovjaMHeyiQ2JgjjVuI6a/Co9+rWUbELQ3g/Ib5MwN3SC/D70gq9APuDi5xuqpC1yAVWsEM5awtuiLEN+pWgjNA0vXPM6tfH5uuhYFxsv5oxDyqGVVVYE8IQ+MMMNL1segKZXK1zE9aVr5oZGtGLe/GJYJKQtTHJpokdXt0/w1/YJBs4BSuxP+rc+7CkFY4dkHO14DPXFv/eoRqnSfekmpO5OfwRE5JwqhGDXlTE0weXEzcBK1Nw7VU+FWeQAA3+bNjRsrkgDFhVhkJ7Kb+LO/FrWBDRckNW8q7THLhXbfwu5xCVTG47nM0DSMVDNT/yNztjFn9clhTOVnzlq8sEqzH5jAn/BJBIEbtyIvm1uTrIxqnLfOa4ec2IvKE4OpC3JzEr6kBwZRfdkpKFqBQqwLxP0b/faAB2I1OA9Pcgf8nUhCpTpCVrz4wCeFo/+SXsaUugntU0pCsL31jVKF0OeGE0AOPwZZpwcjbHwfwsR4FHKCoVFUNPQpJNKsMxVP57km7s3bTXjxXrNu0QeZWSiPYeXVgDCDPC5nwKOiWTez3NxiNSRg2AzQVcTun+KY5WQEjb+2K60sI6vEIkTE+9hiVli47fkuQhscrjOA2LdzmsCJgENZrwYEz84MpOScJnxygijcTpXNOGlDXeWuEVo9ga0yeZscwkp3ihHVvNfGHG8qXOM59LALbuDIfykxhHPmYzCb+UNbX1JPOhhgB"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" \"production\"."}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"EuoECkgIEBABGAIqQIzqS4DEvCyb0cKSv3KRYJAW5iHlMScdri0Q/PwgtXEmUgA2vEu/Zan7Bef9GFmrP3q/LL0aloRLKofbB792zcISDGUnefJZ8bTv6D6I8hoMFgTib5PJq5pnpaXAIjAbRkBM/iDNqwrxemy0hDEPYhak9UVvGQWU9W/dw3Uilg8h7iLBHvpKYSMX+PWBCVAqzwMU41Y6PCmMHRpe3SS061h6qU+C86KpzS/WRMOtSW5cfhAR8OUjGPUiJJI61IffLbOj06kW27F7BwIGomL6aImCo+tS8nIUN8opW2oV75+VQhGictrRKocDGGCOkfWwCTWwCb/yZcBS8dpIE31dfJNfpFF4R9msvPkK7mCkAScFec/mGzwyX55j1jiupt0jjxEyNJLdjP++6J2eIxn9cz0JMCzQzEv9xPUAZNRRbpUzfwEBTUF1zVL6IabTqUmf0liv1QQbzMho7UhufexSakZy6Upi9kPkutmefcOk6jTGAQTC38pw95p0I18MSDREVEaM1Lt1li9huDYsbIEvPU7EkGT5oDby2WF77aYj1PPDlaewFCL5NHo+w8C4cxdxlRYnosuGojSoBq/hNOrblj8m+rN3JACdm4Lsz5cVpa4tATm175D7Gu9oezSB9ekrrr4ef229/SnZTOaWSnJiO86XpMu4xGi9LlfwTyGJ/uyazW3NKi83HA21SbNsAWzKzlLBWDVu14ZlN8lXKuC0xV+tlpBUgn8bWi5muCPelYJX8dNFazGg24JfIGDTTmX0TWMwq8CHimkdsz5+cWSSQgoeQVaCq34Vravv93zo2bkyGAE="}}
 
 event: content_block_stop
 data: {"type":"content_block_stop","index":0}
 
 event: content_block_start
-data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_bdrk_01BG3Kudivs5uCeUGSmoAxVq","caller":{"type":"direct"},"name":"fail_deploy","input":{}}}
+data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_bdrk_013jftCWrSg7EcbotuRWh3wc","caller":{"type":"direct"},"name":"fail_deploy","input":{}}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"target\": \"production"}}
@@ -122,7 +116,7 @@ event: content_block_stop
 data: {"type":"content_block_stop","index":1}
 
 event: message_delta
-data: {"type":"message_delta","delta":{"container":null,"stop_details":null,"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":709,"output_tokens":167,"output_tokens_details":{"thinking_tokens":122},"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"server_tool_use":null,"service_tier":null,"speed":"standard","cost":0.001544,"is_byok":false,"cost_details":{"upstream_inference_cost":0.001544,"upstream_inference_prompt_cost":0.000709,"upstream_inference_completions_cost":0.000835}},"context_management":null}
+data: {"type":"message_delta","delta":{"container":null,"stop_details":null,"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":709,"output_tokens":163,"output_tokens_details":{"thinking_tokens":113},"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"server_tool_use":null,"service_tier":null,"speed":"standard","cost":0.001524,"is_byok":false,"cost_details":{"upstream_inference_cost":0.001524,"upstream_inference_prompt_cost":0.000709,"upstream_inference_completions_cost":0.000815}},"context_management":null}
 
 event: message_stop
 data: {"type":"message_stop"}

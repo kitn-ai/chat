@@ -6,9 +6,6 @@ interface ThreadViewProps {
   theme: Theme;
   messages: ChatMessage[];
   loading: boolean;
-  /** Consumer card types (envelope type → custom-element tag), merged over the
-   *  built-ins. The spike adds `artifact`, which the kit does not ship. */
-  cardTypes?: Record<string, string>;
 }
 
 /**
@@ -20,8 +17,12 @@ interface ThreadViewProps {
  * `{"city":"Par` had nowhere to live. `ToolPart.rawInput` carries it now and
  * `<kai-tool>` renders it while the call is `input-streaming`, so the app
  * renders nothing itself.
+ *
+ * No `cardTypes` either: every card this spike emits is a BUILT-IN one, so the
+ * thread is left on the kit's own registry rather than being handed an override
+ * that would shadow it.
  */
-export function ThreadView({ theme, messages, loading, cardTypes }: ThreadViewProps) {
+export function ThreadView({ theme, messages, loading }: ThreadViewProps) {
   const withActions: ChatMessage[] = messages.map((m) =>
     m.role === 'assistant' ? { ...m, actions: ['copy'] } : m,
   );
@@ -33,7 +34,6 @@ export function ThreadView({ theme, messages, loading, cardTypes }: ThreadViewPr
         theme={theme}
         messages={withActions}
         loading={loading}
-        cardTypes={cardTypes}
       />
     </div>
   );

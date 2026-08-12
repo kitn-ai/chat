@@ -33,7 +33,10 @@ pnpm --filter @kitn.ai/ui exec vitest run --project=unit  # jsdom unit suite; ba
 pnpm --filter @kitn.ai/ui run verify:scaffold  # compiles the MCP scaffolder's EMITTED code with tsc --strict (needs a build first)
 ```
 
+- **Fresh clone or worktree:** run `pnpm --filter @kitn.ai/ui run build:css` before the unit suite. `src/elements/compiled.css` is generated and gitignored, so without it the whole element suite (~38 files) dies on `Failed to resolve import "./compiled.css?inline"` — which reads as a broken checkout rather than a missing build step. `nx build ui` and Storybook run it for you (`prebuild`); a bare `vitest` does not.
 - **Gotcha:** after `nx build ui` / `build:api`, run `git checkout -- packages/ui/src/components/component-meta.json` — it churns with TS-type-expansion noise and is NOT used at runtime.
+- **`nx build ui` does NOT regenerate the derived artifacts** (`docs/web-components.md`, `packages/ui/llms-full.txt`, `packages/ui/src/elements/element-meta.json`). It hits the NX cache, prints "Successfully ran target build", and changes nothing — those generators write side-effects into the SOURCE tree, and the cache does not restore those. Use `npm run build:api` inside `packages/ui`, or `--skip-nx-cache`. **A cached build looks exactly like a successful one.**
+- **Never run `gen-llms.mjs` standalone.** `build:api` already writes `llms-full.txt` from the model it parsed once; running the standalone generator afterwards silently rewrote it with LESS data — every slot's `inject`/`replace` collapsed to `—` across 67 rows. The oversized diff was the only tell.
 - `packages/ui/dist/` is a gitignored build artifact; `prepublishOnly` rebuilds it. The package ships **compiled** entry points (`.`, `./react`, `./elements`) — don't reintroduce raw-source exports.
 
 ## Testing the CONSUMER experience (not just internals)

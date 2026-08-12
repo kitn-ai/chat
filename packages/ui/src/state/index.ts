@@ -4,7 +4,7 @@ export { appendMessage, upsertMessage, updateMessage, removeMessage, appendText,
 export { addSuggestion, removeSuggestion } from './suggestions';
 export { createAssistantStream, onStreamSettled } from './stream';
 export type { SetMessages, AssistantStream } from './stream';
-export { appendTextPart, appendReasoningPart, upsertToolPart, fingerprint } from './parts';
+export { appendTextPart, appendReasoningPart, upsertToolPart, upsertCardPart, fingerprint } from './parts';
 export type { ReasoningOpts } from './parts';
 
 // The content-model types every signature above mentions. Without these a

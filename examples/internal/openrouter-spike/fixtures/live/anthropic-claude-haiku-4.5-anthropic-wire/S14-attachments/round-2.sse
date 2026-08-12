@@ -1,5 +1,5 @@
 event: message_start
-data: {"type":"message_start","message":{"id":"gen-1786476966-rWqYnLqcbcIKdXVStml8","type":"message","role":"assistant","container":null,"content":[],"model":"anthropic/claude-haiku-4.5","stop_reason":null,"stop_details":null,"stop_sequence":null,"usage":{"input_tokens":1030,"output_tokens":1,"output_tokens_details":null,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"inference_geo":null,"server_tool_use":null,"service_tier":null,"speed":"standard"},"provider":"Amazon Bedrock"}}
+data: {"type":"message_start","message":{"id":"gen-1786489323-z4WlOv5NlXs3cH6OEzoI","type":"message","role":"assistant","container":null,"content":[],"model":"anthropic/claude-haiku-4.5","stop_reason":null,"stop_details":null,"stop_sequence":null,"usage":{"input_tokens":971,"output_tokens":1,"output_tokens_details":null,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"inference_geo":null,"server_tool_use":null,"service_tier":null,"speed":"standard"},"provider":"Amazon Bedrock"}}
 
 event: content_block_start
 data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":"","citations":[]}}
@@ -14,37 +14,28 @@ event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"d and attached your"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" **"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" Q3 summary as **"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Q3 summary"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"q3-summary.pdf**."}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" as a PDF**"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":". The file"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" `q3-summary.pdf`"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" The PDF"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" is"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" now ready"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" now"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" for download."}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" ready for download an"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" It"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"d contains"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" contains a comprehensive"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" overview"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" a comprehensive overview"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" of Q"}}
@@ -53,16 +44,13 @@ event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"3 performance metrics,"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" key"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" highlights"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" achievements"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":", and key"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":", and highlights"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"."}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" insights."}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" You"}}
@@ -80,7 +68,7 @@ event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" from the attachment"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" panel"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" below"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"."}}
@@ -89,7 +77,7 @@ event: content_block_stop
 data: {"type":"content_block_stop","index":0}
 
 event: message_delta
-data: {"type":"message_delta","delta":{"container":null,"stop_details":null,"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1030,"output_tokens":67,"output_tokens_details":{"thinking_tokens":0},"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"server_tool_use":null,"service_tier":null,"speed":"standard","cost":0.001365,"is_byok":false,"cost_details":{"upstream_inference_cost":0.001365,"upstream_inference_prompt_cost":0.00103,"upstream_inference_completions_cost":0.000335}},"context_management":null}
+data: {"type":"message_delta","delta":{"container":null,"stop_details":null,"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":971,"output_tokens":62,"output_tokens_details":{"thinking_tokens":0},"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"server_tool_use":null,"service_tier":null,"speed":"standard","cost":0.001281,"is_byok":false,"cost_details":{"upstream_inference_cost":0.001281,"upstream_inference_prompt_cost":0.000971,"upstream_inference_completions_cost":0.00031}},"context_management":null}
 
 event: message_stop
 data: {"type":"message_stop"}

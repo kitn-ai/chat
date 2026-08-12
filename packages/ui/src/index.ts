@@ -208,6 +208,8 @@ export type {
 } from './components/file-tree';
 export { Artifact } from './components/artifact';
 export type { ArtifactProps, ArtifactFile, ArtifactTab } from './components/artifact';
+export { ArtifactCard, DEFAULT_ARTIFACT_CARD_HEIGHT } from './components/artifact-card';
+export type { ArtifactCardProps, ArtifactCardData } from './components/artifact-card';
 
 // Layer 3: AI/Feature Components
 export {

@@ -166,4 +166,45 @@ describe('createAssistantStream', () => {
     s2.appendText('x').abort('boom');
     expect(settledOnAbort).toBe(1);
   });
+
+  // THE headline for card upsert: a model that revises the same card mid-turn
+  // must end up with ONE card carrying the latest data, not N copies.
+  it('addCard REVISES a card with the same id instead of appending a copy', () => {
+    const sink = makeSink();
+    const s = createAssistantStream(sink.set, { id: 'a1' });
+    s.addCard({ type: 'tasks', id: 'card-1', data: { items: [{ label: 'draft' }] } });
+    s.addCard({ type: 'tasks', id: 'card-1', data: { items: [{ label: 'final' }] } });
+    const parts = sink.get()[0].parts;
+    expect(parts).toHaveLength(1);
+    expect((parts[0] as { envelope: { data: unknown } }).envelope.data).toEqual({
+      items: [{ label: 'final' }],
+    });
+  });
+
+  it('addCard keeps two DIFFERENT ids as two parts', () => {
+    const sink = makeSink();
+    const s = createAssistantStream(sink.set, { id: 'a1' });
+    s.addCard({ type: 'confirm', id: 'card-1', data: { n: 1 } });
+    s.addCard({ type: 'confirm', id: 'card-2', data: { n: 2 } });
+    expect(sink.get()[0].parts).toHaveLength(2);
+  });
+
+  it('does not produce a new messages array when addCard is a no-op', () => {
+    const sink = makeSink();
+    const s = createAssistantStream(sink.set);
+    s.addCard({ type: 'confirm', id: 'card-1', data: { a: 1 } });
+    const before = sink.get();
+    s.addCard({ type: 'confirm', id: 'card-1', data: { a: 1 } });
+    expect(sink.get()).toBe(before);
+  });
+
+  it('addCard upserts through the onStreamSettled wrapper too', () => {
+    const sink = makeSink();
+    const s = onStreamSettled(createAssistantStream(sink.set, { id: 'a1' }), () => {});
+    s.addCard({ type: 'confirm', id: 'card-1', data: { a: 1 } })
+      .addCard({ type: 'confirm', id: 'card-1', data: { a: 2 } });
+    const parts = sink.get()[0].parts;
+    expect(parts).toHaveLength(1);
+    expect((parts[0] as { envelope: { data: unknown } }).envelope.data).toEqual({ a: 2 });
+  });
 });

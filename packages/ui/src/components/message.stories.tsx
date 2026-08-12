@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
-import { Message, MessageAvatar, MessageContent, MessageActions } from './message';
+import { Message, MessageAvatar, MessageContent, MessageActions, MessageBody } from './message';
+import type { MessagePart } from '../elements/chat-types';
 import { Button } from '../ui/button';
 import { Copy, ThumbsUp, ThumbsDown, RefreshCw, Pencil } from 'lucide-solid';
 import { componentDescription } from '../stories/docs/element-controls';
@@ -276,4 +277,97 @@ Key benefits:
     <MessageContent markdown class="bg-transparent p-0">{answerMarkdown}</MessageContent>
   </Message>
 </div>`),
+};
+
+/**
+ * Citations. A run of consecutive `source` parts renders as ONE wrapped row
+ * (`part="citations"`) placed OUTSIDE the message bubble — hover a chip for its
+ * title and snippet.
+ *
+ * The answer's prose also contains a link the model typed itself. That inline
+ * anchor is NOT a citation; only the chips below the bubble come from `source`
+ * parts. Keeping the two visually distinct is the whole reason the row lives
+ * outside the content part.
+ */
+export const Citations: Story = {
+  render: () => {
+    const parts: MessagePart[] = [
+      {
+        type: 'text',
+        text: 'Theming is driven by CSS custom properties — see the [theming guide](https://ui.kitn.ai/guides/theming) for the full token list. Override the tokens on any ancestor and every `kai-*` element inherits them.',
+      },
+      {
+        type: 'source',
+        source: {
+          index: 1,
+          url: 'https://ui.kitn.ai/guides/theming',
+          title: 'Theming — @kitn.ai/ui',
+          snippet: 'Every element reads its colors from design tokens, so a single :root override restyles the whole kit.',
+        },
+      },
+      {
+        type: 'source',
+        source: {
+          index: 2,
+          url: 'https://ui.kitn.ai/guides/tokens',
+          title: 'Design tokens',
+          snippet: 'The full list of custom properties, their defaults, and which elements consume them.',
+        },
+      },
+      {
+        type: 'source',
+        source: {
+          index: 3,
+          url: 'https://developer.mozilla.org/en-US/docs/Web/CSS/Using_CSS_custom_properties',
+          title: 'Using CSS custom properties',
+          snippet: 'MDN reference for declaring and consuming CSS variables.',
+        },
+      },
+    ];
+    return (
+      <div class="max-w-2xl">
+        <Message>
+          <MessageAvatar src="" fallback="AI" alt="Assistant" />
+          <div class="flex w-full flex-col gap-0">
+            <MessageBody parts={parts} isUser={false} markdown />
+          </div>
+        </Message>
+      </div>
+    );
+  },
+  ...src(`<MessageBody
+  isUser={false}
+  markdown
+  parts={[
+    { type: 'text', text: 'Theming is driven by CSS custom properties...' },
+    { type: 'source', source: { index: 1, url: 'https://ui.kitn.ai/guides/theming', title: 'Theming', snippet: '...' } },
+    { type: 'source', source: { index: 2, url: 'https://ui.kitn.ai/guides/tokens', title: 'Design tokens', snippet: '...' } },
+  ]}
+/>`),
+};
+
+/**
+ * Every field of a model-produced citation is optional. An unnumbered source
+ * falls back to its domain; a source with NO url degrades to a plain, inert chip
+ * labelled with its title rather than a broken link.
+ */
+export const CitationsWithoutNumbers: Story = {
+  render: () => {
+    const parts: MessagePart[] = [
+      { type: 'text', text: 'Here is what I found.' },
+      { type: 'source', source: { url: 'https://ui.kitn.ai/guides/theming', title: 'Theming', snippet: 'Token-driven theming.' } },
+      { type: 'source', source: { url: 'https://www.solidjs.com/docs', title: 'SolidJS docs' } },
+      { type: 'source', source: { title: 'Internal design note (no public URL)', snippet: 'A citation with no url at all.' } },
+    ];
+    return (
+      <div class="max-w-2xl">
+        <Message>
+          <MessageAvatar src="" fallback="AI" alt="Assistant" />
+          <div class="flex w-full flex-col gap-0">
+            <MessageBody parts={parts} isUser={false} markdown />
+          </div>
+        </Message>
+      </div>
+    );
+  },
 };

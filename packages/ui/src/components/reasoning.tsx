@@ -1,4 +1,4 @@
-import { type JSX, type Accessor, splitProps, createSignal, createContext, useContext, createEffect, onCleanup, Show } from 'solid-js';
+import { type JSX, type Accessor, splitProps, createSignal, createContext, useContext, createEffect, createUniqueId, onCleanup, Show } from 'solid-js';
 import { cn } from '../utils/cn';
 import { ChevronDown } from 'lucide-solid';
 import { Markdown } from './markdown';
@@ -8,6 +8,10 @@ interface ReasoningContextValue {
   isOpen: () => boolean;
   onOpenChange: (open: boolean) => void;
   disabled: () => boolean;
+  /** Id minted on the root and shared by the trigger's `aria-controls` and the
+   *  content's `id` — the same wiring `Collapsible` uses, so a screen reader can
+   *  name the panel this disclosure toggles. */
+  contentId: string;
 }
 
 /** Imperative open controller, handed to a parent (the kai-reasoning facade) via
@@ -78,8 +82,10 @@ function Reasoning(props: ReasoningProps) {
   // by disabled — the facade's wireDisclosure applies disabled-gating itself.
   local.controllerRef?.({ open: isOpen, setOpen: handleOpenChange });
 
+  const contentId = createUniqueId();
+
   return (
-    <ReasoningContext.Provider value={{ isOpen, onOpenChange: handleOpenChange, disabled }}>
+    <ReasoningContext.Provider value={{ isOpen, onOpenChange: handleOpenChange, disabled, contentId }}>
       <div class={local.class}>{local.children}</div>
     </ReasoningContext.Provider>
   );
@@ -93,12 +99,24 @@ export interface ReasoningTriggerProps extends JSX.ButtonHTMLAttributes<HTMLButt
 
 function ReasoningTrigger(props: ReasoningTriggerProps) {
   const [local, rest] = splitProps(props, ['children', 'class']);
-  const { isOpen, onOpenChange, disabled } = useReasoningContext();
+  const { isOpen, onOpenChange, disabled, contentId } = useReasoningContext();
 
   return (
+    // The same disclosure contract as CollapsibleTrigger: an explicit
+    // `type="button"` (so a trigger inside a form never submits it),
+    // `aria-expanded` + `aria-controls` so assistive tech can read the state and
+    // find the panel, and the `data-state` / `data-expanded` / `data-closed`
+    // handles styling and tests hang off. `{...rest}` stays LAST so a consumer
+    // can still override any of them.
     <button
+      type="button"
       class={cn('flex cursor-pointer items-center gap-2 text-meta', local.class)}
       disabled={disabled() || undefined}
+      aria-expanded={isOpen()}
+      aria-controls={contentId}
+      data-expanded={isOpen() ? '' : undefined}
+      data-closed={isOpen() ? undefined : ''}
+      data-state={isOpen() ? 'open' : 'closed'}
       onClick={() => { if (!disabled()) onOpenChange(!isOpen()); }}
       {...rest}
     >
@@ -125,7 +143,7 @@ export interface ReasoningContentProps extends JSX.HTMLAttributes<HTMLDivElement
 
 function ReasoningContent(props: ReasoningContentProps) {
   const [local, rest] = splitProps(props, ['children', 'class', 'contentClass', 'markdown']);
-  const { isOpen } = useReasoningContext();
+  const { isOpen, contentId } = useReasoningContext();
 
   let contentRef: HTMLDivElement | undefined;
   let innerRef: HTMLDivElement | undefined;
@@ -149,13 +167,21 @@ function ReasoningContent(props: ReasoningContentProps) {
   });
 
   return (
+    // `id` matches the trigger's `aria-controls`; `data-state` gives styling and
+    // tests an attribute handle on the panel instead of forcing them to read the
+    // animated `max-height`. Deliberately NOT `inert` while collapsed (unlike
+    // CollapsibleContent): this panel animates its own max-height through the
+    // effect above, and changing focusability is a behaviour change, not a11y
+    // wiring. `{...rest}` stays LAST so a consumer can still override.
     <div
       ref={contentRef}
+      id={contentId}
       class={cn(
         'overflow-hidden transition-[max-height] duration-150 ease-out',
         local.class
       )}
       style={{ 'max-height': '0px' }}
+      data-state={isOpen() ? 'open' : 'closed'}
       {...rest}
     >
       <div

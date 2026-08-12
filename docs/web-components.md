@@ -539,6 +539,7 @@ Restyle from outside the Shadow DOM via `kai-message::part(name)`.
 | `::part(bubble)` | The content bubble wrapper. Restyle its background, radius, or padding; for a user message this is the rounded chat bubble. <br>`kai-message::part(bubble) { background: var(--color-primary); color: var(--color-primary-foreground) }` |
 | `::part(content)` | The rendered message text/markdown region (same node as `bubble`). Target it to tune typography from outside. <br>`kai-message::part(content) { font-size: 0.9375rem }` |
 | `::part(actions)` | The action-bar row (copy / like / regenerate …). Restyle its spacing or hide it entirely from outside. <br>`kai-message::part(actions) { gap: 0.25rem }` |
+| `::part(citations)` | The citation row rendered from the message’s `source` parts — a wrapped row of chips below the bubble, never inside it. Restyle its spacing or hide it entirely from outside. <br>`kai-message::part(citations) { gap: 0.5rem }` |
 | `::part(avatar)` | Replaces the built-in avatar rail with your own node. Use `avatar="none"` to omit the rail and let the body span the full row. |
 
 #### Composed from

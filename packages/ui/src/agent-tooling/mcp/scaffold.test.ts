@@ -2740,13 +2740,66 @@ describe('scaffold — solid', () => {
     expect(note).toContain("The scaffold emits NO `import '@kitn.ai/ui/elements'`");
   });
 
+  /**
+   * WORDING ONLY, and worth saying why it is kept anyway.
+   *
+   * The real guard is `solidPartCoverageCheck` in
+   * scripts/verify-scaffold-compiles.mjs: it derives the variant list from the
+   * `MessagePart` union and asserts a branch per variant across all 54 solid
+   * cells, so it goes red the day someone ADDS a variant. A literal list here
+   * cannot do that — it would pass a new variant silently, which is exactly how
+   * `card` and `source` went missing while the emitted comment claimed the
+   * thread rendered "exactly what <kai-chat> renders".
+   *
+   * What this keeps is the shape the derived check depends on (the
+   * `partAs(part(), '…')` spelling) plus the render CALLS, which the coverage
+   * check does not look at: a `<Match>` that branches correctly and then renders
+   * the wrong component would pass it.
+   */
   it('renders EVERY part kind, not just text — the coarse element did that for free', async () => {
     const f = front(await emit());
-    expect(f).toContain('function renderPart(part: () => MessagePart');
-    expect(f).toContain("partAs(part(), 'text')");
-    expect(f).toContain("partAs(part(), 'reasoning')");
-    expect(f).toContain("partAs(part(), 'tool')");
+    expect(f).toContain('function renderPart(');
+    expect(f).toContain('  part: () => MessagePart,');
+    for (const kind of ['text', 'reasoning', 'tool', 'card', 'source', 'file']) {
+      expect(f, `no partAs branch for ${kind}`).toContain(`partAs(part(), '${kind}')`);
+    }
     expect(f).toContain('<Tool toolPart={p().tool} />');
+    expect(f).toContain('<CardRenderer envelope={p().envelope} />');
+    expect(f).toContain('<Attachment data={fp.attachment}>');
+  });
+
+  /**
+   * The two part kinds that render as a RUN, and the one placement fact that is
+   * load-bearing rather than cosmetic.
+   *
+   * `components/message.tsx` collapses consecutive `source` parts into ONE
+   * citation row and puts it OUTSIDE the message bubble on purpose: a citation
+   * nested in `MessageContent` is indistinguishable from a link the model typed
+   * into its own prose. The emitted scaffold has to do the same, or a Solid
+   * consumer gets N stacked one-chip rows, or citations that read as prose links.
+   */
+  it('collapses source/file runs into one row, with citations outside the bubble', async () => {
+    const f = front(await emit());
+    // The run helper, and both callers.
+    expect(f).toContain("runAt(parts(), index, 'source')");
+    expect(f).toContain("runAt(parts(), index, 'file')");
+    // ONE citation row, carrying the same ::part name <kai-chat> exposes...
+    expect(f).toContain('<SourceList part="citations"');
+    // ...and it is a SIBLING of the bubble, never nested inside MessageContent.
+    // Containment, not a regex: `/<MessageContent[\s\S]*<SourceList/` matches the
+    // text branch and the source branch as two UNRELATED points in the file, so it
+    // is green no matter where the row sits — a check that proves nothing.
+    const nestedInBubble = f
+      .split('</MessageContent>')
+      .slice(0, -1)
+      .some((seg) => {
+        const open = seg.lastIndexOf('<MessageContent');
+        return open >= 0 && seg.slice(open).includes('<SourceList');
+      });
+    expect(nestedInBubble, 'a citation row is nested INSIDE the message bubble').toBe(false);
+    // The run branches need the part's neighbours, so renderPart takes them.
+    expect(f).toContain('  index: number,');
+    expect(f).toContain('  parts: () => MessagePart[],');
   });
 
   /**
@@ -2779,7 +2832,8 @@ describe('scaffold — solid', () => {
     expect(f).toContain('<Show when={messages()[i()]}>');
     // INNER: <Index>, keyed by position — the folds only append or patch in
     // place, and <Index> hands each row a SIGNAL so it survives the delta.
-    expect(f).toContain('<Index each={m().parts}>{(part) => renderPart(part, m().role)}</Index>');
+    expect(f).toContain('<Index each={m().parts}>');
+    expect(f).toContain('{(part, pi) => renderPart(part, pi, () => m().parts, m().role)}');
     expect(f).not.toContain('<For each={m.parts}>');
     // Not `<Index>` for the OUTER list: position keying leaves an open panel
     // with the slot, so prepending older turns moves it onto the wrong message.

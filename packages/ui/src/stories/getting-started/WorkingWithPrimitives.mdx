@@ -47,8 +47,8 @@ import { createKaiChat } from '@kitn.ai/ui';          // SolidJS store
 ```
 
 - `appendMessage` / `upsertMessage` / `updateMessage` / `removeMessage` / `appendText` / `textMessage` / `partsToText`: immutable `ChatMessage[]` updates (new array reference per change, so the element re-renders).
-- `appendTextPart` / `appendReasoningPart` / `upsertToolPart`: the part-level folds those build on, when you own the message object yourself.
-- `createAssistantStream(set)`: a handle that grows one in-flight assistant message via `appendText`, `appendReasoning`, `upsertTool`, `addCard`, `addSource`, `addFile`, `done`, `abort`.
+- `appendTextPart` / `appendReasoningPart` / `upsertToolPart` / `upsertCardPart`: the part-level folds those build on, when you own the message object yourself.
+- `createAssistantStream(set)`: a handle that grows one in-flight assistant message via `appendText`, `appendReasoning`, `upsertTool`, `addCard` (upserts on `envelope.id`, so re-sending a card revises it in place), `addSource`, `addFile`, `done`, `abort`.
 - `useKaiChat` (React) / `createKaiChat` (Solid): own the message list, wire submit, return a spreadable `bind`.
 
 See the **Examples → State & Hooks** story for the setter contract and streaming loop.

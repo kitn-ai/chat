@@ -1,10 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { appendReasoningPart, appendTextPart, fingerprint, upsertToolPart } from './parts';
+import {
+  appendReasoningPart,
+  appendTextPart,
+  fingerprint,
+  upsertCardPart,
+  upsertToolPart,
+} from './parts';
 import type { MessagePart } from '../elements/chat-types';
 import type { ToolPart } from '../components/tool-types';
 
 const reasoningAt = (parts: MessagePart[], i: number) =>
   parts[i] as Extract<MessagePart, { type: 'reasoning' }>;
+
+const cardAt = (parts: MessagePart[], i: number) =>
+  parts[i] as Extract<MessagePart, { type: 'card' }>;
 
 describe('fingerprint', () => {
   it('is stable across key order', () => {
@@ -304,5 +313,97 @@ describe('upsertToolPart', () => {
     const parts = upsertToolPart([], 'tc1', { type: 'bash', state: 'input-streaming', rawInput: '{"a' });
     const next = upsertToolPart(parts, 'tc1', { rawInput: '{"ab' });
     expect(next).not.toBe(parts);
+  });
+});
+
+describe('upsertCardPart', () => {
+  it('creates a card part when the id is new', () => {
+    const parts = upsertCardPart([], { type: 'confirm', id: 'c1', data: { prompt: 'ship it?' } });
+    expect(parts).toHaveLength(1);
+    expect(parts[0]).toEqual({
+      type: 'card',
+      envelope: { type: 'confirm', id: 'c1', data: { prompt: 'ship it?' } },
+    });
+  });
+
+  // THE headline: a model that revises a card mid-turn must not render N copies.
+  it('REVISES the card in place instead of appending a second copy', () => {
+    let parts = upsertCardPart([], { type: 'tasks', id: 'c1', data: { items: [{ label: 'a' }] } });
+    parts = upsertCardPart(parts, {
+      type: 'tasks',
+      id: 'c1',
+      data: { items: [{ label: 'a' }, { label: 'b' }] },
+    });
+    expect(parts).toHaveLength(1);
+    expect(cardAt(parts, 0).envelope.data).toEqual({ items: [{ label: 'a' }, { label: 'b' }] });
+  });
+
+  it('keys on id, so two DIFFERENT ids stay two parts', () => {
+    let parts = upsertCardPart([], { type: 'confirm', id: 'c1', data: { n: 1 } });
+    parts = upsertCardPart(parts, { type: 'confirm', id: 'c2', data: { n: 2 } });
+    expect(parts).toHaveLength(2);
+    expect(cardAt(parts, 0).envelope.id).toBe('c1');
+    expect(cardAt(parts, 1).envelope.id).toBe('c2');
+  });
+
+  it('revises IN PLACE — a revised card does not jump to the end of the thread', () => {
+    let parts = upsertCardPart([], { type: 'confirm', id: 'c1', data: { n: 1 } });
+    parts = appendTextPart(parts, 'between');
+    parts = upsertCardPart(parts, { type: 'confirm', id: 'c2', data: { n: 2 } });
+    parts = upsertCardPart(parts, { type: 'confirm', id: 'c1', data: { n: 99 } });
+    expect(parts.map((p) => p.type)).toEqual(['card', 'text', 'card']);
+    expect(cardAt(parts, 0).envelope.data).toEqual({ n: 99 });
+  });
+
+  it('is a NO-OP (SAME array reference) on a structurally identical envelope', () => {
+    const parts = upsertCardPart([], { type: 'confirm', id: 'c1', data: { a: 1, b: [2, 3] } });
+    // A DIFFERENT object with the same shape, and reversed key order.
+    const same = upsertCardPart(parts, { id: 'c1', data: { b: [2, 3], a: 1 }, type: 'confirm' });
+    expect(same).toBe(parts);
+  });
+
+  it('does NOT dedupe a genuinely changed envelope', () => {
+    const parts = upsertCardPart([], { type: 'confirm', id: 'c1', data: { a: 1 } });
+    const next = upsertCardPart(parts, { type: 'confirm', id: 'c1', data: { a: 2 } });
+    expect(next).not.toBe(parts);
+  });
+
+  it('preserves the PART-level raw across a revision', () => {
+    const raw = { source: 'anthropic.content_block', payload: { x: 1 } };
+    let parts: MessagePart[] = [
+      { type: 'card', envelope: { type: 'confirm', id: 'c1', data: { a: 1 } }, raw },
+    ];
+    parts = upsertCardPart(parts, { type: 'confirm', id: 'c1', data: { a: 2 } });
+    expect(cardAt(parts, 0).raw).toBe(raw);
+    expect(cardAt(parts, 0).envelope.data).toEqual({ a: 2 });
+  });
+
+  // Wholesale replace is what makes the CardPolicy.onReopen path expressible: a
+  // field-by-field merge could never clear `resolution` back to undefined.
+  it('REPLACES wholesale, so a host can clear `resolution` to re-open a card', () => {
+    let parts = upsertCardPart([], {
+      type: 'confirm',
+      id: 'c1',
+      data: { a: 1 },
+      title: 'Deploy?',
+      resolution: { kind: 'dismissed' },
+    });
+    parts = upsertCardPart(parts, { type: 'confirm', id: 'c1', data: { a: 1 }, title: 'Deploy?' });
+    expect(cardAt(parts, 0).envelope.resolution).toBeUndefined();
+    expect(cardAt(parts, 0).envelope.title).toBe('Deploy?');
+  });
+
+  it('replaces a dropped title wholesale rather than carrying it forward', () => {
+    let parts = upsertCardPart([], { type: 'confirm', id: 'c1', data: { a: 1 }, title: 'First' });
+    parts = upsertCardPart(parts, { type: 'confirm', id: 'c1', data: { a: 1 } });
+    expect(cardAt(parts, 0).envelope.title).toBeUndefined();
+  });
+
+  it('ignores non-card parts when matching the id', () => {
+    let parts = upsertToolPart([], 'c1', { type: 'bash', state: 'input-streaming' });
+    parts = upsertCardPart(parts, { type: 'confirm', id: 'c1', data: { a: 1 } });
+    expect(parts).toHaveLength(2);
+    expect(parts[0].type).toBe('tool');
+    expect(parts[1].type).toBe('card');
   });
 });

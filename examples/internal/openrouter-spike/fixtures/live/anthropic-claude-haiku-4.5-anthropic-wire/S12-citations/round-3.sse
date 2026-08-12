@@ -1,5 +1,5 @@
 event: message_start
-data: {"type":"message_start","message":{"id":"gen-1786476960-ApxNF0aQarCkNfwz5LPq","type":"message","role":"assistant","container":null,"content":[],"model":"anthropic/claude-haiku-4.5","stop_reason":null,"stop_details":null,"stop_sequence":null,"usage":{"input_tokens":1596,"output_tokens":1,"output_tokens_details":null,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"inference_geo":null,"server_tool_use":null,"service_tier":null,"speed":"standard"},"provider":"Amazon Bedrock"}}
+data: {"type":"message_start","message":{"id":"gen-1786489317-olJyQotP4gK0J93QIvkl","type":"message","role":"assistant","container":null,"content":[],"model":"anthropic/claude-haiku-4.5","stop_reason":null,"stop_details":null,"stop_sequence":null,"usage":{"input_tokens":1434,"output_tokens":1,"output_tokens_details":null,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"inference_geo":null,"server_tool_use":null,"service_tier":null,"speed":"standard"},"provider":"Amazon Bedrock"}}
 
 event: content_block_start
 data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":"","citations":[]}}
@@ -8,55 +8,55 @@ event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Perfect"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"! According"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"!"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" to the ["}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" The"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Theming guide"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ming in"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"](https://ui.kitn."}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" **"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ai/guides/theming), **"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"@"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"every"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"kitn.ai/"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" element in"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ui** is straight"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" @"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"forward:"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"kitn.ai/ui accepts"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"\n\nEvery"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" a `"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" element accepts"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"theme` prop** that"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" a **"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" takes"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"`"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" values of"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"theme` prop** with"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" three"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" options:"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" `light`, `dark`, or `"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"auto`. "}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"\n\nThe"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" kit"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"auto`. The system"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" uses"}}
@@ -68,79 +68,103 @@ event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"CSS"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" custom properties (`"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" color"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"--color-*`"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" tokens** (`"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" tokens)** that"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"--color-*`) that automatically"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" automatically"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" flip when"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" flip under a `.dark` class,"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" a"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" so your custom"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" `."}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" styling"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"dark` class is applied,"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" integ"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" ensuring"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"rates seamlessly with the built"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" your custom styling"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"-in theming system"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" matches the selecte"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"d theme.\n\nThis"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" approach"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" lets"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" you easily customize colors while"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" maintaining consistent"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" theme"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" switching"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" across all"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" `"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"kai"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"-*` elements an"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"d your"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" own"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" components"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"."}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" This means you can either"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"\n\n**"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" control"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Source"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" the"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":":**"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ming per"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" [Theming Guide"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"-"}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"](https://ui.kitn."}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"element or apply"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" it"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" globally at"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" the container"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" level while"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" maintaining visual"}}
-
-event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" consistency."}}
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ai/guides/theming)"}}
 
 event: content_block_stop
 data: {"type":"content_block_stop","index":0}
 
 event: message_delta
-data: {"type":"message_delta","delta":{"container":null,"stop_details":null,"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1596,"output_tokens":129,"output_tokens_details":{"thinking_tokens":0},"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"server_tool_use":null,"service_tier":null,"speed":"standard","cost":0.002241,"is_byok":false,"cost_details":{"upstream_inference_cost":0.002241,"upstream_inference_prompt_cost":0.001596,"upstream_inference_completions_cost":0.000645}},"context_management":null}
+data: {"type":"message_delta","delta":{"container":null,"stop_details":null,"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1434,"output_tokens":132,"output_tokens_details":{"thinking_tokens":0},"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"server_tool_use":null,"service_tier":null,"speed":"standard","cost":0.002094,"is_byok":false,"cost_details":{"upstream_inference_cost":0.002094,"upstream_inference_prompt_cost":0.001434,"upstream_inference_completions_cost":0.00066}},"context_management":null}
 
 event: message_stop
 data: {"type":"message_stop"}

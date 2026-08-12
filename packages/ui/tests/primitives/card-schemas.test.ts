@@ -33,6 +33,36 @@ test('link schema parses + validates a good/bad link payload', () => {
   expect(validateAgainstSchema(s, { url: 'https://x', title: 'a'.repeat(301) }).valid).toBe(false);
 });
 
+test('artifact schema parses + validates a good/bad artifact payload', () => {
+  const s = load('artifact.schema.json');
+  expect(
+    validateAgainstSchema(s, {
+      src: 'https://preview.example.com/app',
+      files: [{ path: 'index.html', code: '<h1>hi</h1>', language: 'html', type: 'html' }],
+      tab: 'code',
+      activeFile: 'index.html',
+      displayUrl: 'preview.example.com',
+      height: 480,
+    }).valid,
+  ).toBe(true);
+  // A code-only artifact (no src) is legitimate.
+  expect(validateAgainstSchema(s, { files: [{ path: 'a.ts', code: 'x' }], tab: 'code' }).valid).toBe(true);
+  // tab is a closed enum — 'diff' is not a view this component has.
+  expect(validateAgainstSchema(s, { src: 'https://x', tab: 'diff' }).valid).toBe(false);
+  expect(validateAgainstSchema(s, { src: 123 }).valid).toBe(false); // src must be a string
+  expect(validateAgainstSchema(s, { files: [{ code: 'no path' }] }).valid).toBe(false); // path required
+  expect(validateAgainstSchema(s, { files: [{ path: 'a', type: 'binary' }] }).valid).toBe(false); // bad file type
+});
+
+test('artifact schema does NOT expose host-owned artifact props', () => {
+  const s = load('artifact.schema.json');
+  // The card envelope is model-written: sandbox/toolbar/view-state must stay off
+  // the wire so a model cannot widen its own sandbox or hide the chrome.
+  for (const forbidden of ['sandbox', 'maximized', 'controllerRef', 'showNav', 'showTabs', 'expandable']) {
+    expect(Object.keys(s.properties ?? {})).not.toContain(forbidden);
+  }
+});
+
 test('embed schema parses + validates provider payloads', () => {
   const s = load('embed.schema.json');
   expect(validateAgainstSchema(s, { provider: 'youtube', id: 'dQw4w9WgXcQ' }).valid).toBe(true);

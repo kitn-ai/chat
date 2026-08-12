@@ -1,23 +1,22 @@
 import type { Scenario } from './types';
 import { pickTools } from '../tools';
-import { fail, seesElement, seesText } from './dom';
+import { fail, seesElement } from './dom';
 
 /**
  * S13 — an artifact that CHANGES over the course of a turn.
  *
- * EXPECTED TO FAIL, and the failure is the finding. Two things are missing:
+ * This was the harness's longest-standing red cell, and it measured two gaps at
+ * once. Both are now closed, so the `knownGap` is gone and this is an ordinary
+ * assertion:
  *
- *  1. There is no `artifact` card type. `<kai-artifact>` exists as an element but
- *     is not in `BUILTIN_CARD_TAGS`, so a model cannot reach it through a card
- *     part. This spike works around that by registering `<spike-artifact>` and
- *     passing `cardTypes={{ artifact: 'spike-artifact' }}` — the documented
- *     consumer extension point — which is the only reason the scenario renders
- *     anything at all.
- *  2. `AssistantStream` can only ever APPEND a card (`addCard` pushes a new
- *     part). There is no `updateCard`/`upsertCard` keyed by envelope id, the way
- *     `upsertTool` works for tool parts. So a second version of the same
- *     artifact renders as a SECOND card next to the first instead of replacing
- *     it, and a document the agent revises three times renders three times.
+ *  1. `artifact` is the 7th BUILT-IN card type. The spike used to register its
+ *     own `<spike-artifact>` through the `cardTypes` seam, which is also why the
+ *     locator below changed: a non-overridden built-in renders as a Solid
+ *     component with no `kai-*` tag of its own, so `[data-card-type="artifact"]`
+ *     on the card's own wrapper is the stable handle. It is scoped to
+ *     `<kai-thread>` so it can only ever count cards the THREAD rendered.
+ *  2. `AssistantStream.addCard` upserts on `envelope.id` instead of appending,
+ *     so revising an artifact replaces it rather than stacking a second copy.
  *
  * REPLAY-ONLY: the fixture calls `open_artifact` twice with the same envelope id
  * and different content, which is precisely the thing a live model would do when
@@ -27,49 +26,33 @@ export const s13Artifact: Scenario = {
   id: 'S13-artifact',
   title: 'Artifact over time',
   proves: 'an artifact revised mid-turn renders ONCE, showing its latest content',
-  knownGap: {
-    what: 'no `artifact` card type in BUILTIN_CARD_TAGS, and AssistantStream.addCard only APPENDS — there is no id-keyed card upsert, so a revised artifact renders twice',
-    /**
-     * The gap is "a REVISED artifact renders twice", which presupposes an
-     * artifact that rendered and a revision that arrived. This is the exact
-     * scenario that was recorded as `KNOWN GAP CONFIRMED` while the replayed
-     * stream was in the wrong SSE dialect and parsed to nothing: no card part,
-     * no element, no revision, a 20-second timeout, and a green table. That run
-     * now fails here instead, and says why.
-     */
-    async reached(page) {
-      await seesElement(page.locator('spike-artifact'), 'an artifact card', {
-        state: 'attached',
-        because: 'a card that never rendered cannot be rendering twice',
-      });
-      await seesText(page, 'v2', {
-        because: 'the REVISION has to arrive — one artifact from one call is not the gap',
-      });
-    },
-    signature: /expected 1 artifact after a revision, saw \d+/,
-  },
   prompt: 'Draft a one-paragraph release note as an artifact, then revise it.',
   tools: pickTools('open_artifact'),
   mode: 'replay',
   async assert(page) {
-    // Deliberately re-checks what `knownGap.reached` just established. This is
-    // the assertion that has to hold once the gap CLOSES, so it stays whole and
-    // readable on its own rather than being split across the two.
-    //
-    // The workaround element renders, so the card-part → custom-element route is
-    // genuinely exercised.
-    const artifacts = page.locator('spike-artifact');
-    await seesElement(artifacts, 'an artifact card', { state: 'attached' });
+    // The built-in card's own wrapper, inside the thread's shadow root.
+    const artifacts = page.locator('kai-thread [data-card-type="artifact"]');
+    await seesElement(artifacts, 'an artifact card', {
+      because: 'the `artifact` card type must render from a card part with no consumer override',
+    });
 
-    // The revision must be visible…
-    await seesText(page, 'v2', { because: 'the revised artifact content must reach the screen' });
+    // The revision must be visible INSIDE THE CARD. The scoping is the whole
+    // assertion and it was learned here, the same way S12 learned its own: an
+    // unscoped `v2` check passes off the <kai-tool> panel, which echoes the
+    // model's `open_artifact` ARGUMENTS — body text included — a few inches up
+    // the thread. That proves the model typed "v2", not that the artifact card
+    // rendered it. Scoped to the card, it also catches the card rendering as
+    // empty chrome, which is what a payload the card cannot read produces.
+    await seesElement(artifacts.first().getByText('v2'), 'the revised artifact body inside the card', {
+      because: 'the card must show the LATEST draft, not just exist',
+    });
 
-    // …and there must be exactly ONE artifact. This is the half that fails.
+    // …and there must be exactly ONE artifact: the revision REPLACED the draft.
     const count = await artifacts.count();
     if (count !== 1) {
       fail(
         `expected 1 artifact after a revision, saw ${count}. ` +
-          'AssistantStream.addCard appends; there is no id-keyed card upsert, so every revision stacks.',
+          'AssistantStream.addCard upserts on the envelope id, so a revision must replace the card it revises.',
       );
     }
   },

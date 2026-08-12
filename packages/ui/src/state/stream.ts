@@ -3,7 +3,7 @@ import type { ChatMessage, MessagePart, Source } from '../elements/chat-types';
 import type { ToolPart } from '../components/tool-types';
 import type { CardEnvelope } from '../primitives/card-contract';
 import type { AttachmentData } from '../components/attachment-types';
-import { appendReasoningPart, appendTextPart, upsertToolPart, type ReasoningOpts } from './parts';
+import { appendReasoningPart, appendTextPart, upsertCardPart, upsertToolPart, type ReasoningOpts } from './parts';
 
 /** The one universal contract: a functional-updater setter (React setState shape). */
 export type SetMessages = (updater: (prev: ChatMessage[]) => ChatMessage[]) => void;
@@ -19,6 +19,10 @@ export interface AssistantStream {
   appendText(delta: string): AssistantStream;
   appendReasoning(delta: string, opts?: ReasoningOpts): AssistantStream;
   upsertTool(toolCallId: string, patch: Partial<ToolPart>): AssistantStream;
+  /** Adds a card, or REPLACES the existing one with the same `envelope.id`. A
+   *  model that revises a card mid-turn re-sends the whole envelope, so a second
+   *  call with a known id revises that card in place rather than rendering a
+   *  second copy of it. See `upsertCardPart`. */
   addCard(envelope: CardEnvelope): AssistantStream;
   addSource(source: Source): AssistantStream;
   addFile(attachment: AttachmentData): AssistantStream;
@@ -52,7 +56,8 @@ export function createAssistantStream(
     appendText(delta) { mutate((p) => appendTextPart(p, delta)); return stream; },
     appendReasoning(delta, opts) { mutate((p) => appendReasoningPart(p, delta, opts)); return stream; },
     upsertTool(toolCallId, patch) { mutate((p) => upsertToolPart(p, toolCallId, patch)); return stream; },
-    addCard(envelope) { mutate((p) => [...p, { type: 'card', envelope }]); return stream; },
+    // Upsert, not append: keyed on envelope.id so a revised card replaces itself.
+    addCard(envelope) { mutate((p) => upsertCardPart(p, envelope)); return stream; },
     addSource(source) { mutate((p) => [...p, { type: 'source', source }]); return stream; },
     addFile(attachment) { mutate((p) => [...p, { type: 'file', attachment }]); return stream; },
     done() { settled = true; },

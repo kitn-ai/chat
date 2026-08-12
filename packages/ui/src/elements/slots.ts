@@ -206,6 +206,11 @@ export const MESSAGE_PARTS: PartDef[] = [
     doc: 'The action-bar row (copy / like / regenerate …). Restyle its spacing or hide it entirely from outside.',
     recipe: 'kai-message::part(actions) { gap: 0.25rem }',
   },
+  {
+    name: 'citations',
+    doc: 'The citation row rendered from the message’s `source` parts — a wrapped row of chips below the bubble, never inside it. Restyle its spacing or hide it entirely from outside.',
+    recipe: 'kai-message::part(citations) { gap: 0.5rem }',
+  },
 ];
 
 /** Styleable `::part`s of `<kai-attachments>`. */

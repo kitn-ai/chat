@@ -2,7 +2,7 @@
 // One source of truth mapping a CardEnvelope.type to a renderer, for both layers:
 //   - CardComponentMap drives the Solid <CardRenderer>.
 //   - CardTagMap drives the <kai-cards> web component (child kai-* elements).
-// Built-ins cover the 5 contract card types; consumers extend/override via a `types`
+// Built-ins cover the 7 contract card types; consumers extend/override via a `types`
 // prop (merged OVER the built-ins). kai-card (bare shell) is intentionally NOT a target.
 import type { Component } from 'solid-js';
 import type { CardEnvelope, CardHost } from './card-contract';
@@ -12,6 +12,7 @@ import { TasksCard } from '../components/tasks-card';
 import { ChoiceCard } from '../components/choice-card';
 import { LinkPreview } from '../components/link-preview';
 import { Embed } from '../components/embed';
+import { ArtifactCard, type ArtifactCardData } from '../components/artifact-card';
 
 /** Solid renderer for one envelope. `host` is the resolved CardHost so each wrapper
  *  can bridge its card's emit convention (form/confirm/tasks take `host`;
@@ -29,6 +30,7 @@ export const BUILTIN_CARD_TAGS: CardTagMap = {
   choice: 'kai-choice',
   link: 'kai-link-preview',
   embed: 'kai-embed',
+  artifact: 'kai-artifact',
 };
 
 export const BUILTIN_CARD_COMPONENTS: CardComponentMap = {
@@ -54,6 +56,12 @@ export const BUILTIN_CARD_COMPONENTS: CardComponentMap = {
   ),
   embed: (p) => (
     <Embed data={p.envelope.data as never} cardId={p.envelope.id} onEmit={(e) => p.host?.emit(e)} />
+  ),
+  // artifact owns real chrome of its own (sizing + heading), so like the four
+  // above it lives in components/ and gets only a thin wrapper here.
+  artifact: (p) => (
+    <ArtifactCard data={p.envelope.data as ArtifactCardData} cardId={p.envelope.id}
+      heading={p.envelope.title} host={p.host} />
   ),
 };
 
