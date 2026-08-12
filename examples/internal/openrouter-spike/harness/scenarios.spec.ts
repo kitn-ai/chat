@@ -29,6 +29,13 @@ import {
   type ScenarioWire,
 } from '../src/scenarios';
 import { S17_CLOSING_SENTENCE } from '../src/scenarios/s17-cancel';
+import {
+  assertBubbleRolesAreLegible,
+  bubbles,
+  bubblesOf,
+  lastBubble,
+  seesAssistantProse,
+} from '../src/scenarios/dom';
 import { readHarnessState } from '../src/harness-state';
 import { allModelBehaviours, modelBehaviourFor } from './model-behaviour';
 import { waitForPhase } from './stall-report';
@@ -389,6 +396,73 @@ test('S12 control: the citation locator finds a citation when one exists', async
   });
 
   await expect(citation.first()).toBeVisible();
+});
+
+/**
+ * The assistant-bubble locator's own control.
+ *
+ * `answer()` was `bubbles().last()`, and the last bubble is the user's ECHOED
+ * PROMPT until the assistant emits its first text delta. S17 shipped on that and
+ * spent its whole existence comparing an 89-character prompt to itself. The same
+ * locator sat under `seesProse`, which S01–S05 all call: green only because they
+ * assert after the stream finishes — green by WHEN THEY RUN, not by construction.
+ *
+ * S04 is the sharpest case and is therefore the one driven here. Its prompt is
+ * 153 characters and names Paris, Tokyo and Berlin, so the echoed prompt alone
+ * satisfies `seesProse(page, 60)` AND all three `prose.includes(city)` checks —
+ * measured, before the fix: the whole final-answer assertion passed off the
+ * user's own words.
+ *
+ * The trap is armed deterministically rather than raced. Every row that is NOT
+ * the echoed prompt is removed from the live thread, which reproduces exactly
+ * two real states: the opening of every turn, and a stream error that throws the
+ * partial message away (the failure S16 exists to catch). Removal is by TEXT, so
+ * it does not lean on the speaker signals under test.
+ *
+ * Watched red: with `assistantBubble` reverted to `bubbles().last()`,
+ * `seesAssistantProse` returns the 153-character prompt and this test fails on
+ * "must refuse to answer with the user's own prompt".
+ */
+test('the assistant locator refuses the user echo when the assistant has not spoken', async ({ page }) => {
+  const s04 = SCENARIOS.find((s) => s.id === 'S04-multi-round')!;
+  const prompt = s04.prompt.trim();
+
+  await page.goto('/?scenario=S04-multi-round&mode=replay');
+  await waitForPhase(page, 'html[data-kai-phase="done"], html[data-kai-phase="error"]', 90_000);
+
+  // 1. On a real, finished thread the two speakers are legible and the echo is
+  //    classified as the USER's — not as part of the answer.
+  await assertBubbleRolesAreLegible(page);
+  const userTexts = (await bubblesOf(page, 'user').allTextContents()).map((t) => t.trim());
+  const assistantTexts = (await bubblesOf(page, 'assistant').allTextContents()).map((t) => t.trim());
+  expect(userTexts, 'the echoed prompt must classify as the user speaking').toContain(prompt);
+  expect(assistantTexts, 'and must never classify as the assistant speaking').not.toContain(prompt);
+  expect(assistantTexts.length, 'the assistant must have said something to begin with').toBeGreaterThan(0);
+
+  // 2. Take the assistant's rows away. By text, so this does not use either of
+  //    the signals it is about to test.
+  await page.locator('[part~="row"]').evaluateAll((rows, wanted) => {
+    for (const row of rows) if (!(row.textContent ?? '').includes(wanted)) row.remove();
+  }, prompt);
+
+  // 3. The trap is armed: the last bubble on the page IS the user's prompt, so a
+  //    positional locator would hand it straight back. Without this the test
+  //    could pass merely because the thread was empty.
+  expect(await bubbles(page).count(), 'only the echoed prompt should be left').toBe(1);
+  expect(((await lastBubble(page).textContent()) ?? '').trim()).toBe(prompt);
+  expect(prompt.length, "S04's prose bound must be satisfiable by the prompt alone").toBeGreaterThan(60);
+  for (const city of ['Paris', 'Tokyo', 'Berlin']) {
+    expect(prompt, `S04 also checks for ${city}, which its own prompt contains`).toContain(city);
+  }
+
+  // 4. And the locator refuses it.
+  const problem = await problemFrom(seesAssistantProse(page, 60, 2_000));
+  expect(
+    problem,
+    "seesAssistantProse must refuse to answer with the user's own prompt when the assistant " +
+      'has not spoken — returning it is the vacuous pass this whole guard exists to prevent',
+  ).not.toBeNull();
+  expect(problem!.message).toContain('ASSISTANT prose');
 });
 
 test('the catalog is self-consistent', () => {

@@ -1,6 +1,6 @@
 import type { Scenario } from './types';
 import { pickTools } from '../tools';
-import { controlledPanel, expand, seesConsumerCards, seesProse, seesText, toolTrigger } from './dom';
+import { controlledPanel, expand, seesConsumerCards, seesAssistantProse, seesText, toolTrigger } from './dom';
 
 /**
  * S3 — one tool call, end to end: announce → arguments → local run → output.
@@ -45,6 +45,6 @@ export const s03SingleTool: Scenario = {
     // ThreadView registered `weather` through `cardTypes`.
     await seesConsumerCards(page, 1, ['Light rain']);
 
-    await seesProse(page, 30);
+    await seesAssistantProse(page, 30);
   },
 };

@@ -1,5 +1,5 @@
 import type { Scenario } from './types';
-import { neverSeesText, seesProse } from './dom';
+import { neverSeesText, seesAssistantProse } from './dom';
 
 /** S1 — the floor. Tokens arrive, a text part opens, prose renders. */
 export const s01PlainText: Scenario = {
@@ -14,7 +14,7 @@ export const s01PlainText: Scenario = {
   controlDir: 'canned/CONTROL-noisy',
   async assert(page) {
     // Prose, not "a text part exists": the bubble is what the user reads.
-    await seesProse(page, 60);
+    await seesAssistantProse(page, 60);
     // With no tools in the request there must be no tool panel. This half is
     // what stops the scenario passing on a page that renders everything.
     await neverSeesText(page, 'Completed', 'no tool panel on a tool-free turn');

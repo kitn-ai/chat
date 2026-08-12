@@ -130,31 +130,168 @@ export async function neverSeesText(
   }
 }
 
-/** Every rendered message-content bubble, in document order. `part="bubble
- *  content"` is published API (it is what a consumer targets with `::part`), so
- *  it is a stable handle on "the prose the user reads". */
+/** Every rendered message-content bubble, in document order, WHOEVER wrote it.
+ *  `part="bubble content"` is published API (it is what a consumer targets with
+ *  `::part`), so it is a stable handle on "the prose somebody reads".
+ *
+ *  This is a POSITIONAL set and nothing more. Read the note under
+ *  `bubblesOf` before reaching for `.last()` on it. */
 export function bubbles(page: Page): Locator {
   return page.locator('[part~="content"]');
 }
 
-/** The last bubble — the assistant's answer, in a one-turn thread. */
-export function answer(page: Page): Locator {
+// ── which bubble belongs to WHOM ─────────────────────────────────────────────
+//
+// There used to be one helper here, `answer() = bubbles().last()`, described as
+// "the assistant's answer". It is not. It is a POSITION, and until the assistant
+// emits its first text delta the last bubble on screen is the user's own ECHOED
+// PROMPT — so for the opening of every single turn `answer()` silently meant
+// "the user". That is not a hypothetical: S17 clicked Stop at ~50ms, compared
+// the 89-character prompt to itself, reported `grew=0`, and passed vacuously for
+// its entire existence. `seesProse` had the identical defect and S01–S05 were
+// green only because they happen to assert after the stream finished — green by
+// WHEN THEY RUN, not by construction. Measured on this fixture set: pointed at
+// the pre-delta window, `seesProse(page, 60)` hands S04 the user's own
+// 153-character prompt, which satisfies its length bound AND all three of its
+// `prose.includes(city)` checks, because the prompt names the three cities.
+//
+// So the assistant's bubble is now selected by SPEAKER. The kit does not put the
+// speaker in the rendered DOM — `<Message role>` emits `data-role` /
+// `role="article"` / `aria-label`, but neither `Thread` nor `ChatThread` passes
+// it, so every row in a real `<kai-thread>` is an unlabelled generic div (see
+// HARNESS.md, "The thread renders no role"). Until it does, the speaker has to
+// be read off the two independent things the kit DOES render differently:
+//
+//   row alignment   user rows carry `items-end`, assistant rows `items-start`
+//   bubble skin     user bubbles carry `bg-muted rounded-2xl`, assistant ones
+//                   are markdown-rendered and carry `chat-markdown`
+//
+// Neither is a contract, so neither is trusted alone. Selection is by alignment;
+// `assertBubbleRolesAreLegible` then requires the skin signal to AGREE with it
+// and the two to account for every bubble on the page. Drop `items-start` from
+// assistant rows and the locator matches nothing, so a scenario goes red on a
+// timeout it can explain. Add `items-start` to USER rows — the regression that
+// would quietly restore the original defect — and the two signals disagree and
+// every read fails naming the drift. What must never happen again is the middle
+// case: a locator that still resolves, to the wrong speaker, and stays green.
+
+type Speaker = 'user' | 'assistant';
+
+/** Signal 1: how the row is aligned. This is what SELECTS. */
+const ROW_OF: Record<Speaker, string> = {
+  user: '[part~="row"].items-end',
+  assistant: '[part~="row"].items-start',
+};
+
+/** Signal 2: how the bubble is skinned. This is what CROSS-CHECKS. Independent
+ *  of signal 1 — a different component sets it, off a different prop. */
+const SKIN_OF: Record<Speaker, string> = {
+  user: '[part~="content"].bg-muted',
+  assistant: '[part~="content"].chat-markdown',
+};
+
+/** Every content bubble written by `who`, in document order. */
+export function bubblesOf(page: Page, who: Speaker): Locator {
+  return page.locator(`${ROW_OF[who]} [part~="content"]`);
+}
+
+/**
+ * The assistant's current prose bubble — the last one IT wrote, never the
+ * user's echo. A message renders one bubble per text part, so on a turn that
+ * interleaves `text → tool → card → text` this is the closing prose, which is
+ * what the scenarios that reach for it mean.
+ *
+ * Resolves to NOTHING until the assistant has actually emitted text. That is
+ * the point: an assertion made too early now fails as "no assistant prose"
+ * instead of passing off the prompt.
+ */
+export function assistantBubble(page: Page): Locator {
+  return bubblesOf(page, 'assistant').last();
+}
+
+/** The last bubble on screen REGARDLESS of who wrote it — position, not
+ *  speaker. Kept because "whatever is at the bottom of the thread" is a real
+ *  thing to want; named so that no caller can mistake it for the assistant's
+ *  answer, which is exactly what the old `answer()` invited. */
+export function lastBubble(page: Page): Locator {
   return bubbles(page).last();
 }
 
-/** How many characters a locator renders right now. */
+/**
+ * Assert the harness can still tell a user bubble from an assistant one.
+ *
+ * Both signals are styling, and styling is not a contract — so this is what
+ * stands between "the locator means the assistant" and "the locator used to
+ * mean the assistant". It fails if either holds:
+ *
+ *  - the two speakers' bubbles do not add up to every bubble on the page
+ *    (something rendered that classifies as neither, or as both), or
+ *  - the alignment signal and the skin signal disagree about how many bubbles
+ *    each speaker has.
+ *
+ * Called on the PASS path of every read below, because a wrong classification
+ * that still resolves is precisely the failure that stays green.
+ */
+export async function assertBubbleRolesAreLegible(page: Page): Promise<void> {
+  const [all, user, assistant, userSkin, assistantSkin] = await Promise.all([
+    bubbles(page).count(),
+    bubblesOf(page, 'user').count(),
+    bubblesOf(page, 'assistant').count(),
+    page.locator(SKIN_OF.user).count(),
+    page.locator(SKIN_OF.assistant).count(),
+  ]);
+  const drift =
+    `${all} bubble(s) on screen; by row alignment ${user} user + ${assistant} assistant; ` +
+    `by bubble skin ${userSkin} user + ${assistantSkin} assistant`;
+  if (user + assistant !== all) {
+    throw new ScenarioAssertionError(
+      `the harness can no longer tell which bubble belongs to which speaker — ${drift}. ` +
+        'Every bubble must classify as exactly one speaker; one that classifies as neither (or ' +
+        'both) means the kit changed how it renders a message row, and the assistant locator is ' +
+        'now guesswork. Re-derive it before trusting any prose assertion.',
+    );
+  }
+  if (user !== userSkin || assistant !== assistantSkin) {
+    throw new ScenarioAssertionError(
+      `the two speaker signals disagree — ${drift}. Row alignment and bubble skin are set by ` +
+        'different components off different props; when they stop agreeing, one of them has ' +
+        'stopped tracking the speaker and the assistant locator can silently resolve to the ' +
+        "user's echoed prompt. That is the defect this cross-check exists to prevent.",
+    );
+  }
+}
+
+/**
+ * The text a locator renders RIGHT NOW, or `''` if it currently matches nothing.
+ *
+ * Not `locator.textContent()` on its own, which WAITS for a match — and with no
+ * `actionTimeout` configured it waits until the whole test times out. That never
+ * came up while the assistant locator was `bubbles().last()`, because on a
+ * thread with a user message in it that always matched something (the echoed
+ * prompt, which is the whole defect). Selecting by speaker means "the assistant
+ * has not spoken yet" is now an ordinary, expected answer, and it has to read as
+ * `''` in a few milliseconds rather than as a two-minute mystery timeout with no
+ * assertion message attached. `count()` does not wait; `textContent()` is only
+ * reached once there is something to read.
+ */
+export async function textNow(locator: Locator): Promise<string> {
+  if ((await locator.count()) === 0) return '';
+  return (await locator.textContent({ timeout: 2_000 }).catch(() => '')) ?? '';
+}
+
+/** How many characters a locator renders right now; `0` if it matches nothing. */
 export async function textLength(locator: Locator): Promise<number> {
-  return ((await locator.textContent().catch(() => '')) ?? '').length;
+  return (await textNow(locator)).length;
 }
 
 /** Wait until `locator` holds at least `min` characters, and hand back how many
  *  it had when the wait ended — which is UNDER `min` if it timed out, so callers
  *  can report the shortfall rather than a bare timeout.
  *
- *  Takes a LOCATOR, not a page: "the answer" is not always `bubbles().last()`.
- *  While the assistant is still streaming its first text delta the last bubble
- *  is the ECHOED PROMPT, and a caller that measured it would be watching the
- *  user's own words. Pin the bubble you mean and pass it in.
+ *  Takes a LOCATOR, not a page: "the answer" is not `bubbles().last()`. While
+ *  the assistant is still streaming its first text delta the last bubble is the
+ *  ECHOED PROMPT, and a caller that measured it would be watching the user's own
+ *  words. Pass `assistantBubble(page)`, or pin whatever else you actually mean.
  *
  *  A locator rather than `page.waitForFunction` because the thread renders in an
  *  open shadow root: `document.querySelector` does not pierce it, so a
@@ -203,18 +340,43 @@ export async function waitForStableLength(
   }
 }
 
-/** Assert the assistant produced at least `min` characters of visible prose. */
-export async function seesProse(page: Page, min: number, timeout = VISIBLE_TIMEOUT): Promise<string> {
+/**
+ * Assert THE ASSISTANT produced at least `min` characters of visible prose, and
+ * hand that prose back.
+ *
+ * Reads `assistantBubble`, so it cannot be satisfied by the echoed prompt. The
+ * name says the speaker for the same reason: the version called `seesProse`
+ * read `bubbles().last()` and every call site read as if it said "assistant"
+ * while the code said "whatever is at the bottom".
+ */
+export async function seesAssistantProse(
+  page: Page,
+  min: number,
+  timeout = VISIBLE_TIMEOUT,
+): Promise<string> {
   const deadline = Date.now() + timeout;
   let text = '';
   for (;;) {
-    text = ((await answer(page).textContent().catch(() => '')) ?? '').trim();
-    if (text.length >= min) return text;
+    text = (await textNow(assistantBubble(page))).trim();
+    if (text.length >= min) {
+      // Only now: a classification that resolves to the WRONG speaker is the
+      // failure that stays green, so the cross-check guards the pass.
+      await assertBubbleRolesAreLegible(page);
+      return text;
+    }
     if (Date.now() > deadline) break;
     await page.waitForTimeout(150);
   }
+  // Say what was actually on screen. "Saw 0" against a page full of the user's
+  // own words is the single most confusing way this can fail, and it is also
+  // the most likely: it means the assertion ran before the assistant spoke.
+  const others = await bubbles(page).allTextContents();
   throw new ScenarioAssertionError(
-    `expected at least ${min} characters of visible assistant prose, saw ${text.length}: ${JSON.stringify(text.slice(0, 120))}`,
+    `expected at least ${min} characters of visible ASSISTANT prose, saw ${text.length}: ` +
+      `${JSON.stringify(text.slice(0, 120))}. ` +
+      `${others.length} bubble(s) are on screen: ${JSON.stringify(others.map((t) => t.trim().slice(0, 60)))}. ` +
+      'If the assistant has not spoken yet, this assertion is simply early — it will not fall ' +
+      "back to the user's echoed prompt to find something long enough.",
   );
 }
 

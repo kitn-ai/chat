@@ -1,5 +1,5 @@
 import type { Scenario } from './types';
-import { expand, fail, reasoningBody, reasoningTrigger, seesProse } from './dom';
+import { expand, fail, reasoningBody, reasoningTrigger, seesAssistantProse } from './dom';
 
 /** S2 — reasoning deltas land in their own part and are readable on demand. */
 export const s02Reasoning: Scenario = {
@@ -23,6 +23,6 @@ export const s02Reasoning: Scenario = {
     const thought = ((await body.textContent()) ?? '').trim();
     if (thought.length < 20) fail(`reasoning panel opened but holds only ${thought.length} chars of text`);
 
-    await seesProse(page, 20);
+    await seesAssistantProse(page, 20);
   },
 };
