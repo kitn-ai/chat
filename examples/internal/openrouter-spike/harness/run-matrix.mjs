@@ -100,10 +100,18 @@ function classify(spec) {
   const result = test?.results?.[0];
   const annotations = [...(spec.annotations ?? []), ...(test?.annotations ?? [])];
   const gap = annotations.find((a) => a.type === 'confirmed-gap');
+  const diff = annotations.find((a) => a.type === 'model-behaviour');
   const claim = annotations.find((a) => a.type === 'wire-claim')?.description ?? '';
   const status = result?.status ?? test?.status ?? 'unknown';
 
   if (gap) return { state: 'gap', detail: gap.description ?? '', claim };
+  // A DECLARED model-behaviour difference: red because this model does something
+  // else, not because the kit broke. Its own state rather than a `fail`, so the
+  // verdict below does not end a sweep red for a documented difference — and its
+  // own state rather than a `pass`, because a reader must be able to see that
+  // this cell did not exercise what the scenario claims. `harness/model-behaviour.ts`
+  // makes the declaration fail in BOTH directions before it is trusted here.
+  if (diff) return { state: 'diff', detail: diff.description ?? '', claim };
   if (status === 'skipped') {
     return { state: 'skip', detail: result?.error?.message ?? 'no recording yet', claim };
   }
@@ -186,7 +194,7 @@ async function runOne(entry) {
   };
 }
 
-const GLYPH = { pass: 'pass', fail: 'FAIL', gap: 'gap', skip: 'skip', unknown: '?' };
+const GLYPH = { pass: 'pass', fail: 'FAIL', gap: 'gap', diff: 'diff', skip: 'skip', unknown: '?' };
 
 const row = (cells) => `| ${cells.join(' | ')} |`;
 
@@ -303,6 +311,14 @@ const failedCells = results.flatMap((r) =>
     .map(([id]) => `${r.key}/${id}`),
 );
 const totalCells = results.reduce((n, r) => n + Object.keys(r.cells ?? {}).length, 0);
+// Declared differences do NOT end the run red — that is the point of declaring
+// them — but they are counted out loud, because a sweep whose green depends on
+// exemptions should say how many it is leaning on.
+const declaredDiffs = results.flatMap((r) =>
+  Object.entries(r.cells ?? {})
+    .filter(([, c]) => c.state === 'diff')
+    .map(([id]) => `${r.key}/${id}`),
+);
 const skipped = results.flatMap((r) =>
   Object.entries(r.cells ?? {})
     .filter(([, c]) => c.state === 'skip')
@@ -312,7 +328,8 @@ const skipped = results.flatMap((r) =>
 console.log(`\n${'='.repeat(72)}\nVERDICT\n${'='.repeat(72)}\n`);
 console.log(
   `  configurations: ${results.length}   cells: ${totalCells}   ` +
-    `failed: ${failedCells.length}   skipped: ${skipped.length}   errored rows: ${rowsWithError.length}`,
+    `failed: ${failedCells.length}   declared diffs: ${declaredDiffs.length}   ` +
+    `skipped: ${skipped.length}   errored rows: ${rowsWithError.length}`,
 );
 
 if (totalCells === 0) {
@@ -338,15 +355,13 @@ if (skipped.length) {
   console.log(`\n   not measured (no recording yet): ${skipped.join(', ')}`);
 }
 
-// KNOWN STATE, so nobody reads a red exit as a regression: `ministral-3b` fails
-// S02 and S04 today, and both are documented MODEL-BEHAVIOUR differences rather
-// than defects — it has no reasoning mode, and it batches S04's three calls into
-// two rounds. The harness has no first-class way to declare that; `knownGap` is
-// for gaps in the KIT and demands a precondition and a signature.
+// `ministral-3b`'s S02 and S04 are the two cells that made this necessary: both
+// are documented MODEL-BEHAVIOUR differences rather than defects, so a truthful
+// exit code would have ended every sweep red forever, which trains everyone to
+// read red as noise — worse than the always-green bug it replaced.
 //
-// Deliberately NOT special-cased here. Hard-coding an exemption for two cells
-// nobody has to re-justify is how a gate quietly stops covering things, and
-// inventing a `modelBehaviour` marker in passing would ship a declaration
-// mechanism no one has watched fail. So a full sweep exits 1 today, truthfully,
-// and wiring this into CI requires declaring those two first — through something
-// built to the same standard as `KnownGap`.
+// They are DECLARED, in `harness/model-behaviour.ts`, not special-cased here. An
+// exemption hard-coded in the runner is one nobody ever has to re-justify; a
+// declaration has to say what the model does instead, must still fail with the
+// documented failure, and goes RED if the cell starts passing — so a difference
+// that quietly disappears surfaces instead of becoming a permanent hole.
