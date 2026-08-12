@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { cardEmitPlan, scaffold, NO_PROXY_CLAIM, PROXY_REQUIRED_CLAIM } from './tools/scaffold';
-import { getArchetype, getIntegration, listArchetypes, listIntegrations } from '../registry';
+import { cardEmitPlan, scaffold, renderSurface, NO_PROXY_CLAIM, PROXY_REQUIRED_CLAIM } from './tools/scaffold';
+import {
+  getArchetype, getIntegration, listArchetypes, listIntegrations, listSurfaceProbes,
+} from '../registry';
+import { Framework } from '../types';
 import type { Integration } from '../types';
 // The real encoders, used to prove WHY the fabricated sample seed had to go:
 // one of them throws on it, the other quietly sends it.
@@ -2931,9 +2934,16 @@ describe('scaffold — solid', () => {
   const front = (text: string) => text.split('=== (2) BACKEND ROUTE ===')[0];
   const route = (text: string) => text.split('=== (2) BACKEND ROUTE ===')[1].split('=== (3) RUN NOTE ===')[0];
 
-  it('renders the SolidJS components from the root entry — no kai-* anywhere', async () => {
+  // Was "from the root entry", and asserted `} from '@kitn.ai/ui';` by name — so
+  // the generator's wrong specifier had a test HOLDING IT IN PLACE. That is the
+  // second half of why this survived: tsc could not see it (./solid re-exports the
+  // root, so both compile), and the one check that looked at the specifier was
+  // pinning the wrong one. The entry assertion now lives in
+  // "the emitted surface imports its framework's kit entry" at the end of this
+  // file, over every archetype × integration rather than this single sample.
+  it('renders the SolidJS components from the Solid entry — no kai-* anywhere', async () => {
     const f = front(await emit());
-    expect(f).toMatch(/\} from '@kitn\.ai\/ui';/);
+    expect(f).toMatch(/\} from '@kitn\.ai\/ui\/solid';/);
     expect(f).toContain('<ChatContainer');
     expect(f).toContain('<PromptInput');
     // The architectural claim, asserted: no element tags, no element registration.
@@ -3734,5 +3744,160 @@ describe('the emitted scaffold is built from `deps` and `keyExposure`', () => {
       }
     }
     expect(covered.length, 'no integration declares a secret env var — this check is vacuous').toBeGreaterThan(0);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Every emitted surface imports the kit ENTRY its framework is meant to use.
+//
+// WHY THIS CANNOT BE LEFT TO tsc. `src/solid.ts` is `export * from './index'`,
+// so `@kitn.ai/ui/solid` is a strict SUPERSET of the root `@kitn.ai/ui`: every
+// name a Solid surface imports resolves from both, and `verify:scaffold`'s solid
+// tsc project compiles clean either way. The generator emitted the ROOT entry for
+// every Solid scaffold — wrong for every surface × integration, and in direct
+// contradiction of the published guide, which tells readers "Import Solid
+// components from `@kitn.ai/ui/solid`, not from the root `@kitn.ai/ui`" — and no
+// compiler on this repo's critical path could see it. A structural assertion over
+// the emitted SPECIFIER is the only thing that can.
+//
+// The cost of the root entry is not correctness, which is why it hid: it is that
+// the root deliberately carries only the shared layer, so a Solid app told to
+// import from it gets the smaller surface and has to discover the real entry when
+// something it wants is missing. `./solid` is the one import that covers
+// everything (see the WHY THIS EXISTS block in src/solid.ts).
+// ─────────────────────────────────────────────────────────────────────────────
+describe('the emitted surface imports its framework\'s kit entry', () => {
+  /**
+   * The entry each framework must import the kit's COMPONENTS from.
+   *
+   * This is the one thing here that cannot come from the registry — no catalog
+   * describes it — so instead of trusting the list to stay complete, the check
+   * below derives the KEYS it must have from the `Framework` enum. A framework
+   * added to the enum without an entry here fails loudly rather than skipping
+   * coverage silently, which is the failure mode a hand-written list has.
+   *
+   * `fastapi`/`express`/`worker` are backend targets: `renderSurface` gives them
+   * the framework-agnostic web-components surface, so they take the same entry
+   * `html` does.
+   */
+  const COMPONENT_ENTRY: Record<string, string> = {
+    html: '@kitn.ai/ui/elements',
+    vue: '@kitn.ai/ui/elements',
+    svelte: '@kitn.ai/ui/elements',
+    angular: '@kitn.ai/ui/elements',
+    fastapi: '@kitn.ai/ui/elements',
+    express: '@kitn.ai/ui/elements',
+    worker: '@kitn.ai/ui/elements',
+    react: '@kitn.ai/ui/react',
+    next: '@kitn.ai/ui/react',
+    'tanstack-start': '@kitn.ai/ui/react',
+    // The one this block was written for. `./solid` re-exports the root, so tsc
+    // accepts either and only this assertion can tell them apart.
+    solid: '@kitn.ai/ui/solid',
+  };
+
+  /**
+   * The kit specifiers a piece of emitted code IMPORTS.
+   *
+   * Anchored on `from`/`import` rather than on quotes, because the Solid surface's
+   * setup comment carries two strings that are not imports and must not be read as
+   * one: `@source "../node_modules/@kitn.ai/ui"` (a Tailwind scan path, which is
+   * the package DIRECTORY and correctly has no subpath) and `@import
+   * "@kitn.ai/ui/theme.css"` (CSS). The negative lookbehind is what keeps `@import`
+   * out — matching it would report the bare-root bug in a place where there is none.
+   *
+   * The optional paren is not cosmetic: `next` never writes a static import of the
+   * wrappers at all, it writes `dynamic(() => import('@kitn.ai/ui/react')...)`, so
+   * a pattern requiring whitespace after `import` reports every Next surface as
+   * importing nothing. That was this checker's own first red, not the emitter's.
+   */
+  const kitImportsOf = (code: string): string[] =>
+    [...code.matchAll(/(?<![@\w])(?:from|import)\s*\(?\s*['"](@kitn\.ai\/ui[^'"]*)['"]/g)].map((m) => m[1]);
+
+  /** Every framework the scaffolder accepts, from the enum rather than a list. */
+  const FRAMEWORKS = Framework.options;
+
+  /**
+   * Every surface the catalogs can express, from the registry rather than a list.
+   *
+   * `listSurfaceProbes()`, NOT `listArchetypes()`, and that is the same axis
+   * correction `verify:scaffold` already made — see the `WHY THESE AND NOT THE
+   * PRESETS` comment on that function. The preset list is the wrong axis here for
+   * the two reasons stated there, and both bite a check that reads emitted
+   * imports:
+   *
+   *   1. It is seven cells over six distinct `components` lists —
+   *      `support-widget` repeats `drop-in-chat`'s and differs only in
+   *      `defaultPlacement`, which changes an inline CSS string and no import. So
+   *      one cell in seven re-checked the previous cell's specifiers.
+   *   2. Every preset is exactly ONE capability, so no preset can express the
+   *      MAXIMAL surface — chat + sources + tool + reasoning + artifact +
+   *      resizable + voice-input + file-upload + attachments. That is the only
+   *      cell where the workspace layout, the tool loop, the card registry and
+   *      the attachment staging are emitted into one file, and it is where an
+   *      import emitted by one capability's branch can collide with another's.
+   *      The specifier check had never seen it.
+   *
+   * The probes are a strict superset: every preset's `components` list is one of
+   * them (chat-only · sources · tool+reasoning · artifact+resizable · voice-input
+   * · file-upload+attachments), plus `every-capability`, which no preset can
+   * reach. So this trades a duplicate cell for the composition and loses nothing.
+   */
+  const surfaces = () =>
+    listSurfaceProbes().flatMap((probe) =>
+      listIntegrations().map((integration) => ({ probe, integration })),
+    );
+
+  it('declares an expected entry for every framework in the enum', () => {
+    for (const framework of FRAMEWORKS) {
+      expect(
+        COMPONENT_ENTRY[framework],
+        `${framework}: the Framework enum accepts it but COMPONENT_ENTRY does not say which kit entry ` +
+          `its surface must import from, so it would be scaffolded with nothing checking the specifier`,
+      ).toBeDefined();
+    }
+    // Anti-vacuity: the loops below are over these two axes.
+    expect(FRAMEWORKS.length).toBeGreaterThan(0);
+    expect(surfaces().length).toBeGreaterThan(0);
+  });
+
+  it('imports the kit components from the entry its framework is meant to use', () => {
+    for (const framework of FRAMEWORKS) {
+      const expected = COMPONENT_ENTRY[framework];
+      for (const { probe, integration } of surfaces()) {
+        const code = renderSurface({ framework, components: probe.components, integration });
+        expect(
+          kitImportsOf(code),
+          `${framework} × ${probe.id} × ${integration.id}: the emitted surface never imports ` +
+            `${expected}, which is where this framework's components come from`,
+        ).toContain(expected);
+      }
+    }
+  });
+
+  /**
+   * The general form of the Solid bug: an emitted import must NAME the entry it
+   * wants. The bare root is never the right answer for a generated app — the three
+   * web-component frameworks want `./elements`, the three React ones want
+   * `./react`, and Solid wants `./solid` — so a bare `@kitn.ai/ui` anywhere in an
+   * emitted surface means some branch fell back to the default entry.
+   *
+   * Held over EVERY framework, not just Solid, because the reason it was invisible
+   * is not specific to Solid: any subpath that re-exports the root compiles
+   * identically from either specifier.
+   */
+  it('never imports the bare root entry, from any framework', () => {
+    for (const framework of FRAMEWORKS) {
+      for (const { probe, integration } of surfaces()) {
+        const code = renderSurface({ framework, components: probe.components, integration });
+        expect(
+          kitImportsOf(code),
+          `${framework} × ${probe.id} × ${integration.id}: the emitted surface imports the bare ` +
+            `root '@kitn.ai/ui'. Every framework has an entry of its own (${COMPONENT_ENTRY[framework]}); ` +
+            `the root is the shared layer every consumer resolves, and tsc accepts it here because the ` +
+            `real entry re-exports it — so nothing but this assertion can tell the two apart.`,
+        ).not.toContain('@kitn.ai/ui');
+      }
+    }
   });
 });
