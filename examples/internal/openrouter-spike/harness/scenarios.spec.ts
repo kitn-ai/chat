@@ -29,6 +29,7 @@ import {
 } from '../src/scenarios';
 import { readHarnessState } from '../src/harness-state';
 import { allModelBehaviours, modelBehaviourFor } from './model-behaviour';
+import { waitForPhase } from './stall-report';
 
 type RunMode = 'live' | 'replay' | 'both';
 
@@ -97,14 +98,12 @@ if (CONTROL) {
       await page.goto(
         `/?scenario=${encodeURIComponent(scenario.id)}&mode=replay&fixture=${encodeURIComponent(dir)}`,
       );
-      await page.waitForSelector('html[data-kai-phase="running"]', { timeout: 60_000 });
+      await waitForPhase(page, 'html[data-kai-phase="running"]', 60_000);
 
       // `during` counts too: for S17/S18 the interaction IS the assertion.
       const duringProblem = scenario.during ? await problemFrom(scenario.during(page)) : null;
 
-      await page.waitForSelector('html[data-kai-phase="done"], html[data-kai-phase="error"]', {
-        timeout: 90_000,
-      });
+      await waitForPhase(page, 'html[data-kai-phase="done"], html[data-kai-phase="error"]', 90_000);
 
       const problem = duringProblem ?? (await problemFrom(scenario.assert(page)));
 
@@ -138,9 +137,7 @@ if (CONTROL) {
       await page.goto(
         `/?scenario=${encodeURIComponent(scenario.id)}&mode=replay&fixture=${encodeURIComponent(dir)}`,
       );
-      await page.waitForSelector('html[data-kai-phase="done"], html[data-kai-phase="error"]', {
-        timeout: 90_000,
-      });
+      await waitForPhase(page, 'html[data-kai-phase="done"], html[data-kai-phase="error"]', 90_000);
 
       const problem = await problemFrom(gap.reached(page));
       if (!problem) {
@@ -184,16 +181,14 @@ for (const scenario of CONTROL ? [] : selected) {
       // The app publishes `running` before it sends and `done` only once the
       // turn has settled. Waiting on the attribute rather than on a timeout is
       // what keeps a live run (seconds) and a replay run (sub-second) honest.
-      await page.waitForSelector('html[data-kai-phase="running"]', { timeout: 60_000 });
+      await waitForPhase(page, 'html[data-kai-phase="running"]', 60_000);
 
       // Mid-stream choreography, if the scenario has any. It runs while the
       // stream is still open, which is the only moment some of these behaviours
       // exist at all.
       const duringResult = scenario.during ? await problemFrom(scenario.during(page)) : null;
 
-      await page.waitForSelector('html[data-kai-phase="done"], html[data-kai-phase="error"]', {
-        timeout: 90_000,
-      });
+      await waitForPhase(page, 'html[data-kai-phase="done"], html[data-kai-phase="error"]', 90_000);
 
       const state = await readHarnessState(page);
       // A replay run must PROVE it replayed. Without this a misconfigured live
@@ -375,7 +370,7 @@ for (const scenario of CONTROL ? [] : selected) {
 test('S12 control: the citation locator finds a citation when one exists', async ({ page }) => {
   const dir = await controlDirFor(page, 'canned/CONTROL-empty');
   await page.goto(`/?scenario=S12-citations&mode=replay&fixture=${encodeURIComponent(dir)}`);
-  await page.waitForSelector('html[data-kai-phase="done"], html[data-kai-phase="error"]', { timeout: 60_000 });
+  await waitForPhase(page, 'html[data-kai-phase="done"], html[data-kai-phase="error"]', 60_000);
 
   const citation = page.locator('a[href*="ui.kitn.ai/guides/theming"]');
   expect(await citation.count(), 'nothing should match before the anchor is injected').toBe(0);
