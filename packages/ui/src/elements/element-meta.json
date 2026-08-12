@@ -2792,7 +2792,19 @@
         "storyId": "solid-advanced-elements-contextcacheusage--docs"
       }
     ],
-    "tokens": []
+    "tokens": [],
+    "parts": [
+      {
+        "name": "track",
+        "doc": "The usage meter track inside the hover-card breakdown. Carries `role=\"progressbar\"` and is in the DOM only while the card is open. Restyle its height, radius, or background from outside.",
+        "recipe": "kai-context::part(track) { height: 0.5rem }"
+      },
+      {
+        "name": "fill",
+        "doc": "The used-tokens portion of that meter. Its width follows `usedTokens / maxTokens`; its default color is the severity hue picked by `warnThreshold` / `dangerThreshold`, so recoloring it from outside replaces that signal.",
+        "recipe": "kai-context::part(fill) { background: var(--color-tool-blue) }"
+      }
+    ]
   },
   {
     "tag": "kai-conversations",

@@ -400,6 +400,15 @@ export const PROGRESS_BAR_PARTS: PartDef[] = [
   { name: 'fill', doc: 'The filled portion; its width follows value/max. Recolor it from outside.', recipe: 'kai-progress-bar::part(fill) { background: var(--color-tool-green) }' },
 ];
 
+/** Styleable `::part`s of `<kai-context>`. The usage meter is the same shared
+ *  ProgressBar `<kai-progress-bar>` renders, mounted inside this element's own
+ *  shadow root, so `kai-context` exposes the same two names. Both sit inside the
+ *  hover-card breakdown and are in the DOM only while that card is open. */
+export const CONTEXT_PARTS: PartDef[] = [
+  { name: 'track', doc: 'The usage meter track inside the hover-card breakdown. Carries `role="progressbar"` and is in the DOM only while the card is open. Restyle its height, radius, or background from outside.', recipe: 'kai-context::part(track) { height: 0.5rem }' },
+  { name: 'fill', doc: 'The used-tokens portion of that meter. Its width follows `usedTokens / maxTokens`; its default color is the severity hue picked by `warnThreshold` / `dangerThreshold`, so recoloring it from outside replaces that signal.', recipe: 'kai-context::part(fill) { background: var(--color-tool-blue) }' },
+];
+
 /** Styleable `::part`s of `<kai-file-tree>` — the changed-files / diff bits, shown
  *  only when a file carries diff metadata (or the `summary` attribute is set). */
 export const FILE_TREE_PARTS: PartDef[] = [
@@ -645,6 +654,7 @@ export const ELEMENT_COMPOSITION: Record<string, ElementComposition> = {
   'kai-nav': { parts: NAV_PARTS },
   'kai-coachmark': { slots: COACHMARK_SLOTS, parts: COACHMARK_PARTS, children: 'The ANCHOR the coachmark points at: the element it attaches to and positions against. The bubble body is the `content` slot.' },
   'kai-progress-bar': { parts: PROGRESS_BAR_PARTS },
+  'kai-context': { parts: CONTEXT_PARTS },
   'kai-file-tree': { parts: FILE_TREE_PARTS },
   'kai-prompt-dock': { slots: PROMPT_DOCK_SLOTS, parts: PROMPT_DOCK_PARTS, children: 'The input the dock wraps, typically a `<kai-prompt-input>`. The `top`/`bottom` slots are the lips around it.' },
   'kai-segmented': { parts: SEGMENTED_PARTS },

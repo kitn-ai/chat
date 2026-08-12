@@ -874,6 +874,15 @@ A dropdown that lets the user switch between available models.
 |-------|-----------|-------------|
 | `kai-threshold-change` | `{ level: "ok" | "warn" | "danger" }` | Fires when the computed severity level changes (ok → warn → danger or back). `detail.level` is `'ok'`, `'warn'`, or `'danger'`. |
 
+#### Styleable parts
+
+Restyle from outside the Shadow DOM via `kai-context::part(name)`.
+
+| Part | Description |
+|------|-------------|
+| `::part(track)` | The usage meter track inside the hover-card breakdown. Carries `role="progressbar"` and is in the DOM only while the card is open. Restyle its height, radius, or background from outside. <br>`kai-context::part(track) { height: 0.5rem }` |
+| `::part(fill)` | The used-tokens portion of that meter. Its width follows `usedTokens / maxTokens`; its default color is the severity hue picked by `warnThreshold` / `dangerThreshold`, so recoloring it from outside replaces that signal. <br>`kai-context::part(fill) { background: var(--color-tool-blue) }` |
+
 #### Composed from
 
 `Components/Context`, `Components/ContextTrigger`, `Components/ContextContent`, `Components/ContextContentHeader`, `Components/ContextContentBody`, `Components/ContextContentFooter`, `Components/ContextInputUsage`, `Components/ContextOutputUsage`, `Components/ContextReasoningUsage`, `Components/ContextCacheUsage`
