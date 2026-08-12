@@ -40,7 +40,7 @@
  *   2. STRUCTURAL — scan `src/` for the pattern itself, so a NEW `onCleanup` in a
  *      component nobody thought to add a case for is still caught.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render } from 'solid-js/web';
 import type { JSX } from 'solid-js';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
@@ -51,8 +51,54 @@ import { Composer } from '../../src/components/composer';
 import { FileUpload } from '../../src/components/file-upload';
 import { ToastRegion } from '../../src/components/toast';
 import { useDismiss } from '../../src/ui/overlay';
+import { useAudioAnalysis } from '../../src/primitives/use-audio-analysis';
+import { useSequencer } from '../../src/primitives/use-sequencer';
+import { LabVisualizer } from '../../src/components/audio-visualizer/labs/lab-visualizer';
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), '../../src');
+
+/**
+ * Globals a host can take away underneath a deferred cleanup.
+ *
+ * This list is measured, not guessed. vitest's `populateGlobal` installs an
+ * ACCESSOR on `globalThis` for every key it will later `delete`, and its teardown
+ * then restores only the keys that already existed in bare Node. So a name
+ * vanishes iff it is installed as an accessor AND Node has no own version:
+ *
+ *   vanishes  document · customElements · navigator* · CSSStyleSheet ·
+ *             localStorage · sessionStorage · matchMedia · getComputedStyle ·
+ *             getSelection · MutationObserver · requestAnimationFrame ·
+ *             cancelAnimationFrame
+ *   vanishes  window — a plain data property, but `skipKeys` puts it back in the
+ *             delete set explicitly, and Node has no `window` to restore
+ *   SAFE      setTimeout · clearTimeout · setInterval · clearInterval ·
+ *             queueMicrotask — Node owns these, so `getWindowKeys` filters them
+ *             out and they are never overridden in the first place. The four
+ *             `onCleanup(() => clearTimeout(...))` sites in src/ are fine.
+ *
+ * (*) `navigator` is deleted and then RESTORED to Node's, so it is a
+ *     wrong-object risk rather than a crash. Listed anyway: reading it at
+ *     teardown is still a bug, just a quieter one.
+ *
+ * The behavioural harness below deletes this whole list rather than a hand-picked
+ * pair, so a component that reaches for any of them at dispose is caught by the
+ * same case that covers `document`.
+ */
+const FRAGILE_GLOBALS = [
+  'document',
+  'window',
+  'customElements',
+  'navigator',
+  'CSSStyleSheet',
+  'localStorage',
+  'sessionStorage',
+  'matchMedia',
+  'getComputedStyle',
+  'getSelection',
+  'MutationObserver',
+  'requestAnimationFrame',
+  'cancelAnimationFrame',
+];
 
 // ToastRegion's target-anchored branch observes the target. jsdom has no
 // ResizeObserver; same shim the other suites use.
@@ -70,15 +116,22 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), '../../src');
  * `delete` is safe here: vitest's `populateGlobal` installs every one of these as
  * `configurable: true` precisely so its own teardown can delete them, and nothing
  * runs between the delete and the restore because `dispose()` is synchronous.
+ *
+ * Every FRAGILE_GLOBAL goes, not just `document`/`window`: the raf primitives
+ * reach for `cancelAnimationFrame` at dispose, which vanishes on exactly the same
+ * terms, and a harness that only removed the first pair would have watched those
+ * three cases pass while covering nothing. Keys that are not own properties of
+ * `globalThis` are skipped rather than asserted, so this stays honest if a future
+ * jsdom stops installing one of them.
  */
 function disposeAfterGlobalsVanish(mount: () => JSX.Element): unknown {
   const host = document.createElement('div');
   document.body.appendChild(host);
   const dispose = render(mount, host);
 
-  const saved = (['document', 'window'] as const).map(
-    (k) => [k, Object.getOwnPropertyDescriptor(globalThis, k)!] as const,
-  );
+  const saved = FRAGILE_GLOBALS.map(
+    (k) => [k, Object.getOwnPropertyDescriptor(globalThis, k)] as const,
+  ).filter((entry): entry is readonly [string, PropertyDescriptor] => entry[1] !== undefined);
   for (const [k] of saved) delete (globalThis as Record<string, unknown>)[k];
 
   try {
@@ -124,68 +177,103 @@ describe('disposal after the host environment tore the DOM globals down', () => 
       }),
     ).toBeUndefined();
   });
+
+  // --- the requestAnimationFrame family -----------------------------------
+  //
+  // Same bug, different global. `cancelAnimationFrame` is installed as an
+  // accessor and absent from bare Node, so it disappears at teardown on exactly
+  // the same terms `document` does (see FRAGILE_GLOBALS above).
+
+  it('useSequencer — cancelAnimationFrame at dispose', () => {
+    expect(
+      disposeAfterGlobalsVanish(() => {
+        useSequencer(() => 16);
+        return <div />;
+      }),
+    ).toBeUndefined();
+  });
+
+  it('useAudioAnalysis — cancelAnimationFrame at dispose', () => {
+    // jsdom has no Web Audio, and the hook bails before starting its raf loop
+    // without a context -- which would have made this case pass while exercising
+    // nothing. The stub is the minimum surface the hook actually touches.
+    class FakeAnalyser {
+      fftSize = 2048;
+      smoothingTimeConstant = 0;
+      minDecibels = 0;
+      maxDecibels = 0;
+      get frequencyBinCount(): number {
+        return this.fftSize / 2;
+      }
+      getFloatFrequencyData(): void {}
+      getByteFrequencyData(): void {}
+      disconnect(): void {}
+    }
+    const node = { connect(): void {}, disconnect(): void {} };
+    class FakeAudioContext {
+      state = 'running';
+      destination = {};
+      createAnalyser(): FakeAnalyser {
+        return new FakeAnalyser();
+      }
+      createMediaStreamSource(): typeof node {
+        return node;
+      }
+      resume(): Promise<void> {
+        return Promise.resolve();
+      }
+    }
+    vi.stubGlobal('AudioContext', FakeAudioContext);
+
+    // No `tagName`, so the hook takes its MediaStream branch (see isMediaElement).
+    const stream = {} as unknown as MediaStream;
+    expect(
+      disposeAfterGlobalsVanish(() => {
+        useAudioAnalysis(() => stream);
+        return <div />;
+      }),
+    ).toBeUndefined();
+  });
+
+  it('LabVisualizer — cancelAnimationFrame at dispose', () => {
+    expect(disposeAfterGlobalsVanish(() => <LabVisualizer look="orb" />)).toBeUndefined();
+  });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 // --- structural guard ------------------------------------------------------
 
 /**
- * Globals a host can take away underneath a deferred cleanup.
+ * Sites that are the SAME bug and are knowingly not fixed yet, keyed
+ * `file -> global`. EMPTY, and the second test below is what keeps it honest.
  *
- * This list is measured, not guessed. vitest's `populateGlobal` installs an
- * ACCESSOR on `globalThis` for every key it will later `delete`, and its teardown
- * then restores only the keys that already existed in bare Node. So a name
- * vanishes iff it is installed as an accessor AND Node has no own version:
+ * It held three `onCleanup(() => cancelAnimationFrame(raf))` sites —
+ * `primitives/use-audio-analysis.ts`, `primitives/use-sequencer.ts` and
+ * `components/audio-visualizer/labs/lab-visualizer.tsx` — recorded rather than
+ * dropped from FRAGILE_GLOBALS, because dropping the global would have made the
+ * guard quietly stop covering a whole name. All three are fixed; each has a
+ * behavioural case above.
  *
- *   vanishes  document · customElements · navigator* · CSSStyleSheet ·
- *             localStorage · sessionStorage · matchMedia · getComputedStyle ·
- *             getSelection · MutationObserver · requestAnimationFrame ·
- *             cancelAnimationFrame
- *   vanishes  window — a plain data property, but `skipKeys` puts it back in the
- *             delete set explicitly, and Node has no `window` to restore
- *   SAFE      setTimeout · clearTimeout · setInterval · clearInterval ·
- *             queueMicrotask — Node owns these, so `getWindowKeys` filters them
- *             out and they are never overridden in the first place. The four
- *             `onCleanup(() => clearTimeout(...))` sites in src/ are fine.
+ * An allowlist that only ever fails on ADDITION rots closed: a site gets fixed,
+ * nobody removes its entry, and the exemption silently outlives the bug — so the
+ * next real regression at that exact site lands pre-approved and invisible. This
+ * one is therefore checked in BOTH directions. Adding a new violation fails; so
+ * does leaving an entry here once the scan can no longer find the violation it
+ * names.
  *
- * (*) `navigator` is deleted and then RESTORED to Node's, so it is a
- *     wrong-object risk rather than a crash. Listed anyway: reading it at
- *     teardown is still a bug, just a quieter one.
+ * The fix is NOT the `const win = window` capture that fixes a bare `document`.
+ * `window === globalThis` — measured, in jsdom and in real Chromium/WebKit alike
+ * — and the teardown deletes these keys off that very object, so the captured
+ * view has nothing left to call. It only turns
+ * `ReferenceError: cancelAnimationFrame is not defined` into
+ * `TypeError: win.cancelAnimationFrame is not a function`, which was watched
+ * happening before the working fix went in. Capture the FUNCTION at setup
+ * instead: `const cancelFrame = cancelAnimationFrame.bind(globalThis)`.
  */
-const FRAGILE_GLOBALS = [
-  'document',
-  'window',
-  'customElements',
-  'navigator',
-  'CSSStyleSheet',
-  'localStorage',
-  'sessionStorage',
-  'matchMedia',
-  'getComputedStyle',
-  'getSelection',
-  'MutationObserver',
-  'requestAnimationFrame',
-  'cancelAnimationFrame',
-];
-
-/**
- * Sites that are the SAME bug and are not fixed here, keyed `file -> global`.
- *
- * They are `onCleanup(() => cancelAnimationFrame(raf))`, which vanishes exactly
- * like `document` does. They live in `primitives/` and `audio-visualizer/`, which
- * this change does not own, so they are recorded rather than silently dropped
- * from the list — leaving `cancelAnimationFrame` out of FRAGILE_GLOBALS entirely
- * would have made the guard quietly stop covering a whole global.
- *
- * The fix is the same one applied to the four sites above: capture the view at
- * setup (`const win = window`) and call `win.cancelAnimationFrame(raf)`.
- *
- * Shrinking this list never fails the test; adding a NEW violation does.
- */
-const KNOWN_UNFIXED = new Set([
-  'primitives/use-audio-analysis.ts -> cancelAnimationFrame',
-  'primitives/use-sequencer.ts -> cancelAnimationFrame',
-  'components/audio-visualizer/labs/lab-visualizer.tsx -> cancelAnimationFrame',
-]);
+const KNOWN_UNFIXED = new Set<string>([]);
 
 /** Teardown callbacks — everything that runs at dispose rather than at setup. */
 const TEARDOWN_CALLS = ['onCleanup', 'addReleaseCallback'];
@@ -226,8 +314,15 @@ function argumentText(src: string, open: number): string {
   return src.slice(open + 1);
 }
 
-it('no teardown callback in src/ resolves a DOM global by bare identifier', () => {
+/**
+ * One pass over `src/`, reporting both directions of the allowlist:
+ *   `offenders`  — bare-global uses at teardown that nothing exempts.
+ *   `exempted`   — the KNOWN_UNFIXED keys the scan actually MATCHED this run.
+ *                  Anything listed but not matched is stale.
+ */
+function scanSrc(): { offenders: string[]; exempted: Set<string> } {
   const offenders: string[] = [];
+  const exempted = new Set<string>();
 
   for (const file of sourceFiles(SRC)) {
     const src = readFileSync(file, 'utf8');
@@ -247,7 +342,11 @@ it('no teardown callback in src/ resolves a DOM global by bare identifier', () =
             const before = body.slice(Math.max(0, u.index - 40), u.index);
             if (/\b(const|let|var|function|import)\s*$/.test(before)) continue;
             const rel = relative(SRC, file).split(sep).join('/');
-            if (KNOWN_UNFIXED.has(`${rel} -> ${g}`)) continue;
+            const key = `${rel} -> ${g}`;
+            if (KNOWN_UNFIXED.has(key)) {
+              exempted.add(key);
+              continue;
+            }
             const line = startLine + body.slice(0, u.index).split('\n').length - 1;
             offenders.push(`${rel}:${line}  ${call} -> bare \`${g}\``);
           }
@@ -256,5 +355,22 @@ it('no teardown callback in src/ resolves a DOM global by bare identifier', () =
     }
   }
 
-  expect([...new Set(offenders)].sort()).toEqual([]);
+  return { offenders: [...new Set(offenders)].sort(), exempted };
+}
+
+it('no teardown callback in src/ resolves a DOM global by bare identifier', () => {
+  expect(scanSrc().offenders).toEqual([]);
+});
+
+/**
+ * The other direction. Without this, KNOWN_UNFIXED only ever fails on addition,
+ * so a fixed site keeps its exemption forever and the next regression at that
+ * exact file/global pair is waved through by a rule nobody remembers writing.
+ * An entry has to keep earning its place: name a violation the scan can still
+ * find, or come off the list.
+ */
+it('KNOWN_UNFIXED carries no stale entry for an already-fixed site', () => {
+  const { exempted } = scanSrc();
+  const stale = [...KNOWN_UNFIXED].filter((key) => !exempted.has(key)).sort();
+  expect(stale).toEqual([]);
 });

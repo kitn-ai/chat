@@ -32,6 +32,24 @@ export function LabVisualizer(props: LabVisualizerProps): JSX.Element {
   const [frame, setFrame] = createSignal(chor.step(0));
 
   onMount(() => {
+    // Captured at SETUP and closed over, never re-resolved as a global inside
+    // `onCleanup`: cleanup can run after the host removed the DOM globals (a
+    // `kai-*` release is deferred one microtask past detachment, so an
+    // environment teardown gets in between), and a bare `cancelAnimationFrame`
+    // there throws -- from a promise nobody holds, so it lands as an unhandled
+    // rejection that fails the run while every test passes.
+    // See tests/components/teardown-without-dom-globals.test.tsx.
+    //
+    // The FUNCTION, not the view. The `const win = window` capture that fixes a
+    // bare `document` does nothing here: `window === globalThis` -- measured, in
+    // jsdom and in real Chromium/WebKit alike -- and the teardown deletes these
+    // keys off that very object, so `win.cancelAnimationFrame` is undefined by
+    // the time cleanup runs. It only trades the ReferenceError for a TypeError.
+    // `.bind` pins the receiver the WebIDL operation is specified on; Chromium
+    // and WebKit both accept a detached call (measured), so the bind is belt and
+    // braces against an engine that does not, at zero cost.
+    const cancelFrame = cancelAnimationFrame.bind(globalThis);
+
     let raf = 0;
     let last = performance.now();
     const loop = (): void => {
@@ -42,7 +60,7 @@ export function LabVisualizer(props: LabVisualizerProps): JSX.Element {
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
-    onCleanup(() => cancelAnimationFrame(raf));
+    onCleanup(() => cancelFrame(raf));
   });
 
   const uniforms = (): Record<string, UniformSpec> => {
