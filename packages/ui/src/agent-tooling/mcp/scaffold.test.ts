@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { cardEmitPlan, scaffold } from './tools/scaffold';
-import { getIntegration, listIntegrations } from '../registry';
+import { getArchetype, getIntegration, listArchetypes, listIntegrations } from '../registry';
 // The real encoders, used to prove WHY the fabricated sample seed had to go:
 // one of them throws on it, the other quietly sends it.
 import { toAnthropicMessages, toOpenAIMessages, WireEncodeError } from '../../wire/encode';
@@ -50,6 +50,137 @@ describe('scaffold', () => {
     });
     const text = (out.content as { type: string; text: string }[])[0].text;
     expect(text).toMatch(/unknown integration|valid integrations/i);
+  });
+
+  // ── the surface axis is a components list ────────────────────────────────
+  //
+  // These are the unit-level half of `assertPresetsAreData` /
+  // `assertSurfacesAreDistinct` in scripts/verify-scaffold-compiles.mjs. That gate
+  // needs `dist/` and does not run under `npm test`, so the claim "archetypes are
+  // presets over one renderer" would otherwise be checked only in CI's slow job.
+
+  const FRONTENDS_FOR_SURFACE = ['react', 'next', 'tanstack-start', 'vue', 'svelte', 'angular', 'solid', 'html'] as const;
+
+  /** The surface no archetype can express: the workspace pair PLUS the tool pair. */
+  const WORKSPACE_WITH_TOOLS = [
+    'kai-chat',
+    'kai-tool',
+    'kai-reasoning',
+    'kai-artifact',
+    'kai-resizable',
+  ];
+
+  it('renders a surface no archetype can express: a workspace that also runs tools', async () => {
+    // The point of the extraction, stated as a test. `workspace` carries no
+    // kai-tool, so it emits no tool loop and no card round trip; `agentic` carries
+    // no kai-artifact/kai-resizable, so it emits no split. Both at once is a
+    // perfectly reasonable app (render the tool calls that produced the artifact)
+    // and the archetype-keyed entry point had no parameter that could ask for it.
+    for (const framework of FRONTENDS_FOR_SURFACE) {
+      const out = await scaffold.handler({
+        components: WORKSPACE_WITH_TOOLS,
+        integration: 'openrouter',
+        placement: 'full-page',
+        framework,
+      });
+      const text = (out.content as { type: string; text: string }[])[0].text;
+      const front = text.split('=== (2)')[0];
+      expect(front, `${framework}: no resizable split`).toMatch(/Resizable|kai-resizable/);
+      expect(front, `${framework}: no artifact pane`).toMatch(/Artifact|kai-artifact/);
+      expect(front, `${framework}: no card round trip`).toContain('cardFromToolCall(');
+    }
+
+    // And prove the negative rather than assuming it: neither preset produces both.
+    for (const preset of ['workspace', 'agentic'] as const) {
+      const out = await scaffold.handler({
+        useCase: preset,
+        integration: 'openrouter',
+        placement: 'full-page',
+        framework: 'react',
+      });
+      const front = (out.content as { type: string; text: string }[])[0].text.split('=== (2)')[0];
+      const hasSplit = /<Resizable\b/.test(front);
+      const hasCards = front.includes('cardFromToolCall(');
+      expect(hasSplit && hasCards, `preset '${preset}' already emits both — the gap it proves has closed`).toBe(false);
+    }
+  });
+
+  it('a workspace surface still renders its standalone companions', async () => {
+    // The bug the components axis found. Every renderer took a workspace branch
+    // that emitted the split and RETURNED, dropping kai-sources / kai-voice-input
+    // on the floor. Three frameworks failed tsc on the now-unused wrapper import;
+    // four (vue, svelte, angular, html) compiled clean and rendered nothing.
+    const components = [...WORKSPACE_WITH_TOOLS, 'kai-sources', 'kai-voice-input'];
+    for (const framework of FRONTENDS_FOR_SURFACE) {
+      const out = await scaffold.handler({
+        components,
+        integration: 'openrouter',
+        placement: 'full-page',
+        framework,
+      });
+      const front = (out.content as { type: string; text: string }[])[0].text.split('=== (2)')[0];
+      expect(front, `${framework}: sources dropped by the workspace branch`).toMatch(
+        /<Sources\b|<kai-sources|<Source\b/,
+      );
+      expect(front, `${framework}: voice input dropped by the workspace branch`).toMatch(
+        /<VoiceInput\b|<kai-voice-input/,
+      );
+    }
+  });
+
+  it('every archetype is DATA: its preset render equals renderSurface over its own components', async () => {
+    // There must be exactly one renderer. If a preset-keyed fast path is ever
+    // added, these two stop matching. Byte-identical on the FRONT-END block: the
+    // preset's title/id live only in the provenance header above it, so this
+    // comparison is exact rather than normalized.
+    for (const preset of listArchetypes()) {
+      for (const framework of FRONTENDS_FOR_SURFACE) {
+        const viaPreset = await scaffold.handler({
+          useCase: preset.id,
+          integration: 'openrouter',
+          placement: 'full-page',
+          framework,
+        });
+        const viaComponents = await scaffold.handler({
+          components: preset.components,
+          integration: 'openrouter',
+          placement: 'full-page',
+          framework,
+        });
+        const a = (viaPreset.content as { type: string; text: string }[])[0].text.split('=== (2)')[0];
+        const b = (viaComponents.content as { type: string; text: string }[])[0].text.split('=== (2)')[0];
+        // The header differs on purpose (it carries the preset's provenance), so
+        // compare from the front-end marker down.
+        const front = (s: string) => s.slice(s.indexOf('=== (1)'));
+        expect(front(a), `${preset.id} × ${framework}: preset renders a different surface`).toBe(front(b));
+      }
+    }
+  });
+
+  it('components wins over useCase when both are given', async () => {
+    const out = await scaffold.handler({
+      useCase: 'drop-in-chat',
+      components: ['kai-chat', 'kai-sources'],
+      integration: 'openrouter',
+      placement: 'full-page',
+      framework: 'react',
+    });
+    const front = (out.content as { type: string; text: string }[])[0].text.split('=== (2)')[0];
+    expect(front).toMatch(/<Sources\b/);
+  });
+
+  it('rejects a request naming neither components nor useCase, and points at both', async () => {
+    const out = await scaffold.handler({
+      integration: 'openrouter',
+      placement: 'full-page',
+      framework: 'react',
+    });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+    expect(text).toMatch(/no surface given/i);
+    // The rejection has to teach the real axis, not just the six preset ids —
+    // otherwise a harness learns the presets and asks for the nearest one forever.
+    expect(text).toMatch(/components/);
+    expect(text).toMatch(/drop-in-chat/);
   });
 
   // ── added coverage ───────────────────────────────────────────────────────
@@ -3170,7 +3301,10 @@ describe('scaffold — the card round trip is emitted, never restated', () => {
     // would pass by running zero times.
     expect(forwarding.length, 'no integration forwards a tools array — this check is vacuous').toBeGreaterThan(0);
     for (const integration of forwarding) {
-      const plan = cardEmitPlan('agentic', integration.id);
+      // Keyed on the components list, not the `agentic` preset id: `cardEmitPlan`
+      // plans for a SURFACE, and the surfaces that bear cards include ones no
+      // preset names (a workspace that also renders its tool calls).
+      const plan = cardEmitPlan(getArchetype('agentic')!.components, integration.id);
       expect(plan, `${integration.id}: not in the registry`).not.toBeNull();
       expect(plan!.tools, `${integration.id}: expected a tools array`).toBe(true);
       expect(

@@ -12,6 +12,17 @@ import pydanticAi from './integrations/pydantic-ai';
 import mock from './integrations/mock';
 import { archetypes as _archetypes } from './archetypes';
 
+// The surface axis for the scaffolder's gate, derived from the presets above.
+// Re-exported here because `scripts/verify-scaffold-compiles.mjs` bundles this
+// module for its axes and must not reach past the registry for one of them.
+export {
+  BASE_COMPONENT,
+  listCapabilityGroups,
+  listSurfaceProbes,
+  type CapabilityGroup,
+  type SurfaceProbe,
+} from './archetypes';
+
 // Order is the order a scaffolding agent reads them in. `openai` and `anthropic`
 // lead because they are the two keys a developer is most likely to already hold.
 export const integrations: Integration[] = [
