@@ -175,6 +175,24 @@ export interface KaiArtifactElement extends HTMLElement {
   readonlyPath?: boolean;
   /** Friendly address shown in the path field instead of the real current url (read-only, non-navigable). Use when the framed url is not consumer-facing (e.g. a `data:` blob) so a clean address shows instead of leaking it. Scalar string: set as the `display-url` attribute or the `displayUrl` property. */
   displayUrl?: string;
+  /** Go back in the artifact's own history stack (no-op when there's no prior entry). */
+  back(): void;
+  /** Go forward in the history stack (no-op when there's no forward entry). */
+  forward(): void;
+  /** Force-reload the current preview url (also re-renders an inline PDF). */
+  reload(): void;
+  /** Navigate to the `src` home url (no-op when there's no `src`). */
+  home(): void;
+  /** Push + load a url in the preview — the path-field submit path (fires kai-navigate). */
+  navigate(url: string): void;
+  /** Select a file by path: highlights the tree, shows its source, navigates the preview (fires kai-file-select + kai-navigate). Named selectFile to avoid the `activeFile` prop. */
+  selectFile(path: string): void;
+  /** Open the current url in a new browser tab (no-op when there's no concrete url). Named openExternal, NOT openInTab — that's a prop (toolbar button visibility). */
+  openExternal(): void;
+  /** Enter the maximized view-state (fires kai-maximize-change{maximized:true}). Named maximize, NOT maximized — that's a prop. */
+  maximize(): void;
+  /** Exit the maximized view-state (fires kai-maximize-change{maximized:false}). */
+  restore(): void;
 }
 
 export interface KaiAttachmentsElement extends HTMLElement {
@@ -272,6 +290,12 @@ export interface KaiButtonElement extends HTMLElement {
   align?: "start" | "center" | "end";
   /** Native button `type`. Defaults to `button` (so it never submits a form). */
   type?: "button" | "submit" | "reset";
+  /** Focus the inner `<button>` (host.focus() would focus the wrapper). */
+  focus(options?: FocusOptions): void;
+  /** Blur the inner `<button>`. */
+  blur(): void;
+  /** Programmatically activate the button — runs the same path as a user click and fires kai-click. Forwarding to the inner button means `disabled` is respected automatically. */
+  click(): void;
 }
 
 export interface KaiCardElement extends HTMLElement {
@@ -310,6 +334,12 @@ export interface KaiCardsElement extends HTMLElement {
   policy?: { onSubmit?: (cardId: string, data: unknown) => void; onAction?: (cardId: string, action: string, payload?: unknown) => void; onSendPrompt?: (text: string, opts: { mode: "compose" | "send"; context?: unknown; }) => void; onOpen?: (url: string, target: "tab" | "artifact") => void; onState?: (cardId: string, patch: unknown) => void; onDismiss?: (cardId: string) => void; onReopen?: (cardId: string) => void; onError?: (cardId: string, message: string) => void; maxSendPromptMode?: "compose" | "send" };
   /** Validate each envelope's `data` against the schema for its type before rendering it — a built-in's own schema, or yours from `schemas`. Default `true`; set `validate-cards="false"` (or `el.validateCards = false`) to opt out. A hard failure (wrong type, a missing required field) renders a diagnostic naming the field instead of the card; a soft failure (bounds) renders the card unchanged. Both emit a contract `error` event. On in production too: a model emitting a bad shape is a production failure mode, so stripping the check there would hide it from exactly the person who needs to see it. */
   validateCards?: boolean;
+  /** Programmatically resolve a child card by id: set that envelope's `resolution` so the child re-renders into its read-only/resolved view — the imperative twin of the consumer mutating the cards array. No-op for an unknown id. */
+  resolve(cardId: string, resolution: { kind: "action"; action: string; payload?: unknown; at?: undefined | string } | { kind: "submit"; data: unknown; at?: undefined | string } | { kind: "dismissed"; at?: undefined | string } | { kind: "expired"; reason?: undefined | string; at?: undefined | string }): void;
+  /** Collapse a card to its re-openable stub from the host side — convenience for `resolve(cardId, { kind: 'dismissed' })`. */
+  dismiss(cardId: string): void;
+  /** Return the live child element node for a card id (or null) so consumers can call that card's own methods (focus/expand/…) without a shadow-DOM query. */
+  getCard(cardId: string): null | HTMLElement;
 }
 
 export interface KaiChainOfThoughtElement extends HTMLElement {
@@ -323,6 +353,12 @@ export interface KaiChainOfThoughtElement extends HTMLElement {
   value?: string | string[];
   /** Uncontrolled INITIAL open step key(s) — seeds which steps render expanded. Ignored once `value` is provided. Set as a JS property. */
   defaultValue?: string | string[];
+  /** Open one step's detail by index, or — with no arg — ALL steps. In `single` mode opening one step closes the others (expand-all keeps the last). */
+  expand(index?: number): void;
+  /** Close one step's detail by index, or — with no arg — ALL steps. */
+  collapse(index?: number): void;
+  /** Flip one step's open state by index. */
+  toggle(index?: number): void;
 }
 
 export interface KaiChatElement extends HTMLElement {
@@ -388,6 +424,11 @@ export interface KaiChatElement extends HTMLElement {
   cardTypes?: Record<string, string>;
   /** JSON Schemas for the card types this app renders, keyed by envelope type — the companion of `cardTypes`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type — the one your app actually cares about — as the only unchecked thing on screen. A schema here WINS over a built-in of the same name. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `"type"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one. */
   cardSchemas?: Record<string, object>;
+  focus(options?: FocusOptions): void;
+  blur(): void;
+  clear(): void;
+  send(): void;
+  scrollToBottom(behavior?: "auto" | "instant" | "smooth"): void;
 }
 
 export interface KaiCheckpointElement extends HTMLElement {
@@ -420,6 +461,16 @@ export interface KaiChoiceElement extends HTMLElement {
   defaultValue?: string;
   /** Disable the whole radiogroup + Submit (e.g. while the agent is busy). Attribute: `disabled`. */
   disabled?: boolean;
+  /** Focus the radiogroup roving tab stop (or the Other input when selected). */
+  focus(options?: FocusOptions): void;
+  /** Select an option by id locally — no emit, fires kai-value-change (same as a row click). Lets a consumer pre-highlight or drive selection externally. */
+  select(optionId: string): void;
+  /** Submit the current selection — emits the `action` verb on kai-card and resolves the card (single-shot). Named `send`, not `submit`, per the shared vocabulary. */
+  send(): void;
+  /** Trigger the dismiss path — emits `dismiss` on kai-card and optimistically collapses the card to its re-openable stub. */
+  dismiss(): void;
+  /** Re-open a dismissed card from its stub — emits `reopen` on kai-card. */
+  reopen(): void;
 }
 
 export interface KaiCoachmarkElement extends HTMLElement {
@@ -439,6 +490,12 @@ export interface KaiCoachmarkElement extends HTMLElement {
   tone?: "error" | "primary" | "info" | "success" | "warning";
   /** Render the arrow that points at the anchor (default `true`). Set `arrow="false"` for a plain bubble with no pointer. */
   arrow?: boolean;
+  /** Open it programmatically (no-op while disabled). */
+  show(): void;
+  /** Close it programmatically. */
+  hide(): void;
+  /** Flip the open state (closes while disabled). */
+  toggle(): void;
 }
 
 export interface KaiCodeBlockElement extends HTMLElement {
@@ -465,6 +522,12 @@ export interface KaiCommandElement extends HTMLElement {
   placeholder?: string;
   /** Label shown when no items match the current query. */
   emptyLabel?: string;
+  /** Focus the search combobox input inside the shadow root so the palette is type-ready on demand (Shadow-DOM autofocus is unreliable, so hosts call this after opening the palette). */
+  focus(options?: FocusOptions): void;
+  /** Blur the focused search input. */
+  blur(): void;
+  /** Reset the search query to empty — re-showing all items — and fire `kai-query-change` with `''`. Mirrors the Escape-key behavior. */
+  clear(): void;
 }
 
 export interface KaiCompareElement extends HTMLElement {
@@ -484,6 +547,10 @@ export interface KaiCompareElement extends HTMLElement {
   codeTheme?: string;
   /** Whether code blocks are syntax-highlighted. Attribute: `code-highlight`. */
   codeHighlight?: boolean;
+  /** Programmatically commit a pick by candidate id — same path as the "Pick this" button: fires kai-compare-select and optimistically collapses (single-shot; inert while streaming or already resolved). `select` does NOT collide with the `selection` prop (distinct identifier). */
+  select(candidateId: string): void;
+  /** Focus the current roving tab stop (the focused candidate's "Pick this" radio) so a consumer can move keyboard focus into the radiogroup. */
+  focus(options?: FocusOptions): void;
 }
 
 export interface KaiComposerElement extends HTMLElement {
@@ -507,6 +574,16 @@ export interface KaiComposerElement extends HTMLElement {
   highlights?: (string | { pattern: string; flags?: string; class?: string })[];
   /** Default icon per entity kind (kind → image URL/data-URI) for items without their own `icon`. Overrides the built-in agent/plugin glyphs. JS property. */
   kindIcons?: Record<string, string>;
+  /** Focus the editable element. `focus`/`blur` are NOT composed natively, so a host-level focus() can't reach the editable inside the shadow root — this is the only way to focus the composer programmatically. */
+  focus(options?: FocusOptions): void;
+  /** Blur the editable element. */
+  blur(): void;
+  /** Empty the composer to a blank doc (resets the internal value + history baseline; fires kai-value-change). */
+  clear(): void;
+  /** Submit the current content programmatically — same path as Enter (fires kai-submit). Named `send`, not `submit`, to match the shared vocabulary and avoid any submit collision. */
+  send(): void;
+  /** Insert an atomic entity pill (skill/agent/plugin) at the caret without typing a trigger (fires kai-entity-add). */
+  insertEntity(entity: { kind: string; id: string; label: string; icon?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }): void;
 }
 
 export interface KaiConfirmElement extends HTMLElement {
@@ -522,6 +599,14 @@ export interface KaiConfirmElement extends HTMLElement {
   autofocus: boolean;
   /** Set when the user resolved this card; renders the read-only view. Property: `el.resolution = { kind:'action', action:'…' }`. */
   resolution?: Record<string, unknown>;
+  /** Focus the default action button (or the first action if none is default) — the same target `autofocus` focuses on mount, but on demand. */
+  focus(options?: FocusOptions): void;
+  /** Activate an action by id — emits the `action` verb on kai-card and resolves the card (single-shot). With no id, invokes the default action. */
+  confirm(actionId?: string): void;
+  /** Trigger the dismiss path — emits `dismiss` on kai-card and optimistically collapses the card to its re-openable stub. */
+  dismiss(): void;
+  /** Re-open a dismissed card from its stub — emits `reopen` on kai-card. */
+  reopen(): void;
 }
 
 export interface KaiContextElement extends HTMLElement {
@@ -548,6 +633,18 @@ export interface KaiConversationsElement extends HTMLElement {
   collapsed?: boolean;
   /** Initial collapsed state when uncontrolled (default false). Use the `default-collapsed` attribute to start collapsed in plain HTML. */
   defaultCollapsed?: boolean;
+  /** Focus the built-in search input inside the shadow root. */
+  focus(options?: FocusOptions): void;
+  /** Clear the internal search query (resets the list filter) and fire kai-search with an empty string. */
+  clear(): void;
+  /** Programmatically select a conversation by id — mirror of the kai-conversation-select event (a convenience over driving `activeId`). */
+  select(id: string): void;
+  /** Collapse the rail to its floating reopen button (fires `kai-collapse-toggle`). */
+  collapse(): void;
+  /** Expand the rail back to the full list (fires `kai-collapse-toggle`). */
+  expand(): void;
+  /** Toggle the rail collapsed/expanded (fires `kai-collapse-toggle`). */
+  toggle(): void;
 }
 
 export interface KaiDialogElement extends HTMLElement {
@@ -557,6 +654,14 @@ export interface KaiDialogElement extends HTMLElement {
   open?: boolean;
   /** Initial open state on mount (uncontrolled seed). */
   defaultOpen?: boolean;
+  /** Open it programmatically (no-op while disabled). */
+  show(): void;
+  /** Close it programmatically. */
+  hide(): void;
+  /** Flip the open state (closes while disabled). */
+  toggle(): void;
+  /** Move focus to the dialog panel (no-op while closed). */
+  focus(options?: FocusOptions): void;
 }
 
 export interface KaiEditableLabelElement extends HTMLElement {
@@ -570,6 +675,7 @@ export interface KaiEditableLabelElement extends HTMLElement {
   placeholder?: string;
   /** Disable entering edit mode. */
   disabled?: boolean;
+  edit(): void;
 }
 
 export interface KaiEmbedElement extends HTMLElement {
@@ -652,6 +758,18 @@ export interface KaiFormElement extends HTMLElement {
   defaultValues?: Record<string, unknown>;
   /** Disable all fields + submit. Attribute: `disabled`. */
   disabled?: boolean;
+  /** Focus the first control, or the first INVALID control after a failed validation. */
+  focus(options?: FocusOptions): void;
+  /** Validate + submit programmatically — focus the first invalid field on failure, else emit the `submit` CardEvent and resolve. Named `send`, not `submit`. */
+  send(): void;
+  /** Run client-side validation now and return `{ valid, errors? }` WITHOUT submitting. */
+  validate(): void;
+  /** Re-seed the form from each field's `default` and clear errors. */
+  reset(): void;
+  /** Trigger the dismiss path (emit `dismiss` + collapse to the re-openable stub). */
+  dismiss(): void;
+  /** Re-open a dismissed card from its stub (emit `reopen`). */
+  reopen(): void;
 }
 
 export interface KaiHoverCardElement extends HTMLElement {
@@ -669,6 +787,12 @@ export interface KaiHoverCardElement extends HTMLElement {
   defaultOpen?: boolean;
   /** Suppress the hover behavior entirely without unmounting. */
   disabled?: boolean;
+  /** Open it programmatically (no-op while disabled). */
+  show(): void;
+  /** Close it programmatically. */
+  hide(): void;
+  /** Flip the open state (closes while disabled). */
+  toggle(): void;
 }
 
 export interface KaiIconElement extends HTMLElement {
@@ -724,6 +848,12 @@ export interface KaiInputElement extends HTMLElement {
   autocomplete?: string;
   /** Virtual-keyboard hint forwarded to the inner input (e.g. `numeric`, `email`). */
   inputmode?: string;
+  /** Focus the inner input (the host can't reach into the shadow root). */
+  focus(options?: FocusOptions): void;
+  /** Select the inner input's text. */
+  select(): void;
+  /** Empty the value and fire `kai-change` with `''`. */
+  clear(): void;
 }
 
 export interface KaiKbdElement extends HTMLElement {
@@ -791,6 +921,12 @@ export interface KaiMenuElement extends HTMLElement {
   defaultOpen?: boolean;
   /** Disable the trigger — click/keyboard and `show()` no longer open the menu. */
   disabled?: boolean;
+  /** Open it programmatically (no-op while disabled). */
+  show(): void;
+  /** Close it programmatically. */
+  hide(): void;
+  /** Flip the open state (closes while disabled). */
+  toggle(): void;
 }
 
 export interface KaiMessageElement extends HTMLElement {
@@ -820,6 +956,8 @@ export interface KaiMessageElement extends HTMLElement {
   cardTypes?: Record<string, string>;
   /** JSON Schemas for the card types this app renders, keyed by envelope type — the companion of `cardTypes`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type — the one your app actually cares about — as the only unchecked thing on screen. A schema here WINS over a built-in of the same name. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `"type"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one. */
   cardSchemas?: Record<string, object>;
+  /** Copy the message content to the clipboard and show the copied check. */
+  copy(): void;
 }
 
 export interface KaiModelSwitcherElement extends HTMLElement {
@@ -835,6 +973,12 @@ export interface KaiModelSwitcherElement extends HTMLElement {
   defaultOpen?: boolean;
   /** Disable the trigger — click/keyboard and `show()` no longer open the dropdown. */
   disabled?: boolean;
+  /** Open it programmatically (no-op while disabled). */
+  show(): void;
+  /** Close it programmatically. */
+  hide(): void;
+  /** Flip the open state (closes while disabled). */
+  toggle(): void;
 }
 
 export interface KaiNavElement extends HTMLElement {
@@ -848,6 +992,8 @@ export interface KaiNavElement extends HTMLElement {
   defaultValue?: string;
   /** Ids of group items collapsed on first render (groups default to expanded). Set as a JS property (array). */
   defaultCollapsed?: string[];
+  /** Activate an item by id (fires kai-nav-select). */
+  select(id: string): void;
 }
 
 export interface KaiNoticeElement extends HTMLElement {
@@ -889,6 +1035,10 @@ export interface KaiPaneGroupElement extends HTMLElement {
   active?: string;
   /** Highlight the frame as the ACTIVE group in a multi-group layout. Attribute: `focused`. */
   focused?: boolean;
+  /** Select a tab by id (fires `kai-tab-change`). Ignores unknown ids. */
+  select(id: string): void;
+  /** Focus the active tab in the strip. */
+  focus(): void;
 }
 
 export interface KaiPopoverElement extends HTMLElement {
@@ -904,6 +1054,12 @@ export interface KaiPopoverElement extends HTMLElement {
   defaultOpen?: boolean;
   /** Turn the popover off while keeping the trigger mounted (clicks and `show()` no longer open it). */
   disabled?: boolean;
+  /** Open it programmatically (no-op while disabled). */
+  show(): void;
+  /** Close it programmatically. */
+  hide(): void;
+  /** Flip the open state (closes while disabled). */
+  toggle(): void;
 }
 
 export interface KaiProgressBarElement extends HTMLElement {
@@ -959,6 +1115,14 @@ export interface KaiPromptInputElement extends HTMLElement {
   triggers?: { char: string; kind: string; items?: { id: string; label: string; icon?: string; description?: string; group?: string; kind?: string; promptText?: string; data?: Record<string, unknown> }[] }[];
   /** Default icon per entity kind (kind → image URL/data-URI) for pills/menu items without their own `icon`. Overrides the built-in agent/plugin glyphs. JS property. */
   kindIcons?: Record<string, string>;
+  /** Focus the text editor inside the shadow root (not the hidden file input). */
+  focus(options?: FocusOptions): void;
+  /** Blur the focused input control. */
+  blur(): void;
+  /** Clear the text and any staged attachments (fires kai-value-change / kai-attachments-change so a controlled consumer can react). */
+  clear(): void;
+  /** Send the current value programmatically — same path as Enter / the send button (fires kai-submit, then clears staged attachments). Named `send`, not `submit`, to avoid colliding with the `submit` prop. */
+  send(): void;
 }
 
 export interface KaiReasoningElement extends HTMLElement {
@@ -978,6 +1142,12 @@ export interface KaiReasoningElement extends HTMLElement {
   markdown?: boolean;
   /** Gate the disclosure trigger — programmatic `show()/hide()/toggle()` still work, but the trigger click no longer toggles. */
   disabled?: boolean;
+  /** Open it programmatically (no-op while disabled). */
+  show(): void;
+  /** Close it programmatically. */
+  hide(): void;
+  /** Flip the open state (closes while disabled). */
+  toggle(): void;
 }
 
 export interface KaiRemoteElement extends HTMLElement {
@@ -1002,6 +1172,10 @@ export interface KaiResizableElement extends HTMLElement {
   maximizedIndex: null | number;
   /** Divider affordance drawn inside each draggable handle's 8px grab zone: - `line` (default) — a 1px hairline, transparent at rest, tinting on hover/drag. - `grip` — a dotted grip handle. - `none` — no visible divider, just the invisible hit-area. The full grab zone and keyboard/ARIA behavior are identical for all three. */
   handle?: "none" | "line" | "grip";
+  /** Imperatively maximize the item at `index` (thin wrapper over `maximizedIndex`). */
+  maximize(index: number): void;
+  /** Imperatively restore from the maximized layout. */
+  restore(): void;
 }
 
 export interface KaiResizableItemElement extends HTMLElement {
@@ -1049,6 +1223,12 @@ export interface KaiScopePickerElement extends HTMLElement {
   defaultOpen?: boolean;
   /** Disable the trigger — click/keyboard and `show()` no longer open the dropdown. */
   disabled?: boolean;
+  /** Open it programmatically (no-op while disabled). */
+  show(): void;
+  /** Close it programmatically. */
+  hide(): void;
+  /** Flip the open state (closes while disabled). */
+  toggle(): void;
 }
 
 export interface KaiScreenElement extends HTMLElement {
@@ -1064,6 +1244,14 @@ export interface KaiScreenElement extends HTMLElement {
   back?: boolean;
   /** Opt out of marking sibling elements inert/aria-hidden while open (for unusual layouts). */
   noInert?: boolean;
+  /** Open it programmatically (no-op while disabled). */
+  show(): void;
+  /** Close it programmatically. */
+  hide(): void;
+  /** Flip the open state (closes while disabled). */
+  toggle(): void;
+  /** Move focus to the screen surface (no-op while closed). */
+  focus(options?: FocusOptions): void;
 }
 
 export interface KaiScrollAreaElement extends HTMLElement {
@@ -1099,6 +1287,7 @@ export interface KaiSearchElement extends HTMLElement {
   loading?: boolean;
   /** Optional shortcut hint shown (as a `kai-kbd`) while the field is empty, e.g. `Mod+K`. Display only; it does not bind the key. */
   shortcut?: string;
+  focus(): void;
 }
 
 export interface KaiSegmentedElement extends HTMLElement {
@@ -1228,6 +1417,10 @@ export interface KaiSwitchElement extends HTMLElement {
   name?: string;
   /** Submitted value when checked (paired with `name`). Defaults to `'on'`. */
   value?: string;
+  /** Flip the switch and fire `kai-change` (no-op while disabled). */
+  toggle(): void;
+  /** Focus the inner `role="switch"` button (the host element can't reach it). */
+  focus(options?: FocusOptions): void;
 }
 
 export interface KaiTabsElement extends HTMLElement {
@@ -1245,6 +1438,10 @@ export interface KaiTabsElement extends HTMLElement {
   block?: boolean;
   /** Disable the whole strip. */
   disabled?: boolean;
+  /** Select a tab by id (fires `kai-tab-change`). Ignores unknown/disabled ids. */
+  select(id: string): void;
+  /** Focus the active tab (or the first focusable tab). */
+  focus(): void;
 }
 
 export interface KaiTasksElement extends HTMLElement {
@@ -1266,6 +1463,18 @@ export interface KaiTasksElement extends HTMLElement {
   disabled?: boolean;
   /** Display-only: rows can't be toggled and show the default cursor (no pointer, hover, or focus affordances). Keeps the look as-is. Attribute: `readonly`. */
   readonly?: boolean;
+  /** Set the checked task ids (local-only, no emit), respecting disabled/max. With no arg, select all toggleable rows. */
+  select(taskIds?: string[]): void;
+  /** Toggle one task by id, honoring the max gate (no `checked` = flip). */
+  toggle(taskId: string, checked?: boolean): void;
+  /** Confirm the current selection — emits the `submit` CardEvent + resolves (only when the min/max gate passes). Named `send`, not `submit`. */
+  send(): void;
+  /** Focus the task group (select-all checkbox if shown, else the first row). */
+  focus(options?: FocusOptions): void;
+  /** Trigger the dismiss path (emit `dismiss` + collapse to the re-openable stub). */
+  dismiss(): void;
+  /** Re-open a dismissed card from its stub (emit `reopen`). */
+  reopen(): void;
 }
 
 export interface KaiTextShimmerElement extends HTMLElement {
@@ -1315,6 +1524,8 @@ export interface KaiThreadElement extends HTMLElement {
   cardTypes?: Record<string, string>;
   /** JSON Schemas for the card types this app renders, keyed by envelope type — the companion of `cardTypes`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type — the one your app actually cares about — as the only unchecked thing on screen. A schema here WINS over a built-in of the same name. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `"type"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one. */
   cardSchemas?: Record<string, object>;
+  /** Scroll the message list to the bottom (default `'smooth'`). */
+  scrollToBottom(behavior?: "auto" | "instant" | "smooth"): void;
 }
 
 export interface KaiToastRegionElement extends HTMLElement {
@@ -1347,6 +1558,12 @@ export interface KaiToolElement extends HTMLElement {
   defaultOpen?: boolean;
   /** Gate the disclosure trigger — programmatic `show()/hide()/toggle()` still work, but the trigger click no longer toggles. */
   disabled?: boolean;
+  /** Open it programmatically (no-op while disabled). */
+  show(): void;
+  /** Close it programmatically. */
+  hide(): void;
+  /** Flip the open state (closes while disabled). */
+  toggle(): void;
 }
 
 export interface KaiTooltipElement extends HTMLElement {
@@ -1366,6 +1583,12 @@ export interface KaiTooltipElement extends HTMLElement {
   defaultOpen?: boolean;
   /** Turn the tooltip off while keeping the trigger mounted (hover/focus and `show()` no longer open it). */
   disabled?: boolean;
+  /** Open it programmatically (no-op while disabled). */
+  show(): void;
+  /** Close it programmatically. */
+  hide(): void;
+  /** Flip the open state (closes while disabled). */
+  toggle(): void;
 }
 
 export interface KaiVoiceInputElement extends HTMLElement {
@@ -1379,6 +1602,10 @@ export interface KaiVoiceInputElement extends HTMLElement {
   recognitionLang?: string;
   /** Emit live partial transcripts (`kai-transcript-interim`) during native recognition. Attribute: `interim`. No-op on the transcribe/fallback paths. */
   interim?: boolean;
+  /** Begin recording programmatically (e.g. push-to-talk bound to a global key). Runs the same getUserMedia path as clicking the mic; no-ops if already recording. */
+  start(): void;
+  /** Stop the in-progress recording, producing the blob (→ kai-audio-captured) and running transcription. Pairs with start() for push-to-talk. */
+  stop(): void;
 }
 
 export interface KaiVoiceOutputElement extends HTMLElement {
@@ -1392,6 +1619,14 @@ export interface KaiVoiceOutputElement extends HTMLElement {
   synthesize?: (text: string) => Promise<Blob>;
   /** Disable the button (non-interactive). */
   disabled?: boolean;
+  /** Speak the current `text` (native, or via `synthesize` if set). */
+  speak(): void;
+  /** Pause playback (resumable). */
+  pause(): void;
+  /** Resume paused playback. */
+  resume(): void;
+  /** Stop playback and reset. */
+  stop(): void;
 }
 
 export interface KaiWorkspaceElement extends HTMLElement {
@@ -1444,6 +1679,20 @@ export interface KaiWorkspaceElement extends HTMLElement {
   cardTypes?: Record<string, string>;
   /** JSON Schemas for the card types this app renders, keyed by envelope type — the companion of `cardTypes`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type — the one your app actually cares about — as the only unchecked thing on screen. A schema here WINS over a built-in of the same name. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `"type"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one. */
   cardSchemas?: Record<string, object>;
+  /** Collapse/expand the conversation sidebar and fire `kai-sidebar-toggle`. */
+  toggleSidebar(): void;
+  /** Force the conversation sidebar collapsed (fires `kai-sidebar-toggle`). */
+  collapseSidebar(): void;
+  /** Force the conversation sidebar expanded (fires `kai-sidebar-toggle`). */
+  expandSidebar(): void;
+  /** Focus the thread's composer. */
+  focus(options?: FocusOptions): void;
+  /** Clear the thread draft + staged attachments. */
+  clear(): void;
+  /** Submit the current thread draft programmatically (fires `kai-submit`). */
+  send(): void;
+  /** Scroll the thread to the newest message. */
+  scrollToBottom(behavior?: "auto" | "instant" | "smooth"): void;
 }
 
 declare global {

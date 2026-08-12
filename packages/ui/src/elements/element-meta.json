@@ -6220,7 +6220,20 @@
         "displayDetail": "{ maximized: false | true }"
       }
     ],
-    "methods": [],
+    "methods": [
+      {
+        "name": "maximize",
+        "params": "index: number",
+        "returns": "void",
+        "description": "Imperatively maximize the item at `index` (thin wrapper over `maximizedIndex`)."
+      },
+      {
+        "name": "restore",
+        "params": "",
+        "returns": "void",
+        "description": "Imperatively restore from the maximized layout."
+      }
+    ],
     "composedFrom": [
       {
         "name": "ResizableHandle",

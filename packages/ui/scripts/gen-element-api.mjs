@@ -368,14 +368,52 @@ const HELPER_METHODS = {
   ],
 };
 
-// collect expose({ name: fn }) imperative methods per file — the input half of the
+// The signature the generated .d.ts emits for a method, stashed NON-ENUMERABLY so
+// element-meta.json / the CEM / llms-full.txt keep showing the AUTHORED text
+// (`resolve(cardId: string, resolution: CardResolution)`) while the type
+// declarations get a SELF-CONTAINED one (`CardResolution` expanded inline). Same
+// trick, and the same reason, as `el.module` below: two audiences, one model.
+//
+// The distinction is not cosmetic. The generated type files import nothing —
+// otherwise a consumer's tsc resolves a library `.ts` SOURCE file through them
+// (the LIB-2 fix, see gen-element-types.mjs) — so a method signature naming
+// `CardResolution` or `EntityRef` would be a bare TS2304 in the shipped
+// dist/elements.d.ts, invisible under the `skipLibCheck: true` every consumer
+// template sets. Rendering through the checker is what props already do.
+const withDts = (m, dts) => Object.defineProperty(m, 'dts', { value: dts, enumerable: false });
+
+/** `(a: X, b?: Y): R` with every named non-lib type expanded inline. Lib types
+ *  (FocusOptions, HTMLElement) keep their names; a lib ALIAS of a union
+ *  (ScrollBehavior) expands, exactly as renderType treats a prop of that type. */
+const dtsSignature = (fn, sourceFile) => {
+  const params = (fn.parameters ?? [])
+    .map((p) => {
+      const name = p.name.getText(sourceFile);
+      const rest = p.dotDotDotToken ? '...' : '';
+      // `?` in a .d.ts, whether the source wrote `x?: T` or `x: T = d` — a
+      // declaration file cannot carry the initializer either way.
+      const opt = !p.dotDotDotToken && (p.questionToken || p.initializer) ? '?' : '';
+      const type = p.type ? checker.getTypeFromTypeNode(p.type) : checker.getTypeAtLocation(p);
+      return `${rest}${name}${opt}: ${renderType(type, p)}`;
+    })
+    .join(', ');
+  const returns = fn.type ? renderType(checker.getTypeFromTypeNode(fn.type), fn) : 'void';
+  return `(${params}): ${returns}`;
+};
+
+// collect expose({ name: fn }) imperative methods — the input half of the
 // interaction surface (defineWebComponent's ctx.expose attaches them to the host).
 // Also recognizes method-providing helpers (e.g. wireDisclosure) by their call site.
-const exposeMethods = (sourceFile) => {
+//
+// `scope` is the ELEMENT's own facade callback, not the file: resizable.tsx defines
+// both kai-resizable and kai-resizable-item, and a file-wide walk gave the item the
+// group's `maximize`/`restore` — harmless while the methods reached no generated
+// type, a lie the moment they do. Scoped the same way declarativeChildren already is.
+const exposeMethods = (scope, sourceFile) => {
   const out = [];
   const visit = (node) => {
     if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && Array.isArray(HELPER_METHODS[node.expression.text])) {
-      out.push(...HELPER_METHODS[node.expression.text].map((m) => ({ ...m })));
+      out.push(...HELPER_METHODS[node.expression.text].map((m) => withDts({ ...m }, `(${m.params}): ${m.returns}`)));
     }
     if (
       ts.isCallExpression(node) &&
@@ -398,12 +436,12 @@ const exposeMethods = (sourceFile) => {
           const t = sourceFile.text.slice(r.pos, r.end);
           if (t.startsWith('/**')) description = t.replace(/^\/\*\*|\*\/$/g, '').replace(/^\s*\*\s?/gm, '').replace(/\s+/g, ' ').trim();
         }
-        out.push({ name, params, returns, description });
+        out.push(withDts({ name, params, returns, description }, dtsSignature(fn, sourceFile)));
       }
     }
     ts.forEachChild(node, visit);
   };
-  visit(sourceFile);
+  visit(scope);
   return out;
 };
 
@@ -412,7 +450,6 @@ for (const file of facadeFiles) {
   const sf = program.getSourceFile(file);
   if (!sf) continue;
   const fileDispatch = dispatchNames(sf);
-  const fileMethods = exposeMethods(sf);
   const visit = (node) => {
     if (
       ts.isCallExpression(node) &&
@@ -444,10 +481,12 @@ for (const file of facadeFiles) {
       // both kai-source and kai-sources, and only the latter reads <kai-source>
       // children.
       const children = node.arguments[2] ? declarativeChildren(node.arguments[2]) : [];
+      // Same scoping as `children` above, and for the same reason.
+      const methods = node.arguments[2] ? exposeMethods(node.arguments[2], sf) : [];
       const el = {
         tag, className, displayName: displayNameFromClass(className),
         props: [...UNIVERSAL_PROPS, ...props],
-        events, methods: fileMethods, composedFrom: composed, tokens,
+        events, methods, composedFrom: composed, tokens,
         ...(children.length ? { declarativeChildren: children } : {}),
       };
       // Source-module basename (e.g. confirm-card.tsx → "confirm-card"). The

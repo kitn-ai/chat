@@ -48,7 +48,7 @@ const PRICING_SCHEMA = {
 };
 
 async function mount(cards: CardEnvelope[], props: Record<string, unknown> = {}) {
-  const el = document.createElement('kai-cards') as HTMLElement & Record<string, unknown>;
+  const el = document.createElement('kai-cards') as unknown as HTMLElement & Record<string, unknown>;
   const events: CardEvent[] = [];
   el.addEventListener(CARD_EVENT_NAME, (e) => events.push((e as CustomEvent<CardEvent>).detail));
   el.cards = cards;
@@ -107,7 +107,7 @@ describe('<kai-cards> validation', () => {
     // A scalar prop that only worked as a JS property would be a trap: the whole
     // point of the `kai-` contract is that scalars are settable as attributes. The
     // string "false" has to coerce, which is exactly the case that silently fails.
-    const el = document.createElement('kai-cards') as HTMLElement & Record<string, unknown>;
+    const el = document.createElement('kai-cards') as unknown as HTMLElement & Record<string, unknown>;
     el.setAttribute('validate-cards', 'false');
     el.cards = [env(HARD)];
     document.body.append(el);
