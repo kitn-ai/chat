@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { Tool } from './types';
-import { Placement, Framework } from '../../types';
+import { Placement, Framework, SECRET_ENV_VAR } from '../../types';
 import type { Integration } from '../../types';
 import {
   getArchetype,
@@ -2114,8 +2114,10 @@ function renderSvelte(components: readonly string[], ctx: RenderCtx): string {
  * Scaffold command (official TanStack CLI, non-interactive):
  *   npx @tanstack/cli@latest create <app-name> --framework react --no-git --package-manager npm -y
  *
- * After scaffolding, run `npm install @kitn.ai/ui`, then drop this file into
- * `src/routes/chat.tsx`. Start the dev server with `npm run dev` (port 3000).
+ * After scaffolding, install what block (3) lists — `@kitn.ai/ui` plus whatever
+ * the chosen integration's route imports, which this renderer cannot know and so
+ * no longer guesses — then drop this file into `src/routes/chat.tsx`. Start the
+ * dev server with `npm run dev` (port 3000).
  * Build: `npm run build`; preview: `npm run preview` (or `node dist/server/server.js`).
  * Note: `npm start` does NOT exist in TanStack Start projects — use `npm run dev` / `npm run preview`.
  *
@@ -2231,7 +2233,11 @@ function renderTanstackStart(components: readonly string[], ctx: RenderCtx): str
   const filePathNote = [
     `// TanStack Start route file — save as: src/routes/chat.tsx`,
     `// Scaffold command: npx @tanstack/cli@latest create <app-name> --framework react --no-git --package-manager npm -y`,
-    `// Then: npm install @kitn.ai/ui`,
+    // NOT "npm install @kitn.ai/ui". This block is emitted for every integration,
+    // so a fixed package list here is wrong for the eight of them whose route
+    // imports something else — and it silently WAS, for langgraph and mastra.
+    // Block (3) builds the line from the integration's own `deps`.
+    `// Then: install the packages block (3) lists.`,
     `// Dev: npm run dev (port 3000)  Build: npm run build  Preview: npm run preview`,
     `// Note: there is no 'npm start' script — use 'npm run dev' or 'npm run preview'.`,
     `// Backend: the fetch below hits /api/chat, so it needs a SERVER ROUTE, not a`,
@@ -3818,6 +3824,18 @@ function chooseRoute(integration: Integration, framework: string): RouteChoice |
 function cannotHostWarning(integration: Integration, route: RouteChoice, framework: string): string[] {
   const target = FRAMEWORK_LABEL[framework] ?? `a ${framework} app`;
   const options = [
+    // Led by the option `keyExposure` unlocks, where there is one. The generic
+    // note below tells a static page to "run this route on a separate server",
+    // which for ollama is work nobody has to do: its route holds no credential
+    // and reaches localhost, so the page can call it. That advice was emitted
+    // identically for every integration because nothing read the flag that
+    // distinguishes them.
+    ...(integration.keyExposure === 'frontend-safe'
+      ? [
+          `#   • or drop the route entirely: this integration needs no server hop — see the`,
+          `#     run note — so the page may call it directly (CORS applies).`,
+        ]
+      : []),
     `#   • ${CANNOT_HOST_NOTE[framework] ?? "port it to this framework's route convention."}`,
     ...(integration.language === 'python'
       ? [
@@ -3908,6 +3926,111 @@ function setupBlock(framework: string): string | undefined {
   ].join('\n');
 }
 
+// ── block (3): what to install, and where the key may live ───────────────────
+
+/**
+ * The install command, DERIVED from the catalog's `deps`.
+ *
+ * `deps` was declared by all eleven integrations and consumed by nothing: the
+ * schema typed it, `registry.test.ts` checked its SHAPE, and the fact a developer
+ * actually needs — which packages to install — lived a SECOND time as prose in
+ * each integration's `runNote`. Two copies of one fact drift silently, and both
+ * copies already had: langgraph's prose named three packages where `deps.npm`
+ * carries four (it never mentioned `zod`, which its route imports and its app
+ * therefore fails to build without), and pydantic-ai's named three where
+ * `deps.pip` carries four (it never mentioned `pydantic`, which its route
+ * imports). Nothing could catch either, because nothing compared them.
+ *
+ * So the prose is gone and this is the only place the scaffold names a package.
+ * `registry.test.ts` pins `deps.npm` to the imports of the route's own source, so
+ * the line below cannot drift from the code printed above it either.
+ *
+ * `@kitn.ai/ui` leads and is deliberately in no integration's `deps`: it is the
+ * kit, a dependency of every scaffold whatever the backend, so declaring it
+ * per-integration would be eleven copies of one constant.
+ *
+ * Only what the emitted CODE imports is listed. The host a route runs on (Express,
+ * an Angular SSR server, a Vite dev server) comes from the app template the
+ * developer created, not from here.
+ */
+function installLines(integration: Integration): string[] {
+  const lines = [
+    `Install:`,
+    `  npm install ${['@kitn.ai/ui', ...integration.deps.npm].join(' ')}`,
+  ];
+  if (integration.deps.pip.length > 0) {
+    lines.push(
+      `  # ...and block (2) is Python — a separate service, with its own install:`,
+      `  pip install ${integration.deps.pip.join(' ')}`,
+    );
+  }
+  return lines;
+}
+
+/**
+ * The two halves of the proxy decision, as the exact strings the emitted run note
+ * carries. Exported so the guards in scaffold.test.ts can look for the claim the
+ * scaffold really makes instead of restating it — a copied string is a guard that
+ * goes green the day the wording changes.
+ */
+export const PROXY_REQUIRED_CLAIM = 'a server hop is REQUIRED';
+export const NO_PROXY_CLAIM = 'no server hop is required';
+
+/**
+ * Where this integration's key may live, DERIVED from the catalog's `keyExposure`.
+ *
+ * This is the field's whole point of existence (see `KeyExposure` in types.ts) and
+ * until now nothing read it, which meant every one of the eleven values could have
+ * been wrong with every test still green.
+ *
+ * `'frontend-safe'` is tested POSITIVELY and everything else — including an absent
+ * flag, which the type still permits — falls through to the proxy branch. That
+ * asymmetry is the safety property: declaring a proxy where none was needed costs
+ * a server hop, and reading a missing flag as "safe" costs the key.
+ */
+function keyHandlingLines(integration: Integration, route: RouteChoice | undefined): string[] {
+  if (integration.keyExposure === 'frontend-safe') {
+    return [
+      `Key handling: frontend-safe — ${NO_PROXY_CLAIM}.`,
+      `  Nothing here is secret and nothing needs a capability a browser lacks, so the`,
+      `  page may talk to this integration itself.`,
+      ...(route
+        ? [
+            `  The route in block (2) is a convenience — one origin, one place to log — and`,
+            `  not a requirement.`,
+          ]
+        : []),
+    ];
+  }
+
+  // Named rather than described: "OPENAI_API_KEY stays on the server" is a
+  // sentence a developer can act on. `SECRET_ENV_VAR` is the schema's own pattern,
+  // imported rather than restated, so this list and the refinement that rejects a
+  // false `frontend-safe` cannot disagree about what counts as a secret.
+  const secrets = integration.envVars.filter((name) => SECRET_ENV_VAR.test(name));
+  return [
+    `Key handling: needs-proxy — ${PROXY_REQUIRED_CLAIM}.`,
+    ...(secrets.length > 0
+      ? [
+          `  ${secrets.join(' and ')} ${secrets.length > 1 ? 'stay' : 'stays'} on the server: the front end POSTs to`,
+          `  /api/chat, and only the route reads ${secrets.length > 1 ? 'them' : 'it'}.`,
+          `  Do NOT re-export ${secrets.length > 1 ? 'them' : 'it'} through a client-bundle env var — a bundler INLINES`,
+          `  VITE_*, NEXT_PUBLIC_* and PUBLIC_* into the JavaScript the browser downloads,`,
+          `  so a key put there is published, not configured.`,
+        ]
+      : [
+          // Two integrations are here, for two different reasons, and the sentence
+          // has to be true of both: `pi` spawns a local process, which a browser
+          // cannot do at any price, and `mastra` points at an unauthenticated agent
+          // endpoint that a public bundle must not be aimed at. Neither declares a
+          // key, and neither is frontend-safe.
+          `  No API key is involved. What keeps this on a server is the route itself —`,
+          `  either a capability a browser does not have, or an endpoint a public bundle`,
+          `  must not be pointed at. Block (2) is not optional.`,
+        ]),
+  ];
+}
+
 // ── compose ───────────────────────────────────────────────────────────────────
 
 /**
@@ -3987,13 +4110,21 @@ function compose(
   const envLines = integration.envVars.length
     ? integration.envVars.map((v) => `  - ${v}`).join('\n')
     : '  (none)';
+  // The catalog's two machine-readable facts, emitted rather than described: what
+  // to install comes from `deps`, and where the key may live comes from
+  // `keyExposure`. `runNote` is prose ABOUT running it and no longer restates
+  // either — see `installLines` for the drift that duplication had already caused.
   const block3 = [
     `=== (3) RUN NOTE ===`,
     ``,
     integration.runNote,
     ``,
+    ...installLines(integration),
+    ``,
     `Env vars to set:`,
     envLines,
+    ``,
+    ...keyHandlingLines(integration, route),
   ].join('\n');
 
   // SCAF-16: loading-options note — inform consumers about the two opt-in load modes

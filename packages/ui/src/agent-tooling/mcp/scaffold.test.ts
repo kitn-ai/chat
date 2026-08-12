@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { cardEmitPlan, scaffold } from './tools/scaffold';
+import { cardEmitPlan, scaffold, NO_PROXY_CLAIM, PROXY_REQUIRED_CLAIM } from './tools/scaffold';
 import { getArchetype, getIntegration, listArchetypes, listIntegrations } from '../registry';
+import type { Integration } from '../types';
 // The real encoders, used to prove WHY the fabricated sample seed had to go:
 // one of them throws on it, the other quietly sends it.
 import { toAnthropicMessages, toOpenAIMessages, WireEncodeError } from '../../wire/encode';
@@ -3481,5 +3482,257 @@ describe("scaffold — the emitted model id belongs to its route's host", () => 
     expect(anthropic.accepts('openai/gpt-4o-mini'), 'api.anthropic.com accepted an OpenRouter slug').toBe(false);
     const openrouter = HOST_ID_SPACES.find((s) => s.host === 'openrouter.ai')!;
     expect(openrouter.accepts('gpt-4o-mini'), 'openrouter.ai accepted an unprefixed id').toBe(false);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The catalog's `deps` and `keyExposure` ARE the scaffold's install command and
+// its proxy decision.
+//
+// Both fields were declared by all eleven integrations and read by nothing. A
+// field with no consumer is a field nobody has proven correct: every value could
+// have been wrong with the whole suite green, and two of them WERE wrong in the
+// prose that stood in for them (langgraph's run note named three packages where
+// `deps.npm` has four, and pydantic-ai's named three where `deps.pip` has four).
+//
+// These checks are written so a WRONG VALUE fails them, not just a missing wire.
+// That distinction is the point, and it is what makes the second and third checks
+// below the load-bearing ones: their expectations come from GROUND TRUTH — the
+// imports the emitted route really makes, and the credential the integration
+// really holds — rather than from the same declaration the emitter read. A check
+// whose expectation comes from the field it is checking moves with the corruption
+// and stays green.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('the emitted scaffold is built from `deps` and `keyExposure`', () => {
+  /** Every front-end target. Enumerated, so a new one is covered on arrival. */
+  const FRONTENDS = ['html', 'react', 'next', 'vue', 'svelte', 'angular', 'solid', 'tanstack-start'] as const;
+
+  const emit = async (integrationId: string, framework: string): Promise<string> => {
+    const out = await scaffold.handler({
+      useCase: 'drop-in-chat',
+      integration: integrationId,
+      placement: 'full-page',
+      framework,
+    });
+    return (out.content as { type: string; text: string }[])[0].text;
+  };
+
+  const frontEndBlock = (text: string) => text.split('=== (2) BACKEND ROUTE ===')[0];
+  const routeBlock = (text: string) =>
+    text.split('=== (2) BACKEND ROUTE ===')[1]?.split('=== (3) RUN NOTE ===')[0] ?? '';
+  const runNoteBlock = (text: string) =>
+    text.split('=== (3) RUN NOTE ===')[1]?.split('=== LOADING OPTIONS ===')[0] ?? '';
+
+  /** The install commands the scaffold emits, read back out of its own text. */
+  const emittedInstall = (text: string) => {
+    const note = runNoteBlock(text);
+    const npm = note.match(/^\s*npm install (.+)$/m);
+    const pip = note.match(/^\s*pip install (.+)$/m);
+    return {
+      npm: npm ? npm[1].trim().split(/\s+/) : [],
+      pip: pip ? pip[1].trim().split(/\s+/) : [],
+    };
+  };
+
+  /**
+   * Ground truth, restated here on purpose rather than imported from the schema.
+   * These two patterns are what the checks below MEASURE the emitted text
+   * against; importing the emitter's own definitions would let one edit move the
+   * claim and the check that reads it together.
+   */
+  const SECRET_ENV_VAR = /(?:KEY|TOKEN|SECRET|PASSWORD)$/;
+  const AUTH_HEADER = /Authorization\s*:|['"]x-api-key['"]\s*:/i;
+
+  const routeSourcesOf = (integration: Integration): string[] => [
+    ...Object.values(integration.routeTemplates),
+    ...(integration.webRoute ? [integration.webRoute] : []),
+  ];
+  const secretsOf = (integration: Integration) => integration.envVars.filter((n) => SECRET_ENV_VAR.test(n));
+
+  /** `@langchain/core/tools` is the package `@langchain/core`. */
+  const packageOf = (specifier: string): string => {
+    const segments = specifier.split('/');
+    return specifier.startsWith('@') ? segments.slice(0, 2).join('/') : segments[0];
+  };
+
+  // Anti-vacuity. Every check below loops over the catalog; an empty one would
+  // pass them all by running zero times.
+  it('the catalog it enumerates is not empty', () => {
+    expect(listIntegrations().length).toBeGreaterThan(0);
+  });
+
+  /**
+   * The wiring half: the emitted install command IS `deps`, for every integration
+   * and every front-end target.
+   *
+   * This one moves with a corrupted `deps` and would stay green under it — which
+   * is exactly why it is not the only check here. What it catches is the EMITTER
+   * drifting from the catalog: a hand-written package list creeping back in, a
+   * framework branch that forgets the line, `@kitn.ai/ui` going missing.
+   */
+  it("emits an install command that is exactly the integration's declared deps", async () => {
+    for (const integration of listIntegrations()) {
+      for (const framework of FRONTENDS) {
+        const { npm, pip } = emittedInstall(await emit(integration.id, framework));
+        expect(
+          npm,
+          `${integration.id} × ${framework}: emitted \`npm install\` line does not match ` +
+            `['@kitn.ai/ui', ...deps.npm]`,
+        ).toEqual(['@kitn.ai/ui', ...integration.deps.npm]);
+        expect(
+          pip,
+          `${integration.id} × ${framework}: emitted \`pip install\` line does not match deps.pip`,
+        ).toEqual(integration.deps.pip);
+      }
+    }
+  });
+
+  /**
+   * THE VALUE CHECK for `deps`, and the one a wrong value fails.
+   *
+   * The expectation comes from the ROUTE THE SCAFFOLD JUST EMITTED — its own
+   * import statements — not from `deps`, so removing a package from `deps` breaks
+   * the two apart and this goes red naming the integration. `registry.test.ts`
+   * makes the same comparison against the catalog's raw sources; this one closes
+   * the loop at the other end, over the text a consumer is actually handed.
+   *
+   * `next` and `fastapi` are the two targets whose route adapter contributes no
+   * import of its own (Express adds `express`, Angular adds `@angular/ssr`, the
+   * Vite middleware adds `vite`). Those belong to the app template the developer
+   * created rather than to the integration, and `deps` does not claim them.
+   */
+  it('names every package the route it emits actually imports', async () => {
+    const PY_STDLIB = new Set(['json', 'os', 'typing', 'asyncio', 'sys', 're', 'time', 'dataclasses']);
+
+    for (const integration of listIntegrations()) {
+      const framework = integration.language === 'python' ? 'fastapi' : 'next';
+      const text = await emit(integration.id, framework);
+      const route = routeBlock(text);
+      const { npm, pip } = emittedInstall(text);
+
+      if (integration.language === 'python') {
+        for (const match of route.matchAll(/(?:^|\n)\s*(?:from\s+([\w.]+)\s+import|import\s+([\w.]+))/g)) {
+          const module = (match[1] ?? match[2]).split('.')[0];
+          if (PY_STDLIB.has(module)) continue;
+          expect(
+            pip,
+            `${integration.id}: the route the scaffold emits imports '${module}', but the ` +
+              `\`pip install\` line it emits alongside does not cover it — that service does not start`,
+          ).toContain(module.replace(/_/g, '-'));
+        }
+        continue;
+      }
+
+      for (const match of route.matchAll(/(?:^|\n)\s*import\s+(?:[^'"]*?\s+from\s+)?['"]([^'"]+)['"]/g)) {
+        const specifier = match[1];
+        if (specifier.startsWith('.') || specifier.startsWith('node:')) continue;
+        const pkg = packageOf(specifier);
+        expect(
+          npm,
+          `${integration.id}: the route the scaffold emits imports '${specifier}', but the ` +
+            `\`npm install\` line it emits alongside does not cover ${pkg} — that app does not build`,
+        ).toContain(pkg);
+      }
+    }
+  });
+
+  /**
+   * THE VALUE CHECK for `keyExposure`, and the one a wrong value fails.
+   *
+   * The trigger is the sentence the scaffold really prints; the verdict comes from
+   * what the integration really holds — a secret env var, or an authorization
+   * header in its route. Declaring `frontend-safe` on an integration with a key
+   * therefore makes the scaffolder print "no server hop is required" over a
+   * credential, and this goes red naming it.
+   *
+   * One direction only, deliberately: an unnecessary proxy costs a server hop, and
+   * the other error costs the key.
+   */
+  it('never says the proxy is optional for an integration that holds a credential', async () => {
+    for (const integration of listIntegrations()) {
+      for (const framework of FRONTENDS) {
+        const text = await emit(integration.id, framework);
+        if (!text.includes(NO_PROXY_CLAIM)) continue;
+
+        const secrets = secretsOf(integration);
+        expect(
+          secrets,
+          `${integration.id} × ${framework}: the scaffold tells the developer "${NO_PROXY_CLAIM}", ` +
+            `but this integration declares the secret env var(s) ${secrets.join(', ')}. That sentence ` +
+            `invites an API key into a browser bundle.`,
+        ).toEqual([]);
+
+        for (const code of routeSourcesOf(integration)) {
+          expect(
+            code,
+            `${integration.id} × ${framework}: the scaffold tells the developer "${NO_PROXY_CLAIM}", ` +
+              `but its route sends an authorization header, so it holds a credential a page must not.`,
+          ).not.toMatch(AUTH_HEADER);
+        }
+      }
+    }
+  });
+
+  /** The wiring half for `keyExposure`: one verdict per scaffold, and it is the declared one. */
+  it('emits exactly one key-handling verdict, matching the declared keyExposure', async () => {
+    for (const integration of listIntegrations()) {
+      for (const framework of FRONTENDS) {
+        const text = await emit(integration.id, framework);
+        const claims = [
+          text.includes(NO_PROXY_CLAIM) ? 'frontend-safe' : null,
+          text.includes(PROXY_REQUIRED_CLAIM) ? 'needs-proxy' : null,
+        ].filter(Boolean);
+        expect(
+          claims,
+          `${integration.id} × ${framework}: expected exactly one key-handling verdict in the emitted scaffold`,
+        ).toHaveLength(1);
+        expect(
+          claims[0],
+          `${integration.id} × ${framework}: emitted verdict does not match its declared keyExposure`,
+        ).toBe(integration.keyExposure);
+      }
+    }
+  });
+
+  /**
+   * The marker-free check: whatever the scaffold SAYS, no secret env var may
+   * appear anywhere a browser can read it.
+   *
+   * `VITE_*`, `NEXT_PUBLIC_*` and `PUBLIC_*` are inlined into the client bundle by
+   * their bundlers, and block (1) IS client code, so naming a key there is the
+   * same leak whether or not any prose admits it. This depends on no declaration
+   * and no phrase — it catches an emitter that grows a frontend key path with
+   * `keyExposure` left correctly at `needs-proxy`.
+   */
+  it('puts no secret env var anywhere a browser bundle can reach', async () => {
+    const covered: string[] = [];
+    for (const integration of listIntegrations()) {
+      const secrets = secretsOf(integration);
+      if (secrets.length === 0) continue;
+      covered.push(integration.id);
+
+      for (const framework of FRONTENDS) {
+        const text = await emit(integration.id, framework);
+        for (const secret of secrets) {
+          for (const prefix of ['VITE_', 'NEXT_PUBLIC_', 'PUBLIC_']) {
+            expect(
+              text,
+              `${integration.id} × ${framework}: emits ${prefix}${secret} — that prefix means the ` +
+                `bundler writes the key into the JavaScript it serves`,
+            ).not.toContain(`${prefix}${secret}`);
+          }
+          expect(
+            text,
+            `${integration.id} × ${framework}: emits import.meta.env.${secret}, which resolves in the browser`,
+          ).not.toContain(`import.meta.env.${secret}`);
+          expect(
+            frontEndBlock(text),
+            `${integration.id} × ${framework}: the FRONT-END block names ${secret}. Block (1) is ` +
+              `client code — the key belongs to the route in block (2) and nowhere else`,
+          ).not.toContain(secret);
+        }
+      }
+    }
+    expect(covered.length, 'no integration declares a secret env var — this check is vacuous').toBeGreaterThan(0);
   });
 });

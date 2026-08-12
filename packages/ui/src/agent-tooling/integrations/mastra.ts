@@ -107,7 +107,10 @@ async function chatHandler(request: Request): Promise<Response> {
   });
 }`,
   streamMapping: "Mastra's client SDK has no textStream: agent.stream() returns a Response wrapped with processDataStream({ onChunk }), which replays the agent's SSE body as typed chunks (text-delta, tool-call, reasoning-delta, error, finish, ...). Filter to type === 'text-delta' and emit data: {choices:[{delta:{content:payload.text}}]} frames; close with data: [DONE]. readOpenAIStream from @kitn.ai/ui/wire parses that, including tool calls and reasoning, but this route only wires text-delta: re-frame tool-call/tool-result and reasoning-delta chunks onto delta.tool_calls and delta.reasoning to get them too.",
-  runNote: 'Set MASTRA_URL to your Mastra server base URL (mastra dev exposes POST /api/agents/:agentId/stream on port 4111). Install @mastra/client-js.',
+  // No install list here: `deps` below is the one, and the scaffolder emits it.
+  // This sentence used to end "Install @mastra/client-js." — right on the day it
+  // was written, and unchecked against the route's imports ever after.
+  runNote: 'Set MASTRA_URL to your Mastra server base URL (mastra dev exposes POST /api/agents/:agentId/stream on port 4111).',
   docsSlug: 'integrations/harnesses',
   // Nothing. The Mastra agent owns its model and its tools server-side.
   forwardsFromClient: [],

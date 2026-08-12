@@ -92,15 +92,19 @@ async function chatHandler(request: Request): Promise<Response> {
   });
 }`,
   streamMapping: "Use graph.stream(input, { streamMode: 'messages' }) to get [messageChunk, metadata] tuples. Extract chunk.content (string) and forward as OpenAI-format SSE frames: data: {choices:[{delta:{content}}]}. Close with data: [DONE]. readOpenAIStream from @kitn.ai/ui/wire parses tool calls and reasoning too, but the route template forwards chunk.content only, which is text: the same message chunks carry the tool-call fragments on chunk.tool_call_chunks, so re-frame those onto delta.tool_calls to fill kai-tool.",
-  runNote: 'Set OPENAI_API_KEY (or the key for your chosen model provider). Install @langchain/langgraph, @langchain/openai, @langchain/core.',
+  // No install list here: `deps` below is the one, and the scaffolder emits it.
+  // This sentence used to end "Install @langchain/langgraph, @langchain/openai,
+  // @langchain/core." — three of the four packages, for as long as nobody was
+  // comparing it to anything.
+  runNote: 'Set OPENAI_API_KEY (or the key for your chosen model provider).',
   docsSlug: 'integrations/langgraph',
   // Nothing. The agent owns both: ChatOpenAI({ model: 'gpt-4o' }) and the tools
   // array passed to createReactAgent are server-side.
   forwardsFromClient: [],
-  // Four, one per import in the route above. `zod` is the one runNote's prose
-  // forgets: the tool's `schema:` is a z.object(), so an app installed from that
+  // Four, one per import in the route above. `zod` is the one the deleted prose
+  // forgot: the tool's `schema:` is a z.object(), so an app installed from that
   // sentence alone fails to build. Deriving this from the imports rather than
-  // from the prose is the point of the field.
+  // from a sentence is the point of the field.
   deps: { npm: ['@langchain/langgraph', '@langchain/openai', '@langchain/core', 'zod'], pip: [] },
   // No key appears in the route: `new ChatOpenAI(...)` reads OPENAI_API_KEY from
   // the environment itself. Same invisible-key shape as vercel-ai-sdk.
