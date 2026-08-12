@@ -79,8 +79,13 @@ export const DepsSchema = z.object({
  * (`langgraph`, `vercel-ai-sdk`, `pydantic-ai`) hold a key their route source
  * never names, because the SDK reads the env var itself; their `envVars` is what
  * catches them here, and nothing but the author reading the route would have.
+ *
+ * Exported because the scaffolder names the secrets back at the developer in its
+ * run note ("OPENAI_API_KEY stays on the server"). That sentence and the
+ * refinement below have to agree about which env vars are secret, so there is one
+ * pattern rather than two free to drift apart.
  */
-const SECRET_ENV_VAR = /(?:KEY|TOKEN|SECRET|PASSWORD)$/;
+export const SECRET_ENV_VAR = /(?:KEY|TOKEN|SECRET|PASSWORD)$/;
 
 /**
  * A credential written into a request from route source. The second alternative

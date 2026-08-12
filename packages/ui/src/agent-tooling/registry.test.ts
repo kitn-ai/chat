@@ -270,6 +270,32 @@ it('only the python integration declares pip deps', () => {
   }
 });
 
+/**
+ * `deps` is the ONLY place a package list may live, and this is what keeps it
+ * that way.
+ *
+ * Three run notes used to carry a second copy as prose, and two of the three had
+ * already drifted by the time anything compared them: langgraph's said "Install
+ * @langchain/langgraph, @langchain/openai, @langchain/core" while `deps.npm`
+ * carries those three plus `zod` (its route's tool schema is a `z.object()`, so
+ * an app installed from the sentence does not build), and pydantic-ai's said
+ * "pip install pydantic-ai fastapi uvicorn" while `deps.pip` carries those three
+ * plus `pydantic` (which the route imports on line 5). Neither was catchable:
+ * `deps` was checked against the route and the prose was checked against nothing.
+ *
+ * The scaffolder now emits the install command from `deps` itself, so the prose
+ * is not merely redundant — it is a second answer to a question that has one.
+ */
+it('no runNote restates an install command', () => {
+  for (const integration of integrations) {
+    expect(
+      integration.runNote,
+      `${integration.id}: runNote names packages to install. \`deps\` is the single source and the ` +
+        `scaffolder emits it; a sentence beside it is a copy that drifts and that nothing checks`,
+    ).not.toMatch(/\b(?:npm|pnpm|yarn|pip)\s+(?:install|add)\b|\bInstall\s+@/i);
+  }
+});
+
 // --- Anthropic wire constraints ---
 //
 // The Anthropic Messages API is NOT the OpenAI one with a different host, and
