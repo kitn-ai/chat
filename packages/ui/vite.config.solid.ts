@@ -3,8 +3,10 @@ import solidPlugin from 'vite-plugin-solid';
 import { resolve } from 'node:path';
 
 // The `@kitn.ai/ui/solid` entry (src/solid.ts → dist/solid.js) — the COMPLETE
-// SolidJS surface: a writable component for all 79 registered elements plus a
-// `<Name>Props` type for every public component.
+// SolidJS surface: a writable component for EVERY registered element plus a
+// `<Name>Props` type for every public component. The catalog is
+// src/elements/element-meta.json; `npm run verify:solid-coverage` prints the
+// element count and fails on any gap, so the number is not restated here.
 //
 // WHY IT IS ITS OWN BUILD TARGET RATHER THAN PART OF THE BARREL
 // ------------------------------------------------------------
