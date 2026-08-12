@@ -1298,6 +1298,56 @@ unchanged.
 element or the composed component — the layer a consumer imports — because every prop-forwarding gap
 lives *between* units and is invisible to both sides' tests.
 
+### 5.21 The artifact a failure hands you is not necessarily about the thing that failed
+
+Three instances, one family. In each, the output is a true statement that points at the wrong
+subject — which is worse than an unhelpful error, because it is actionable in the wrong direction.
+
+**`waitFor` reports the last assertion, not the timeout.** It retries its callback until the budget
+expires, then re-throws whatever the final attempt threw. The output is an assertion error naming a
+value, with no mention that a deadline was reached. The reader sees `expected 355 to be greater than
+40` and starts investigating why the value is 355, when the fact is that the budget ran out before
+the value ever arrived. **Operational form: establish *which* failure it is — never satisfied, or
+satisfied too late — before reading the value it reports.** Raising the budget and re-running answers
+that in one step. If the failure disappears with a longer budget, the value in the message was never
+the bug.
+
+**A failure COUNT reports how many guards touch a thing, not which layer broke.** Breaking the
+attachment bridge reports `2 failed`, not 1: the maximal-surface guard dies its own way, and a
+separate card-path guard also consumes the encoder and dies with `SyntaxError: "undefined" is not
+valid JSON`. Neither number nor tally identifies the layer. Read the *named* assertion, not the
+count.
+
+**The same break can present at two different assertions.** In `emitted-maximal-surface.live.test.ts`
+staging asserts at line 334 and the round count at 356. A broken *bridge* fires 334 (`a dropped file
+never reached <kai-attachments>`); a broken *encoder* fires 356 (`expected +0 to be 2`), because
+staging succeeds normally and only then does `toOpenAIMessages` throw, so `fetch` never happens. Two
+of us compared these and each briefly concluded the other's fingerprint was wrong. **Both are correct
+for their own mutation, and a doc recording only one would teach a future reader to diagnose an
+encoder failure as a staging failure** — miscategorising a symptom by layer, which is the specific
+class this document exists to prevent.
+
+Corollary, and it is the cheap general rule: **one mutation cannot discriminate between two
+hypotheses.** If two causes predict the same red, you have not localised anything; perform the
+second mutation.
+
+### 5.22 A substring check over source is a check over prose that happens to sit next to code
+
+A structural guard for the Python route nearly shipped as `code.includes('list')`. That passes on a
+comment containing the word. It is not a weak version of the right check — it is a check of a
+different thing, one that cannot distinguish an annotation from an apology for the lack of one.
+Rebuilt over the real AST via `ast.unparse`, it asserts a `Message` class whose `content` annotation
+contains `list`, and an `ast.Raise` naming `HTTPException`.
+
+This is the cleaner statement of failures already recorded above: the `::part` drift guard going
+blind, and a docs linter matching "Never" anywhere in a comment. Each scanned text and reported on
+code.
+
+**Rule: if a claim is about structure, check the structure.** Grep answers "does this string occur",
+which is only ever a proxy — and the gap between the proxy and the claim is where a green check
+stops meaning anything. When no parser is available, say what the check actually verifies in its own
+failure message, so the next reader is not told a structural fact was proven when a textual one was.
+
 ---
 
 ## 6. Repo gotchas
