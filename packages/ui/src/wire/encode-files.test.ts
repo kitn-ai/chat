@@ -224,3 +224,68 @@ describe('toAnthropicMessages: file parts', () => {
     ).toEqual([{ role: 'user', content: [{ type: 'text', text: 'hi' }] }]);
   });
 });
+
+describe('an attachment staged by a consumer OWN composer', () => {
+  // The kit's own paperclip stages a `data:` URI, so this shape does not come
+  // from `<kai-chat>`. It comes from a developer who built their own input and
+  // forwarded `event.detail.attachments` straight through: an id, a type and a
+  // filename is the obvious minimum, and it carries neither bytes nor an
+  // address.
+  //
+  // This had INCIDENTAL coverage in the emitted maximal-surface test until that
+  // fixture had to become realistic, and incidental coverage vanishing with
+  // nothing going red is the failure mode this file exists to prevent. So it is
+  // asserted here on purpose instead.
+  const bare: AttachmentData = { id: 'from-composer', type: 'file', filename: 'notes.txt' };
+
+  const turn: ChatMessage[] = [
+    {
+      id: 'u7',
+      role: 'user',
+      parts: [
+        { type: 'text', text: 'have a look' },
+        { type: 'file', attachment: bare },
+      ],
+    },
+  ];
+
+  it('THROWS on the OpenAI wire, naming the part rather than the message', () => {
+    try {
+      toOpenAIMessages(turn);
+      expect.unreachable('an attachment with no bytes and no address must not encode to silence');
+    } catch (e) {
+      const err = e as WireEncodeError;
+      expect(err).toBeInstanceOf(WireEncodeError);
+      expect(err.messageId).toBe('u7');
+      // The FILE part at index 1, not the text that happens to precede it.
+      expect(err.partIndex).toBe(1);
+      expect(err.message).toContain('no `url`');
+      // An error that only says "no" costs a debugging session; this one says
+      // which call produces the form the encoder wants.
+      expect(err.message).toContain('readAsDataURL');
+    }
+  });
+
+  it('THROWS on the Anthropic wire too, so neither is the lenient one', () => {
+    try {
+      toAnthropicMessages(turn);
+      expect.unreachable('the Anthropic encoder must refuse it as well');
+    } catch (e) {
+      const err = e as WireEncodeError;
+      expect(err).toBeInstanceOf(WireEncodeError);
+      expect(err.messageId).toBe('u7');
+      expect(err.partIndex).toBe(1);
+      expect(err.message).toContain('no `url`');
+    }
+  });
+
+  it('is the DROP that is being prevented: the text alone would look like a working request', () => {
+    // The regression in one assertion. Under the opt-out the turn still sends,
+    // carrying only the text -- which is precisely what shipped before, and
+    // precisely why the default is a throw and this behaviour has to be asked
+    // for by name.
+    expect(toOpenAIMessages(turn, { onUnencodableFile: 'skip' })).toEqual([
+      { role: 'user', content: 'have a look' },
+    ]);
+  });
+});
