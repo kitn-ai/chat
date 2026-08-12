@@ -6,6 +6,7 @@ description: Show two assistant responses side by side and let the user pick the
 import { Aside } from '@astrojs/starlight/components';
 import PropTable from '../../../components/PropTable.astro';
 import EventTable from '../../../components/EventTable.astro';
+import MethodTable from '../../../components/MethodTable.astro';
 import ComposedFrom from '../../../components/ComposedFrom.astro';
 import Facts from '../../../components/Facts.astro';
 import NeedAHand from '../../../components/NeedAHand.astro';
@@ -153,6 +154,10 @@ The two columns are a WAI-ARIA radiogroup with roving focus: Arrow keys move bet
 ## Events
 
 <EventTable tag="kai-compare" />
+
+## Methods
+
+<MethodTable tag="kai-compare" />
 
 ## Composed from
 

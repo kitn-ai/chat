@@ -1,0 +1,30 @@
+---
+// Imperative methods for an element, from the generated element-meta.json.
+// These are the input half of the interaction API: `expose({ … })` in the facade
+// attaches them to the host, so a consumer calls them straight off the element
+// (`document.querySelector('kai-resizable').maximize(0)`). Signatures are the
+// AUTHORED text — the shipped .d.ts carries a self-contained expansion of the
+// same call, which is right for a compiler and unreadable in a table.
+import meta from '@kitn.ai/ui/element-meta.json';
+interface Props { tag: string }
+const { tag } = Astro.props;
+const el = (meta as any[]).find((e) => e.tag === tag);
+const methods = el?.methods ?? [];
+const th = 'text-left text-xs font-semibold uppercase tracking-wide text-ink-3 bg-surface px-4 py-2.5 border-b border-line';
+---
+{methods.length > 0 && (
+  <div class="not-content my-4 overflow-hidden rounded-xl border border-line">
+    <table class="w-full border-collapse text-sm">
+      <thead><tr><th class={th}>Method</th><th class={th}>Signature</th><th class={th}>Notes</th></tr></thead>
+      <tbody>
+        {methods.map((m: any) => (
+          <tr>
+            <td class="border-b border-line px-4 py-3 align-top font-mono text-sm font-semibold text-link">{m.name}</td>
+            <td class="border-b border-line px-4 py-3 align-top font-mono text-sm text-ink-2">({m.params}): {m.returns}</td>
+            <td class="border-b border-line px-4 py-3 align-top text-sm text-ink-2">{m.description}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+)}

@@ -4623,7 +4623,7 @@
         "type": "undefined | \"user\" | \"assistant\"",
         "optional": true,
         "scalar": true,
-        "description": "Who is speaking: `'user'` or `'assistant'`. Convenience for simple cases when not passing a `message` object. This is the SEMANTIC role of the message, not an ARIA role — and the name collides with the global ARIA `role` attribute, which is why the facade lifts it off the host (see `liftRoleOffHost`). Neither speaker is a valid ARIA role, so a `role=\"user\"` left on `<kai-message>` is a CRITICAL axe `aria-roles` violation. The accessible role lives on the row inside the shadow root instead: `role=\"article\"` plus an `aria-label` naming the speaker, matching the SolidJS `<Message>` component.",
+        "description": "Who is speaking: `'user'` or `'assistant'`. Convenience for simple cases when not passing a `message` object. This is the SEMANTIC role of the message, not an ARIA role. The name collides with the global ARIA `role` attribute, which is why the facade lifts it off the host (see `liftRoleOffHost`). Neither speaker is a valid ARIA role, so a `role=\"user\"` left on `<kai-message>` is a CRITICAL axe `aria-roles` violation. The accessible role lives on the row inside the shadow root instead: `role=\"article\"` plus an `aria-label` naming the speaker, matching the SolidJS `<Message>` component.",
         "default": "'assistant'",
         "displayType": "undefined | \"user\" | \"assistant\""
       },
