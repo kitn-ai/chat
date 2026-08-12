@@ -181,6 +181,18 @@ Every element also accepts a `theme` attribute (`'light' | 'dark' | 'auto'`, def
 | `kai-value-change` | `{ value: string }` | Fired on every input change. |
 | `kai-voice` | — | The Mic / voice button was clicked. |
 
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-chat').focus(…)`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `focus` | `(options?: FocusOptions): void` |  |
+| `blur` | `(): void` |  |
+| `clear` | `(): void` |  |
+| `send` | `(): void` |  |
+| `scrollToBottom` | `(behavior?: ScrollBehavior): void` |  |
+
 #### Slots
 
 Project your own markup with `slot="name"` on a light-DOM child.
@@ -274,6 +286,20 @@ A complete chat interface: a scrolling message list (with Markdown rendering, re
 | `kai-suggestion-click` | `{ value: string }` | A suggestion chip was clicked (only in `suggestion-mode="fill"`). |
 | `kai-value-change` | `{ value: string }` | Fired on every input change. |
 | `kai-voice` | — | The Mic / voice button was clicked. |
+
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-workspace').toggleSidebar()`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `toggleSidebar` | `(): void` | Collapse/expand the conversation sidebar and fire `kai-sidebar-toggle`. |
+| `collapseSidebar` | `(): void` | Force the conversation sidebar collapsed (fires `kai-sidebar-toggle`). |
+| `expandSidebar` | `(): void` | Force the conversation sidebar expanded (fires `kai-sidebar-toggle`). |
+| `focus` | `(options?: FocusOptions): void` | Focus the thread's composer. |
+| `clear` | `(): void` | Clear the thread draft + staged attachments. |
+| `send` | `(): void` | Submit the current thread draft programmatically (fires `kai-submit`). |
+| `scrollToBottom` | `(behavior?: ScrollBehavior): void` | Scroll the thread to the newest message. |
 
 #### Slots
 
@@ -373,6 +399,19 @@ The full app shell in one tag — a collapsible conversation-list sidebar (left)
 | `kai-search` | `{ query: string }` | The built-in search box query changed (typing, or a programmatic `clear()` which fires it with `''`). Lets a consumer mirror or server-side the filter. |
 | `kai-toggle-sidebar` | — | The sidebar toggle was clicked. |
 
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-conversations').focus(…)`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `focus` | `(options?: FocusOptions): void` | Focus the built-in search input inside the shadow root. |
+| `clear` | `(): void` | Clear the internal search query (resets the list filter) and fire kai-search with an empty string. |
+| `select` | `(id: string): void` | Programmatically select a conversation by id — mirror of the kai-conversation-select event (a convenience over driving `activeId`). |
+| `collapse` | `(): void` | Collapse the rail to its floating reopen button (fires `kai-collapse-toggle`). |
+| `expand` | `(): void` | Expand the rail back to the full list (fires `kai-collapse-toggle`). |
+| `toggle` | `(): void` | Toggle the rail collapsed/expanded (fires `kai-collapse-toggle`). |
+
 #### Slots
 
 Project your own markup with `slot="name"` on a light-DOM child.
@@ -448,6 +487,17 @@ Sidebar panel listing conversations, optionally grouped. Emits events for naviga
 | `kai-value-change` | `{ value: string; doc: ({ type: "text"; text: string } | { type: "entity"; entity: { kind: string; id: string; label: string; icon?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> } })[]; entities: { kind: string; id: string; label: string; icon?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[] }` | The input changed (fires on every edit). Carries the flattened `value` plus the structured `doc` + `entities`. |
 | `kai-voice` | — | The Voice (Mic) toolbar button was clicked. |
 
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-prompt-input').focus(…)`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `focus` | `(options?: FocusOptions): void` | Focus the text editor inside the shadow root (not the hidden file input). |
+| `blur` | `(): void` | Blur the focused input control. |
+| `clear` | `(): void` | Clear the text and any staged attachments (fires kai-value-change / kai-attachments-change so a controlled consumer can react). |
+| `send` | `(): void` | Send the current value programmatically — same path as Enter / the send button (fires kai-submit, then clears staged attachments). Named `send`, not `submit`, to avoid colliding with the `submit` prop. |
+
 #### Slots
 
 Project your own markup with `slot="name"` on a light-DOM child.
@@ -513,6 +563,14 @@ Standalone prompt input with a send button. Use when you want just the input are
 | Event | `detail` | Description |
 |-------|-----------|-------------|
 | `kai-message-action` | `{ messageId: string; action: string; state?: undefined | "on" | "off" }` | An action button was clicked. `action` is the built-in name or custom id. `state` is present only for the toggleable feedback votes: `'on'` when a like/dislike is set, `'off'` when re-tapped to clear. |
+
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-message').copy()`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `copy` | `(): void` | Copy the message content to the clipboard and show the copied check. |
 
 #### Slots
 
@@ -637,6 +695,16 @@ No events.
 |-------|-----------|-------------|
 | `kai-open-change` | `{ open: false | true }` | The reasoning block expanded or collapsed (via the trigger, streaming auto-open, or a method). |
 
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-reasoning').show()`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `show` | `(): void` | Open it programmatically (no-op while disabled). |
+| `hide` | `(): void` | Close it programmatically. |
+| `toggle` | `(): void` | Flip the open state (closes while disabled). |
+
 #### Composed from
 
 `Components/Reasoning`, `Components/ReasoningTrigger`, `Components/ReasoningContent`
@@ -668,6 +736,16 @@ Collapsible reasoning/thinking block with optional streaming auto-expand.
 | Event | `detail` | Description |
 |-------|-----------|-------------|
 | `kai-open-change` | `{ open: false | true }` | The panel expanded or collapsed (by trigger click or a method). |
+
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-tool').show()`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `show` | `(): void` | Open it programmatically (no-op while disabled). |
+| `hide` | `(): void` | Close it programmatically. |
+| `toggle` | `(): void` | Flip the open state (closes while disabled). |
 
 #### Composed from
 
@@ -747,6 +825,16 @@ Renders a list of file/document attachments in grid, inline, or list layouts.
 | `kai-model-change` | `{ modelId: string }` | A model was selected. |
 | `kai-open-change` | `{ open: false | true }` | The model dropdown opened or closed (by click, keyboard, Escape, outside-click, or a method). |
 
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-model-switcher').show()`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `show` | `(): void` | Open it programmatically (no-op while disabled). |
+| `hide` | `(): void` | Close it programmatically. |
+| `toggle` | `(): void` | Flip the open state (closes while disabled). |
+
 #### Declarative children
 
 Compose these in light DOM instead of setting the JS property — the no-JS route.
@@ -819,6 +907,16 @@ No events.
 | Event | `detail` | Description |
 |-------|-----------|-------------|
 | `kai-value-change` | `{ value: string | string[] }` | The open set changed — by user click OR an expand()/collapse()/toggle() call. `value` is a string in `single` mode, a string[] in `multiple` mode. (Maps Radix Accordion's onValueChange.) |
+
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-chain-of-thought').expand(…)`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `expand` | `(index?: number): void` | Open one step's detail by index, or — with no arg — ALL steps. In `single` mode opening one step closes the others (expand-all keeps the last). |
+| `collapse` | `(index?: number): void` | Close one step's detail by index, or — with no arg — ALL steps. |
+| `toggle` | `(index?: number): void` | Flip one step's open state by index. |
 
 #### Declarative children
 
@@ -1048,6 +1146,15 @@ A drag-and-drop / click-to-pick file upload dropzone.
 | `kai-transcript-interim` | `{ text: string }` | Live partial transcript during native recognition (only when `interim` is set). Fires repeatedly before the final `kai-transcription`. |
 | `kai-transcription` | `{ text: string }` | Final transcript — the `transcribe` property resolved, OR native `SpeechRecognition` produced final text (no `transcribe` set). |
 
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-voice-input').start()`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `start` | `(): void` | Begin recording programmatically (e.g. push-to-talk bound to a global key). Runs the same getUserMedia path as clicking the mic; no-ops if already recording. |
+| `stop` | `(): void` | Stop the in-progress recording, producing the blob (→ kai-audio-captured) and running transcription. Pairs with start() for push-to-talk. |
+
 #### Composed from
 
 `Components/VoiceInput`
@@ -1261,6 +1368,16 @@ A small button used to mark or navigate to a conversation checkpoint.
 | `kai-open-change` | `{ open: false | true }` | The scope dropdown opened or closed (by click, keyboard, Escape, outside-click, or a method). |
 | `kai-scope-change` | `{ filters: SearchFilters | undefined }` | A scope was chosen (`undefined` filters = "All Content"). |
 
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-scope-picker').show()`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `show` | `(): void` | Open it programmatically (no-op while disabled). |
+| `hide` | `(): void` | Close it programmatically. |
+| `toggle` | `(): void` | Flip the open state (closes while disabled). |
+
 #### Composed from
 
 `Components/ChatScopePicker`
@@ -1369,6 +1486,16 @@ The polished building blocks you compose your own chrome from — themed, access
 | Event | `detail` | Description |
 |-------|-----------|-------------|
 | `kai-click` | — | The button was activated (pointer or keyboard). Carries no detail. The native `click` also bubbles (composed) for consumers who prefer it. |
+
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-button').focus(…)`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `focus` | `(options?: FocusOptions): void` | Focus the inner `<button>` (host.focus() would focus the wrapper). |
+| `blur` | `(): void` | Blur the inner `<button>`. |
+| `click` | `(): void` | Programmatically activate the button — runs the same path as a user click and fires kai-click. Forwarding to the inner button means `disabled` is respected automatically. |
 
 #### Slots
 
@@ -1515,6 +1642,16 @@ A curated, theme-aware icon used standalone. Recolor via `::part(icon)` or `curr
 |-------|-----------|-------------|
 | `kai-open-change` | `{ open: false | true }` | The tooltip opened or closed (by hover/focus, outside-click, or a method). |
 
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-tooltip').show()`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `show` | `(): void` | Open it programmatically (no-op while disabled). |
+| `hide` | `(): void` | Close it programmatically. |
+| `toggle` | `(): void` | Flip the open state (closes while disabled). |
+
 #### Slots
 
 Project your own markup with `slot="name"` on a light-DOM child.
@@ -1556,6 +1693,16 @@ A text hint shown on hover/focus of a slotted trigger; positioned and portaled i
 | Event | `detail` | Description |
 |-------|-----------|-------------|
 | `kai-open-change` | `{ open: false | true }` | The card opened or closed (by hover/focus, outside-click, or a method). |
+
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-hover-card').show()`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `show` | `(): void` | Open it programmatically (no-op while disabled). |
+| `hide` | `(): void` | Close it programmatically. |
+| `toggle` | `(): void` | Flip the open state (closes while disabled). |
 
 #### Slots
 
@@ -1749,6 +1896,16 @@ A pulsing loading placeholder that preserves layout while content arrives. Respo
 | `kai-open-change` | `{ open: false | true }` | The menu opened or closed (by click, keyboard, Escape, outside-click, or a method). |
 | `kai-select` | `{ id: string; checked?: undefined | false | true; radioGroup?: undefined | string }` | Fired when the user selects a leaf item. - Plain items: `{ id }`. - Checkbox items: `{ id, checked }` where `checked` is the NEW state. - Radio items: `{ id, radioGroup }` — the consumer marks `id` as the selected one in `radioGroup` and clears the others. |
 
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-menu').show()`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `show` | `(): void` | Open it programmatically (no-op while disabled). |
+| `hide` | `(): void` | Close it programmatically. |
+| `toggle` | `(): void` | Flip the open state (closes while disabled). |
+
 #### Slots
 
 Project your own markup with `slot="name"` on a light-DOM child.
@@ -1797,6 +1954,16 @@ A cascading action menu built from a JSON items-tree (submenus, separators, chec
 | `kai-active-change` | `{ id: undefined | string }` | Fired when the highlighted/active item changes — via Arrow keys or when filtering re-clamps the active row. `id` is the newly active item's id, or `undefined` when no item is active (e.g. the filtered list is empty). Lets a host preview the active item without committing a selection. |
 | `kai-query-change` | `{ value: string }` | Fired on every keystroke in the search input. |
 | `kai-select` | `{ id: string }` | Fired when the user selects an item (click or Enter). |
+
+#### Methods
+
+Call these on the element instance: `document.querySelector('kai-command').focus(…)`.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `focus` | `(options?: FocusOptions): void` | Focus the search combobox input inside the shadow root so the palette is type-ready on demand (Shadow-DOM autofocus is unreliable, so hosts call this after opening the palette). |
+| `blur` | `(): void` | Blur the focused search input. |
+| `clear` | `(): void` | Reset the search query to empty — re-showing all items — and fire `kai-query-change` with `''`. Mirrors the Escape-key behavior. |
 
 #### Styleable parts
 

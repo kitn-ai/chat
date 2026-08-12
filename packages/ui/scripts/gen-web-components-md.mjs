@@ -109,6 +109,26 @@ function tablesFor(el) {
     out += `\n#### Events\n\n| Event | \`detail\` | Description |\n|-------|-----------|-------------|\n${evRows}\n`;
   }
 
+  // The imperative half of the interaction API. `params`/`returns` are the
+  // AUTHORED text, not the self-contained expansion the .d.ts carries (see
+  // `withDts` in gen-element-api.mjs): this table is read by a human, the .d.ts
+  // by a compiler.
+  //
+  // A `|` inside a signature (`HTMLElement | null`) splits the markdown row even
+  // inside backticks, so it is escaped. Only these cells are escaped, and only
+  // because they are new — the prop/event tables above have shipped raw pipes for
+  // union types since this generator was written, and fixing that rewrites most
+  // of the file for one reviewable change at a time.
+  if (el.methods?.length) {
+    const cell = (s) => String(s ?? '').replace(/\|/g, '\\|').replace(/\n/g, ' ');
+    const rows = el.methods
+      .map((m) => `| \`${m.name}\` | \`${cell(`(${m.params}): ${m.returns}`)}\` | ${cell(m.description)} |`)
+      .join('\n');
+    const [first] = el.methods;
+    const call = `document.querySelector('${el.tag}').${first.name}(${first.params ? '…' : ''})`;
+    out += `\n#### Methods\n\nCall these on the element instance: \`${call}\`.\n\n| Method | Signature | Description |\n|--------|-----------|-------------|\n${rows}\n`;
+  }
+
   if (el.slots?.length) {
     const rows = el.slots
       .map((s) => `| ${s.name ? `\`${s.name}\`` : '_(default)_'} | ${s.mode} | ${s.doc ?? ''} |`)

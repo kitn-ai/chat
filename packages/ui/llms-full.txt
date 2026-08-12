@@ -316,6 +316,20 @@ Every element also accepts the `theme` attribute. Array/object properties are ma
 | `kai-navigate` | `CustomEvent<{ url: string }>` | Fired when the preview navigates. `detail.url` = the new location. |
 | `kai-tab-change` | `CustomEvent<{ tab: "preview" \| "code" }>` | Fired when the Preview\|Code tab changes. `detail.tab`. |
 
+**Methods** (call on the element instance: `document.querySelector('kai-artifact').back()`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `back` | `(): void` | Go back in the artifact's own history stack (no-op when there's no prior entry). |
+| `forward` | `(): void` | Go forward in the history stack (no-op when there's no forward entry). |
+| `reload` | `(): void` | Force-reload the current preview url (also re-renders an inline PDF). |
+| `home` | `(): void` | Navigate to the `src` home url (no-op when there's no `src`). |
+| `navigate` | `(url: string): void` | Push + load a url in the preview — the path-field submit path (fires kai-navigate). |
+| `selectFile` | `(path: string): void` | Select a file by path: highlights the tree, shows its source, navigates the preview (fires kai-file-select + kai-navigate). Named selectFile to avoid the `activeFile` prop. |
+| `openExternal` | `(): void` | Open the current url in a new browser tab (no-op when there's no concrete url). Named openExternal, NOT openInTab — that's a prop (toolbar button visibility). |
+| `maximize` | `(): void` | Enter the maximized view-state (fires kai-maximize-change{maximized:true}). Named maximize, NOT maximized — that's a prop. |
+| `restore` | `(): void` | Exit the maximized view-state (fires kai-maximize-change{maximized:false}). |
+
 ---
 
 ### `kai-attachments` / `Attachments`
@@ -447,6 +461,14 @@ _No events._
 |---|---|---|
 | `kai-click` | `CustomEvent` | The button was activated (pointer or keyboard). Carries no detail. The native `click` also bubbles (composed) for consumers who prefer it. |
 
+**Methods** (call on the element instance: `document.querySelector('kai-button').focus(…)`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `focus` | `(options?: FocusOptions): void` | Focus the inner `<button>` (host.focus() would focus the wrapper). |
+| `blur` | `(): void` | Blur the inner `<button>`. |
+| `click` | `(): void` | Programmatically activate the button — runs the same path as a user click and fires kai-click. Forwarding to the inner button means `disabled` is respected automatically. |
+
 **Slots** (project your own markup via `slot="name"` on a light-DOM child):
 
 | Slot | Mode | Description |
@@ -529,6 +551,14 @@ _No events._
 |---|---|---|
 | `kai-card-resolved` | `CustomEvent<{ cardId: string; resolution: { kind: "action"; action: string; payload?: unknown; at?: undefined \| string } \| { kind: "submit"; data: unknown; at?: undefined \| string } \| { kind: "dismissed"; at?: undefined \| string } \| { kind: "expired"; reason?: undefined \| string; at?: undefined \| string } }>` | A child card transitioned to a resolved/deferred state (an action was chosen, a form/tasks submission landed, or it was dismissed) — re-emitted off the host as a non-bubbling convenience event so a consumer can observe resolution centrally without diffing the cards array. `detail` = `{ cardId, resolution }`. (A `reopen` un-resolves a card and has no `CardResolution`, so it does NOT fire this — observe reopen via the underlying bubbling `kai-card` event.) |
 
+**Methods** (call on the element instance: `document.querySelector('kai-cards').resolve(…)`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `resolve` | `(cardId: string, resolution: CardResolution): void` | Programmatically resolve a child card by id: set that envelope's `resolution` so the child re-renders into its read-only/resolved view — the imperative twin of the consumer mutating the cards array. No-op for an unknown id. |
+| `dismiss` | `(cardId: string): void` | Collapse a card to its re-openable stub from the host side — convenience for `resolve(cardId, { kind: 'dismissed' })`. |
+| `getCard` | `(cardId: string): HTMLElement \| null` | Return the live child element node for a card id (or null) so consumers can call that card's own methods (focus/expand/…) without a shadow-DOM query. |
+
 ---
 
 ### `kai-chain-of-thought` / `ChainOfThought`
@@ -548,6 +578,14 @@ _No events._
 | Event | `detail` type | Description |
 |---|---|---|
 | `kai-value-change` | `CustomEvent<{ value: string \| string[] }>` | The open set changed — by user click OR an expand()/collapse()/toggle() call. `value` is a string in `single` mode, a string[] in `multiple` mode. (Maps Radix Accordion's onValueChange.) |
+
+**Methods** (call on the element instance: `document.querySelector('kai-chain-of-thought').expand(…)`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `expand` | `(index?: number): void` | Open one step's detail by index, or — with no arg — ALL steps. In `single` mode opening one step closes the others (expand-all keeps the last). |
+| `collapse` | `(index?: number): void` | Close one step's detail by index, or — with no arg — ALL steps. |
+| `toggle` | `(index?: number): void` | Flip one step's open state by index. |
 
 **Declarative children** (compose these in light DOM instead of setting the JS property):
 
@@ -607,6 +645,16 @@ _No events._
 | `kai-suggestion-click` | `CustomEvent<{ value: string }>` | A suggestion chip was clicked (only in `suggestion-mode="fill"`). |
 | `kai-value-change` | `CustomEvent<{ value: string }>` | Fired on every input change. |
 | `kai-voice` | `CustomEvent<Record<string, never>>` | The Mic / voice button was clicked. |
+
+**Methods** (call on the element instance: `document.querySelector('kai-chat').focus(…)`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `focus` | `(options?: FocusOptions): void` |  |
+| `blur` | `(): void` |  |
+| `clear` | `(): void` |  |
+| `send` | `(): void` |  |
+| `scrollToBottom` | `(behavior?: ScrollBehavior): void` |  |
 
 **Slots** (project your own markup via `slot="name"` on a light-DOM child):
 
@@ -673,6 +721,16 @@ _No events._
 |---|---|---|
 | `kai-value-change` | `CustomEvent<{ value: string }>` | The selection changed BEFORE submit (a row click or the `select()` method). Distinct from the terminal `action` verb on the `kai-card` contract event. |
 
+**Methods** (call on the element instance: `document.querySelector('kai-choice').focus(…)`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `focus` | `(options?: FocusOptions): void` | Focus the radiogroup roving tab stop (or the Other input when selected). |
+| `select` | `(optionId: string): void` | Select an option by id locally — no emit, fires kai-value-change (same as a row click). Lets a consumer pre-highlight or drive selection externally. |
+| `send` | `(): void` | Submit the current selection — emits the `action` verb on kai-card and resolves the card (single-shot). Named `send`, not `submit`, per the shared vocabulary. |
+| `dismiss` | `(): void` | Trigger the dismiss path — emits `dismiss` on kai-card and optimistically collapses the card to its re-openable stub. |
+| `reopen` | `(): void` | Re-open a dismissed card from its stub — emits `reopen` on kai-card. |
+
 ---
 
 ### `kai-coachmark` / `Coachmark`
@@ -696,6 +754,14 @@ _No events._
 |---|---|---|
 | `kai-dismiss` | `CustomEvent<Record<string, never>>` | The × dismiss button was pressed. The consumer records that this hint was seen so it won't show again. |
 | `kai-open-change` | `CustomEvent<{ open: false \| true }>` | The coachmark opened or closed (a method, the ×, or a driven `open`). |
+
+**Methods** (call on the element instance: `document.querySelector('kai-coachmark').show()`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `show` | `(): void` | Open it programmatically (no-op while disabled). |
+| `hide` | `(): void` | Close it programmatically. |
+| `toggle` | `(): void` | Flip the open state (closes while disabled). |
 
 **Slots** (project your own markup via `slot="name"` on a light-DOM child):
 
@@ -752,6 +818,14 @@ _No events._
 | `kai-query-change` | `CustomEvent<{ value: string }>` | Fired on every keystroke in the search input. |
 | `kai-select` | `CustomEvent<{ id: string }>` | Fired when the user selects an item (click or Enter). |
 
+**Methods** (call on the element instance: `document.querySelector('kai-command').focus(…)`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `focus` | `(options?: FocusOptions): void` | Focus the search combobox input inside the shadow root so the palette is type-ready on demand (Shadow-DOM autofocus is unreliable, so hosts call this after opening the palette). |
+| `blur` | `(): void` | Blur the focused search input. |
+| `clear` | `(): void` | Reset the search query to empty — re-showing all items — and fire `kai-query-change` with `''`. Mirrors the Escape-key behavior. |
+
 **Styleable parts** (restyle from outside via `kai-command::part(name)`):
 
 | Part | Description |
@@ -782,6 +856,13 @@ _No events._
 | `kai-compare-select` | `CustomEvent<{ chosenId: string; rejectedIds: string[]; at?: undefined \| number }>` | The user committed a pick. `detail` = `{ chosenId, rejectedIds, at }`. |
 | `kai-error` | `CustomEvent<{ compareId: string; message: string }>` | The definition was unusable. |
 | `kai-ready` | `CustomEvent<{ compareId: string }>` | Both candidates have settled and the pick is live. |
+
+**Methods** (call on the element instance: `document.querySelector('kai-compare').select(…)`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `select` | `(candidateId: string): void` | Programmatically commit a pick by candidate id — same path as the "Pick this" button: fires kai-compare-select and optimistically collapses (single-shot; inert while streaming or already resolved). `select` does NOT collide with the `selection` prop (distinct identifier). |
+| `focus` | `(options?: FocusOptions): void` | Focus the current roving tab stop (the focused candidate's "Pick this" radio) so a consumer can move keyboard focus into the radiogroup. |
 
 ---
 
@@ -815,6 +896,16 @@ _No events._
 | `kai-trigger-close` | `CustomEvent<Record<string, never>>` | The active trigger was dismissed (Escape, space, or outside click). |
 | `kai-value-change` | `CustomEvent<{ doc: ({ type: "text"; text: string } \| { type: "entity"; entity: { kind: string; id: string; label: string; icon?: undefined \| string; promptText?: undefined \| string; data?: undefined \| Record<string, unknown> } })[]; text: string; entities: { kind: string; id: string; label: string; icon?: undefined \| string; promptText?: undefined \| string; data?: undefined \| Record<string, unknown> }[] }>` | The content changed (fires on every input event). |
 
+**Methods** (call on the element instance: `document.querySelector('kai-composer').focus(…)`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `focus` | `(options?: FocusOptions): void` | Focus the editable element. `focus`/`blur` are NOT composed natively, so a host-level focus() can't reach the editable inside the shadow root — this is the only way to focus the composer programmatically. |
+| `blur` | `(): void` | Blur the editable element. |
+| `clear` | `(): void` | Empty the composer to a blank doc (resets the internal value + history baseline; fires kai-value-change). |
+| `send` | `(): void` | Submit the current content programmatically — same path as Enter (fires kai-submit). Named `send`, not `submit`, to match the shared vocabulary and avoid any submit collision. |
+| `insertEntity` | `(entity: EntityRef): void` | Insert an atomic entity pill (skill/agent/plugin) at the caret without typing a trigger (fires kai-entity-add). |
+
 ---
 
 ### `kai-confirm` / `Confirm`
@@ -831,6 +922,15 @@ _No events._
 | `resolution` | — | `undefined \| Record<string, unknown>` | Set when the user resolved this card; renders the read-only view. Property: `el.resolution = { kind:'action', action:'…' }`. |
 
 _No events._
+
+**Methods** (call on the element instance: `document.querySelector('kai-confirm').focus(…)`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `focus` | `(options?: FocusOptions): void` | Focus the default action button (or the first action if none is default) — the same target `autofocus` focuses on mount, but on demand. |
+| `confirm` | `(actionId?: string): void` | Activate an action by id — emits the `action` verb on kai-card and resolves the card (single-shot). With no id, invokes the default action. |
+| `dismiss` | `(): void` | Trigger the dismiss path — emits `dismiss` on kai-card and optimistically collapses the card to its re-openable stub. |
+| `reopen` | `(): void` | Re-open a dismissed card from its stub — emits `reopen` on kai-card. |
 
 ---
 
@@ -876,6 +976,17 @@ _No events._
 | `kai-search` | `CustomEvent<{ query: string }>` | The built-in search box query changed (typing, or a programmatic `clear()` which fires it with `''`). Lets a consumer mirror or server-side the filter. |
 | `kai-toggle-sidebar` | `CustomEvent<Record<string, never>>` | The sidebar toggle was clicked. |
 
+**Methods** (call on the element instance: `document.querySelector('kai-conversations').focus(…)`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `focus` | `(options?: FocusOptions): void` | Focus the built-in search input inside the shadow root. |
+| `clear` | `(): void` | Clear the internal search query (resets the list filter) and fire kai-search with an empty string. |
+| `select` | `(id: string): void` | Programmatically select a conversation by id — mirror of the kai-conversation-select event (a convenience over driving `activeId`). |
+| `collapse` | `(): void` | Collapse the rail to its floating reopen button (fires `kai-collapse-toggle`). |
+| `expand` | `(): void` | Expand the rail back to the full list (fires `kai-collapse-toggle`). |
+| `toggle` | `(): void` | Toggle the rail collapsed/expanded (fires `kai-collapse-toggle`). |
+
 **Slots** (project your own markup via `slot="name"` on a light-DOM child):
 
 | Slot | Mode | Description |
@@ -913,6 +1024,15 @@ _No events._
 | Event | `detail` type | Description |
 |---|---|---|
 | `kai-open-change` | `CustomEvent<{ open: false \| true }>` | The dialog opened or closed (Escape, backdrop click, a driven `open`, or a method). |
+
+**Methods** (call on the element instance: `document.querySelector('kai-dialog').show()`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `show` | `(): void` | Open it programmatically (no-op while disabled). |
+| `hide` | `(): void` | Close it programmatically. |
+| `toggle` | `(): void` | Flip the open state (closes while disabled). |
+| `focus` | `(options?: FocusOptions): void` | Move focus to the dialog panel (no-op while closed). |
 
 **Slots** (project your own markup via `slot="name"` on a light-DOM child):
 
@@ -952,6 +1072,12 @@ _No events._
 |---|---|---|
 | `kai-cancel` | `CustomEvent<Record<string, never>>` | Edit was cancelled (Esc); the text is restored. |
 | `kai-rename` | `CustomEvent<{ value: string }>` | Committed a changed value (Enter / blur). |
+
+**Methods** (call on the element instance: `document.querySelector('kai-editable-label').edit()`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `edit` | `(): void` |  |
 
 **Styleable parts** (restyle from outside via `kai-editable-label::part(name)`):
 
@@ -1098,6 +1224,17 @@ _No events._
 |---|---|---|
 | `kai-values-change` | `CustomEvent<{ values: Record<string, unknown>; valid: false \| true }>` | The form's values changed on input — current coerced values + validity. |
 
+**Methods** (call on the element instance: `document.querySelector('kai-form').focus(…)`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `focus` | `(options?: FocusOptions): void` | Focus the first control, or the first INVALID control after a failed validation. |
+| `send` | `(): void` | Validate + submit programmatically — focus the first invalid field on failure, else emit the `submit` CardEvent and resolve. Named `send`, not `submit`. |
+| `validate` | `(): void` | Run client-side validation now and return `{ valid, errors? }` WITHOUT submitting. |
+| `reset` | `(): void` | Re-seed the form from each field's `default` and clear errors. |
+| `dismiss` | `(): void` | Trigger the dismiss path (emit `dismiss` + collapse to the re-openable stub). |
+| `reopen` | `(): void` | Re-open a dismissed card from its stub (emit `reopen`). |
+
 ---
 
 ### `kai-hover-card` / `HoverCard`
@@ -1119,6 +1256,14 @@ _No events._
 | Event | `detail` type | Description |
 |---|---|---|
 | `kai-open-change` | `CustomEvent<{ open: false \| true }>` | The card opened or closed (by hover/focus, outside-click, or a method). |
+
+**Methods** (call on the element instance: `document.querySelector('kai-hover-card').show()`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `show` | `(): void` | Open it programmatically (no-op while disabled). |
+| `hide` | `(): void` | Close it programmatically. |
+| `toggle` | `(): void` | Flip the open state (closes while disabled). |
 
 **Slots** (project your own markup via `slot="name"` on a light-DOM child):
 
@@ -1193,6 +1338,14 @@ _No events._
 |---|---|---|
 | `kai-change` | `CustomEvent<{ value: string }>` | The value was committed (blur). |
 | `kai-input` | `CustomEvent<{ value: string }>` | The value changed per keystroke. |
+
+**Methods** (call on the element instance: `document.querySelector('kai-input').focus(…)`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `focus` | `(options?: FocusOptions): void` | Focus the inner input (the host can't reach into the shadow root). |
+| `select` | `(): void` | Select the inner input's text. |
+| `clear` | `(): void` | Empty the value and fire `kai-change` with `''`. |
 
 **Slots** (project your own markup via `slot="name"` on a light-DOM child):
 
@@ -1309,6 +1462,14 @@ _No events._
 | `kai-open-change` | `CustomEvent<{ open: false \| true }>` | The menu opened or closed (by click, keyboard, Escape, outside-click, or a method). |
 | `kai-select` | `CustomEvent<{ id: string; checked?: undefined \| false \| true; radioGroup?: undefined \| string }>` | Fired when the user selects a leaf item. - Plain items: `{ id }`. - Checkbox items: `{ id, checked }` where `checked` is the NEW state. - Radio items: `{ id, radioGroup }` — the consumer marks `id` as the selected one in `radioGroup` and clears the others. |
 
+**Methods** (call on the element instance: `document.querySelector('kai-menu').show()`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `show` | `(): void` | Open it programmatically (no-op while disabled). |
+| `hide` | `(): void` | Close it programmatically. |
+| `toggle` | `(): void` | Flip the open state (closes while disabled). |
+
 **Slots** (project your own markup via `slot="name"` on a light-DOM child):
 
 | Slot | Mode | Description |
@@ -1348,6 +1509,12 @@ _No events._
 | Event | `detail` type | Description |
 |---|---|---|
 | `kai-message-action` | `CustomEvent<{ messageId: string; action: string; state?: undefined \| "on" \| "off" }>` | An action button was clicked. `action` is the built-in name or custom id. `state` is present only for the toggleable feedback votes: `'on'` when a like/dislike is set, `'off'` when re-tapped to clear. |
+
+**Methods** (call on the element instance: `document.querySelector('kai-message').copy()`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `copy` | `(): void` | Copy the message content to the clipboard and show the copied check. |
 
 **Slots** (project your own markup via `slot="name"` on a light-DOM child):
 
@@ -1396,6 +1563,14 @@ _No events._
 | `kai-model-change` | `CustomEvent<{ modelId: string }>` | A model was selected. |
 | `kai-open-change` | `CustomEvent<{ open: false \| true }>` | The model dropdown opened or closed (by click, keyboard, Escape, outside-click, or a method). |
 
+**Methods** (call on the element instance: `document.querySelector('kai-model-switcher').show()`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `show` | `(): void` | Open it programmatically (no-op while disabled). |
+| `hide` | `(): void` | Close it programmatically. |
+| `toggle` | `(): void` | Flip the open state (closes while disabled). |
+
 **Declarative children** (compose these in light DOM instead of setting the JS property):
 
 | Child element | Attributes | Text content | Notes |
@@ -1423,6 +1598,12 @@ _No events._
 | `kai-nav-item-action` | `CustomEvent<{ value: string; action?: undefined \| { icon: string; label: string } }>` | A row's trailing `action` button was activated (not a select). `value` is the item id; `action` echoes the item's `{ icon, label }`. |
 | `kai-nav-item-close` | `CustomEvent<{ value: string }>` | A `closable` row's trailing close button was activated (not a select). `value` is the item id. |
 | `kai-nav-select` | `CustomEvent<{ id: string }>` | A nav item was activated. |
+
+**Methods** (call on the element instance: `document.querySelector('kai-nav').select(…)`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `select` | `(id: string): void` | Activate an item by id (fires kai-nav-select). |
 
 **Styleable parts** (restyle from outside via `kai-nav::part(name)`):
 
@@ -1528,6 +1709,13 @@ _No events._
 | `kai-tab-close` | `CustomEvent<{ id: string }>` | A tab's close (×) was clicked. Drop the tab from `tabs` yourself. |
 | `kai-tab-menu` | `CustomEvent<{ id: string }>` | A tab's "…" overflow was clicked. Open your own menu from `detail.id`. |
 
+**Methods** (call on the element instance: `document.querySelector('kai-pane-group').select(…)`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `select` | `(id: string): void` | Select a tab by id (fires `kai-tab-change`). Ignores unknown ids. |
+| `focus` | `(): void` | Focus the active tab in the strip. |
+
 **Slots** (project your own markup via `slot="name"` on a light-DOM child):
 
 | Slot | Mode | Description |
@@ -1564,6 +1752,14 @@ _No events._
 | Event | `detail` type | Description |
 |---|---|---|
 | `kai-open-change` | `CustomEvent<{ open: false \| true }>` | The popover opened or closed (click, Escape, outside-click, or a method). |
+
+**Methods** (call on the element instance: `document.querySelector('kai-popover').show()`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `show` | `(): void` | Open it programmatically (no-op while disabled). |
+| `hide` | `(): void` | Close it programmatically. |
+| `toggle` | `(): void` | Flip the open state (closes while disabled). |
 
 **Slots** (project your own markup via `slot="name"` on a light-DOM child):
 
@@ -1662,6 +1858,15 @@ _No events._
 | `kai-value-change` | `CustomEvent<{ value: string; doc: ({ type: "text"; text: string } \| { type: "entity"; entity: { kind: string; id: string; label: string; icon?: undefined \| string; promptText?: undefined \| string; data?: undefined \| Record<string, unknown> } })[]; entities: { kind: string; id: string; label: string; icon?: undefined \| string; promptText?: undefined \| string; data?: undefined \| Record<string, unknown> }[] }>` | The input changed (fires on every edit). Carries the flattened `value` plus the structured `doc` + `entities`. |
 | `kai-voice` | `CustomEvent<Record<string, never>>` | The Voice (Mic) toolbar button was clicked. |
 
+**Methods** (call on the element instance: `document.querySelector('kai-prompt-input').focus(…)`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `focus` | `(options?: FocusOptions): void` | Focus the text editor inside the shadow root (not the hidden file input). |
+| `blur` | `(): void` | Blur the focused input control. |
+| `clear` | `(): void` | Clear the text and any staged attachments (fires kai-value-change / kai-attachments-change so a controlled consumer can react). |
+| `send` | `(): void` | Send the current value programmatically — same path as Enter / the send button (fires kai-submit, then clears staged attachments). Named `send`, not `submit`, to avoid colliding with the `submit` prop. |
+
 **Slots** (project your own markup via `slot="name"` on a light-DOM child):
 
 | Slot | Mode | Description |
@@ -1705,6 +1910,14 @@ _No events._
 |---|---|---|
 | `kai-open-change` | `CustomEvent<{ open: false \| true }>` | The reasoning block expanded or collapsed (via the trigger, streaming auto-open, or a method). |
 
+**Methods** (call on the element instance: `document.querySelector('kai-reasoning').show()`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `show` | `(): void` | Open it programmatically (no-op while disabled). |
+| `hide` | `(): void` | Close it programmatically. |
+| `toggle` | `(): void` | Flip the open state (closes while disabled). |
+
 ---
 
 ### `kai-remote` / `Remote`
@@ -1741,6 +1954,13 @@ _No events._
 | `kai-change` | `CustomEvent<{ sizes: number[] }>` | Fired on drag-end / keyboard resize / visibility change. `detail.sizes` = panel sizes in percent. |
 | `kai-maximize-change` | `CustomEvent<{ maximized: false \| true; index: null \| number }>` | Observe layout maximize state. |
 | `kai-maximize-state` | `CustomEvent<{ maximized: false \| true }>` | Authoritative maximize state, dispatched as a raw composed CustomEvent (not through `dispatch`) onto the affected `<kai-resizable-item>` and, on restore, onto the group host. A nested element (e.g. `<kai-artifact>`) listens for it to reconcile its own toggle. |
+
+**Methods** (call on the element instance: `document.querySelector('kai-resizable').maximize(…)`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `maximize` | `(index: number): void` | Imperatively maximize the item at `index` (thin wrapper over `maximizedIndex`). |
+| `restore` | `(): void` | Imperatively restore from the maximized layout. |
 
 **Slots** (project your own markup via `slot="name"` on a light-DOM child):
 
@@ -1821,6 +2041,14 @@ _No events._
 | `kai-open-change` | `CustomEvent<{ open: false \| true }>` | The scope dropdown opened or closed (by click, keyboard, Escape, outside-click, or a method). |
 | `kai-scope-change` | `CustomEvent<{ filters: undefined \| { tags?: undefined \| string[]; authors?: undefined \| string[]; contentType?: undefined \| "transcript" \| "markdown"; dateRange?: undefined \| { from: string; to: string } } }>` | A scope was chosen (`undefined` filters = "All Content"). |
 
+**Methods** (call on the element instance: `document.querySelector('kai-scope-picker').show()`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `show` | `(): void` | Open it programmatically (no-op while disabled). |
+| `hide` | `(): void` | Close it programmatically. |
+| `toggle` | `(): void` | Flip the open state (closes while disabled). |
+
 ---
 
 ### `kai-screen` / `Screen`
@@ -1842,6 +2070,15 @@ _No events._
 |---|---|---|
 | `kai-back` | `CustomEvent<Record<string, never>>` | Back navigation intent: the back button or Escape. The consumer flips their own routing in response (the screen knows nothing about the trigger). |
 | `kai-open-change` | `CustomEvent<{ open: false \| true }>` | The screen opened or closed (a method, `Escape` close, or driven `open`). |
+
+**Methods** (call on the element instance: `document.querySelector('kai-screen').show()`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `show` | `(): void` | Open it programmatically (no-op while disabled). |
+| `hide` | `(): void` | Close it programmatically. |
+| `toggle` | `(): void` | Flip the open state (closes while disabled). |
+| `focus` | `(options?: FocusOptions): void` | Move focus to the screen surface (no-op while closed). |
 
 **Slots** (project your own markup via `slot="name"` on a light-DOM child):
 
@@ -1927,6 +2164,12 @@ _No events._
 | `kai-change` | `CustomEvent<{ value: string }>` | The field committed (blur). |
 | `kai-search` | `CustomEvent<{ value: string }>` | The query changed (debounced live, and on clear). |
 | `kai-submit` | `CustomEvent<{ value: string }>` | Enter was pressed. |
+
+**Methods** (call on the element instance: `document.querySelector('kai-search').focus()`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `focus` | `(): void` |  |
 
 **Styleable parts** (restyle from outside via `kai-search::part(name)`):
 
@@ -2186,6 +2429,13 @@ _No events._
 |---|---|---|
 | `kai-change` | `CustomEvent<{ checked: false \| true }>` | The toggle changed. |
 
+**Methods** (call on the element instance: `document.querySelector('kai-switch').toggle()`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `toggle` | `(): void` | Flip the switch and fire `kai-change` (no-op while disabled). |
+| `focus` | `(options?: FocusOptions): void` | Focus the inner `role="switch"` button (the host element can't reach it). |
+
 ---
 
 ### `kai-tabs` / `Tabs`
@@ -2207,6 +2457,13 @@ _No events._
 | Event | `detail` type | Description |
 |---|---|---|
 | `kai-tab-change` | `CustomEvent<{ value: string }>` | A tab was selected (click, Enter/Space, or arrow-key move). `value` is the item's id. |
+
+**Methods** (call on the element instance: `document.querySelector('kai-tabs').select(…)`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `select` | `(id: string): void` | Select a tab by id (fires `kai-tab-change`). Ignores unknown/disabled ids. |
+| `focus` | `(): void` | Focus the active tab (or the first focusable tab). |
 
 **Styleable parts** (restyle from outside via `kai-tabs::part(name)`):
 
@@ -2238,6 +2495,17 @@ _No events._
 | Event | `detail` type | Description |
 |---|---|---|
 | `kai-value-change` | `CustomEvent<{ value: string[] }>` | The selection changed on a toggle — the selected ids in input order. |
+
+**Methods** (call on the element instance: `document.querySelector('kai-tasks').select(…)`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `select` | `(taskIds?: string[]): void` | Set the checked task ids (local-only, no emit), respecting disabled/max. With no arg, select all toggleable rows. |
+| `toggle` | `(taskId: string, checked?: boolean): void` | Toggle one task by id, honoring the max gate (no `checked` = flip). |
+| `send` | `(): void` | Confirm the current selection — emits the `submit` CardEvent + resolves (only when the min/max gate passes). Named `send`, not `submit`. |
+| `focus` | `(options?: FocusOptions): void` | Focus the task group (select-all checkbox if shown, else the first row). |
+| `dismiss` | `(): void` | Trigger the dismiss path (emit `dismiss` + collapse to the re-openable stub). |
+| `reopen` | `(): void` | Re-open a dismissed card from its stub (emit `reopen`). |
 
 ---
 
@@ -2300,6 +2568,12 @@ _No events._
 |---|---|---|
 | `kai-message-action` | `CustomEvent<{ messageId: string; action: string; state?: undefined \| "on" \| "off" }>` | A message's action button was clicked. `action` is the built-in name (`copy` / `like` / `dislike` / `regenerate` / `edit`) or a custom id. `state` is present only for the toggleable feedback votes: `'on'` when a like/dislike is set, `'off'` when re-tapped to clear. |
 
+**Methods** (call on the element instance: `document.querySelector('kai-thread').scrollToBottom(…)`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `scrollToBottom` | `(behavior?: ScrollBehavior): void` | Scroll the message list to the bottom (default `'smooth'`). |
+
 **Slots** (project your own markup via `slot="name"` on a light-DOM child):
 
 | Slot | Mode | Description |
@@ -2350,6 +2624,14 @@ _No events._
 |---|---|---|
 | `kai-open-change` | `CustomEvent<{ open: false \| true }>` | The panel expanded or collapsed (by trigger click or a method). |
 
+**Methods** (call on the element instance: `document.querySelector('kai-tool').show()`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `show` | `(): void` | Open it programmatically (no-op while disabled). |
+| `hide` | `(): void` | Close it programmatically. |
+| `toggle` | `(): void` | Flip the open state (closes while disabled). |
+
 ---
 
 ### `kai-tooltip` / `Tooltip`
@@ -2372,6 +2654,14 @@ _No events._
 | Event | `detail` type | Description |
 |---|---|---|
 | `kai-open-change` | `CustomEvent<{ open: false \| true }>` | The tooltip opened or closed (by hover/focus, outside-click, or a method). |
+
+**Methods** (call on the element instance: `document.querySelector('kai-tooltip').show()`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `show` | `(): void` | Open it programmatically (no-op while disabled). |
+| `hide` | `(): void` | Close it programmatically. |
+| `toggle` | `(): void` | Flip the open state (closes while disabled). |
 
 **Slots** (project your own markup via `slot="name"` on a light-DOM child):
 
@@ -2402,6 +2692,13 @@ _No events._
 | `kai-transcript-interim` | `CustomEvent<{ text: string }>` | Live partial transcript during native recognition (only when `interim` is set). Fires repeatedly before the final `kai-transcription`. |
 | `kai-transcription` | `CustomEvent<{ text: string }>` | Final transcript — the `transcribe` property resolved, OR native `SpeechRecognition` produced final text (no `transcribe` set). |
 
+**Methods** (call on the element instance: `document.querySelector('kai-voice-input').start()`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `start` | `(): void` | Begin recording programmatically (e.g. push-to-talk bound to a global key). Runs the same getUserMedia path as clicking the mic; no-ops if already recording. |
+| `stop` | `(): void` | Stop the in-progress recording, producing the blob (→ kai-audio-captured) and running transcription. Pairs with start() for push-to-talk. |
+
 ---
 
 ### `kai-voice-output` / `VoiceOutput`
@@ -2422,6 +2719,15 @@ _No events._
 |---|---|---|
 | `kai-speaking-change` | `CustomEvent<{ speaking: false \| true }>` | Playback started or stopped — drive your own UI in sync. Fires on real transitions only (manual click and programmatic speak()/stop()), never on mount. |
 | `kai-synthesized` | `CustomEvent<{ blob: Blob }>` | The model path (`synthesize`) resolved audio — the raw `Blob` before playback. |
+
+**Methods** (call on the element instance: `document.querySelector('kai-voice-output').speak()`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `speak` | `(): void` | Speak the current `text` (native, or via `synthesize` if set). |
+| `pause` | `(): void` | Pause playback (resumable). |
+| `resume` | `(): void` | Resume paused playback. |
+| `stop` | `(): void` | Stop playback and reset. |
 
 **Styleable parts** (restyle from outside via `kai-voice-output::part(name)`):
 
@@ -2484,6 +2790,18 @@ _No events._
 | `kai-suggestion-click` | `CustomEvent<{ value: string }>` | A suggestion chip was clicked (only in `suggestion-mode="fill"`). |
 | `kai-value-change` | `CustomEvent<{ value: string }>` | Fired on every input change. |
 | `kai-voice` | `CustomEvent<Record<string, never>>` | The Mic / voice button was clicked. |
+
+**Methods** (call on the element instance: `document.querySelector('kai-workspace').toggleSidebar()`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `toggleSidebar` | `(): void` | Collapse/expand the conversation sidebar and fire `kai-sidebar-toggle`. |
+| `collapseSidebar` | `(): void` | Force the conversation sidebar collapsed (fires `kai-sidebar-toggle`). |
+| `expandSidebar` | `(): void` | Force the conversation sidebar expanded (fires `kai-sidebar-toggle`). |
+| `focus` | `(options?: FocusOptions): void` | Focus the thread's composer. |
+| `clear` | `(): void` | Clear the thread draft + staged attachments. |
+| `send` | `(): void` | Submit the current thread draft programmatically (fires `kai-submit`). |
+| `scrollToBottom` | `(behavior?: ScrollBehavior): void` | Scroll the thread to the newest message. |
 
 **Slots** (project your own markup via `slot="name"` on a light-DOM child):
 
