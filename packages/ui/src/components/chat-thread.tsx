@@ -340,16 +340,21 @@ export function ChatThread(props: ChatThreadProps) {
                         );
                         const rowGroup = () => (reveal() === 'hover' ? 'group ' : '');
                         return (
+                          // `role` is the SPEAKER, forwarded on BOTH branches —
+                          // see the same note in thread.tsx. `Message` turns it
+                          // into `role="article"` + an `aria-label`; without it the
+                          // row is a bare div chromium prunes from the
+                          // accessibility tree as "uninteresting".
                           <Show
                             when={m().avatar}
                             fallback={
-                              <Message class={`${rowGroup()}${m().role === 'user' ? 'flex-col items-end' : 'flex-col items-start'}`}>
+                              <Message role={m().role} class={`${rowGroup()}${m().role === 'user' ? 'flex-col items-end' : 'flex-col items-start'}`}>
                                 {body}
                               </Message>
                             }
                           >
                             {(av) => (
-                              <Message class={rowGroup()}>
+                              <Message role={m().role} class={rowGroup()}>
                                 <MessageAvatar src={av().src ?? ''} alt={av().alt ?? ''} fallback={av().fallback} />
                                 <div class={`flex min-w-0 flex-1 flex-col ${m().role === 'user' ? 'items-end' : 'items-start'}`}>
                                   {body}

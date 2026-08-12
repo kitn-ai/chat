@@ -157,16 +157,25 @@ export function Thread(props: ThreadProps) {
                     );
                     const rowGroup = () => (reveal() === 'hover' ? 'group ' : '');
                     return (
+                      // `role` is the SPEAKER, and it has to be forwarded on BOTH
+                      // branches. `Message` turns it into `role="article"` + an
+                      // `aria-label` naming the speaker; without it the row is a
+                      // bare div that chromium prunes from the accessibility tree
+                      // as "uninteresting", so a screen reader gets no speaker at
+                      // all. Every other read of `m().role` here is cosmetic
+                      // (alignment, markdown), which is exactly how it went
+                      // missing: the value was in hand and used for styling while
+                      // being dropped for semantics.
                       <Show
                         when={m().avatar}
                         fallback={
-                          <Message class={`${rowGroup()}${m().role === 'user' ? 'flex-col items-end' : 'flex-col items-start'}`}>
+                          <Message role={m().role} class={`${rowGroup()}${m().role === 'user' ? 'flex-col items-end' : 'flex-col items-start'}`}>
                             {body}
                           </Message>
                         }
                       >
                         {(av) => (
-                          <Message class={rowGroup()}>
+                          <Message role={m().role} class={rowGroup()}>
                             <MessageAvatar src={av().src ?? ''} alt={av().alt ?? ''} fallback={av().fallback} />
                             <div class={`flex min-w-0 flex-1 flex-col ${m().role === 'user' ? 'items-end' : 'items-start'}`}>
                               {body}
@@ -179,7 +188,16 @@ export function Thread(props: ThreadProps) {
                 </Show>
               )}
             </For>
-            {/* Typing indicator on the pending assistant turn. */}
+            {/* Typing indicator on the pending assistant turn.
+                DELIBERATELY role-less, unlike the rows above — this is not an
+                oversight of the same kind. There is no message here yet, so
+                `role="assistant"` would announce an empty article named
+                "Assistant message". What a pending indicator needs instead is a
+                live region, so its ARRIVAL and departure are announced. The
+                Loader already carries an accessible name — an sr-only "Loading"
+                on all nine shape variants — and what it lacks is the
+                `role="status"` / aria-live wrapper around it. A real but
+                SEPARATE gap, and it lives in loader.tsx. Filed, not fixed here. */}
             <Show when={props.loading}>
               <Message class="flex-col items-start">
                 <div class="rounded-lg px-1 py-2">
