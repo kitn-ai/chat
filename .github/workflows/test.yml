@@ -7,12 +7,23 @@ on:
     branches: [main]
 
 jobs:
-  # The REQUIRED check. Everything here is deterministic: build, typecheck, the
-  # jsdom unit project, the React adapter tests, and the cross-origin e2e
-  # security matrix. The flaky storybook BROWSER project lives in its own
-  # `storybook` job below (gated/required via the `storybook-gate` aggregation
-  # job), so environmental chromium crashes are retried away rather than
-  # blocking merges.
+  # The REQUIRED check -- and, today, the ONLY one. Everything here is
+  # deterministic: build, typecheck, the jsdom unit project, the React adapter
+  # tests, and the cross-origin e2e security matrix. The flaky storybook BROWSER
+  # project lives in its own `storybook` job below, aggregated by
+  # `storybook-gate`, which is ADVISORY and does NOT block a merge -- so
+  # environmental chromium crashes are retried away rather than blocking merges.
+  #
+  # WHICH CONTEXTS BLOCK A MERGE IS RULESET CONFIG, NOT WORKFLOW CONFIG, so this
+  # comment cannot be authoritative and you should not act on it without asking
+  # the API. Job names here do not imply required status; only the ruleset does:
+  #
+  #   gh api repos/kitn-ai/ui/rulesets/18328421 \
+  #     --jq '.rules[] | select(.type == "required_status_checks")
+  #           | .parameters.required_status_checks[].context'
+  #
+  # That prints the live list. If it prints anything other than `test` alone,
+  # this comment and the `storybook-gate` one below are the stale things.
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -321,14 +332,20 @@ jobs:
       - name: Card-validation coverage guard (no keyword validates nothing)
         run: pnpm --filter @kitn.ai/ui run verify:card-validation
 
-      # Diffs the 79-element registry against the public SolidJS surface, derived
-      # from the TS checker and cross-checked against the BUILT entry's runtime
-      # keys. Solid is the authored layer, and the framework docs promise the same
+      # Diffs the registered-element catalog (src/elements/element-meta.json)
+      # against the public SolidJS surface, derived from the TS checker and
+      # cross-checked against the BUILT entry's runtime keys. The catalog size is
+      # not restated here -- the script prints `elements <n>` and the n/n verdict
+      # on every run, and that line is the source of the number.
+      #
+      # Solid is the authored layer, and the framework docs promise the same
       # catalog everywhere -- but src/index.ts was grown by hand and nobody ever
-      # diffed it against the registry, so 33 of 79 elements had no writable Solid
-      # equivalent (kai-chat, kai-thread and kai-workspace among them). Also
-      # asserts every public component ships a <Name>Props type. Needs the build
-      # above; a missing build fails the check rather than skipping it.
+      # diffed it against the registry, so when this guard was introduced 33 of
+      # the then-79 elements had no writable Solid equivalent (kai-chat,
+      # kai-thread and kai-workspace among them). Those gaps are closed: it
+      # reports GAP 0 today. Also asserts every public component ships a
+      # <Name>Props type. Needs the build above; a missing build fails the check
+      # rather than skipping it.
       - name: Solid coverage guard (every element writable in SolidJS)
         run: pnpm --filter @kitn.ai/ui run verify:solid-coverage
 
@@ -338,14 +355,36 @@ jobs:
       # assert its wording but never its types; this caught an unused import that
       # failed `npm run build` in a stock create-vite app.
       #
-      # Two matrices: the FRONT END (432 archetype x integration x framework
-      # cells) and, since the routes stopped being sliced off and discarded, the
-      # BACKEND ROUTE (9 x 11) under three more tsc projects that model the real
-      # host -- node/no-DOM for express + Vite middleware, DOM for Next/SvelteKit/
-      # TanStack, workers-types for Cloudflare. That split is the point: the first
-      # run found TS2339 on `await request.json()` in all seven TS integrations,
-      # green on a Next tsconfig and a hard `npm run build` failure on a Vite app's.
-      # ~16s, still no network.
+      # Two matrices. The FRONT END axis is SURFACE x integration x framework --
+      # a surface is a components LIST from `listSurfaceProbes()` (none, each
+      # capability alone, and all of them), NOT an archetype id. That swap is the
+      # substance, not the cell count. The presets are still there as data, and
+      # they are the wrong axis for two structural reasons that do not depend on
+      # any count: they collide (two carry identical components and differ only
+      # in `defaultPlacement`, which this matrix pins, so one cell re-compiled
+      # the previous cell's types), and each one is exactly ONE capability -- so
+      # the maximal chat+sources+tool+reasoning+artifact+voice+attachments cell,
+      # which NO preset can express and which the feature multi-select makes
+      # reachable, had nothing compiling it at all. Read the `WHY NOT THE POWER
+      # SET` comment in archetypes.ts before touching the axis.
+      #
+      # The second matrix is the BACKEND ROUTE (integration x host framework),
+      # added when the routes stopped being sliced off and discarded, under three
+      # more tsc projects that model the real host -- node/no-DOM for express +
+      # Vite middleware, DOM for Next/SvelteKit/TanStack, workers-types for
+      # Cloudflare. That split is the point: the first run found TS2339 on
+      # `await request.json()` in all seven TS integrations, green on a Next
+      # tsconfig and a hard `npm run build` failure on a Vite app's.
+      #
+      # NO CELL COUNT IS PINNED HERE ON PURPOSE. Every axis is derived from the
+      # registry at run time, so registering an integration moves the counts by
+      # itself -- writing a number here would restore the coupling the derivation
+      # removed (`openai` and `anthropic` both landed in the catalog and compiled
+      # ZERO times while this script printed success at a hardcoded count). The
+      # script PRINTS what it actually ran; read that. Today it prints 616 front
+      # ends (7 surfaces x 11 integrations x 8 TS frameworks) and 121 routes of
+      # which 99 reach tsc -- 11 are python, and `mock`'s 11 stream in the
+      # browser and emit no route at all. ~16s, still no network.
       - name: Scaffolder output compiles (tsc --strict over emitted code)
         run: pnpm --filter @kitn.ai/ui run verify:scaffold
 
@@ -514,8 +553,8 @@ jobs:
   # files-per-process: each job's `test:storybook:ci` wrapper splits its slice
   # into ~20-total fresh-chromium sub-shards of ~5-6 files each (and retries each
   # sub-shard to absorb a rare crash). The stable `storybook-gate` job (below)
-  # aggregates all shards into the single required status context. A real,
-  # repeatable regression still fails every retry and shows red here.
+  # aggregates all shards into one advisory status context. A real, repeatable
+  # regression still fails every retry and shows red here.
   storybook:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -547,12 +586,20 @@ jobs:
           STORYBOOK_SUBSHARD_TOTAL: '20'
         run: pnpm --filter @kitn.ai/ui test:storybook:ci
 
-  # Stable aggregation gate: the SINGLE required status context for the storybook
-  # browser suite. `needs: [storybook]` makes `needs.storybook.result` 'success'
-  # only when EVERY matrix shard succeeded; `if: always()` ensures this job still
-  # runs (and can fail) when a shard fails, instead of being skipped. Branch
-  # protection requires THIS context, not the per-shard `storybook (N)` contexts,
-  # so changing the shard count never breaks the required-checks config.
+  # Stable aggregation gate: collapses the storybook browser suite's shards into
+  # ONE status context. `needs: [storybook]` makes `needs.storybook.result`
+  # 'success' only when EVERY matrix shard succeeded; `if: always()` ensures this
+  # job still runs (and can fail) when a shard fails, instead of being skipped.
+  #
+  # This context is ADVISORY. It is not in the branch ruleset, so a red gate here
+  # does NOT block a merge -- the browser suite was tried as a required check,
+  # flaked on CI, and was deliberately left advisory. The aggregation is still
+  # worth having: it means that IF it is ever promoted to required, the ruleset
+  # names this one stable context rather than the per-shard `storybook (N)` ones,
+  # and changing the shard count never breaks the required-checks config.
+  #
+  # Do not infer required status from this comment -- run the `gh api` query in
+  # the `test` job's header comment above, which reads the ruleset itself.
   storybook-gate:
     needs: [storybook]
     if: always()

@@ -237,8 +237,8 @@ const composedImports = (sourceFile, seen = new Set([sourceFile.fileName])) => {
 
 // ---- the props EVERY element gets, injected by defineWebComponent -----------
 // `define.tsx` merges its own defaults over each facade's (`{ theme: 'auto',
-// ...propDefaults }`), so `theme` is a real property + attribute on all 79
-// elements — but it was declared nowhere in the model, and instead re-typed by
+// ...propDefaults }`), so `theme` is a real property + attribute on EVERY
+// element — but it was declared nowhere in the model, and instead re-typed by
 // hand in three places (the .d.ts propBody, the CEM `attributes` list, the React
 // `propNames` array) and absent entirely from element-meta.json, llms-full.txt
 // and the CEM `members` list the kai MCP serves. Read it off the source literal

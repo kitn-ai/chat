@@ -5,12 +5,16 @@
 // Every consumer of `@kitn.ai/ui` pays for this barrel, INCLUDING React/Vue/
 // Svelte consumers who never render a Solid component. It is therefore frozen at
 // the surface that shipped: adding a Solid component here taxes four frameworks
-// to serve one. Closing the 79/79 element coverage gaps on this file grew it
-// 591,359 -> 705,031 bytes (+19.2%), which is what motivated the split.
+// to serve one. Closing the element coverage gaps on this file grew it
+// 591,359 -> 705,031 bytes (+19.2%), which is what motivated the split. (That
+// measurement was taken at the then-79 elements; the catalog grows, the bytes
+// quoted do not — they are a record of the split, not a current reading.)
 //
-// The COMPLETE SolidJS surface — all 79 elements' components plus a `<Name>Props`
-// type for every public component — lives on `@kitn.ai/ui/solid` (src/solid.ts),
-// which is its own build target so only Solid consumers pay for it. `./solid`
+// The COMPLETE SolidJS surface — a component for EVERY registered element plus a
+// `<Name>Props` type for every public component — lives on `@kitn.ai/ui/solid`
+// (src/solid.ts), which is its own build target so only Solid consumers pay for
+// it. `npm run verify:solid-coverage` prints the element count and proves that
+// surface n/n on every run, which is why no count is restated here. `./solid`
 // re-exports this file, so it is a strict superset: anything here is reachable
 // there too, and a Solid consumer only ever needs the one import.
 //
