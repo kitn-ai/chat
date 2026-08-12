@@ -235,11 +235,11 @@ or do not bother.
 | `verify:dts:consumer` | shipped `.d.ts` type-check under bundler AND nodenext, both directions | needs network |
 | `verify:ssr` | every public entry imports under `node` | 8 entries, derived from the exports map |
 | `verify:solid-coverage` | every element writable in Solid, every component has a `<Name>Props` | 80/80 + 164 |
-| `verify:scaffold` | 432 emitted front-ends + 77 backend routes compile under real host tsconfigs; 54 html / 54 angular / 54 solid checked structurally, the solid ones per `MessagePart` variant | ~18s, no network |
+| `verify:scaffold` | 528 emitted front-ends + 99 backend routes compile under real host tsconfigs; 66 html / 66 angular / 66 solid checked structurally, the solid ones per `MessagePart` variant | no network |
 | `verify:docs` | every doc snippet compiles against the shipped API | BLOCKING, gates on `high` only |
 | `verify:dts` | no emitted declaration escapes `dist/`, all specifiers resolve | both resolution modes |
-| unit | 2306 tests / 209 files | |
-| typecheck | 4 tsc passes | |
+| unit | 2671 tests / 230 files | |
+| typecheck | `verify:quarantine`, then 5 tsc passes | |
 
 **Both halves of a two-direction guard are required.** "Wrong code errors" alone is satisfied by
 types that error at everything; "right code compiles" alone is satisfied by types that are entirely
