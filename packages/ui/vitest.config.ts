@@ -135,15 +135,26 @@ export default defineConfig({
         browser: {
           enabled: true,
           headless: true,
-          provider: playwright({}),
-          instances: [{
-            browser: 'chromium',
-            // CI hardening: chromium crashes ("Browser connection was closed /
-            // rpc is closed") partway through the story suite when it exhausts
-            // the runner's memory / the tiny default /dev/shm on GitHub runners,
-            // and a renderer page dies — which aborts the whole runner (not a
-            // retryable per-test failure). Give the renderer more headroom and
-            // stop it from being killed under load. No-op locally; required on CI.
+          // CI hardening: chromium crashes ("Browser connection was closed /
+          // rpc is closed") partway through the story suite when it exhausts
+          // the runner's memory / the tiny default /dev/shm on GitHub runners,
+          // and a renderer page dies — which aborts the whole runner (not a
+          // retryable per-test failure). Give the renderer more headroom and
+          // stop it from being killed under load. No-op locally; required on CI.
+          //
+          // `launchOptions` belongs to the PROVIDER, not to a browser instance.
+          // @vitest/browser-playwright reads `this.options.launchOptions` off the
+          // object passed to `playwright()` and spreads exactly that into
+          // `playwright.chromium.launch()`; an instance-level `launchOptions` is
+          // read by nobody. It sat on the instance until 2026-08-11, so none of
+          // these args ever reached chromium — and nothing caught it, because the
+          // suite is green either way and five of these eight flags are ALREADY
+          // playwright chromium defaults, so even eyeballing `ps` looks reassuring.
+          // Verify with `node scripts/probe-browser-launch-args.mjs`: it diffs the
+          // argv of the chromium vitest launches against a plain playwright launch
+          // and judges only the three flags that can tell the two states apart
+          // (0/3 before this moved, 3/3 after).
+          provider: playwright({
             launchOptions: {
               args: [
                 '--disable-dev-shm-usage', // route shared memory to /tmp (default /dev/shm is tiny on runners)
@@ -153,10 +164,23 @@ export default defineConfig({
                 '--disable-background-timer-throttling', // keep the test page fully alive when "backgrounded"
                 '--disable-backgrounding-occluded-windows',
                 '--disable-renderer-backgrounding',
-                '--disable-features=CalculateNativeWinOcclusion,BackForwardCache',
+                // NO '--disable-features=...' here. Playwright's own defaults already
+                // pass one (16 names it disables for test determinism: PaintHolding,
+                // Translate, HttpsUpgrades, RenderDocument, ...) and it appends our
+                // args AFTER its own, so a second `--disable-features` does not extend
+                // that list — chromium keeps the LAST duplicate switch and drops the
+                // first, so ours would REPLACE all 16. Verified, not assumed:
+                // `node scripts/probe-duplicate-switch.mjs` passes --user-agent twice
+                // and the browser reports the second. The two names this used to pass
+                // were dead weight anyway: BackForwardCache is already covered by
+                // playwright's dedicated `--disable-back-forward-cache`, and
+                // CalculateNativeWinOcclusion is Windows-only (CI is ubuntu-latest).
                 '--js-flags=--max-old-space-size=2048', // each shard is ~28 files; lower cap forces earlier GC
               ],
             },
+          }),
+          instances: [{
+            browser: 'chromium',
           }]
         }
       }
