@@ -82,6 +82,8 @@ const openai: Integration = {
   // The route reads OPENAI_API_KEY and puts it in an `Authorization: Bearer`
   // header. A static bundle carrying that is a published key.
   keyExposure: 'needs-proxy',
+  // A remote HTTPS endpoint and a key. Nothing to install, nothing to start.
+  outOfBand: 'none',
 };
 
 export default openai;

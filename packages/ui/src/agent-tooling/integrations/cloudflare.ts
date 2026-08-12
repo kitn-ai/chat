@@ -167,6 +167,11 @@ export default {
   // the `env.AI` binding and holds no token in code at all, but a binding is a
   // Worker capability, not a browser one. Either way a server is required.
   keyExposure: 'needs-proxy',
+  // Workers AI is a remote HTTPS endpoint (the REST route) or a platform binding
+  // (the worker route) — either way there is nothing on the developer's machine
+  // to install or run. `wrangler` is a devDependency of a Worker app, not an
+  // out-of-band prerequisite of this integration.
+  outOfBand: 'none',
 };
 
 export default cloudflare;

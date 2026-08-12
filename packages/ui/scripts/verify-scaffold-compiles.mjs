@@ -44,14 +44,17 @@
 // would be the hand that updates the number. The script prints what it actually
 // ran; read that, not this comment.
 //
-// FRONT END: 6 surfaces × 11 integrations × 8 TS frameworks = 528 compiled
+// FRONT END: 7 surfaces × 11 integrations × 8 TS frameworks = 616 compiled
 // cells, at one placement. `placement` is the fourth axis and is left at
 // 'full-page' on purpose: it only ever changes an inline CSS string, so the
 // extra 3x compiles the same types again.
 //
 // THE SURFACE AXIS IS A COMPONENTS LIST, NOT AN ARCHETYPE ID, and that swap is
-// worth reading carefully because the cell count did NOT move — 528 before, 528
-// after — while the coverage did.
+// worth reading carefully because the cell count did NOT move at the time — 528
+// before, 528 after — while the coverage did. (It has moved since, and only by
+// the mechanism this file exists to enforce: registering the `attachments`
+// preset added a fifth capability, which added a seventh surface probe, which
+// added 88 cells with nobody editing a number here.)
 //
 // Before: the six archetype ids. That is five distinct `components` lists, not
 // six, because `support-widget` and `drop-in-chat` carry the same components and
@@ -60,9 +63,10 @@
 // covered by exactly that much.
 //
 // After: `listSurfaceProbes()` — none, each capability alone, and ALL of them.
-// Six distinct lists, so the duplicate is gone, and the cell it freed is spent on
+// Distinct lists, so the duplicate is gone, and the cell it freed is spent on
 // the maximal surface: chat + sources + tool + reasoning + artifact + resizable +
-// voice-input. That one is the whole reason the axis changed. No archetype can
+// voice-input + file-upload + attachments. That one is the whole reason the axis
+// changed. No archetype can
 // express it — `workspace` has no `kai-tool` so it emits no card round trip, and
 // `agentic` has no artifact pane — so it is simultaneously the surface a builder
 // most obviously wants (a workspace that renders the tool calls that produced the
@@ -71,7 +75,7 @@
 // registry are emitted into the same file. It had never been compiled.
 //
 // `assertSurfacesAreDistinct` fails if the axis ever degenerates back into
-// repeated cells, and `assertPresetsAreData` keeps the six presets checked —
+// repeated cells, and `assertPresetsAreData` keeps every preset checked —
 // harder than before, by requiring each to be byte-identical to `renderSurface`
 // over its own components rather than merely compiling on its own.
 //
@@ -1589,6 +1593,162 @@ async function routeCheck(scaffold) {
 }
 
 /**
+ * THE ATTACHMENT SURFACE REALLY EMITS A WORKING STAGING LOOP — in all seven
+ * framework renderers, not just the one a jsdom test happens to run.
+ *
+ * WHY THIS EXISTS. `kai-file-upload` and `kai-attachments` were registered
+ * elements no preset composed. Passing them in `components` was legal (the axis
+ * takes any list) and produced two bare tags from the generic companion
+ * fall-through: a dropzone whose `kai-files-added` nobody listened to, and a list
+ * whose `items` nobody ever set. That emit COMPILES — there is no type relating a
+ * custom element to a listener — and renders an empty box forever.
+ *
+ * So this is the same class of hole as `cardRoundTripCheck`, one capability over,
+ * and it is checked the same way: three pieces with no type relating them (mount
+ * the dropzone, hold the staged list, fold it onto the outgoing message), any two
+ * of which compile perfectly while nothing reaches the screen.
+ *
+ * THE ASSERTION THAT MATTERS MOST is the third one, `fold`. A surface can mount
+ * both tags, stage a file, draw the chip — and then submit a message with no
+ * `file` part on it, at which point the user watches their attachment vanish.
+ * That is what every scaffold in this repo did before this capability existed
+ * (`kai-submit` carries `{ value, attachments }` and every emitted handler read
+ * only `.value`), so it is not a hypothetical.
+ *
+ * Derived from the scaffolder's own `attachmentEmitPlan`, never from a count or a
+ * preset name — see `cardRoundTripCheck` for why that matters here too. The
+ * anti-vacuity pair at the bottom is the same guard: a plan stuck at one value
+ * makes every assertion above it vacuously true.
+ */
+const ATTACHMENT_MOUNT = {
+  // The kai-* targets mount the tags themselves.
+  html: ['<kai-file-upload', '<kai-attachments'],
+  vue: ['<kai-file-upload', '<kai-attachments'],
+  svelte: ['<kai-file-upload', '<kai-attachments'],
+  angular: ['<kai-file-upload', '<kai-attachments'],
+  // React and its two relatives mount the generated wrappers.
+  react: ['<FileUpload', '<Attachments items='],
+  next: ['<FileUpload', '<Attachments items='],
+  'tanstack-start': ['<FileUpload', '<Attachments items='],
+  // solid renders the SolidJS primitives directly. `<Attachments>` is NOT a
+  // staging marker there — `renderPart` already draws `file` parts with it on
+  // every surface — so the staging half is identified by the dropzone and by
+  // `<AttachmentRemove>`, which only a removable staged chip has.
+  solid: ['<FileUpload', '<AttachmentRemove'],
+};
+
+/** Markers that are identical in every framework, so they say what was WIRED. */
+const ATTACHMENT_MARKERS = {
+  // the File -> AttachmentData bridge, declared AND called
+  bridge: 'function toAttachment(file: File)',
+  bridgeCall: '.map(toAttachment)',
+  // the fold onto the outgoing message — the piece whose absence is invisible
+  fold: "({ type: 'file' as const, attachment })",
+};
+
+async function attachmentStagingCheck(scaffold, attachmentEmitPlan) {
+  const failures = [];
+  let checked = 0;
+  let staging = 0;
+  let notStaging = 0;
+
+  // Block comments are stripped only when the `/*` OPENS A LINE. Anchoring it is
+  // not tidiness: `accept="image/*,application/pdf"` puts a bare `/*` in the middle
+  // of the emitted dropzone tag, and an unanchored strip read that as a comment
+  // opening and swallowed everything up to the next `*/` — which is the JSDoc on
+  // `toAttachment`, several lines later, taking `<kai-attachments>` with it. This
+  // check reported html and solid as "never mounts the list" while they mounted it
+  // perfectly. Line-anchored, the JSDoc block still goes (it names both tags, so
+  // leaving it would let prose satisfy a mount assertion) and no attribute value can
+  // open a comment.
+  const strip = (t) =>
+    t
+      .replace(/^[ \t]*\/\/.*$/gm, '')
+      .replace(/^[ \t]*\/\*[\s\S]*?\*\//gm, '')
+      .replace(/<!--[\s\S]*?-->/g, '');
+
+  for (const surface of SURFACES) {
+    const plan = attachmentEmitPlan(surface.components);
+    if (!plan || typeof plan.staging !== 'boolean') {
+      cleanup();
+      fail(
+        `attachmentEmitPlan([${surface.components.join(', ')}]) did not return { staging: boolean } —\n` +
+          '  this check would silently skip every cell of that surface.',
+      );
+    }
+    for (const integration of INTEGRATIONS) {
+      for (const framework of FRAMEWORKS) {
+        const label = `${surface.id}__${integration}__${framework}`;
+        if (FILTER && !label.includes(FILTER)) continue;
+        checked++;
+        const out = await scaffold.handler({
+          components: surface.components,
+          integration,
+          placement: 'full-page',
+          framework,
+        });
+        const whole = out.content[0].text;
+        // Prose that TALKS about attachments must not satisfy an assertion about
+        // code that attaches them — the same reason cardRoundTripCheck strips first.
+        const front = strip(frontEnd(whole));
+
+        if (plan.staging) {
+          staging++;
+          for (const needle of ATTACHMENT_MOUNT[framework] ?? []) {
+            if (!front.includes(needle))
+              failures.push(`${label}: never mounts \`${needle}\` — the staging surface is not on screen`);
+          }
+          for (const [what, needle] of Object.entries(ATTACHMENT_MARKERS)) {
+            if (!front.includes(needle))
+              failures.push(
+                `${label}: emits no \`${needle}\` (${what}) — the staging loop is incomplete, and ` +
+                  'every piece of it compiles fine on its own',
+              );
+          }
+          // Both ends of the interaction. Without the first nothing can ever be
+          // staged; without the second a wrong file can never be taken back off.
+          if (!/kai-files-added|onFilesAdded|FilesAdded=/.test(front))
+            failures.push(`${label}: the dropzone is mounted but nothing listens for its files`);
+          if (!/kai-remove|onRemove/.test(front))
+            failures.push(`${label}: staged files are drawn with no way to remove one`);
+          // An array set as an ATTRIBUTE stringifies to "[object Object]" and the
+          // list renders its empty state, silently. Same hard contract as cardTypes.
+          if (/(?:^|\s)items="/m.test(front))
+            failures.push(`${label}: items bound as an ATTRIBUTE — an array stringifies and stages nothing`);
+        } else {
+          notStaging++;
+          // Over the WHOLE text, not the sliced front end: see cardRoundTripCheck.
+          const stripped = strip(whole);
+          for (const needle of [ATTACHMENT_MARKERS.bridge, ATTACHMENT_MARKERS.fold, 'kai-file-upload']) {
+            if (stripped.includes(needle))
+              failures.push(`${label}: emits \`${needle}\` for a surface that stages no attachments`);
+          }
+        }
+      }
+    }
+  }
+
+  if (!FILTER) {
+    if (staging === 0)
+      failures.push(
+        'no surface stages attachments at all — either attachmentEmitPlan is stuck at false or no ' +
+          'preset composes kai-file-upload + kai-attachments, and every assertion above is vacuous',
+      );
+    if (notStaging === 0) failures.push('every surface stages attachments — the negative half never runs');
+  }
+
+  if (failures.length) {
+    for (const f of failures) console.log(`  ✗ ${f}`);
+    cleanup();
+    fail(`${failures.length} attachment-staging problem(s) across ${checked} scaffolds.`);
+  }
+  console.log(
+    `  ✓ ${checked} scaffolds: ${staging} mount the dropzone + list, convert File -> AttachmentData, ` +
+      `and fold the staged files onto the message as \`file\` parts; ${notStaging} emit none of it`,
+  );
+}
+
+/**
  * Fill the two catalog axes from the registry itself.
  *
  * Bundled with esbuild for the same reason the scaffolder is: it is TypeScript
@@ -1761,7 +1921,14 @@ async function main() {
     outfile: bundle,
     logLevel: 'error',
   });
-  const { scaffold, cardEmitPlan } = await import(pathToFileURL(bundle).href);
+  const { scaffold, cardEmitPlan, attachmentEmitPlan } = await import(pathToFileURL(bundle).href);
+  if (typeof attachmentEmitPlan !== 'function')
+    fail(
+      'the scaffolder no longer exports `attachmentEmitPlan`.\n' +
+        '  attachmentStagingCheck derives its per-cell expectation from it rather than re-deriving\n' +
+        '  "both attachment tags are present" itself. Refusing to skip: a check that quietly stops\n' +
+        '  running is worse than no check.',
+    );
   if (typeof cardEmitPlan !== 'function')
     fail(
       'the scaffolder no longer exports `cardEmitPlan`.\n' +
@@ -1776,6 +1943,7 @@ async function main() {
   await angularStructureCheck(scaffold);
   await solidPartCoverageCheck(scaffold);
   await cardRoundTripCheck(scaffold, cardEmitPlan);
+  await attachmentStagingCheck(scaffold, attachmentEmitPlan);
 
   const cases = [];
   for (const surface of SURFACES)

@@ -69,6 +69,8 @@ const openrouter: Integration = {
   deps: { npm: [], pip: [] },
   // The route reads OPENROUTER_API_KEY into an `Authorization: Bearer` header.
   keyExposure: 'needs-proxy',
+  // A remote HTTPS endpoint and a key. Nothing to install, nothing to start.
+  outOfBand: 'none',
 };
 
 export default openrouter;

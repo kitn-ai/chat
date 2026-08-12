@@ -79,6 +79,13 @@ const ollama: Integration = {
   // the browser-direct path (set OLLAMA_ORIGINS to allow the page origin), which
   // is the path this value unlocks.
   keyExposure: 'frontend-safe',
+  // The route fetches http://localhost:11434, so Ollama must ALREADY be running:
+  // `ollama serve`, then `ollama pull <model>` for the model the route pins.
+  // Nothing in package.json installs or starts it — `deps.npm` is empty because
+  // the route is bare `fetch`, which is exactly why this cannot be inferred from
+  // the dependency list. The schema's LOOPBACK_FETCH net catches this one
+  // independently, so a later edit to 'none' fails at the catalog boundary.
+  outOfBand: 'local-server',
 };
 
 export default ollama;

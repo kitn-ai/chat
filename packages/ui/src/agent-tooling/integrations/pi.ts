@@ -91,6 +91,13 @@ app.listen(3001, () => console.log('chat api: http://localhost:3001/api/chat'));
   // is exposed. "No key" is not the same fact as "safe in the browser", and
   // collapsing the two is exactly how this flag would be got wrong.
   keyExposure: 'needs-proxy',
+  // Not 'local-server': nothing is listening in advance. The bridge spawns
+  // `pi --mode rpc` per request, so what the developer supplies is an EXECUTABLE
+  // on PATH ("Pi must be installed locally and available on PATH as 'pi'"), and
+  // "start the server first" would be the wrong instruction to print. Pi is not
+  // in `deps` for the same reason — the route reaches it with spawn(), not an
+  // import. The schema's SPAWNS_PROCESS net catches this one independently.
+  outOfBand: 'local-binary',
 };
 
 export default pi;

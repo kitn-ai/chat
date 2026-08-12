@@ -130,6 +130,21 @@ async function chatHandler(request: Request): Promise<Response> {
   // no key leaks. The conservative direction is the cheap one: a needless server
   // hop costs a process, the other error costs the endpoint.
   keyExposure: 'needs-proxy',
+  // THE JUDGEMENT CALL FOR THIS FIELD, exactly as keyExposure above is, and for
+  // a related reason: no automatic check can decide it. MASTRA_URL is a base URL
+  // for a server this integration does not ship and cannot start; the route's
+  // only mention of loopback is inside a `throw new Error(...)` string, which
+  // LOOPBACK_FETCH deliberately does not match (a net that fired on prose would
+  // be right here by accident and wrong elsewhere). So 'none' would parse
+  // cleanly.
+  //
+  // It is 'local-server' on what the integration actually requires: a Mastra
+  // server has to be reachable at MASTRA_URL before the first message works,
+  // `mastra dev` is how a developer gets one (port 4111), and `@mastra/client-js`
+  // is a CLIENT for it, not the server itself. Printing "start your Mastra
+  // server" costs a line; omitting it produces a scaffold that fetches a URL
+  // nothing answers.
+  outOfBand: 'local-server',
 };
 
 export default mastra;

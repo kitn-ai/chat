@@ -407,6 +407,8 @@ async function chatHandler(request: Request): Promise<Response> {
   // header is NOT `Authorization`, which is why the schema's detector matches
   // both spellings.
   keyExposure: 'needs-proxy',
+  // A remote HTTPS endpoint and a key. Nothing to install, nothing to start.
+  outOfBand: 'none',
 };
 
 export default anthropic;

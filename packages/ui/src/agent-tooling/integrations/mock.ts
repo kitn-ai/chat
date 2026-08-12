@@ -64,6 +64,10 @@ const mock: Integration = {
   // the one place where "declares nothing" genuinely means safe — which is
   // precisely why it still has to SAY so rather than be left blank.
   keyExposure: 'frontend-safe',
+  // Nothing at all, and here that is the literal truth rather than a shorthand:
+  // there is no route, no upstream and no process. This is the "No backend"
+  // group of create-kai's gateway prompt all by itself.
+  outOfBand: 'none',
 };
 
 export default mock;

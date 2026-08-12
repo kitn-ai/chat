@@ -91,6 +91,14 @@ proto.scrollIntoView ??= () => {};
   unobserve() {}
   disconnect() {}
 };
+// jsdom implements neither half of the object-URL API, and the emitted attachment
+// bridge calls createObjectURL to give an image preview a real `src`. A stub is
+// honest here because nothing below asserts the URL's VALUE — only that a staged
+// file reaches the list and then the message. Left as a stub rather than removed
+// from the emit: the URL is what makes a thumbnail render in a real browser, and
+// dropping it to suit a test environment would be the test shaping the product.
+(globalThis.URL as unknown as { createObjectURL?: unknown }).createObjectURL ??= () => 'blob:kai-test';
+(globalThis.URL as unknown as { revokeObjectURL?: unknown }).revokeObjectURL ??= () => {};
 
 const SEP = '// ── src/main.ts ──';
 
@@ -301,8 +309,45 @@ describe('the EMITTED maximal surface really composes, end to end', () => {
         'kai-voice-input upgraded but drew no control',
       ).not.toBeNull();
 
+      // ── 3b. THE ATTACHMENT STAGING LOOP RUNS ────────────────────────────────
+      // The emitted dropzone is listened to, the staged list is populated from
+      // that listener, and the chip is drawn by the LIVE <kai-attachments> — none
+      // of which any string in the emit can demonstrate. `verify:scaffold` compiles
+      // all seven renderers' version of this; only execution says it works.
+      const upload = upgraded('kai-file-upload', 'the attachment dropzone was not emitted');
+      const attachmentsEl = upgraded('kai-attachments', 'the staged-attachment list was not emitted');
+      expect(
+        upload.shadowRoot.textContent,
+        'kai-file-upload upgraded but drew no dropzone label',
+      ).toContain('drop files');
+
+      // The element's own event, with its own detail shape. The emitted module's
+      // listener is what turns this into an AttachmentData and assigns `.items`.
+      upload.dispatchEvent(
+        new CustomEvent('kai-files-added', {
+          detail: { files: [new File(['%PDF-1.4'], 'quarterly-report.pdf', { type: 'application/pdf' })] },
+        }),
+      );
+      await new Promise((r) => setTimeout(r, 20));
+      expect(
+        attachmentsEl.shadowRoot.textContent,
+        'a dropped file never reached <kai-attachments> — the dropzone is mounted but nothing stages',
+      ).toContain('quarterly-report.pdf');
+
       // ── 4. THE TOOL LOOP RUNS INSIDE THE COMPOSED SURFACE ───────────────────
-      chatEl.dispatchEvent(new CustomEvent('kai-submit', { detail: { value: 'what shipped lately?' } }));
+      // `attachments` is on the real detail every time — <kai-chat> always sends
+      // `{ value, attachments }` — and it carries a file here on purpose: the
+      // emitted handler merges the composer's own paperclip with the dropzone, and
+      // a synthetic event that omitted the field would let a regression to reading
+      // only one of them pass.
+      chatEl.dispatchEvent(
+        new CustomEvent('kai-submit', {
+          detail: {
+            value: 'what shipped lately?',
+            attachments: [{ id: 'from-composer', type: 'file', filename: 'notes.txt' }],
+          },
+        }),
+      );
       for (let i = 0; i < 400 && (round < 2 || chatEl.loading !== false); i += 1) {
         await new Promise((r) => setTimeout(r, 10));
       }
@@ -317,6 +362,30 @@ describe('the EMITTED maximal surface really composes, end to end', () => {
       // The thread carries all three part kinds the maximal surface promises.
       const parts = chatEl.messages[1].parts;
       expect(parts.map((p) => p.type)).toEqual(['reasoning', 'tool', 'text']);
+
+      // THE USER TURN CARRIES BOTH STAGED FILES, ahead of its text. This is the
+      // assertion the whole capability exists for: mounting the dropzone and
+      // drawing the chip are worth nothing if the submit drops the files, which is
+      // exactly what every scaffold did before — `kai-submit` has always carried
+      // `attachments` and every emitted handler read only `.value`.
+      const userParts = chatEl.messages[0].parts;
+      expect(
+        userParts.map((p) => p.type),
+        'the staged files did not reach the outgoing message as `file` parts',
+      ).toEqual(['file', 'file', 'text']);
+      // The two SOURCES, not just two parts: the dropzone's file and the one the
+      // composer's own paperclip put on the event. Reading either alone passes a
+      // count check and still loses half the user's attachments.
+      expect(
+        userParts
+          .filter((p): p is { type: 'file'; attachment: { filename?: string } } => p.type === 'file')
+          .map((p) => p.attachment.filename),
+      ).toEqual(['quarterly-report.pdf', 'notes.txt']);
+      // Staging is emptied by the submit, so the next message does not re-send them.
+      expect(
+        attachmentsEl.shadowRoot.textContent,
+        'the staged list still shows a sent file — the next message would attach it again',
+      ).not.toContain('quarterly-report.pdf');
 
       // ── 5. IT IS ON SCREEN, IN THE CHAT PANE ────────────────────────────────
       // Scoped to the thread's own rendered nodes rather than the whole shadow

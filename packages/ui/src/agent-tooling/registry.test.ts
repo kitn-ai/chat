@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { integrations, archetypes, getIntegration, getArchetype, listIntegrations, listArchetypes } from './registry';
+import { integrations, archetypes, getIntegration, getArchetype, listIntegrations, listArchetypes, listGatewayGroups } from './registry';
 import { IntegrationSchema, ArchetypeSchema } from './types';
 import type { Integration } from './types';
 
@@ -203,6 +203,127 @@ it('no frontend-safe integration sends a credential from its route', () => {
  */
 it('only ollama and mock are frontend-safe', () => {
   expect(integrations.filter((i) => i.keyExposure === 'frontend-safe').map((i) => i.id).sort()).toEqual(['mock', 'ollama']);
+});
+
+// --- outOfBand + the gateway grouping ---
+//
+// What `create-kai` prints as a PREREQUISITE, and the heading it files each
+// gateway under. Wrong in the permissive direction it produces a scaffold that
+// cannot possibly run — "npm run dev" to someone who has to start Ollama first —
+// and reads as a broken kit rather than a missing step. As with `keyExposure`, a
+// wrong value COMPILES, so only a check over the declaration catches it.
+
+it('every integration declares outOfBand', () => {
+  for (const integration of integrations) {
+    expect(
+      integration.outOfBand,
+      `${integration.id}: no outOfBand. create-kai would have to guess whether this integration needs ` +
+        'something running before the first message works',
+    ).toBeDefined();
+  }
+});
+
+/**
+ * The set is spelled out, exactly as `only ollama and mock are frontend-safe` is,
+ * because an integration silently JOINING or LEAVING it is the change worth
+ * noticing in review — it moves a menu heading and a printed prerequisite.
+ *
+ * `langgraph` is deliberately NOT here, and that is a divergence from the
+ * create-kai spec's prose, which lists it under "Bring a server or runtime". Its
+ * emitted route builds the graph in process (`createReactAgent` over a
+ * `new ChatOpenAI(...)`) and its runNote asks for a key and nothing else, so
+ * there is no server to bring. If a LangGraph Platform integration is ever added
+ * it is a separate catalog entry, not a change to this line.
+ */
+it('exactly ollama, mastra, pi and pydantic-ai need something out of band', () => {
+  expect(
+    integrations.filter((i) => i.outOfBand !== 'none').map((i) => i.id).sort(),
+  ).toEqual(['mastra', 'ollama', 'pi', 'pydantic-ai']);
+});
+
+/** The KIND matters as much as the fact: each prints a different sentence. */
+it('each out-of-band integration declares the kind of thing it needs', () => {
+  expect(getIntegration('ollama')?.outOfBand).toBe('local-server');
+  expect(getIntegration('mastra')?.outOfBand).toBe('local-server');
+  // Not 'local-server': nothing is listening in advance, the route spawns it.
+  expect(getIntegration('pi')?.outOfBand).toBe('local-binary');
+  expect(getIntegration('pydantic-ai')?.outOfBand).toBe('language-runtime');
+});
+
+/**
+ * The permissive-direction guard over the real catalog, on route source. The
+ * schema refines the same three signals; this runs them against what actually
+ * shipped, which is the half that catches a route edited after the flag was set.
+ */
+it('no integration claiming outOfBand none contradicts itself in its route', () => {
+  for (const integration of integrations.filter((i) => i.outOfBand === 'none')) {
+    expect(
+      integration.language,
+      `${integration.id}: claims outOfBand 'none' but its route is python, which a node toolchain cannot run`,
+    ).not.toBe('python');
+    for (const code of routeSourcesOf(integration)) {
+      expect(
+        code,
+        `${integration.id}: claims outOfBand 'none' but its route spawns a process that nothing installs`,
+      ).not.toMatch(/\bfrom\s+['"]node:child_process['"]|\bspawn\s*\(/);
+      expect(
+        code,
+        `${integration.id}: claims outOfBand 'none' but its route fetches a loopback address, so something local must be listening`,
+      ).not.toMatch(/\b(?:fetch|URL)\s*\(\s*['"`]https?:\/\/(?:localhost|127\.0\.0\.1)/);
+    }
+  }
+});
+
+/**
+ * THE GROUPING THE create-kai SPEC DESCRIBES, now derived instead of restated.
+ *
+ * It could not be derived before `outOfBand` existed: `category` does not
+ * separate the groups (`provider` holds openai AND ollama), an empty
+ * `routeTemplates` picks out how a route is EXPRESSED rather than what it needs,
+ * and "declares a secret env var" splits langgraph from pydantic-ai the wrong
+ * way. Every partition that matched the spec matched it by accident.
+ *
+ * Asserted by MEMBERSHIP, not by count: a count passes while two integrations
+ * swap groups, which is precisely the failure that would put a key prompt in
+ * front of someone who needs to start a server.
+ */
+it('listGatewayGroups derives the three headings the CLI prompt needs', () => {
+  const groups = listGatewayGroups();
+  const idsIn = (id: string) =>
+    groups.find((g) => g.id === id)!.integrations.map((i) => i.id).sort();
+
+  // Derived from having no route at all, not from `id === 'mock'`.
+  expect(idsIn('no-backend')).toEqual(['mock']);
+  expect(idsIn('bring-a-server')).toEqual(['mastra', 'ollama', 'pi', 'pydantic-ai']);
+  expect(idsIn('bring-a-key')).toEqual([
+    'anthropic',
+    'cloudflare',
+    'langgraph',
+    'openai',
+    'openrouter',
+    'vercel-ai-sdk',
+  ]);
+});
+
+/** Every integration lands in exactly one group — no gaps, no duplicates. */
+it('the gateway groups partition the catalog', () => {
+  const grouped = listGatewayGroups().flatMap((g) => g.integrations.map((i) => i.id));
+  expect(grouped.sort()).toEqual(integrations.map((i) => i.id).sort());
+  expect(new Set(grouped).size, 'an integration appears in more than one gateway group').toBe(grouped.length);
+});
+
+/**
+ * The precedence rule, made explicit because it is the one judgement in the
+ * grouping. `pydantic-ai` needs BOTH a python runtime and OPENAI_API_KEY, so the
+ * groups are not disjoint in reality and something has to win. The prerequisite
+ * does: a key is useless until the service it authenticates is running.
+ */
+it('a gateway needing both a runtime and a key is grouped by the runtime', () => {
+  const py = getIntegration('pydantic-ai')!;
+  expect(py.envVars.some((v) => /KEY$/.test(v)), 'pydantic-ai stopped needing a key, so this test proves nothing').toBe(true);
+  expect(
+    listGatewayGroups().find((g) => g.integrations.includes(py))?.id,
+  ).toBe('bring-a-server');
 });
 
 // --- deps ---

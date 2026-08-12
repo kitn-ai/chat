@@ -69,6 +69,14 @@ async def chat(req: ChatRequest):
   // 'frontend-safe' — the flag asks where the SECRET lives, and it lives in the
   // python process. The FastAPI service IS the server hop.
   keyExposure: 'needs-proxy',
+  // The emitted backend is a FastAPI service: a python interpreter, the four
+  // `deps.pip` packages, and `uvicorn main:app` on its own port — none of which a
+  // node toolchain provides or starts. It also needs OPENAI_API_KEY, so this is
+  // the entry that proves the groups are not mutually exclusive: a runtime
+  // prerequisite and a key at once. The prompt should lead with the runtime,
+  // because a key is useless until the service runs. The schema's `language ===
+  // 'python'` net catches this one independently.
+  outOfBand: 'language-runtime',
 };
 
 export default pydanticAi;

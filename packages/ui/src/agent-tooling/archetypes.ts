@@ -55,6 +55,34 @@ export const archetypes: Archetype[] = [
     defaultPlacement: 'full-page',
     docsSlug: 'examples/voice-assistant',
   },
+  /**
+   * THE PRESET THAT EXISTS TO MAKE A CAPABILITY REACHABLE, not to name a product
+   * shape someone asked for.
+   *
+   * `kai-file-upload` and `kai-attachments` were registered elements that NO
+   * preset composed, and `listCapabilityGroups` derives its answer from this
+   * table — so the attachments capability reached neither `listSurfaceProbes`
+   * nor `verify:scaffold`, and `renderSurface` had no branch that emitted either
+   * tag. A caller could pass them in `components` (the axis takes any list) and
+   * get two bare `<kai-file-upload></kai-file-upload>` / `<kai-attachments>`
+   * siblings with nothing wired to them: on screen, inert, silent.
+   *
+   * The pair is ONE capability for the same reason `kai-artifact` +
+   * `kai-resizable` are: a dropzone with no list is a black hole, and a list
+   * with no dropzone can never fill. `hasAttachments` in scaffold.ts requires
+   * both for exactly that reason.
+   *
+   * The components match the create-kai spec's own feature table
+   * (`attachments` -> `kai-file-upload`, `kai-attachments`), so the CLI's
+   * multi-select and this preset name the same surface rather than two.
+   */
+  {
+    id: 'attachments',
+    title: 'File attachments',
+    components: ['kai-chat', 'kai-file-upload', 'kai-attachments'],
+    defaultPlacement: 'full-page',
+    docsSlug: 'examples/attachments',
+  },
 ];
 
 /** The component every surface composes around, so never a capability by itself. */
@@ -71,9 +99,10 @@ export interface CapabilityGroup {
  * The distinct capabilities the presets know about, DERIVED from them.
  *
  * A capability is one preset's components minus `kai-chat`, deduped across the
- * catalog. Today that is four: `sources`, `tool+reasoning`, `artifact+resizable`,
- * `voice-input` — and the six presets collapse onto them because `drop-in-chat`
- * and `support-widget` both add nothing (they differ only in `defaultPlacement`).
+ * catalog. Today that is five: `sources`, `tool+reasoning`, `artifact+resizable`,
+ * `voice-input`, `file-upload+attachments` — and the seven presets collapse onto
+ * them because `drop-in-chat` and `support-widget` both add nothing (they differ
+ * only in `defaultPlacement`).
  *
  * Derived rather than listed for the reason the verify script's other axes are:
  * a hand-written list would have to be edited by the same hand that adds a
@@ -83,9 +112,11 @@ export interface CapabilityGroup {
  *
  * The grouping is real and not an artifact of the derivation: `kai-tool` and
  * `kai-reasoning` are one capability because a tool panel with no reasoning
- * disclosure is not a surface anyone asks for, and `kai-artifact` /
+ * disclosure is not a surface anyone asks for, `kai-artifact` /
  * `kai-resizable` are one because `isWorkspace` only fires when BOTH are present
- * — split them and the renderer emits a bare artifact with no pane to put it in.
+ * — split them and the renderer emits a bare artifact with no pane to put it in
+ * — and `kai-file-upload` / `kai-attachments` are one because `hasAttachments`
+ * fires the same way, for the same kind of reason.
  */
 export function listCapabilityGroups(): CapabilityGroup[] {
   const seen = new Map<string, CapabilityGroup>();
@@ -109,14 +140,14 @@ export interface SurfaceProbe {
  * The surface axis for `verify:scaffold`: each capability ALONE, plus none, plus
  * ALL of them.
  *
- * WHY THESE AND NOT THE PRESETS. The presets are six cells covering five distinct
- * components lists (`support-widget` repeats `drop-in-chat`'s, and the matrix
- * holds `placement` at one value, so that pair compiled the same types twice).
- * More importantly they cover no combination at all — every preset is exactly one
- * capability — so the surfaces the multi-select makes reachable, which is most of
- * them, had nothing compiling them.
+ * WHY THESE AND NOT THE PRESETS. The presets are seven cells covering six
+ * distinct components lists (`support-widget` repeats `drop-in-chat`'s, and the
+ * matrix holds `placement` at one value, so that pair compiled the same types
+ * twice). More importantly they cover no combination at all — every preset is
+ * exactly one capability — so the surfaces the multi-select makes reachable,
+ * which is most of them, had nothing compiling them.
  *
- * WHY NOT THE POWER SET. 2^4 x 11 integrations x 8 frameworks is 1408 cells to
+ * WHY NOT THE POWER SET. 2^5 x 11 integrations x 8 frameworks is 2816 cells to
  * exercise no new branch. The renderers compose capabilities INDEPENDENTLY: each
  * companion tag is emitted on its own terms, and the one multi-component
  * predicate (`isWorkspace`) reads components from within a single group. So
