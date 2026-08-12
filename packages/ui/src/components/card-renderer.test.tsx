@@ -188,3 +188,121 @@ describe('CardRenderer: the unknown-TYPE path is unchanged', () => {
     expect(onError).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * `schemas` — the consumer's own card types, checked in the browser.
+ *
+ * These four tests are the whole gate, one branch each. The `types`-only cases
+ * above are their controls: same payload, same renderer, no schema, no check.
+ */
+describe('CardRenderer: a CONSUMER schema is enforced too', () => {
+  const Custom = (p: { envelope: CardEnvelope }) => <div data-custom>{p.envelope.id}</div>;
+  /** Authored form, `$schema`/`title`/`additionalProperties` left in — the shape a
+   *  developer actually has, and the reason `schemas` is not typed `JsonSchema`. */
+  const PRICING_SCHEMA = {
+    $schema: 'https://json-schema.org/draft/2020-12/schema',
+    title: 'Pricing table',
+    type: 'object',
+    required: ['plans'],
+    additionalProperties: false,
+    properties: {
+      plans: {
+        type: 'array',
+        minItems: 1,
+        maxItems: 3,
+        items: {
+          type: 'object',
+          required: ['name', 'price'],
+          properties: { name: { type: 'string' }, price: { type: 'number' } },
+        },
+      },
+    },
+  };
+  const mountCustom = (data: unknown, schemas?: Record<string, object>, types: Record<string, typeof Custom> = { 'pricing-table': Custom }) => {
+    const onError = vi.fn();
+    const result = render(() => (
+      <CardProvider context={CTX} policy={{ onError: (id, m) => onError(id, m) }}>
+        <CardRenderer envelope={envelope(data, 'pricing-table')} types={types} schemas={schemas} />
+      </CardProvider>
+    ));
+    return { ...result, onError };
+  };
+
+  it('HARD on a consumer card replaces it with a diagnostic naming the field path', () => {
+    const { container, onError } = mountCustom({ plans: [{ name: 'Pro' }] }, { 'pricing-table': PRICING_SCHEMA });
+    expect(container.querySelector('[data-custom]')).toBeNull();
+    expect(container.querySelector('[data-card-invalid-reason]')).toHaveTextContent(
+      '(root).plans[0].price: required',
+    );
+    expect(onError).toHaveBeenCalledWith('c1', 'invalid card data (hard): (root).plans[0].price: required');
+  });
+
+  it('SOFT on a consumer card renders it unchanged and still reports', () => {
+    const { container, onError } = mountCustom(
+      { plans: [1, 2, 3, 4].map((n) => ({ name: `P${n}`, price: n })) },
+      { 'pricing-table': PRICING_SCHEMA },
+    );
+    expect(container.querySelector('[data-custom]')).not.toBeNull();
+    expect(diagnostic(container)).toBeNull();
+    expect(onError).toHaveBeenCalledWith('c1', 'invalid card data (soft): (root).plans: more than maxItems 3');
+  });
+
+  it('the SAME payload with NO schemas prop is untouched', () => {
+    // The control. Pre-change behaviour, pinned: without a schema a consumer card
+    // renders whatever it was handed and nothing is emitted.
+    const { container, onError } = mountCustom({ plans: [{ name: 'Pro' }] });
+    expect(container.querySelector('[data-custom]')).not.toBeNull();
+    expect(diagnostic(container)).toBeNull();
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('validateCards={false} still opts a consumer card out', () => {
+    const onError = vi.fn();
+    const { container } = render(() => (
+      <CardProvider context={CTX} policy={{ onError: (id, m) => onError(id, m) }}>
+        <CardRenderer
+          envelope={envelope({ plans: [{ name: 'Pro' }] }, 'pricing-table')}
+          types={{ 'pricing-table': Custom }}
+          schemas={{ 'pricing-table': PRICING_SCHEMA }}
+          validateCards={false}
+        />
+      </CardProvider>
+    ));
+    expect(container.querySelector('[data-custom]')).not.toBeNull();
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('a consumer schema for a BUILT-IN type wins over ours', () => {
+    // `schemaFor`'s consumer-wins rule, reaching the dispatcher. The renderer here
+    // is OURS (not overridden) and the schema is THEIRS, so the failing field names
+    // their field: proof the precedence is real and not a coincidence.
+    const onError = vi.fn();
+    const { container } = render(() => (
+      <CardProvider context={CTX} policy={{ onError: (id, m) => onError(id, m) }}>
+        <CardRenderer envelope={envelope(VALID)} schemas={{ confirm: { type: 'object', required: ['question'] } }} />
+      </CardProvider>
+    ));
+    expect(actionButtons(container)).toHaveLength(0);
+    expect(container.querySelector('[data-card-invalid-reason]')).toHaveTextContent('(root).question: required');
+    expect(onError).toHaveBeenCalledWith('c1', 'invalid card data (hard): (root).question: required');
+  });
+
+  it('validates an OVERRIDDEN built-in when the consumer supplied its schema', () => {
+    // The overridden-built-in rule is "OUR schema does not describe THEIR card", so
+    // supplying theirs re-enables the check. The `types`-only twin of this test (in
+    // the block above) must keep passing for this one to mean anything.
+    const onError = vi.fn();
+    const { container } = render(() => (
+      <CardProvider context={CTX} policy={{ onError: (id, m) => onError(id, m) }}>
+        <CardRenderer
+          envelope={envelope(HARD)}
+          types={{ confirm: Custom }}
+          schemas={{ confirm: { type: 'object', required: ['question'] } }}
+        />
+      </CardProvider>
+    ));
+    expect(container.querySelector('[data-custom]')).toBeNull();
+    expect(container.querySelector('[data-card-invalid-reason]')).toHaveTextContent('(root).question: required');
+    expect(onError).toHaveBeenCalledWith('c1', 'invalid card data (hard): (root).question: required');
+  });
+});

@@ -11,7 +11,7 @@ import { Reasoning, ReasoningTrigger, ReasoningContent } from "./reasoning";
 import { Tool } from "./tool";
 import { Attachments, Attachment, AttachmentPreview, AttachmentInfo } from "./attachments";
 import { Source, SourceTrigger, SourceContent, SourceList } from "./source";
-import { CardRenderer } from "./card-renderer";
+import { CardRenderer, type CardSchemaMap } from "./card-renderer";
 import type { CardComponentMap } from "../primitives/card-registry";
 
 // --- Message ---
@@ -265,6 +265,13 @@ export interface MessageBodyProps {
   /** Add/override card type -> component entries, forwarded to `CardRenderer`
    *  for `card` parts. */
   cardTypes?: CardComponentMap;
+  /** JSON Schemas for the card types this app renders, keyed by envelope type,
+   *  forwarded to `CardRenderer` for `card` parts. The companion of `cardTypes`:
+   *  that says what DRAWS a card, this says what a VALID one looks like.
+   *  `createCardRegistry(...).validationSchemas` is exactly this shape. Without it
+   *  the kit checks its own seven built-ins and leaves your own card type
+   *  unvalidated. A schema here WINS over a built-in of the same name. */
+  cardSchemas?: CardSchemaMap;
   /** Whether this is a user message (right-aligned bubble) vs an assistant
    *  message (full-width transparent). */
   isUser: boolean;
@@ -510,7 +517,7 @@ function MessageBody(props: MessageBodyProps) {
                       {(p) => <Tool toolPart={p().tool} class="mb-2 w-full" />}
                     </Match>
                     <Match when={partAs(part(), 'card')}>
-                      {(p) => <CardRenderer envelope={p().envelope} types={props.cardTypes} />}
+                      {(p) => <CardRenderer envelope={p().envelope} types={props.cardTypes} schemas={props.cardSchemas} />}
                     </Match>
                     {/* No `source` match here on purpose: source parts never
                         reach a 'single' group — they are collapsed into a

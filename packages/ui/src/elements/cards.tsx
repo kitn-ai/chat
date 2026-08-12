@@ -10,7 +10,9 @@ import { defineWebComponent } from './define';
 import type { CardEnvelope, CardEvent, CardPolicy, CardResolution } from '../primitives/card-contract';
 import { CARD_EVENT_NAME, emitCardEvent, routeCardEvent } from '../primitives/card-routing';
 import { BUILTIN_CARD_TAGS, mergeCardTags } from '../primitives/card-registry';
+import type { JsonSchema } from '../primitives/card-validate';
 import { cardValidationMessage, validateCardData, type CardValidationReport } from '../primitives/card-validate-cards';
+import { hasConsumerSchema } from '../components/card-renderer';
 import { CardFallback } from '../components/card-fallback';
 // Register the built-in child card elements so that importing <kai-cards> is self-contained.
 import './form';
@@ -27,10 +29,28 @@ interface Props extends Record<string, unknown> {
    *  Typed as a plain string map (not the `CardTagMap` alias) so the generated React
    *  wrapper inlines it instead of emitting an unresolved named type. */
   types?: Record<string, string>;
+  /** JSON Schemas for the card types this app renders, keyed by envelope type —
+   *  the companion of `types`, which says what DRAWS a card while this says what a
+   *  VALID one looks like. An OBJECT, so it is a JS property only:
+   *  `el.schemas = { 'pricing-table': pricingSchema }`, never an attribute.
+   *  `createCardRegistry(...).validationSchemas` is exactly this shape.
+   *
+   *  Without it the kit validates its own seven built-ins and leaves your own card
+   *  type — the one your app actually cares about — as the only unchecked thing on
+   *  screen. A schema here WINS over a built-in of the same name, matching
+   *  `mergeCardTags`, where your entry is spread over ours.
+   *
+   *  Typed `Record<string, object>` rather than `Record<string, JsonSchema>`
+   *  deliberately: an imported `.json` schema widens `"type"` to `string`, and an
+   *  authored one carries `$schema`/`title`/`description`/`additionalProperties`,
+   *  so the tighter type would reject both of the normal ways to supply one. See
+   *  `CardSchemaMap` in components/card-renderer.tsx. */
+  schemas?: Record<string, object>;
   /** Optional CardPolicy handling child events. Property: `el.policy`. */
   policy?: CardPolicy;
-  /** Validate each envelope's `data` against the built-in schema for its type before
-   *  rendering it. Default `true`; set `validate-cards="false"` (or `el.validateCards
+  /** Validate each envelope's `data` against the schema for its type before
+   *  rendering it — a built-in's own schema, or yours from `schemas`.
+   *  Default `true`; set `validate-cards="false"` (or `el.validateCards
    *  = false`) to opt out. A hard failure (wrong type, a missing required field)
    *  renders a diagnostic naming the field instead of the card; a soft failure
    *  (bounds) renders the card unchanged. Both emit a contract `error` event.
@@ -74,6 +94,7 @@ function CardSlot(props: {
   tag?: string;
   theme: string;
   validate: boolean;
+  schemas?: Record<string, object>;
   emit: (e: CardEvent) => void;
 }): JSX.Element {
   let ref: HTMLElement | undefined;
@@ -85,15 +106,26 @@ function CardSlot(props: {
   // other. Two tiers: `hard` (nothing to render) replaces the card with a diagnostic
   // naming the field, `soft` (bounds) renders the card untouched. Both emit `error`.
   //
-  // Only a BUILT-IN tag is validated: `types` lets a consumer point a built-in card
-  // type at their own element (`el.types = { confirm: 'my-confirm-el' }`), and our
-  // schema describes our element's data, not theirs. Same rule as
-  // components/card-renderer.tsx, which compares component identity instead.
-  const report = createMemo<CardValidationReport | null>(() =>
-    props.validate && props.tag === BUILTIN_CARD_TAGS[props.envelope.type]
-      ? validateCardData(props.envelope.type, props.envelope.data)
-      : null,
-  );
+  // OUR schema applies only to OUR element: `types` lets a consumer point a built-in
+  // card type at their own element (`el.types = { confirm: 'my-confirm-el' }`), and
+  // our schema describes our element's data, not theirs.
+  //
+  // A schema the CONSUMER registered through `el.schemas` runs the other way: they
+  // wrote it about their own card, and it is the shape their model was told to
+  // emit, so it applies whichever element draws the type. That is what validates a
+  // `pricing-table` — nobody's built-in, and until this prop existed the one card in
+  // the app that nothing checked. Same rule as components/card-renderer.tsx, which
+  // compares component identity where this compares tag identity; `hasConsumerSchema`
+  // is shared with it so the gate is spelled once.
+  const report = createMemo<CardValidationReport | null>(() => {
+    if (!props.validate) return null;
+    if (!hasConsumerSchema(props.schemas, props.envelope.type) && props.tag !== BUILTIN_CARD_TAGS[props.envelope.type]) {
+      return null;
+    }
+    // `schemas` is passed even when the gate opened on tag identity, so a consumer
+    // schema for a built-in type wins over ours — `schemaFor`'s rule.
+    return validateCardData(props.envelope.type, props.envelope.data, props.schemas as Record<string, JsonSchema> | undefined);
+  });
   const invalid = () => report()?.tier === 'hard';
 
   // Set object/string props as DOM properties on the custom element (reactive).
@@ -152,7 +184,7 @@ function CardSlot(props: {
 
 defineWebComponent<Props, Events>(
   'kai-cards',
-  { cards: undefined, types: undefined, policy: undefined, validateCards: true },
+  { cards: undefined, types: undefined, schemas: undefined, policy: undefined, validateCards: true },
   (props, { element, dispatch, expose }) => {
     // Local working copy of the card list. The `cards` PROP still drives rendering
     // (a new prop array re-seeds this), but holding a settable copy lets the
@@ -223,6 +255,7 @@ defineWebComponent<Props, Events>(
               tag={tags()[env.type]}
               theme={theme()}
               validate={props.validateCards !== false}
+              schemas={props.schemas}
               emit={(e) => emitCardEvent(element, e)}
             />
           )}

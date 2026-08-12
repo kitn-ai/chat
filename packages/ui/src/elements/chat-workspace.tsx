@@ -81,6 +81,21 @@ interface Props extends Record<string, unknown> {
    *  plain string map (not the `CardTagMap` alias) so the generated React
    *  wrapper inlines it instead of emitting an unresolved named type. */
   cardTypes?: Record<string, string>;
+  /** JSON Schemas for the card types this app renders, keyed by envelope type —
+   *  the companion of `cardTypes`, which says what DRAWS a card while this says
+   *  what a VALID one looks like. An OBJECT, so it is a JS property only:
+   *  `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute.
+   *  `createCardRegistry(...).validationSchemas` is exactly this shape.
+   *
+   *  Without it the kit validates its own seven built-ins and leaves your own card
+   *  type — the one your app actually cares about — as the only unchecked thing on
+   *  screen. A schema here WINS over a built-in of the same name.
+   *
+   *  Typed `Record<string, object>` rather than `Record<string, JsonSchema>`
+   *  deliberately: an imported `.json` schema widens `"type"` to `string`, and an
+   *  authored one carries `$schema`/`title`/`description`/`additionalProperties`,
+   *  so the tighter type would reject both of the normal ways to supply one. */
+  cardSchemas?: Record<string, object>;
 }
 
 interface Events {
@@ -117,7 +132,7 @@ defineWebComponent<Props, Events>('kai-workspace', {
   search: false, voice: false, triggers: undefined, kindIcons: undefined,
   sidebarWidth: 26, sidebarMinWidth: 240, sidebarMaxWidth: 420,
   sidebarCollapsed: undefined, defaultSidebarCollapsed: undefined, collapseBelow: undefined, compact: undefined,
-  noConversations: undefined, cardTypes: undefined,
+  noConversations: undefined, cardTypes: undefined, cardSchemas: undefined,
 }, (props, { dispatch, flag, expose, element }) => {
   // `messages` is an untyped boundary: a consumer can hand it anything at
   // runtime (a pre-0.20.0 `{ id, role, content }` array, in particular). Skip
@@ -214,6 +229,7 @@ defineWebComponent<Props, Events>('kai-workspace', {
       triggers={props.triggers as TriggerDef[] | undefined}
       kindIcons={props.kindIcons as Record<string, string> | undefined}
       cardTypes={cardComponentsFromTags(props.cardTypes as Record<string, string> | undefined, (props as { theme?: string }).theme)}
+      cardSchemas={props.cardSchemas as Record<string, object> | undefined}
       onValueChange={(value) => dispatch('kai-value-change', { value })}
       onSubmit={(detail) => dispatch('kai-submit', detail)}
       onSuggestionClick={(value) => dispatch('kai-suggestion-click', { value })}

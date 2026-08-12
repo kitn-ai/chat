@@ -17,6 +17,7 @@ import type { ChatMessage } from '../elements/chat-types';
 import type { ProseSize } from '../primitives/chat-config';
 import type { ModelOption } from '../types';
 import type { CardComponentMap } from '../primitives/card-registry';
+import type { CardSchemaMap } from './card-renderer';
 
 export interface ChatThreadContextUsage {
   usedTokens: number;
@@ -36,6 +37,13 @@ export interface ChatThreadProps {
   /** Add/override card type -> component entries, forwarded to `CardRenderer`
    *  for `card` parts. */
   cardTypes?: CardComponentMap;
+  /** JSON Schemas for the card types this app renders, keyed by envelope type,
+   *  forwarded to `CardRenderer` for `card` parts. The companion of `cardTypes`:
+   *  that says what DRAWS a card, this says what a VALID one looks like.
+   *  `createCardRegistry(...).validationSchemas` is exactly this shape. Without it
+   *  the kit checks its own seven built-ins and leaves your own card type
+   *  unvalidated. A schema here WINS over a built-in of the same name. */
+  cardSchemas?: CardSchemaMap;
   /** Value of the input. A **string** is controlled (the host owns the text and
    *  updates it on `kai-value-change`). A **ComposerDoc** is a one-time seed that
    *  pre-populates pills; the user then edits freely. Leave unset for uncontrolled. */
@@ -320,6 +328,7 @@ export function ChatThread(props: ChatThreadProps) {
                           <MessageBody
                             parts={m().parts}
                             cardTypes={props.cardTypes}
+                            cardSchemas={props.cardSchemas}
                             isUser={m().role === 'user'}
                             markdown={m().role === 'assistant'}
                             actions={m().actions}
