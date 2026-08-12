@@ -18,11 +18,41 @@
  * keeps the strict 5000ms default, where it is still a meaningful hang
  * detector.
  *
- * MEASURED, not guessed. Numbers below are the file's slowest single test on
- * an IDLE 10-core machine (9 vitest forks, the default), and what it did under
- * synthetic CPU starvation (32 spinning processes on those same 10 cores):
+ * THE NUMBERS BELOW ARE INVALIDATED. Read this before citing any of them.
  *
- *   file                          idle     starved
+ * They were recorded between Aug 11 22:10 and Aug 12 10:05 local, and for that
+ * entire window four orphaned `while :; do :; done` shells — CPU burners leaked
+ * by a stale flake-hunting script and never reaped — were pinning four of this
+ * box's ten cores continuously. This table landed inside that window (c6c83fe,
+ * Aug 11 23:16 local), so the column headed `idle` was never measured on an idle
+ * machine; it was measured on a box already down four cores. The `starved`
+ * column is not "32 spinners" either, it is 32 spinners ON TOP OF that
+ * pre-existing four-core deficit. Both columns are real observations of
+ * something, but neither is the quantity its heading claims, and the header's
+ * stated method is untrue in its first half.
+ *
+ * WHICH DIRECTION THE ERROR RUNS, because that decides how urgent this is.
+ * Every figure was taken with LESS CPU available than the method claims, so
+ * every figure is too HIGH, and any budget derived from them is too GENEROUS
+ * rather than too tight. Nothing is newly flaky, no test is at risk, and no
+ * budget needs raising. This is a truth problem, not a stability problem: the
+ * reasoning written on top of these numbers is unsound even though the values
+ * it produced are safe. That is also why nothing here was retuned in response.
+ *
+ * WHAT WOULD SETTLE IT: re-run the same method on a genuinely quiet machine.
+ * Confirm the machine is quiet FIRST, because that is the step that was skipped
+ * here — check the load average (`uptime`) and look for runaway processes
+ * pinning cores (`ps -A -o %cpu,command | sort -rn | head`) BEFORE trusting any
+ * timing number, not after one looks surprising. Deliberately NOT re-measured at
+ * the time this was caught: the box was running several agents and was not quiet
+ * either, and a second wrong number recorded confidently is worse than one
+ * flagged as wrong.
+ *
+ * The original method, for whoever re-runs it: each figure is the file's slowest
+ * single test, taken with 9 vitest forks (the default), then again under
+ * synthetic CPU starvation from 32 spinning processes on 10 cores.
+ *
+ *   file                         "idle"   "starved"   BOTH SUSPECT — see above
  *   element-types-lib-check       3766ms   6045ms  (blew the 5s budget)
  *   inline-element-types           967ms   1633ms
  *   variant-aurora                 272ms   TIMEOUT
@@ -30,12 +60,19 @@
  *   variant-custom                 246ms   TIMEOUT
  *   highlighter                    277ms    841ms
  *
- * `element-types-lib-check` is the clearest case: it spends 75% of the default
- * budget on an idle machine with zero contention, so it needs only a 33%
- * slowdown to fail. The shader-variant files are the subtler one — their own
- * logic is a few hundred milliseconds, but they `await import()` the variant
- * module, `shader-canvas` and a `.glsl` asset from inside the test body, and
- * that transform cost is charged to the TEST's budget rather than to setup.
+ * The `because` strings on the entries below quote the same run — the
+ * `element-types-lib-check` entry says "3.8s idle" — and carry the same caveat.
+ * They are left as recorded rather than silently reworded.
+ *
+ * WHAT SURVIVES, and why the table still stands: the two causes are structural,
+ * not contention artifacts. `element-types-lib-check` runs a real
+ * `ts.createProgram`, and the shader-variant files `await import()` the variant
+ * module, `shader-canvas` and a `.glsl` asset from inside the test body, so Vite
+ * transform cost is charged to the TEST's budget rather than to setup. Those
+ * hold at any load. What does NOT survive is the specific claim that
+ * `element-types-lib-check` spends 75% of the default budget "on an idle machine
+ * with zero contention": the machine had contention, so its true idle share is
+ * lower than 75% and is currently unknown.
  *
  * ADDING AN ENTRY IS A SMELL, NOT A ROUTINE. If a test needs more than five
  * seconds, the first question is whether it should be doing that work at all.
@@ -44,8 +81,10 @@
  * slow because it sleeps or polls does NOT belong here — fix the test.
  *
  * `emitted-card-path.live` USED TO BE the entry to be uneasy about, and what
- * happened to it is the precedent worth keeping. It measured 9635ms idle and
- * 32621ms starved — 2.5x the next slowest file here and the only entry that ever
+ * happened to it is the precedent worth keeping. It measured 9635ms "idle" and
+ * 32621ms "starved" (4cd2de9, Aug 12 00:39 local — same invalidated window, same
+ * caveat, and the pair that the 60s budget in `emitted-code-tests.ts` is derived
+ * from) — 2.5x the next slowest file here and the only entry that ever
  * needed more than 30 seconds — because it RUNS emitted consumer code end to end,
  * which is an integration test wearing a unit test's filename. This header called
  * the fix a separate vitest project for run-the-emitted-code guards, with its own
