@@ -300,12 +300,18 @@ jobs:
       # neither can see whether anything reaches the screen.
       #
       # A SEPARATE STEP, NOT A SEPARATE JOB. The whole reason these moved out of the
-      # `unit` project is that they cost seconds each (9.6s idle, 32.6s under CPU
-      # starvation) and were distorting a suite whose 99th-percentile test is under a
-      # second. That is an argument about which project owns them, not about whether
+      # `unit` project is that they cost seconds each (recorded as 9.6s idle, 32.6s
+      # under CPU starvation -- BOTH INVALIDATED: the "idle" box had four cores pinned
+      # by orphaned CPU burners, see `packages/ui/emitted-code-tests.ts`. The ORDER of
+      # magnitude is what this argument rests on, and seconds-not-milliseconds
+      # survives; the specific figures do not) and were distorting a suite whose
+      # 99th-percentile test is under a second. That is an argument about which
+      # project owns them, not about whether
       # they gate a merge: they must stay inside the one required context, next to the
       # build they depend on, or splitting them out would have traded a slow check for
-      # no check. Needs the build above (src/elements/compiled.css). ~10s.
+      # no check. Needs the build above (src/elements/compiled.css). ~10s, which
+      # restates the same invalidated local "idle" reading and is not a figure from
+      # this runner; treat it as an order of magnitude, not a budget.
       #
       # `tests/agent-tooling/emitted-project-wiring.test.ts`, which runs in the `unit`
       # project above, fails if this step stops naming --project=emitted, if the

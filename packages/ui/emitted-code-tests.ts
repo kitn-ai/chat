@@ -11,8 +11,9 @@
  * screen. The cost of that coverage is that such a test transforms a heavy module
  * graph through Vite and then DRIVES it — seconds, not milliseconds, by construction.
  *
- * `tests/agent-tooling/emitted-card-path.live.test.ts` measured 9.6s idle and 32.6s
- * under CPU starvation (32 spinning processes on 10 cores). It used to sit in the
+ * `tests/agent-tooling/emitted-card-path.live.test.ts` measured 9.6s "idle" and 32.6s
+ * under CPU starvation (32 spinning processes on 10 cores) -- both figures INVALIDATED,
+ * see THE BUDGET below before citing either. It used to sit in the
  * `unit` project on a 60s per-file exception in `test-timeout-budgets.ts`, where it
  * was 2.5x the next slowest entry and the only one needing more than 30 seconds. That
  * table's own header called it the entry to be uneasy about and named this file's
@@ -27,13 +28,44 @@
  * entries point at files that exist, so it would have stayed green forever. Exactly
  * the failure mode that table warns about for `audio-visualizer/index.test.tsx`.
  *
- * THE BUDGET. 60s is ~1.8x the worst MEASURED starved run and ~6x idle. It is a
- * PROJECT-level default here rather than a per-file exception, because inside a
- * project whose entire purpose is expensive integration runs there is no strict
- * default to protect. That is a real widening: a second file added to this project
- * gets 60s without arguing for it. The trade is deliberate — the argument moves from
- * "does this file deserve an exception" to "does this file belong in this project at
- * all", which is the question worth asking about a guard that runs emitted code.
+ * THE BUDGET. 60s STAYS, but the measurement under it is INVALIDATED and the
+ * multiplier below is not the ratio it claims to be.
+ *
+ * The two figures (9635ms "idle", 32621ms "starved") were recorded in 4cd2de9 at
+ * Aug 12 00:39 local. From Aug 11 22:10 until Aug 12 10:05 local, four orphaned
+ * `while :; do :; done` shells -- CPU burners leaked by a stale flake-hunting
+ * script and never reaped -- pinned four of this box's ten cores continuously. So
+ * the "idle" baseline was taken on a box already down four cores, and "starved" is
+ * 32 spinners ON TOP OF that deficit. Neither is the quantity its name claims, and
+ * the method's first half is untrue.
+ *
+ * WHY 60s IS NOT CHANGED, and why this is not urgent. Both figures were taken with
+ * LESS CPU available than stated, so both are too HIGH, so a budget derived from
+ * them is too GENEROUS rather than too tight. Nothing is newly flaky and no test is
+ * at risk. This is a truth problem, not a stability problem. Lowering the budget to
+ * match a number nobody has measured would be an unmeasured guess, and the guess is
+ * the thing that went wrong here.
+ *
+ * TO SETTLE IT: re-run the file on a genuinely quiet machine, confirming quiet
+ * FIRST -- `uptime`, plus `ps -A -o %cpu,command | sort -rn | head` for runaway
+ * processes -- BEFORE trusting any timing rather than after one looks surprising.
+ * Not re-measured when this was caught, because the box was running several agents
+ * and was not quiet either.
+ *
+ * The same pair is quoted in `test-timeout-budgets.ts` (which carries the fuller
+ * account), `.github/workflows/test.yml`, and CLAUDE.md. The original claim is left
+ * readable so the arithmetic can be re-checked once real numbers exist: "60s is
+ * ~1.8x the worst MEASURED starved run and ~6x idle" -- both ratios computed against
+ * the invalidated pair, so both are suspect even though 60s itself stands.
+ *
+ * The REST of the argument for this shape does not depend on any measurement, and
+ * is untouched by the above. 60s is a PROJECT-level default here rather than a
+ * per-file exception, because inside a project whose entire purpose is expensive
+ * integration runs there is no strict default to protect. That is a real widening: a
+ * second file added to this project gets 60s without arguing for it. The trade is
+ * deliberate — the argument moves from "does this file deserve an exception" to
+ * "does this file belong in this project at all", which is the question worth asking
+ * about a guard that runs emitted code.
  *
  * ADDING A FILE. Name it `*.live.test.ts` and put it under `tests/agent-tooling/`.
  * Both halves matter: `emitted-project-wiring.test.ts` fails if a `.live.test.ts`
@@ -73,9 +105,18 @@ export const EMITTED_CODE_TESTS_EXCLUDE: readonly string[] = [
 ];
 
 /**
- * Per-test budget for the project, in milliseconds. See THE BUDGET above: ~1.8x the
- * worst measured starved run (32621ms), ~6x idle (9635ms). The multiplier is stated
- * rather than tuned — the number comes from the measurement, NOT from raising it
- * until the file stopped flaking, which would only ever track today's load.
+ * Per-test budget for the project, in milliseconds.
+ *
+ * The value STANDS; the justification for it does not. It was set as ~1.8x the worst
+ * "starved" run (32621ms) and ~6x "idle" (9635ms), but both figures were measured on
+ * a box with four cores pinned by orphaned CPU burners, so neither is what its name
+ * says and neither ratio is real. See THE BUDGET above for the window and the cause.
+ *
+ * Left at 60s deliberately: the contamination made both readings too HIGH, so this
+ * budget errs generous rather than tight, and re-deriving it from an unmeasured
+ * guess is exactly the failure being corrected. The original intent still holds and
+ * is worth preserving through the re-measurement — the number should come from a
+ * multiplier on a real measurement, NOT from raising it until the file stops
+ * flaking, which would only ever track today's load.
  */
 export const EMITTED_CODE_TIMEOUT = 60_000;

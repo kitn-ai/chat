@@ -64,6 +64,26 @@
  * `element-types-lib-check` entry says "3.8s idle" — and carry the same caveat.
  * They are left as recorded rather than silently reworded.
  *
+ * EVERYWHERE ELSE THE SAME WINDOW LEAKED, so a reader who lands on one of these
+ * first can find this note. All were recorded Aug 11 22:10 - Aug 12 10:05 local:
+ *
+ *   packages/ui/emitted-code-tests.ts   the 60s budget + 9635/32621. Value STANDS
+ *                                       (the error runs generous); the ratios do not.
+ *   packages/ui/vitest.config.ts        the `--maxWorkers=4` advice, WITHDRAWN —
+ *                                       a finding about contention, measured under
+ *                                       four cores of hidden contention.
+ *   .github/workflows/test.yml          9.6s/32.6s again, plus a "~10s" step estimate.
+ *   CLAUDE.md                           "~11s" — a SEPARATE later reading, not a
+ *                                       restatement, so it needs its own re-measure.
+ *
+ * One more lives only in a commit message and therefore cannot be corrected in
+ * place: db979e1 (Aug 11 23:40 local) records `verify:scaffold` wall clock going
+ * 14.5s -> 15.1s for +22% cells, read as "+4% time". Its author noticed the after
+ * went UP and set it aside as ordinary contention; it was not ordinary. Worth
+ * separating, though: the two runs shared the same hidden load, so the RATIO
+ * ("+4% for +22% cells") is far more robust than either absolute, and the
+ * conclusion it supports probably survives. The absolutes do not.
+ *
  * WHAT SURVIVES, and why the table still stands: the two causes are structural,
  * not contention artifacts. `element-types-lib-check` runs a real
  * `ts.createProgram`, and the shader-variant files `await import()` the variant

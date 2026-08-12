@@ -117,27 +117,61 @@ export default defineConfig({
         // `test-timeout-budgets.ts` for the measurements and the per-file
         // reasons.
         setupFiles: ['./vitest.setup.timeouts.ts'],
-        // Worker count is deliberately left at vitest's default, but if this
-        // suite is flaking or crawling on YOUR machine, `--maxWorkers=4` is
-        // very likely the answer. Measured here on a 10-core box, same suite,
-        // same synthetic load (32 spinning processes):
+        // Worker count is deliberately left at vitest's default.
         //
-        //                       wall     failures
+        // THE `--maxWorkers=4` RECOMMENDATION BELOW IS WITHDRAWN. Do not act on
+        // it. This is not a stale-number problem like the one in
+        // `test-timeout-budgets.ts`; here the CONCLUSION itself is contaminated,
+        // which is why the advice is pulled rather than annotated.
+        //
+        // The measurement ran between Aug 11 22:10 and Aug 12 10:05 local, while
+        // four orphaned `while :; do :; done` shells -- CPU burners leaked by a
+        // stale flake-hunting script -- pinned four of this box's ten cores
+        // continuously. A finding about CONTENTION was derived on a box with
+        // four cores of hidden contention: the single variable that decides the
+        // answer was wrong, and unmeasured, in the input.
+        //
+        // Concretely, `4` was tuned against roughly SIX effective cores while
+        // the note claimed ten. Someone on a genuinely idle 10-core machine who
+        // follows this will probably UNDER-parallelize, because the optimum
+        // scales with the cores actually available. So the error does not run in
+        // the safe direction the way an over-generous timeout does.
+        //
+        //                       wall     failures    <- ALL SUSPECT, see above
         //   default (9 forks)   395.6s   6
         //   --maxWorkers=4      257.6s   0
         //
-        // Faster AND clean, which is counter-intuitive until you look at where
-        // the time goes: aggregate `import` was 558s across 9 forks versus
-        // 255s across 4. Nine jsdom forks on ten cores thrash the transform
-        // pipeline rather than sharing it, so cutting workers removes more
-        // contention than it removes parallelism. On an idle machine the same
-        // flag costs only ~12% (94.1s -> 105.6s).
+        // The `on an idle machine ... ~12% (94.1s -> 105.6s)` figure that used to
+        // sit here has the identical defect twice over: that machine was not idle
+        // either, so it measured neither the baseline nor the delta it named.
         //
-        // NOT encoded as config on purpose: that is a result about one
-        // machine's core count, not about this repo. A hard `maxWorkers: 4`
-        // would FORCE oversubscription on a 2-4 core CI runner, and '50%'
-        // would halve parallelism there for contention that runner does not
-        // have. Reach for the flag locally; leave the repo neutral.
+        // The mechanism may well survive -- nine jsdom forks on ten cores can
+        // genuinely thrash the transform pipeline rather than share it (aggregate
+        // `import` was measured at 558s across 9 forks versus 255s across 4, same
+        // caveat). Fewer workers plausibly removes more contention than
+        // parallelism. But "plausible mechanism" is not "measured threshold", and
+        // the number you would actually type is the part that was contaminated.
+        //
+        // TO RESTORE THIS ADVICE: re-run both configurations on a quiet machine,
+        // and confirm it is quiet FIRST -- `uptime` for load average, plus
+        // `ps -A -o %cpu,command | sort -rn | head` for runaway processes --
+        // BEFORE trusting any timing, not after one looks surprising. That check
+        // is precisely what was skipped. Not re-measured in place because the box
+        // was running several agents when this was caught and was not quiet
+        // either; a confidently-recorded second wrong number is worse than one
+        // flagged as wrong.
+        //
+        // NO VALUE WAS CHANGED in response to this. The default stays vitest's
+        // default. Picking a different worker count now would be an unmeasured
+        // guess in the opposite direction, which is the same mistake that
+        // produced the withdrawn advice.
+        //
+        // Independent of the measurement, and still true: a worker count does NOT
+        // belong in this config, because it is a fact about one machine's core
+        // count rather than about this repo. A hard `maxWorkers: 4` would FORCE
+        // oversubscription on a 2-4 core CI runner, and '50%' would halve
+        // parallelism there for contention that runner does not have. Leave the
+        // repo neutral.
         // React wrapper tests run under @vitejs/plugin-react via the separate
         // vitest.react.config.ts (`npm run test:react`). They MUST be excluded
         // here, or the global Solid JSX transform would mis-compile their React
