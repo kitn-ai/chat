@@ -214,7 +214,12 @@ export function Toast(props: ToastProps) {
     <Show when={presence.present()}>
       <div
         ref={presence.setRef}
-        role="status"
+        // `variant` already picks the error ICON; it has to pick the ROLE too, or
+        // a failure is announced with the same (polite, easily missed) urgency as
+        // a success. `alert` is implicitly assertive and interrupts, which is what
+        // the region's `aria-live="polite"` alone will not do for the toast that
+        // actually matters. Same expression as ui/notice.tsx.
+        role={variant() === 'error' ? 'alert' : 'status'}
         data-appearance={appearance()}
         data-inverse={inverse() ? '' : undefined}
         data-closed={presence.state() === 'closed' ? '' : undefined}

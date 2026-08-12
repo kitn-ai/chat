@@ -1,6 +1,6 @@
 import { splitProps, For, Show, createSignal } from 'solid-js';
 import { cn } from '../utils/cn';
-import { Dropdown, DropdownTrigger, DropdownContent, DropdownItem, type DropdownController } from '../ui/dropdown';
+import { Dropdown, DropdownTrigger, DropdownContent, DropdownRadioItem, type DropdownController } from '../ui/dropdown';
 import { Button } from '../ui/button';
 import type { ModelOption } from '../types';
 
@@ -23,21 +23,51 @@ const Chevron = (props: { class?: string }) => (
   </svg>
 );
 
-function ModelRow(props: { model: ModelOption; currentModelId: string; onModelChange: (id: string) => void }) {
+/**
+ * One selectable model.
+ *
+ * A single-select list of models IS a radio group, so this routes through
+ * `DropdownRadioItem` (`role="menuitemradio"` + `aria-checked`) rather than
+ * hand-rolling those attributes onto a plain `DropdownItem`. Being the current
+ * model used to render as `font-medium` and nothing else — invisible to a screen
+ * reader. `kai-menu` already renders its radio items this way.
+ *
+ * `DropdownRadioItem` deliberately does NOT close the menu on activation (it is
+ * built for groups the consumer keeps mutating), so `onSelect` closes it here to
+ * preserve the pick-and-close behaviour `DropdownItem` used to provide.
+ */
+function ModelRow(props: {
+  model: ModelOption;
+  currentModelId: string;
+  onModelChange: (id: string) => void;
+  onClose: () => void;
+}) {
   const subtitle = () => props.model.description ?? props.model.provider;
+  const checked = () => props.model.id === props.currentModelId;
   return (
-    <DropdownItem onSelect={() => props.onModelChange(props.model.id)}>
+    <DropdownRadioItem
+      checked={checked()}
+      onSelect={() => { props.onModelChange(props.model.id); props.onClose(); }}
+    >
       <div class="flex flex-col">
-        <span class={cn('text-body', props.model.id === props.currentModelId && 'font-medium text-foreground')}>{props.model.name}</span>
+        <span class={cn('text-body', checked() && 'font-medium text-foreground')}>{props.model.name}</span>
         <Show when={subtitle()}><span class="text-caption text-muted-foreground">{subtitle()}</span></Show>
       </div>
-    </DropdownItem>
+    </DropdownRadioItem>
   );
 }
 
 export function ModelSwitcher(props: ModelSwitcherProps) {
   const [local] = splitProps(props, ['models', 'currentModelId', 'onModelChange', 'class', 'defaultOpen', 'disabled', 'controllerRef']);
   const currentModel = () => local.models.find((m) => m.id === local.currentModelId);
+
+  // The rows are DropdownRadioItems, which stay open by design, so the switcher
+  // needs its own handle on the dropdown to close after a pick. Tapping
+  // `controllerRef` keeps that inside this component — the dropdown's own context
+  // is module-private — and the consumer's `controllerRef` is still called, so
+  // this is invisible from the outside.
+  let controller: DropdownController | undefined;
+  const closeMenu = () => controller?.setOpen(false);
 
   // Ungrouped models list first; grouped models collect under their group name,
   // preserving first-seen group order.
@@ -58,7 +88,7 @@ export function ModelSwitcher(props: ModelSwitcherProps) {
       <Dropdown
         defaultOpen={local.defaultOpen}
         disabled={local.disabled}
-        controllerRef={local.controllerRef}
+        controllerRef={(api) => { controller = api; local.controllerRef?.(api); }}
       >
         <DropdownTrigger as={(triggerProps: any) => (
           <Button variant="ghost" size="sm" class={cn('gap-1 text-meta text-muted-foreground', local.class)} {...triggerProps}>
@@ -68,7 +98,7 @@ export function ModelSwitcher(props: ModelSwitcherProps) {
         )} />
         <DropdownContent>
           <For each={ungrouped()}>
-            {(model) => <ModelRow model={model} currentModelId={local.currentModelId} onModelChange={local.onModelChange} />}
+            {(model) => <ModelRow model={model} currentModelId={local.currentModelId} onModelChange={local.onModelChange} onClose={closeMenu} />}
           </For>
           <For each={groups()}>
             {(group) => {
@@ -87,7 +117,7 @@ export function ModelSwitcher(props: ModelSwitcherProps) {
                   <Show when={open()}>
                     <div class="pl-2">
                       <For each={group.models}>
-                        {(model) => <ModelRow model={model} currentModelId={local.currentModelId} onModelChange={local.onModelChange} />}
+                        {(model) => <ModelRow model={model} currentModelId={local.currentModelId} onModelChange={local.onModelChange} onClose={closeMenu} />}
                       </For>
                     </div>
                   </Show>
