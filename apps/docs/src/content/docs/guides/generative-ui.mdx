@@ -9,6 +9,8 @@ Your model doesn't have to answer in prose. It can ask the chat to render a **ty
 
 This guide is the model/server side: the contract, how to get your model to emit cards, and how to feed the result back. For the rendering pattern see [Generative UI cards](/patterns/generative-ui-cards/); for each card's props, the component pages ([confirm](/components/confirm/), [choice](/components/choice/), [form](/components/form/), [tasks](/components/tasks/)).
 
+If you are wiring a model rather than reading the contract, go straight to [Schemas as tool definitions](/guides/schemas-as-tools/): `cardTools` projects the schemas below into tool definitions and `cardFromToolCall` turns the model's call back into an envelope, so none of the mapping on this page has to be written by hand.
+
 ## The loop
 
 ```
@@ -48,7 +50,7 @@ The built-in types and the element each renders:
 
 `artifact` reaches a deliberately narrow slice of the `<kai-artifact>` element: an envelope sets `src`, `files`, `tab`, `activeFile`, `displayUrl` and `height`, never the iframe `sandbox`, the toolbar composition or the view state. A model says what to show; the host keeps control of how the viewer behaves. `tab` and `activeFile` seed the first render only, so revising the card leaves a user who has since switched views where they are.
 
-Each `data` shape has a published **JSON Schema** (shipped in the package under `dist/schemas/`, e.g. `confirm.schema.json`). A `confirm` envelope looks like:
+Each `data` shape has a published **JSON Schema**, importable as `cardSchemas` from `@kitn.ai/ui/schemas` (or as a raw document, `@kitn.ai/ui/schemas/confirm.schema.json`, for a backend that is not JavaScript). A `confirm` envelope looks like:
 
 ```json
 {
@@ -72,23 +74,21 @@ There's **no special skill, agent framework, or fine-tune required** — a card 
 
 ### Tool calling (recommended for agents)
 
-Give the model **one tool per card type**, with the tool's parameters set to that card's `data` schema. When the model calls the tool, map the call to an envelope and push it into the chat. This keeps the model on rails — the provider validates arguments against the schema for you.
+Give the model **one tool per card type**, with the tool's parameters set to that card's `data` schema. `cardTools` builds those definitions from the shipped schemas and `cardFromToolCall` maps the call back, so both halves come off one contract:
 
 ```ts
-// Tool definition (Anthropic / OpenAI function-calling shape) — params = the card schema.
-const tools = [{
-  name: 'ask_confirm',
-  description: 'Ask the user to approve or decline an action.',
-  input_schema: confirmSchema, // dist/schemas/confirm.schema.json
-}];
+import { cardTools, cardFromToolCall } from '@kitn.ai/ui/schemas';
 
-// When the model calls it, wrap the args in an envelope and render.
+const tools = cardTools({ provider: 'anthropic' }); // one per card type, named kai_*
+
+// When the model calls one, the call IS the envelope.
 function onToolCall(call) {
-  if (call.name === 'ask_confirm') {
-    cards.cards = [...cards.cards, { type: 'confirm', id: call.id, data: call.input }];
-  }
+  const card = cardFromToolCall(call.name, call.input ?? {}, { id: call.id });
+  if (card) cards.cards = [...cards.cards, card];
 }
 ```
+
+The schema guides the model, it does not constrain it. Provider strict modes cannot express any of the seven card types today, so validate what comes back rather than assuming the arguments match. [Schemas as tool definitions](/guides/schemas-as-tools/) has the detail, including why re-using the provider's tool call id is what lets a model revise a card in place.
 
 ### Structured output / JSON mode
 
@@ -101,17 +101,19 @@ Tell the model **when** to reach for a card, not just that it can. e.g. "Use `co
 
 ### Validate before you render
 
-The data is model-generated, so check it against the schema first. The kit ships a validator:
+`<kai-cards>` already validates a built-in card's `data` before rendering it and emits `{ kind: 'error' }` when it fails. To check earlier, on the server, use the same validator against the same schema:
 
 ```ts
 import { validateAgainstSchema } from '@kitn.ai/ui';
-// The card schemas ship in the package at dist/schemas/*.schema.json — load the
-// one for the type (read it on the server, or copy it into your project).
-const result = validateAgainstSchema(envelope.data, confirmSchema);
+import { cardSchemas } from '@kitn.ai/ui/schemas';
+
+const result = validateAgainstSchema(cardSchemas.confirm, envelope.data); // schema first
 if (!result.valid) {
   // result.errors is a string[] — hand it back to the model to fix the card
 }
 ```
+
+It implements a lean keyword subset: `allOf`, `anyOf`, `oneOf`, `format` and `additionalProperties` are not enforced. [Schemas as tool definitions](/guides/schemas-as-tools/#validation-and-what-it-misses) lists what that lets through.
 
 ## Wiring the host
 

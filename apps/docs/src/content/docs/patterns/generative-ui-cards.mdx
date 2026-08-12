@@ -134,6 +134,8 @@ for await (const event of streamFromYourAgent()) {
 }
 ```
 
+Building those envelopes by hand is optional. `cardFromToolCall` turns a model's tool call straight into one, keyed on the provider's tool call id so a revision replaces the card instead of appending a second copy. See [Schemas as tool definitions](/guides/schemas-as-tools/).
+
 ## Dismissing a card without losing it
 
 Set `dismissible: true` in a card's `data` and the user gets a × to wave it away. Dismissing **defers** the card — it collapses to a small *"Proposed: … — dismissed · Reopen"* stub instead of vanishing — and fires `onDismiss(cardId)`. Tapping **Reopen** fires `onReopen(cardId)`.

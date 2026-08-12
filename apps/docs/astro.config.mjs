@@ -93,6 +93,7 @@ export default defineConfig({
               { label: 'Theming', slug: 'guides/theming' },
               { label: 'State helpers & hooks', slug: 'guides/state-and-hooks' },
               { label: 'Generative UI', slug: 'guides/generative-ui' },
+              { label: 'Schemas as tool definitions', slug: 'guides/schemas-as-tools' },
               { label: 'Loading', slug: 'guides/loading' },
               { label: 'Accessibility', slug: 'guides/accessibility' },
               { label: 'For AI Agents', slug: 'guides/for-ai-agents' },

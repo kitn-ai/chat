@@ -1,0 +1,183 @@
+---
+title: Schemas as tool definitions
+description: Hand a card's JSON Schema to a model as a tool with cardTools, and turn the model's call straight back into a renderable card with cardFromToolCall.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+A card's `data` schema is already the shape of a tool definition. `@kitn.ai/ui/schemas` ships the schemas plus both directions of the projection, so the model gets a real tool and you get a `CardEnvelope` back with nothing hand-written in between.
+
+```ts
+import { cardSchemas, cardTools, cardFromToolCall } from '@kitn.ai/ui/schemas';
+import { applyToolOutput } from '@kitn.ai/ui/wire';
+
+const tools = [...myTools, ...cardTools(cardSchemas, { provider: 'openai' })];
+
+// In your tool loop, once per pending call:
+for (const call of pending) {
+  const card = cardFromToolCall(call.name, call.input ?? {}, { id: call.id });
+  if (card) {
+    stream.addCard(card);
+    applyToolOutput(stream, call.id, { status: 'awaiting_user' });
+    continue;
+  }
+  applyToolOutput(stream, call.id, await runTool(call.name, call.input ?? {}));
+}
+```
+
+`cardTools({ provider: 'openai' })` with no registry defaults to the same built-in map, so the `cardSchemas` import is only worth spelling out when you are filtering it or adding your own types.
+
+The entry is server-safe by design: no DOM, no Solid, no `fetch`. Import it in the route that talks to the model.
+
+## What it replaces
+
+Four hand-written steps, all of them gone:
+
+1. Copying a card's shape out of the docs into your codebase.
+2. Writing a tool definition that approximates a schema you could not import.
+3. Writing a mapper from the model's arguments to a `CardEnvelope`.
+4. Finding out any of the three had drifted when a card rendered empty in front of a user.
+
+The tool definition is generated from the same schema the card validates against, so it cannot drift from it.
+
+## Pick a provider
+
+`provider` is required. There is no default, because the three envelopes are not interchangeable and a silent guess would hand your endpoint a shape it rejects.
+
+| `provider` | What you get back | Where it goes |
+|---|---|---|
+| `'anthropic'` | `{ name, description, input_schema }` | `tools` on `POST /v1/messages` |
+| `'openai'` | `{ type: 'function', function: { name, description, parameters } }` | `tools` on chat completions or responses |
+| `'jsonschema'` | `{ name, description, schema }` | anything taking a raw JSON Schema |
+
+`toAnthropicTools()`, `toOpenAITools()` and `toJsonSchemaTools()` are the same call spelled out, if you prefer the name over the option.
+
+`'jsonschema'` is first-class, not a fallback. It is what you want on the Vercel AI SDK, where `jsonSchema()` takes the document directly:
+
+```ts
+import { jsonSchema, tool } from 'ai';
+import { toJsonSchemaTools } from '@kitn.ai/ui/schemas';
+
+const cards = Object.fromEntries(
+  toJsonSchemaTools().map((def) => [
+    def.name,
+    tool({ description: def.description, inputSchema: jsonSchema(def.schema) }),
+  ]),
+);
+
+// streamText({ model, messages, tools: { ...myTools, ...cards } })
+```
+
+No `execute` on those tools. A card is answered by the user, not by your server.
+
+For a backend that is not JavaScript, the documents themselves ship as files: `@kitn.ai/ui/schemas/confirm.schema.json`, and the whole set under `dist/schemas/`.
+
+## Strict mode is opt-in, and today it throws
+
+`strict: true` asks the provider to constrain the model to the grammar. It currently fails for **every** built-in card on **both** providers, and that is measured rather than feared:
+
+| Card | OpenAI strict trips | Anthropic strict trips |
+|---|---|---|
+| `form` | free-form `properties` object | same, plus `minimum` |
+| `confirm` | `minLength`, untyped `payload` | same, plus `maxItems` |
+| `choice` | `minLength`, untyped `payload` and `allowOther` | same |
+| `tasks` | `minLength` | same, plus `minimum` |
+| `link` | `format: "uri"`, `maxLength` | `maxLength` |
+| `embed` | `allOf`, `maxLength`, `format: "uri"` | the `if`/`then` inside that `allOf`, plus `pattern`, `maxLength`, `minimum` |
+| `artifact` | root `anyOf`, `oneOf`, `format: "uri"`, `maxLength` | `oneOf`, `maxItems`, `maxLength`, `minimum` |
+
+The two grammars are narrower than JSON Schema, and narrower in different places: `format: "uri"` is fine on Anthropic and unsupported on OpenAI, `minItems: 2` is fine on OpenAI and a 400 on Anthropic. `form` is the sharpest case. Its `data` is itself a JSON Schema describing the fields to collect, so a free-form object is the point, and under the mandatory `additionalProperties: false` it can only ever be `{}`.
+
+Non-strict is the default, the working mode, and the mode the kit's conformance sweep proved cards in. Both providers accept the loose schema and ignore what they cannot compile.
+
+<Aside type="caution" title="The throw is the feature">
+Silently dropping the offending keywords would be worse. A dropped `maxItems: 4` means the model emits six actions, the card renders six buttons, and nothing anywhere says the contract was loosened. `UnsupportedCardToolSchemaError` names the card, the path and the keyword instead, on your machine, at build time.
+</Aside>
+
+```ts
+import { cardTools, UnsupportedCardToolSchemaError } from '@kitn.ai/ui/schemas';
+
+try {
+  send(cardTools({ provider: 'anthropic', strict: true }));
+} catch (err) {
+  if (err instanceof UnsupportedCardToolSchemaError) {
+    console.error(err.provider, err.source); // which subset, and the doc it was read from
+    console.error(err.keywords); // every keyword named, deduped
+    for (const card of err.cards) console.error(card.toolName, card.violations);
+  }
+}
+```
+
+`strict` with `provider: 'jsonschema'` is a `TypeError`, not a silent pass: the two subsets differ, so there is no provider-neutral way to check one.
+
+To test a schema of your own before you ship it, run the same check the projection runs:
+
+```ts
+import { checkProviderSubset, OPENAI_STRICT } from '@kitn.ai/ui/schemas';
+
+const violations = checkProviderSubset(mySchema, OPENAI_STRICT); // SubsetViolation[]
+```
+
+## Reading the call back
+
+`cardFromToolCall(name, input, { id })` returns a `CardEnvelope`, or `null` when the name is not a card tool, so the `if (card)` above falls through to your own tools. It never throws. Two conventions do the work:
+
+- **The tool name carries the type.** `kai_confirm` produces `{ type: 'confirm' }`. `toolNameForCardType` and `cardTypeFromToolName` are the two halves, exported.
+- **The provider's tool call id becomes `envelope.id`,** verbatim, and `addCard` upserts on that id.
+
+That second one is why revision works. A model that corrects a card re-sends the same tool call id, and the card updates in place instead of stacking a second copy below the first. Pass the provider's id through; generating your own breaks it for nothing.
+
+`data` is the tool input as given. Nothing is peeled, renamed or defaulted, because the tool's input schema **is** the card-data schema. No `title` is set either: that is host chrome, and no card schema offers the model one, so add it yourself with `{ ...card, title: 'Deploy?' }`.
+
+A card tool call still needs a result. The encoders skip a tool call that has none, so without the `applyToolOutput` line the next round encodes as though the model never asked, and the tool panel stays on `input-available`. Feed the user's real answer back through your [`CardPolicy`](/guides/generative-ui/#wiring-the-host) when it arrives.
+
+## Custom card types round-trip
+
+`isCardTool` tests the `kai_` prefix, not membership in the built-ins. So `kai_pricing-table` produces `{ type: 'pricing-table' }` and reaches the dispatcher, where your `types` entry renders it. Register a schema of your own the same way:
+
+```ts
+import { cardTools } from '@kitn.ai/ui/schemas';
+
+const tools = cardTools(
+  {
+    schemas: { 'pricing-table': pricingTableSchema },
+    descriptions: { 'pricing-table': 'Show the user the plans side by side.' },
+  },
+  { provider: 'anthropic' },
+);
+```
+
+The permissive read is deliberate. Gating on the seven built-ins would route a legitimately registered custom type to `runTool('kai_pricing-table')`, which no app implements, and the card would vanish with no diagnostic anywhere. A type the kit genuinely does not know is named on screen by the fallback card instead, alongside a `{ kind: 'error' }` event.
+
+## Validation, and what it misses
+
+The dispatcher validates `data` against the built-in schema for its type before rendering. A failure that leaves nothing to draw replaces the card with a diagnostic naming the field path (`(root).actions: fewer than minItems 1`); a failure that is merely out of bounds renders the card unchanged. Both emit `{ kind: 'error', cardId, message }`, which reaches your `onError`.
+
+It is a real check, not a conformance guarantee. The validator implements a lean keyword subset, so **`additionalProperties`, `allOf`, `anyOf`, `oneOf` and `format` are not enforced**. In practice:
+
+- An `embed` with neither `id` nor `url` passes, and renders an empty player.
+- An `artifact` with neither `src` nor `files` passes.
+- A `link.url` that is not a URL passes.
+- An undeclared extra property passes.
+
+Those gaps are pinned by tests so they cannot quietly be overstated. What the check does catch is the common model failure: a missing required field, a wrong type, an empty `actions` array.
+
+To check a payload yourself, before it reaches a card:
+
+```ts
+import { validateAgainstSchema } from '@kitn.ai/ui';
+import { cardSchemas } from '@kitn.ai/ui/schemas';
+
+const result = validateAgainstSchema(cardSchemas.confirm, envelope.data);
+if (!result.valid) {
+  // result.errors is a string[]; result.issues keeps the path and keyword as data
+}
+```
+
+Schema first, value second, and the same lean subset applies.
+
+## Next
+
+- [Wire adapter](/guides/recipes/wire-adapter/) for the tool loop this drops into.
+- [Generative UI](/guides/generative-ui/) for the card contract and routing the answer back.
+- [Generative UI cards](/patterns/generative-ui-cards/) for each card's `data` shape, live.
