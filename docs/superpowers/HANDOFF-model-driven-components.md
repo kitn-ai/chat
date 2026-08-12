@@ -331,6 +331,35 @@ makes an architecture decision on, and it would have talked them out of the corr
 
 ## 5. Hard-won lessons. These WILL recur.
 
+Every mechanism added in this session is one shape of a single defence: **make the absence of a
+measurement impossible to mistake for a measurement.**
+
+It is a concrete rule and not an abstract one because of where it started. A table cell read
+`n/a`, and everyone, including the people who wrote it, read that as a fact about a provider. It
+was our own request, carrying a thinking budget under the provider's floor, answered with HTTP 200
+and silence (§1.6). Nothing errored. The silence was published as a provider limitation.
+
+Each mechanism reduces to that rule:
+
+- **The truthful matrix exit code.** A run that collected zero cells must not exit 0. An empty
+  result set and a clean one have the same failure count.
+- **The `modelBehaviour` declaration.** An exemption must state what the model does INSTEAD, and
+  must fail when the difference disappears, so a permanent hole cannot pass for a measured result.
+- **The reasoning-coverage guard.** A column declared reasoning-capable that recorded none is a
+  finding, not a silence. Its verdict ordering checks truncation before silence, because a
+  truncated stream has no usage frame and therefore reads as zero reasoning.
+- **The stall diagnostic.** Report observed state, refuse to name a cause. Being confidently
+  specific about the wrong thing costs more than being vague.
+- **The generated-artifact guard.** A generator that exits 0 having written nothing must not read
+  as in sync.
+
+One shape none of them catch, named here so nobody reads the rule as fully mechanised: **coverage
+that exists only because something was missing is coverage on a timer.** The workaround did not
+fail. It succeeded, was correctly deleted, and nothing went red. That is worse than a broken test,
+because there is no moment at which anyone could have caught it.
+
+What follows is where that was learned, one failure at a time.
+
 ### 5.1 The dominant failure mode: checks that pass while covering nothing
 
 This accounted for more defects than bad implementations, by a wide margin. Instances from this epic:
@@ -532,10 +561,12 @@ results doc is the instance that got furthest.
 
 ### 5.12 Absence read as a legitimate value
 
-**This, §5.13 and §5.14 are the lessons from this session that leave this repo**, alongside §5.11.
-The rest above are instances: worth recognising when they recur, but tied to this codebase. They
-are named here rather than counted, because the count that used to stand in this sentence went
-stale the moment §5.14 was added, which is §5.11 happening inside the paragraph that points at it.
+**§5.11, this one, and everything below it are the lessons from this session that leave this
+repo.** The rest above are instances: worth recognising when they recur, but tied to this codebase.
+This is a boundary rather than a count or a list because both have already gone stale here: the
+count when §5.14 was added, the list that replaced it when §5.15 was. That is §5.11 happening twice
+inside the paragraph that points at it. Keep portable lessons at the end of the section and the
+boundary stays true on its own.
 
 Four separate bugs were the same bug: something was absent, and the absence was read as a value.
 
@@ -607,6 +638,77 @@ says nothing about whether the branch that ships has it.
 
 Operational form: **never trust your own record of what you landed. Enumerate the branches and diff
 subjects against HEAD.**
+
+### 5.15 Verifying a mechanism is not verifying its constraints, and neither is verifying that it compiles
+
+Three layers, each silent about the ones above it. From building the `modelBehaviour` declaration
+for the conformance matrix:
+
+1. **What it DOES when used correctly.** Watched four ways: declared-and-still-differs goes green;
+   declared-but-now-passes goes red; declared-but-fails-with-a-different-error goes red;
+   declaration-removed goes red.
+2. **What it REFUSES when used wrongly.** Checked only because the actual requirement
+   ("unwritable as a bare note") lives at this layer and not at the first. Shortening the `instead`
+   field to a useless value, and watching the catalog test reject it.
+3. **Whether it is WELL-FORMED at all.** `tsc -b` then caught a `string | null` vs
+   `string | undefined` mismatch. **All five runtime checks had passed against code that does not
+   compile**, because Playwright transpiles specs without typechecking them.
+
+The third is both the easiest to skip, because five greens already felt like enough, and the most
+embarrassing, because a tool will simply tell you.
+
+Operational form: **a constraint system has a layer for what it does, a layer for what it refuses,
+and a layer for whether it is well-formed. Greens at one layer say nothing about the others.**
+
+The same work gained a property for free by watching a bad declaration in isolation: one malformed
+declaration does not disable the others, so the mechanism **fails closed**. An exemption mechanism
+that failed open would go silently green the day someone mistyped a signature.
+
+### 5.16 Writing "measured" next to a claim should force the measurement
+
+An agent asserted from reasoning that `resolveJsonModule` is required for TypeScript to RESOLVE a
+JSON import, reporting TS2307 in both resolution modes without it. I recorded that as settled and
+relayed it onward.
+
+It is wrong. TypeScript 5.x defaults the flag to true under both `bundler` and `nodenext`; the code
+is TS2732, not TS2307; and the ORIGINAL claim it was "correcting" was right.
+
+Two details make it a lesson rather than a mistake:
+
+- It was caught only when the claim was about to be written into a guard header **labelled as
+  measured**. Having to write the word forced the measurement.
+- The first measurement attempt was broken in the same shape. It OMITTED the flag rather than
+  setting it to `false`, got "compiles clean" both ways, and nearly confirmed the error.
+
+Both operational forms are worth keeping. **Writing "measured" beside a claim is a commitment that
+should trigger the measurement, not a description of your confidence.** And **when testing whether
+a flag matters, omitting it and disabling it are different experiments, only one of which tests the
+flag.**
+
+The supervisory half, recorded honestly: I amplified the finding to Rob within minutes of receiving
+it, and it was the third relayed claim that day that did not survive verification. **Speed of relay
+is not free.**
+
+### 5.17 A check that reports the boring branch has been misread, not verified
+
+Building a diagnostic that reports observed state on a timeout, a build race was staged to exercise
+its "dist changed during this run" branch. The diagnostic reported `unchanged`, because the touch
+beat the spec's module load. The report was correct. It was correct about the wrong branch.
+
+The window was widened and the race re-run, rather than accepting it.
+
+This is neither of the failure modes §5.1 and §5.6 name. The check did fire, and the report was not
+wrong. What went wrong is that **the branch the condition was staged to exercise never ran, and the
+output looks like success either way.**
+
+Operational form: **name the branch you expect BEFORE running, then check the output took that
+branch, not merely that the output is sane.** The tell exists only for the person who knew which
+branch they were aiming at, which is why review cannot catch it.
+
+The same diagnostic carries a test asserting it NEVER names a cause, only observed state.
+**Asserting a design constraint in a test beats trusting review to preserve it**, because the
+constraint most likely to decay is the one a well-meaning contributor would violate helpfully.
+Adding a cause to a diagnostic is exactly that shape.
 
 ---
 
