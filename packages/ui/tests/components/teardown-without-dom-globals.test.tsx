@@ -724,9 +724,9 @@ function scanSource(rel: string, text: string): ScanResult {
           const decl = resolveName(arg);
           const body = functionBodyOf(decl);
           if (decl && body) walkBody(body, [name, arg.text], new Set([decl]));
-          else unresolved.push(`${rel}:${lineOf(n)}  ${name}(${arg.text})`);
+          else unresolved.push(`${rel}  ${name}(${arg.text})`);
         } else {
-          unresolved.push(`${rel}:${lineOf(n)}  ${name}(<${ts.SyntaxKind[arg.kind]}>)`);
+          unresolved.push(`${rel}  ${name}(<${ts.SyntaxKind[arg.kind]}>)`);
         }
       }
     }
@@ -787,10 +787,16 @@ it('KNOWN_UNFIXED carries no stale entry for an already-fixed site', () => {
  * Asserting the exact set, rather than tolerating any number of them, is the point:
  * a new unresolvable disposer fails here and gets looked at by a person, instead of
  * being quietly excluded by an analyzer that reports nothing about what it skipped.
+ *
+ * Keyed by file and callback name, deliberately WITHOUT a line number. A line here
+ * would make this suite go red for any edit that merely shifted those files, which
+ * trains people to update the expectation without reading it — the exact reflex
+ * that lets a real entry slip in. `offenders` keeps its line numbers, because those
+ * have to be actionable and are expected to be empty anyway.
  */
 const UNRESOLVED_TEARDOWN_CALLBACKS = [
-  'components/reasoning.tsx:227  onCleanup(dispose)',
-  'ui/dropdown.tsx:560  onCleanup(unregister)',
+  'components/reasoning.tsx  onCleanup(dispose)',
+  'ui/dropdown.tsx  onCleanup(unregister)',
 ];
 
 it('every teardown callback the scan cannot resolve is one that was reviewed', () => {
@@ -865,5 +871,5 @@ it('the analyzer finds indirect violations and only those — checked against a 
     'fixture.tsx:24  onCleanup -> guarded -> bare `getComputedStyle`',
     'fixture.tsx:36  onCleanup -> bare `document`',
   ]);
-  expect(unresolved).toEqual(['fixture.tsx:44  onCleanup(<CallExpression>)']);
+  expect(unresolved).toEqual(['fixture.tsx  onCleanup(<CallExpression>)']);
 });
