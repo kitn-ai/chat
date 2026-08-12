@@ -281,3 +281,72 @@ if (coverage.roundsRead === 0) {
 if (coverage.missing.length) {
   console.log(`\n   missing measurements (nothing recorded): ${coverage.missing.map((c) => c.key).join(', ')}`);
 }
+
+// THE VERDICT. Until this existed the runner printed `FAIL` cells and exited 0,
+// because only the reasoning audit above ever touched `process.exitCode` — a
+// measured, reproducible fact: `--only ministral --mode replay` printed two FAIL
+// rows and returned EXIT=0. So the matrix could not be wired into CI as a gate;
+// anyone who tried would get a job that passes no matter what the cells say,
+// which is the failure mode this whole harness exists to catch, in the harness.
+//
+// Three things end the run red, and the third is the one that is easy to leave out:
+//   · a red cell;
+//   · a model row that could not run at all (its Playwright process died, or the
+//     port was busy) — that is UNMEASURED, not passed;
+//   · ZERO cells collected. A run that measured nothing must never exit 0. This
+//     is the same "absence read as zero" that produced the thinking-budget bug:
+//     an empty result set and a clean result set are the same number of failures.
+const rowsWithError = results.filter((r) => r.error);
+const failedCells = results.flatMap((r) =>
+  Object.entries(r.cells ?? {})
+    .filter(([, c]) => c.state === 'fail')
+    .map(([id]) => `${r.key}/${id}`),
+);
+const totalCells = results.reduce((n, r) => n + Object.keys(r.cells ?? {}).length, 0);
+const skipped = results.flatMap((r) =>
+  Object.entries(r.cells ?? {})
+    .filter(([, c]) => c.state === 'skip')
+    .map(([id]) => `${r.key}/${id}`),
+);
+
+console.log(`\n${'='.repeat(72)}\nVERDICT\n${'='.repeat(72)}\n`);
+console.log(
+  `  configurations: ${results.length}   cells: ${totalCells}   ` +
+    `failed: ${failedCells.length}   skipped: ${skipped.length}   errored rows: ${rowsWithError.length}`,
+);
+
+if (totalCells === 0) {
+  console.error(`\n!! the matrix collected ZERO cells — it measured NOTHING. Not a pass.`);
+  process.exitCode = 1;
+}
+if (rowsWithError.length) {
+  console.error(
+    `\n!! ${rowsWithError.length} configuration(s) never ran: ` +
+      `${rowsWithError.map((r) => `${r.key} (${r.error})`).join('; ')}`,
+  );
+  process.exitCode = 1;
+}
+if (failedCells.length) {
+  console.error(`\n!! ${failedCells.length} cell(s) FAILED: ${failedCells.join(', ')}`);
+  process.exitCode = 1;
+}
+if (skipped.length) {
+  // Not fatal on its own — a `live` scenario with no recording yet is a missing
+  // measurement, and the harness deliberately distinguishes that from a failure.
+  // It is still printed, because "we did not measure it" degrades a sweep's
+  // coverage claim and is invisible from the table, where `skip` is one word.
+  console.log(`\n   not measured (no recording yet): ${skipped.join(', ')}`);
+}
+
+// KNOWN STATE, so nobody reads a red exit as a regression: `ministral-3b` fails
+// S02 and S04 today, and both are documented MODEL-BEHAVIOUR differences rather
+// than defects — it has no reasoning mode, and it batches S04's three calls into
+// two rounds. The harness has no first-class way to declare that; `knownGap` is
+// for gaps in the KIT and demands a precondition and a signature.
+//
+// Deliberately NOT special-cased here. Hard-coding an exemption for two cells
+// nobody has to re-justify is how a gate quietly stops covering things, and
+// inventing a `modelBehaviour` marker in passing would ship a declaration
+// mechanism no one has watched fail. So a full sweep exits 1 today, truthfully,
+// and wiring this into CI requires declaring those two first — through something
+// built to the same standard as `KnownGap`.
