@@ -1165,6 +1165,15 @@
         "typeShape": "{ onSubmit?: undefined | (cardId: string, data: unknown) => void; onAction?: undefined | (cardId: string, action: string, payload?: unknown) => void; onSendPrompt?: undefined | (text: string, opts: { mode: \"compose\" | \"send\"; context?: unknown; }) => void; onOpen?: undefined | (url: string, target: \"tab\" | \"artifact\") => void; onState?: undefined | (cardId: string, patch: unknown) => void; onDismiss?: undefined | (cardId: string) => void; onReopen?: undefined | (cardId: string) => void; onError?: undefined | (cardId: string, message: string) => void; maxSendPromptMode?: undefined | \"compose\" | \"send\" }",
         "typeImport": "CardPolicy",
         "displayType": "undefined | { onSubmit?: undefined | (cardId: string, data: unknown) => void; onAction?: undefined | (cardId: string, action: string, payload?: unknown) => void; onSendPrompt?: undefined | (text: string, opts: { mode: \"compose\" | \"send\"; context?: unknown; }) => void; onOpen?: undefined | (url: string, target: \"tab\" | \"artifact\") => void; onState?: undefined | (cardId: string, patch: unknown) => void; onDismiss?: undefined | (cardId: string) => void; onReopen?: undefined | (cardId: string) => void; onError?: undefined | (cardId: string, message: string) => void; maxSendPromptMode?: undefined | \"compose\" | \"send\" }"
+      },
+      {
+        "name": "validateCards",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Validate each envelope's `data` against the built-in schema for its type before rendering it. Default `true`; set `validate-cards=\"false\"` (or `el.validateCards = false`) to opt out. A hard failure (wrong type, a missing required field) renders a diagnostic naming the field instead of the card; a soft failure (bounds) renders the card unchanged. Both emit a contract `error` event. On in production too: a model emitting a bad shape is a production failure mode, so stripping the check there would hide it from exactly the person who needs to see it.",
+        "default": "true",
+        "displayType": "undefined | false | true"
       }
     ],
     "events": [
