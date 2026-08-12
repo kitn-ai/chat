@@ -28,7 +28,7 @@ import {
   type ScenarioMode,
   type ScenarioWire,
 } from '../src/scenarios';
-import { S17_CLOSING_SENTENCE, S17_MAX_FRAME_CHARS } from '../src/scenarios/s17-cancel';
+import { S17_CLOSING_SENTENCE } from '../src/scenarios/s17-cancel';
 import { readHarnessState } from '../src/harness-state';
 import { allModelBehaviours, modelBehaviourFor } from './model-behaviour';
 import { waitForPhase } from './stall-report';
@@ -466,12 +466,12 @@ function contentDeltas(sse: string): string[] {
   return out;
 }
 
-// S17 asserts against two properties of its own fixture: that a named sentence
-// is the LAST thing round 1 streams, and how big a single frame can be. Both are
-// constants in the scenario, and a re-recorded fixture would leave them pointing
-// at nothing — which is the failure mode where the assertion stays green and
-// stops meaning anything. Tie them to the file.
-test('S17 cancel: its markers still match the fixture it replays', async () => {
+// S17's whole "the stream was cut short" claim rests on ONE property of its own
+// fixture: that a named sentence is the LAST thing round 1 streams. That is a
+// constant in the scenario, and a re-recorded fixture would leave it pointing at
+// nothing — the failure mode where the assertion stays green and stops meaning
+// anything. Tie it to the file.
+test('S17 cancel: its closing sentence still matches the fixture it replays', async () => {
   for (const dir of ['canned/S17-cancel', 'canned-anthropic/S17-cancel']) {
     const sse = await readFile(new URL(`../fixtures/${dir}/round-1.sse`, import.meta.url), 'utf8');
     const deltas = contentDeltas(sse);
@@ -482,9 +482,5 @@ test('S17 cancel: its markers still match the fixture it replays', async () => {
       `${dir}: S17_CLOSING_SENTENCE must be the LAST thing round 1 streams, or "it never appeared" ` +
         'stops meaning "the stream was cut short"',
     ).toBe(S17_CLOSING_SENTENCE);
-    expect(
-      Math.max(...deltas.map((d) => d.length)),
-      `${dir}: S17_MAX_FRAME_CHARS must be the largest single delta, or the in-flight allowance is guesswork`,
-    ).toBe(S17_MAX_FRAME_CHARS);
   }
 });

@@ -78,7 +78,7 @@ the whole point of having hedged.
 | S14 attachments | pass | pass | pass | pass | pass |
 | S15 interleaving | pass | pass | pass | pass | pass |
 | S16 mid-stream error | pass | pass | pass | pass | pass |
-| S17 cancel | pass | pass | pass | pass | pass |
+| S17 cancel ‡ | pass | pass | pass | pass | pass |
 | S18 expand mid-stream | pass | pass | pass | pass | pass |
 
 \* **S05 on the Anthropic wire proves less than the same cell on the OpenAI wire**, so
@@ -89,6 +89,37 @@ cannot produce that: its content blocks stream strictly sequentially, so its cel
 tests two complete tool_use blocks arriving one after another. The harness now
 carries this per wire (`provesByWire` in `s05-parallel-tools.ts`) and prints it as a
 footnote, rather than leaving a reader to infer equivalence from two green cells.
+
+‡ **One of S17's three claims was never measured, in any of these five columns.**
+Corrected 2026-08-12. The scenario's `proves` line reads "Stop aborts the stream,
+keeps what rendered, and resolves the orphaned tool panel to Error". The third
+clause was genuinely tested and the second weakly so. **The first was not tested at
+all.**
+
+`during()` located the answer with `bubbles().last()`, which is the **echoed user
+prompt** until the assistant emits its first text delta at 176ms. The click landed
+at ~50ms, so the check read the prompt's 89 characters, cleared its own
+"nothing to cancel" floor of 40 with them, compared the prompt to itself
+(`before=89 after=89`), and cancelled during the tool call. Every run. The
+assistant's stream was never observed. The 40-character tolerance was also smaller
+than a single frame (mean 62, largest 95), so the check would have failed the moment
+it ever measured the real thing — **the two defects hid each other, and the first
+kept the second from ever being exercised.**
+
+**The behaviour was correct all along**, which is why this is a truth problem rather
+than a regression: measured directly afterwards, round 1 totals 623 characters, the
+cancelled stream stopped at 355 and held there for the remaining ~1.1s. Nothing in
+`packages/ui/src/` was at fault or was changed.
+
+So these five cells published a claim that happened to be true and had not been
+tested. That is worth stating plainly rather than quietly re-running: a green cell
+and an unmeasured one look identical, which is the whole reason this document
+carries footnotes at all.
+
+It surfaced only because the scenario was wired into CI, where different timing let
+the locator resolve to the assistant bubble for the first time and the cell went red
+on its first real run. **A vacuous pass survives until something changes the timing
+it depended on.**
 
 † **This cell read `n/a` until the harness stopped asking for a sub-floor thinking
 budget.** See the correction at the top. It is the one cell in this table that was

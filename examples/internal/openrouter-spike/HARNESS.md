@@ -219,6 +219,33 @@ A `live` scenario replayed before it has ever been recorded reports as
 failing assertion, and reporting the two the same way is how a suite starts lying
 about its coverage.
 
+### What S17 can and cannot see
+
+S17 asserts cancellation entirely from the DOM, and there is one thing that
+buys and one thing it does not.
+
+It proves the user-visible claim: the answer **stops growing**, and it stops
+**short of the fixture's closing sentence** — a stream that was not cut off
+renders that sentence, whatever the timings were on the day.
+
+It cannot prove the in-flight **fetch** was aborted. `AssistantStream.abort`
+makes the fold ignore later deltas, so a build that dropped `abort.abort()` and
+kept `stream.abort()` looks identical on screen while the socket stays open and
+the bytes keep arriving. That was confirmed by disabling each half in turn: only
+disabling BOTH turns the scenario red.
+
+Nor can it bound how PROMPTLY the stream stopped. A character budget on
+post-click growth was tried and removed: under a 6x CPU-throttled renderer it
+failed 1 run in 5 on working code, growing 355 → 572, because what it measures
+is how long the *click* took to dispatch on a loaded box, not how long the
+stream kept flowing.
+
+Both gaps have the same fix, and it is a server-side one: have the replay
+handler count the frames it wrote before `res.on('close')` fired and expose that
+count. "The server stopped writing after frame N" is measured on the server's
+own clock, so it is immune to renderer speed, and it is the only thing that
+actually distinguishes an aborted fetch from an ignored one. Not built.
+
 ## A 200 is not proof of reasoning
 
 Every cell in the matrix can be green while a whole column recorded no reasoning
