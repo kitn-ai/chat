@@ -1,11 +1,11 @@
 # HANDOFF: model-driven components
 
-Last updated 2026-08-12. **Verified against `origin/main` at `476a16b`.** Supersedes the
+Last updated 2026-08-12. **Verified against `origin/main` at `905acca`.** Supersedes the
 2026-08-11 version entirely.
 
 That SHA is the point of the line, not decoration. This document is a claim about the state of a
 tree, and without knowing which tree, a later reader cannot tell drift from disagreement.
-`git log --oneline 476a16b..origin/main` measures exactly how stale this is. Every count and every
+`git log --oneline 905acca..origin/main` measures exactly how stale this is. Every count and every
 "done" below was read off that tree; nothing was carried forward from the previous version on
 trust, and several things that were carried forward turned out to be wrong.
 
@@ -19,6 +19,12 @@ said five versions where the registry says six). Two items §1.3 recorded as BLO
 by the same PR, and one §1.4 item had half closed itself. **That is the rate to plan for: about one
 figure in three, over a single day of merged work.** Re-derive the section; do not patch the one
 number somebody tells you about, because the number you are told is rarely the only one that moved.
+
+`905acca` then landed while this was being written, and it is the corroboration rather than more
+drift: a different session, independently, fixing the same 528 → 616 in `CLAUDE.md`. Same stale
+figure, found twice, in two files, by two people who were not talking to each other. It moved
+nothing here — which is itself worth knowing, because a docs-only commit on `origin/main` is the
+cheap case, and the expensive case looked identical from the branch.
 
 **The work this document describes as done is MERGED TO MAIN**, through PR #178, and
 **`@kitn.ai/ui@0.21.0` is published** (§2). That now includes the whole emit contract, which the
@@ -262,12 +268,23 @@ this CLI rather than housekeeping.
    `conversations` is `COMPOSED_ONLY`, because `renderSurface` has no `kai-conversations` branch.
 4. **The coding-agent wiring step** (`.mcp.json` + `AGENTS.md`). Unblocked, not started.
 
-**The headline has changed, and the old one is worth reading before the new one.** This section
-used to say *v1 is gated on CATALOG COMPLETENESS, not on CLI code*, with two of four next steps
-blocked on catalog gaps. **Both gaps closed in a single PR**, so that headline is retired: v1 is now
-gated on CLI code — the seven remaining frameworks and the wiring step — plus widening
-`WIRED_GATEWAYS`. The two blockers were reported rather than papered over, and that is precisely why
-they were cheap to close.
+**The headline is RETIRED, formally, by the lane owner.** This section used to say *v1 is gated on
+CATALOG COMPLETENESS, not on CLI code*, with two of four next steps blocked on catalog gaps. #97 and
+#98 are both closed, so that sentence is dead — do not quote it, and do not re-derive it from the
+older plan docs, which still carry it.
+
+**The accurate replacement, and it has two halves that must not be collapsed into one:**
+
+- **Remaining work is CLI-SIDE.** The other seven frameworks, and the coding-agent wiring step.
+  Nobody has done these.
+- **Plus one DELIBERATE DEFERRAL.** `create-kai`'s gateway prompt stays flat until `WIRED_GATEWAYS`
+  widens beyond `{ mock }`, because grouping a one-item menu adds headings to nothing. Someone
+  decided not to yet.
+
+Keeping those apart is the point of writing it this way. "Unblocked" and "done" are different facts
+(§5.14), and so are "nobody has done it" and "someone decided not to yet" — a reader who cannot tell
+them apart will either re-open a settled decision or treat an untouched task as settled. The two
+blockers were reported rather than papered over, which is precisely why they were cheap to close.
 
 **One open decision, awaiting Rob — do not record it as taken.** v1 shipping all eight frameworks
 was a scope call made in his absence. The spec excluded Angular and Solid on the grounds that no
@@ -405,7 +422,7 @@ a pass with no code change.
 
 ### 1.7 ★ Attachments are a THREE-LAYER gap, and the layers must land together
 
-Open as of `476a16b`. Every layer below was read off the tree rather than carried in from the
+Open as of `905acca`. Every layer below was read off the tree rather than carried in from the
 session that found it, and one claim did not survive that check — recorded at the bottom, because a
 finding you could not reproduce is worth as much as the ones you could.
 
@@ -436,10 +453,30 @@ way past — five of them assuming it is a string:
 | `pydantic-ai` | `prompt = messages[-1].content`, typed `content: str` | flattened (python) |
 | `langgraph` | `{ ...m, content: m.content ?? '' }` | **passes through** — only `null` is coerced |
 
-So five of eleven integrations — **55 of the 121 route cells** — would drop attachments at runtime
-even with a fixed encoder. `langgraph` is the honest edge case: its route does not flatten, but its
-own comment records that LangChain's `MessageContent` coercion accepts string only, so it is
-untested rather than safe.
+So five of eleven integrations — 55 of the 121 route cells — would drop attachments at runtime even
+with a fixed encoder. `langgraph` is the honest edge case: its route does not flatten, but its own
+comment records that LangChain's `MessageContent` coercion accepts string only, so it is untested
+rather than safe.
+
+**The count is not the finding. This is: three of those five break the COMPILER, and two cannot.**
+Fix `anthropic`, `vercel-ai-sdk` and `mastra` — the three a widened `content` type makes fail
+loudly — and `verify:scaffold` goes to a full green 121/121 **while `pi` and `pydantic-ai` still
+silently drop attachments.** Neither can ever break loudly, and for different reasons:
+
+- **`pydantic-ai` is invisible to a TypeScript change BY CONSTRUCTION.** Its 11 cells are Python, so
+  they route to `pythonCheck` instead of tsc, and that check is `ast.parse` — a SYNTAX check — plus
+  four substring assertions about SSE shape (`@app.post('/api/chat')`, `StreamingResponse`,
+  `media_type='text/event-stream'`, `data: [DONE]`). There is no type information anywhere in that
+  path. **Whatever fixes `pydantic-ai` has to be structural, because typechecking will never reach
+  it.**
+- **`pi` drops or stringifies rather than rejecting.** `messages.at(-1)?.content ?? ''` accepts an
+  array perfectly happily and coerces it; nothing errors.
+
+Filed as **#109**. Record it as a gate at full green count with a subset it cannot see by
+construction — the same shape as the surface-axis finding (a matrix whose count overstated its
+coverage, §1.2) and the population finding (§5.18). **A green 121/121 is a claim about 99 cells
+under tsc, 11 under a syntax parser, and 11 with no route at all**, and only the first of those
+three can notice a type.
 
 **Layer 3 — production. This is the load-bearing one:** *the kit cannot produce an attachment its
 own encoder would accept.* `packages/ui/src/elements/default-input.tsx:77` — the built-in paperclip
@@ -470,7 +507,7 @@ attachment scaffold:
 // @kitn.ai/ui/wire), so nothing here reaches the provider.
 ```
 
-True at `476a16b`. **False the moment layer 1 lands**, and it is emitted into user code, so it will
+True at `905acca`. **False the moment layer 1 lands**, and it is emitted into user code, so it will
 outlive the limitation it describes and start teaching the opposite. It is on the fix's critical
 path, not a follow-up. This document has already been burned by exactly this shape: §1.5 was still
 steering readers away from #70 after #70 had shipped.
@@ -479,21 +516,35 @@ steering readers away from #70 after #70 had shipped.
 that EXECUTES the scaffolder's output — it writes the emitted `main.ts` to a real module, imports it
 (the module ends in `void init()`), and drives a mounted `<kai-chat>` out to a stubbed `fetch`. The
 unit suite never runs that code: `scaffold.test.ts` asserts over the emitted STRINGS, so it can
-check wording and never behaviour. That gap is not theoretical — I broke the attachment bridge
-deliberately (made `URL.createObjectURL` throw) and watched the projects disagree:
-`--project=unit` stayed green at 2,858/2,858 while `--project=emitted` went red with
+check wording and never behaviour. That gap is not theoretical — `--project=unit` stayed green at
+2,858/2,858 through both mutations below, while `--project=emitted` went red on each.
 
-```
-a dropped file never reached <kai-attachments> — the dropzone is mounted but nothing stages
-TypeError: createObjectURL is not a function
-```
+**TWO fingerprints, and reading them apart is the whole point.** Both are real, both come out of
+`emitted-maximal-surface.live.test.ts`, and they indicate DIFFERENT layers. The staging assertion
+(line 334) runs before the fetch-round assertion (line 356), so whichever breaks first wins — which
+means the message you get tells you which layer failed, provided you know both:
 
-**One correction to the report that reached me.** It cited that failure as `expected +0 to be 2`,
-from the fetch-round counter, "because fetch never fired". That assertion is real —
-`expect(round).toBe(2)` in `emitted-maximal-surface.live.test.ts` — but it is **not** the one that
-fires for a broken attachment bridge: the staging assertion sits ~20 lines earlier and catches it
-first. The structural claim (only the emitted project sees this layer) held; the fingerprint did
-not. Cite the staging message.
+| mutation | what happens | fires at | message |
+| --- | --- | --- | --- |
+| break the **bridge** (`URL.createObjectURL` throws) | staging never happens | **334** | `a dropped file never reached <kai-attachments> — the dropzone is mounted but nothing stages` |
+| break the **encoder** (`toOpenAIMessages` throws) | staging succeeds; the throw lands at submit, `fetch` is never called, `round` stays 0 | **356** | `the emitted tool loop did not run a second round: expected +0 to be 2` |
+
+Both were performed on `905acca` rather than reasoned about, and the second one is the reason this
+table exists: an earlier pass of this document performed only the bridge mutation, saw the staging
+message, and "corrected" the encoder fingerprint out of the record as wrong. **That correction would
+have taught a future reader to diagnose an ENCODER failure as a STAGING failure** — a symptom read
+onto the wrong layer, which is the exact class of bug this whole document is about (§5.3). One
+mutation is not a discriminator between two hypotheses; two are.
+
+`--project=emitted` reports 2 failed for the encoder mutation, not 1: the card-path guard is a
+SEPARATE file that consumes the encoder too, and it dies its own way, with
+`SyntaxError: "undefined" is not valid JSON`. Read the maximal-surface line, not the failure count —
+the count tells you how many emitted guards touch the encoder, not which layer broke.
+
+**The `createObjectURL` stub is NOT a discriminator either way.** jsdom implements both halves of
+the object-URL API, so REMOVING the stub in that file changes nothing and all three tests stay
+green. Only making it throw reproduces the bridge failure. A stub that is never reached is
+indistinguishable from one that is load-bearing until you break it.
 
 ---
 
@@ -527,7 +578,7 @@ registry, 2026-08-12:
 | 0.20.0 | **root entry throws under Node** — `Client-only API called on the server side`, so SSR and any server-side import fail | fixed in 0.20.1 |
 
 **0.20.1 and 0.21.0 are the only clean versions.** Every message names its defect, its fix version,
-and directs the reader to 0.21.0. Re-read off the registry per version at `476a16b`: 12 published,
+and directs the reader to 0.21.0. Re-read off the registry per version at `905acca`: 12 published,
 10 carrying a deprecation message, and the middle row is **six** versions (0.16.0, 0.17.0, 0.18.0,
 0.18.1, 0.18.2, 0.19.0) — it read "5" until this pass. The row total was right and the row itself
 was wrong, which is the arithmetic that survives review longest.
