@@ -40,6 +40,31 @@
  * turns up anywhere else, because such a file would be collected by `unit` on the
  * strict 5000ms default and flake there instead of running here.
  *
+ * WHAT THE PROJECT COSTS, RE-MEASURED at three files (per-test, mean of 3 runs):
+ *
+ *   emitted-card-path       9601ms   (recorded idle baseline: 9635ms)
+ *   emitted-maximal-surface 10793ms
+ *   emitted-mock-path       11358ms
+ *
+ * The card path landing within 0.3% of its own recorded idle figure is the
+ * CALIBRATION, and it is the only reason these numbers are quotable: the box was
+ * carrying a load average of ~12 on 10 cores at the time, so a raw wall-clock
+ * reading would have been worthless. Three forks on ten cores are not starved by
+ * that load, and the file with a known idle number proves it rather than asserting
+ * it. Check the same way before trusting a timing figure here — a budget in this
+ * repo was once measured on a box that was four cores down without anyone knowing.
+ *
+ * The budget did not need revisiting for the third file, and the reason is worth
+ * stating: it is not the slowest one. `emitted-mock-path` is, and it already lives
+ * under this 60s default. Nothing here justifies a NEW number.
+ *
+ * WALL CLOCK BARELY MOVES, AGGREGATE CPU NEARLY DOUBLES. Adding the third file took
+ * the project from 13.9s to 14.4s wall (+3.6%) while its aggregate `tests` metric
+ * went 20.4s -> 32.0s (+57%): vitest runs these files in PARALLEL forks, so the
+ * cost of a new guard here is CPU, not the time anyone waits. Do not read the wall
+ * figure as headroom to add files indefinitely — the parallelism runs out at the
+ * fork count, and the next file after that lands on the clock in full.
+ *
  * WHERE IT RUNS. `.github/workflows/test.yml`, in the REQUIRED `test` job, as its
  * own step right after the unit project. A project nobody runs looks like coverage
  * and is not, so that wiring is itself asserted by `emitted-project-wiring.test.ts`
