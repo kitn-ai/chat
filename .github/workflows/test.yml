@@ -51,9 +51,7 @@ jobs:
       # It also cannot pass vacuously: each artifact is seeded with a single-use
       # random sentinel before the run and must come back without it, so a
       # generator that was deleted, renamed, dropped an output or no-op'd fails
-      # here instead of reading as "in sync". src/components/component-meta.json
-      # is excluded -- it churns with TS-type-expansion noise on every run by
-      # design and is not used at runtime. The guard restores every file it
+      # here instead of reading as "in sync". The guard restores every file it
       # touches, pass or fail. No build needed, no network. ~20s.
       - name: Generated artifacts in sync with their source
         run: pnpm --filter @kitn.ai/ui run verify:generated

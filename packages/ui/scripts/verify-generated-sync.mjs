@@ -17,26 +17,20 @@
 // tells you to run, so the fix and the check can never diverge) and fails if any
 // derived file in the tree differs from what came out.
 //
-// TWO TRAPS THIS GUARD IS BUILT AROUND (both documented in CLAUDE.md)
-// ------------------------------------------------------------------
-//   1. `nx build ui` is not a dependable way to regenerate these. It runs them
-//      via postbuild, but the generators write side-effects into the SOURCE tree
-//      and the NX cache does not restore those, so on a cache HIT the target
-//      prints "Successfully ran target build" and leaves the tree stale — a
-//      cached build is indistinguishable from a successful one. A guard layered
-//      on `nx build ui` could therefore pass on a stale tree. This guard invokes
-//      build:api directly and never goes through NX, so no cache state can
-//      affect its result.
-//      (Measured in this repo: three consecutive `nx build ui` runs all MISSED
-//      the cache and did regenerate — the target's own source-tree side effects
-//      dirty its input hash, so it re-runs. The guard does not depend on that
-//      staying true, which is the point.)
-//   2. src/components/component-meta.json is EXCLUDED. It churns with
-//      TS-type-expansion noise on every single run by design (105 insertions /
-//      51 deletions against an untouched tree) and is not used at runtime.
-//      Including it would make this guard fail always, which gets it disabled,
-//      which is worse than not having it. It is still snapshotted and restored
-//      so the guard leaves no diff behind.
+// THE TRAP THIS GUARD IS BUILT AROUND (documented in CLAUDE.md)
+// -------------------------------------------------------------
+//   `nx build ui` is not a dependable way to regenerate these. It runs them
+//   via postbuild, but the generators write side-effects into the SOURCE tree
+//   and the NX cache does not restore those, so on a cache HIT the target
+//   prints "Successfully ran target build" and leaves the tree stale — a
+//   cached build is indistinguishable from a successful one. A guard layered
+//   on `nx build ui` could therefore pass on a stale tree. This guard invokes
+//   build:api directly and never goes through NX, so no cache state can
+//   affect its result.
+//   (Measured in this repo: three consecutive `nx build ui` runs all MISSED
+//   the cache and did regenerate — the target's own source-tree side effects
+//   dirty its input hash, so it re-runs. The guard does not depend on that
+//   staying true, which is the point.)
 //
 // WHY IT CANNOT PASS VACUOUSLY
 // ----------------------------
@@ -99,9 +93,6 @@ const GENERATED = [
   { file: 'docs/web-components.md', probe: 'in-block' },
 ];
 
-// Rewritten by the same generator run, deliberately NOT compared. See trap 2.
-const CHURN = ['packages/ui/src/components/component-meta.json'];
-
 const abs = (f) => resolve(REPO, f);
 const fail = (msg) => {
   console.error(`\n✗ verify-generated-sync: ${msg}\n`);
@@ -113,7 +104,7 @@ const fail = (msg) => {
 // Fail rather than quietly guard less than the list claims.
 if (GENERATED.length === 0) fail('the generated-file list is empty — the guard would assert nothing.');
 
-for (const { file } of [...GENERATED, ...CHURN.map((file) => ({ file }))]) {
+for (const { file } of GENERATED) {
   if (!existsSync(abs(file))) {
     fail(
       `${file} does not exist.\n` +
@@ -125,7 +116,7 @@ for (const { file } of [...GENERATED, ...CHURN.map((file) => ({ file }))]) {
 }
 
 {
-  const paths = [...GENERATED.map((g) => g.file), ...CHURN];
+  const paths = GENERATED.map((g) => g.file);
   const r = spawnSync('git', ['ls-files', '--', ...paths], { cwd: REPO, encoding: 'utf8' });
   if (r.status !== 0) fail(`\`git ls-files\` failed: ${`${r.stderr}`.trim()}`);
   const tracked = new Set(`${r.stdout}`.split('\n').filter(Boolean));
@@ -141,7 +132,7 @@ for (const { file } of [...GENERATED, ...CHURN.map((file) => ({ file }))]) {
 
 // ------------------------------------------------------------------ snapshot
 const before = new Map();
-for (const { file } of [...GENERATED, ...CHURN.map((file) => ({ file }))]) {
+for (const { file } of GENERATED) {
   before.set(file, readFileSync(abs(file)));
 }
 
@@ -293,8 +284,7 @@ try {
         '  prop, event or ::part you added to the source is invisible to every tool a\n' +
         '  developer would use to discover it until these are regenerated.\n\n' +
         '  Fix — run, then commit the files listed above:\n' +
-        `    ${FIX}\n` +
-        '    git checkout -- packages/ui/src/components/component-meta.json\n\n' +
+        `    ${FIX}\n\n` +
         '  Do not reach for `nx build ui` instead. It regenerates these only when it\n' +
         '  actually runs the target; on a cache HIT it restores dist/ and skips these\n' +
         '  SOURCE-tree side effects while still printing "Successfully ran target build",\n' +
