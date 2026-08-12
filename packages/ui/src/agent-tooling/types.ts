@@ -66,6 +66,50 @@ export const IntegrationSchema = z.object({
    * does forward the field.
    */
   forwardsFromClient: z.array(z.enum(['model', 'tools'])).default([]),
+  /**
+   * The tool-definition envelope this integration's ROUTE expects to find in the
+   * `tools` array the client POSTs. Required exactly when `forwardsFromClient`
+   * includes `'tools'`, and meaningless otherwise.
+   *
+   * WHY THIS IS DECLARED AND NOT DERIVED. It used to be looked up from
+   * `streamFormat`, and that is a category error: `streamFormat` describes the
+   * shape of the RESPONSE stream, while the tool envelope is a REQUEST concern.
+   * The two only appeared to agree because every integration that forwarded
+   * tools happened to be `openai-sse`. `anthropic` is where the conflation
+   * becomes visible — it is `streamFormat: 'native'`, which says nothing about
+   * request shape, and the old table mapped `native` to null.
+   *
+   * And keying on the integration's PROVIDER would be wrong too, which is the
+   * part worth reading the route before assuming: `anthropic`'s handler converts
+   * the array itself (`toAnthropicTools` reads `raw.function.name` /
+   * `.function.parameters`), so it wants `'openai'` here. Handing it Anthropic's
+   * own `{ name, input_schema }` shape would yield tools with a blank name. Only
+   * the route knows what it accepts, so only the integration can state it — the
+   * same reason `forwardsFromClient` lives here rather than being sniffed out of
+   * the route source.
+   *
+   * Optional in the type, mandatory in practice: the refinement below rejects an
+   * integration that forwards tools without one. There is deliberately no
+   * default — a default is how a tools array with no card in it ships silently.
+   */
+  clientToolFormat: z.enum(['openai', 'anthropic', 'jsonschema']).optional(),
+}).superRefine((integration, ctx) => {
+  // Enforced against the real catalog by `registry.test.ts`, which parses every
+  // integration through this schema. A new host that forwards tools therefore
+  // cannot reach the scaffolder undeclared: it fails at the catalog boundary,
+  // before any emit path has to decide what to do about it.
+  if (integration.forwardsFromClient.includes('tools') && integration.clientToolFormat === undefined) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['clientToolFormat'],
+      message:
+        `integration '${integration.id}' forwards a 'tools' array but declares no clientToolFormat. ` +
+        `State the envelope its route expects: 'openai' ({ type: 'function', function: { parameters } }), ` +
+        `'anthropic' ({ name, input_schema }), or 'jsonschema' ({ name, description, schema }). ` +
+        `Read the route's own handler to decide — a route that CONVERTS the array server-side wants the ` +
+        `shape it converts FROM, not its own provider's.`,
+    });
+  }
 });
 export type Integration = z.infer<typeof IntegrationSchema>;
 

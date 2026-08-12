@@ -66,6 +66,9 @@ const ollama: Integration = {
   // editable value the route throws away. Change the model in the route. 'tools'
   // IS forwarded, which is what lets an agentic scaffold fill its kai-tool panel.
   forwardsFromClient: ['tools'],
+  // Ollama's OpenAI-compatible endpoint, and the handler forwards `tools`
+  // verbatim into that body — so the client sends OpenAI's function envelope.
+  clientToolFormat: 'openai',
 };
 
 export default ollama;

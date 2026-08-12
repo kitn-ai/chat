@@ -336,8 +336,39 @@ export function writeTypes(root, elements, _toAttr, IMPORTS, { domMembers = new 
     }),
   ].join('\n');
 
+  // The imperative methods `defineWebComponent`'s `ctx.expose` attaches to the host
+  // (`el.show()`, `chat.scrollToBottom()`, `panel.maximize(0)`, …). They belong on the
+  // ELEMENT interfaces only — the read side, what `document.querySelector` hands back
+  // — never on the Vue/React props interfaces, which are the CONSTRUCT side and have
+  // no way to call a method.
+  //
+  // They were collected into element-meta.json and custom-elements.json from the
+  // start and emitted into NO type declaration, so the entire interaction API — 37 of
+  // 80 elements — was uncallable through the shipped types: `TS2339 Property 'show'
+  // does not exist on type 'KaiDialogElement'`. The workaround downstream was a cast
+  // (`element as unknown as { maximize(i: number): void }` in resizable.tsx), and the
+  // attempted fix was a hand-written global interface of the same name, which loses
+  // to the generated one declared here (TS2717). Guarded by
+  // tests/elements/element-methods-typed.test.ts.
+  //
+  // `m.dts` is the self-contained signature (gen-element-api.mjs); the `params`/
+  // `returns` fallback keeps this working for a caller that re-reads the model from
+  // element-meta.json, where `dts` is deliberately absent.
+  const methodBody = (el) =>
+    (el.methods ?? [])
+      .flatMap((m) => [
+        ...(m.description ? [`  /** ${m.description} */`] : []),
+        // `clean(…, false)` for the same normalization the props get — the checker
+        // renders a `boolean` parameter as `false | true`.
+        `  ${m.name}${clean(m.dts ?? `(${m.params ?? ''}): ${m.returns ?? 'void'}`, false)};`,
+      ])
+      .join('\n');
+
   const interfaces = elements
-    .map((el) => `export interface ${el.className} extends HTMLElement {\n${propBody(el, true)}\n}`)
+    .map((el) => {
+      const body = [propBody(el, true), methodBody(el)].filter(Boolean).join('\n');
+      return `export interface ${el.className} extends HTMLElement {\n${body}\n}`;
+    })
     .join('\n\n');
 
   const tagMap = elements.map((el) => `    '${el.tag}': ${el.className};`).join('\n');

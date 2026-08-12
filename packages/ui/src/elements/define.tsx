@@ -96,6 +96,147 @@ function toAttr(name: string): string {
   return name.replace(/([A-Z])/g, '-$1').toLowerCase();
 }
 
+/**
+ * Every property name the built-in element prototype chain exposes as an ACCESSOR
+ * — `role`, `hidden`, `autofocus`, `dir`, `title`, `className`, … — i.e. the
+ * reflected IDL attributes plus the handful of read-only accessors. Methods
+ * (`focus`, `append`) are plain data properties and are deliberately not included:
+ * assigning over one shadows it on the instance but destroys nothing on the DOM.
+ *
+ * DERIVED, not listed. A hand-written list is a list someone has to remember to
+ * extend: the collision set is (this element's prop names) × (whatever the browser
+ * reflects), and both sides move — the kit adds props, and the platform keeps
+ * adding globals (`inert`, `popover`, `writingSuggestions` are all recent). Reading
+ * it off the live prototype chain means a prop that starts colliding tomorrow is
+ * protected the day it lands, in whichever engines have shipped the accessor,
+ * without a code change. It also self-limits: in an engine that has NOT shipped a
+ * given accessor (jsdom has no `autofocus`) the name is simply not a collision
+ * there, which is exactly right.
+ *
+ * Computed once — the chain does not change at runtime.
+ */
+let globalAccessorNames: Set<string> | undefined;
+export function reflectedGlobalPropNames(): Set<string> {
+  if (globalAccessorNames) return globalAccessorNames;
+  const names = new Set<string>();
+  let proto: object | null =
+    typeof HTMLElement === 'undefined' ? null : (HTMLElement.prototype as object);
+  while (proto && proto !== Object.prototype) {
+    for (const [name, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(proto))) {
+      if (descriptor.get || descriptor.set) names.add(name);
+    }
+    proto = Object.getPrototypeOf(proto) as object | null;
+  }
+  globalAccessorNames = names;
+  return names;
+}
+
+/**
+ * Replace inherited reflected accessors with plain, non-reflecting per-instance
+ * stores on this element class's prototype. Setting the property then only STORES
+ * the value — component-register still reads it back to seed the styling prop, and
+ * later shadows this with its own (also non-reflecting) instance accessor — and it
+ * can never touch a host attribute.
+ */
+function installNonReflectingProps(proto: object, keys: readonly string[]): void {
+  for (const key of keys) {
+    const store = Symbol(`kai-prop:${key}`);
+    Object.defineProperty(proto, key, {
+      get(this: Record<symbol, unknown>) {
+        return this[store];
+      },
+      set(this: Record<symbol, unknown>, value: unknown) {
+        this[store] = value;
+      },
+      enumerable: true,
+      configurable: true,
+    });
+  }
+}
+
+/**
+ * Run `define` (solid-element's `customElement`, which calls
+ * `customElements.define` internally) with `keys` already shadowed on the element
+ * class — BEFORE the registry ever sees it.
+ *
+ * THE ORDER IS THE WHOLE POINT. `customElements.define()` synchronously upgrades
+ * every matching element the parser has already produced, and component-register's
+ * constructor runs `this[prop] = undefined` for every declared prop. If the
+ * non-reflecting accessor is installed AFTER the define call, that assignment lands
+ * on the NATIVE setter, which for a reflected IDL attribute means the author's
+ * markup is destroyed before a line of facade code runs — `undefined` coerces to
+ * `null`/`false` and the setter removes the attribute. Measured in chromium from
+ * parsed HTML (`node scripts/probe-upgrade-attribute-loss.mjs`):
+ *
+ *   <kai-message role="user">        → role attr gone, el.role "assistant",
+ *                                      the row renders as "Assistant message"
+ *   <kai-resizable-item hidden>      → hidden attr gone, el.hidden false, the
+ *                                      panel is slotted and RENDERS VISIBLE
+ *   <kai-confirm autofocus>          → autofocus attr gone, nothing focused
+ *
+ * Two of those are silent: `hidden` and `autofocus` are legitimate global
+ * attributes, so no a11y rule and no console warning fires — the value simply
+ * evaporates. Only `role` was loud enough to get noticed.
+ *
+ * WHY A TRANSIENT REGISTRY WRAP and not something tidier: the class does not exist
+ * until `register()` builds it, and `register()` defines it in the same statement.
+ * component-register can take a `BaseElement` (a prototype we control) or a
+ * `customElements`-alike (a registry we control) via its third argument — either
+ * would be cleaner — but solid-element's `customElement()` calls `register(tag,
+ * props)` with no options and forwards nothing, and `component-register` is not a
+ * declared dependency of this package, so reaching past solid-element to call
+ * `register` ourselves would ship an undeclared import to consumers. Intercepting
+ * the one `define` call is the smallest seam that exists.
+ *
+ * The wrap is synchronous, restored in a `finally`, delegates to whatever was
+ * installed (so a polyfilled or consumer-wrapped registry keeps working), acts only
+ * on OUR tag, and is re-entrancy safe: a facade that defines another element during
+ * its upgrade nests a second wrap and unwinds it in order.
+ */
+function defineWithNonReflectingProps<T>(
+  tag: string,
+  keys: readonly string[],
+  define: () => T,
+): { result: T; handled: boolean } {
+  // `handled` = nothing more for the caller to do. With no colliding props there is
+  // nothing to install at all, so that case is trivially handled.
+  if (keys.length === 0) return { result: define(), handled: true };
+  const registry = customElements;
+  const hadOwnDefine = Object.prototype.hasOwnProperty.call(registry, 'define');
+  const inner = registry.define;
+  let handled = false;
+  let restore: (() => void) | undefined;
+  try {
+    registry.define = function (
+      this: CustomElementRegistry,
+      name: string,
+      constructor: CustomElementConstructor,
+      options?: ElementDefinitionOptions,
+    ) {
+      if (name === tag) {
+        installNonReflectingProps(constructor.prototype, keys);
+        handled = true;
+      }
+      return inner.call(this, name, constructor, options);
+    };
+    restore = () => {
+      if (hadOwnDefine) registry.define = inner;
+      else delete (registry as unknown as Record<string, unknown>).define;
+    };
+  } catch {
+    // A frozen registry (SES lockdown, a sealed polyfill, a hardened extension
+    // page): we cannot get ahead of define() there. Leave `handled` false so the
+    // caller installs on the returned class instead — the OLD, too-late timing, but
+    // registration itself still succeeds. Getting this wrong the other way would
+    // take all 80 elements down in that environment to fix three props in it.
+  }
+  try {
+    return { result: define(), handled };
+  } finally {
+    restore?.();
+  }
+}
+
 /** Underlying flag resolution; see `WebComponentContext.flag`. */
 function resolveFlag(element: HTMLElement, value: unknown, attribute: string): boolean {
   if (value === true) return true;
@@ -148,20 +289,6 @@ export function defineWebComponent<P extends Record<string, unknown>, E = Record
     }
   }
 
-  // Props that NAME a reflected global IDL accessor (today: only `role`, from
-  // ARIAMixin's Element.prototype.role). Unlike RESERVED (which throws), these are
-  // allowed as plain styling props, but they must NEVER reach the host as an
-  // attribute: kai-message uses role='user'|'assistant' to pick its layout, and
-  // those are not valid ARIA roles, so a reflected role="user" / role="assistant"
-  // fails axe's aria-roles rule. The native IDL setter reflects to an attribute
-  // whenever the property is set BEFORE connectedCallback (e.g. in a framework
-  // `ref`: `el.role = 'user'`), which is the window before component-register
-  // installs its own (non-reflecting) per-instance accessor in initializeProps. We
-  // shadow the native accessor on the element prototype with a plain non-reflecting
-  // one, so setting the property only STORES the value (component-register still
-  // reads it back for styling) and never touches a host attribute.
-  const NON_REFLECTING = ['role'];
-
   // Every element gets a `theme` property/attribute. It drives a `.dark` class on
   // an inner wrapper, which the injected kit CSS already styles — so dark mode
   // works in standalone Shadow-DOM usage with no token duplication.
@@ -178,7 +305,17 @@ export function defineWebComponent<P extends Record<string, unknown>, E = Record
     ...propDefaults,
   };
 
-  const Ctor = customElement(tag, defaults, (props: typeof defaults, options: { element: object }) => {
+  // Props that NAME a reflected global IDL accessor (today, across all 80 elements:
+  // `role` on kai-message, `hidden` on kai-resizable-item, `autofocus` on
+  // kai-confirm). Unlike RESERVED (which throws), these are legitimate domain props
+  // — `role` is the SPEAKER, `hidden` and `autofocus` mean what they say — and they
+  // stay usable, but the native accessor must not be the one that receives them.
+  // See defineWithNonReflectingProps for what the native setter does to the author's
+  // markup if it is, and why the shadowing has to be in place before the registry
+  // sees the class. RESERVED names never get here; they already threw above.
+  const shadowedProps = Object.keys(defaults).filter((key) => reflectedGlobalPropNames().has(key));
+
+  const renderFacade = (props: typeof defaults, options: { element: object }) => {
     const element = options.element as HTMLElement;
     let portalNode!: HTMLDivElement;
 
@@ -249,30 +386,18 @@ export function defineWebComponent<P extends Record<string, unknown>, E = Record
         </div>
       </>
     );
-  });
+  };
 
-  // Shadow any reflected native IDL accessor this element re-uses as a prop (see
-  // NON_REFLECTING) with a plain, non-reflecting store on the element prototype.
-  // This must live on the prototype (not the instance) so it is already in place
-  // when the value is set before connectedCallback, the window in which the native
-  // setter would otherwise reflect it to a host attribute. component-register reads
-  // the property back during initializeProps to seed the styling prop, and later
-  // shadows this with its own (also non-reflecting) per-instance accessor.
+  const { result: Ctor, handled } = defineWithNonReflectingProps(tag, shadowedProps, () =>
+    customElement(tag, defaults, renderFacade),
+  );
+
+  // Belt and braces for the one path the wrap cannot see: if `customElements.define`
+  // was never reached for this tag (a registry that defines lazily, or a future
+  // solid-element that stops calling it synchronously), install on the returned class
+  // instead. That is the OLD, too-late timing — it still protects every element
+  // constructed from here on, it just cannot rescue an already-upgraded one. Skipped
+  // in the normal case, where the accessors are already on this same prototype.
   const proto = (Ctor as unknown as { prototype?: object } | undefined)?.prototype;
-  if (proto) {
-    for (const key of NON_REFLECTING) {
-      if (!(key in defaults)) continue;
-      const store = Symbol(`kai-prop:${key}`);
-      Object.defineProperty(proto, key, {
-        get(this: Record<symbol, unknown>) {
-          return this[store];
-        },
-        set(this: Record<symbol, unknown>, value: unknown) {
-          this[store] = value;
-        },
-        enumerable: true,
-        configurable: true,
-      });
-    }
-  }
+  if (!handled && proto) installNonReflectingProps(proto, shadowedProps);
 }

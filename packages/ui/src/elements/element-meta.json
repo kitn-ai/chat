@@ -4623,7 +4623,7 @@
         "type": "undefined | \"user\" | \"assistant\"",
         "optional": true,
         "scalar": true,
-        "description": "Convenience for simple cases when not passing a `message` object.",
+        "description": "Who is speaking: `'user'` or `'assistant'`. Convenience for simple cases when not passing a `message` object. This is the SEMANTIC role of the message, not an ARIA role — and the name collides with the global ARIA `role` attribute, which is why the facade lifts it off the host (see `liftRoleOffHost`). Neither speaker is a valid ARIA role, so a `role=\"user\"` left on `<kai-message>` is a CRITICAL axe `aria-roles` violation. The accessible role lives on the row inside the shadow root instead: `role=\"article\"` plus an `aria-label` naming the speaker, matching the SolidJS `<Message>` component.",
         "default": "'assistant'",
         "displayType": "undefined | \"user\" | \"assistant\""
       },
@@ -6220,7 +6220,20 @@
         "displayDetail": "{ maximized: false | true }"
       }
     ],
-    "methods": [],
+    "methods": [
+      {
+        "name": "maximize",
+        "params": "index: number",
+        "returns": "void",
+        "description": "Imperatively maximize the item at `index` (thin wrapper over `maximizedIndex`)."
+      },
+      {
+        "name": "restore",
+        "params": "",
+        "returns": "void",
+        "description": "Imperatively restore from the maximized layout."
+      }
+    ],
     "composedFrom": [
       {
         "name": "ResizableHandle",

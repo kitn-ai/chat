@@ -89,7 +89,7 @@ defineWebComponent<GroupProps, GroupEvents>('kai-resizable', {
   orientation: 'horizontal',
   maximizedIndex: null,
   handle: 'line',
-}, (props, { element, dispatch }) => {
+}, (props, { element, dispatch, expose }) => {
   const [items, setItems] = createSignal<ItemInfo[]>([]);
   const orientation = (): Orientation => (props.orientation === 'vertical' ? 'vertical' : 'horizontal');
 
@@ -410,15 +410,19 @@ defineWebComponent<GroupProps, GroupEvents>('kai-resizable', {
 
     // --- Task 3: imperative host methods + declarative maximizedIndex prop ---
 
-    // Imperative host API (assigned onto the element). resizable.globals.d.ts
-    // means to type this, but its declaration loses to the generated one in
-    // element-types.d.ts — see the header there. Hence the cast below.
-    const host = element as unknown as { maximize(i: number): void; restore(): void };
-    host.maximize = (i: number) => {
-      const it = items()[i]?.el;
-      if (it) maximizeItem(it);
-    };
-    host.restore = () => restore();
+    // Imperative host API. Routed through `expose()` like every other element's,
+    // so gen-element-api.mjs sees it and the generated element interface carries
+    // `maximize`/`restore` — a direct assignment onto `element` was invisible to
+    // the extractor and needed an `as unknown as` cast to type-check here.
+    expose({
+      /** Imperatively maximize the item at `index` (thin wrapper over `maximizedIndex`). */
+      maximize: (index: number) => {
+        const it = items()[index]?.el;
+        if (it) maximizeItem(it);
+      },
+      /** Imperatively restore from the maximized layout. */
+      restore: () => restore(),
+    });
 
     // Declarative maximizedIndex → maximize/restore. Skip the initial null run.
     createEffect(

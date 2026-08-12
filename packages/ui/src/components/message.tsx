@@ -16,14 +16,55 @@ import type { CardComponentMap } from "../primitives/card-registry";
 
 // --- Message ---
 
-export interface MessageProps extends JSX.HTMLAttributes<HTMLDivElement> {
+/** Who is speaking in a message row. This is the SEMANTIC role of the message,
+ *  not an ARIA role — see `MessageProps['role']`. */
+export type MessageRole = 'user' | 'assistant' | 'system';
+
+/** The accessible name given to a row that declares a speaker. `role="article"`
+ *  supports naming; the bare `<div>` a role-less `<Message>` renders does not,
+ *  so the label is only attached alongside that role. */
+const MESSAGE_ROLE_LABEL: Record<MessageRole, string> = {
+  user: 'User message',
+  assistant: 'Assistant message',
+  system: 'System message',
+};
+
+export interface MessageProps extends Omit<JSX.HTMLAttributes<HTMLDivElement>, 'role'> {
   children: JSX.Element;
+  /** Who is speaking: `'user'`, `'assistant'` or `'system'`.
+   *
+   *  This SHADOWS the inherited ARIA `role` attribute on purpose, and is the
+   *  reason `JSX.HTMLAttributes` is `Omit`ted above. Before this existed, `role`
+   *  resolved to ARIA and was spread straight onto the row, so `<Message
+   *  role="user">` shipped `role="user"` on a div — not a valid ARIA role, and a
+   *  critical axe `aria-roles` violation ("Role must be one of the valid ARIA
+   *  roles: user") on every message that used the prop. Chromium discards the
+   *  unknown token and computes `generic`, so the damage was a failed a11y audit
+   *  and a row with no accessible role or name at all, not a mis-announced one.
+   *
+   *  It is now consumed here and never reaches the DOM. What the row gets
+   *  instead is a VALID ARIA role that can carry a name — `role="article"` plus
+   *  an `aria-label` naming the speaker — and `data-role` for styling and
+   *  querying. Omit the prop and the row stays an unlabelled `<div>`, exactly as
+   *  before, so the many role-less call sites are untouched.
+   *
+   *  The trade-off: the row's ARIA role can no longer be set through this prop.
+   *  Pass `aria-label` (or any other ARIA attribute) to override the default
+   *  naming — the spread below still wins over what this computes. */
+  role?: MessageRole;
 }
 
 function Message(props: MessageProps) {
-  const [local, rest] = splitProps(props, ["children", "class"]);
+  const [local, rest] = splitProps(props, ["children", "class", "role"]);
   return (
-    <div part="row" class={cn("flex items-start gap-3", local.class)} {...rest}>
+    <div
+      part="row"
+      class={cn("flex items-start gap-3", local.class)}
+      data-role={local.role}
+      role={local.role ? 'article' : undefined}
+      aria-label={local.role ? MESSAGE_ROLE_LABEL[local.role] : undefined}
+      {...rest}
+    >
       {local.children}
     </div>
   );
@@ -32,8 +73,13 @@ function Message(props: MessageProps) {
 // --- MessageAvatar ---
 
 export interface MessageAvatarProps {
-  src: string;
-  alt: string;
+  /** Avatar image URL. Optional: with no `src` the component renders `fallback`
+   *  (initials), which is the whole point of having a fallback — requiring `src`
+   *  forced `<MessageAvatar src="" …/>` at every initials-only call site. */
+  src?: string;
+  /** Alt text for the image. Only meaningful alongside `src`; defaults to `''`
+   *  so an avatar stays decorative rather than announcing a filename. */
+  alt?: string;
   fallback?: string;
   class?: string;
 }
@@ -56,7 +102,7 @@ function MessageAvatar(props: MessageAvatarProps) {
       >
         <img
           src={props.src}
-          alt={props.alt}
+          alt={props.alt ?? ''}
           class="h-full w-full object-cover"
         />
       </Show>

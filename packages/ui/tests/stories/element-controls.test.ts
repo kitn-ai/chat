@@ -63,8 +63,14 @@ describe('argTypesFor', () => {
       // Union member order tracks the TS checker's global type-id ordering, which
       // shifts when the element set changes (e.g. kai-button's `size` also defines
       // 'sm'/'lg'). A select control's option order is cosmetic, so assert the SET.
-      expect(result['proseSize'].control).toEqual({ type: 'select' });
-      expect([...result['proseSize'].options].sort()).toEqual(['base', 'lg', 'sm', 'xs']);
+      //
+      // argTypesFor returns Record<string, unknown> (a storybook argTypes bag), so
+      // reaching INSIDE an entry needs a narrowing. Every other case here compares
+      // the whole entry with toEqual and needs none. The cast claims nothing the
+      // two lines below do not immediately check.
+      const proseSize = result['proseSize'] as { control: unknown; options: unknown[] };
+      expect(proseSize.control).toEqual({ type: 'select' });
+      expect([...proseSize.options].sort()).toEqual(['base', 'lg', 'sm', 'xs']);
     });
 
     it('codeTheme → text control', () => {

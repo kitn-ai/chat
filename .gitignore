@@ -18,6 +18,10 @@ packages/ui/tests/e2e/__screenshots__/pill-skins/
 # IVP screenshots (non-deterministic, regenerated on each run)
 spike-screens/
 
+# Emitted-scaffold module the live card test writes, imports and runs
+# (rewritten per run by emitted-card-path.live.test.ts; only survives a crash)
+packages/ui/.tmp-emitted-scaffold/
+
 # NX local cache
 .nx/cache
 .nx/workspace-data

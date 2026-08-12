@@ -10,7 +10,14 @@ import { defineConfig } from 'vite';
 import solidPlugin from 'vite-plugin-solid';
 import { resolve } from 'node:path';
 import { transform } from 'esbuild';
-import type { Plugin, OutputBundle, OutputChunk } from 'vite';
+// Rollup's output types come through vite's `Rollup` namespace re-export, NOT as
+// named exports: vite imports OutputBundle/OutputChunk from rollup for its own
+// declarations and never re-exports them, so `import type { OutputBundle } from
+// 'vite'` is TS2459 ("declares it locally, but it is not exported") and `chunk`
+// silently degrades to unknown. Same fix in vite.config.elements.ts.
+import type { Plugin, Rollup } from 'vite';
+type OutputBundle = Rollup.OutputBundle;
+type OutputChunk = Rollup.OutputChunk;
 
 // Vite 6 skips minification for `build.lib` + ES builds; re-minify every chunk in
 // generateBundle (after all renderChunk hooks) with esbuild.

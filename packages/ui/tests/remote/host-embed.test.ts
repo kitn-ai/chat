@@ -109,7 +109,13 @@ test('updateContext after error does not throw and does not buffer', () => {
   window.dispatchEvent(new MessageEvent('message', { data: pack({ dir: 'up', kind: 'ready', acceptedVersion: '1' }), origin: 'https://p.example', source: contentWindow as unknown as Window }));
   expect(handle.state()).toBe('open');
   // Drive into error via a fault frame.
-  window.dispatchEvent(new MessageEvent('message', { data: pack({ dir: 'up', kind: 'fault', code: 'render-error', message: 'boom' }), origin: 'https://p.example', source: contentWindow as unknown as Window }));
+  // 'render-failed' is the code provider-runtime.ts actually posts when a card
+  // throws — the only fault a host sees from a rendering provider. This line read
+  // 'render-error' until 2026-08-12, which has never been a WireFaultCode member
+  // in any revision of src/remote/wire.ts; the test passed anyway because the
+  // host's fault branch only interpolates the code into a message and never
+  // validates it. Nothing here depends on the string, so use the real one.
+  window.dispatchEvent(new MessageEvent('message', { data: pack({ dir: 'up', kind: 'fault', code: 'render-failed', message: 'boom' }), origin: 'https://p.example', source: contentWindow as unknown as Window }));
   expect(handle.state()).toBe('error');
   const countBefore = posted.length;
   // updateContext in error state must not throw and must not queue anything.

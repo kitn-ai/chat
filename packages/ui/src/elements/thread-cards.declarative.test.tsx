@@ -18,7 +18,7 @@ afterEach(() => {
 
 describe('<kai-thread> cardTypes seam', () => {
   it('renders a registered custom card type from a message part', async () => {
-    const el = document.createElement('kai-thread') as HTMLElement & Record<string, unknown>;
+    const el = document.createElement('kai-thread') as unknown as HTMLElement & Record<string, unknown>;
     el.cardTypes = { 'my-widget': 'my-widget-el' };
     el.messages = [{
       id: 'm1', role: 'assistant',
@@ -37,7 +37,7 @@ describe('<kai-thread> cardTypes seam', () => {
   });
 
   it('overriding a BUILT-IN type renders the consumer tag, not the built-in tag', async () => {
-    const el = document.createElement('kai-thread') as HTMLElement & Record<string, unknown>;
+    const el = document.createElement('kai-thread') as unknown as HTMLElement & Record<string, unknown>;
     el.cardTypes = { confirm: 'my-confirm-el' };
     el.messages = [{
       id: 'm1', role: 'assistant',
@@ -53,7 +53,7 @@ describe('<kai-thread> cardTypes seam', () => {
   });
 
   it('falls through to CardFallback for an UNREGISTERED card type', async () => {
-    const el = document.createElement('kai-thread') as HTMLElement & Record<string, unknown>;
+    const el = document.createElement('kai-thread') as unknown as HTMLElement & Record<string, unknown>;
     el.messages = [{
       id: 'm1', role: 'assistant',
       parts: [{ type: 'card', envelope: { type: 'never-registered', id: 'c1', data: {} } }],

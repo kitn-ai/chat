@@ -30,12 +30,26 @@
 //
 // SCOPE
 // -----
-// FRONT END: 6 archetypes × 9 integrations × 8 TS frameworks = 432 compiled
+// The integration and archetype axes are DERIVED from `listIntegrations()` /
+// `listArchetypes()` at run time (see `loadCatalogAxes`). They used to be
+// hand-written arrays, which made this gate one-directional: adding a catalog
+// entry did NOT add coverage and nothing failed to say so — `openai` and
+// `anthropic` both landed in the catalog and compiled ZERO times while this
+// script printed success at its old 432/99 counts. Registering an integration
+// now moves the cell counts by itself.
+//
+// Cell counts are therefore NOT fixed, and the figures below are illustrative of
+// the current catalog rather than a target to hold: writing an expected count
+// here would restore the same coupling, since the hand that adds an integration
+// would be the hand that updates the number. The script prints what it actually
+// ran; read that, not this comment.
+//
+// FRONT END: 6 archetypes × 11 integrations × 8 TS frameworks = 528 compiled
 // cells, at one placement. `placement` is the fourth axis and is left at
 // 'full-page' on purpose: it only ever changes an inline CSS string, so the
 // extra 3x compiles the same types again.
 //
-// ROUTES: 9 integrations × 11 frameworks = 99 cells, of which 77 reach tsc: the
+// ROUTES: 11 integrations × 11 frameworks = 121 cells, of which 99 reach tsc: the
 // 11 `mock` cells carry no backend by design (it streams in the browser) and the
 // 11 `pydantic-ai` cells are Python, so they go to `pythonCheck` instead. The
 // framework axis is WIDER here than the front end's eight because `express`,
@@ -83,6 +97,12 @@
 // `solidPartCoverageCheck` asserts a branch per variant, with the variant list
 // derived from the union rather than restated. See its own comment for how that
 // shipped broken.
+//
+// The GENERATIVE-UI CARD round trip is the same class of hole one level up, and
+// `cardRoundTripCheck` covers it. Cards are three pieces with no type relating
+// them — the registry, `cardTools()`, `cardFromToolCall()` — and any two of them
+// compile perfectly while nothing ever reaches the screen. Derived from the
+// scaffolder's own `cardEmitPlan` over the full matrix, never from a count.
 //
 // BLOCK (2), THE BACKEND ROUTE, IS COMPILED TOO — see `routeCheck` below.
 //
@@ -193,7 +213,21 @@ const KEEP = process.argv.includes('--keep');
 const filterIdx = process.argv.indexOf('--filter');
 const FILTER = filterIdx > -1 ? process.argv[filterIdx + 1] : null;
 
-const ARCHETYPES = ['drop-in-chat', 'support-widget', 'knowledge-base', 'agentic', 'workspace', 'voice'];
+/**
+ * The two catalog axes, DERIVED from the registry in `main()` — never listed here.
+ *
+ * These were hand-written arrays, and that made the gate one-directional in the
+ * worst way: adding a catalog entry did not add coverage, and nothing failed to
+ * say so. `openai` and `anthropic` were both added to the catalog and compiled
+ * ZERO times while this script reported success at its old 432/99 counts. A gate
+ * that covers a list instead of a system is indistinguishable from a passing one.
+ *
+ * They stay `let` + empty because every reader is inside a function `main()`
+ * calls after `loadCatalogAxes()` has filled them; nothing runs at module scope.
+ * `assertCatalogAxes()` refuses to proceed on an empty axis, so a registry that
+ * failed to load degrades to a loud failure rather than a zero-cell green run.
+ */
+let ARCHETYPES = [];
 /**
  * EVERY integration, not a representative pair.
  *
@@ -212,18 +246,11 @@ const ARCHETYPES = ['drop-in-chat', 'support-widget', 'knowledge-base', 'agentic
  *
  * The other axis, `placement`, is deliberately left at one value: it only ever
  * changes an inline CSS string, so the extra 3x buys no type coverage.
+ *
+ * Derived from `listIntegrations()`, so "every integration" is a fact rather
+ * than a claim — see the note on ARCHETYPES above.
  */
-const INTEGRATIONS = [
-  'openrouter',
-  'vercel-ai-sdk',
-  'langgraph',
-  'cloudflare',
-  'ollama',
-  'mastra',
-  'pi',
-  'pydantic-ai',
-  'mock',
-];
+let INTEGRATIONS = [];
 /**
  * TS-visible frameworks. `html` is one of them now.
  *
@@ -748,6 +775,165 @@ async function solidPartCoverageCheck(scaffold) {
   console.log(
     `  ✓ ${checked} solid scaffolds: renderPart branches on all ${variants.length} MessagePart variants ` +
       `(${variants.join(', ')}), derived from the union`,
+  );
+}
+
+/**
+ * The generative-UI card ROUND TRIP, which tsc cannot judge either.
+ *
+ * Cards are three pieces that only work together — a `createCardRegistry` the app
+ * declares, `cardTools()` that turns it into the tool definitions the model is
+ * offered, and `cardFromToolCall()` in the loop that turns the model's answer back
+ * into an envelope — and any TWO of them compile perfectly while the third being
+ * absent means no card ever reaches the screen. There is no type relating them.
+ * That is the same class as `solidPartCoverageCheck`: valid code, missing
+ * behaviour, invisible to the compiler.
+ *
+ * WHAT IT IS DERIVED FROM, AND WHY THAT MATTERS
+ * --------------------------------------------
+ * The expectation per cell comes from the scaffolder's own `cardEmitPlan`, over
+ * the full ARCHETYPES x INTEGRATIONS x FRAMEWORKS product. No count is written
+ * down here: "the agentic archetype, 8 integrations, 8 frameworks = 64" would go
+ * stale the day cards move or an integration lands, and would pass while doing so.
+ * The realistic defect this catches is one of the EIGHT framework renderers not
+ * following the decision — they are eight separate hand-written emitters.
+ *
+ * A plan-driven check alone would be circular (a wrong plan and a wrong emitter
+ * agree), so there are two assertions that consult NO plan:
+ *
+ *   · every scaffold that declares a `tools` array must also call `cardTools`.
+ *     A tools array handed to a model with no card tool in it is the silent hole:
+ *     the model is never told a card exists, so it never emits one, and nothing
+ *     anywhere says why. This is what fails when a new integration forwards tools
+ *     without declaring a `clientToolFormat`.
+ *   · at least one cell must expect cards and at least one must not. A predicate
+ *     stuck at `false` would make every other assertion here vacuously true, which
+ *     is precisely the shape of check this repo keeps shipping.
+ *
+ * NOT sliced at a delimiter and half-checked. `frontEnd()` cuts block (2) off, and
+ * that cut is why 65 of 77 routes went uncompiled for months, so the negative
+ * assertion below runs over the WHOLE scaffold text: card code appearing under the
+ * BACKEND ROUTE heading of an archetype that should have none would be caught, not
+ * sliced away.
+ */
+const CARD_MARKERS = {
+  registry: 'createCardRegistry(',
+  tools: 'cardTools(cards, { provider:',
+  fromToolCall: 'cardFromToolCall(',
+  import: "from '@kitn.ai/ui/schemas'",
+};
+/** Every provider envelope `cardTools` can project into. Widening this is a decision. */
+const CARD_PROVIDERS = ['openai', 'anthropic', 'jsonschema'];
+
+async function cardRoundTripCheck(scaffold, cardEmitPlan) {
+  const failures = [];
+  let checked = 0;
+  let withCards = 0;
+  let withoutCards = 0;
+  let withTools = 0;
+
+  for (const useCase of ARCHETYPES) {
+    for (const integration of INTEGRATIONS) {
+      const plan = cardEmitPlan(useCase, integration);
+      if (!plan) {
+        cleanup();
+        fail(
+          `cardEmitPlan('${useCase}', '${integration}') returned null — the archetype or the\n` +
+            '  integration is not in the registry, so this check would silently skip the cell.',
+        );
+      }
+      for (const framework of FRAMEWORKS) {
+        const label = `${useCase}__${integration}__${framework}`;
+        if (FILTER && !label.includes(FILTER)) continue;
+        checked++;
+        const out = await scaffold.handler({ useCase, integration, placement: 'full-page', framework });
+        const whole = out.content[0].text;
+        // Comments TALK about cards at length, and a claim standing in for the code
+        // is the exact defect under test — so whole-line `//` and `<!-- -->` prose
+        // goes first, in both the JS and the markup halves.
+        const front = frontEnd(whole)
+          .replace(/^[ \t]*\/\/.*$/gm, '')
+          .replace(/<!--[\s\S]*?-->/g, '');
+
+        if (plan.cards) {
+          withCards++;
+          for (const [what, needle] of Object.entries(CARD_MARKERS)) {
+            if (what === 'tools' && !plan.tools) continue;
+            if (!front.includes(needle)) {
+              failures.push(
+                `${label}: emits no \`${needle}\` (${what}) — the card round trip is incomplete, ` +
+                  'and every piece of it compiles fine on its own',
+              );
+            }
+          }
+          // The two client properties, which are what puts an arriving card on
+          // screen. Solid renders the components directly, so it wires
+          // <CardRenderer types/schemas> instead of <kai-chat>'s cardTypes.
+          const wiring =
+            framework === 'solid'
+              ? ['types={cards.components}', 'schemas={cards.validationSchemas}']
+              : ['cards.tags', 'cards.validationSchemas'];
+          for (const needle of wiring) {
+            if (!front.includes(needle))
+              failures.push(`${label}: the registry is declared but \`${needle}\` is never wired to the view`);
+          }
+          // An object set as an ATTRIBUTE stringifies to "[object Object]" and
+          // registers nothing, silently. Hard contract, stated in CLAUDE.md.
+          for (const prop of ['cardTypes', 'cardSchemas']) {
+            if (new RegExp(`(?:^|\\s)${prop}="`, 'm').test(front))
+              failures.push(`${label}: ${prop} bound as an ATTRIBUTE — an object stringifies to "[object Object]"`);
+          }
+        } else {
+          withoutCards++;
+          // Over the WHOLE text, not the sliced front end: see the header.
+          const stripped = whole.replace(/^[ \t]*\/\/.*$/gm, '').replace(/<!--[\s\S]*?-->/g, '');
+          for (const needle of [CARD_MARKERS.registry, CARD_MARKERS.fromToolCall]) {
+            if (stripped.includes(needle))
+              failures.push(`${label}: emits \`${needle}\` for an archetype that bears no cards`);
+          }
+        }
+
+        // Plan-free. A tools array with no card tool in it is a model that is never
+        // told a card exists.
+        const declaresTools = /^\s*const tools = \[/m.test(front);
+        if (declaresTools) {
+          withTools++;
+          const m = front.match(/cardTools\(cards, \{ provider: '([a-z]+)' \}\)/);
+          if (!m) {
+            failures.push(
+              `${label}: declares a \`tools\` array and never calls cardTools(). The model is offered ` +
+                'no card tool, so it can never emit one and nothing says why. If this integration is ' +
+                'new, set `clientToolFormat` on it to the envelope its ROUTE expects — read the route ' +
+                'first: one that converts the array server-side wants the shape it converts FROM.',
+            );
+          } else if (!CARD_PROVIDERS.includes(m[1])) {
+            failures.push(`${label}: cardTools provider '${m[1]}' is not one of ${CARD_PROVIDERS.join(', ')}`);
+          }
+        }
+      }
+    }
+  }
+
+  // Anti-vacuity. Both directions have to be exercised, or a predicate stuck at one
+  // value would make everything above pass while checking nothing.
+  if (!FILTER) {
+    if (withCards === 0)
+      failures.push('no cell expects cards at all — cardEmitPlan is stuck at false and every assertion above is vacuous');
+    if (withoutCards === 0)
+      failures.push('every cell expects cards — the negative half of this check never runs');
+    if (withTools === 0)
+      failures.push('no cell declares a `tools` array — the plan-free half of this check never runs');
+  }
+
+  if (failures.length) {
+    for (const f of failures) console.log(`  ✗ ${f}`);
+    cleanup();
+    fail(`${failures.length} card round-trip problem(s) across ${checked} scaffolds.`);
+  }
+  console.log(
+    `  ✓ ${checked} scaffolds: ${withCards} emit the full card round trip (registry -> cardTools -> ` +
+      `cardFromToolCall -> cardTypes/cardSchemas), ${withoutCards} emit none of it, and all ${withTools} ` +
+      'that declare a tools array put card tools in it',
   );
 }
 
@@ -1332,12 +1518,54 @@ async function routeCheck(scaffold) {
   console.log('  ✓ every emitted backend route compiles under its real host tsconfig');
 }
 
+/**
+ * Fill the two catalog axes from the registry itself.
+ *
+ * Bundled with esbuild for the same reason the scaffolder is: it is TypeScript
+ * importing TypeScript, and this script is plain node.
+ *
+ * The counts are PRINTED, not asserted against a number written here. A written
+ * expectation would have to be edited by the same hand that adds an integration
+ * — which is exactly the coupling that let two of them land uncovered. What is
+ * asserted is that the axes are non-empty and that the registry is the source:
+ * if the registry grows, the printed cell counts move on their own.
+ */
+async function loadCatalogAxes(esbuild) {
+  const bundle = join(tmp, 'registry.bundle.mjs');
+  await esbuild.build({
+    entryPoints: [resolve(ROOT, 'src/agent-tooling/registry.ts')],
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    outfile: bundle,
+    logLevel: 'error',
+  });
+  const mod = await import(pathToFileURL(bundle).href);
+  if (typeof mod.listIntegrations !== 'function' || typeof mod.listArchetypes !== 'function')
+    fail(
+      'the catalog no longer exports `listIntegrations` / `listArchetypes`.\n' +
+        '  This matrix derives its integration and archetype axes from them. Refusing to fall\n' +
+        '  back to a hand-written list: that is the exact defect that let `openai` and\n' +
+        '  `anthropic` compile zero times while this gate reported success.',
+    );
+  INTEGRATIONS = mod.listIntegrations().map((i) => i.id);
+  ARCHETYPES = mod.listArchetypes().map((a) => a.id);
+  // Anti-vacuity. An empty axis makes every matrix below a zero-cell green run.
+  if (INTEGRATIONS.length === 0) fail('the registry lists no integrations — every matrix here would be empty.');
+  if (ARCHETYPES.length === 0) fail('the registry lists no archetypes — every matrix here would be empty.');
+  console.log(
+    `  · catalog axes from the registry: ${INTEGRATIONS.length} integrations × ${ARCHETYPES.length} archetypes ` +
+      `(${INTEGRATIONS.join(', ')})`,
+  );
+}
+
 async function main() {
   console.log('  · bundling the scaffolder with esbuild');
   const bundle = join(tmp, 'scaffold.bundle.mjs');
   // The JS API, not the .bin shim: pnpm does not always link binaries where a
   // hard-coded path expects them.
   const esbuild = await import('esbuild');
+  await loadCatalogAxes(esbuild);
   await esbuild.build({
     entryPoints: [resolve(ROOT, 'src/agent-tooling/mcp/tools/scaffold.ts')],
     bundle: true,
@@ -1346,12 +1574,20 @@ async function main() {
     outfile: bundle,
     logLevel: 'error',
   });
-  const { scaffold } = await import(pathToFileURL(bundle).href);
+  const { scaffold, cardEmitPlan } = await import(pathToFileURL(bundle).href);
+  if (typeof cardEmitPlan !== 'function')
+    fail(
+      'the scaffolder no longer exports `cardEmitPlan`.\n' +
+        '  cardRoundTripCheck derives its per-cell expectation from it rather than from a\n' +
+        '  hard-coded archetype list. Refusing to skip: a check that quietly stops running\n' +
+        '  is worse than no check.',
+    );
 
   for (const project of Object.keys(PROJECTS)) selfTest(project);
   await htmlStructureCheck(scaffold);
   await angularStructureCheck(scaffold);
   await solidPartCoverageCheck(scaffold);
+  await cardRoundTripCheck(scaffold, cardEmitPlan);
 
   const cases = [];
   for (const useCase of ARCHETYPES)

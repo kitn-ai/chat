@@ -66,16 +66,22 @@ function FileUpload(props: FileUploadProps) {
       }
     };
 
-    window.addEventListener('dragenter', handleDragIn);
-    window.addEventListener('dragleave', handleDragOut);
-    window.addEventListener('dragover', handleDrag);
-    window.addEventListener('drop', handleDrop);
+    // Captured at SETUP and closed over, never re-resolved as a global inside
+    // `onCleanup`: cleanup can run after the host removed the DOM globals (a
+    // `kai-*` release is deferred one microtask past detachment, so an
+    // environment teardown gets in between), and a bare `window` there throws.
+    // See tests/components/teardown-without-dom-globals.test.tsx.
+    const win = window;
+    win.addEventListener('dragenter', handleDragIn);
+    win.addEventListener('dragleave', handleDragOut);
+    win.addEventListener('dragover', handleDrag);
+    win.addEventListener('drop', handleDrop);
 
     onCleanup(() => {
-      window.removeEventListener('dragenter', handleDragIn);
-      window.removeEventListener('dragleave', handleDragOut);
-      window.removeEventListener('dragover', handleDrag);
-      window.removeEventListener('drop', handleDrop);
+      win.removeEventListener('dragenter', handleDragIn);
+      win.removeEventListener('dragleave', handleDragOut);
+      win.removeEventListener('dragover', handleDrag);
+      win.removeEventListener('drop', handleDrop);
     });
   });
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { scaffold } from './tools/scaffold';
+import { cardEmitPlan, scaffold } from './tools/scaffold';
 import { getIntegration, listIntegrations } from '../registry';
 // The real encoders, used to prove WHY the fabricated sample seed had to go:
 // one of them throws on it, the other quietly sends it.
@@ -2365,8 +2365,14 @@ describe('real-backend scaffolds send what the panel needs and survive a failure
       expect(route, `${integration}: route never reads tools`).toMatch(
         /const \{[^}]*\btools\b[^}]*\} = await readChatRequest\(request\);/,
       );
+      // `[\s\S]*?` rather than `[^}]*`: a route that CONVERTS the body before
+      // sending it (anthropic maps OpenAI tool schemas onto `input_schema`) has
+      // nested braces between `JSON.stringify({` and `tools`, which a
+      // no-close-brace class cannot cross. It stayed non-greedy so the match
+      // still has to find `tools` inside the upstream body and not somewhere
+      // later in the file.
       expect(route, `${integration}: route never sends tools`).toMatch(
-        /JSON\.stringify\(\{[^}]*\btools\b[^}]*\}\)/,
+        /JSON\.stringify\(\{[\s\S]*?\btools\b[\s\S]*?\}\)/,
       );
     },
   );
@@ -2764,7 +2770,18 @@ describe('scaffold — solid', () => {
       expect(f, `no partAs branch for ${kind}`).toContain(`partAs(part(), '${kind}')`);
     }
     expect(f).toContain('<Tool toolPart={p().tool} />');
-    expect(f).toContain('<CardRenderer envelope={p().envelope} />');
+    // The card branch takes the app's registry when there IS one. `agentic` bears
+    // cards, so the render call carries `types`/`schemas` — the Solid half of
+    // <kai-chat>'s cardTypes/cardSchemas. Without them a developer's own card type
+    // draws the fallback and is never validated, which is the whole seam.
+    expect(f).toContain('<CardRenderer');
+    expect(f).toContain('envelope={p().envelope}');
+    expect(f).toContain('types={cards.components}');
+    expect(f).toContain('schemas={cards.validationSchemas}');
+    // An archetype with no registry to hand it still renders every card, plainly.
+    const plain = front(await emit('drop-in-chat'));
+    expect(plain).toContain('<CardRenderer envelope={p().envelope} />');
+    expect(plain).not.toContain('types={cards.components}');
     expect(f).toContain('<Attachment data={fp.attachment}>');
   });
 
@@ -2983,5 +3000,279 @@ describe('scaffold — capability parity across every front-end framework', () =
         .split('=== (3) RUN NOTE ===')[0];
       expect(route, `${framework}: no warning for a Python service`).toContain('will NOT run');
     }
+  });
+});
+
+/**
+ * The generative-UI card round trip.
+ *
+ * These assert WORDING, which is all a string-literal emitter can be asserted on
+ * from here: `verify:scaffold` compiles the same output under eight real consumer
+ * tsconfigs, and `emitted-card-path.live.test.ts` actually RUNS it against a
+ * canned model stream and reads the card out of the shadow DOM. Three layers,
+ * because each one is blind to the other two — a scaffold can read correctly,
+ * compile cleanly, and still render nothing.
+ *
+ * The one thing asserted here that neither other layer can see is the RESTATEMENT
+ * ban: the emitted code must CALL the kit's functions and must never write a card
+ * schema out again. A restated schema compiles and runs perfectly, and is the
+ * exact drift this whole contract exists to prevent.
+ */
+describe('scaffold — the card round trip is emitted, never restated', () => {
+  const FRONTENDS = ['html', 'react', 'next', 'vue', 'svelte', 'angular', 'solid', 'tanstack-start'] as const;
+
+  const front = async (framework: string, useCase = 'agentic', integration = 'openrouter') => {
+    const out = await scaffold.handler({ useCase, integration, placement: 'full-page', framework });
+    return (out.content as { type: string; text: string }[])[0].text.split('=== (2) BACKEND ROUTE ===')[0];
+  };
+
+  it('every framework emits registry -> cardTools -> cardFromToolCall, calling the kit', async () => {
+    for (const framework of FRONTENDS) {
+      const code = await front(framework);
+      expect(code, `${framework}: no registry`).toContain('createCardRegistry({');
+      expect(code, `${framework}: no generated tool defs`).toContain("cardTools(cards, { provider: 'openai' })");
+      expect(code, `${framework}: the loop never maps a card tool call`).toContain(
+        'cardFromToolCall(call.name, call.input ?? {}, { id: call.id })',
+      );
+      expect(code, `${framework}: the card is never added to the stream`).toContain('stream.addCard(card);');
+      expect(code, `${framework}: no import`).toContain("from '@kitn.ai/ui/schemas'");
+    }
+  });
+
+  it('nothing about a card SHAPE is restated — the schema stays the schema', async () => {
+    // The five-copies problem this contract exists to kill. A scaffold that spelled
+    // out confirm's fields would compile, run, render, and then drift the first time
+    // the card contract moved, with nothing anywhere to say so.
+    for (const framework of FRONTENDS) {
+      const code = await front(framework);
+      // Confirm's own property names, as they appear in confirm.schema.json. `search`
+      // legitimately writes `type: 'object'` / `required: [...]` for the ONE tool the
+      // scaffold hand-declares, so those generic keywords are not the tell; the card's
+      // field names are.
+      for (const field of ['dismissible', 'x-kai-control', 'ConfirmCardData']) {
+        expect(code, `${framework}: restates confirm's \`${field}\``).not.toContain(field);
+      }
+      // And the tool NAME comes off toolNameForCardType, never a literal.
+      expect(code, `${framework}: hard-codes a kai_ tool name`).not.toMatch(/name: 'kai_/);
+    }
+  });
+
+  it('the two card props are JS PROPERTIES, never attributes', async () => {
+    for (const framework of FRONTENDS) {
+      const code = await front(framework);
+      // Solid renders the components directly, so its half of the contract is
+      // <CardRenderer types/schemas> rather than <kai-chat>'s cardTypes/cardSchemas.
+      const wiring =
+        framework === 'solid'
+          ? ['types={cards.components}', 'schemas={cards.validationSchemas}']
+          : ['cards.tags', 'cards.validationSchemas'];
+      for (const needle of wiring) expect(code, `${framework}: ${needle} unwired`).toContain(needle);
+      for (const prop of ['cardTypes', 'cardSchemas']) {
+        expect(code, `${framework}: ${prop} as an attribute`).not.toMatch(new RegExp(`(?:^|\\s)${prop}="`, 'm'));
+      }
+    }
+  });
+
+  it('mock emits no card round trip: there is no model to ask for one', async () => {
+    for (const framework of FRONTENDS) {
+      const code = await front(framework, 'agentic', 'mock');
+      expect(code, `${framework}: mock declares a registry`).not.toContain('createCardRegistry(');
+      expect(code, `${framework}: mock maps card tool calls`).not.toContain('cardFromToolCall(');
+    }
+  });
+
+  /**
+   * The catalog-derived half, and the one that survives a new integration.
+   *
+   * `cardTools()` takes `provider` as a REQUIRED argument because the three tool
+   * envelopes are different documents. An integration whose route forwards a tools
+   * array but whose stream format is unmapped would emit a `tools` array with no
+   * card in it: the model is never told a card exists, never emits one, and nothing
+   * anywhere says why. Derived from `listIntegrations()`, so the day the `anthropic`
+   * integration lands this goes red until its envelope is stated.
+   */
+  it('every integration that forwards a tools array has a card-tool provider', async () => {
+    const forwarding = listIntegrations().filter((i) => i.forwardsFromClient.includes('tools'));
+    // Anti-vacuity: if the catalog stopped declaring `tools` anywhere, the loop below
+    // would pass by running zero times.
+    expect(forwarding.length, 'no integration forwards a tools array — this check is vacuous').toBeGreaterThan(0);
+    for (const integration of forwarding) {
+      const plan = cardEmitPlan('agentic', integration.id);
+      expect(plan, `${integration.id}: not in the registry`).not.toBeNull();
+      expect(plan!.tools, `${integration.id}: expected a tools array`).toBe(true);
+      expect(
+        plan!.provider,
+        `${integration.id} forwards a tools array but declares no clientToolFormat, so the scaffold would ` +
+          'offer the model no card tool at all. State the envelope its route expects — and read the route ' +
+          'first: one that CONVERTS the array server-side wants the shape it converts FROM, not its own ' +
+          "provider's (streamFormat is the RESPONSE stream and does not answer this).",
+      ).not.toBeNull();
+      const code = await front('react', 'agentic', integration.id);
+      expect(code, `${integration.id}: wrong provider emitted`).toContain(
+        `cardTools(cards, { provider: '${plan!.provider}' })`,
+      );
+    }
+  });
+
+  it('an integration whose route builds its own tools still wires the client half', async () => {
+    // langgraph owns its tool list server-side (forwardsFromClient is empty), so there
+    // is no client tools array to put card tools in — but an envelope arriving from
+    // that agent still has to draw, so the registry and the loop's mapping stay.
+    const code = await front('react', 'agentic', 'langgraph');
+    expect(code).toContain('createCardRegistry({');
+    expect(code).toContain('cardFromToolCall(');
+    // Asserted on the IMPORT LINE, not on the whole file: the emitted prose names
+    // `cardTools(cards, …)` while explaining what the registry is for, and matching
+    // that would be a comment standing in for the code — in the direction that
+    // makes the test pass for the wrong reason.
+    const imported = code.match(/^import \{(.+)\} from '@kitn\.ai\/ui\/schemas';$/m)?.[1] ?? '';
+    expect(imported, 'nothing to import from @kitn.ai/ui/schemas').toContain('createCardRegistry');
+    expect(imported, 'imported cardTools with nothing to call it on (TS6133 in a stock app)').not.toContain(
+      'cardTools',
+    );
+    expect(code, 'called cardTools with no tools array to put it in').not.toMatch(/\.\.\.cardTools\(/);
+  });
+});
+
+/**
+ * SCAF-8, the half tsc cannot reach: the emitted model id has to be an id the
+ * host that scaffold's own route POSTs to will actually answer.
+ *
+ * WHY A COMPILE PROVES NOTHING HERE. `const model = 'openai/gpt-4o-mini'` and
+ * `const model = 'gpt-4o-mini'` are the same type. The whole matrix in
+ * verify-scaffold-compiles.mjs went green on the first of those while
+ * api.openai.com answered it with a 404 — a scaffold generated for the provider
+ * it names could not run against that provider, and every gate in the repo said
+ * fine. Compilation is not behaviour.
+ *
+ * SO THIS READS THE EMITTED DOCUMENT, BOTH HALVES, and checks them against each
+ * other rather than against a restated table:
+ *   · the id comes out of the FRONT END's `const model = '…'`
+ *   · the host comes out of the BACKEND ROUTE's own `fetch('…')`
+ * Neither is a value this file supplies, so the check cannot pass by agreeing
+ * with itself — the only thing stated here is what each host's id SPACE looks
+ * like, which is the fact that was wrong.
+ *
+ * An unrecognised host is a hard failure, not a skip, for the same reason the
+ * scaffold gate hard-fails an unrecognised runtime label: a new integration that
+ * quietly matched nothing would restore exactly the blind spot this closes.
+ */
+describe("scaffold — the emitted model id belongs to its route's host", () => {
+  /**
+   * Model-id SHAPE per API host. Shape, not a value list: pinning the exact
+   * strings would just restate CLIENT_MODEL_IDS and would go stale on the next
+   * model release, while the id space of a host is the stable fact — OpenRouter
+   * namespaces by vendor, first-party APIs do not, and Anthropic's ids are all
+   * `claude-*`. Getting the SPACE wrong is what 404s.
+   */
+  const HOST_ID_SPACES: {
+    host: string;
+    expected: string;
+    accepts: (id: string) => boolean;
+  }[] = [
+    {
+      host: 'openrouter.ai',
+      expected: "a vendor-prefixed 'vendor/model' slug, e.g. 'openai/gpt-4o-mini'",
+      accepts: (id) => /^[^/\s]+\/[^/\s]+$/.test(id),
+    },
+    {
+      host: 'api.openai.com',
+      // The exact defect: the prefixed form is an OpenRouter slug and this host
+      // 404s it.
+      expected: "a bare id with NO vendor prefix, e.g. 'gpt-4o-mini' (never 'openai/gpt-4o-mini')",
+      accepts: (id) => !id.includes('/') && !id.startsWith('claude-'),
+    },
+    {
+      host: 'api.anthropic.com',
+      expected: "an Anthropic id, e.g. 'claude-opus-5' / 'claude-sonnet-5' / 'claude-haiku-4-5'",
+      accepts: (id) => /^claude-[a-z0-9.-]+$/.test(id),
+    },
+    {
+      host: 'localhost:11434',
+      expected: "a local Ollama tag, e.g. 'llama3.2'",
+      accepts: (id) => !id.includes('/'),
+    },
+  ];
+
+  const emit = async (integrationId: string) => {
+    const out = await scaffold.handler({
+      useCase: 'agentic',
+      integration: integrationId,
+      placement: 'full-page',
+      framework: 'react',
+    });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+    const [frontEnd, backend = ''] = text.split('=== (2) BACKEND ROUTE ===');
+    return { frontEnd, backend };
+  };
+
+  it('every integration that forwards a model emits one valid for the host it POSTs to', async () => {
+    const forwarding = listIntegrations().filter((i) => i.forwardsFromClient.includes('model'));
+    // Anti-vacuity: if the catalog stopped forwarding `model` anywhere, the loop
+    // below would pass by running zero times.
+    expect(forwarding.length, 'no integration forwards a model — this check is vacuous').toBeGreaterThan(0);
+
+    for (const integration of forwarding) {
+      const { frontEnd, backend } = await emit(integration.id);
+
+      const id = frontEnd.match(/const model = '([^']+)'/)?.[1];
+      expect(
+        id,
+        `${integration.id}: declares forwardsFromClient: ['model'] but the scaffold emits no \`const model\` — ` +
+          'the field would be sent as undefined',
+      ).toBeDefined();
+
+      // The host the emitted route really calls, read off its own fetch().
+      const hosts = [...backend.matchAll(/fetch\(\s*['"`]([^'"`]+)['"`]/g)]
+        .map((m) => {
+          try {
+            return new URL(m[1]).host;
+          } catch {
+            return '';
+          }
+        })
+        .filter(Boolean);
+      expect(hosts.length, `${integration.id}: emitted route calls no absolute URL — cannot tell which host`)
+        .toBeGreaterThan(0);
+
+      const space = HOST_ID_SPACES.find((s) => hosts.includes(s.host));
+      expect(
+        space,
+        `${integration.id}: emitted route POSTs to ${hosts.join(', ')}, which has no entry in HOST_ID_SPACES. ` +
+          'Add one stating what that host\'s model ids look like — a host nobody has described is a host whose ' +
+          'ids nothing is checking.',
+      ).toBeDefined();
+
+      expect(
+        space!.accepts(id!),
+        `${integration.id}: emits model id '${id}' but its route POSTs to ${space!.host}, which wants ` +
+          `${space!.expected}. This compiles and then 404s at runtime.`,
+      ).toBe(true);
+    }
+  });
+
+  it('the id space rules reject the ids of the OTHER hosts', () => {
+    // Proves the rules DISCRIMINATE. Each `accepts` is checked against a
+    // representative id from every other host; a rule that waved everything
+    // through would pass the test above no matter what the scaffolder emitted,
+    // which is the failure mode this whole file exists to catch.
+    const samples: Record<string, string> = {
+      'openrouter.ai': 'openai/gpt-4o-mini',
+      'api.openai.com': 'gpt-4o-mini',
+      'api.anthropic.com': 'claude-opus-5',
+    };
+    for (const [host, id] of Object.entries(samples)) {
+      const own = HOST_ID_SPACES.find((s) => s.host === host)!;
+      expect(own.accepts(id), `${host} rejects its OWN id '${id}'`).toBe(true);
+    }
+    // The specific cross-host confusions that shipped, or could:
+    const openai = HOST_ID_SPACES.find((s) => s.host === 'api.openai.com')!;
+    expect(openai.accepts('openai/gpt-4o-mini'), 'api.openai.com accepted an OpenRouter slug').toBe(false);
+    expect(openai.accepts('claude-opus-5'), 'api.openai.com accepted an Anthropic id').toBe(false);
+    const anthropic = HOST_ID_SPACES.find((s) => s.host === 'api.anthropic.com')!;
+    expect(anthropic.accepts('gpt-4o-mini'), 'api.anthropic.com accepted an OpenAI id').toBe(false);
+    expect(anthropic.accepts('openai/gpt-4o-mini'), 'api.anthropic.com accepted an OpenRouter slug').toBe(false);
+    const openrouter = HOST_ID_SPACES.find((s) => s.host === 'openrouter.ai')!;
+    expect(openrouter.accepts('gpt-4o-mini'), 'openrouter.ai accepted an unprefixed id').toBe(false);
   });
 });

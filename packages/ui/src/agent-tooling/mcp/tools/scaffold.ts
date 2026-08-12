@@ -396,6 +396,8 @@ function realStreamBody(opts: {
   strictRoles?: boolean;
   /** archetype renders kai-tool → emit the LIVE multi-round loop */
   toolLoop: boolean;
+  /** the scaffold declares a card registry → the loop gets its cardFromToolCall arm */
+  cards?: boolean;
   /** how this framework exposes the turn's thread (tool-loop shape only) */
   thread: ThreadBinding;
   /** where the submitted text comes from — see `mockStreamBody.valueSource` */
@@ -405,7 +407,7 @@ function realStreamBody(opts: {
 }): string {
   const {
     pad, read, commitSet, setterAdapter, setLoading, bodyPayload, strictRoles = false, toolLoop, thread,
-    valueSource = 'e.detail.value', afterValue = [],
+    cards = false, valueSource = 'e.detail.value', afterValue = [],
   } = opts;
   const asConst = strictRoles ? ' as const' : '';
   // Under strict TS an un-annotated array literal widens the part's `type` to
@@ -446,7 +448,7 @@ function realStreamBody(opts: {
     `${pad}// every delta onto its parts. readOpenAIStream parses the SSE: keep-alive`,
     `${pad}// comments, multi-line frames, split codepoints, tool calls, reasoning.`,
     `${pad}const stream = createAssistantStream(${setter});`,
-    ...(toolLoop ? toolLoopBody({ pad, request, threadExpr }) : [
+    ...(toolLoop ? toolLoopBody({ pad, request, threadExpr, cards }) : [
       `${pad}try {`,
       ...request(`${pad}  `),
       `${pad}  if (turn.error) console.error('Model error:', turn.error.message);`,
@@ -494,8 +496,40 @@ function toolLoopBody(opts: {
   pad: string;
   request: (indent: string) => string[];
   threadExpr: string;
+  /** the scaffold declares a card registry, so a `kai_*` call is a card, not a tool */
+  cards?: boolean;
 }): string[] {
-  const { pad, request, threadExpr } = opts;
+  const { pad, request, threadExpr, cards = false } = opts;
+  // THE ONE LINE THAT CLOSES THE LOOP.
+  //
+  // A `kai_confirm` call is not a tool to run: `cardTools` handed the model the
+  // card's own data schema, so the arguments ARE the envelope's `data` and the
+  // mapping is identity. `cardFromToolCall` returns null for every other name, so
+  // the app's own tools fall through untouched and this costs nothing when the
+  // model never asks for a card.
+  //
+  // The provider's `tool_call_id` becomes `CardEnvelope.id` verbatim, which is what
+  // buys free revision: a model correcting a card re-sends the same call id and
+  // `addCard` upserts in place instead of stacking a second copy.
+  const cardBranch = cards
+    ? [
+        `${pad}      // A kai_* call is a CARD, not a tool to run: cardTools handed the model`,
+        `${pad}      // the card's own schema, so the arguments ARE the envelope's data.`,
+        `${pad}      // cardFromToolCall returns null for anything else, which falls through to`,
+        `${pad}      // your own tools below.`,
+        `${pad}      const card = cardFromToolCall(call.name, call.input ?? {}, { id: call.id });`,
+        `${pad}      if (card) {`,
+        `${pad}        // The id IS the tool call id, so a model that revises the card re-sends`,
+        `${pad}        // the same id and this replaces it in place instead of drawing a second.`,
+        `${pad}        stream.addCard(card);`,
+        `${pad}        // Answer the call now: the card is on screen and the model must not sit`,
+        `${pad}        // waiting on a result. The user's click comes back through the card's own`,
+        `${pad}        // kai-card-event, not through this round.`,
+        `${pad}        applyToolOutput(stream, call.id, { status: 'awaiting_user' });`,
+        `${pad}        continue;`,
+        `${pad}      }`,
+      ]
+    : [];
   return [
     `${pad}// Cap the rounds: a runaway model is a runaway bill.`,
     `${pad}const MAX_TOOL_ROUNDS = 4;`,
@@ -508,6 +542,7 @@ function toolLoopBody(opts: {
     `${pad}    const pending = turn.toolCalls.filter((c) => !c.error && !c.providerExecuted);`,
     `${pad}    if (pending.length === 0) break;  // the model answered — the turn is done`,
     `${pad}    for (const call of pending) {`,
+    ...cardBranch,
     `${pad}      try {`,
     `${pad}        applyToolOutput(stream, call.id, await runTool(call.name, call.input ?? {}));`,
     `${pad}      } catch (err) {`,
@@ -559,6 +594,115 @@ function hasToolPanel(archetype: Archetype): boolean {
 }
 
 /**
+ * True when the scaffold emits the generative-UI card round trip: a
+ * `createCardRegistry` declaration, `cardTools()` in the tools array, and
+ * `cardFromToolCall()` in the tool loop.
+ *
+ * CARDS FOLD INTO `agentic`. THERE IS NO SEVENTH ARCHETYPE, AND THAT IS A CHOICE.
+ * A card is a tool call the model makes and the app draws instead of executing, so
+ * "the model reaches for a tool" is the same capability `agentic` already stands
+ * for, and a `cards` archetype would add 72 front-end cells to `verify:scaffold`
+ * (one archetype x 9 integrations x 8 frameworks) to say it twice.
+ *
+ * Written as its own predicate rather than being spelled `hasToolPanel` at each
+ * call site even though it returns exactly that today. The fold is a decision with
+ * ONE place to change: point this at a different archetype and the registry, the
+ * tools and the loop line move together. Inlining `hasToolPanel` would scatter the
+ * decision over eight renderers and make moving it a search-and-replace.
+ */
+function bearsCards(archetype: Archetype): boolean {
+  return hasToolPanel(archetype);
+}
+
+/**
+ * Which provider envelope `cardTools()` should project into, for the wire this
+ * integration's route really speaks.
+ *
+ * `cardTools` takes `provider` as a REQUIRED argument because the three shapes are
+ * genuinely different documents: OpenAI nests the schema under
+ * `function.parameters`, Anthropic puts it at `input_schema`, and `jsonschema`
+ * returns a bare `{name, description, schema}` that `ai@7`'s `jsonSchema()` takes
+ * directly. Emitting the wrong one is not a style problem — the provider 400s, or
+ * (worse) ignores the tool and the card silently never arrives.
+ *
+ * READ OFF THE INTEGRATION, not inferred. This used to be a table keyed on
+ * `streamFormat`, and that table was wrong in a way only `anthropic` made
+ * visible: `streamFormat` describes the RESPONSE stream, the tool envelope is a
+ * REQUEST concern, and the two only looked correlated while every integration
+ * that forwarded tools happened to be `openai-sse`. `anthropic` is
+ * `streamFormat: 'native'`, the table mapped `native` to `null`, and a null here
+ * means a scaffold that hands the model a tools array with no card in it.
+ *
+ * Nor is the fix "key on the provider instead". Anthropic's emitted route
+ * CONVERTS the array itself — `toAnthropicTools` reads `raw.function.name` and
+ * `raw.function.parameters` — so it wants the OPENAI envelope even though it
+ * POSTs to api.anthropic.com. Only the route knows its own request contract, so
+ * the integration declares it (`clientToolFormat`), exactly as it already
+ * declares `forwardsFromClient`.
+ *
+ * `null` here means the integration does not forward a tools array at all, which
+ * is the honest state for langgraph/mastra/pi/vercel-ai-sdk (their routes own the
+ * tool list server-side). It can no longer mean "forwards tools, envelope
+ * unknown": `IntegrationSchema` rejects that combination at the catalog boundary,
+ * `assertCardToolFormat` below refuses to emit it, and `scaffold.test.ts` +
+ * `cardRoundTripCheck` both assert it against the real registry.
+ */
+function cardToolProviderFor(integration: Integration): 'openai' | 'anthropic' | 'jsonschema' | null {
+  return integration.clientToolFormat ?? null;
+}
+
+/**
+ * The emit-time hard stop.
+ *
+ * The schema refinement catches a malformed catalog entry, but `Integration`
+ * values also arrive from tests and from callers that build one by hand, so the
+ * emit path refuses rather than trusting that. Throwing here is the point: the
+ * failure this guards is SILENT by nature — a tools array with no card tool in it
+ * produces a model that is never told a card exists, so it never emits one, and
+ * nothing anywhere says why. A thrown error naming the integration is strictly
+ * better than a scaffold that looks fine and renders nothing.
+ */
+function assertCardToolFormat(integration: Integration): 'openai' | 'anthropic' | 'jsonschema' {
+  const provider = cardToolProviderFor(integration);
+  if (provider === null) {
+    throw new Error(
+      `Integration '${integration.id}' forwards a 'tools' array but declares no clientToolFormat, so the ` +
+        `scaffold would offer the model no card tool at all. Set clientToolFormat on the integration to the ` +
+        `envelope its route expects: 'openai' | 'anthropic' | 'jsonschema'.`,
+    );
+  }
+  return provider;
+}
+
+/**
+ * What the scaffolder INTENDS to emit for one (archetype, integration) pair, so a
+ * guard can check the eight renderers against the decision instead of restating it.
+ *
+ * Exported for `cardRoundTripCheck` in scripts/verify-scaffold-compiles.mjs and
+ * for scaffold.test.ts. It reads the same three predicates `compose` reads and
+ * nothing else, which is the point: the failure it exists to catch is one of the
+ * eight framework renderers not following the decision, and the check would be
+ * worthless if the guard hard-coded "the agentic archetype, 8 integrations".
+ *
+ * It cannot catch the emitter and the plan being wrong TOGETHER, so it is not the
+ * only check: `cardRoundTripCheck` also asserts, without consulting this function,
+ * that a scaffold declaring a `tools` array always calls `cardTools` — a tools
+ * array offered to a model with no card in it is the silent hole.
+ */
+export function cardEmitPlan(
+  useCaseId: string,
+  integrationId: string,
+): { cards: boolean; tools: boolean; provider: 'openai' | 'anthropic' | 'jsonschema' | null } | null {
+  const archetype = getArchetype(useCaseId);
+  const integration = getIntegration(integrationId);
+  if (!archetype || !integration) return null;
+  const isMock = integration.id === 'mock';
+  const cards = !isMock && bearsCards(archetype);
+  const tools = !isMock && emitsToolSchemas(archetype, integration);
+  return { cards, tools, provider: cards && tools ? cardToolProviderFor(integration) : null };
+}
+
+/**
  * The import lines a real-backend scaffold needs on top of the ones it already
  * emits.
  *
@@ -582,8 +726,12 @@ function wireImportLines(opts: {
   toolLoop?: boolean;
   /** the framework's thread binding declares `const set: SetMessages` */
   setMessagesType?: boolean;
+  /** the card registry is emitted → createCardRegistry + cardFromToolCall */
+  cards?: boolean;
+  /** the tools array calls cardTools() as well */
+  cardTools?: boolean;
 }): string[] {
-  const { pad = '', typed, toolLoop = false, setMessagesType = false } = opts;
+  const { pad = '', typed, toolLoop = false, setMessagesType = false, cards = false, cardTools: emitsCardTools = false } = opts;
   const stateNames = [
     'createAssistantStream',
     ...(typed ? ['type ChatMessage'] : []),
@@ -594,9 +742,21 @@ function wireImportLines(opts: {
     'toOpenAIMessages',
     ...(toolLoop ? ['applyToolOutput', 'applyToolFailure'] : []),
   ].join(', ');
+  // Same noUnusedLocals rule as above, one entry finer: `cardTools` is named only
+  // when the integration's route actually forwards a tools array, because on the
+  // ones that build their tools server-side the registry is still wired to the
+  // client (cardTypes/cardSchemas) while nothing here calls cardTools.
+  const schemaNames = [
+    'createCardRegistry',
+    ...(emitsCardTools ? ['cardTools'] : []),
+    ...(toolLoop ? ['cardFromToolCall'] : []),
+  ].join(', ');
   return [
     `${pad}import { ${stateNames} } from '@kitn.ai/ui/state';`,
     `${pad}import { ${wireNames} } from '@kitn.ai/ui/wire';`,
+    // Server-safe: no DOM, no Solid runtime. The same import works in the route
+    // when the registry moves to its own cards.ts.
+    ...(cards ? [`${pad}import { ${schemaNames} } from '@kitn.ai/ui/schemas';`] : []),
   ];
 }
 
@@ -654,11 +814,33 @@ const HTML_CHAT_MESSAGE_TYPE = [
 
 // ── SCAF-8: per-integration default model ids ─────────────────────────────────
 
-/** Default model id per integration that forwards one. Anything else falls back
- *  to a generic OpenAI-compatible id, which is safe: a route that forwards the
- *  client's model is by definition pointed at an OpenAI-compatible endpoint. */
+/**
+ * Default model id per integration whose route forwards one.
+ *
+ * THE ID IS HOST-SPECIFIC, and there is no such thing as a safe generic one.
+ * This used to fall through to `'openai/gpt-4o-mini'` for anything unlisted, on
+ * the reasoning that "a route that forwards the client's model is by definition
+ * pointed at an OpenAI-compatible endpoint". That was false twice over the
+ * moment a first-party provider landed: `openai/gpt-4o-mini` is an OPENROUTER
+ * slug — api.openai.com 404s the prefixed form, and api.anthropic.com rejects it
+ * outright — so a scaffold generated for the provider it names could not run
+ * against it.
+ *
+ * tsc cannot see any of this; every one of those strings compiles. The guard is
+ * `scaffold.test.ts` → "the emitted model id is valid for the host its route
+ * POSTs to", which reads the id out of the EMITTED scaffold and the host out of
+ * the route source, so a new integration cannot reintroduce a wrong one.
+ */
 const CLIENT_MODEL_IDS: Record<string, string> = {
+  // Vendor-prefixed `vendor/model`: OpenRouter's own id space, and the ONLY one
+  // of the three where the prefix belongs.
   openrouter: 'openai/gpt-4o-mini',
+  // No vendor prefix. This is what the route already pinned, so moving the knob
+  // to the client changes the wire not at all.
+  openai: 'gpt-4o-mini',
+  // Anthropic's id space. Matches what the route pinned; 'claude-sonnet-5' and
+  // 'claude-haiku-4-5' are the cheaper swaps (see this integration's runNote).
+  anthropic: 'claude-opus-5',
 };
 
 /**
@@ -674,7 +856,19 @@ const CLIENT_MODEL_IDS: Record<string, string> = {
  */
 function defaultModelFor(integration: Integration): string | undefined {
   if (!integration.forwardsFromClient.includes('model')) return undefined;
-  return CLIENT_MODEL_IDS[integration.id] ?? 'openai/gpt-4o-mini';
+  const id = CLIENT_MODEL_IDS[integration.id];
+  // No fallback, deliberately — the old `?? 'openai/gpt-4o-mini'` is what let a
+  // first-party provider inherit an OpenRouter slug and emit a scaffold that
+  // 404s on its own host. A model id is a per-host fact; an integration that
+  // forwards one has to say which.
+  if (id === undefined) {
+    throw new Error(
+      `Integration '${integration.id}' forwards the client's 'model' but has no CLIENT_MODEL_IDS entry, so the ` +
+        `scaffold would emit a model id that is not valid for the host its route POSTs to. Add one in ` +
+        `mcp/tools/scaffold.ts.`,
+    );
+  }
+  return id;
 }
 
 /**
@@ -685,9 +879,17 @@ function defaultModelFor(integration: Integration): string | undefined {
  * renders nothing forever. And a tools array the route drops on the floor is the
  * same dead-const defect as the model one: langgraph builds its tools into the
  * agent, Mastra and Pi into the harness, and none of them read the field.
+ *
+ * The archetype half is an OR, not just `hasToolPanel`, because there are now two
+ * reasons a scaffold needs a tools array: a tool panel with nothing to call, and a
+ * card the model can never be asked for. Both operands are true for `agentic`
+ * today (see `bearsCards`), so the `||` changes no output — it is here so that
+ * moving cards to an archetype without `kai-tool` keeps emitting their tools
+ * instead of silently dropping them.
  */
 function emitsToolSchemas(archetype: Archetype, integration: Integration): boolean {
-  return hasToolPanel(archetype) && integration.forwardsFromClient.includes('tools');
+  const needsToolsArray = hasToolPanel(archetype) || bearsCards(archetype);
+  return needsToolsArray && integration.forwardsFromClient.includes('tools');
 }
 
 /**
@@ -696,8 +898,48 @@ function emitsToolSchemas(archetype: Archetype, integration: Integration): boole
  *
  * `search` on purpose: it is the tool `SAMPLE_AGENTIC_MESSAGE` already shows in
  * the seeded thread, so the sample panel and the live one describe one tool.
+ *
+ * The CARD tools are appended by calling `cardTools(cards, { provider })`, never
+ * by writing a card's shape out here. That is the whole point of the emit
+ * contract: a `confirm` card's schema already exists, the kit already validates
+ * arriving cards against it, and a scaffolder that restated it would be the sixth
+ * copy of one shape — the copy that drifts, in the file a developer is least
+ * likely to re-read.
  */
-function toolSchemaLines(pad: string): string[] {
+function toolSchemaLines(
+  pad: string,
+  cardProvider: 'openai' | 'anthropic' | 'jsonschema' | null = null,
+): string[] {
+  // The `provider` note differs per shape, because the three shapes are genuinely
+  // different documents and a developer swapping backends needs to know which line
+  // to change.
+  const PROVIDER_NOTE: Record<'openai' | 'anthropic' | 'jsonschema', string[]> = {
+    openai: [
+      `// \`provider\` is required, not cosmetic: this route POSTs to an OpenAI-compatible`,
+      `// endpoint, which wants { type: 'function', function: { parameters } }. Anthropic`,
+      `// wants the schema at \`input_schema\` instead — one word here, not a rewrite.`,
+    ],
+    anthropic: [
+      `// \`provider\` is required, not cosmetic: Anthropic's /v1/messages wants the schema`,
+      `// at \`input_schema\`, where an OpenAI-compatible endpoint wants it nested under`,
+      `// \`function.parameters\`. One word here, not a rewrite.`,
+    ],
+    jsonschema: [
+      `// 'jsonschema' returns a bare { name, description, schema }, which is the form the`,
+      `// AI SDK takes directly: tool({ description, inputSchema: jsonSchema(def.schema) }).`,
+      `// No provider envelope, so our schema is not an awkward second source of truth.`,
+    ],
+  };
+  const cardLines =
+    cardProvider === null
+      ? []
+      : [
+          `${pad}  // Every card type \`cards\` declares, as a tool definition GENERATED from the`,
+          `${pad}  // card's own JSON Schema — the same schema the kit validates arriving cards`,
+          `${pad}  // against, so the tool the model sees and the card that renders cannot drift.`,
+          ...PROVIDER_NOTE[cardProvider].map((l) => `${pad}  ${l}`),
+          `${pad}  ...cardTools(cards, { provider: '${cardProvider}' }),`,
+        ];
   return [
     `${pad}// The tools the model may call. The request body carries this array; without`,
     `${pad}// it the model never emits a tool call and the kai-tool panel stays empty,`,
@@ -716,8 +958,85 @@ function toolSchemaLines(pad: string): string[] {
     `${pad}      },`,
     `${pad}    },`,
     `${pad}  },`,
+    ...cardLines,
     `${pad}];`,
   ];
+}
+
+/**
+ * The card registry: the ONE place this app writes down which cards it renders.
+ *
+ * Emitted at MODULE scope in every framework, deliberately. Three separate things
+ * read it — the tools array, the tool loop's `cardFromToolCall` fall-through, and
+ * the client's `cardTypes`/`cardSchemas` wiring — and in the Solid target one of
+ * them (`renderPart`) is a top-level function that cannot see a component-local
+ * const. In a real app this block is `cards.ts`, imported by the client AND by the
+ * route; the scaffold's tool loop runs in the browser, so one module holds both
+ * ends here and the comment says where it goes when they separate.
+ *
+ * `use` is a real narrowing, not decoration: it is what the model is OFFERED, so
+ * two entries is two tool definitions per request instead of seven. It does not
+ * narrow what RENDERS — `mergeCardTags` unions all seven built-ins in regardless,
+ * so a `tasks` envelope arriving from somewhere else still draws.
+ */
+function cardRegistryLines(pad = ''): string[] {
+  return [
+    `${pad}// The card types this app renders, declared ONCE for both ends of the round`,
+    `${pad}// trip: \`cardTools(cards, …)\` turns them into the tool definitions the model`,
+    `${pad}// is offered, and cardTypes/cardSchemas below tell <kai-chat> what draws an`,
+    `${pad}// arriving card and what a valid one looks like. Move this to its own cards.ts`,
+    `${pad}// the moment your BACKEND needs it too — it imports nothing from the DOM.`,
+    `${pad}const cards = createCardRegistry({`,
+    `${pad}  // The built-ins the model is OFFERED. Omit \`use\` for all seven; every entry`,
+    `${pad}  // is one more tool definition in every request. This does NOT narrow what`,
+    `${pad}  // RENDERS: all seven built-in cards still draw if one turns up.`,
+    `${pad}  use: ['confirm', 'choice'],`,
+    `${pad}  // YOUR card types go here, and this is the half that makes the generative UI`,
+    `${pad}  // yours. \`schema\` is both what the model is told and what arriving data is`,
+    `${pad}  // checked against; \`tag\` is your own custom element.`,
+    `${pad}  // custom: {`,
+    `${pad}  //   'pricing-table': {`,
+    `${pad}  //     schema: pricingSchema,          // import pricingSchema from './pricing.schema.json'`,
+    `${pad}  //     tag: 'my-pricing-table',`,
+    `${pad}  //     description: 'Show a plan comparison the user can pick from.',`,
+    `${pad}  //   },`,
+    `${pad}  // },`,
+    `${pad}});`,
+  ];
+}
+
+/**
+ * The two card properties, as the JS PROPERTIES they have to be.
+ *
+ * `cards.tags` and `cards.validationSchemas` carry the CUSTOM types only, because
+ * the kit merges its own seven in itself — so with no `custom` block above they are
+ * both `{}` and these two lines currently do nothing. They are emitted anyway, and
+ * that is the point of the emit contract rather than an oversight: filling in
+ * `custom` is then a one-line change instead of an archaeology exercise through the
+ * docs, and the two names are the ones a developer would otherwise have to
+ * discover. `verify:scaffold` compiles the assignment in all eight frameworks, so
+ * the shapes are proven compatible rather than asserted to be.
+ *
+ * Never an attribute. `cardTypes`/`cardSchemas` are objects, and an object set as
+ * an HTML attribute stringifies to "[object Object]" and silently registers
+ * nothing.
+ */
+const CARD_PROP_COMMENT = [
+  `// Cards, as JS PROPERTIES (objects can never be HTML attributes). \`tags\` says`,
+  `// what DRAWS your own card type; \`cardSchemas\` says what a VALID one looks like,`,
+  `// so a model that gets the shape wrong shows a named diagnostic instead of empty`,
+  `// chrome. Both are {} until the \`custom\` block above is filled in; the built-in`,
+  `// seven draw and validate without them.`,
+];
+
+// `//` comment lines as a JSX comment block, for the three JSX targets.
+//
+// A JSX comment (a braces pair wrapping a block comment) is legal only at ELEMENT
+// position; between attributes it is a parse error. So these go above the tag
+// rather than among its props. Written as line comments here because the thing
+// being described cannot be spelled inside a block comment.
+function jsxComment(lines: readonly string[], pad: string): string[] {
+  return lines.map((l) => `${pad}{/* ${l.replace(/^\/\/ ?/, '')} */}`);
 }
 
 // ── SCAF-9: message-embedded companion logic ──────────────────────────────────
@@ -833,6 +1152,14 @@ interface RenderCtx {
   /** the archetype renders kai-tool and there is a backend to call, so the live
    *  multi-round loop (and the `runTool` stub it calls) is emitted */
   emitToolLoop: boolean;
+  /** the archetype bears cards and there is a model to ask for one, so the
+   *  registry + the loop's cardFromToolCall arm + the cardTypes/cardSchemas
+   *  wiring are emitted */
+  emitCards: boolean;
+  /** which provider envelope `cardTools()` projects into, or null when this
+   *  integration's route does not forward a tools array we can shape (see
+   *  `cardToolProviderFor`). Non-null implies `emitCards`. */
+  cardProvider: 'openai' | 'anthropic' | 'jsonschema' | null;
 }
 
 /** The kai-* tags for the archetype, in order, as opening/closing markup.
@@ -952,13 +1279,22 @@ function htmlModule(ctx: RenderCtx, archetype: Archetype): string {
   // `runTool` is a function declaration rather than something wedged into init().
   const modelLines = ctx.defaultModel
     ? [
-        `// SCAF-8: change this model id to any provider/model string you want to use.`,
+        `// SCAF-8: change this model id to another id THIS PROVIDER accepts.`,
         `const model = '${ctx.defaultModel}';`,
         ``,
       ]
     : [];
-  const toolsLines = ctx.emitTools ? [...toolSchemaLines(''), ``] : [];
+  const cardsLines = ctx.emitCards ? [...cardRegistryLines(''), ``] : [];
+  const toolsLines = ctx.emitTools ? [...toolSchemaLines('', ctx.cardProvider), ``] : [];
   const runnerLines = ctx.emitToolLoop ? [...toolRunnerLines('', true), ``] : [];
+  const cardPropLines = ctx.emitCards
+    ? [
+        ...CARD_PROP_COMMENT.map((l) => `  ${l}`),
+        `  chat.cardTypes = cards.tags;`,
+        `  chat.cardSchemas = cards.validationSchemas;`,
+        ``,
+      ]
+    : [];
 
   // KaiSourcesElement only when a kai-sources companion is really declared: a
   // stock vanilla-ts tsconfig sets noUnusedLocals, so an always-on import is a
@@ -991,11 +1327,17 @@ function htmlModule(ctx: RenderCtx, archetype: Archetype): string {
     `import type { ${elementTypes} } from '@kitn.ai/ui/elements';`,
     ...(ctx.isMock
       ? []
-      : wireImportLines({ typed: annotatesChatMessage, toolLoop: ctx.emitToolLoop })),
+      : wireImportLines({
+          typed: annotatesChatMessage,
+          toolLoop: ctx.emitToolLoop,
+          cards: ctx.emitCards,
+          cardTools: ctx.cardProvider !== null,
+        })),
     `import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
     ``,
     ...(ctx.isMock ? [...HTML_CHAT_MESSAGE_TYPE, ``] : []),
     ...modelLines,
+    ...cardsLines,
     ...toolsLines,
     ...runnerLines,
     `async function init() {`,
@@ -1008,6 +1350,7 @@ function htmlModule(ctx: RenderCtx, archetype: Archetype): string {
     `  chat.suggestions = ${jsArray(ctx.suggestions)};`,
     `  chat.suggestionMode = 'submit';`,
     ``,
+    ...cardPropLines,
     ...seedLines,
     ...sourcesSetupLines,
   ];
@@ -1058,6 +1401,7 @@ function htmlModule(ctx: RenderCtx, archetype: Archetype): string {
       bodyPayload: realBodyPayload({ defaultModel: ctx.defaultModel, tools: ctx.emitTools }),
       strictRoles: true,
       toolLoop: ctx.emitToolLoop,
+      cards: ctx.emitCards,
       thread: liveThreadBinding(
         'chat.messages',
         '(fn) => { chat.messages = fn(chat.messages); }',
@@ -1193,11 +1537,25 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
 
   // SCAF-8: model const for integrations that forward model to the upstream provider.
   const modelInit = defaultModel
-    ? `  // SCAF-8: change this to any provider/model string you want to use.\n  const model = '${defaultModel}';`
+    ? `  // SCAF-8: change this model id to another id THIS PROVIDER accepts.\n  const model = '${defaultModel}';`
     : '';
 
-  const toolsInit = emitTools ? toolSchemaLines('  ').join('\n') : '';
+  const toolsInit = emitTools ? toolSchemaLines('  ', ctx.cardProvider).join('\n') : '';
   const toolRunner = emitToolLoop ? toolRunnerLines('  ', true).join('\n') : '';
+  // MODULE scope, unlike `tools`/`runTool`: a registry is static data, so rebuilding
+  // it on every render would allocate a new object per keystroke and hand <Chat> a
+  // new cardTypes reference each time.
+  const cardsInit = ctx.emitCards ? cardRegistryLines('') : [];
+  // The two card props, as JSX props on the wrapper — which sets them as DOM
+  // PROPERTIES on <kai-chat>, never as attributes. The explanation goes ABOVE the
+  // element, not between its attributes: `{/* … */}` is only legal at element
+  // position in JSX, and in attribute position it is a parse error.
+  const cardProps = (pad: string): string[] =>
+    ctx.emitCards
+      ? [`${pad}cardTypes={cards.tags}`, `${pad}cardSchemas={cards.validationSchemas}`]
+      : [];
+  const cardPropsNote = (pad: string): string[] =>
+    ctx.emitCards ? jsxComment(CARD_PROP_COMMENT, pad) : [];
 
   // onSubmit body: mock streams a canned reply client-side; otherwise fetch /api/chat.
   const onSubmitBody = isMock
@@ -1220,6 +1578,7 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
         bodyPayload: realBodyPayload({ defaultModel, tools: emitTools }),
         strictRoles: true,
         toolLoop: emitToolLoop,
+        cards: ctx.emitCards,
         thread: REACT_THREAD,
       });
 
@@ -1252,7 +1611,13 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
       // so they stay static imports even though the ELEMENTS have to be dynamic.
       ...(isMock
         ? []
-        : wireImportLines({ typed: true, toolLoop: emitToolLoop, setMessagesType: emitToolLoop })),
+        : wireImportLines({
+          typed: true,
+          toolLoop: emitToolLoop,
+          setMessagesType: emitToolLoop,
+          cards: ctx.emitCards,
+          cardTools: ctx.cardProvider !== null,
+        })),
       `import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
       `// <kai-*> are client-only custom elements (the server has no customElements`,
       `// registry) → load client-only so hydration doesn't mismatch. The package itself`,
@@ -1264,6 +1629,7 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
       ...(p.altNote ?? []).map((l) => `// ${l}`),
       ...chatMessageType,
       ``,
+      ...cardsInit,
       `export default function App() {`,
       sampleMessagesInit,
       `  const [loading, setLoading] = useState(false);`,
@@ -1285,11 +1651,13 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
             `      {/* Resizable needs ResizableItem children to render panels. */}`,
             `      <Resizable orientation="horizontal" style={{ display: 'block', width: '100%', height: '100%' }}>`,
             `        <ResizableItem size="40%" min="240px">`,
+            ...cardPropsNote('          '),
             `          <Chat`,
             `            messages={messages}`,
             `            loading={loading}`,
             `            suggestions={suggestions}`,
             `            suggestionMode="submit"`,
+            ...cardProps('            '),
             `            onSubmit={onSubmit}`,
             `            style={{ ${jsxStyle(p.chatFill)} }}`,
             `          />`,
@@ -1301,11 +1669,13 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
             `      </Resizable>`,
           ]
         : [
+            ...cardPropsNote('      '),
             `      <Chat`,
             `        messages={messages}`,
             `        loading={loading}`,
             `        suggestions={suggestions}`,
             `        suggestionMode="submit"`,
+            ...cardProps('        '),
             `        onSubmit={onSubmit}`,
             `        style={{ ${jsxStyle(p.chatFill)} }}`,
             `      />`,
@@ -1332,7 +1702,13 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
     `import { ${importList} } from '@kitn.ai/ui/react';`,
     ...(isMock
       ? []
-      : wireImportLines({ typed: true, toolLoop: emitToolLoop, setMessagesType: emitToolLoop })),
+      : wireImportLines({
+          typed: true,
+          toolLoop: emitToolLoop,
+          setMessagesType: emitToolLoop,
+          cards: ctx.emitCards,
+          cardTools: ctx.cardProvider !== null,
+        })),
     `import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
     ``,
     ...nextConfigNote,
@@ -1340,6 +1716,7 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
     ...(p.altNote ?? []).map((l) => `// ${l}`),
     ...chatMessageType,
     ``,
+    ...cardsInit,
     `export default function App() {`,
     sampleMessagesInit,
     `  const [loading, setLoading] = useState(false);`,
@@ -1361,11 +1738,13 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
           `      {/* Resizable needs ResizableItem children to render panels. */}`,
           `      <Resizable orientation="horizontal" style={{ display: 'block', width: '100%', height: '100%' }}>`,
           `        <ResizableItem size="40%" min="240px">`,
+          ...cardPropsNote('          '),
           `          <Chat`,
           `            messages={messages}`,
           `            loading={loading}`,
           `            suggestions={suggestions}`,
           `            suggestionMode="submit"`,
+          ...cardProps('            '),
           `            onSubmit={onSubmit}`,
           `            style={{ ${jsxStyle(p.chatFill)} }}`,
           `          />`,
@@ -1377,11 +1756,13 @@ function renderJsx(archetype: Archetype, ctx: RenderCtx, framework: string): str
           `      </Resizable>`,
         ]
       : [
+          ...cardPropsNote('      '),
           `      <Chat`,
           `        messages={messages}`,
           `        loading={loading}`,
           `        suggestions={suggestions}`,
           `        suggestionMode="submit"`,
+          ...cardProps('        '),
           `        onSubmit={onSubmit}`,
           `        style={{ ${jsxStyle(p.chatFill)} }}`,
           `      />`,
@@ -1443,6 +1824,7 @@ function renderVue(archetype: Archetype, ctx: RenderCtx): string {
         bodyPayload: realBodyPayload({ defaultModel, tools: emitTools }),
         strictRoles: true,
         toolLoop: emitToolLoop,
+        cards: ctx.emitCards,
         thread: liveThreadBinding('messages.value', '(fn) => { messages.value = fn(messages.value); }'),
       });
 
@@ -1452,13 +1834,24 @@ function renderVue(archetype: Archetype, ctx: RenderCtx): string {
   // SCAF-8: model const at module scope so onSubmit closes over it.
   const modelInit = defaultModel
     ? [
-        `// SCAF-8: change this to any provider/model string you want to use.`,
+        `// SCAF-8: change this model id to another id THIS PROVIDER accepts.`,
         `const model = '${defaultModel}';`,
       ]
     : [];
 
+  const cardsInit = ctx.emitCards ? [...cardRegistryLines(''), ``] : [];
+  // Vue applies the card props in the SAME onMounted re-application the other
+  // element properties go through, and NOT as a `:cardTypes.prop` template binding.
+  // A registry is static — it is built once at module load and never changes — so a
+  // reactive binding would buy nothing, and the one place that has to be right is
+  // the post-upgrade re-apply: a property set on a not-yet-upgraded custom element
+  // is dropped on upgrade.
+  const cardPropAssign = ctx.emitCards
+    ? [`cardTypes: cards.tags`, `cardSchemas: cards.validationSchemas`]
+    : [];
+
   // Same scope, same reason: onSubmit puts `tools` in the request body.
-  const toolsLines = emitTools ? toolSchemaLines('') : [];
+  const toolsLines = emitTools ? toolSchemaLines('', ctx.cardProvider) : [];
   // Same scope again: the loop in onSubmit calls runTool.
   const runnerLines = emitToolLoop ? toolRunnerLines('', true) : [];
 
@@ -1534,12 +1927,20 @@ function renderVue(archetype: Archetype, ctx: RenderCtx): string {
     `     not, and that warning is Vue asking you for exactly that config. -->`,
     `<script setup lang="ts">`,
     `import '@kitn.ai/ui/elements';  // registers <kai-*> — required, must come first`,
-    ...(isMock ? [] : wireImportLines({ typed: true, toolLoop: emitToolLoop })),
+    ...(isMock
+      ? []
+      : wireImportLines({
+          typed: true,
+          toolLoop: emitToolLoop,
+          cards: ctx.emitCards,
+          cardTools: ctx.cardProvider !== null,
+        })),
     `import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
     vueImports,
     ``,
     ...chatMessageType,
     ``,
+    ...cardsInit,
     ...sampleSeed,
     `const loading = ref(false);`,
     `const suggestions = ${jsArray(suggestions)};`,
@@ -1553,8 +1954,9 @@ function renderVue(archetype: Archetype, ctx: RenderCtx): string {
     `// the element is defined so the initial messages/suggestions/loading stick.`,
     `onMounted(async () => {`,
     `  await customElements.whenDefined('kai-chat');`,
+    ...(ctx.emitCards ? CARD_PROP_COMMENT.map((l) => `  ${l}`) : []),
     `  const el = document.querySelector('kai-chat');`,
-    `  if (el) Object.assign(el, { messages: messages.value, loading: loading.value, suggestions });`,
+    `  if (el) Object.assign(el, { messages: messages.value, loading: loading.value, suggestions${cardPropAssign.length ? `, ${cardPropAssign.join(', ')}` : ''} });`,
     `});`,
     ``,
     `async function onSubmit(e: CustomEvent<{ value: string }>) {`,
@@ -1621,6 +2023,7 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
         bodyPayload: realBodyPayload({ defaultModel, tools: emitTools }),
         strictRoles: true,
         toolLoop: emitToolLoop,
+        cards: ctx.emitCards,
         thread: liveThreadBinding('messages', '(fn) => { messages = fn(messages); }'),
       });
 
@@ -1630,13 +2033,22 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
   // SCAF-8: model const at script scope so onSubmit closes over it.
   const modelInit = defaultModel
     ? [
-        `  // SCAF-8: change this to any provider/model string you want to use.`,
+        `  // SCAF-8: change this model id to another id THIS PROVIDER accepts.`,
         `  const model = '${defaultModel}';`,
       ]
     : [];
 
+  const cardsInit = ctx.emitCards ? cardRegistryLines('  ') : [];
+  // Applied in the same upgrade-gated $effect as messages/loading/suggestions, for
+  // the same reason: a property set on a not-yet-upgraded custom element is dropped
+  // on upgrade. `cards` never changes, so re-running the effect re-applies the same
+  // two references and does nothing.
+  const cardPropEffect = ctx.emitCards
+    ? ` chatEl.cardTypes = cards.tags; chatEl.cardSchemas = cards.validationSchemas;`
+    : '';
+
   // Same scope, same reason: onSubmit puts `tools` in the request body.
-  const toolsLines = emitTools ? toolSchemaLines('  ') : [];
+  const toolsLines = emitTools ? toolSchemaLines('  ', ctx.cardProvider) : [];
   // Same scope again: the loop in onSubmit calls runTool.
   const runnerLines = emitToolLoop ? toolRunnerLines('  ', true) : [];
 
@@ -1706,7 +2118,15 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
     // declared below: an always-on import would be unused (and fail noUnusedLocals)
     // on every archetype without kai-sources.
     `  import type { ${hasSourcesCompanion ? 'KaiChatElement, KaiSourcesElement' : 'KaiChatElement'} } from '@kitn.ai/ui/elements';`,
-    ...(isMock ? [] : wireImportLines({ pad: '  ', typed: true, toolLoop: emitToolLoop })),
+    ...(isMock
+      ? []
+      : wireImportLines({
+          pad: '  ',
+          typed: true,
+          toolLoop: emitToolLoop,
+          cards: ctx.emitCards,
+          cardTools: ctx.cardProvider !== null,
+        })),
     `  import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
     `  import { onMount } from 'svelte';`,
     ...chatMessageType,
@@ -1722,11 +2142,13 @@ function renderSvelte(archetype: Archetype, ctx: RenderCtx): string {
     `  let loading = $state(false);`,
     `  const suggestions: string[] = ${jsArray(suggestions)};`,
     ...modelInit,
+    ...cardsInit,
     ...toolsLines,
     ...runnerLines,
     `  // suggestions/messages are JS PROPERTIES (arrays/objects can't be attributes)`,
+    ...(ctx.emitCards ? CARD_PROP_COMMENT.map((l) => `  ${l}`) : []),
     `  $effect(() => {`,
-    `    if (chatEl && defined) { chatEl.messages = messages; chatEl.loading = loading; chatEl.suggestions = suggestions; }`,
+    `    if (chatEl && defined) { chatEl.messages = messages; chatEl.loading = loading; chatEl.suggestions = suggestions;${cardPropEffect} }`,
     `  });`,
     ...sourcesReactive,
     ``,
@@ -1839,11 +2261,19 @@ function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
       : '';
 
   const modelInit = defaultModel
-    ? `  // SCAF-8: change this to any provider/model string you want to use.\n  const model = '${defaultModel}';`
+    ? `  // SCAF-8: change this model id to another id THIS PROVIDER accepts.\n  const model = '${defaultModel}';`
     : '';
 
-  const toolsInit = emitTools ? toolSchemaLines('  ').join('\n') : '';
+  const toolsInit = emitTools ? toolSchemaLines('  ', ctx.cardProvider).join('\n') : '';
   const toolRunner = emitToolLoop ? toolRunnerLines('  ', true).join('\n') : '';
+  // Module scope: static data, so it is not rebuilt on every render (see renderJsx).
+  const cardsInit = ctx.emitCards ? cardRegistryLines('') : [];
+  const cardProps = (pad: string): string[] =>
+    ctx.emitCards
+      ? [`${pad}cardTypes={cards.tags}`, `${pad}cardSchemas={cards.validationSchemas}`]
+      : [];
+  const cardPropsNote = (pad: string): string[] =>
+    ctx.emitCards ? jsxComment(CARD_PROP_COMMENT, pad) : [];
 
   const onSubmitBody = isMock
     ? mockStreamBody({
@@ -1864,6 +2294,7 @@ function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
         bodyPayload: realBodyPayload({ defaultModel, tools: emitTools }),
         strictRoles: true,
         toolLoop: emitToolLoop,
+        cards: ctx.emitCards,
         thread: REACT_THREAD,
       });
 
@@ -1889,13 +2320,20 @@ function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
     `import { ${importList} } from '@kitn.ai/ui/react'`,
     ...(isMock
       ? []
-      : wireImportLines({ typed: true, toolLoop: emitToolLoop, setMessagesType: emitToolLoop })),
+      : wireImportLines({
+          typed: true,
+          toolLoop: emitToolLoop,
+          setMessagesType: emitToolLoop,
+          cards: ctx.emitCards,
+          cardTools: ctx.cardProvider !== null,
+        })),
     `import '@kitn.ai/ui/theme.tokens.css'  // compiled token defaults`,
     ``,
     `// ${archetype.title} — ${p.note}. empty-state hint: ${emptyHint}`,
     ...(p.altNote ?? []).map((l) => `// ${l}`),
     ...chatMessageType,
     ``,
+    ...cardsInit,
     `// ssr: false keeps the Solid-based web component client-only.`,
     `// Server HTML for /chat omits <kai-chat> → no hydration mismatch.`,
     `export const Route = createFileRoute('/chat')({`,
@@ -1924,11 +2362,13 @@ function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
           `      {/* Resizable needs ResizableItem children to render panels. */}`,
           `      <Resizable orientation="horizontal" style={{ display: 'block', width: '100%', height: '100%' }}>`,
           `        <ResizableItem size="40%" min="240px">`,
+          ...cardPropsNote('          '),
           `          <Chat`,
           `            messages={messages}`,
           `            loading={loading}`,
           `            suggestions={suggestions}`,
           `            suggestionMode="submit"`,
+          ...cardProps('            '),
           `            onSubmit={onSubmit}`,
           `            style={{ ${jsxStyle(p.chatFill)} }}`,
           `          />`,
@@ -1940,11 +2380,13 @@ function renderTanstackStart(archetype: Archetype, ctx: RenderCtx): string {
           `      </Resizable>`,
         ]
       : [
+          ...cardPropsNote('      '),
           `      <Chat`,
           `        messages={messages}`,
           `        loading={loading}`,
           `        suggestions={suggestions}`,
           `        suggestionMode="submit"`,
+          ...cardProps('        '),
           `        onSubmit={onSubmit}`,
           `        style={{ ${jsxStyle(p.chatFill)} }}`,
           `      />`,
@@ -2037,6 +2479,7 @@ function renderAngular(archetype: Archetype, ctx: RenderCtx): string {
         bodyPayload: realBodyPayload({ defaultModel, tools: emitTools }),
         strictRoles: true,
         toolLoop: emitToolLoop,
+        cards: ctx.emitCards,
         thread: accessorThreadBinding(read, commit, setter),
       });
 
@@ -2044,13 +2487,27 @@ function renderAngular(archetype: Archetype, ctx: RenderCtx): string {
   // `function` declaration, and the methods below close over all three.
   const modelInit = defaultModel
     ? [
-        `// SCAF-8: change this to any provider/model string you want to use.`,
+        `// SCAF-8: change this model id to another id THIS PROVIDER accepts.`,
         `const model = '${defaultModel}';`,
         ``,
       ]
     : [];
-  const toolsLines = emitTools ? [...toolSchemaLines(''), ``] : [];
+  const cardsInit = ctx.emitCards ? [...cardRegistryLines(''), ``] : [];
+  const toolsLines = emitTools ? [...toolSchemaLines('', ctx.cardProvider), ``] : [];
   const runnerLines = emitToolLoop ? [...toolRunnerLines('', true), ``] : [];
+  // Set in the SAME afterNextRender re-application as messages/loading/suggestions,
+  // not as a `[cardTypes]` template binding. Two reasons, and the second is the
+  // load-bearing one: a registry is static, so a binding buys nothing; and an
+  // Angular template can only read CLASS members, so a template binding would need
+  // the module-scope `cards` restated as a field. The re-apply is also the point
+  // that matters — a property set on a not-yet-upgraded custom element is dropped.
+  const cardPropAssign = ctx.emitCards
+    ? [
+        ...CARD_PROP_COMMENT.map((l) => `        ${l}`),
+        `        cardTypes: cards.tags,`,
+        `        cardSchemas: cards.validationSchemas,`,
+      ]
+    : [];
 
   // SCAF-9: no fabricated seed — see SAMPLE_AGENTIC_MESSAGE.
   const sampleSeed = [
@@ -2124,13 +2581,21 @@ function renderAngular(archetype: Archetype, ctx: RenderCtx): string {
     `import { CUSTOM_ELEMENTS_SCHEMA, Component, ElementRef, afterNextRender, signal, viewChild } from '@angular/core';`,
     `import '@kitn.ai/ui/elements';  // registers <kai-*> — required, must come first`,
     `import type { ${elementTypes} } from '@kitn.ai/ui/elements';`,
-    ...(isMock ? [] : wireImportLines({ typed: true, toolLoop: emitToolLoop })),
+    ...(isMock
+      ? []
+      : wireImportLines({
+          typed: true,
+          toolLoop: emitToolLoop,
+          cards: ctx.emitCards,
+          cardTools: ctx.cardProvider !== null,
+        })),
     ``,
     `// ${archetype.title} — ${p.note}. empty-state hint: ${emptyHint}`,
     ...(p.altNote ?? []).map((l) => `// ${l}`),
     ...chatMessageDecl(isMock),
     ``,
     ...modelInit,
+    ...cardsInit,
     ...toolsLines,
     ...runnerLines,
     `@Component({`,
@@ -2167,6 +2632,7 @@ function renderAngular(archetype: Archetype, ctx: RenderCtx): string {
     `        messages: this.messages(),`,
     `        loading: this.loading(),`,
     `        suggestions: this.suggestions,`,
+    ...cardPropAssign,
     `      });`,
     ...sourcesReapply,
     `    });`,
@@ -2306,6 +2772,7 @@ function renderSolid(archetype: Archetype, ctx: RenderCtx): string {
         bodyPayload: realBodyPayload({ defaultModel, tools: emitTools }),
         strictRoles: true,
         toolLoop: emitToolLoop,
+        cards: ctx.emitCards,
         thread: accessorThreadBinding(read, commit, setter),
         valueSource: 'input()',
         afterValue: [`setInput('');`],
@@ -2313,12 +2780,26 @@ function renderSolid(archetype: Archetype, ctx: RenderCtx): string {
 
   const modelInit = defaultModel
     ? [
-        `  // SCAF-8: change this to any provider/model string you want to use.`,
+        `  // SCAF-8: change this model id to another id THIS PROVIDER accepts.`,
         `  const model = '${defaultModel}';`,
       ]
     : [];
-  const toolsLines = emitTools ? toolSchemaLines('  ') : [];
+  // MODULE scope in this target and not merely by convention: `renderPart` is a
+  // top-level function (it has to be — <Index> calls it per row), and it is what
+  // hands the registry to <CardRenderer>. A const inside App() would be invisible
+  // to it.
+  const cardsInit = ctx.emitCards ? [...cardRegistryLines(''), ``] : [];
+  const toolsLines = emitTools ? toolSchemaLines('  ', ctx.cardProvider) : [];
   const runnerLines = emitToolLoop ? toolRunnerLines('  ', true) : [];
+  // Solid renders the components directly, so the props go on <CardRenderer>
+  // itself rather than on <kai-chat>: `types` is the Solid-component half of
+  // `cardTypes` (a component, not a tag name) and `schemas` is `cardSchemas`.
+  const cardRendererProps = ctx.emitCards
+    ? [
+        `            types={cards.components}`,
+        `            schemas={cards.validationSchemas}`,
+      ]
+    : [];
 
   const sourcesInit = hasSources
     ? [
@@ -2479,11 +2960,19 @@ function renderSolid(archetype: Archetype, ctx: RenderCtx): string {
     `} from '@kitn.ai/ui';`,
     `// The kit's own types, from the same entry the components come from.`,
     `import type { ChatMessage, MessagePart, MessageSource } from '@kitn.ai/ui';`,
-    ...(isMock ? [] : wireImportLines({ typed: false, toolLoop: emitToolLoop })),
+    ...(isMock
+      ? []
+      : wireImportLines({
+          typed: false,
+          toolLoop: emitToolLoop,
+          cards: ctx.emitCards,
+          cardTools: ctx.cardProvider !== null,
+        })),
     ``,
     `// ${archetype.title} — ${p.note}. empty-state hint: ${emptyHint}`,
     ...(p.altNote ?? []).map((l) => `// ${l}`),
     ``,
+    ...cardsInit,
     `// Narrow a part to ONE variant, or false. One read, one cast — and the JSX`,
     `// below re-runs it on every delta, which is what keeps a growing text or`,
     `// reasoning block updating while its row stays put.`,
@@ -2535,9 +3024,15 @@ function renderSolid(archetype: Archetype, ctx: RenderCtx): string {
     `// behind <kai-chat>), runs included: consecutive \`source\` parts collapse into`,
     `// ONE citation row and consecutive \`file\` parts into one attachment row, and`,
     `// the citation row is a SIBLING of the text bubble rather than a child of it.`,
-    `// Two things are deliberately NOT copied over: the bubble's own padding and`,
-    `// radius (styling, yours to change) and the cardTypes override prop — put your`,
-    `// own card components on the card registry instead.`,
+    `// The one thing deliberately NOT copied over is the bubble's own padding and`,
+    `// radius — styling, and yours to change.`,
+    ...(ctx.emitCards
+      ? [
+          `// The card branch DOES carry the registry through: \`types\` is the`,
+          `// Solid-component half of <kai-chat>'s \`cardTypes\` (a component, not a tag`,
+          `// name) and \`schemas\` is its \`cardSchemas\`.`,
+        ]
+      : []),
     `//`,
     `// \`part\` is an ACCESSOR, not a value. The <Index> that calls this keeps each`,
     `// row MOUNTED while the message streams, so the row outlives the delta that`,
@@ -2591,7 +3086,14 @@ function renderSolid(archetype: Archetype, ctx: RenderCtx): string {
     `          // Generative-UI cards. An envelope whose type is not registered gets`,
     `          // the built-in fallback card, so an unknown card is visible rather`,
     `          // than absent; register your own components on the card registry.`,
-    `          <CardRenderer envelope={p().envelope} />`,
+    ...(ctx.emitCards
+      ? [
+          `          <CardRenderer`,
+          `            envelope={p().envelope}`,
+          ...cardRendererProps,
+          `          />`,
+        ]
+      : [`          <CardRenderer envelope={p().envelope} />`]),
     `        )}`,
     `      </Match>`,
     `      <Match when={partAs(part(), 'source')}>`,
@@ -2729,6 +3231,8 @@ function renderFrontend(
   defaultModel: string | undefined,
   emitTools: boolean,
   emitToolLoop: boolean,
+  emitCards: boolean,
+  cardProvider: 'openai' | 'anthropic' | 'jsonschema' | null,
 ): string {
   const ctx: RenderCtx = {
     p: placementStyle(placement),
@@ -2738,6 +3242,8 @@ function renderFrontend(
     defaultModel,
     emitTools,
     emitToolLoop,
+    emitCards,
+    cardProvider,
   };
   switch (framework) {
     case 'react':
@@ -3438,6 +3944,21 @@ function compose(
   // server-side (langgraph, mastra, pi) still streams tool calls back, and the
   // loop that answers them is the same loop.
   const emitToolLoop = !isMock && hasToolPanel(archetype);
+  // Cards need a MODEL to ask for one, so `mock` (which streams a canned reply in
+  // the browser and never sees a tool call) is out for the same reason the loop is.
+  const emitCards = !isMock && bearsCards(archetype);
+  // Only shape card tools when the array is really forwarded AND we know which
+  // envelope this route's provider takes. Either half missing means the registry
+  // is still wired to the client (cardTypes/cardSchemas) while the model is not
+  // offered a card tool — which is the honest state for langgraph/mastra/pi, whose
+  // routes own their tool list server-side.
+  // `assertCardToolFormat`, not `cardToolProviderFor`: reaching here with both
+  // flags true means a tools array IS going into the request body, so an
+  // undeclared envelope is a scaffold that silently ships no card tool. Fail
+  // loudly instead. (`cardEmitPlan` keeps returning null for the same case on
+  // purpose — it is a planning function the guards read, and its job is to let
+  // them report the gap in their own words rather than blow up first.)
+  const cardProvider = emitCards && emitTools ? assertCardToolFormat(integration) : null;
   const frontend = renderFrontend(
     framework,
     archetype,
@@ -3448,6 +3969,8 @@ function compose(
     defaultModel,
     emitTools,
     emitToolLoop,
+    emitCards,
+    cardProvider,
   );
   const route = isMock ? undefined : chooseRoute(integration, framework);
 

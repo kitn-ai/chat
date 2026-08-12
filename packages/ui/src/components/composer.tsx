@@ -469,11 +469,21 @@ export function Composer(props: ComposerProps): JSX.Element {
   const handleBlur = (e: FocusEvent) => { focused = false; clearPillSelection(); props.onBlur?.(e); };
 
   onMount(() => {
+    // Captured at SETUP and closed over, never re-resolved as a global inside
+    // `onCleanup`: cleanup can run after the host removed the DOM globals (a
+    // `kai-*` release is deferred one microtask past detachment, so an
+    // environment teardown gets in between), and a bare `document` there throws
+    // -- from a promise nobody holds, so it lands as an unhandled rejection that
+    // fails the run while every test passes. That is how this was found.
+    // See tests/components/teardown-without-dom-globals.test.tsx.
+    // `ownerDocument` rather than a captured `document`, matching the rest of
+    // this file and staying correct for a composer inside an iframe.
+    const doc = editable.ownerDocument;
     const onSelectionChange = () => {
       if (focused) updateTriggerState();
     };
-    document.addEventListener('selectionchange', onSelectionChange);
-    onCleanup(() => document.removeEventListener('selectionchange', onSelectionChange));
+    doc.addEventListener('selectionchange', onSelectionChange);
+    onCleanup(() => doc.removeEventListener('selectionchange', onSelectionChange));
   });
 
   // --- Imperative controller (Pattern C): hand the facade a handle over the

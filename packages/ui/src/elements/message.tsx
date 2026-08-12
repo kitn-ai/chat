@@ -60,7 +60,16 @@ function CardTagSlot(props: { tag: string; envelope: CardEnvelope; theme: string
 interface Props extends Record<string, unknown> {
   /** The full message object. Set as a JS property. */
   message?: ChatMessage;
-  /** Convenience for simple cases when not passing a `message` object. */
+  /** Who is speaking: `'user'` or `'assistant'`. Convenience for simple cases when
+   *  not passing a `message` object.
+   *
+   *  This is the SEMANTIC role of the message, not an ARIA role — and the name
+   *  collides with the global ARIA `role` attribute, which is why the facade lifts
+   *  it off the host (see `liftRoleOffHost`). Neither speaker is a valid ARIA role,
+   *  so a `role="user"` left on `<kai-message>` is a CRITICAL axe `aria-roles`
+   *  violation. The accessible role lives on the row inside the shadow root
+   *  instead: `role="article"` plus an `aria-label` naming the speaker, matching
+   *  the SolidJS `<Message>` component. */
   role?: 'user' | 'assistant';
   /** Force markdown on/off. Defaults to on for assistant, off for user. */
   markdown?: boolean;
@@ -104,6 +113,45 @@ interface Props extends Record<string, unknown> {
   cardSchemas?: Record<string, object>;
 }
 
+/**
+ * Move a `role` the consumer put on the host into the element's own prop store,
+ * and off the DOM.
+ *
+ * `role` names the SPEAKER here (`'user'` / `'assistant'`) — the correct domain
+ * word, and the documented attribute — but it is also the global ARIA `role`
+ * attribute, and neither speaker is a valid ARIA role. Measured in a real chromium:
+ * a host left carrying `role="user"` is a CRITICAL axe `aria-roles` violation
+ * ("Role must be one of the valid ARIA roles: user"), and chromium discards the
+ * unknown token and computes `generic`, so the row is left with no accessible role
+ * and no accessible name rather than a mis-announced one.
+ *
+ * Capture the value, remove the attribute, then write it back as a PROPERTY.
+ * component-register's prop accessors do not reflect, so the write cannot put it
+ * back on the DOM, and it feeds the same reactive prop the facade already reads.
+ *
+ * The ORDER is load-bearing: `removeAttribute` fires component-register's
+ * `attributeChangedCallback` with `null`, which sets the property to `null`. The
+ * write-back has to come after that, or the scrub destroys the speaker it was
+ * meant to preserve.
+ *
+ * NOTE — this covers every path where the attribute is still on the host by the
+ * time the facade runs (`setAttribute` before or after connection, and any later
+ * change, via the observer below). It does NOT cover an element authored in HTML
+ * and upgraded at registration time: `defineWebComponent` installs its
+ * non-reflecting `role` accessor AFTER `customElements.define()`, so for elements
+ * already in the document the native ARIAMixin setter runs first in the constructor
+ * (`this[prop] = undefined` → `role` is a nullable reflected IDL attribute →
+ * `removeAttribute`) and the value is gone before any of this code executes. That
+ * is a separate defect in `src/elements/define.tsx`, not something the facade can
+ * reach; this function composes correctly with the fix once it lands.
+ */
+function liftRoleOffHost(element: HTMLElement): void {
+  const attr = element.getAttribute('role');
+  if (attr === null) return;
+  element.removeAttribute('role');
+  (element as unknown as { role?: string }).role = attr;
+}
+
 /** Events fired by `<kai-message>`. */
 interface Events {
   /** An action button was clicked. `action` is the built-in name or custom id.
@@ -133,6 +181,9 @@ defineWebComponent<Props, Events>('kai-message', {
   cardSchemas: undefined,
 }, (props, { dispatch, flag, element, expose }) => {
   const outer = useChatConfig();
+  // Do this FIRST, before anything reads `props.role`: it rewrites that prop as a
+  // side effect of taking the invalid ARIA role off the host.
+  liftRoleOffHost(element);
   const msg = (): ChatMessage =>
     props.message ?? {
       id: 'message',
@@ -199,6 +250,16 @@ defineWebComponent<Props, Events>('kai-message', {
     const observer = new MutationObserver(read);
     observer.observe(element, { childList: true, attributes: true, subtree: true });
     onCleanup(() => observer.disconnect());
+  });
+  // A consumer can set `role` at any point after the element is live
+  // (`el.setAttribute('role', 'user')`), which puts the invalid ARIA role back on
+  // the host. Keep lifting it off. Scoped to the one attribute so this cannot be
+  // mistaken for general attribute handling; no loop, because the write-back is a
+  // property and the removal leaves nothing for the next callback to find.
+  onMount(() => {
+    const roleObserver = new MutationObserver(() => liftRoleOffHost(element));
+    roleObserver.observe(element, { attributes: true, attributeFilter: ['role'] });
+    onCleanup(() => roleObserver.disconnect());
   });
   const isUser = () => msg().role === 'user';
   const avatar = () =>
@@ -270,12 +331,22 @@ defineWebComponent<Props, Events>('kai-message', {
         <Show
           when={showRail()}
           fallback={
-            <Message class={`${rowGroup()}${isUser() ? 'flex-col items-end' : 'flex-col items-start'}`}>
+            // `role` here is `<Message>`'s SPEAKER prop, not an ARIA role: the
+            // component turns it into `role="article"` + an `aria-label` naming the
+            // speaker, so the row an assistive technology sees has a valid role and
+            // a name. This is the same treatment the SolidJS `<Message>` gets when
+            // used directly — the facade just always knows its speaker, so unlike
+            // the bare component (where `role` is optional and usually omitted) the
+            // row is never left unlabelled.
+            <Message
+              role={msg().role}
+              class={`${rowGroup()}${isUser() ? 'flex-col items-end' : 'flex-col items-start'}`}
+            >
               {body()}
             </Message>
           }
         >
-          <Message class={rowGroup()}>
+          <Message role={msg().role} class={rowGroup()}>
             {avatarRail()}
             <div class={`flex min-w-0 flex-1 flex-col ${isUser() ? 'items-end' : 'items-start'}`}>
               {body()}
