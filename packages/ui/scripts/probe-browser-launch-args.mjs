@@ -21,10 +21,13 @@
  *      chromium IT launched
  *   verdict := over (our configured flags MINUS the defaults from A) only
  *
- * Exit 0 = every discriminating flag reached the process (config applied).
- * Exit 1 = at least one discriminating flag is missing (config NOT applied).
- * Exit 2 = a phase never produced a browser, so the probe measured nothing.
- *          Never read that as a pass.
+ * Exit 0 = every discriminating flag reached the process, no switch is
+ *          duplicated, and no flag from FORBIDDEN_FLAGS is back. Also exit 0,
+ *          vacuously and out loud, when the config configures no flags at all.
+ * Exit 1 = any of those three failed.
+ * Exit 2 = the probe could not measure: a phase never produced a browser, or
+ *          flags are configured but every one is also a playwright default so
+ *          their presence would prove nothing. Never read either as a pass.
  *
  * Usage: node scripts/probe-browser-launch-args.mjs [--story <path>] [--out <file>]
  */
@@ -35,16 +38,17 @@ import process from 'node:process';
 // The flags vitest.config.ts asks chromium for, restated literally on purpose.
 // Deriving them from the config would make the probe agree with the config by
 // construction, which is the exact failure mode under test.
-const EXPECTED_FLAGS = [
-  '--disable-dev-shm-usage',
-  '--no-sandbox',
-  '--disable-gpu',
-  '--disable-software-rasterizer',
-  '--disable-background-timer-throttling',
-  '--disable-backgrounding-occluded-windows',
-  '--disable-renderer-backgrounding',
-  '--js-flags=--max-old-space-size=2048',
-];
+const EXPECTED_FLAGS = ['--disable-gpu'];
+
+// Flags that were in the list while it was inert and that measurement showed do
+// harm once live. Re-adding any of them is a regression, so the probe fails on
+// their PRESENCE. See scripts/probe-webgl-under-flags.mjs and probe-heap-cap.mjs.
+const FORBIDDEN_FLAGS = {
+  '--disable-software-rasterizer':
+    'with --disable-gpu it removes WebGL entirely, and the wave/aurora/custom visualizer stories silently pass on their bar fallback',
+  '--js-flags=--max-old-space-size=2048':
+    'lowers the renderer heap ceiling from 3586MB to 2222MB, below chromium\'s own default - it causes the OOM crash it was meant to prevent',
+};
 
 const argv = process.argv.slice(2);
 const readArg = (name, fallback) => {
@@ -159,9 +163,27 @@ console.log('[probe] flags that only appear if our config was honoured (the real
 for (const f of discriminating) console.log(`  probe    ${f}`);
 console.log('');
 
+// Two different empty cases, and they are NOT the same answer.
+//
+// If EXPECTED_FLAGS is empty, vitest.config.ts asks chromium for nothing beyond
+// playwright's defaults, and "are our flags applied?" has no content. That is a
+// vacuous PASS and the probe says so out loud. It must not be a failure, or the
+// config would end up carrying a flag purely to keep this script happy — which
+// inverts what the script is for.
+if (EXPECTED_FLAGS.length === 0) {
+  console.log('[probe] No custom flags to verify: vitest.config.ts passes no launch args of its own,');
+  console.log('[probe] so playwright\'s defaults are the whole story and there is nothing to plumb.');
+  console.log('\n[probe] VERDICT: vacuous pass (nothing configured).');
+  process.exit(0);
+}
+
+// But if flags ARE configured and every one is also a playwright default, someone
+// wrote them expecting them to matter and this probe cannot tell whether they
+// arrived. That is genuinely inconclusive, not a pass.
 if (discriminating.length === 0) {
-  console.error('[probe] INCONCLUSIVE - every configured flag is also a playwright default.');
-  console.error('[probe] There is nothing to measure. Do not read this as a pass.');
+  console.error('[probe] INCONCLUSIVE - flags are configured, but every one is also a playwright');
+  console.error('[probe] default, so their presence proves nothing. Either drop them as duplicates');
+  console.error('[probe] or add one playwright does not set. Do not read this as a pass.');
   process.exit(2);
 }
 
@@ -192,11 +214,17 @@ for (const switchName of ['--disable-features', '--enable-features', '--js-flags
 }
 for (const d of dupes) console.log(`  CLOBBER  ${d}`);
 
-const verdict = missing.length === 0 && dupes.length === 0 ? 'APPLIED' : 'NOT APPLIED';
+const forbidden = Object.entries(FORBIDDEN_FLAGS)
+  .filter(([flag]) => vitestArgs.includes(flag))
+  .map(([flag, why]) => `${flag} is back - ${why}`);
+for (const f of forbidden) console.log(`  HARMFUL  ${f}`);
+
+const clean = missing.length === 0 && dupes.length === 0 && forbidden.length === 0;
+const verdict = clean ? 'APPLIED' : 'NOT APPLIED';
 console.log(`\n[probe] VERDICT: ${present.length}/${discriminating.length} discriminating flags on the process -> ${verdict}`);
 
 if (outFile) {
-  writeFileSync(outFile, JSON.stringify({ defaultArgs, vitestArgs, undetectable, discriminating, present, missing, dupes, verdict }, null, 2));
+  writeFileSync(outFile, JSON.stringify({ defaultArgs, vitestArgs, undetectable, discriminating, present, missing, dupes, forbidden, verdict }, null, 2));
   console.log(`[probe] wrote ${outFile}`);
 }
 process.exit(verdict === 'APPLIED' ? 0 : 1);

@@ -135,35 +135,67 @@ export default defineConfig({
         browser: {
           enabled: true,
           headless: true,
-          // CI hardening: chromium crashes ("Browser connection was closed /
-          // rpc is closed") partway through the story suite when it exhausts
-          // the runner's memory / the tiny default /dev/shm on GitHub runners,
-          // and a renderer page dies — which aborts the whole runner (not a
-          // retryable per-test failure). Give the renderer more headroom and
-          // stop it from being killed under load. No-op locally; required on CI.
+          // This block used to be a nine-flag "CI hardening" list, and none of it
+          // ran. `launchOptions` belongs to the PROVIDER, not to a browser
+          // instance: @vitest/browser-playwright reads `this.options.launchOptions`
+          // off the object passed to `playwright()` and spreads exactly that into
+          // `playwright.chromium.launch()`, so an instance-level `launchOptions` is
+          // read by nobody. It sat on the instance until 2026-08-12.
           //
-          // `launchOptions` belongs to the PROVIDER, not to a browser instance.
-          // @vitest/browser-playwright reads `this.options.launchOptions` off the
-          // object passed to `playwright()` and spreads exactly that into
-          // `playwright.chromium.launch()`; an instance-level `launchOptions` is
-          // read by nobody. It sat on the instance until 2026-08-11, so none of
-          // these args ever reached chromium — and nothing caught it, because the
-          // suite is green either way and five of these eight flags are ALREADY
-          // playwright chromium defaults, so even eyeballing `ps` looks reassuring.
-          // Verify with `node scripts/probe-browser-launch-args.mjs`: it diffs the
-          // argv of the chromium vitest launches against a plain playwright launch
-          // and judges only the three flags that can tell the two states apart
-          // (0/3 before this moved, 3/3 after).
+          // Nothing caught it, and the reason is worth keeping: the block never did
+          // that work, but the work was being done. Playwright's own chromium
+          // defaults already pass --disable-dev-shm-usage (the /dev/shm fix the old
+          // comment led with), --disable-background-timer-throttling,
+          // --disable-backgrounding-occluded-windows, --disable-renderer-backgrounding
+          // and --no-sandbox. Five of the nine flags were exact duplicates of
+          // playwright's list, so their absence could never show up as a symptom —
+          // and their PRESENCE in `ps` could never show up as proof either. Deleted
+          // as duplicates rather than kept as belt-and-braces; if a playwright bump
+          // ever drops one, re-check `chromiumSwitches` in
+          // playwright-core/lib/coreBundle.js, which is where that list lives.
+          //
+          // Three more were deleted because they had never once run and each
+          // measured harmful the moment it did — see the notes below.
+          //
+          // That leaves --disable-gpu: the one flag here that is genuinely ours.
+          // Verify it actually arrives with `node scripts/probe-browser-launch-args.mjs`,
+          // which reads the argv of the chromium a real storybook run launches and
+          // judges only flags playwright does not set by itself (0/1 before this
+          // moved to the provider, 1/1 after).
           provider: playwright({
             launchOptions: {
               args: [
-                '--disable-dev-shm-usage', // route shared memory to /tmp (default /dev/shm is tiny on runners)
-                '--no-sandbox',
-                '--disable-gpu', // headless CI has no GPU; avoids the GPU process + its memory
-                '--disable-software-rasterizer',
-                '--disable-background-timer-throttling', // keep the test page fully alive when "backgrounded"
-                '--disable-backgrounding-occluded-windows',
-                '--disable-renderer-backgrounding',
+                // Kept, but be honest about its standing: UNVERIFIED on the platform
+                // that matters, and disproven on the one that was measurable.
+                //
+                // The claim is that headless CI has no GPU, so this avoids a GPU
+                // process and its memory. On macOS chrome-headless-shell it does not:
+                // `node scripts/probe-disable-gpu-effect.mjs` counts ONE
+                // --type=gpu-process child with the flag and one without, and the WebGL
+                // renderer string is byte-identical SwiftShader either way. The flag
+                // changes nothing observable here.
+                //
+                // That is not grounds to delete it, because a macOS measurement cannot
+                // settle a claim about ubuntu-latest, which is where CI runs and where
+                // the flag has never been measured. It IS grounds to stop calling it
+                // required. Retained as not-disproven-where-it-matters, no stronger.
+                // If someone gets a reading on a real runner, act on it — including by
+                // deleting this, which would empty the list. The probe handles that
+                // case and passes vacuously rather than failing; do not keep a flag
+                // alive to give the probe something to check.
+                '--disable-gpu',
+
+                // NO '--disable-software-rasterizer'. It used to sit here, inert.
+                // The moment it became live it removed WebGL: --disable-gpu alone
+                // still leaves SwiftShader ("ANGLE (Google, Vulkan 1.3.0 (SwiftShader
+                // Device), SwiftShader driver)"), and the two together leave nothing,
+                // so `canvas.getContext('webgl')` returns null. Measured by
+                // `node scripts/probe-webgl-under-flags.mjs`, which bisects the list.
+                // That is not a crash — audio-visualizer's wave/aurora/custom variants
+                // "fall back to bars if WebGL is unavailable", so those stories would
+                // go on PASSING while silently exercising the bar path and never the
+                // shader path they exist to cover.
+
                 // NO '--disable-features=...' here. Playwright's own defaults already
                 // pass one (16 names it disables for test determinism: PaintHolding,
                 // Translate, HttpsUpgrades, RenderDocument, ...) and it appends our
@@ -175,7 +207,26 @@ export default defineConfig({
                 // were dead weight anyway: BackForwardCache is already covered by
                 // playwright's dedicated `--disable-back-forward-cache`, and
                 // CalculateNativeWinOcclusion is Windows-only (CI is ubuntu-latest).
-                '--js-flags=--max-old-space-size=2048', // each shard is ~28 files; lower cap forces earlier GC
+                // NO '--js-flags=--max-old-space-size=2048' either. It was written to
+                // "give the renderer more headroom" and measures as the exact
+                // opposite.
+                //
+                // THE LOAD-BEARING EVIDENCE, and the only thing anyone should cite
+                // here: `node scripts/probe-heap-cap.mjs` reads
+                // performance.memory.jsHeapSizeLimit straight out of the renderer —
+                // 3586 MB without the flag, 2222 MB with it. Chromium's own default
+                // ceiling is already ABOVE 2048, so the cap can only make the renderer
+                // OOM sooner, which is the mid-suite "Browser connection was closed"
+                // crash this block exists to prevent. That is a direct reading of the
+                // thing being claimed, and it does not depend on a sample.
+                //
+                // DO NOT CITE THIS NEXT NUMBER AS THOUGH IT SETTLED ANYTHING. One bare
+                // full local run each got 77/115 files through with the flags inert and
+                // 57/115 with them live. Suggestive, and consistent with the reading
+                // above, but n=1 per side and the bare full run ALWAYS dies eventually
+                // on a known per-file harness leak — which is why CI sub-shards via
+                // scripts/run-storybook-tests.mjs and never runs it this way. It cannot
+                // distinguish anything on its own; it is corroboration or it is noise.
               ],
             },
           }),
