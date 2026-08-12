@@ -1,6 +1,6 @@
 import type { Scenario } from './types';
 import { pickTools } from '../tools';
-import { answer, rendersAbove, seesText, toolTrigger } from './dom';
+import { assistantBubble, rendersAbove, seesText, toolTrigger } from './dom';
 
 /**
  * S15 — the whole reason `content: string` became `parts: MessagePart[]`.
@@ -31,6 +31,10 @@ export const s15Interleaving: Scenario = {
     // The tool ran first, so its panel must sit ABOVE the card it led to.
     await rendersAbove(tool, 'the get_weather panel', card, 'the confirm card');
     // And the closing prose must sit below the card, because it streamed last.
-    await rendersAbove(card, 'the confirm card', answer(page), 'the closing prose');
+    // `assistantBubble`, not "the last bubble": one message renders one bubble
+    // per text part, so this is the LAST thing the ASSISTANT wrote. Pointed at
+    // the last bubble on the page it would have been the same node here only
+    // because the assistant message happens to be last in the thread.
+    await rendersAbove(card, 'the confirm card', assistantBubble(page), 'the closing prose');
   },
 };

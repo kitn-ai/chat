@@ -107,6 +107,71 @@ carries the run phase (so the runner knows when to assert) and loop-level facts
 the DOM genuinely cannot express (how many round trips the tool loop took). It
 does **not** carry the message parts.
 
+### A position is not a speaker
+
+`answer()` was `bubbles().last()` and was described as "the assistant's answer".
+It is a **position**. Until the assistant emits its first text delta the last
+bubble on screen is the user's own **echoed prompt**, so for the opening of every
+turn that helper silently meant *the user* — which is how S17 spent its whole
+existence comparing an 89-character prompt to itself and reporting `grew=0`.
+
+The same locator sat under `seesProse`, which S01–S05 all call. Those were green
+for a real reason: they assert after the stream finished, so the last bubble
+genuinely was the assistant's. That is green **by when they happen to run**, not
+green by construction, and the margin was thinner than it looks. Measured on this
+fixture set, at the pre-delta moment:
+
+| scenario | its own prose check | what the echoed prompt alone gives it |
+|---|---|---|
+| S02 | `seesProse(page, 20)` | 77 characters — **passes** |
+| S04 | `seesProse(page, 60)` + names Paris, Tokyo, Berlin | 153 characters **and all three cities**, because the prompt asks for them — **passes entirely** |
+| S01 | `seesProse(page, 60)` | 42 characters — fails, by luck of prompt length |
+
+S04 is the one to look at twice: its whole final-answer assertion is satisfiable
+by the user's own words.
+
+S16 was worse than latent. Its check that a mid-stream error must not wipe the
+partial message read `page.locator('[part~="content"]').last()` and failed if it
+was empty — but wiping the message removes the assistant's bubble, so `.last()`
+falls back to the never-empty user echo and the check **passes hardest in exactly
+the case it exists to catch**.
+
+So a bubble is now selected by **speaker**, not position: `assistantBubble()` and
+`bubblesOf(page, who)`, with `lastBubble()` kept for the rare "whatever is at the
+bottom of the thread" and named so nobody mistakes it for the answer. An
+assertion made too early now fails as *"expected at least N characters of visible
+ASSISTANT prose, saw 0; 1 bubble(s) are on screen: [the prompt]"* instead of
+passing off the prompt. `harness/scenarios.spec.ts` carries the control for it:
+it removes every row that is not the echo — reproducing both the opening of a
+turn and a stream error that discards the message — proves the trap is armed by
+checking the last bubble on the page IS the prompt, and requires the locator to
+refuse it.
+
+#### The thread renders no role
+
+None of this should need styling. `<Message role>` already emits `data-role`,
+`role="article"` and an `aria-label` naming the speaker — but neither `Thread`
+nor `ChatThread` passes `role` when it renders the message list, so every row in
+a real `<kai-thread>` is an **unlabelled generic div**. That is a kit gap in its
+own right (a screen reader gets no speaker either), and it is why the speaker has
+to be inferred here at all.
+
+Until it is closed, two independent signals stand in:
+
+| signal | user | assistant | set by |
+|---|---|---|---|
+| row alignment | `items-end` | `items-start` | `Thread`'s row class |
+| bubble skin | `bg-muted rounded-2xl` | `chat-markdown` (markdown-rendered) | `MessageContent` / `Markdown` |
+
+Alignment **selects**; the skin **cross-checks**. `assertBubbleRolesAreLegible`
+runs on the pass path of every prose read and fails if the two disagree or if any
+bubble classifies as neither speaker. Drop `items-start` and the locator matches
+nothing, so a scenario goes red on a timeout it can explain. Add `items-start` to
+user rows — the regression that would quietly restore the original defect — and
+the signals disagree and every read fails naming the drift. The middle case, a
+locator that still resolves but to the wrong speaker, is the one thing that must
+never come back.
+
 ## Watch it fail first
 
 `conformance:control` points every assertion at a stream that **cannot** satisfy

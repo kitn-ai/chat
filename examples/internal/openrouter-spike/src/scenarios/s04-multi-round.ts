@@ -1,6 +1,6 @@
 import type { Scenario } from './types';
 import { pickTools } from '../tools';
-import { fail, seesAtLeast, seesProse } from './dom';
+import { fail, seesAtLeast, seesAssistantProse } from './dom';
 import { readHarnessState } from '../harness-state';
 
 /** S4 — the loop runs more than twice: tool → result → tool → result → answer.
@@ -23,7 +23,7 @@ export const s04MultiRound: Scenario = {
     const completed = page.getByText('Completed');
     await seesAtLeast(page, completed, 3, 'Completed tool panels (one per city)');
 
-    const prose = await seesProse(page, 60);
+    const prose = await seesAssistantProse(page, 60);
     for (const city of ['Paris', 'Tokyo', 'Berlin']) {
       if (!prose.includes(city)) fail(`the final answer never mentions ${city}: ${JSON.stringify(prose.slice(0, 200))}`);
     }

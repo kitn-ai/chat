@@ -1,5 +1,5 @@
 import type { Scenario } from './types';
-import { fail, seesText } from './dom';
+import { assistantBubble, bubbles, fail, seesText, textNow } from './dom';
 
 /**
  * S16 — the provider dies halfway through a sentence.
@@ -32,7 +32,27 @@ export const s16MidStreamError: Scenario = {
       because: "the provider's own error message must reach the user",
     });
 
-    const prose = ((await page.locator('[part~="content"]').last().textContent()) ?? '').trim();
-    if (prose.length === 0) fail('the assistant bubble was emptied by the error');
+    // The assistant's OWN bubble, selected by speaker.
+    //
+    // This read used to be `page.locator('[part~="content"]').last()`, and that
+    // is the one shape in this harness where the ambiguity was not merely
+    // latent — it was pointed the wrong way round. The failure this scenario
+    // exists to catch is the kit throwing the partial message away. Throw the
+    // message away and there is no assistant bubble left, so `.last()` falls
+    // back to the ECHOED USER PROMPT, which is never empty, and
+    // `prose.length === 0` reports success. The check passed hardest in exactly
+    // the case it was written to fail on.
+    //
+    // `assistantBubble` resolves to nothing when the assistant message is gone,
+    // and `textContent()` on nothing is '', so the same line now goes red.
+    const prose = (await textNow(assistantBubble(page))).trim();
+    if (prose.length === 0) {
+      const onScreen = await bubbles(page).allTextContents();
+      fail(
+        'the assistant bubble was emptied by the error — the partial message a user was already ' +
+          `reading did not survive. ${onScreen.length} bubble(s) remain on screen: ` +
+          `${JSON.stringify(onScreen.map((t) => t.trim().slice(0, 60)))}`,
+      );
+    }
   },
 };

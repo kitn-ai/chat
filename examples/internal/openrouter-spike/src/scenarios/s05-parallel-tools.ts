@@ -1,6 +1,6 @@
 import type { Scenario } from './types';
 import { pickTools } from '../tools';
-import { fail, seesAtLeast, seesConsumerCards, seesProse } from './dom';
+import { fail, seesAtLeast, seesConsumerCards, seesAssistantProse } from './dom';
 
 /** S5 — two tool calls in ONE assistant turn.
  *
@@ -52,6 +52,6 @@ export const s05ParallelTools: Scenario = {
     // green "a card rendered" as a working seam if nobody counts.
     await seesConsumerCards(page, 2, ['Light rain', 'Clear']);
 
-    await seesProse(page, 20);
+    await seesAssistantProse(page, 20);
   },
 };
