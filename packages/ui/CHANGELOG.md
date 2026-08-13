@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.22.0](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.21.0...@kitn.ai/ui-v0.22.0) (2026-08-13)
+
+
+### ⚠ BREAKING CHANGES
+
+* **elements:** the label prop stops overriding text the user can see ([#199](https://github.com/kitn-ai/ui/issues/199))
+* **wire:** OpenAIWireMessage.content widens from `string | null` to `string | OpenAIContentPart[] | null`. Consumers treating it as a string (e.g. msg.content.trim()) will no longer typecheck.
+
+### Features
+
+* **agent-tooling:** emit the attachment surface, and make the gateway grouping a declared fact ([#185](https://github.com/kitn-ai/ui/issues/185)) ([476a16b](https://github.com/kitn-ai/ui/commit/476a16b9a04a7681cfcc2117817f84b3f40b4aaf))
+* **wire,elements:** one media-type declaration the composer and the encoder both derive from ([#190](https://github.com/kitn-ai/ui/issues/190)) ([202f01b](https://github.com/kitn-ai/ui/commit/202f01bd98e73d2463f3b8d76aca5961d6352be8))
+* **wire:** attachments actually reach the model, across all three layers ([#186](https://github.com/kitn-ai/ui/issues/186)) ([ad8de3b](https://github.com/kitn-ai/ui/commit/ad8de3b003062b9715f4da50d3aee22009500ca8))
+
+
+### Bug Fixes
+
+* **a11y:** four components spent semantic state on Tailwind classes and nothing else ([17cba9c](https://github.com/kitn-ai/ui/commit/17cba9c0982dc8cb9a4f426f2a87000db8a5982f))
+* **a11y:** four components spent semantic state on Tailwind classes and nothing else ([#178](https://github.com/kitn-ai/ui/issues/178)) ([17cba9c](https://github.com/kitn-ai/ui/commit/17cba9c0982dc8cb9a4f426f2a87000db8a5982f))
+* **agent-tooling:** the scaffolder emitted the root entry for Solid, and a test pinned it there ([#180](https://github.com/kitn-ai/ui/issues/180)) ([36e2567](https://github.com/kitn-ai/ui/commit/36e2567c1ac39414d3ba7909009923cdee5ee13a))
+* **elements:** the label prop stops overriding text the user can see ([#199](https://github.com/kitn-ai/ui/issues/199)) ([e6fd55e](https://github.com/kitn-ai/ui/commit/e6fd55e54882a6ab0f780f3136ada118d78f088a))
+* **examples:** the Solid starter imports from ./solid, not the root entry ([#192](https://github.com/kitn-ai/ui/issues/192)) ([c5b3751](https://github.com/kitn-ai/ui/commit/c5b3751507ff3010417e9731213cbc2697233606))
+
 ## [0.21.0](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.20.1...@kitn.ai/ui-v0.21.0) (2026-08-12)
 
 
