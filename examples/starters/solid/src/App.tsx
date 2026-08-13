@@ -16,7 +16,7 @@ import {
   ResizablePanelGroup,
   ResizablePanel,
   ResizableHandle,
-} from "@kitn.ai/ui";
+} from "@kitn.ai/ui/solid";
 import type {
   ChatMessage,
   ChatMessageAction,
@@ -24,7 +24,7 @@ import type {
   ConversationSummary,
   FeedbackVote,
   MessagePart,
-} from "@kitn.ai/ui";
+} from "@kitn.ai/ui/solid";
 import {
   appendReasoningPart,
   appendTextPart,

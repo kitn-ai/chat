@@ -100,8 +100,10 @@ the port to whatever it prints.
 ### Framework and meta-framework apps
 
 - **`starters/solid/`**: SolidJS Vite app that uses the raw SolidJS component API
-  (the `.` entry). A pnpm-workspace member on `"@kitn.ai/ui": "workspace:*"`, like
-  the other SPA starters.
+  from `@kitn.ai/ui/solid`, the complete SolidJS surface, which lives off the root
+  entry so the React/Vue/Svelte/vanilla majority do not ship a catalog they cannot
+  render. A pnpm-workspace member on `"@kitn.ai/ui": "workspace:*"`, like the other
+  SPA starters.
 - **`starters/nextjs/`**: Next.js 15 App Router, SSR + RSC `'use client'`, on the
   generated React wrappers (`@kitn.ai/ui/react`).
 - **`starters/tanstack-start/`**: TanStack Start, SSR + hydration, also on the

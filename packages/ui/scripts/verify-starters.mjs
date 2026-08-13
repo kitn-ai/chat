@@ -258,7 +258,7 @@ for (const name of readdirSync(STARTERS_DIR).sort()) {
     toRun.push('typecheck');
   }
 
-  starters.push({ name, dir, tier, spec, scripts: toRun, buildTypechecks });
+  starters.push({ name, dir, tier, spec, scripts: toRun, buildTypechecks, pkg });
 }
 
 if (problems.length > 0) {
@@ -271,6 +271,143 @@ if (problems.length > 0) {
 }
 
 if (starters.length === 0) fail(`found no starters under ${STARTERS_DIR}. Zero checked must not read as green.`);
+
+// ---- structural: a Solid starter imports the kit from "./solid" -------------
+//
+// WHY A SEPARATE CHECK, WHEN EVERY STARTER ALREADY BUILDS
+// ------------------------------------------------------
+// The build tier above CANNOT see this defect, and that is the whole reason this
+// block exists. `src/solid.ts` is `export * from './index'` plus the Solid-only
+// additions, so "./solid" is a compiler-guaranteed STRICT SUPERSET of ".". A
+// Solid starter importing components from the root entry therefore compiles
+// perfectly, for exactly as long as it happens to use only symbols that live on
+// both. It is a specifier that WORKS while contradicting the documentation, and
+// a compile gate cannot distinguish that from a correct one. The starter shipped
+// this way and `verify:starters` was green over it.
+//
+// It matters because the root entry is not where the Solid surface lives. The
+// full Solid catalog was deliberately moved OFF "." (it cost every React/Vue/
+// Svelte/vanilla consumer +113,672 bytes, +19.2%, for components they cannot
+// render), and `verify:solid-coverage` checks 79/79 against `@kitn.ai/ui/solid`
+// and explicitly NOT against ".". A Solid consumer is told to import from one
+// place. The starters are what create-kai scaffolds from, so a starter modelling
+// the other one teaches every new project the wrong entry point, and #180 had
+// already fixed the same defect in the MCP scaffolder's Solid branch.
+//
+// ROOT IS BANNED OUTRIGHT HERE, not merely discouraged: because "./solid" is a
+// superset, a Solid app has no reason to reach for "." at all. Every OTHER
+// subpath stays legal (`/state`, `/wire`, `/elements`, ...) — those are
+// framework-neutral and Solid consumers use them normally. This says nothing
+// about the Vue/Svelte/vanilla starters, which import types from "." correctly.
+//
+// DERIVED, NOT LISTED. The Solid starters are the ones that DEPEND ON solid-js,
+// read from each starter's own package.json. There is no `'solid'` literal
+// naming a directory, so a second Solid starter added next month is covered on
+// arrival rather than quietly falling outside a hand-written roster.
+//
+// It runs on EVERY invocation, before any build and regardless of --only /
+// --linked-only. It is a few file reads with no build behind it, and a static
+// contradiction should not be skippable by a flag whose purpose is to save build
+// time — that is the coverage hole this file already refuses elsewhere.
+//
+// VACUITY. Three ways this could pass while checking nothing, all of them hard
+// failures: no starter depends on solid-js, a Solid starter has no source files
+// to scan, or it imports the kit from nowhere at all. "Found none, so nothing was
+// wrong" is the single most expensive recurring defect in this repo.
+const KIT = '@kitn.ai/ui';
+const SOLID_ENTRY = `${KIT}/solid`;
+const SOURCE_EXT = /\.(?:[cm]?[jt]sx?)$/;
+const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', '.next', '.vinxi', '.output', '.vite']);
+
+// `from '<spec>'`, bare `import '<spec>'`, and dynamic `import('<spec>')`. Covers
+// `import type` too, which matters: the starter's type-only import of the root
+// entry is half of this defect, and it is the half a bundler never even sees.
+const SPECIFIER_RE = /(?:\bfrom|\bimport)\s*\(?\s*['"]([^'"]+)['"]/g;
+
+const walkSources = (dir, out = []) => {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      if (!SKIP_DIRS.has(entry.name) && !entry.name.startsWith('.')) walkSources(join(dir, entry.name), out);
+    } else if (SOURCE_EXT.test(entry.name)) {
+      out.push(join(dir, entry.name));
+    }
+  }
+  return out;
+};
+
+const solidStarters = starters.filter(
+  (s) => s.pkg.dependencies?.['solid-js'] ?? s.pkg.devDependencies?.['solid-js'],
+);
+
+if (solidStarters.length === 0) {
+  fail(
+    `no starter depends on solid-js, so the "./solid" entry check covered NOTHING.\n` +
+      `  This check is derived from each starter's package.json rather than a hard-coded\n` +
+      `  directory name, and finding zero is a failure, not a pass: examples/starters/solid\n` +
+      `  exists and is a Solid app. Either it lost its solid-js dependency, or it was renamed\n` +
+      `  or removed and this guard silently stopped checking anything.`,
+  );
+}
+
+const entryProblems = [];
+for (const s of solidStarters) {
+  const files = walkSources(s.dir);
+  if (files.length === 0) {
+    entryProblems.push(`${s.name}: is a Solid starter but has no scannable source files. Nothing was checked.`);
+    continue;
+  }
+
+  const rootHits = [];
+  let solidHits = 0;
+
+  for (const file of files) {
+    const src = readFileSync(file, 'utf8');
+    const rel = file.slice(REPO_ROOT.length + 1);
+    for (const m of src.matchAll(SPECIFIER_RE)) {
+      const spec = m[1];
+      if (spec === KIT) {
+        // m.index, not indexOf(spec): the bare root specifier is a PREFIX of
+        // every subpath, so a text search would land on the wrong occurrence and
+        // report every hit at the same line.
+        rootHits.push(`${rel}:${src.slice(0, m.index).split('\n').length}`);
+      } else if (spec === SOLID_ENTRY) {
+        solidHits += 1;
+      }
+    }
+  }
+
+  if (rootHits.length > 0) {
+    entryProblems.push(
+      `${s.name}: imports the kit from the ROOT entry "${KIT}" at ${rootHits.length} site(s):\n` +
+        rootHits.map((h) => `      ${h}`).join('\n') +
+        `\n    A Solid app must import from "${SOLID_ENTRY}", the complete SolidJS surface.\n` +
+        `    This BUILDS today only because "./solid" is a strict superset and these symbols\n` +
+        `    happen to exist on both, which is precisely why the build tier cannot catch it.`,
+    );
+  }
+  if (solidHits === 0) {
+    entryProblems.push(
+      `${s.name}: never imports "${SOLID_ENTRY}". A Solid starter that touches the kit from\n` +
+        `    nowhere, or only through the framework-neutral subpaths, is not demonstrating the\n` +
+        `    Solid surface — and this check would pass over it having asserted nothing.`,
+    );
+  }
+}
+
+if (entryProblems.length > 0) {
+  fail(
+    `${entryProblems.length} Solid starter entry-point problem(s).\n\n` +
+      `  The starters are what create-kai scaffolds from, so the wrong entry here teaches it\n` +
+      `  to every new project. See the header of packages/ui/src/solid.ts for why the full\n` +
+      `  Solid catalog lives off "." and packages/ui/scripts/verify-solid-coverage.mjs for\n` +
+      `  the coverage guard that follows it there.\n\n` +
+      entryProblems.map((p) => `  ✗ ${p}`).join('\n\n'),
+  );
+}
+
+step(
+  `solid entry: ${solidStarters.length} solid starter(s) import the kit from "${SOLID_ENTRY}", not "${KIT}"`,
+);
 
 // ---- scope ------------------------------------------------------------------
 const totalFound = starters.length;
