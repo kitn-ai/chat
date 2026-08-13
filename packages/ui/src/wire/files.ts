@@ -13,13 +13,21 @@
 // itself. That constraint is what makes a `blob:` URL unencodable rather than
 // merely inconvenient -- resolving one requires the browser tab that minted it.
 import type { AttachmentData } from '../components/attachment-types';
-import { DEFAULT_MEDIA_POLICY, type MediaPolicy } from './media-types';
+import {
+  DEFAULT_MEDIA_POLICY,
+  UNNAMED_TEXT_MEDIA_TYPE,
+  namesNothing,
+  type MediaPolicy,
+} from './media-types';
 
-/** `data:<media type>;base64,<data>`. Deliberately requires an explicit media
- *  type and base64 encoding: those are the two things both APIs need, and a
- *  `data:` URI missing either cannot be turned into a content block without
- *  guessing. */
-const BASE64_DATA_URI = /^data:([^;,]+);base64,([\s\S]*)$/;
+/** `data:<media type>;base64,<data>`. Base64 is required -- both APIs need it,
+ *  and a `data:` URI without it cannot become a content block without guessing.
+ *  The media type is NOT required, because a browser omits it for a file it
+ *  could not name: the File API says to emit a `data:` URL with no media type,
+ *  and Chrome and jsdom both write `application/octet-stream` there instead.
+ *  Either way there is no type to read, which `decide()` answers with
+ *  `undetermined` and this file settles by decoding. */
+const BASE64_DATA_URI = /^data:([^;,]*);base64,([\s\S]*)$/;
 
 const SCHEME = /^([a-z][a-z0-9+.-]*):/i;
 
@@ -88,18 +96,68 @@ function decodeBase64Text(data: string): { ok: true; text: string; bytes: number
 }
 
 /**
+ * XML attribute escaping, for the two attributes the envelope carries.
+ *
+ * A filename is whatever the user called their file, and it lands between double
+ * quotes: `notes" x="` would otherwise rewrite the header into attributes of its
+ * own choosing. Newlines are escaped for the same reason and not for tidiness --
+ * a raw one splits the header across lines, which is how a filename gets to look
+ * like the start of the content.
+ *
+ * The media type goes through the same function, which is not symmetry for its
+ * own sake: it comes from a `data:` URI, where it is anything up to the first
+ * `;`, and `text/pl"ain` matches the `text/*` capability and arrives here whole.
+ */
+const escapeAttribute = (value: string): string =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/\r/g, '&#13;')
+    .replace(/\n/g, '&#10;');
+
+/** The only sequence in the body that could end the block early, and so the only
+ *  thing in the body that gets touched. Whitespace-tolerant and case-insensitive
+ *  because the reader here is a model, and `</file >` reads as the end to one
+ *  just as readily as `</file>` does. */
+const CLOSING_DELIMITER = /<(\/file\s*)>/gi;
+
+/**
  * The text content a text attachment contributes to the prompt.
  *
- * ★ THE SWAP POINT for how a text file appears in a message. It is one function
- * on purpose: the filename-tagged envelope below is the smallest defensible
- * default, not a settled decision, and replacing it is a change to this function
- * and nothing else. The tag form is chosen over a bare `filename:\n` prefix
- * because it marks where the file ENDS as well as where it begins, which is what
- * stops a model reading the next part of the turn as more file.
+ * ★ THE SWAP POINT for how a text file appears in a message, and the shape is
+ * SETTLED: `<file name="..." type="...">…</file>`. Two alternatives were weighed
+ * and rejected. A bare `filename:\n` prefix marks where the file BEGINS and not
+ * where it ends, so the next part of the turn reads as more file. An Anthropic
+ * `document` block would buy citations, but it is Anthropic-specific -- the
+ * OpenAI wire has no equivalent, so the two wires would disagree about one
+ * attachment -- and it needs a Files API upload round trip, which is I/O, in a
+ * layer that by design has none. Changing the envelope is still a change to this
+ * function and nothing else; it just is not an open question.
+ *
+ * ★ WHY THE BODY IS BARELY TOUCHED. Both attributes are escaped in full, as
+ * attributes always are. The body is not, and that is deliberate: these are
+ * source files, a reader will diff what they attached against what arrived, and
+ * XML-escaping every `<` in a TSX file would mangle the exact thing this feature
+ * exists to send and pay tokens to do it. So the body transform is the smallest
+ * one that makes the delimiter unforgeable -- the end tag, and nothing else.
+ *
+ * Left alone, that end tag is a way out of the block. A file containing `</file>`
+ * closes it early, and everything after that point reads to the model as the turn
+ * AROUND the file rather than as file content: user-supplied bytes in instruction
+ * position, reachable by anyone who can get a file in front of the composer.
+ * Escaped, it stays where it belongs. `&lt;/file&gt;` ends nothing, and it is
+ * visible in the output and reversible by eye, which a deletion or a silent
+ * substitution would not be -- a reader who spots it can say exactly what the
+ * original byte was. The OPENING tag is left untouched on purpose: it cannot end
+ * the block, and escaping it would corrupt every HTML file anyone ever attaches.
  */
 export function textFileContent(file: Extract<ClassifiedFile, { kind: 'text' }>): string {
-  const name = file.filename ?? 'attachment';
-  return `<file name="${name}" type="${file.mediaType}">\n${file.text}\n</file>`;
+  const name = escapeAttribute(file.filename ?? 'attachment');
+  const type = escapeAttribute(file.mediaType);
+  const text = file.text.replace(CLOSING_DELIMITER, '&lt;$1&gt;');
+  return `<file name="${name}" type="${type}">\n${text}\n</file>`;
 }
 
 /**
@@ -107,7 +165,13 @@ export function textFileContent(file: Extract<ClassifiedFile, { kind: 'text' }>)
  *
  * A `data:` URI's OWN media type wins over `attachment.mediaType` when they
  * disagree: the URI describes the bytes actually present, while the field is a
- * label the host set, and it is the bytes the provider will decode.
+ * label the host set, and it is the bytes the provider will decode. The one
+ * exception is a URI whose media type names nothing, where there is no answer to
+ * prefer -- see below.
+ *
+ * When NOTHING names the file, it is settled by DECODING it rather than by
+ * reading its filename. That path can only ever produce text, and only when the
+ * policy still allows text, so it cannot be used to get around `accept`.
  *
  * `policy` narrows what counts as encodable. It defaults to the kit's full
  * capability set, so an omitted policy behaves exactly as before for images and
@@ -134,7 +198,13 @@ export function classifyAttachment(
 
   const asData = BASE64_DATA_URI.exec(url);
   if (asData) {
-    mediaType = asData[1].toLowerCase();
+    const inUri = asData[1].toLowerCase();
+    // The URI's own media type wins -- but only when it NAMES something. A
+    // browser writes `application/octet-stream` (or nothing) for a file it could
+    // not identify, and a non-answer describes the bytes no better than the
+    // host's `mediaType` field does. In that one case the field is the only
+    // label anybody actually wrote down, so it is read rather than overridden.
+    mediaType = namesNothing(inUri) ? (attachment.mediaType?.toLowerCase() ?? inUri) : inUri;
     source = { type: 'base64', mediaType, data: asData[2], dataUri: url };
   } else if (/^https?:\/\//i.test(url)) {
     const declared = attachment.mediaType?.toLowerCase();
@@ -165,6 +235,47 @@ export function classifyAttachment(
   }
 
   const decision = policy.decide(mediaType);
+
+  if (decision.status === 'undetermined') {
+    // ★ NOBODY NAMED THIS FILE, SO READ IT. Seven of the file types a developer
+    // is likeliest to attach to a coding chat arrive from Chrome with no media
+    // type at all (the table in media-types.ts), and the tempting fix -- map
+    // `.rs` to text -- is a filename talking, which is the one thing this design
+    // refuses. The bytes are already in hand, so ask them instead: a clean UTF-8
+    // decode IS the evidence that this is text, and it is evidence about the
+    // actual file rather than about its name.
+    //
+    // The developer's filter is already enforced: `undetermined` comes back only
+    // when the effective policy still admits plain text, so reaching this line at
+    // all means a text file is something this policy would take. An
+    // images-only `accept` gets `unsupported` and never arrives here.
+    if (source.type !== 'base64') {
+      return {
+        status: 'unencodable',
+        reason: `it is at a remote URL ("${source.url}") and its media type "${mediaType}" says nothing about the bytes -- that is the label for "arbitrary binary", so it separates an image from a document not at all. Settling it by reading the bytes would need a fetch, and this layer does no I/O. Set \`mediaType\` to what the file actually is when you stage it.`,
+      };
+    }
+    const decoded = decodeBase64Text(source.data);
+    if (!decoded.ok) {
+      return {
+        status: 'unencodable',
+        reason: `nothing names it -- ${mediaType === '' ? 'it carries no media type' : `its media type is "${mediaType}"`}, so the only way to tell what it is was to read it -- and its bytes are not valid UTF-8, so it is binary of some unidentified kind. Neither API has an arbitrary-file block to carry that. Set \`mediaType\` if you know what it is, or hand the file to the model through a tool.`,
+      };
+    }
+    // `text/plain` and not the media type it arrived with: a decode establishes
+    // "this is text" and nothing more specific, and that is exactly what
+    // `text/plain` means. See UNNAMED_TEXT_MEDIA_TYPE.
+    return {
+      status: 'encodable',
+      file: {
+        kind: 'text',
+        mediaType: UNNAMED_TEXT_MEDIA_TYPE,
+        source,
+        filename: attachment.filename,
+        text: decoded.text,
+      },
+    };
+  }
 
   if (decision.status === 'filtered') {
     return {

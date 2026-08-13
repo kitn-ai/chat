@@ -22,13 +22,21 @@ import type { CustomAction } from './chat-types';
 // than copying the list into the composer) is the entire point -- a second list
 // here is the drift this design exists to prevent.
 import { resolveMediaPolicy, type MediaTypeFilter } from '../wire/media-types';
+// Also a leaf, and imported for the same reason: when the browser cannot name a
+// file, the question "can this be sent?" is answered by decoding its bytes, and
+// this module is where that decode already lives. Asking IT rather than growing
+// a second decoder here is what keeps the composer's answer and the encoder's
+// answer the same answer, byte for byte, instead of two that agree today.
+import { classifyAttachment } from '../wire/files';
 
 /** One file the composer refused, as facts rather than as a message. The kit
  *  says what happened; the application decides what the user reads. */
 export interface RejectedAttachment {
   filename: string;
-  /** The browser's media type for the file, or `''` when it could not tell --
-   *  which is itself the usual reason a source file gets rejected. */
+  /** The browser's media type for the file, or `''` when it could not tell. An
+   *  empty one is not by itself why a file was rejected: an unnamed file is
+   *  decided by decoding its bytes, so `''` here means the decode is what said
+   *  no (binary), or that your `accept` left no text type for it to land in. */
   mediaType: string;
   /** `'filtered'` = this kit could have sent it, your `accept` excluded it.
    *  `'unsupported'` = no API takes this as message content at all. */
@@ -144,25 +152,52 @@ export function DefaultPromptInput(props: DefaultPromptInputProps) {
     // "All Files" escape, and it does not apply to drag-and-drop at all. So the
     // filter that actually holds is this one, in JS, on the files as staged.
     const policy = mediaPolicy();
-    const allowed: File[] = [];
-    const rejected: RejectedAttachment[] = [];
-    for (const file of Array.from(files)) {
-      // No `accept` means no filtering, which is what every existing consumer
-      // gets today. Opting in is what turns the picker into a guarantee.
-      if (props.accept === undefined) {
-        allowed.push(file);
-        continue;
-      }
-      const decision = policy.decide(file.type);
-      if (decision.status === 'allowed') allowed.push(file);
-      else rejected.push({ filename: file.name, mediaType: file.type, reason: decision.status });
-    }
-    if (rejected.length > 0) props.onAttachmentsRejected?.(rejected);
-    if (allowed.length === 0) return;
+    const picked = Array.from(files);
+    // No `accept` means no filtering, which is what every existing consumer gets
+    // today. Opting in is what turns the picker into a guarantee.
+    const decisions = picked.map((file) =>
+      props.accept === undefined ? undefined : policy.decide(file.type),
+    );
+    // Read a file when its media type says yes, and ALSO when its media type
+    // says nothing at all: `undetermined` means the browser could not name it,
+    // and the only honest way to answer is to look at the bytes. Reading is the
+    // cost of that answer, so it is spent only on files that could still be
+    // staged — a file the filter already rejected is never read.
+    const needsBytes = (d: (typeof decisions)[number]): boolean =>
+      d === undefined || d.status === 'allowed' || d.status === 'undetermined';
+    // One parallel pass, index-aligned with `picked`, so the staged order is the
+    // PICK order rather than whichever file finished reading first.
+    const read = await Promise.all(
+      picked.map((file, i) => (needsBytes(decisions[i]) ? fileToAttachment(file) : undefined)),
+    );
 
-    // Read all of them before publishing once: a per-file append would make the
-    // list order depend on which file finished reading first.
-    const staged = await Promise.all(allowed.map(fileToAttachment));
+    const staged: AttachmentData[] = [];
+    const rejected: RejectedAttachment[] = [];
+    picked.forEach((file, i) => {
+      const decision = decisions[i];
+      const attachment = read[i];
+      if (decision === undefined || decision.status === 'allowed') {
+        if (attachment) staged.push(attachment);
+        return;
+      }
+      if (decision.status === 'undetermined') {
+        // The bytes are in hand now, so the encoder can answer for real. Its
+        // verdict IS the composer's verdict: staging anything it would refuse is
+        // the exact defect (#186) this whole design exists to prevent.
+        if (attachment && classifyAttachment(attachment, policy).status === 'encodable') {
+          staged.push(attachment);
+        } else {
+          // Not `filtered`: the kit could not encode this either, so pointing
+          // the developer at their own `accept` would send them the wrong way.
+          rejected.push({ filename: file.name, mediaType: file.type, reason: 'unsupported' });
+        }
+        return;
+      }
+      rejected.push({ filename: file.name, mediaType: file.type, reason: decision.status });
+    });
+
+    if (rejected.length > 0) props.onAttachmentsRejected?.(rejected);
+    if (staged.length === 0) return;
     // Re-read `attachments()` AFTER the await — a second drop while these were
     // being read would otherwise be overwritten by this call's stale snapshot.
     props.onAttachmentsChange?.([...attachments(), ...staged]);

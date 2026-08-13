@@ -198,3 +198,114 @@ describe('the filter holds even when the picker attribute does not', () => {
     expect(onAttachmentsRejected).not.toHaveBeenCalled();
   });
 });
+
+// The composer half of "a file nobody could name is decided by DECODING it".
+//
+// The encoder half is in `src/wire/media-types.test.ts`. This side matters
+// separately because the composer decides BEFORE the wire ever sees the file: if
+// it drops a staged `.rs` the user never gets to send it, and if it stages one
+// the developer's `accept` excluded, `accept` was never a filter at all.
+//
+// The measurement behind it (Chrome 151, macOS 26.5, real <input type="file">):
+// .ts .tsx .rs .go .sql .toml and .log all arrive with `File.type === ''`, and
+// `readAsDataURL` then writes `application/octet-stream` into the data URI. jsdom
+// does the same substitution, which is why these tests can be written here at
+// all -- see `node scripts/probe-file-media-types.mjs`.
+describe('a file the browser could not name', () => {
+  /** What Chrome hands you for a .rs: real content, no media type. */
+  const typeless = (name: string, body: BlobPart): File => new File([body], name, { type: '' });
+
+  it('is staged when its bytes decode as text', async () => {
+    const onAttachmentsChange = vi.fn();
+    const { container } = render(() => (
+      <DefaultPromptInput {...baseProps} accept="text/*" onAttachmentsChange={onAttachmentsChange} />
+    ));
+    await pick(picker(container), [typeless('main.rs', 'fn main() {}\n')]);
+    const staged = onAttachmentsChange.mock.calls[0][0] as AttachmentData[];
+    expect(staged.map((a) => a.filename)).toEqual(['main.rs']);
+  });
+
+  it('is refused when its bytes are binary, rather than staged as mojibake', async () => {
+    const onAttachmentsChange = vi.fn();
+    const onAttachmentsRejected = vi.fn();
+    const { container } = render(() => (
+      <DefaultPromptInput
+        {...baseProps}
+        accept="text/*"
+        onAttachmentsChange={onAttachmentsChange}
+        onAttachmentsRejected={onAttachmentsRejected}
+      />
+    ));
+    await pick(picker(container), [typeless('blob.bin', new Uint8Array([0xff, 0xfe, 0x00, 0x01]))]);
+    expect(onAttachmentsChange).not.toHaveBeenCalled();
+    expect(onAttachmentsRejected.mock.calls[0][0]).toEqual([
+      { filename: 'blob.bin', mediaType: '', reason: 'unsupported' },
+    ]);
+  });
+
+  it('★ is REFUSED under an images-only filter, decodable or not', async () => {
+    // THE CONSTRAINT. The developer wrote `accept="image/png"`; a perfectly
+    // readable .rs file is still not an image. If the decode fallback ignored
+    // the effective policy here, `accept` would stop being a filter and become
+    // a suggestion -- and the file would sail past the picker into a request the
+    // developer thought could only contain PNGs.
+    const onAttachmentsChange = vi.fn();
+    const onAttachmentsRejected = vi.fn();
+    const { container } = render(() => (
+      <DefaultPromptInput
+        {...baseProps}
+        accept="image/png"
+        onAttachmentsChange={onAttachmentsChange}
+        onAttachmentsRejected={onAttachmentsRejected}
+      />
+    ));
+    await pick(picker(container), [typeless('main.rs', 'fn main() {}\n')]);
+    expect(onAttachmentsChange).not.toHaveBeenCalled();
+    expect(onAttachmentsRejected).toHaveBeenCalledTimes(1);
+  });
+
+  it('is staged unfiltered when the host set no accept, exactly as before', async () => {
+    // Back-compat: no `accept` is no filtering, and that has to keep holding for
+    // the unnamed file too -- this path does not read anything.
+    const onAttachmentsChange = vi.fn();
+    const { container } = render(() => (
+      <DefaultPromptInput {...baseProps} onAttachmentsChange={onAttachmentsChange} />
+    ));
+    await pick(picker(container), [typeless('blob.bin', new Uint8Array([0xff, 0x00]))]);
+    const staged = onAttachmentsChange.mock.calls[0][0] as AttachmentData[];
+    expect(staged.map((a) => a.filename)).toEqual(['blob.bin']);
+  });
+
+  it('keeps the PICK order when a decoded file sits between two named ones', async () => {
+    // The decode happens after an await, so an implementation that appended as
+    // each answer came back would order the list by whichever file finished
+    // reading first. That is a real reordering, and it is invisible in a test
+    // that stages one file.
+    const onAttachmentsChange = vi.fn();
+    const { container } = render(() => (
+      <DefaultPromptInput
+        {...baseProps}
+        accept="image/png,text/*"
+        onAttachmentsChange={onAttachmentsChange}
+      />
+    ));
+    await pick(picker(container), [
+      file('shot.png', 'image/png'),
+      typeless('main.rs', 'fn main() {}\n'),
+      file('archive.zip', 'application/zip'),
+      file('notes.md', 'text/markdown'),
+    ]);
+    const staged = onAttachmentsChange.mock.calls[0][0] as AttachmentData[];
+    expect(staged.map((a) => a.filename)).toEqual(['shot.png', 'main.rs', 'notes.md']);
+  });
+});
+
+describe('an extension in `accept` fails loudly, in the composer too', () => {
+  it('throws rather than rendering a picker that accepts nothing', () => {
+    // `<kai-chat accept=".py">` resolved to `accept=""` and a composer that
+    // silently staged nothing. A developer cannot debug silence.
+    expect(() =>
+      render(() => <DefaultPromptInput {...baseProps} accept=".py" onAttachmentsChange={noop} />),
+    ).toThrow(/is a file extension/);
+  });
+});

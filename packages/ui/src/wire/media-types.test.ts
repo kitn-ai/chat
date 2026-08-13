@@ -123,6 +123,194 @@ describe('a filter narrows, and can never widen', () => {
   });
 });
 
+describe('a file EXTENSION in `accept` is refused loudly', () => {
+  // Measured on this branch before the throw existed: `.py` alone produced zero
+  // effective types and `accept=""` on the picker -- a composer that accepted
+  // nothing, silently. `".py,text/plain"` was worse: the half that worked made
+  // it read as correct while the `.py` disappeared without a word.
+  it('throws rather than resolving to an empty set', () => {
+    expect(() => resolveMediaPolicy({ accept: '.py' })).toThrow(/is a file extension/);
+  });
+
+  it('throws on the PARTIAL case too, where half of it appears to work', () => {
+    expect(() => resolveMediaPolicy({ accept: '.py,text/plain' })).toThrow(/is a file extension/);
+    // Not a silently-narrower policy: nothing is resolved at all.
+    expect(() => resolveMediaPolicy({ accept: 'text/plain,.py' })).toThrow(/is a file extension/);
+  });
+
+  it('names the offending entry and the form to use instead', () => {
+    // A message that says "invalid accept" sends the developer to the docs. This
+    // one has to say which entry, and what to write.
+    try {
+      resolveMediaPolicy({ accept: 'image/png, .PY ' });
+      expect.unreachable('should have thrown');
+    } catch (err) {
+      const message = (err as Error).message;
+      expect(message).toContain('".py"');
+      expect(message).toContain('media type');
+      expect(message).toContain('text/*');
+    }
+  });
+
+  it('throws from the array form and the string form alike', () => {
+    expect(() => resolveMediaPolicy({ accept: ['.md'] })).toThrow(/is a file extension/);
+  });
+
+  it('leaves a filter of real media types alone', () => {
+    // The guard on the guard: a check that threw on everything would satisfy
+    // every test above and break the feature.
+    expect(() => resolveMediaPolicy({ accept: 'image/png,text/*' })).not.toThrow();
+    expect(resolveMediaPolicy({ accept: 'image/png,text/*' }).types).toEqual([
+      'image/png',
+      'text/*',
+    ]);
+  });
+});
+
+describe('YAML, both spellings', () => {
+  // `application/x-yaml` is what Chrome on macOS hands back for a `.yaml`
+  // (measured -- see the table in media-types.ts). `application/yaml` is the
+  // IANA registration (RFC 9512) and is what a correctly configured server
+  // sends. Neither is reachable through `text/*`, which is why both are rows.
+  it('encodes a .yaml under the type the browser actually reports', () => {
+    for (const mediaType of ['application/x-yaml', 'application/yaml']) {
+      expect(resolveMediaPolicy().decide(mediaType), mediaType).toEqual({
+        status: 'allowed',
+        kind: 'text',
+      });
+    }
+    const out = toAnthropicMessages(
+      withFile(
+        attach({
+          mediaType: 'application/x-yaml',
+          filename: 'compose.yaml',
+          url: dataUri('application/x-yaml', 'services:\n  web:\n    image: nginx\n'),
+        }),
+      ),
+    );
+    expect(out[0].content[0].type).toBe('text');
+    expect(String(out[0].content[0].text)).toContain('image: nginx');
+  });
+
+  it('needs no row for the text/ spellings, which text/* already covers', () => {
+    for (const mediaType of ['text/yaml', 'text/x-yaml']) {
+      expect(resolveMediaPolicy().decide(mediaType), mediaType).toEqual({
+        status: 'allowed',
+        kind: 'text',
+      });
+    }
+  });
+});
+
+describe('a file nobody could name is decided by DECODING it', () => {
+  // WHY THIS EXISTS. Chrome on macOS returns an empty `File.type` for .ts, .tsx,
+  // .rs, .go, .sql, .toml and .log -- the files a developer is likeliest to
+  // attach to a coding chat. `FileReader.readAsDataURL` then writes
+  // `application/octet-stream` into the data URI, measured in Chrome 151 and in
+  // this jsdom. So both spellings have to mean the same thing, and neither may
+  // be answered by looking at the filename.
+  const source = (text: string, mediaType = 'application/octet-stream'): AttachmentData =>
+    attach({ mediaType, filename: 'main.rs', url: dataUri(mediaType, text) });
+
+  it('answers "read the bytes" rather than yes or no', () => {
+    for (const type of ['', 'application/octet-stream', undefined]) {
+      expect(resolveMediaPolicy().decide(type), String(type)).toEqual({ status: 'undetermined' });
+    }
+  });
+
+  it('encodes a typeless source file as text, on both wires', () => {
+    const RUST = 'fn main() {\n    println!("hi");\n}\n';
+    const anthropic = toAnthropicMessages(withFile(source(RUST)));
+    expect(anthropic[0].content[0].type).toBe('text');
+    expect(String(anthropic[0].content[0].text)).toContain(RUST);
+    expect(toOpenAIMessages(withFile(source(RUST)))[0].content).toEqual([
+      { type: 'text', text: expect.stringContaining(RUST) as unknown as string },
+    ]);
+  });
+
+  it('claims text/plain and nothing more specific, because that is all it proved', () => {
+    // NOT `text/x-rust`. A decode establishes "this is text"; anything narrower
+    // would be the filename talking, which is the guess this design refuses.
+    const out = toAnthropicMessages(withFile(source('fn main() {}')));
+    expect(String(out[0].content[0].text)).toContain('type="text/plain"');
+    // The NAME still rides along, so the model can see it is Rust. That is a
+    // fact about the file; the media type would have been a guess about it.
+    expect(String(out[0].content[0].text)).toContain('name="main.rs"');
+  });
+
+  it('handles the spec spelling of a typeless data URI as well as the measured one', () => {
+    // The File API says to emit a data URL with NO media type for a Blob whose
+    // type is empty. Chrome and jsdom both write `application/octet-stream`
+    // instead, so `data:;base64,` is the unmeasured form -- handled because a
+    // browser that follows the spec is not a bug report anyone should have to
+    // file.
+    const out = toAnthropicMessages(
+      withFile(attach({ mediaType: '', filename: 'q.sql', url: `data:;base64,${b64('select 1;')}` })),
+    );
+    expect(String(out[0].content[0].text)).toContain('select 1;');
+  });
+
+  it('refuses a typeless file whose bytes are NOT text, instead of mojibake', () => {
+    // The case a filename-based fallback gets wrong and this one cannot: an
+    // unnamed binary. Refused, rather than spending tokens on replacement
+    // characters and getting a confident wrong answer back.
+    const binary = 'data:application/octet-stream;base64,' + btoa('\xff\xfe\x00\x01');
+    expect(() =>
+      toAnthropicMessages(withFile(attach({ mediaType: '', filename: 'blob', url: binary }))),
+    ).toThrow(/not valid UTF-8/);
+  });
+
+  it('★ CANNOT BE USED TO GET AROUND `accept`', () => {
+    // THE constraint. A developer who wrote `accept="image/png"` gets images. A
+    // typeless .rs file is perfectly decodable as text and is still REFUSED,
+    // because this policy carries no text capability for it to land in. Without
+    // this, `accept` degrades from a filter into a suggestion.
+    const rs = source('fn main() {}');
+    expect(resolveMediaPolicy({ accept: 'image/png' }).decide('')).toEqual({
+      status: 'unsupported',
+    });
+    expect(() => toAnthropicMessages(withFile(rs), { accept: 'image/png' })).toThrow(
+      WireEncodeError,
+    );
+    // ...and it is still refused when the developer narrowed to a SPECIFIC text
+    // type. A decode proves "text", never "markdown", so a file that proved only
+    // the first does not satisfy a filter that asked for the second.
+    expect(() => toAnthropicMessages(withFile(rs), { accept: 'text/markdown' })).toThrow(
+      WireEncodeError,
+    );
+    // The same file lands the moment the policy admits plain text.
+    expect(toAnthropicMessages(withFile(rs), { accept: 'text/*' })).toHaveLength(1);
+  });
+
+  it('does not fetch a remote file to find out what it is', () => {
+    // The decode needs bytes in hand. A remote URL has none, and this layer does
+    // no I/O, so the answer is a refusal with the fix in it.
+    expect(() =>
+      toAnthropicMessages(
+        withFile(
+          attach({ mediaType: 'application/octet-stream', url: 'https://example.com/thing' }),
+        ),
+      ),
+    ).toThrow(/says nothing about the bytes/);
+  });
+
+  it('reads the host\'s label when the data URI carries none', () => {
+    // A host that read a File with readAsDataURL gets `application/octet-stream`
+    // in the URI whatever the file was. If they ALSO wrote down what it is, that
+    // is the only real label in play and it is not thrown away for a non-answer.
+    const out = toAnthropicMessages(
+      withFile(
+        attach({
+          mediaType: 'text/markdown',
+          filename: 'README.md',
+          url: `data:application/octet-stream;base64,${b64('# Title')}`,
+        }),
+      ),
+    );
+    expect(String(out[0].content[0].text)).toContain('type="text/markdown"');
+  });
+});
+
 describe('a filtered attachment does not reach the wire', () => {
   const pdf = attach({ mediaType: 'application/pdf', filename: 'report.pdf' });
 
