@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "svelte-check --tsconfig ./tsconfig.app.json && vite build",
+    "build": "svelte-check --tsconfig ./tsconfig.app.json --fail-on-warnings && vite build",
     "preview": "vite preview",
-    "typecheck": "svelte-check --tsconfig ./tsconfig.app.json"
+    "typecheck": "svelte-check --tsconfig ./tsconfig.app.json --fail-on-warnings"
   },
   "dependencies": {
     "@kitn.ai/ui": "workspace:*",
