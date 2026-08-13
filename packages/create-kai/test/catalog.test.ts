@@ -278,6 +278,24 @@ describe('framework table', () => {
     expect(vue.composedWorkspace).toBe(true);
   });
 
+  it('ships angular ready', () => {
+    const angular = getFramework('angular')!;
+    expect(angular.status).toBe('ready');
+    expect(angular.registration).toBe('elements');
+    expect(angular.composedWorkspace).toBe(true);
+  });
+
+  /**
+   * Solid's row was wrong from the day it was written: it declared
+   * `css: 'src/index.css'` while the starter's stylesheet has always been
+   * `src/styles.css`. `scripts/build.mjs` cannot catch that while Solid is
+   * `planned`, because it only walks READY templates — so the row is pinned
+   * here instead, where being planned is not a reason to go unchecked.
+   */
+  it('points solid at the stylesheet its starter actually has', () => {
+    expect(getFramework('solid')!.paths.css).toBe('src/styles.css');
+  });
+
   /**
    * A `note` is what `--list` prints beside a framework to state the gap. On a
    * READY framework it is a leftover that contradicts the row it sits on — Vue's

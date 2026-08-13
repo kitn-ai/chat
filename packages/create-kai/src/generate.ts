@@ -149,18 +149,44 @@ export async function generate(
  * fails the build if a ready template stops carrying one — which is why the
  * throw below cannot reach a user.
  */
-const GO_LIVE_THREAD = /toOpenAIMessages\(([^)]+)\)/;
+const GO_LIVE_CALL = 'toOpenAIMessages(';
 
+/**
+ * WHY THIS COUNTS PARENTHESES INSTEAD OF MATCHING `\(([^)]+)\)`.
+ *
+ * It used to be that regex, and `[^)]+` stops at the FIRST `)`. React's thread
+ * expression is `chat.messages` and Vue's is `messages.value` — neither contains
+ * a parenthesis, so both round-tripped correctly and the bug was invisible for
+ * two ready frameworks. Angular reads its thread through a signal CALL,
+ * `this.chat.messages()`, and the capture came back as `this.chat.messages(`.
+ * The README then emitted
+ *
+ *     body: JSON.stringify({ messages: toOpenAIMessages(this.chat.messages() }),
+ *
+ * which is a syntax error in the one snippet whose entire job is to be pasted.
+ * The build would not have caught it either: `verifyAppPath` only asks that the
+ * expression EXISTS, and it did.
+ *
+ * Any framework whose thread getter is a call — a signal, a store `get()`, a
+ * `useSyncExternalStore` selector — hits this, so it is fixed structurally
+ * rather than by widening the character class.
+ */
 export function goLiveThread(appSource: string, framework: FrameworkDef): string {
-  const match = appSource.match(GO_LIVE_THREAD);
-  if (!match) {
-    throw new Error(
-      `create-kai: ${framework.paths.app} carries no toOpenAIMessages(...) expression, so the ` +
-        'README cannot state how to go live without inventing one. Restore the comment in the ' +
-        `examples/starters/${framework.templateDir} starter.`,
-    );
+  const call = appSource.indexOf(GO_LIVE_CALL);
+  if (call >= 0) {
+    const from = call + GO_LIVE_CALL.length;
+    let depth = 1;
+    for (let i = from; i < appSource.length; i++) {
+      const ch = appSource[i];
+      if (ch === '(') depth++;
+      else if (ch === ')' && --depth === 0) return appSource.slice(from, i);
+    }
   }
-  return match[1];
+  throw new Error(
+    `create-kai: ${framework.paths.app} carries no balanced toOpenAIMessages(...) expression, so ` +
+      'the README cannot state how to go live without inventing one. Restore the comment in the ' +
+      `examples/starters/${framework.templateDir} starter.`,
+  );
 }
 
 function renderReadme(

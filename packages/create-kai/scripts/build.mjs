@@ -231,6 +231,40 @@ async function verifyAppPath(framework, root, goLiveThread) {
 }
 
 /**
+ * Assert every OTHER path the framework declares exists in its template too.
+ *
+ * `verifyAppPath` covers `paths.app` because the README quotes it. The rest of
+ * the block is written verbatim into the emitted `kai.json`, where a v2 `add`
+ * reads it to decide where to put a generated component or which stylesheet to
+ * append an `@import` to — so a wrong entry here is a v2 command that writes to
+ * a file that is not there, reported against the user's project rather than
+ * against this table.
+ *
+ * Nothing else in the build opens these. They are strings that get copied down
+ * from the row above and then diverge silently: `solid` declares
+ * `css: 'src/index.css'` while its starter's stylesheet has always been
+ * `src/styles.css`, and it has been wrong for as long as the row has existed
+ * because a `planned` framework is never checked against its template at all.
+ *
+ * `env` is exempt — `.env.local` is the file the user is told to CREATE for a
+ * keyed gateway, so a template carrying one would be the bug.
+ */
+async function verifyDeclaredPaths(framework, root) {
+  const missing = Object.entries(framework.paths)
+    .filter(([key]) => key !== 'env' && key !== 'app')
+    .filter(([, rel]) => !existsSync(path.join(root, rel)))
+    .map(([key, rel]) => `  · paths.${key} = '${rel}'`);
+
+  if (missing.length > 0) {
+    throw new Error(
+      `create-kai build: framework '${framework.id}' declares paths that template ` +
+        `'${framework.templateDir}' does not have:\n${missing.join('\n')}\n` +
+        '  These are copied verbatim into the emitted kai.json for a v2 `add` to read.',
+    );
+  }
+}
+
+/**
  * Refuse to build if this package's shared devDependency ranges disagree with
  * the kit's.
  *
@@ -281,6 +315,7 @@ async function main() {
     patchCount += await verifyPatches(framework.templateDir, root, patchesFor);
     await verifyNoRepoInternals(framework.templateDir, root, patchesFor);
     await verifyAppPath(framework, root, goLiveThread);
+    await verifyDeclaredPaths(framework, root);
     console.log(`  template  ${framework.id.padEnd(16)} <- examples/starters/${framework.templateDir}`);
   }
 

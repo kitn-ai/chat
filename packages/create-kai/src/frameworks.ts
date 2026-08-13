@@ -6,9 +6,11 @@
  * source of truth for how a consumer wires the kit — they are CI-built, so drift
  * is caught there rather than here.
  *
- * `status` is what the CLI offers. React and Vue are `ready` — scaffolded,
- * installed, built and driven in a browser — and the rest are declared but not
- * offered, because the emitted project for those cells has not been run. This
+ * `status` is what the CLI offers. A `ready` framework has been scaffolded,
+ * installed, built and driven in a browser; the rest are declared but not
+ * offered, because the emitted project for those cells has not been run. Which
+ * ones are which is the table below — and `--list --json` at runtime — rather
+ * than a roster restated here that goes stale every time one flips. This
  * table is the whole of "turn one on": flip the status, drop the note, add the
  * template patches, and the prompt, the coverage gate and the `--list` output
  * all follow.
@@ -118,10 +120,38 @@ export const FRAMEWORKS: readonly FrameworkDef[] = [
       entry: 'src/index.tsx',
       app: 'src/App.tsx',
       components: 'src',
-      css: 'src/index.css',
+      // `src/styles.css`, not the `src/index.css` every other row carries. This
+      // was wrong from the day the row was written and nothing caught it,
+      // because `verifyDeclaredPaths` only runs against a READY framework's
+      // template. Fixed here so the row is true before it is ever offered.
+      css: 'src/styles.css',
       env: '.env.local',
     },
-    note: 'starter exists; not yet run end to end by this CLI',
+    /**
+     * NOT a "nobody got to it yet" note. Solid was run against this CLI and
+     * cannot be emitted by it today, blocked on three things in
+     * `examples/starters/solid/` — outside this package, so recorded rather than
+     * worked around:
+     *
+     *  1. no `.gitignore`. It is the only one of the eight starters without one,
+     *     and `scripts/build.mjs` refuses a template that has none, because an
+     *     emitted project that ignores neither `node_modules/` nor `.env.local`
+     *     stages an API key on its first `git add .`.
+     *  2. no `toOpenAIMessages(...)`, because the starter does not use
+     *     `@kitn.ai/ui/wire` AT ALL. It replays a canned part script through the
+     *     `@kitn.ai/ui/state` folds, so it has no `readOpenAIStream` call for the
+     *     README's go-live diff to point at. `goLiveThread` throws on it, and
+     *     that throw is correct: the diff this CLI emits would name identifiers
+     *     the file does not contain.
+     *  3. `index.html` links its favicon to `../../internal/shared/logo.svg`, a
+     *     path that escapes the project root and resolves only inside this repo.
+     *
+     * (1) and (3) are small. (2) is a product question — that starter is
+     * deliberately a primitives showcase, and giving it a wire-backed mock
+     * changes what it demonstrates. Whoever picks this up should settle (2)
+     * first; the rest follows in minutes.
+     */
+    note: 'starter has no .gitignore and no @kitn.ai/ui/wire call for the README go-live diff',
   },
   {
     id: 'angular',
@@ -130,7 +160,7 @@ export const FRAMEWORKS: readonly FrameworkDef[] = [
     renderer: 'angular',
     registration: 'elements',
     composedWorkspace: true,
-    status: 'planned',
+    status: 'ready',
     paths: {
       entry: 'src/main.ts',
       app: 'src/app/app.ts',
@@ -138,7 +168,6 @@ export const FRAMEWORKS: readonly FrameworkDef[] = [
       css: 'src/styles.css',
       env: '.env.local',
     },
-    note: 'starter exists; needs Node >= 22.22.3',
   },
   {
     id: 'html',

@@ -72,6 +72,20 @@ export const PATCHES: Record<string, readonly Patch[]> = {
       why: 'a scaffolded project is not a workspace member and has no `nx build ui` to run',
     },
   ],
+  angular: [
+    {
+      /**
+       * Angular's index.html lives at `src/index.html`, not the project root the
+       * way React's and Vue's do — `angular.json` names it as the `index` input
+       * and the builder emits it to `dist/`. Same one-line edit, different path,
+       * and the path is the part that a copy of the row above would get wrong.
+       */
+      file: 'src/index.html',
+      find: /<title>@kitn\.ai\/ui Angular example<\/title>/,
+      replace: (name) => `<title>${name}</title>`,
+      why: 'the browser tab should name the user\'s app, not the kit\'s example',
+    },
+  ],
 };
 
 /** Apply every patch for a template. Throws if one does not match. */
