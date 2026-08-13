@@ -119,52 +119,58 @@ export default defineConfig({
         setupFiles: ['./vitest.setup.timeouts.ts'],
         // Worker count is deliberately left at vitest's default.
         //
-        // THE `--maxWorkers=4` RECOMMENDATION BELOW IS WITHDRAWN. Do not act on
-        // it. This is not a stale-number problem like the one in
-        // `test-timeout-budgets.ts`; here the CONCLUSION itself is contaminated,
-        // which is why the advice is pulled rather than annotated.
+        // DO NOT LOWER IT. An earlier note here recommended `--maxWorkers=4`.
+        // That advice was withdrawn as contaminated, and re-measurement does not
+        // merely fail to support it -- it CONTRADICTS it. On this 10-core box
+        // `4` is 1.34x SLOWER than the default, and the curve is monotonic:
+        // every value below the default cost wall-clock time.
         //
-        // The measurement ran between Aug 11 22:10 and Aug 12 10:05 local, while
-        // four orphaned `while :; do :; done` shells -- CPU burners leaked by a
-        // stale flake-hunting script -- pinned four of this box's ten cores
-        // continuously. A finding about CONTENTION was derived on a box with
-        // four cores of hidden contention: the single variable that decides the
-        // answer was wrong, and unmeasured, in the input.
+        //   maxWorkers     wall min/median/max of 3      failures   vs default
+        //   2              95343 / 95810 / 95915 ms      0          2.18x slower
+        //   4              58645 / 58948 / 59090 ms      0          1.34x slower
+        //   6              46291 / 46637 / 46734 ms      0          1.06x slower
+        //   8              43430 / 43499 / 44063 ms      0          0.99x (noise)
+        //   default (9)    43663 / 43911 / 45019 ms      0          --
         //
-        // Concretely, `4` was tuned against roughly SIX effective cores while
-        // the note claimed ten. Someone on a genuinely idle 10-core machine who
-        // follows this will probably UNDER-parallelize, because the optimum
-        // scales with the cores actually available. So the error does not run in
-        // the safe direction the way an over-generous timeout does.
+        // 2861 tests per run; 15 runs; ZERO failures at every worker count. The
+        // old table's "6 failures at the default, 0 at 4" did not reproduce, so
+        // there is no stability argument for lowering it either.
         //
-        //                       wall     failures    <- ALL SUSPECT, see above
-        //   default (9 forks)   395.6s   6
-        //   --maxWorkers=4      257.6s   0
+        // `8` and the default are indistinguishable -- their min/max ranges
+        // overlap -- so the default already sits on the flat top of the curve.
+        // vitest's default is `max(availableParallelism - 1, 1)`, hence 9 forks
+        // here, which is why there is nothing to gain by naming a number.
         //
-        // The `on an idle machine ... ~12% (94.1s -> 105.6s)` figure that used to
-        // sit here has the identical defect twice over: that machine was not idle
-        // either, so it measured neither the baseline nor the delta it named.
+        // WHY THIS CONCLUSION IS ROBUST TO ITS OWN CONDITIONS, which matters
+        // because the last one was not. These runs were NOT taken on an idle box:
+        // ~0.73-0.85 cores of steady foreign CPU, two agent sessions and an
+        // editor resident. That is the condition which most FAVOURS reducing the
+        // worker count, because fewer cores were actually free than the box has
+        // -- and reducing it still lost, at every value tested. A
+        // genuinely quiet box has more headroom, not less, so it can only widen
+        // the default's margin. The direction of this finding therefore does not
+        // depend on the box being quiet, which is precisely the assumption that
+        // sank the previous number.
         //
-        // The mechanism may well survive -- nine jsdom forks on ten cores can
-        // genuinely thrash the transform pipeline rather than share it (aggregate
-        // `import` was measured at 558s across 9 forks versus 255s across 4, same
-        // caveat). Fewer workers plausibly removes more contention than
-        // parallelism. But "plausible mechanism" is not "measured threshold", and
-        // the number you would actually type is the part that was contaminated.
+        // ON THE OLD MECHANISM. The withdrawn note hedged that nine jsdom forks
+        // might thrash the transform pipeline rather than share it, citing
+        // aggregate `import` time of 558s across 9 forks versus 255s across 4.
+        // Aggregate CPU rising while wall clock FALLS is what parallelism looks
+        // like; it is not evidence of harmful contention. The quantity anyone
+        // waits on is the wall clock, and it goes the other way.
         //
-        // TO RESTORE THIS ADVICE: re-run both configurations on a quiet machine,
-        // and confirm it is quiet FIRST -- `uptime` for load average, plus
-        // `ps -A -o %cpu,command | sort -rn | head` for runaway processes --
-        // BEFORE trusting any timing, not after one looks surprising. That check
-        // is precisely what was skipped. Not re-measured in place because the box
-        // was running several agents when this was caught and was not quiet
-        // either; a confidently-recorded second wrong number is worse than one
-        // flagged as wrong.
+        // NO VALUE WAS CHANGED in response to this, and none should be. The
+        // default stays vitest's default -- now because it measured fastest,
+        // not merely because nothing better was known.
         //
-        // NO VALUE WAS CHANGED in response to this. The default stays vitest's
-        // default. Picking a different worker count now would be an unmeasured
-        // guess in the opposite direction, which is the same mistake that
-        // produced the withdrawn advice.
+        // IF YOUR LOCAL SUITE IS SLOW, fewer workers is the wrong lever: it was
+        // monotonically worse here. Measure your own machine instead of copying
+        // a number out of this comment --
+        //   node scripts/measure-timings.mjs --target=unit --iterations=3 --workers=N
+        // -- which records the load average, core count and top CPU consumers
+        // around every run, discards runs disturbed mid-flight, and reports
+        // min/median/max. A single timing off a box you have not inspected is
+        // how the withdrawn advice happened.
         //
         // Independent of the measurement, and still true: a worker count does NOT
         // belong in this config, because it is a fact about one machine's core
