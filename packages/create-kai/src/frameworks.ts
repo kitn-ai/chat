@@ -19,6 +19,26 @@
  * refuses that, but the standard the status is held to is
  * `scripts/smoke.mjs --framework <id> --keep` plus a real browser: a message
  * sent, and a reply streaming into `<kai-thread>`.
+ *
+ * NOT EVERY STARTER IS A CHAT APP, so for some rows flipping `status` is not a
+ * table edit at all. Five starters (react, vue, svelte, angular, vanilla) are
+ * composed chat workspaces with a composer and the kit's mock responder behind
+ * them. THREE ARE NOT: `nextjs` and `tanstack-start` are SSR/RSC compatibility
+ * demos — a Button rendered from a server component, a static `messages` array,
+ * a registration probe — and `solid` is likewise a component demo. None of the
+ * three has a composer, a `<kai-thread>` fed by `useKaiChat`, or a mock
+ * responder, so there is no stream for the browser check to observe and nothing
+ * the `ready` standard above can be applied to.
+ *
+ * `scripts/build.mjs` already refuses them rather than emitting one: flip either
+ * SSR row and the build stops at `verifyAppPath` with "app/page.tsx carries no
+ * toOpenAIMessages(...) expression", because the emitted README quotes that
+ * expression out of the app file and there is none to quote. That throw is the
+ * guard working, not a bug in it.
+ *
+ * Turning one of these on is therefore work in `examples/starters/<dir>/` —
+ * giving the starter a real thread + composer + mock stream, SSR-safely — and
+ * only then a status flip here.
  */
 import type { Registration } from './types';
 
@@ -175,7 +195,7 @@ export const FRAMEWORKS: readonly FrameworkDef[] = [
       css: 'app/globals.css',
       env: '.env.local',
     },
-    note: 'SSR starter exists; no composed-workspace shell yet',
+    note: 'starter is an SSR compatibility demo, not a chat app; no thread, composer or mock stream to run',
   },
   {
     id: 'tanstack-start',
@@ -192,7 +212,7 @@ export const FRAMEWORKS: readonly FrameworkDef[] = [
       css: 'src/styles.css',
       env: '.env.local',
     },
-    note: 'SSR starter exists; no composed-workspace shell yet',
+    note: 'starter is an SSR compatibility demo, not a chat app; no thread, composer or mock stream to run',
   },
 ];
 
