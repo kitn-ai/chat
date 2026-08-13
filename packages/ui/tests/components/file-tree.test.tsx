@@ -118,6 +118,18 @@ describe('<FileTree>', () => {
     expect(folder.getAttribute('aria-expanded')).toBe('false');
     expect(queryByText('app.ts')).toBeNull();
   });
+
+  // `files` is required, so it must NOT be defaulted to [] inside the component:
+  // a caller who forgets it should fail here, not render a silently empty tree
+  // that looks like "no files" and fails somewhere else. TypeScript stops this at
+  // compile time; the cast gets past it to pin the RUNTIME behaviour, so the
+  // mergeProps default cannot quietly come back. `<kai-file-tree>` is unaffected —
+  // the facade declares its own `files: []`.
+  test('omitting the required files prop fails where the mistake is', () => {
+    expect(() =>
+      render(() => <FileTree {...({} as unknown as { files: FileTreeFile[] })} />),
+    ).toThrow();
+  });
 });
 
 describe('<FileTree> changed-files / diff presentation', () => {

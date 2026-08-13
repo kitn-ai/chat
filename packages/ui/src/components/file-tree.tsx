@@ -5,7 +5,6 @@ import {
   splitProps,
   createSignal,
   createMemo,
-  mergeProps,
 } from 'solid-js';
 import { cn } from '../utils/cn';
 import {
@@ -208,8 +207,13 @@ export interface FileTreeProps extends Omit<JSX.HTMLAttributes<HTMLDivElement>, 
  * calls `onSelect(path, file)`.
  */
 export function FileTree(props: FileTreeProps): JSX.Element {
-  const merged = mergeProps({ files: [] as FileTreeFile[] }, props);
-  const [local, rest] = splitProps(merged, [
+  // `files` is REQUIRED, so it is read straight off `props` — no `mergeProps`
+  // default. Defaulting it to `[]` here would turn a caller who forgot it into a
+  // silently empty tree, which fails far from the mistake. The `<kai-file-tree>`
+  // facade declares its own `files: []` default (elements/file-tree.tsx), so the
+  // web-component path is covered where the property genuinely arrives late.
+  // Same shape as `Segmented`, which reads `merged.options` directly.
+  const [local, rest] = splitProps(props, [
     'files',
     'activeFile',
     'onSelect',
