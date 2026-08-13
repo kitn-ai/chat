@@ -1093,9 +1093,10 @@ function hasAttachments(components: readonly string[]): boolean {
  *
  * Unlike `cardEmitPlan` this takes no integration, and that is a real difference
  * rather than an omission: staging a file needs no model, no tools array and no
- * route, so `mock` emits exactly what `openai` does. The one thing the wire
- * decides — whether the files reach the provider — is the same NO for every
- * integration (see `ATTACHMENT_WIRE_NOTE`).
+ * route, so `mock` emits exactly what `openai` does. What the wire then makes of
+ * the files is decided by the encoders and by the media-type declaration behind
+ * them, which is the same answer for every integration (see
+ * `ATTACHMENT_WIRE_NOTE`).
  */
 export function attachmentEmitPlan(components: readonly string[]): { staging: boolean } {
   return { staging: hasAttachments(components) };
@@ -1103,32 +1104,56 @@ export function attachmentEmitPlan(components: readonly string[]): { staging: bo
 
 /**
  * What the emitted attachment surface does, and — the part that matters — what
- * it does NOT do.
+ * it does not.
  *
- * `toOpenAIMessages` and `toAnthropicMessages` do not encode `file` parts. That
- * is not an oversight in this scaffold, it is stated at the encoder
- * (`wire/encode.ts`: "card, source and file are kit-side and have no wire
- * representation in v1"), and it is load-bearing enough that an
- * attachment-ONLY user turn encodes to nothing at all and is dropped from the
- * request. So a scaffold that quietly staged files and POSTed the thread would
- * put a paperclip on screen, accept a PDF, render it in the thread, and send the
- * model a message that never mentions it — with nothing anywhere saying why.
+ * It stages AND it sends. `toOpenAIMessages` / `toAnthropicMessages` encode
+ * `file` parts into the content blocks each API takes, so a staged file reaches
+ * the model. That is worth stating because it was false for a long time and the
+ * failure was silent: before #186 an attachment-only turn encoded to nothing at
+ * all and was dropped from the request, so a scaffold could put a paperclip on
+ * screen, accept a PDF, render it in the thread, and send the model a message
+ * that never mentioned it.
  *
- * The emitted comment says it instead. Read that as the honest state of the
- * feature: the SURFACE is complete (stage, preview, remove, render in-thread),
- * the WIRE is not, and encoding a file for a specific provider is the
- * consumer's own step because every provider spells it differently.
+ * WHAT IT STILL DOES NOT DO. Both remaining limits are facts about the APIs, not
+ * gaps in this scaffold, which is why the emitted note can state them plainly:
+ *   · Neither API has an arbitrary-file content block, so a media type outside
+ *     the kit's set — a `.zip` is the one people try — has no representation on
+ *     either wire and throws at encode time rather than going missing.
+ *   · A REMOTE text file is refused. Text has to ride as text CONTENT (no wire
+ *     has a URL form for it), so inlining one would mean fetching it, and
+ *     `wire/` does no I/O by design. Stage a `data:` URI instead.
+ * A file the browser could not name is NOT on that list any more: it is settled
+ * by decoding its bytes, so the `.rs` and `.toml` files a coding chat is full of
+ * go through even though Chrome hands them over with no media type at all.
+ *
+ * ★ THE EMITTED NOTE MUST NOT NAME MEDIA TYPES, and that is the whole reason it
+ * reads the way it does. It lands in a user's repo, where it outlives any
+ * limitation it describes and where nothing can ever check it — a second copy of
+ * the capability list, at the worst possible layer. It points at
+ * `encodableMediaTypes()` instead, which is public precisely so that nobody has
+ * to hardcode the set. A guard in `scaffold.test.ts` fails if a media type
+ * creeps back into it.
+ *
+ * This very comment has been wrong before, in the way that matters most: #186
+ * corrected the emitted string and left the explanation above it teaching the
+ * reverse, so the scaffolder's own documentation said files never reach the
+ * model while the code it emitted said they do. Anything written here that a
+ * script cannot re-derive is a claim with a shelf life.
  */
-const ATTACHMENT_WIRE_NOTE = [
+export const ATTACHMENT_WIRE_NOTE = [
   '// The staged files ride along on the message as `file` parts, so they RENDER',
   '// in the thread AND reach the model: toOpenAIMessages / toAnthropicMessages',
-  '// encode them (image_url + file_data on the OpenAI wire, image + document',
-  '// blocks on the Anthropic one).',
+  '// encode each one into the content block its API takes.',
   '// Which is why toAttachment below stages a `data:` URI rather than a',
   '// URL.createObjectURL blob: an object URL previews fine and resolves ONLY',
   '// inside this tab, so the encoder rejects it rather than send an address the',
-  '// provider cannot fetch. Images and PDFs encode today; any other media type',
-  '// throws at encode time instead of going missing in the request.',
+  '// provider cannot fetch.',
+  '// What can be sent is not a list worth copying into a comment -- it moves, and',
+  '// a copy cannot. `encodableMediaTypes()` from "@kitn.ai/ui/wire" IS the set,',
+  '// and `resolveMediaPolicy().decide(mediaType)` answers for one file. Anything',
+  '// outside it throws at encode time instead of going missing from the request.',
+  '// A file the browser could not name (a .rs, a .toml) is settled by decoding',
+  '// its bytes, never by its extension.',
 ];
 
 /**
