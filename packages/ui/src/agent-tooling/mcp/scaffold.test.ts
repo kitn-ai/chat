@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { cardEmitPlan, scaffold, renderSurface, NO_PROXY_CLAIM, PROXY_REQUIRED_CLAIM } from './tools/scaffold';
+import { cardEmitPlan, scaffold, renderSurface, NO_PROXY_CLAIM, PROXY_REQUIRED_CLAIM, ATTACHMENT_WIRE_NOTE } from './tools/scaffold';
 import {
   getArchetype, getIntegration, listArchetypes, listIntegrations, listSurfaceProbes,
 } from '../registry';
@@ -3899,5 +3899,49 @@ describe('the emitted surface imports its framework\'s kit entry', () => {
         ).not.toContain('@kitn.ai/ui');
       }
     }
+  });
+});
+
+/**
+ * The attachment note is emitted into a USER'S repo, where nothing in this
+ * project will ever look at it again.
+ *
+ * That is the whole risk. A comment in our own tree gets corrected when someone
+ * reads it; a comment in a scaffolded app gets copied, committed, and believed
+ * for years. So the one thing it must never do is restate the media-type
+ * capability set -- that would be a second copy of `ENCODABLE`, in a string
+ * literal, in code nothing can check, which is the exact drift the single
+ * declaration exists to prevent.
+ *
+ * The precedent is not hypothetical: #186 corrected this note and left the doc
+ * comment ABOVE it asserting the reverse, and both survived review, because a
+ * claim in prose has nothing to disagree with.
+ */
+describe('the emitted attachment note points at the capability, never restates it', () => {
+  const note = ATTACHMENT_WIRE_NOTE.join('\n');
+
+  it('names no media type at all', () => {
+    // Any `type/subtype` in the note is a copy of the declaration with no way to
+    // be updated. The set lives in one place and is readable at runtime.
+    const found = note.match(/\b(?:image|application|text|audio|video|multipart)\/[a-z0-9*.+-]+/gi);
+    expect(found, `the note hardcodes ${String(found)}`).toBeNull();
+  });
+
+  it('points the reader at the function that IS the set', () => {
+    expect(note).toContain('encodableMediaTypes()');
+  });
+
+  it('is actually emitted, so this guard is checking live output', async () => {
+    // Without this the two assertions above could pass forever against a
+    // constant nothing renders any more.
+    const out = await scaffold.handler({
+      components: ['kai-chat', 'kai-file-upload', 'kai-attachments'],
+      integration: 'openai',
+      placement: 'full-page',
+      framework: 'react',
+    });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+    expect(text).toContain('encodableMediaTypes()');
+    expect(text).toContain(ATTACHMENT_WIRE_NOTE[0]);
   });
 });
