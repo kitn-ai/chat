@@ -2,6 +2,7 @@ import { Show } from 'solid-js';
 import { Button } from '../ui/button';
 import { renderIcon } from '../ui/icon';
 import { defineWebComponent } from './define';
+import { createSlotText } from './slot-text';
 
 interface Props extends Record<string, unknown> {
   /** Visual style. `default` (filled), `subtle` (muted text, hover tint, the
@@ -17,7 +18,12 @@ interface Props extends Record<string, unknown> {
   /** Trailing icon, after the label (e.g. `"chevron-down"` for a menu affordance). */
   iconTrailing?: string;
   /** Accessible name. REQUIRED for icon-only buttons (no visible text); ignored
-   *  when you slot visible text, which already names the button. */
+   *  when you slot visible text, which already names the button. An `aria-label`
+   *  on top of visible text REPLACES that name rather than adding to it, so a
+   *  button reading "Save" that answers to "Submit" is unusable by speech input
+   *  (WCAG 2.5.3, Label in Name). The visible text wins. An `icon` / `icon-sm`
+   *  size hides the slot, which makes the button icon-only whatever you slotted,
+   *  so `label` is what names it there. */
   label?: string;
   /** Disable the button (non-interactive, dimmed). */
   disabled?: boolean;
@@ -71,6 +77,23 @@ defineWebComponent<Props, Events>('kai-button', {
   // `label` prop still names it for assistive tech).
   const iconOnly = () => props.size === 'icon' || props.size === 'icon-sm';
 
+  // Slotted text names the button by itself (name-from-contents reaches through
+  // the slot), so `label` must NOT be emitted on top of it: aria-label REPLACES
+  // the computed name, and a name that disagrees with the visible text locks
+  // speech-input users out of the control (WCAG 2.5.3). This is what the `label`
+  // doc has always promised, and what `kai-checkpoint` already does.
+  //
+  // `flatten` so a consumer who wraps <kai-button> in their own component and
+  // forwards a <slot> still counts as having visible text. Safe here because the
+  // default slot has no fallback content — see createSlotText.
+  const slotted = createSlotText({ flatten: true });
+
+  // The name to emit, or nothing. An `icon`/`icon-sm` size does not render the
+  // default slot at all, so whatever was slotted is INVISIBLE and `label` is the
+  // only name available — dropping it there would leave icon buttons nameless,
+  // which is the worse bug.
+  const ariaLabel = () => (!iconOnly() && slotted.hasText() ? undefined : props.label);
+
   // ── Imperative API (instance methods on the host) ──────────────────────────
   // The real <button> lives in the shadow root, so native focus()/blur()/click()
   // on the host hit the wrapper, not the control. Forward to the inner button.
@@ -104,7 +127,7 @@ defineWebComponent<Props, Events>('kai-button', {
       full={flag('full') || !iconOnly()}
       type={props.type ?? 'button'}
       disabled={flag('disabled')}
-      aria-label={props.label}
+      aria-label={ariaLabel()}
       onClick={() => dispatch('kai-click')}
     >
       {/* Leading icon: a slotted SVG (slot="icon") wins — drop in any icon
@@ -115,7 +138,7 @@ defineWebComponent<Props, Events>('kai-button', {
         </Show>
       </slot>
       <Show when={!iconOnly()}>
-        <slot />
+        <slot ref={slotted.ref} />
       </Show>
       <Show when={props.iconTrailing && !iconOnly()}>
         {renderIcon(props.iconTrailing, { class: 'size-4 shrink-0 opacity-60', imgClass: 'size-4 shrink-0', spanClass: 'inline-flex size-4 shrink-0 items-center justify-center', ariaHidden: true })}
