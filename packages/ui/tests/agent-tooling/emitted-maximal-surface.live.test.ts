@@ -91,12 +91,23 @@ proto.scrollIntoView ??= () => {};
   unobserve() {}
   disconnect() {}
 };
-// jsdom implements neither half of the object-URL API, and the emitted attachment
-// bridge calls createObjectURL to give an image preview a real `src`. A stub is
-// honest here because nothing below asserts the URL's VALUE — only that a staged
-// file reaches the list and then the message. Left as a stub rather than removed
-// from the emit: the URL is what makes a thumbnail render in a real browser, and
-// dropping it to suit a test environment would be the test shaping the product.
+// jsdom implements neither half of the object-URL API. This stub is DEFENSIVE
+// ONLY, and the distinction matters to anyone mutating this file to check it
+// still discriminates.
+//
+// The emitted attachment bridge used to call createObjectURL. It does not any
+// more: `toAttachment` reads every file with FileReader.readAsDataURL and stages
+// a `data:` URI, because an object URL resolves only inside the tab that minted
+// it and the wire encoder refuses one. Measured rather than assumed — replacing
+// this stub with a thrower leaves all 3 tests in this project GREEN, so nothing
+// on this surface reaches it today. It is kept because other components here
+// (voice output, image previews) can, and a jsdom gap reads as a crash.
+//
+// SO: breaking createObjectURL does NOT test the staging bridge. The mutation
+// that does is `FileReader.prototype.readAsDataURL`, which fires the "a dropped
+// file never reached <kai-attachments>" assertion below; breaking
+// `toOpenAIMessages` instead fires the round assertion. Those two are the
+// layered check, and they were watched failing separately.
 (globalThis.URL as unknown as { createObjectURL?: unknown }).createObjectURL ??= () => 'blob:kai-test';
 (globalThis.URL as unknown as { revokeObjectURL?: unknown }).revokeObjectURL ??= () => {};
 
