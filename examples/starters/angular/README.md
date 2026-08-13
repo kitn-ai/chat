@@ -5,7 +5,7 @@ A small chat **workspace assembled from `@kitn.ai/ui`'s individual elements** �
 `<kai-prompt-input>` composer — wired together with plain Angular signals. Non-React
 frameworks consume the **raw `kai-*` web components directly** (no wrappers), so this
 is the reference for how that composition looks in Angular. It mirrors
-`examples/react` and `examples/vue` feature-for-feature.
+`examples/starters/react` and `examples/starters/vue` feature-for-feature.
 
 It runs with **no backend**: replies stream in from the kit's own mock responder,
 `createMockResponder()` from `@kitn.ai/ui/state` (wired up in `src/chat-data.ts`),
@@ -40,17 +40,21 @@ Consuming Shadow-DOM custom elements from Angular comes down to five things:
   properties, and fixed strings like `size="280px"` are plain attributes. Streaming
   needs a **new array reference per chunk** — `createChat` keeps `messages` in a
   signal and assigns a fresh array on every update.
-- **Boolean flags are truthy properties.** `[voice]="true"`, not a bare `voice`
-  attribute (which the facade's `flag()` reads as false).
+- **Boolean flags read the JS property first, then the attribute.** Bind `[voice]="true"`:
+  the facade's `flag()` takes an explicit JS `false` over a present attribute, so the bound
+  property is the one that can still turn a flag back off. A bare `voice` attribute is read
+  as **true**, not false — presence is what counts, and only `voice="false"` reads as false.
 - **Events are non-bubbling `kai-*` CustomEvents.** Bind on the element with
   `(kai-submit)`, `(kai-message-action)`, `(kai-conversation-select)`, … and read
   `($event as CustomEvent).detail`.
 
 ## How it works
 
-- `src/app/app.component.ts` composes the elements by hand: `<kai-resizable>` for the
-  split, `<kai-conversations>` (via `sidebar.component.ts`), `<kai-thread>` (via
-  `thread-view.component.ts`), and `<kai-prompt-input>` (via `composer.component.ts`).
+- `src/app/app.ts` + its `app.html` template compose the elements by hand:
+  `<kai-resizable>` for the split, `<kai-conversations>` (via
+  `components/sidebar/sidebar.ts`), `<kai-thread>` (via
+  `components/thread-view/thread-view.ts`), and `<kai-prompt-input>` (via
+  `components/composer/composer.ts`).
 - `src/app/state/chat.store.ts` owns the message array + streaming (`append`,
   `setMessages`, `streamAssistant`, `loading`). It's a thin Angular port of the kit's
   React `useKaiChat`, built on the **same** framework-neutral state core

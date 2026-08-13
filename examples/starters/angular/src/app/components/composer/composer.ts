@@ -17,8 +17,10 @@ type PromptInputEl = HTMLElement & { value?: unknown; clear?: () => void };
  * one-time seed that leaves the input uncontrolled). We keep the live text mirrored
  * in `liveText` (from `kai-value-change`) so voice can append.
  *
- * `voice` is set as a truthy PROPERTY (`[voice]="true"`), not a bare `voice`
- * attribute, which the facade's flag() would read as false.
+ * `voice` is set as a truthy PROPERTY (`[voice]="true"`) because the facade's flag()
+ * takes an explicit JS `false` over a present attribute, so the bound property is the
+ * one that can still turn the flag back off. A bare `voice` attribute would also read
+ * as TRUE here — presence is what counts, and only `voice="false"` reads as false.
  */
 @Component({
   selector: 'app-composer',
