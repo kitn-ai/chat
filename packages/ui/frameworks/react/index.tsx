@@ -203,7 +203,7 @@ export interface ButtonProps extends WebComponentProps {
   icon?: string;
   /** Trailing icon, after the label (e.g. `"chevron-down"` for a menu affordance). */
   iconTrailing?: string;
-  /** Accessible name. REQUIRED for icon-only buttons (no visible text); ignored when you slot visible text, which already names the button. */
+  /** Accessible name. REQUIRED for icon-only buttons (no visible text); ignored when you slot visible text, which already names the button. An `aria-label` on top of visible text REPLACES that name rather than adding to it, so a button reading "Save" that answers to "Submit" is unusable by speech input (WCAG 2.5.3, Label in Name). The visible text wins. An `icon` / `icon-sm` size hides the slot, which makes the button icon-only whatever you slotted, so `label` is what names it there. */
   label?: string;
   /** Disable the button (non-interactive, dimmed). */
   disabled?: boolean;
@@ -981,7 +981,7 @@ export interface MenuProps extends WebComponentProps {
   triggerLabel?: string;
   /** Built-in trigger: a trailing icon (e.g. `"chevron-down"` for a select look). */
   triggerIconTrailing?: string;
-  /** Accessible name for an icon-only trigger (no visible label). */
+  /** Accessible name for an icon-only trigger (no visible label). Ignored when `triggerLabel` is set: that text is already the name, and an `aria-label` over it REPLACES the name rather than adding to it, so a trigger reading "High" that answers to "Reasoning effort" is unusable by speech input (WCAG 2.5.3, Label in Name). It still applies over a slotted `slot="trigger"`, which is documented as VISUAL content (a `+` or an `<svg>`, not a name) and cannot be told apart from a name programmatically. So if you slot a real WORD, name the trigger with that same word or leave `label` off; otherwise you reintroduce the mismatch this prop is careful to avoid on `triggerLabel`. */
   label?: string;
   /** Drive/observe open state (Shoelace-style: settable + reflected to the `open` attribute, the menu still self-manages on click/keyboard). Set `el.open = true`, or `<kai-menu open>`; listen for `kai-open-change`. */
   open?: boolean;

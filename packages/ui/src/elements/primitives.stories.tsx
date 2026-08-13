@@ -239,7 +239,7 @@ export const Icons: Story = {
         <kai-icon name="sparkles" size="lg" />
       </div>
       {/* Escape hatch: any inline SVG via slot="icon"; inherits currentColor. */}
-      <kai-button variant="outline" size="sm" label="Ship it" ref={withActions}>
+      <kai-button variant="outline" size="sm" ref={withActions}>
         <svg slot="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></svg>
         Ship it
       </kai-button>
@@ -251,7 +251,7 @@ export const Icons: Story = {
 <kai-icon name="sparkles" size="lg"></kai-icon>
 
 <!-- slot="icon" escape hatch: any inline SVG inherits currentColor -->
-<kai-button variant="outline" size="sm" label="Ship it">
+<kai-button variant="outline" size="sm">
   <svg slot="icon" viewBox="0 0 24 24"><!-- ... --></svg>
   Ship it
 </kai-button>`),

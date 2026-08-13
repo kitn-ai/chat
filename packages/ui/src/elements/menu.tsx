@@ -32,7 +32,17 @@ interface Props extends Record<string, unknown> {
   triggerLabel?: string;
   /** Built-in trigger: a trailing icon (e.g. `"chevron-down"` for a select look). */
   triggerIconTrailing?: string;
-  /** Accessible name for an icon-only trigger (no visible label). */
+  /** Accessible name for an icon-only trigger (no visible label). Ignored when
+   *  `triggerLabel` is set: that text is already the name, and an `aria-label`
+   *  over it REPLACES the name rather than adding to it, so a trigger reading
+   *  "High" that answers to "Reasoning effort" is unusable by speech input
+   *  (WCAG 2.5.3, Label in Name).
+   *
+   *  It still applies over a slotted `slot="trigger"`, which is documented as
+   *  VISUAL content (a `+` or an `<svg>`, not a name) and cannot be told apart
+   *  from a name programmatically. So if you slot a real WORD, name the trigger
+   *  with that same word or leave `label` off; otherwise you reintroduce the
+   *  mismatch this prop is careful to avoid on `triggerLabel`. */
   label?: string;
   /** Drive/observe open state (Shoelace-style: settable + reflected to the `open`
    *  attribute, the menu still self-manages on click/keyboard). Set `el.open = true`,
@@ -182,7 +192,13 @@ defineWebComponent<Props, Events>('kai-menu', {
             ? 'gap-1.5 px-2 py-1.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground'
             : 'justify-center p-1.5 text-foreground hover:bg-muted',
         )}
-        aria-label={props.label ?? (props.triggerLabel ? undefined : 'Open menu')}
+        // A visible `triggerLabel` IS the name (name-from-contents reaches the
+        // slotted/shadow text), so `label` must not be layered over it: aria-label
+        // REPLACES the computed name, and a trigger reading "High" that answers to
+        // "Reasoning effort" locks speech-input users out (WCAG 2.5.3). Same rule
+        // kai-checkpoint and kai-button follow. A slotted trigger is deliberately
+        // NOT treated this way — see the `label` prop doc.
+        aria-label={props.triggerLabel ? undefined : (props.label ?? 'Open menu')}
       >
         {/* Slotted trigger wins; otherwise build one from the trigger* props;
             otherwise fall back to a "more" glyph. */}
