@@ -8,6 +8,12 @@ import {
   listArchetypes,
   listIntegrations,
 } from '../../registry';
+// The kit's media-type declaration, read rather than restated. This is the one
+// import in agent-tooling that reaches outside itself, and the module it reaches
+// for is the reason: `wire/media-types.ts` is pure (no I/O, no DOM, no solid-js),
+// so the Node MCP pass typechecks and bundles it unchanged. See
+// `ATTACHMENT_ACCEPT`.
+import { encodableMediaTypes } from '../../../wire/media-types';
 
 /**
  * scaffold — the keystone tool. Composes a working chat surface from four axes:
@@ -1082,6 +1088,40 @@ function hasAttachments(components: readonly string[]): boolean {
 }
 
 /**
+ * ★ THE EMITTED `accept`, DERIVED. The seven renderers below interpolate this;
+ * none of them writes a media type.
+ *
+ * It used to be the literal `image/*,application/pdf` in all seven, which was
+ * right when only images and PDFs could be encoded and silently stopped being
+ * right when #190 made `text/*`, `application/json`, `application/xml` and YAML
+ * encodable. The list did not become wrong in this file — it became wrong in
+ * every app scaffolded from it, which is the worst place for a copy to live and
+ * exactly what `wire/media-types.ts` exists to prevent. An `accept` attribute is
+ * a harder case than the prose in `ATTACHMENT_WIRE_NOTE` only in that a comment
+ * can point at a function and an attribute has to CONTAIN the answer; the fix is
+ * the same either way, which is to read the declaration rather than restate it.
+ *
+ * WHY EMIT IT AT ALL, RATHER THAN NOTHING. An absent filter means the full
+ * capability set to `resolveMediaPolicy`, so omitting looks equivalent and is
+ * not, because the tags emitted here never call it. `<kai-file-upload>` (and the
+ * Solid `<FileUpload>`) pass `accept` straight to `<input type="file">` and do no
+ * JS filtering at all — unlike `<kai-chat accept>`, which resolves the policy in
+ * `default-input.tsx`. So on THESE tags an absent attribute is not the capability
+ * set, it is wider than the capability set: the dialog offers `.zip`, the emitted
+ * `toAttachment` stages it, and the encoder throws on a file the picker
+ * volunteered. Deriving the attribute is the only form that tracks the
+ * declaration; omitting it is a third behaviour that matches neither layer.
+ *
+ * IT IS A STEER, NOT A GATE, and nothing here should be read as claiming
+ * otherwise. `accept` filters the OS dialog, which always offers an "All Files"
+ * escape, and it does not apply to drag-and-drop — `file-upload.tsx` hands
+ * `dataTransfer.files` straight to `onFilesAdded`. A scaffolded app that wants a
+ * filter that HOLDS calls `resolveMediaPolicy().decide()` on what it staged; the
+ * emitted note points at it.
+ */
+const ATTACHMENT_ACCEPT = encodableMediaTypes().join(',');
+
+/**
  * What the scaffolder INTENDS to emit for one components list, so a guard can
  * check the seven renderers against the decision instead of restating it.
  *
@@ -1424,7 +1464,7 @@ function componentTags(components: readonly string[], chatFill: string): string 
       `  <!-- Drop files here to stage them for the NEXT message. src/main.ts wires`,
       `       kai-files-added -> the staged list -> kai-attachments' items property. -->`,
       `  <div style="flex: 0 0 auto; display: flex; flex-direction: column; gap: 0.5rem; padding: 0.75rem;">`,
-      `    <kai-file-upload id="upload" accept="image/*,application/pdf"></kai-file-upload>`,
+      `    <kai-file-upload id="upload" accept="${ATTACHMENT_ACCEPT}"></kai-file-upload>`,
       `    <!-- items is a JS PROPERTY (arrays can't be attributes); 'removable' fires kai-remove. -->`,
       `    <kai-attachments id="attachments" variant="inline" removable></kai-attachments>`,
       `  </div>`,
@@ -1835,7 +1875,7 @@ function renderJsx(components: readonly string[], ctx: RenderCtx, framework: str
     ? [
         `      {/* Drop files here to stage them for the NEXT message. */}`,
         `      <div style={{ flex: '0 0 auto', display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '0.75rem' }}>`,
-        `        <FileUpload accept="image/*,application/pdf" onFilesAdded={onFilesAdded} />`,
+        `        <FileUpload accept="${ATTACHMENT_ACCEPT}" onFilesAdded={onFilesAdded} />`,
         `        {/* items is an ARRAY, so the wrapper sets it as a DOM property, never an attribute. */}`,
         `        <Attachments items={staged} variant="inline" removable onRemove={onRemoveAttachment} />`,
         `      </div>`,
@@ -2196,7 +2236,7 @@ function renderVue(components: readonly string[], ctx: RenderCtx): string {
     ? [
         `    <!-- Drop files here to stage them for the NEXT message. -->`,
         `    <div style="flex: 0 0 auto; display: flex; flex-direction: column; gap: 0.5rem; padding: 0.75rem;">`,
-        `      <kai-file-upload accept="image/*,application/pdf" @kai-files-added="onFilesAdded" />`,
+        `      <kai-file-upload accept="${ATTACHMENT_ACCEPT}" @kai-files-added="onFilesAdded" />`,
         `      <kai-attachments :items.prop="staged" variant="inline" removable @kai-remove="onRemoveAttachment" />`,
         `    </div>`,
       ].join('\n')
@@ -2553,7 +2593,7 @@ function renderSvelte(components: readonly string[], ctx: RenderCtx): string {
     ? [
         `  <!-- Drop files here to stage them for the NEXT message. -->`,
         `  <div style="flex: 0 0 auto; display: flex; flex-direction: column; gap: 0.5rem; padding: 0.75rem;">`,
-        `    <kai-file-upload accept="image/*,application/pdf" onkai-files-added={onFilesAdded}></kai-file-upload>`,
+        `    <kai-file-upload accept="${ATTACHMENT_ACCEPT}" onkai-files-added={onFilesAdded}></kai-file-upload>`,
         `    <kai-attachments bind:this={attachmentsEl} variant="inline" removable onkai-remove={onRemoveAttachment}></kai-attachments>`,
         `  </div>`,
       ]
@@ -2734,7 +2774,7 @@ function renderTanstackStart(components: readonly string[], ctx: RenderCtx): str
     ? [
         `      {/* Drop files here to stage them for the NEXT message. */}`,
         `      <div style={{ flex: '0 0 auto', display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '0.75rem' }}>`,
-        `        <FileUpload accept="image/*,application/pdf" onFilesAdded={onFilesAdded} />`,
+        `        <FileUpload accept="${ATTACHMENT_ACCEPT}" onFilesAdded={onFilesAdded} />`,
         `        {/* items is an ARRAY, so the wrapper sets it as a DOM property, never an attribute. */}`,
         `        <Attachments items={staged} variant="inline" removable onRemove={onRemoveAttachment} />`,
         `      </div>`,
@@ -3009,7 +3049,7 @@ function renderAngular(components: readonly string[], ctx: RenderCtx): string {
     ? [
         `      <!-- Drop files here to stage them for the NEXT message. -->`,
         `      <div style="flex: 0 0 auto; display: flex; flex-direction: column; gap: 0.5rem; padding: 0.75rem;">`,
-        `        <kai-file-upload accept="image/*,application/pdf" (kai-files-added)="onFilesAdded($event)"></kai-file-upload>`,
+        `        <kai-file-upload accept="${ATTACHMENT_ACCEPT}" (kai-files-added)="onFilesAdded($event)"></kai-file-upload>`,
         `        <kai-attachments [items]="staged()" variant="inline" removable (kai-remove)="onRemoveAttachment($event)"></kai-attachments>`,
         `      </div>`,
       ]
@@ -3518,7 +3558,7 @@ function renderSolid(components: readonly string[], ctx: RenderCtx): string {
             `        {/* Read every file BEFORE appending: a per-file append would order`,
             `            the list by whichever finished reading first. */}`,
             `        <FileUpload`,
-            `          accept="image/*,application/pdf"`,
+            `          accept="${ATTACHMENT_ACCEPT}"`,
             `          onFilesAdded={async (files) => setStaged([...staged(), ...(await Promise.all(files.map(toAttachment)))])}`,
             `        >`,
             `          <FileUploadTrigger class="border-border text-muted-foreground w-full rounded-xl border border-dashed px-4 py-3 text-center text-sm">`,
