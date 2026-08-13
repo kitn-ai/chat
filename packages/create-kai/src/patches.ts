@@ -86,6 +86,65 @@ export const PATCHES: Record<string, readonly Patch[]> = {
       why: 'the browser tab should name the user\'s app, not the kit\'s example',
     },
   ],
+  svelte: [
+    {
+      file: 'index.html',
+      find: /<title>@kitn\.ai\/ui Svelte example<\/title>/,
+      replace: (name) => `<title>${name}</title>`,
+      why: 'the browser tab should name the user\'s app, not the kit\'s example',
+    },
+    {
+      /**
+       * Same two-paragraph shape as Vue's, and the second paragraph is kept for
+       * the same reason: it is about the FRAMEWORK, not about this repo. It
+       * tells a Svelte reader why `kai-*` needs no `isCustomElement`-style
+       * registration — the compiler treats any hyphenated tag as a native
+       * custom element — which is the first thing someone coming from the Vue
+       * config asks. So the lookahead stops at the blank comment line, exactly
+       * as Vue's does.
+       */
+      file: 'vite.config.ts',
+      find: /\/\/ `@kitn\.ai\/ui` is linked into this example via `workspace:\*`[\s\S]*?\n(?=\/\/\n\/\/ Unlike Vue, Svelte needs no)/,
+      replace: () =>
+        '// `@kitn.ai/ui` ships compiled entry points and resolves through its own\n' +
+        '// `exports` map — no aliases, no transpile step needed.\n',
+      why: 'a scaffolded project is not a workspace member and has no `nx build ui` to run',
+    },
+  ],
+  vanilla: [
+    {
+      file: 'index.html',
+      find: /<title>@kitn\.ai\/ui vanilla example<\/title>/,
+      replace: (name) => `<title>${name}</title>`,
+      why: 'the browser tab should name the user\'s app, not the kit\'s example',
+    },
+    {
+      /**
+       * The one place a patch REWRITES the framework paragraph instead of
+       * stopping short of it.
+       *
+       * Vue's and Svelte's second paragraphs describe their compilers, so they
+       * survive the copy into a user's project unchanged. The vanilla starter's
+       * describes ITSELF — "unlike the React/Vue examples", "this is the pure
+       * web components, zero framework showcase" — which is true of the starter
+       * sitting in `examples/` and false of the app the user just scaffolded.
+       * Nothing in REPO_INTERNAL catches that, because it is not an instruction
+       * the user cannot follow; it is a sentence that describes the wrong
+       * project. So this patch spans both paragraphs and re-emits the half that
+       * is about the browser, dropping the half that is about the repo.
+       */
+      file: 'vite.config.ts',
+      find: /\/\/ `@kitn\.ai\/ui` is linked into this example via `workspace:\*`[\s\S]*?\n(?=\/\/ https:\/\/vite\.dev\/config\/)/,
+      replace: () =>
+        '// `@kitn.ai/ui` ships compiled entry points and resolves through its own\n' +
+        '// `exports` map — no aliases, no transpile step needed.\n' +
+        '//\n' +
+        '// No framework plugin here: the browser upgrades the `kai-*` custom elements\n' +
+        '// natively, so there is nothing for a template compiler to learn about the\n' +
+        '// tags.\n',
+      why: 'a scaffolded project is not a workspace member and has no `nx build ui` to run',
+    },
+  ],
 };
 
 /** Apply every patch for a template. Throws if one does not match. */

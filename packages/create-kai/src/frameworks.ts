@@ -41,6 +41,12 @@
  * Turning one of these on is therefore work in `examples/starters/<dir>/` —
  * giving the starter a real thread + composer + mock stream, SSR-safely — and
  * only then a status flip here.
+ *
+ * WATCH THE `templateDir` COLUMN. It is not the id. `html` is served by
+ * `examples/starters/vanilla`, and since patches are keyed by templateDir, a
+ * lookup written against the id finds none and the emitted project ships the
+ * kit's own example title. The build's repo-internals check is what stands
+ * behind that, and generate.test.ts asserts the html patches by their effect.
  */
 import type { Registration } from './types';
 
@@ -114,7 +120,7 @@ export const FRAMEWORKS: readonly FrameworkDef[] = [
     renderer: 'svelte',
     registration: 'elements',
     composedWorkspace: true,
-    status: 'planned',
+    status: 'ready',
     paths: {
       entry: 'src/main.ts',
       app: 'src/App.svelte',
@@ -122,7 +128,6 @@ export const FRAMEWORKS: readonly FrameworkDef[] = [
       css: 'src/index.css',
       env: '.env.local',
     },
-    note: 'starter exists; not yet run end to end by this CLI',
   },
   {
     id: 'solid',
@@ -148,30 +153,35 @@ export const FRAMEWORKS: readonly FrameworkDef[] = [
       env: '.env.local',
     },
     /**
-     * NOT a "nobody got to it yet" note. Solid was run against this CLI and
-     * cannot be emitted by it today, blocked on three things in
-     * `examples/starters/solid/` — outside this package, so recorded rather than
-     * worked around:
+     * NOT a "nobody got to it yet" note, and NOT a bug list. Solid is the third
+     * instance of one shape, alongside `nextjs` and `tanstack-start`: THE
+     * STARTER IS NOT A CHAT APP, so there is nothing for the `ready` standard to
+     * be applied to.
      *
-     *  1. no `.gitignore`. It is the only one of the eight starters without one,
-     *     and `scripts/build.mjs` refuses a template that has none, because an
-     *     emitted project that ignores neither `node_modules/` nor `.env.local`
-     *     stages an API key on its first `git add .`.
-     *  2. no `toOpenAIMessages(...)`, because the starter does not use
-     *     `@kitn.ai/ui/wire` AT ALL. It replays a canned part script through the
-     *     `@kitn.ai/ui/state` folds, so it has no `readOpenAIStream` call for the
-     *     README's go-live diff to point at. `goLiveThread` throws on it, and
-     *     that throw is correct: the diff this CLI emits would name identifiers
-     *     the file does not contain.
-     *  3. `index.html` links its favicon to `../../internal/shared/logo.svg`, a
-     *     path that escapes the project root and resolves only inside this repo.
+     * The Solid starter does not use `@kitn.ai/ui/wire` at all. It replays a
+     * canned part script through the `@kitn.ai/ui/state` folds to demonstrate
+     * the SolidJS primitives directly, so it has no `toOpenAIMessages` /
+     * `readOpenAIStream` call for the emitted README's go-live diff to quote.
+     * `goLiveThread` throws on it, and `scripts/build.mjs` stops there if the
+     * status is flipped. THAT THROW IS CORRECT — the diff this CLI emits would
+     * otherwise name identifiers the file does not contain.
      *
-     * (1) and (3) are small. (2) is a product question — that starter is
-     * deliberately a primitives showcase, and giving it a wire-backed mock
-     * changes what it demonstrates. Whoever picks this up should settle (2)
-     * first; the rest follows in minutes.
+     * That is a product decision, not a defect to fix here. The starter is
+     * deliberately a primitives showcase; converting it into a gateway-backed
+     * chat app would destroy the thing it exists to demonstrate. Making Solid
+     * `ready` therefore means WRITING a Solid chat app, which is scoped
+     * separately — exactly as it is for the two SSR rows below.
+     *
+     * This note used to enumerate three blockers. #197 fixed two of them (the
+     * missing `.gitignore`, and a favicon linked to `../../internal/shared/`
+     * outside the project root), and a stale list of fixed defects is worse than
+     * no list: it sends a reader hunting for problems that are not there.
+     * Confirmed against the tree rather than assumed — the starter now carries
+     * its own `.gitignore`, and a build with this row flipped to `ready` gets
+     * past the template copy and stops at `goLiveThread`, which is the one
+     * blocker above and nothing else.
      */
-    note: 'starter has no .gitignore and no @kitn.ai/ui/wire call for the README go-live diff',
+    note: 'starter is a primitives showcase, not a chat app; no @kitn.ai/ui/wire call for the README go-live diff',
   },
   {
     id: 'angular',
@@ -196,7 +206,7 @@ export const FRAMEWORKS: readonly FrameworkDef[] = [
     renderer: 'html',
     registration: 'elements',
     composedWorkspace: true,
-    status: 'planned',
+    status: 'ready',
     paths: {
       entry: 'src/main.ts',
       app: 'src/main.ts',
@@ -204,7 +214,6 @@ export const FRAMEWORKS: readonly FrameworkDef[] = [
       css: 'src/index.css',
       env: '.env.local',
     },
-    note: 'starter exists; not yet run end to end by this CLI',
   },
   {
     id: 'nextjs',

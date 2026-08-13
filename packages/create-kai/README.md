@@ -13,20 +13,31 @@ history + the kit's local mock: a project that streams a reply on the first
 
 ## Status
 
-**First slice of v1.** The zero-config path (React · full-screen · conversation
-history · mock) runs end to end, and **Vue** does too — scaffolded, installed,
-built and driven in a browser, streaming a mock reply into `<kai-thread>`.
-Remaining frameworks, layouts and gateways are declared in the tables but not
-offered; `create-kai --list` prints exactly what is ready and what is not.
+**First slice of v1.** A `ready` framework has been scaffolded, installed from
+the registry, built by its own build script, and driven in a browser — a message
+sent, and a reply streaming into `<kai-thread>`. Remaining frameworks, layouts
+and gateways are declared in the tables but not offered.
 
-Vue is the representative of the four `registration: 'elements'` +
-`composedWorkspace: true` cells (vue · svelte · angular · html), so most of what
-it took to turn Vue on is already done for the other three. What it exposed was
-not Vue-specific: a framework could go `ready` with **no patches at all** and the
-build would still print "2 patches verified", shipping the kit's own example
-title and `nx build ui` into a user's project. That hole is closed by the
-repo-internals check below, which reads the emitted output instead of the patch
-list.
+**`create-kai --list` is the roster.** This paragraph used to name which
+frameworks were ready, and it was wrong within a day of each one landing — so
+the list lives in `src/frameworks.ts` and at runtime in `--list --json`, and
+nowhere else.
+
+Vue went first among the `registration: 'elements'` + `composedWorkspace: true`
+cells and paid for the shared machinery: a framework could go `ready` with **no
+patches at all** and the build would still print "2 patches verified", shipping
+the kit's own example title and `nx build ui` into a user's project. That hole
+is closed by the repo-internals check below, which reads the emitted output
+instead of the patch list — and it is what caught Svelte and HTML on their first
+`ready` build, naming every offending line, exactly as intended.
+
+Each of the later cells then needed only its own patches. The one decision
+neither React nor Vue had to make: the vanilla template's vite config describes
+ITSELF ("unlike the React/Vue examples", "this is the showcase"), which is true
+of a starter in `examples/` and false of the project a user just scaffolded.
+Nothing in the repo-internals list catches that — it is not an unfollowable
+instruction, just a sentence about the wrong project — so that patch rewrites
+the paragraph rather than stopping short of it.
 
 ## How it is put together
 
@@ -94,9 +105,9 @@ Green means an emitted project will build for a user.
 published kit is 0.20.1, which predates `@kitn.ai/ui/wire`, `MessagePart` and
 `createMockResponder`, so an emitted project installs cleanly and then fails
 `npm run build` with nine type errors. **0.21.0 is published and carries all
-three.** The gate above is green against it for both templates, and an emitted
-Vue project pinned to `^0.21.0` installs from the registry, passes
-`vue-tsc -b && vite build`, and streams in a browser.
+three.** The gate above is green against it for every ready template, and
+every ready framework's emitted project, pinned to `^0.21.0`, installs from the
+registry, passes its own build script, and streams in a browser.
 
 Re-run it against whatever the pin resolves to; do not read this paragraph as
 standing permission.
@@ -123,3 +134,21 @@ node scripts/smoke.mjs --framework <id> --keep   # ... and leave it to `npm run 
 because it built; it is `ready` because a message sent in a real browser streamed
 a reply into `<kai-thread>`. Vue's build was green before its patches existed and
 while its README pointed at `src/App.tsx`.
+
+When you drive it, assert on the RIGHT PAGE and on GROWTH:
+
+- Every Vite starter's dev script has a fixed `server.port`, and Vite does
+  **not** use `strictPort` — a port already in use makes it quietly serve on the
+  next one instead. Drive it with `--port <n> --strictPort`, and kill by
+  process GROUP (`spawn(..., { detached: true })` + `process.kill(-pid)`);
+  killing the `npm` wrapper alone orphans the `vite` child, which then squats
+  the port for the next framework you test. Both traps fired here: the html run
+  hit a leaked svelte server on 5176 and "passed", and because all these
+  starters render the same design the screenshots were pixel-identical, which
+  read as success. Assert `document.title` — every scaffold patches it to the
+  project name — so the run is bound to the app you meant to test.
+- Sample `<kai-thread>` on an interval and require the text to GROW across
+  several distinct samples. One non-empty read is satisfied by the seeded
+  conversation that is already on screen before you type anything.
+- The composer is `contenteditable="plaintext-only"` inside a shadow root, not a
+  `textarea`. A bare `textarea` selector finds the sidebar's search box instead.
