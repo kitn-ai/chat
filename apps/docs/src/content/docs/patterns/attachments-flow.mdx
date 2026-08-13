@@ -81,8 +81,16 @@ const userMsg = {
 | `type` | Yes | `'file'` or `'source-document'` |
 | `filename` | No | Shown as the chip label |
 | `mediaType` | No | MIME type — drives the icon (image / video / audio / document) |
-| `url` | No | Object URL or CDN URL — enables image previews in the hover card |
+| `url` | No | `data:` URI or an https URL — previews in the hover card, and it is the field the wire encodes. Not `URL.createObjectURL`: see below |
 | `title` | No | Display name for `source-document` attachments |
+
+### `url` is what reaches the model
+
+Set it to a `data:` URI or an https URL, on every file rather than only images.
+
+Do not use `URL.createObjectURL`. An object URL resolves only inside the tab that minted it, so it renders a flawless thumbnail and is meaningless to any provider — `toOpenAIMessages` and `toAnthropicMessages` reject a `blob:` URL rather than send an address the model cannot fetch. An attachment with no `url` at all is unencodable for the same reason, which is why a document needs one just as much as an image does.
+
+`<kai-prompt-input>`'s built-in paperclip already does this for you; you only need the conversion below when you stage files yourself.
 
 ## Pre-populating staged files
 
@@ -90,7 +98,15 @@ Assign `prompt.attachments` in JavaScript after mount to seed the composer befor
 
 ```js
 prompt.attachments = [
-  { id: 'ctx-1', type: 'file', filename: 'brief.pdf', mediaType: 'application/pdf' },
+  {
+    id: 'ctx-1',
+    type: 'file',
+    filename: 'brief.pdf',
+    mediaType: 'application/pdf',
+    // Seeded files need a `url` too, or they render as chips and reach the
+    // model as nothing. An https URL is the natural one here.
+    url: 'https://cdn.example.com/brief.pdf',
+  },
 ];
 ```
 

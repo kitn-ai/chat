@@ -47,21 +47,30 @@
 //     url: f.type.startsWith('image/') ? URL.createObjectURL(f) : undefined
 //     attachment.url = URL.createObjectURL(f)
 //
-// HOW THE DECISION IS MADE. For each `createObjectURL` call, walk BACKWARD and
-// ask what the value flows into: whichever sink is NEAREST wins. A `url` key or
-// a `.url =` member wins -> finding. A variable binding, or any other key, wins
-// -> clean. Comments and string literals are blanked first (preserving offsets,
-// so reported line numbers stay true), because this file, `default-input.tsx`
-// and `scaffold.ts` all TALK about `URL.createObjectURL` at length and a guard
-// that fires on prose about itself gets switched off within the day.
+// HOW THE DECISION IS MADE. A real TS parse, then two AST shapes: a property
+// assignment whose name is `url` (bare or quoted), and an assignment to a `.url`
+// member, in either case with a `createObjectURL` call somewhere in the value.
+// Because the value side is a SUBTREE search, the ternary, an `await`, and any
+// wrapping all fall out for free without the rule ever mentioning them.
+//
+// Working on the AST is also what keeps this off prose: this file,
+// `default-input.tsx` and `scaffold.ts` all TALK about `URL.createObjectURL` at
+// length, and a comment is not a node while a string containing code is a string
+// literal, not a call. A guard that fires on prose about itself gets switched
+// off within the day.
 //
 // KNOWN LIMITATION, stated rather than hidden: the flow analysis is one hop.
 // `const u = URL.createObjectURL(f); return { url: u };` is NOT caught. Closing
 // that needs real alias tracking, which buys false positives back; the measured
 // defect is direct, and one honest hop beats a rule nobody trusts.
 //
-// SCOPE: all first-party source under apps/ and packages/, including tests and
-// docs prose. See SCAN_ROOTS below for why it is not narrowed to docs/examples.
+// It also sees CODE only. The third instance fixed alongside this guard was a
+// docs props table reading "Object URL or CDN URL", which is prose recommending
+// the defect and which no AST rule can reach. Prose stays a review problem.
+//
+// SCOPE: all first-party source under apps/ and packages/, including tests, and
+// including the code inside markdown fences and .astro/.vue/.svelte script
+// blocks. See SCAN_ROOTS below for why it is not narrowed to docs/examples.
 //
 // RUNNING IT, without a build. Parses source, reads no dist/:
 //
@@ -99,6 +108,13 @@ const SKIP_DIRS = new Set([
   'node_modules', 'dist', 'build', '.git', '.astro', '.nx', '.cache',
   'coverage', 'storybook-static', '.turbo', '.output', '.vercel', '.wrangler',
 ]);
+// Gitignored COPIES of built kit output, not source. `apps/docs/public/kitn/` is
+// written by the docs site's prebuild (copy-kit-assets.mjs) and is gitignored, so
+// whether it exists depends on whether anyone has run a build -- which made the
+// scanned-file count differ between a fresh checkout and a built one. Left in, a
+// finding could also be reported against a bundle nobody can edit, whose source
+// this scan already covers.
+const SKIP_PATHS = ['apps/docs/public/kitn'];
 const CODE_EXT = new Set(['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs']);
 const FENCE_EXT = new Set(['.md', '.mdx']);
 const MARKUP_EXT = new Set(['.astro', '.vue', '.svelte']);
@@ -114,6 +130,7 @@ function walk(dir, out) {
     const full = join(dir, e.name);
     if (e.isDirectory()) {
       if (SKIP_DIRS.has(e.name)) continue;
+      if (SKIP_PATHS.includes(relative(REPO_ROOT, full))) continue;
       walk(full, out);
     } else if (e.isFile()) {
       const ext = extname(e.name);
