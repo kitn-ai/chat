@@ -24,12 +24,20 @@
  * flag — which is the zero-config path, which is React. So it answered "does
  * React still build" no matter which framework you had just turned on. Vue was
  * turned on and smoked green here without a single Vue file being compiled.
+ *
+ * AND `npm run build` IS NOT ALWAYS A TYPECHECK. Six starters chain or embed a
+ * checker in their build; TanStack Start's is a bare `vite build`, which strips
+ * types with esbuild rather than checking them. Running only `build` there would
+ * print a green tick over a project that does not compile — the same shape of
+ * vacuous pass as the two above. `src/starter-scripts.ts` decides which scripts
+ * to run from the emitted project's own package.json.
  */
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import * as esbuild from 'esbuild';
 
 const pkgRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = path.resolve(pkgRoot, '../..');
@@ -47,6 +55,24 @@ const frameworkArg = flag('framework');
 const step = (message) => console.log(`\n• ${message}`);
 const sh = (cmd, args, cwd) =>
   execFileSync(cmd, args, { cwd, stdio: 'inherit', encoding: 'utf8' });
+
+/**
+ * Load one of the CLI's own TypeScript modules, the way `scripts/build.mjs`
+ * does, so the rule below is read from `src/` rather than restated here.
+ */
+async function loadTs(relative) {
+  const built = await esbuild.build({
+    entryPoints: [path.join(pkgRoot, relative)],
+    bundle: true,
+    write: false,
+    format: 'esm',
+    platform: 'node',
+    external: ['zod'],
+  });
+  return import(
+    `data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`
+  );
+}
 
 async function main() {
   const work = await mkdtemp(path.join(tmpdir(), 'create-kai-smoke-'));
@@ -70,6 +96,8 @@ async function main() {
 
     step('building create-kai');
     sh('node', [path.join(pkgRoot, 'scripts/build.mjs')], pkgRoot);
+
+    const { scriptsToRun } = await loadTs('src/starter-scripts.ts');
 
     // `--framework all` asks the CLI we just built which frameworks are ready,
     // through its own `--list --json` introspection rather than a list restated
@@ -115,10 +143,24 @@ async function main() {
       step(`installing ${label}`);
       sh('npm', ['install', '--no-audit', '--no-fund'], appDir);
 
-      step(`building ${label} (its own build script, over the real installed kit)`);
-      sh('npm', ['run', 'build'], appDir);
+      // WHICH SCRIPTS ACTUALLY PROVE IT COMPILES. `npm run build` alone is not
+      // the answer for every framework: TanStack Start's build is a bare
+      // `vite build`, and Vite strips types with esbuild rather than checking
+      // them, so a project with type errors bundles green. `scriptsToRun` reads
+      // the emitted project's own package.json and adds `typecheck` when the
+      // build does not reach a checker — build FIRST, because TanStack's
+      // `tsc --noEmit` reads a routeTree the build generates.
+      const emittedScripts = JSON.parse(
+        await readFile(path.join(appDir, 'package.json'), 'utf8'),
+      ).scripts;
+      const toRun = scriptsToRun(emittedScripts ?? {});
 
-      console.log(`\n✓ ${label} installs and builds`);
+      for (const script of toRun) {
+        step(`${script === 'build' ? 'building' : 'typechecking'} ${label} (its own \`${script}\` script, over the real installed kit)`);
+        sh('npm', ['run', script], appDir);
+      }
+
+      console.log(`\n✓ ${label} installs and passes ${toRun.map((s) => `\`${s}\``).join(' + ')}`);
       if (keep) console.log(`  kept at ${appDir} — \`cd\` there and \`npm run dev\``);
     }
   } catch (error) {

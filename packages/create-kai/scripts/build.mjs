@@ -27,8 +27,36 @@ const startersRoot = path.join(repoRoot, 'examples/starters');
 const dist = path.join(pkgRoot, 'dist');
 const templatesOut = path.join(dist, 'templates');
 
-/** Never copied into a template: build output, installed deps, editor cruft. */
-const SKIP = new Set(['node_modules', 'dist', '.next', '.vite', '.turbo', '.angular', 'README.md']);
+/**
+ * Never copied into a template: build output, installed deps, editor cruft —
+ * and lockfiles.
+ *
+ * A LOCKFILE IS STALE THE MOMENT IT IS COPIED, so shipping one is strictly worse
+ * than shipping none. The emitted project's dependency set is not the starter's:
+ * `rewritePackageJson` replaces the `@kitn.ai/ui` spec (a monorepo-local
+ * `file:../../../packages/ui` or `workspace:*` becomes a real range) and adds
+ * the chosen gateway's deps. A copied lockfile still pins the old one, so
+ * `npm ci` refuses the package.json/lock mismatch outright and `npm install`
+ * resolves the kit from a path that climbed out of the user's project.
+ *
+ * Only the two STANDALONE starters have one today (nextjs, tanstack-start), and
+ * neither is `ready` — so this is a latent bug, caught by the `file:` pattern in
+ * REPO_INTERNAL below rather than by review. create-vite ships no lockfile for
+ * the same reason: the first `npm install` is what should write it.
+ */
+const SKIP = new Set([
+  'node_modules',
+  'dist',
+  '.next',
+  '.vite',
+  '.turbo',
+  '.angular',
+  'README.md',
+  'package-lock.json',
+  'pnpm-lock.yaml',
+  'yarn.lock',
+  'bun.lockb',
+]);
 
 /**
  * npm strips `.gitignore` out of a published tarball, so it travels as
@@ -112,7 +140,56 @@ const REPO_INTERNAL = [
     why: 'a repo-internal command, unrunnable from a scaffolded project',
   },
   {
-    pattern: /@kitn\.ai\/ui\s+\S+\s+example/i,
+    /**
+     * A monorepo-relative path to the kit.
+     *
+     * `workspace:*` is how the six LINKED starters name the kit; the two
+     * STANDALONE ones (nextjs, tanstack-start) instead say
+     * `file:../../../packages/ui`, which climbs out of the project and resolves
+     * to nothing once that project is somewhere else on disk. It is the same
+     * defect as `workspace:*` wearing different clothes, and the pattern above
+     * does not match it.
+     *
+     * `rewritePackageJson` already replaces this spec in package.json — which is
+     * why package.json is exempt from this whole check — but it is the ONLY file
+     * rewritten, and the standalone starters carry the same path in two others:
+     * their package-lock.json and their .npmrc comment. A lockfile pinning the
+     * kit to a path that does not exist is not a cosmetic leak; it is an
+     * `npm install` that resolves the wrong thing and an `npm ci` that refuses
+     * outright.
+     */
+    pattern: /file:(?:\.\.\/)+packages\/ui/,
+    why: 'a monorepo-relative path to the kit; from a user\'s project it resolves to nothing',
+  },
+  {
+    /**
+     * The kit's own example title, in any of the shapes the starters write it.
+     *
+     * The first version of this was `\s+\S+\s+example`, which reads "the kit
+     * name, ONE token, then `example`". That is the shape the five Vite
+     * starters happen to use ("@kitn.ai/ui Vue example"), and it silently
+     * misses every longer one: both SSR starters title themselves
+     * "@kitn.ai/ui — Next.js App Router example" and
+     * "@kitn.ai/ui — TanStack Start example", and neither tripped the guard.
+     * A pattern fitted to the examples in front of it is how this check passes
+     * over the next starter, which is the same vacuity #193 closed one layer up.
+     *
+     * So it now spans the whole title rather than a fixed token count, and it
+     * anchors on the SPACE after the kit name, which is what makes it a title
+     * rather than any other mention. Three real strings in the tree are excluded
+     * by that one character, and all three would otherwise be false reds:
+     *
+     *   `@kitn.ai/ui` is linked into this example ...  a backtick — vite.config
+     *        prose, repo-internal for a DIFFERENT reason, already caught and
+     *        patched out as `workspace:*`. Matching it here would report one
+     *        defect twice and pin this pattern to a line another patch owns.
+     *   @kitn.ai/ui-example-nextjs                    a hyphen — the starter's
+     *        own package NAME. package.json is exempt from this check, but that
+     *        name also appears in the standalone starters' package-lock.json.
+     *   @kitn.ai/ui/react                             a slash — a subpath
+     *        import, which can sit on a line whose comment says "example".
+     */
+    pattern: /@kitn\.ai\/ui[ \t]+[^\n`]{0,40}?\bexamples?\b/i,
     why: "the kit's own example title — the user's app should be named after the user's app",
   },
 ];
