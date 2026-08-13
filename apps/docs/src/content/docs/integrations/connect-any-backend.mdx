@@ -12,31 +12,34 @@ import { Aside } from '@astrojs/starlight/components';
 `<kai-chat>` renders a `messages` array. You own the array; the component reflects it. A message is plain data — spelled out below so you can see the whole contract, but don't retype it: the kit exports these as `ChatMessage`, `MessagePart`, and `ToolPart` from `@kitn.ai/ui` (types only, so they cost nothing at runtime).
 
 ```ts
-type Message = {
-  id: string;
-  role: 'user' | 'assistant';
-  parts: MessagePart[];             // ordered, rendered in the order they appear
+import type { ChatMessage, MessagePart, ToolPart } from '@kitn.ai/ui';
+
+const message: ChatMessage = {
+  id: 'm_1',
+  role: 'assistant', // 'user' | 'assistant'
+  parts: [],         // ordered, rendered in the order they appear
+};
+
+const search: ToolPart = {
+  type: 'web_search',                 // the tool name
+  state: 'output-available',          // 'input-streaming' | 'input-available' | 'output-available' | 'output-error'
+  input: { query: 'kitn ui' },        // arguments
+  output: { results: [] },            // result, once it returns
+  toolCallId: 'call_1',
 };
 
 // The full union has six variants. Streaming from a model or agent only ever
 // produces the first three below; card / source / file are for generative-UI
-// cards, citations, and attachments, covered in their own guides.
-type MessagePart =
-  | { type: 'text'; text: string }  // the text, streamed in token by token
-  | { type: 'reasoning'; text: string; label?: string }
-  | { type: 'tool'; tool: ToolCall }
-  | { type: 'card'; envelope: CardEnvelope }
-  | { type: 'source'; source: Source }
-  | { type: 'file'; attachment: AttachmentData };
-
-type ToolCall = {
-  type: string;                    // the tool name, e.g. 'web_search'
-  state: 'input-streaming' | 'input-available' | 'output-available' | 'output-error';
-  input?: Record<string, unknown>; // arguments
-  output?: Record<string, unknown>; // result, once it returns
-  toolCallId?: string;
-  errorText?: string;
-};
+// cards, citations, and attachments, covered in their own guides. This array is
+// checked against the kit's own MessagePart, so it cannot drift from the contract.
+const parts: MessagePart[] = [
+  { type: 'text', text: 'the text, streamed in token by token' },
+  { type: 'reasoning', text: 'the model thinking out loud', label: 'Reasoning' },
+  { type: 'tool', tool: search },
+  { type: 'card', envelope: { type: 'confirm', id: 'c_1', data: {} } },
+  { type: 'source', source: { url: 'https://example.com', title: 'Example' } },
+  { type: 'file', attachment: { id: 'a_1', type: 'file', filename: 'notes.md' } },
+];
 ```
 
 Three things stream into a message, and they map from any model:

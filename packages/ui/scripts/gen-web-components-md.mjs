@@ -84,6 +84,53 @@ export function shorten(type) {
   return ALIAS.get(type) ?? type;
 }
 
+// ---------------------------------------------------------------------------
+// The Overview block.
+//
+// Everything OUTSIDE a `<!-- spec:… -->` marker in docs/web-components.md is
+// hand-written prose that this generator preserves byte-for-byte. That is
+// exactly why the element count rotted: it was typed by hand as "27" while the
+// kit had grown to 80, and `verify:generated` could not see it — regeneration
+// reproduced the stale sentence byte-identically, so the drift check passed.
+// Re-typing "80" here would rot the same way on the next element.
+//
+// So the count is DERIVED from the same in-memory model that writes every table
+// below. It now moves with the roster on its own, and because it lives inside a
+// marked region the drift guard covers it like any other generated block.
+// ---------------------------------------------------------------------------
+
+/**
+ * Editorial: the three headline elements. The purposes are authored prose (the
+ * model's own descriptions are written for a props table, not a lede); the tags
+ * are checked against the model so this block can never advertise an element
+ * the kit stopped shipping.
+ */
+const FEATURED = [
+  ['kai-chat', 'Full chat UI — message list plus prompt input'],
+  ['kai-conversations', 'Sidebar conversation browser with group support'],
+  ['kai-prompt-input', 'Standalone text-input area with send button'],
+];
+
+function overviewBlock(elements) {
+  const tags = new Set(elements.map((e) => e.tag));
+  const missing = FEATURED.map(([t]) => t).filter((t) => !tags.has(t));
+  if (missing.length) {
+    throw new Error(
+      `gen-web-components-md: the Overview block features ${missing.join(', ')}, ` +
+        'which the element model no longer contains. Update FEATURED in ' +
+        'scripts/gen-web-components-md.mjs rather than shipping a roster that ' +
+        'points at an element the kit does not have.',
+    );
+  }
+  const rows = FEATURED.map(([tag, purpose]) => `| \`<${tag}>\` | ${purpose} |`).join('\n');
+  const rest = elements.length - FEATURED.length;
+  return (
+    `\n\`@kitn.ai/ui\` ships ${elements.length} framework-agnostic custom elements built on the SolidJS kit.\n\n` +
+    `| Tag | Purpose |\n|-----|---------|\n${rows}\n` +
+    `| + ${rest} composable primitives | See the full roster below |\n`
+  );
+}
+
 function tablesFor(el) {
   const propRows = el.props
     .map((p) => {
@@ -172,6 +219,25 @@ function tablesFor(el) {
 export function writeWebComponentsMd(root, elements) {
   const path = resolve(root, '..', '..', 'docs/web-components.md');
   let md = readFileSync(path, 'utf8');
+
+  // Derived element counts — see overviewBlock. Unlike the per-element blocks
+  // below there is no "insert it on first run" fallback: this region wraps
+  // hand-written prose, so guessing where to put it would be worse than saying
+  // it is gone. A missing marker is the stale-count bug coming back, so fail.
+  {
+    const start = '<!-- spec:overview -->';
+    const end = '<!-- /spec:overview -->';
+    const re = new RegExp(`${start}[\\s\\S]*?${end}`);
+    if (!re.test(md)) {
+      throw new Error(
+        `gen-web-components-md: docs/web-components.md has no ${start} … ${end} region. ` +
+          'It carries the DERIVED element count; without it the count is hand-typed ' +
+          'prose again and goes stale silently (regeneration reproduces it exactly, ' +
+          'so verify:generated cannot see it). Restore the markers.',
+      );
+    }
+    md = md.replace(re, `${start}${overviewBlock(elements)}${end}`);
+  }
 
   for (const el of elements) {
     const block = tablesFor(el);
