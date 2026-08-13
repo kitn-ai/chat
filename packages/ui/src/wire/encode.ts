@@ -143,6 +143,7 @@ type SettledTool = ToolPart & { toolCallId: string };
 
 const isTextPart = (p: MessagePart): p is TextPart => p.type === 'text';
 
+// lint-silent-drops: drops reasoning,tool,card,source,file -- text projection by name and contract, used for the plain-string form of a turn; every caller that needs the other variants encodes them itself before falling back here.
 const textOf = (parts: MessagePart[]): string =>
   parts
     .filter(isTextPart)
@@ -423,6 +424,7 @@ function reasoningDetailOf(part: ReasoningPart): OpenAIReasoningDetail | undefin
  * or document content in an assistant message, so there is nothing to encode it
  * to; attachments belong to the user turn that sent them.
  */
+// lint-silent-drops: drops card,source -- kit-side parts with no OpenAI wire representation; cards come from tool calls, which ARE encoded, and sources are UI citations.
 export function toOpenAIMessages(
   messages: ChatMessage[],
   options: OpenAIEncodeOptions = {},
@@ -449,6 +451,7 @@ export function toOpenAIMessages(
         buffered = '';
       };
 
+      // lint-silent-drops: drops reasoning,tool,card,source -- a USER turn carries authored content only; reasoning and tool parts are assistant-side, cards and sources are kit-side UI with no OpenAI wire form.
       message.parts.forEach((part, partIndex) => {
         if (part.type === 'text') {
           buffered += part.text;
@@ -593,6 +596,7 @@ export function toAnthropicMessages(
     if (message.role === 'user') {
       // Part order, for the same reason as `toOpenAIMessages`.
       const userBlocks: AnthropicContentBlock[] = [];
+      // lint-silent-drops: drops reasoning,tool,card,source -- a USER turn carries authored content only; reasoning and tool parts are assistant-side, cards and sources are kit-side UI with no Anthropic wire form.
       message.parts.forEach((part, partIndex) => {
         if (part.type === 'text') {
           if (part.text !== '') userBlocks.push({ type: 'text', text: part.text });
@@ -619,6 +623,7 @@ export function toAnthropicMessages(
       results = [];
     };
 
+    // lint-silent-drops: drops card,source,file -- cards and sources are kit-side UI; a file part on an ASSISTANT turn has no Anthropic representation, since the API takes image and document content on user turns only.
     message.parts.forEach((part, partIndex) => {
       switch (part.type) {
         case 'reasoning': {

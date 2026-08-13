@@ -113,6 +113,28 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # CLAUDE.md's "decide loudly" corollary, enforced on the one layer where a
+      # quiet decision is IRREVERSIBLE: src/wire turns ChatMessage.parts into a
+      # provider request, so a variant it does not encode is gone by the time the
+      # request leaves the process. #186 shipped exactly that -- a user turn
+      # carrying only an attachment encoded to nothing -- and the drop was already
+      # explained in a prose comment, which is why the waiver this guard accepts
+      # is a parsed directive that must NAME each dropped variant rather than a
+      # sentence. A waiver covers only what it spells out, so a seventh
+      # MessagePart member re-fires every waived site instead of being swallowed.
+      #
+      # Runs BEFORE the build because it needs none: it parses source only and
+      # reads no dist/, so it reports in ~1s and is a seam anyone can grab to
+      # watch it fail (`node packages/ui/scripts/lint-silent-drops.mjs`).
+      #
+      # It cannot pass vacuously. `--self-test` asserts the analyzer still
+      # DETECTS on ten known-bad and known-good inputs, and the scan itself exits
+      # non-zero if the MessagePart union will not parse, if no wire source is
+      # found, or if no function in it discriminates a part at all -- because each
+      # of those is this script being broken, not the tree being clean.
+      - name: Silent-drop guard (wire encoders)
+        run: pnpm --filter @kitn.ai/ui run lint:silent-drops
+
       - name: Build (element bundle + provider subpath)
         run: pnpm exec nx build ui
 
