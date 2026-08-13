@@ -1,31 +1,53 @@
 # HANDOFF: attachments, the create-kai scaffolder, and a label-vs-visible-text a11y fix
 
-**Verified against `origin/main` at `5a858268f4be3286323f6cd05fbcdfee2c9f514e`** (`docs: record that
-nx typecheck ui is cached and can report a stale verdict (#200)`). The body was first derived against
-`e6fd55e` and re-derived when main moved underneath it; §8.7 records what that move changed.
+**Verified against `origin/main` at `bce481ebd5e0cc781433053c98387af28d94480a`** (`fix(create-kai):
+rename the Angular project, and grade titles by what they must be (#201)`).
 
 That SHA is the whole contract of this document. Everything below was read off that tree, and
-`git log --oneline 5a85826..origin/main` measures exactly how stale it has become. Nothing here was
+`git log --oneline bce481e..origin/main` measures exactly how stale it has become. Nothing here was
 carried forward from a summary; the session that commissioned it supplied a narrative, every claim in
 that narrative was checked against the repo, and §8 lists the ones that did not survive.
 
-**This file contains no number a script can produce.** That rule went into root `CLAUDE.md` in #191,
-and the reason it applies to handoffs too is written into the previous one: `HANDOFF-model-driven-components.md`
-opens by explaining that it went stale between being written and being merged, that re-deriving it
-against a newer base moved seventeen figures, and that the rate to plan for is about one figure in
-three over a single day of merged work. So counts, timings and test totals are not restated here.
-Where a figure matters, the command that prints it is named instead. Run the command.
+### This document went stale twice while it was being written, and that is the argument for the anchor
+
+Not a caution. A measurement, taken on the file you are reading.
+
+**First draft, anchored at `e6fd55e`:** it said the 0.22.0 release was deliberately held and that
+publishing was Rob's call. Within the hour Rob merged it, the `Release` workflow ran, and 0.22.0 was
+live on npm. A standing "do not publish" instruction became history while the paragraph containing it
+was still being edited.
+
+**Second draft, anchored at `5a85826`:** it described #201 as an open PR, and §5.9 and §5.10 were
+*about* that PR. #201 merged and became main's tip. Two of this document's own sections were
+describing a proposal that had already shipped.
+
+Both drafts were correct at their anchors and wrong within minutes. That is the whole case: **a
+handoff without a SHA is not wrong, it is unfalsifiable**, and a reader cannot tell drift from
+disagreement. The previous handoff, `HANDOFF-model-driven-components.md`, opens with the same lesson
+learned the same way, reporting that re-deriving it against a newer base moved seventeen figures and
+that the rate to plan for is about one figure in three over a single day of merged work. Two documents
+in two days. Plan for it.
+
+**Re-derive; do not patch the number somebody tells you about.** When main moved under this file the
+second time, the sections were re-read against the tree rather than text-edited, and that caught
+something a find-and-replace would have shipped: #201 did **not** fully close the root cause §5.9
+names, and the Solid starter's offending title is **unchanged**. See §5.9 and §6.
+
+**This file contains no number a script can produce.** That rule went into root `CLAUDE.md` in #191.
+Counts, timings and test totals are not restated here; where a figure matters, the command that prints
+it is named instead. Run the command.
 
 ---
 
 ## 0. Do this first
 
-1. **`git log --oneline --first-parent 5a85826..origin/main`** and **`gh pr list --state open`**.
-   One PR (#201) was open when this was finished, and main moved twice while it was being written.
+1. **`git log --oneline --first-parent bce481e..origin/main`** and **`gh pr list --state open`**.
+   Nothing from this session was left open. Main moved twice while this was being written.
 2. **`@kitn.ai/ui@0.22.0` is PUBLISHED and is `latest`** (§2). Rob merged the release PR mid-session.
    Two breaking changes shipped with it. Anything that was "gated on 0.22.0" is now unblocked (§6).
-3. **A sibling agent owns `packages/create-kai/**`.** #201 was open against it. Check whether it
-   merged before touching that package.
+3. **The `create-kai` root cause is only PARTLY closed.** #201 moved the content rules into a tested
+   module, but `scripts/build.mjs` still runs `main()` at module scope with no test importing it, and
+   four guards still live inside it. Read §5.9 before assuming that finding is retired.
 
 ---
 
@@ -34,7 +56,7 @@ Where a figure matters, the command that prints it is named instead. Run the com
 Derive the list rather than trusting this table:
 
 ```
-git log --oneline --first-parent 101bfc0..5a85826
+git log --oneline --first-parent 101bfc0..bce481e
 ```
 
 `101bfc0` is #189, the previous session's handoff (`HANDOFF-2026-08-12-attachments-and-scope.md`), so
@@ -55,10 +77,11 @@ that range is exactly this session's landed work.
 | #199 | `e6fd55e` | `fix(elements)!: the label prop stops overriding text the user can see` |
 | #179 | `4a28693` | `chore(main): release @kitn.ai/ui 0.22.0` |
 | #200 | `5a85826` | `docs: record that nx typecheck ui is cached and can report a stale verdict` |
+| #201 | `bce481e` | `fix(create-kai): rename the Angular project, and grade titles by what they must be` |
 
-**The last two rows landed while this document was being written**, which is the failure this whole
-file is organised around. Both were described as open in the narrative it was derived from; both were
-re-checked and re-derived before it merged. See §8.7.
+**The last three rows landed while this document was being written**, which is the failure this whole
+file is organised around. All three were described as open in the narrative it was derived from; each
+was re-derived against the tree before it merged. See §8.7 and §8.8.
 
 Rows are in **merge order, which is not number order**. #190 landed between #193 and #195; #194 landed
 after #195; #196 landed after #197 and #198. Reading the numbers as a sequence will mislead you about
@@ -88,6 +111,29 @@ workflow completed, and the hold is now history rather than standing instruction
 
 Both are minor bumps, not majors: the project is pre-1.0 and `bump-minor-pre-major` is set in
 `release-please-config.json`.
+
+**Verify the release from the tarball, not the version number.** `npm pack @kitn.ai/ui@0.22.0` and
+read it: the `./wire` entry in the exports map resolves (`./dist/wire.js` plus
+`./dist/wire/index.d.ts`), and `encodableMediaTypes`, `resolveMediaPolicy`, `textFileContent` and the
+`undetermined` status are all present in the shipped `dist`. A version number on the registry says a
+publish ran; the tarball says the feature shipped.
+
+### A release PR can only be merged with `--admin`, and that is expected
+
+**Record this so the next person does not read it as a misconfiguration.** The ruleset
+`main: required checks` (id `18328421`) requires exactly one context: **`test`**. The `test` workflow
+triggers on `pull_request` to `main`, but a release-please PR never produces a run of it, so the
+required context can never be satisfied on that branch and the merge button stays blocked forever.
+
+Verified rather than assumed: `gh pr checks 179` and `gh pr checks 146` (the 0.21.0 release) both
+report *no checks reported on the branch*, so this is systemic to release-please PRs here and not a
+one-off. `.github/workflows/release-please.yml` runs the action with
+`token: ${{ secrets.GITHUB_TOKEN }}`, and GitHub suppresses workflow runs for events raised by that
+token, which is the standard cause. The ruleset carries bypass actors (`OrganizationAdmin` and a
+repository admin role, both `always`) for exactly this case.
+
+So: **merging a release PR needs `--admin`. That is the designed path, not a workaround.** Everything
+else still goes through `test`.
 
 ---
 
@@ -219,7 +265,8 @@ one still matched its template. With no patches for a framework it passed vacuou
 `2 patches verified` (React's) while emitting a Vue project carrying our repo's example title and
 `nx build ui`. Every remaining starter carried the same two lines, so the same silent pass was queued
 up behind svelte, angular and html. Closed by checking the emitted **output** instead of the patch
-list (`verifyNoRepoInternals`).
+list. That function is now `verifyEmittedContent` in `scripts/build.mjs`, renamed from
+`verifyNoRepoInternals` by #201 when it grew the title rule (§5.10).
 
 ### 5.2 `smoke.mjs` only ever built React (#193, again in #195)
 
@@ -237,9 +284,12 @@ package.json.
 It was `\s+\S+\s+example`: the kit name, one token, then `example`. That is the shape the five Vite
 starters happen to use, and it misses both SSR titles
 (`@kitn.ai/ui — Next.js App Router example`). A pattern fitted to its examples is the same vacuity
-#193 closed one layer up. The replacement spans the whole title and anchors on the space after the kit
-name, with three real strings in the tree excluded by that one character. It is still not enough; see
-§6 and §5.9.
+#193 closed one layer up. #195's replacement spans the whole title and anchors on the space after the
+kit name, with three real strings in the tree excluded by that one character.
+
+**It was still not enough, and #201 fixed it by changing the question rather than the pattern.** See
+§5.10. That pattern is still in `REPO_INTERNAL` (now in `src/template-guards.ts`) and unchanged: it
+is retained for prose a title rule cannot reach, and is simply no longer load-bearing for titles.
 
 ### 5.4 A `svelte-ignore` comment was space-separated, so it suppressed half of what it named (#198)
 
@@ -304,24 +354,44 @@ inside `packages/ui` and `nx typecheck ui --skip-nx-cache`. Treat it as a verifi
 unverified occurrence, and note that the stale red only costs time while the cached green over broken
 code is the one that ships.
 
-### 5.9 The root cause, from #201 (open at time of writing)
+### 5.9 The root cause, from #201 (merged as `bce481e`, and only PARTLY closed)
 
 **A guard you cannot invoke in isolation is a guard nobody has watched fail.**
 
-`packages/create-kai/scripts/build.mjs` calls `main()` at module scope (the file ends
-`main().catch(...)`), and no test imports it. Verified: the only references to it under
-`packages/create-kai/test/` are prose in comments. So **every rule living inside that file was
-unreachable except by running the whole build and reading stderr.** This repo's stated discipline is
-to watch every check go red before trusting it, and that discipline is physically unenforceable
-against a check with no seam to grab. In #201's author's words, that is *how a guard shipped unable to
-match the one string it was pointed at*.
+`packages/create-kai/scripts/build.mjs` calls `main()` at module scope, and no test imports it. So
+**every rule living inside that file was unreachable except by running the whole build and reading
+stderr.** This repo's stated discipline is to watch every check go red before trusting it, and that
+discipline is physically unenforceable against a check with no seam to grab. In #201's author's words,
+that is *how a guard shipped unable to match the one string it was pointed at*.
 
-Note where the instances above live: 5.1, 5.2, 5.3 and 5.9 are all in that one file. They were not a
+Note where the instances above live: 5.1, 5.2, 5.3 and 5.10 are all in that one file. They were not a
 run of bad luck. They were concentrated where the discipline could not be applied.
 
-#201 moves the rules into `packages/create-kai/src/template-guards.ts` as exported pure functions
-(`repoInternalProblems`, `documentTitles`, `titleProblems`) with `test/template-guards.test.ts`
-alongside, and `build.mjs` loads them the way it already loads `frameworks.ts` and `patches.ts`.
+**What #201 fixed.** The content rules moved into `packages/create-kai/src/template-guards.ts` as
+exported pure functions (`repoInternalProblems`, `documentTitles`, `titleProblems`, plus
+`REPO_INTERNAL` and `PROBE_NAME`), with `test/template-guards.test.ts` alongside. `build.mjs` loads
+them through the same `loadTs()` it already used for `frameworks.ts` and `patches.ts`. `patches.ts`
+grew `countMatches` and its own `test/patches.test.ts`. Those rules now have a seam.
+
+**What #201 did not fix, re-derived against `bce481e` rather than assumed.** The file still ends
+`main().catch(...)`, and still **no test imports it** (the only mentions under
+`packages/create-kai/test/` are prose in comments, including one in `template-guards.test.ts`
+explaining why the rules moved out). Four guards remain inside it and remain reachable only by running
+the whole build: `verifyPatches`, `verifyAppPath`, `verifyDeclaredPaths` and `verifySharedDevDeps`,
+alongside the orchestration in `copyTemplate`, `walk` and `verifyEmittedContent`.
+
+So the shape that produced four of this session's eight instances is **reduced, not removed**. Derive
+it yourself before trusting either statement:
+
+```
+tail -5 packages/create-kai/scripts/build.mjs
+grep -rn "scripts/build" packages/create-kai/test/
+grep -n "^async function" packages/create-kai/scripts/build.mjs
+```
+
+Anyone continuing this work should finish the move rather than treat the finding as retired. **Do not
+read "the guards moved to `template-guards.ts`" as "the root cause is closed"**. That summary was
+offered to this document and did not survive checking (§8.8).
 
 **Scope of the generalisation, stated at the size actually measured.** The same shape is common in
 `packages/ui/scripts/` and the finding is broader than `create-kai`, but that directory is not in the
@@ -340,44 +410,68 @@ So: the *narrow* claim, that `create-kai`'s build had no seam and its guards wer
 verified. The *broad* claim, that `packages/ui/scripts` shares the shape, is verified structurally but
 is partly mitigated there. Do not quote the broad version without the mitigation.
 
-### 5.10 A verifier that reimplements the thing it verifies is checking its own copy (#201, open)
+### 5.10 A verifier that reimplements the thing it verifies is checking its own copy (#201, merged)
 
-On `5a85826`, `verifyNoRepoInternals` applies patches by hand:
+Before `bce481e`, `verifyNoRepoInternals` applied patches by hand:
 
 ```js
 source = source.replace(new RegExp(patch.find.source, patch.find.flags), () => patch.replace('my-app'));
 ```
 
-instead of calling `applyPatch` from `src/patches.ts`. The hand-rolled copy is blind to the new
-`multiple` patch kind #201 introduces, so it would validate a half-patched file no user ever receives.
-This is the **duplicated-fact** failure, the same one `packages/ui/src/wire/media-types.ts` exists to
-prevent one package over (§3), appearing in a verifier rather than in a feature. #201 passes
-`applyPatch` into the renamed `verifyEmittedContent`.
+instead of calling `applyPatch` from `src/patches.ts`. The hand-rolled copy was blind to the
+`multiple` patch kind #201 introduced, so it would have validated a half-patched file no user ever
+receives. This is the **duplicated-fact** failure, the same one `packages/ui/src/wire/media-types.ts`
+exists to prevent one package over (§3), appearing in a verifier rather than in a feature. The renamed
+`verifyEmittedContent` now takes `applyPatch` as a parameter and calls it.
+
+**Two rules that shipped with it, both worth understanding before editing that package:**
+
+`multiple: true` on a patch. `angular.json` names the Angular project at four sites, two of them
+embedded in longer values (`dist/ui-example-angular`, `ui-example-angular:build:production`), so the
+patch matches the bare name and rewrites every occurrence. The reasoning is the interesting part:
+`verifyPatches` throws when a patch matches more than once, so four context-pinned patches would each
+match once and **satisfy the unambiguity guard completely** while covering a fixed four of an
+unbounded set. Add an `extract-i18n` target and the fifth reference ships green. That is a fixed-arity
+encoding of an unbounded fact. The hole is kept narrow: patches that do not opt in are still held to
+exactly one match, an opted-in patch matching **zero** times is fatal, and `patches.test.ts` asserts
+this is the only patch in the table that opts in.
+
+`titleProblems` grades titles by what they must **be**, not by what they must not be. The build
+applies patches with a deliberately implausible sentinel (`PROBE_NAME`) and requires every document
+title to equal it. Nothing describing our repo, in any spelling or under any future rename, can
+satisfy that, and a template whose title was never patched cannot pass vacuously. The rule has no list
+to keep current. Its **known limit is stated in the code**: it reads HTML documents, which covers
+every `ready` framework; the two SSR starters set their titles in JS and are both `planned`, and
+telling a document title from an object field named `title` needs a parser.
+
+Note the shape of this fix, because it generalises: the old rule enumerated wrong outcomes and each
+new starter could invent one it had never seen. The new rule states the required outcome, so the set
+it covers is closed by construction.
 
 ---
 
 ## 6. Still open, and what is next
 
-**`gh pr list --state open` is the authority.** One PR was open at `5a85826` (#179 and #200 both
-merged while this was being written):
+**`gh pr list --state open` is the authority.** Nothing from this session was left open at `bce481e`.
+#201 was the last to land, and it closed the two defects earlier rounds had found and deliberately
+left because they touch shared files those agents were told not to edit.
 
-- **#201** `fix(create-kai): rename the Angular project, and grade titles by what they must be`,
-  branch `fix/create-kai-patch-machinery`. Two defects earlier rounds found and deliberately left
-  because they touch shared files those agents were told not to edit. Both verified against
-  `5a85826`:
-  - **`examples/starters/angular/angular.json` names the project four times** (the `projects` key,
-    `outputPath: "dist/ui-example-angular"`, and both `serve` buildTargets) and nothing rewrites any
-    of them, so a scaffolded Angular app builds into a directory named after our example.
-    `rewritePackageJson` touches package.json only. The fix needs a `multiple: true` patch kind
-    because `verifyPatches` throws on a patch matching more than once; four context-pinned patches
-    would each match once and satisfy the unambiguity guard completely while covering a fixed four of
-    an unbounded set, which is a fixed-arity encoding of an unbounded fact.
-  - **The example-title guard cannot see the Solid starter.** Its title is literally
-    `kai-chat — SolidJS Primitives Example`, which contains no `@kitn.ai/ui`, while #195's pattern
-    (the `example title` entry in `REPO_INTERNAL`, `scripts/build.mjs`) anchors on the kit name, so it
-    cannot match. Two things went stale at once: an element name used as a product name, and a product
-    since renamed. #201 replaces the enumerate-wrong-outcomes rule with a right-outcome one, patching
-    with an implausible sentinel name and requiring every document title to equal it.
+**Two things #201 left behind on purpose, re-derived against `bce481e` rather than read off its
+description.** Both look like unfinished work and are not:
+
+- **`examples/starters/angular/angular.json` still contains `ui-example-angular` at all four sites**,
+  and should. That file is *our* example and is correctly named after it. The fix is a scaffold-time
+  patch (`find: /ui-example-angular/`, `multiple: true`, `replace: (name) => name`), so the rename
+  happens in the emitted project. Do not "fix" the starter.
+- **`examples/starters/solid/index.html` still reads `<title>kai-chat — SolidJS Primitives Example</title>`.**
+  #201 touched no file under `examples/`. The defect was never the title; it was that the guard could
+  not see it. Now `titleProblems` requires every emitted title to equal the sentinel, so flipping
+  Solid to `ready` fails at the title guard, by design, before it reaches `goLiveThread`. That title
+  becomes a real edit only when someone writes the Solid chat app.
+
+**The one open finding in that package is §5.9's:** `scripts/build.mjs` still runs `main()` at module
+scope with no test importing it, and four guards still live inside it. Finishing that move is the
+natural follow-up to #201 and is not tracked by any PR.
 
 **Next, in the order the session left them:**
 
@@ -425,6 +519,14 @@ works.
 Recorded because this repo has been bitten repeatedly by claims that gain authority at each hop and
 evidence at none, and a handoff that hides its own corrections teaches the opposite lesson.
 
+**Eight claims did not survive checking.** The narrative was substantially right: the merged set and
+its numbering, every attachment claim, the framework split and its reasoning, and all eight vacuity
+instances held up. What failed clusters in one place, and it is worth naming the pattern rather than
+just the items. **Six of the eight are claims about the state of something outside the code** (what
+merged, what is open, which file is which, what a version is doing on npm) and only two are about the
+code itself. State claims decay in hours; structural claims do not. Weight your trust accordingly, and
+when a report mixes them, check the state ones first.
+
 1. **"Possibly #200" merged.** At `e6fd55e` it had not; it was open with `test` pending. It merged
    before this document did, as `5a85826`. Both halves of that are worth keeping: the narrative's
    claim was wrong when made and right an hour later, which is exactly why a handoff carries a SHA.
@@ -451,6 +553,14 @@ evidence at none, and a handoff that hides its own corrections teaches the oppos
    correction here, because it flips a standing "do not publish" instruction into history and unblocks
    the deferred lint item (§6). It also cost a full re-derivation of §1, §2, §5.8 and §6, which is the
    documented rate of drift arriving on schedule rather than a surprise.
+8. **"#201's guards moved to `src/template-guards.ts`, which is the root-cause fix."** Half right, and
+   the half that is wrong is the half that matters. The content rules did move and are now tested. But
+   `scripts/build.mjs` **still** ends `main().catch(...)`, **still** has no test importing it, and
+   **still** holds four guards. This one is worth dwelling on: it arrived as a summary of a PR that had
+   just merged, from someone who had read the PR, and it was wrong in the direction that would have
+   closed a live finding. Re-reading the file took one command. **Had this document been re-anchored by
+   find-and-replace instead of re-derived, §5.9 would have shipped announcing that the root cause was
+   fixed**: a check-that-proves-nothing claim, inside the document cataloguing them. §5.9.
 
 ---
 
