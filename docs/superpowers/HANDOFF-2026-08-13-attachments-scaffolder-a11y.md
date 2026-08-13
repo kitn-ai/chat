@@ -54,7 +54,9 @@ it is named instead. Run the command.
    module, but `scripts/build.mjs` still runs `main()` at module scope with no test importing it, and
    four guards still live inside it. Read §5.9 before assuming that finding is retired.
    *(RETIRED at `16c14c2` by #203 and #205, but not in the way this sentence would predict: the
-   guards left, `main()` at module scope did not. §9.1.)*
+   guards left, `main()` at module scope did not. §9.1. At `67365c8` the surviving clause is retired
+   as a finding too, and #212 corrected two of §9.1's own claims about the check that replaced it.
+   §10.1.)*
 
 ---
 
@@ -368,6 +370,11 @@ code is the one that ships.
 > remain inside it" claim below is now false. `main().catch(...)` at module scope with no test
 > importing it is **unchanged**, because the fix was to move the rules out rather than make the file
 > reachable. The paragraphs below are left as written at `bce481e`. §9.1.
+>
+> **Further, at `67365c8`: that remaining clause is RETIRED as a finding.** It is still literally
+> true and it is no longer a defect, so anyone who greps it out of the paragraphs below and re-opens
+> it will be doing work that makes the codebase worse. §10.1 carries the reasoning, which is the part
+> that has to travel with the status.
 
 **A guard you cannot invoke in isolation is a guard nobody has watched fail.**
 
@@ -610,6 +617,12 @@ main and none of it is published, and §2's account of why a release PR can only
 
 ### 9.1 The `create-kai` root cause: closed by relocation, and §5.9's literal condition still holds (#203, #205)
 
+> **CORRECTED at `67365c8` by #212. Two claims in this entry did not survive checking.** "the blind
+> spot is now real but empty" was wrong when it was written: parsing `build.mjs` rather than grepping
+> it found rules still living there. And "it reads top-level names" understates the hole, because the
+> names it read were not the naming convention this repo uses for a rule. The entry is left as
+> written at `16c14c2`; §10.1 has both corrections and the evidence.
+
 **§5.9 and §6 status: the finding is retired, the sentence stating it is still literally true.** Both
 halves matter and the difference between them is the whole content of this entry.
 
@@ -664,6 +677,8 @@ the next author at `src/build-guards.ts`. That test is the one that reads `build
 **It states its own limit rather than overstating its reach**, which is the same discipline §5.10
 records: it reads top-level names, so it catches a guard someone declares and misses one inlined into
 a function that already does the reading. Catching that needs a parser.
+*(Wrong at `67365c8`, and wrong in the direction this document is about: the limit it stated was not
+the limit it had. §10.1.)*
 
 **#205 closed the two defects #203 found and deliberately left**, and it is two defects rather than
 the one its subject's first clause suggests:
@@ -679,6 +694,7 @@ the one its subject's first clause suggests:
   whose other job is `cp`. It is now `gitignoreProblem()` in `build-guards.ts`. This is the entry
   #203's anti-rot check had named as the one live instance its regex provably could not see, so the
   blind spot is now real but empty, and the test says exactly that rather than deleting the caveat.
+  *("real but empty" was FALSE when written; #212 parsed the file and found rules still in it. §10.1.)*
 
 The two names are each declared once: `GITIGNORE_SOURCE_NAME` with the rule that asserts it,
 `GITIGNORE_TEMPLATE_NAME` with the `generate()` that renames it back.
@@ -945,6 +961,8 @@ and `examples/starters/solid/index.html` still carries its own title. Neither is
 
 **"The one open finding in that package is §5.9's" is half retired.** See §9.1: the four guards are
 out, the module-scope `main()` is not, and #203 chose the first as the fix rather than the second.
+*(Fully retired at `67365c8`: the module-scope `main()` is not a defect on its own, and #212 states
+why in a form that should stop it being re-opened. §10.1.)*
 
 ### 9.8 What this section's commissioning narrative got wrong
 
@@ -961,7 +979,8 @@ failed was mostly the *status* of things rather than the *structure* of them.
 3. **#205 described as the `GITIGNORE_TEMPLATE_NAME` de-duplication.** It was two defects. It also
    extracted the "a starter must have a `.gitignore`" rule out of `copyTemplate`, which is what
    emptied the blind spot #203's anti-rot check had named as its one live instance. Its subject says
-   both: "one declaration **and a seam**".
+   both: "one declaration **and a seam**". *(The "emptied" half is wrong at `67365c8`: it took one
+   rule out of `copyTemplate` and left another one in. §10.1.)*
 4. **"#206, #207" treated as one change covering three sites.** #206 is the Storybook story alone.
    #207 is the docs demo, the published MDX, and the lint. #207 also found a fourth instance, the
    props-table prose, and states that its own guard did not find it and would not.
@@ -981,6 +1000,77 @@ Note the split, because it is the same one §8 measured: **six of these eight ar
 two are about the code.** The structural claims in the narrative held up almost entirely. The claims
 about what a PR *did*, what a decision *was*, and what shipped are the ones that needed checking.
 That ratio has now held across two consecutive handoffs. Check the status claims first.
+
+---
+
+## 10. What landed after `16c14c2`
+
+**Verified against `origin/main` at `67365c8b21ff1cf01485ef5f93af4318e6dbe635`** (`fix: clear a batch
+of small open items (5 of 5 were still live) (#213)`).
+
+Same rule as §9. Nothing above this section is rewritten; where a claim above is now wrong it carries
+a marker pointing here, so a reader who wants to know what was believed at `16c14c2` can still find
+out. Derive the landed set rather than trusting this heading:
+
+```
+git log --oneline --first-parent 16c14c2..origin/main
+```
+
+Three things are in that range, and only the first belongs to this document.
+
+- **#212 is §10.1.** It corrects two claims §9.1 made, and retires §5.9's surviving clause.
+- **#209 MERGED.** §9 says "Note what that range does not contain: #209 never merged", which was
+  true at `16c14c2` and is not now. The held release PR it names went in. Whether the publish
+  followed is a separate fact from the merge, and both are derivable rather than restatable here:
+  `.release-please-manifest.json` on main gives the version the repo believes it is at, and
+  `npm view @kitn.ai/ui dist-tags` gives what is actually on npm. Run both; §2 names the same two
+  facts for the previous release and keeps them apart for the same reason.
+- **#213 belongs to the other handoff.** It clears the small items in
+  `HANDOFF-model-driven-components.md` §1.4, and the corrections for those are recorded in that
+  document, in that section, not here.
+
+### 10.1 §9.1 overstated the anti-rot check twice, and §5.9's second clause is retired (#212)
+
+**§9.1's "the blind spot is now real but empty" was wrong at `16c14c2`.** It was not empty. Parsing
+`scripts/build.mjs` rather than grepping it found two rules still living there:
+
+- `create-kai build: no framework is marked ready`, inlined in `main()` and **carrying no name at
+  all**. Invisible twice over: nested, and with no declaration for a name-based check to match.
+- `create-kai build: no starter at ${from}`, inlined in `copyTemplate` beside the `cp` it explains.
+  That is the same function #205 pulled the `.gitignore` rule out of, which is worth noticing on its
+  own: a rule was extracted from that function by hand while another rule sat in it, unseen by the
+  check written in the same round.
+
+Both are now `readyFrameworksProblem` and `missingStarterProblem` in `src/build-guards.ts`, with
+their messages byte-identical, so a failing build prints exactly what it printed before.
+
+**§9.1's "it reads top-level names" understates the hole, and the understated half is the serious
+one.** The regex was `/^(?:(?:async\s+)?function|const)\s+((?:verify|check|assert|guard)\w*)/gm`.
+The disclosed limit was the `^`, which cannot match an indented declaration. The undisclosed limit
+was the alternation. **Every rule in `src/build-guards.ts` is named `*Problem`**, `patchMatchProblem`
+and `gitignoreProblem` and `sharedDevDepsProblem`, and not one of those four prefixes is that
+convention. So the naming a next author would copy off the neighbouring code was precisely the
+naming the check could not see, at the **top level, inside its own stated reach**. A planted
+top-level `*Problem` function left the suite green. The check now parses the file and asks two
+questions: is there a guard-shaped function at any depth, by both conventions, and does the file
+write a message of its own. The second is the only one of the two that can see a rule with no name.
+
+**§5.9's second clause is RETIRED, and the reasoning has to travel with the status**, because
+"`main()` at module scope with no test importing it" is still literally true and will keep reading
+like an open finding to anyone who greps it out of §5.9. It is not one. The defect §5.9 diagnosed
+was never module scope; it was **rules living where nothing can watch them**, and #203 and #205
+moved every rule out. `export main` plus an entry-point guard was considered by #203's author and
+rejected, and that argument holds at this SHA: no test would import it, so the export buys no
+coverage it does not already have, and it re-legitimises `build.mjs` as a place to put a rule, which
+is the one thing the move existed to stop. An unimportable IO orchestrator is the correct shape of
+that file now. Do not finish the move; there is nothing left to move.
+
+**One more thing about this guard, stated plainly because it is this document's own subject
+appearing inside this document.** It was described three times by three authors who had each just
+improved it, and each description overstated what had been checked: #203 disclosed the nesting hole
+and not the naming one, #205 reported the blind spot emptied, and §9.1 relayed both as verified. The
+check written to enforce "watch it fail before trusting it" was itself the thing nobody watched
+fail.
 
 ---
 

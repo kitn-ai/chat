@@ -313,38 +313,82 @@ Do NOT pay context-switch cost on these individually. Batch them when something 
   the top, so the tween ran backwards. Both files now drive off the deterministic fake clock and
   contain no wall-clock waits at all.
 
+**Closed on 2026-08-13 by PR #213, re-derived against `origin/main` at `67365c8` rather than read
+off that PR's description.** The entries these replace are gone from the "still open" list below,
+because leaving a closed item on an open list is how it gets re-reported — see the last one. The
+reasoning is recorded because in most of these the interesting part is not the line that changed:
+
+- **#54, the Angular starter README's `voice` claim.** `resolveFlag` in
+  `packages/ui/src/elements/define.tsx` ends `hasAttribute(attr) && getAttribute(attr) !== 'false'`,
+  so a bare `voice` is present with the value `""` and resolves to **true**. `[voice]="true"` is
+  still the right advice, for the other reason: an explicit JS `false` beats a present attribute, so
+  the bound property is the one that can turn a flag back off. **The same false claim was restated
+  in `src/app/components/composer/composer.ts`'s doc comment, directly beside the code that
+  disproves it** — §5.11 arriving in a README, and the reason re-deriving the item beat patching the
+  one line it named. Auditing the rest of that README found more claims that had outlived the code:
+  the `*.component.ts` filenames it pointed at are now `app.ts` and `components/<name>/<name>.ts`,
+  and the `examples/react` / `examples/vue` paths it mirrors are now under `examples/starters/`.
+- **`docs/web-components.md`'s element count.** Closed by **deriving** it rather than correcting it,
+  and that distinction is the whole item. The count sentence sat outside every `<!-- spec:TAG -->`
+  region, so `writeWebComponentsMd` reproduced it byte-identically on every run and
+  `verify:generated` passed over a stale claim; re-typing the right number would have rotted again
+  at the next element. The Overview lede and its roster table are now emitted from the element model
+  into a `<!-- spec:overview -->` region, and `verify-generated-sync` already plants its sentinel in
+  the first spec marker of that file, so the derived region is the one it proves got rewritten. A
+  second hand-written count, in the `## Full Element Reference` heading, was dropped. **One is
+  left, and it is worth knowing rather than assuming the file is now clean:** the "registers all
+  **40+ custom elements**" sentence in the module-import section is still hand-written and still
+  outside every spec region. It is not false today, it is simply not derived, which is the same trap
+  in the same file. `grep -n '40+' docs/web-components.md` finds it.
+- **#58, the `redeclared-kit-type` sites.** Each block now imports the real type and annotates
+  a value with it, so the snippet is *checked* against the contract instead of describing it.
+  **`remote-cards.mdx`'s restatement had already drifted, which is this item's own argument arriving
+  as evidence**: its inline copy of `CardEnvelope` listed `action` and `submit` as the `resolution`
+  kinds, while `CardResolution` in `packages/ui/src/primitives/card-contract.ts` also carries
+  `dismissed` and `expired`, added after the copy was written and never followed. `connect-any-backend.mdx`
+  was the sharper case: it told the reader "don't retype it: the kit exports these as `ChatMessage`,
+  `MessagePart` and `ToolPart`" directly above a snippet that retyped every one of them.
+- **#64, `file-tree.tsx`'s `mergeProps({ files: [] })`.** Fully closed, so "one site, not two" above
+  is now zero sites. `FileTree` reads `files` straight off `props`, with a comment saying why —
+  defaulting it turns a caller who forgot the prop into a silently empty tree, which fails far from
+  the mistake — matching `Segmented`, which reads `merged.options` directly. Safe for the element
+  path because the `<kai-file-tree>` facade declares its own `files: []`, which is where the property
+  genuinely arrives after construction.
+- **#69, the Solid starter's import entry — closed, and HOW it stayed on this list is worth more
+  than the fix.** At `67365c8`, `examples/starters/solid/src/App.tsx` imports from `@kitn.ai/ui/solid`
+  at both sites, nothing under `examples/starters/solid/` imports the root entry, and
+  `verify-starters.mjs` carries the structural check #192 added: the root entry is banned outright
+  for any starter that depends on `solid-js`, that starter set is derived from the dependencies
+  rather than listed, and finding zero such starters is a hard failure so the check cannot pass
+  vacuously. Keep the reason a *structural* check was needed, because it is the durable half: #183
+  had already built every starter in the required job and this one built fine, since the root
+  entry really does serve those symbols. **A compile gate cannot see a specifier that works but
+  contradicts the documentation.** **The entry this replaces was true at this document's anchor
+  `905acca` and false a few hours later**, when #192 (`c5b3751`) merged — drift, not an authoring
+  error. What *is* an error is
+  that #213's own note back to this handoff restated #69 as still open on 2026-08-13: read off this
+  list rather than off the tree, which is the one thing this section's preamble asks a reader not to
+  do. Note also that §1.3 pairs this with the scaffolder's Solid branch as "one mistake, two
+  emitters"; at `67365c8` the scaffolder emits `} from '@kitn.ai/ui/solid'` too, in
+  `packages/ui/src/agent-tooling/mcp/tools/scaffold.ts`. Re-derive that sentence rather than quoting
+  it.
+
 **Still open. I checked each of these against the tree on 2026-08-12 rather than carrying it
-forward:**
+forward.** The entries that have since closed moved to the block above. **The ones left here were
+NOT re-derived at `67365c8`** — #213 deliberately left them untouched, and untouched is not the same
+fact as checked. Re-derive one before acting on it:
 
 - **#27** per-element `./elements/*` is still not server-importable, and `verify-ssr-imports.mjs`
   says so in its own header: those modules are DOM-only by design and the guard asserts they fail
   ONLY for that reason. "A separate, still-open limitation" is the guard's own wording, which is
   the right way to carry a known gap.
-- **#54** the Angular starter README still says a bare `voice` attribute is read as false. It is
-  read as **true**: `resolveFlag` in `define.tsx` returns `hasAttribute(attr) && getAttribute(attr)
-  !== 'false'`. The README teaches the opposite of the code.
-- **#58** three `redeclared-kit-type` sites remain — `CardEnvelope` in `guides/generative-ui.mdx`
-  and `examples/remote-cards.mdx`, `MessagePart` in `integrations/connect-any-backend.mdx`.
 - **#62** per-element EVENT attribution is still file-level: `gen-element-api.mjs` takes the "union
   of typed events and dispatch() literals seen in the file". `::part` attribution was fixed
   per-element in #152 and methods in #154; events were not, and a file declaring two tags
   (`resizable.tsx`) is where that shows.
 - **#63** the docs harness still greps source. Nothing under `apps/docs/scripts/docs-alignment/`
   reads `declarativeChildren`.
-- **#64** is now HALF closed, and re-deriving it is what found that. `segmented.tsx` no longer
-  defaults `options` at all — it reads `merged.options` directly, so a caller omitting it fails
-  where the mistake is. `file-tree.tsx` still carries `mergeProps({ files: [] })`. One site, not
-  two.
 - **#68** promote the Solid mid-stream repro into CI.
-- **#69** the Solid STARTER still imports from the root entry — two sites in
-  `examples/starters/solid/src/App.tsx` — while the guide says `./solid`. Same defect as the
-  scaffolder's Solid branch (§1.3). **#183 did NOT close this and could not have**, which is the
-  useful part: `verify:starters` now builds all eight starters in the required job, and this starter
-  builds fine, because the root entry really does serve those symbols. A compile gate cannot see a
-  specifier that works but contradicts the documentation.
-- **`docs/web-components.md:5` still claims 27 elements.** `element-meta.json` has 80. Hand-written
-  prose inside a generated file, which is precisely why `verify:generated` cannot see it: the
-  regeneration reproduces the stale sentence byte-identically and the drift check passes (§5.2).
 - **`audio-visualizer/index.test.tsx` flakes about 1 run in 34 and is NOT fixed.** Diagnosed as
   mock isolation rather than wait duration, and the diagnosis is the useful part: `waitFor`'s
   1000ms is its own budget, and on expiry it rethrows the last assertion error rather than anything
