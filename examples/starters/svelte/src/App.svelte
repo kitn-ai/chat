@@ -81,7 +81,11 @@
         <header class="bar">
           <div class="bar-left">
             {#if collapsed}
-              <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+              <!-- Comma-separated on purpose: in runes mode Svelte reads everything after the
+                   first uncommaed code as prose, so the space-separated form suppresses only the
+                   first rule. Both are false positives over a shadow root that already holds a
+                   real focusable `<button>`; see the block in components/ThemeToggle.svelte. -->
+              <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
               <kai-button
                 {theme}
                 variant="ghost"
