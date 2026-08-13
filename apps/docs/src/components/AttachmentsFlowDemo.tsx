@@ -31,6 +31,21 @@ interface MessagePart {
   attachment?: AttachmentData;
 }
 
+/** The staged file as a `data:` URI — the same thing `<kai-prompt-input>`'s own
+ *  paperclip does (see `readAsDataUrl` in `src/elements/default-input.tsx`).
+ *
+ *  NOT `URL.createObjectURL`. An object URL resolves only inside the tab that
+ *  minted it, so it renders a perfect thumbnail here and is meaningless to
+ *  anything downstream — `toOpenAIMessages` / `toAnthropicMessages` refuse it.
+ *  A data URI previews identically and is the one form both providers take. */
+const readAsDataUrl = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error(`Could not read ${file.name}`));
+    reader.readAsDataURL(file);
+  });
+
 interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -246,17 +261,29 @@ function DropZoneAttachDemo() {
   const t = useThread(() => promptEl);
   const [stagedCount, setStagedCount] = createSignal(0);
 
-  const onFilesAdded = (e: Event) => {
-    const files: File[] = (e as CustomEvent).detail?.files ?? [];
+  const onFilesAdded = async (e: Event) => {
+    // Snapshot before the first await: <kai-file-upload> is free to clear its
+    // own list as soon as this handler yields.
+    const files: File[] = Array.from((e as CustomEvent).detail?.files ?? []);
     if (!files.length || !promptEl) return;
+    const added: AttachmentData[] = await Promise.all(
+      files.map(async (f) => ({
+        id: crypto.randomUUID(),
+        type: 'file' as const,
+        filename: f.name,
+        mediaType: f.type || undefined,
+        // Every file, not just images, and a `data:` URI rather than
+        // URL.createObjectURL. An object URL previews identically and resolves
+        // only inside this tab, so the wire encoders refuse it; a document with
+        // no `url` at all is unencodable for the same reason.
+        url: await readAsDataUrl(f),
+      })),
+    );
+    // The element may have gone away while we were reading.
+    if (!promptEl) return;
+    // Re-read AFTER the await rather than reusing a value captured before it,
+    // so a second drop landing mid-read is appended to instead of overwritten.
     const current: AttachmentData[] = (promptEl.attachments as AttachmentData[] | undefined) ?? [];
-    const added: AttachmentData[] = files.map((f) => ({
-      id: crypto.randomUUID(),
-      type: 'file' as const,
-      filename: f.name,
-      mediaType: f.type || undefined,
-      url: f.type.startsWith('image/') ? URL.createObjectURL(f) : undefined,
-    }));
     promptEl.attachments = [...current, ...added];
     setStagedCount((promptEl.attachments as AttachmentData[]).length);
   };

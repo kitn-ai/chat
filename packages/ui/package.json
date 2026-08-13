@@ -178,6 +178,7 @@
     "verify:ssr:render": "node scripts/verify-ssr-render.mjs",
     "verify:pack": "node scripts/verify-pack-weight.mjs",
     "verify:starters": "node scripts/verify-starters.mjs",
+    "lint:attachment-object-urls": "node scripts/lint-attachment-object-urls.mjs --self-test && node scripts/lint-attachment-object-urls.mjs",
     "lint:silent-drops": "node scripts/lint-silent-drops.mjs --self-test && node scripts/lint-silent-drops.mjs",
     "test": "vitest run",
     "test:react": "vitest run --config vitest.react.config.ts",

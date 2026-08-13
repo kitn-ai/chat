@@ -135,6 +135,34 @@ jobs:
       - name: Silent-drop guard (wire encoders)
         run: pnpm --filter @kitn.ai/ui run lint:silent-drops
 
+      # Reintroduction guard for `url: URL.createObjectURL(file)` -- an object
+      # URL staged onto an attachment's `url`, the field the wire has to encode.
+      # It resolves only inside the tab that minted it, so it renders a perfect
+      # thumbnail and reaches no model; #186 shipped exactly that. The encoders
+      # now REFUSE it, so this guards the SOURCE rather than the symptom, and it
+      # fixes the two instances that were live on ui.kitn.ai -- one of which
+      # recommended the anti-pattern in a comment.
+      #
+      # UNLIKE the silent-drop guard directly above, a ZERO-MATCH RUN HERE IS A
+      # PASS. That one scans for dispatch sites it knows exist, so finding none
+      # means it is broken; this one scans for a forbidden pattern, so finding
+      # none is the healthy steady state and is the state the tree is in the
+      # moment it lands. Its vacuity tripwire is therefore zero FILES walked, not
+      # zero findings, plus a --self-test that asserts the analyzer still detects
+      # on 18 known-bad and known-good inputs.
+      #
+      # Detection is structural, on a real TS parse: a `url` property (or `.url`
+      # member) whose value comes from createObjectURL. It deliberately does NOT
+      # key on the `cond ? work() : undefined` ternary shape, which lint-silent-
+      # drops records as considered and rejected for imprecision. Minting an
+      # object URL to render bytes IN-TAB (components/image.tsx, voice-output.tsx)
+      # binds a variable rather than a `url` property and is never matched.
+      #
+      # Parses source, reads no dist/, so it is a seam anyone can grab to watch it
+      # fail (`node packages/ui/scripts/lint-attachment-object-urls.mjs`).
+      - name: Attachment object-URL guard (docs, stories, kit)
+        run: pnpm --filter @kitn.ai/ui run lint:attachment-object-urls
+
       - name: Build (element bundle + provider subpath)
         run: pnpm exec nx build ui
 
