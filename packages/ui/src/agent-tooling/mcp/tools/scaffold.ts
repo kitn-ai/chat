@@ -1161,15 +1161,35 @@ export const ATTACHMENT_WIRE_NOTE = [
  *
  * `<kai-file-upload>` hands over `File` objects and `<kai-attachments>` renders
  * `AttachmentData`, so something has to bridge them and it may as well be code
- * the consumer can edit. The object URL is what makes an image preview a real
- * thumbnail rather than a generic icon; it is deliberately not revoked here,
- * and the comment says why rather than leaving a silent leak.
+ * the consumer can edit.
+ *
+ * It reads the file with `FileReader.readAsDataURL` and stages a `data:` URI —
+ * the same call `readAsDataUrl` in `elements/default-input.tsx` makes, for the
+ * same reason. `URL.createObjectURL` would draw an identical thumbnail and be
+ * meaningless to anything downstream: an object URL resolves only inside the tab
+ * that minted it, so `toOpenAIMessages` / `toAnthropicMessages` refuse it rather
+ * than send a provider an address it cannot fetch. A `data:` URI previews the
+ * same and is the one form both APIs actually take. Reading is async, which is
+ * the only reason the emitted function is.
+ *
+ * WHICH files survive that encoding is deliberately not stated here, and the
+ * emitted code does not state it either: `encodableMediaTypes()` is the set, and
+ * is public precisely so that nothing has to keep a second copy of it (the
+ * reasoning is on `ATTACHMENT_WIRE_NOTE` above).
  *
  * The parameter type is derived from the property it feeds
  * (`KaiAttachmentsElement['items']` / the wrapper's `items` prop) at each call
  * site rather than importing `AttachmentData`, for the reason the html target
  * already derives its message type from `KaiChatElement['messages']`: a type
  * read off the assignment target cannot drift out of step with it.
+ *
+ * This comment taught the reverse until now, and approvingly — it described the
+ * object URL as what made a preview a real thumbnail and called leaving it
+ * unrevoked a deliberate choice, having gone untouched since #185 while #186
+ * rewrote the function under it. That is the second time in this file the code
+ * was corrected and the prose above it was not; the paragraph on
+ * `ATTACHMENT_WIRE_NOTE` records the first. Neither claim had anything to
+ * disagree with, which is the whole hazard of explaining emitted code in prose.
  */
 function fileToAttachmentLines(pad: string, typeName: string): string[] {
   return [
