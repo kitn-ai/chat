@@ -44,6 +44,34 @@ export const PATCHES: Record<string, readonly Patch[]> = {
       why: 'a scaffolded project is not a workspace member and has no `nx build ui` to run',
     },
   ],
+  vue: [
+    {
+      file: 'index.html',
+      find: /<title>@kitn\.ai\/ui Vue example<\/title>/,
+      replace: (name) => `<title>${name}</title>`,
+      why: 'the browser tab should name the user\'s app, not the kit\'s example',
+    },
+    {
+      /**
+       * Vue's config carries TWO comment paragraphs where React's carries one:
+       * the `workspace:*` note, then the `isCustomElement` note explaining why
+       * every `kai-*` tag is passed through to the DOM instead of resolved as a
+       * Vue component. Only the first is repo-internal, and the second is the
+       * single most load-bearing line in a Vue consumer's config — drop it and
+       * the app warns "unknown custom element" and renders nothing.
+       *
+       * So the lookahead stops at the blank comment line before it, rather than
+       * at `// https://vite.dev/config/` the way React's does. Copying React's
+       * pattern here would have eaten the Vue-specific note.
+       */
+      file: 'vite.config.ts',
+      find: /\/\/ `@kitn\.ai\/ui` is linked into this example via `workspace:\*`[\s\S]*?\n(?=\/\/\n\/\/ The one Vue-specific bit)/,
+      replace: () =>
+        '// `@kitn.ai/ui` ships compiled entry points and resolves through its own\n' +
+        '// `exports` map — no aliases, no transpile step needed.\n',
+      why: 'a scaffolded project is not a workspace member and has no `nx build ui` to run',
+    },
+  ],
 };
 
 /** Apply every patch for a template. Throws if one does not match. */

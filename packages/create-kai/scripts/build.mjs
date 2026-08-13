@@ -14,7 +14,7 @@
  *      the kit's `agent-tooling` catalog, which is why the CLI can hand out real
  *      `Integration` objects without depending on `@kitn.ai/ui` at runtime.
  */
-import { chmod, cp, mkdir, readFile, rename, rm, stat } from 'node:fs/promises';
+import { chmod, cp, mkdir, readFile, readdir, rename, rm, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -81,6 +81,53 @@ async function copyTemplate(templateDir) {
   return to;
 }
 
+/**
+ * Instructions that make sense inside this monorepo and are unfollowable in a
+ * user's project.
+ *
+ * THIS IS THE CHECK THE PATCH TABLE COULD NOT MAKE. `verifyPatches` proves the
+ * patches you WROTE still match. It says nothing about the patches you did not
+ * write, so a framework flipped to `ready` with an empty patch list passes it
+ * vacuously — which is exactly what happened to Vue: the build printed
+ * `2 patches verified`, both of them React's, and emitted a Vue project whose
+ * browser tab read "@kitn.ai/ui Vue example" and whose vite.config told the user
+ * to run `nx build ui`. Every remaining starter carries the same two lines, so
+ * the same silent pass was waiting for svelte, angular and html.
+ *
+ * Checking the OUTPUT instead of the patch list is what makes it a real gate:
+ * a new framework cannot go `ready` without either patching these out or
+ * explaining itself here.
+ */
+const REPO_INTERNAL = [
+  {
+    pattern: /workspace:\*/,
+    why: 'a `workspace:*` spec is a pnpm-only instruction; a user cannot install it',
+  },
+  {
+    pattern: /nx build ui/,
+    why: 'an emitted project is not a workspace member and has no `nx build ui` to run',
+  },
+  {
+    pattern: /pnpm --filter/,
+    why: 'a repo-internal command, unrunnable from a scaffolded project',
+  },
+  {
+    pattern: /@kitn\.ai\/ui\s+\S+\s+example/i,
+    why: "the kit's own example title — the user's app should be named after the user's app",
+  },
+];
+
+/** Every file under `dir`, absolute, ignoring nothing (templates are small). */
+async function walk(dir) {
+  const out = [];
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    const abs = path.join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...(await walk(abs)));
+    else out.push(abs);
+  }
+  return out;
+}
+
 async function verifyPatches(templateDir, root, patchesFor) {
   const patches = patchesFor(templateDir);
   for (const patch of patches) {
@@ -107,6 +154,80 @@ async function verifyPatches(templateDir, root, patchesFor) {
     }
   }
   return patches.length;
+}
+
+/**
+ * Apply this template's patches in memory and assert nothing repo-internal
+ * survives them.
+ *
+ * `package.json` is exempt because it is not patched at all — `rewritePackageJson`
+ * replaces the `workspace:*` kit spec wholesale at scaffold time, and
+ * generate.test.ts asserts no local spec reaches the emitted file.
+ */
+async function verifyNoRepoInternals(templateDir, root, patchesFor) {
+  const patches = patchesFor(templateDir);
+  const problems = [];
+
+  for (const file of await walk(root)) {
+    const rel = path.relative(root, file);
+    if (rel === 'package.json') continue;
+
+    let source;
+    try {
+      source = await readFile(file, 'utf8');
+    } catch {
+      continue;
+    }
+    if (source.includes('\u0000')) continue; // binary; nothing to instruct a user with
+
+    for (const patch of patches) {
+      if (patch.file !== rel) continue;
+      source = source.replace(
+        new RegExp(patch.find.source, patch.find.flags),
+        // the project name is irrelevant to this check; any name proves the
+        // patch removed the marker rather than renaming it
+        () => patch.replace('my-app'),
+      );
+    }
+
+    for (const { pattern, why } of REPO_INTERNAL) {
+      if (pattern.test(source)) {
+        problems.push(`  · ${templateDir}/${rel}: ${pattern.source}\n      ${why}`);
+      }
+    }
+  }
+
+  if (problems.length > 0) {
+    throw new Error(
+      `create-kai build: template '${templateDir}' would ship repo-internal instructions ` +
+        'to a user.\nAdd a patch in src/patches.ts for each of these:\n' +
+        problems.join('\n'),
+    );
+  }
+}
+
+/**
+ * Assert the template's app file is where `paths.app` says and carries the
+ * expression the emitted README quotes.
+ *
+ * `paths.app` is written into `kai.json` for a v2 `add` to read, and the README
+ * tells the user "one expression in <paths.app> changes" — so a wrong path is
+ * two lies at once, and nothing else in the build would notice, because the path
+ * is never opened at build time. Vue's is `src/App.vue` where React's is
+ * `src/App.tsx`, which is exactly the kind of per-framework value that gets
+ * copied from the row above.
+ */
+async function verifyAppPath(framework, root, goLiveThread) {
+  const app = path.join(root, framework.paths.app);
+  if (!existsSync(app)) {
+    throw new Error(
+      `create-kai build: framework '${framework.id}' declares paths.app='${framework.paths.app}', ` +
+        `which template '${framework.templateDir}' does not have.\n` +
+        '  kai.json records that path and the emitted README points the user at it.',
+    );
+  }
+  // Throws with its own explanation if the go-live expression is missing.
+  goLiveThread(await readFile(app, 'utf8'), framework);
 }
 
 /**
@@ -149,6 +270,7 @@ async function main() {
 
   const { FRAMEWORKS } = await loadTs('src/frameworks.ts');
   const { patchesFor } = await loadTs('src/patches.ts');
+  const { goLiveThread } = await loadTs('src/generate.ts');
 
   const ready = FRAMEWORKS.filter((f) => f.status === 'ready');
   if (ready.length === 0) throw new Error('create-kai build: no framework is marked ready');
@@ -157,6 +279,8 @@ async function main() {
   for (const framework of ready) {
     const root = await copyTemplate(framework.templateDir);
     patchCount += await verifyPatches(framework.templateDir, root, patchesFor);
+    await verifyNoRepoInternals(framework.templateDir, root, patchesFor);
+    await verifyAppPath(framework, root, goLiveThread);
     console.log(`  template  ${framework.id.padEnd(16)} <- examples/starters/${framework.templateDir}`);
   }
 

@@ -6,11 +6,19 @@
  * source of truth for how a consumer wires the kit — they are CI-built, so drift
  * is caught there rather than here.
  *
- * `status` is what the CLI offers. v1's first slice ships React end to end, and
- * the rest are declared but not offered, because the emitted project for those
- * cells has not been run. This table is the whole of "turn one on": add the
- * template patches, flip the status, and the prompt, the coverage gate and the
- * `--list` output all follow.
+ * `status` is what the CLI offers. React and Vue are `ready` — scaffolded,
+ * installed, built and driven in a browser — and the rest are declared but not
+ * offered, because the emitted project for those cells has not been run. This
+ * table is the whole of "turn one on": flip the status, drop the note, add the
+ * template patches, and the prompt, the coverage gate and the `--list` output
+ * all follow.
+ *
+ * `ready` MEANS RUN, NOT BUILT. Vue built green before it had a single patch,
+ * while emitting a project whose browser tab read "@kitn.ai/ui Vue example" and
+ * whose vite.config told the user to run `nx build ui`. `scripts/build.mjs` now
+ * refuses that, but the standard the status is held to is
+ * `scripts/smoke.mjs --framework <id> --keep` plus a real browser: a message
+ * sent, and a reply streaming into `<kai-thread>`.
  */
 import type { Registration } from './types';
 
@@ -68,7 +76,7 @@ export const FRAMEWORKS: readonly FrameworkDef[] = [
     renderer: 'vue',
     registration: 'elements',
     composedWorkspace: true,
-    status: 'planned',
+    status: 'ready',
     paths: {
       entry: 'src/main.ts',
       app: 'src/App.vue',
@@ -76,7 +84,6 @@ export const FRAMEWORKS: readonly FrameworkDef[] = [
       css: 'src/index.css',
       env: '.env.local',
     },
-    note: 'starter exists; not yet run end to end by this CLI',
   },
   {
     id: 'svelte',

@@ -193,11 +193,116 @@ describe('generate (refusals)', () => {
     );
   });
 
+  /**
+   * The subject was `vue`, and Vue going `ready` is exactly what invalidated it:
+   * the build now copies a vue template, so this would have asserted a refusal
+   * that no longer happens.
+   *
+   * `svelte` replaces it because it is the same SHAPE — `composedWorkspace: true`,
+   * so `conversations` resolves cleanly and the request reaches the template
+   * check rather than being turned away by the feature gate first. Any framework
+   * whose features refuse earlier would pass this test without the template
+   * check ever running.
+   */
   it('refuses a framework with no template', async () => {
     await expect(
-      generate(plan(path.join(root, 'c'), { frameworkId: 'vue' }), {
+      generate(plan(path.join(root, 'c'), { frameworkId: 'svelte' }), {
         templateRoot: TEMPLATE_ROOT,
       }),
     ).rejects.toThrow(/no template/);
+  });
+});
+
+/**
+ * Vue is the representative of the four `registration: 'elements'` +
+ * `composedWorkspace: true` frameworks (vue · svelte · angular · html). It is
+ * asserted separately from React rather than by parameterising the React block,
+ * because what matters here is the handful of values that DIFFER — the app file
+ * extension, the Vue-only vite config, the composables directory — and a shared
+ * loop over both would have to be written in terms of `framework.paths` and so
+ * could not catch a wrong `framework.paths`.
+ */
+describe('generate (vue + full-screen + conversations + mock)', () => {
+  let root: string;
+  let dir: string;
+  let files: string[];
+
+  beforeAll(async () => {
+    root = await mkdtemp(path.join(tmpdir(), 'create-kai-vue-'));
+    dir = path.join(root, 'vue-app');
+    const result = await generate(plan(dir, { frameworkId: 'vue', name: 'vue-app' }), {
+      templateRoot: TEMPLATE_ROOT,
+    });
+    files = result.files;
+  });
+
+  afterAll(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it('emits the composed workspace as SFCs plus composables', async () => {
+    expect(files).toEqual(
+      expect.arrayContaining([
+        'src/App.vue',
+        'src/chat-data.ts',
+        'src/components/Sidebar.vue',
+        'src/components/ThreadView.vue',
+        'src/components/Composer.vue',
+        'src/composables/useChat.ts',
+        'src/composables/useConversations.ts',
+      ]),
+    );
+  });
+
+  it('applies the vue patches', async () => {
+    const html = await readFile(path.join(dir, 'index.html'), 'utf8');
+    expect(html).toContain('<title>vue-app</title>');
+    expect(html).not.toContain('Vue example');
+
+    const viteConfig = await readFile(path.join(dir, 'vite.config.ts'), 'utf8');
+    expect(viteConfig).not.toContain('nx build ui');
+    expect(viteConfig).not.toContain('workspace:*');
+  });
+
+  it('keeps isCustomElement, without which the app renders nothing', async () => {
+    // The single most load-bearing line in a Vue consumer's config. Vue resolves
+    // an unknown tag as a Vue component unless told otherwise, so dropping this
+    // while patching out the paragraph above it yields a project that builds,
+    // runs, logs "unknown custom element" and shows an empty page.
+    const viteConfig = await readFile(path.join(dir, 'vite.config.ts'), 'utf8');
+    expect(viteConfig).toContain('isCustomElement');
+    expect(viteConfig).toContain("tag.startsWith('kai-')");
+  });
+
+  it('records vue paths in kai.json', async () => {
+    const kai = JSON.parse(await readFile(path.join(dir, 'kai.json'), 'utf8'));
+    expect(kai).toMatchObject({ framework: 'vue', registration: 'elements', gateway: 'mock' });
+    expect(kai.paths.app).toBe('src/App.vue');
+    expect(kai.paths.entry).toBe('src/main.ts');
+  });
+
+  it('points the README at the file this project actually has', async () => {
+    const readme = await readFile(path.join(dir, 'README.md'), 'utf8');
+    expect(readme).toContain('# vue-app');
+    // Was hard-coded to React's. A Vue project has no src/App.tsx at all, and
+    // `chat.messages` is a Ref here — pasting React's snippet would serialize a
+    // Ref object into the request body.
+    expect(readme).toContain('`src/App.vue`');
+    expect(readme).not.toContain('src/App.tsx');
+    expect(readme).toContain('toOpenAIMessages(messages.value)');
+    expect(readme).not.toContain('toOpenAIMessages(chat.messages)');
+  });
+
+  it('emits a package.json a user can install', async () => {
+    const pkg = JSON.parse(await readFile(path.join(dir, 'package.json'), 'utf8'));
+    expect(pkg.name).toBe('vue-app');
+    expect(pkg.private).toBeUndefined();
+    expect(pkg.dependencies['@kitn.ai/ui']).toBe('^9.9.9');
+    expect(pkg.dependencies.vue).toBeDefined();
+    for (const spec of Object.values(pkg.dependencies as Record<string, string>)) {
+      expect(spec).not.toMatch(/^(?:workspace:|file:\.\.|link:)/);
+    }
+    // vue-tsc, not tsc — the emitted build has to typecheck SFC templates.
+    expect(pkg.scripts.build).toContain('vue-tsc');
   });
 });
