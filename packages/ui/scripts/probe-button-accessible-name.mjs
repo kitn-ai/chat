@@ -154,20 +154,26 @@ const CASES = [
     what: 'kai-menu, slotted visible trigger + a disagreeing label prop',
     html: '<kai-menu label="Reasoning effort"><span slot="trigger">High</span></kai-menu>',
     visible: 'High',
-    // NOT 'High'. `slot="trigger"` is documented as VISUAL content — a `+`, an
-    // `<svg>` — and `label` is documented as the name for it, so the override is
-    // the contract here and the element's own docstring example
-    // (`<span slot="trigger">+</span>` named "Open menu") depends on it. A glyph
-    // cannot be told from a word programmatically, and guessing would silently
-    // rename that example "+".
+    // NOT 'High', and not a gap the fix failed to close. The two slots MEAN
+    // different things: kai-button's default slot IS the label, so text there is
+    // the name and `label` steps aside; `slot="trigger"` is VISUAL content (a
+    // `+`, an `<svg>`) with the name supplied separately, so `label` names it.
+    // Decoration beside a name is not a second name competing with one, which is
+    // why the same rule should not apply to both. The element's own docstring
+    // example (`<span slot="trigger">+</span>` named "Open menu") is that
+    // contract working.
     expect: 'Reasoning effort',
-    // ...but the risk is real when the consumer slots a WORD, so it is printed
-    // rather than absorbed. Changing `expect` to make a row green is how a check
-    // stops proving anything; this field is the alternative.
+    // The consumer CAN still put a word in a slot meant for a glyph, and then
+    // this name no longer contains the visible text. Printed rather than
+    // absorbed: editing `expect` until a row is green is how a check stops
+    // proving anything, and a PASS* a reader has to ask about is doing its job.
     openRisk:
-      'UNRESOLVED: slotting a real word into slot="trigger" while setting `label` still ' +
-      'breaks WCAG 2.5.3, and the element cannot tell that word from a glyph. Documented ' +
-      'on the `label` prop, not enforced. A lint/dev-warning is the plausible fix.',
+      'BY DESIGN, and still worth seeing: slotting a real WORD into slot="trigger" makes ' +
+      'that word a visible label, and the accessible name no longer contains it. Whether ' +
+      'slotted content is a label or decoration is a judgement about the consumer\'s own ' +
+      'content, so the kit documents both handles (on `label`) and the app decides. Not ' +
+      'enforced, deliberately: a heuristic guessing word-vs-glyph would nag developers ' +
+      'who are correct.',
   },
   {
     id: 'checkpoint:icon-only',

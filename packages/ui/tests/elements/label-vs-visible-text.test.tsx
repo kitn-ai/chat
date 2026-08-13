@@ -159,14 +159,18 @@ describe('kai-menu: the same rule, for the trigger the element renders itself', 
     expect(ariaLabelOf(host)).toBe('Open menu');
   });
 
-  it('STILL lets label win over a slotted trigger — deliberately', async () => {
-    // Not an oversight, and not a case anyone should copy: `slot="trigger"` is
-    // documented as VISUAL content (a `+`, an `<svg>`), the element cannot tell a
-    // glyph from a word, and the docstring's own `<span slot="trigger">+</span>`
-    // example depends on `label` naming it. Slotting a real WORD here while
-    // setting `label` is still a WCAG 2.5.3 risk the element does not catch —
-    // documented on the prop, and printed as PASS* by the chromium probe. This
-    // assertion exists so changing that is a deliberate act, not a silent drift.
+  it('lets label name a slotted trigger, because that slot is visual content', async () => {
+    // The two slots MEAN different things, so the same rule should not apply to
+    // both: `<kai-button>`'s default slot IS the label, so text there is the name
+    // and `label` steps aside; `slot="trigger"` is VISUAL content (a `+`, an
+    // `<svg>`) with the name supplied separately, so `label` names it. Decoration
+    // beside a name is not a second name competing with one, and the docstring's
+    // own `<span slot="trigger">+</span>` example is that contract working.
+    //
+    // A consumer who slots a real WORD has made it a visible label, and the name
+    // then fails to contain it. That is documented on `label` and printed as
+    // PASS* by the chromium probe, not enforced: whether slotted content is a
+    // label or decoration is a judgement about the consumer's own content.
     const host = await mount('<kai-menu label="Reasoning effort"><span slot="trigger">High</span></kai-menu>');
     expect(ariaLabelOf(host)).toBe('Reasoning effort');
   });

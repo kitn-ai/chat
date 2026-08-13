@@ -28,21 +28,28 @@ interface Props extends Record<string, unknown> {
    *  URL/data-URI, or text). Use this instead of slotting `slot="trigger"` for
    *  the common case; a slotted trigger overrides it. */
   triggerIcon?: string;
-  /** Built-in trigger: a text label (e.g. `"High"`). */
+  /** Built-in trigger: a text label (e.g. `"High"`). This is the trigger's
+   *  VISIBLE text, so it is also its accessible name, and `label` does not
+   *  override it: an accessible name that does not contain the visible text is
+   *  unreachable by speech input, which is what WCAG 2.5.3 (Label in Name)
+   *  exists for. A slotted `slot="trigger"` replaces this built-in trigger
+   *  entirely and is named differently; see `label`. */
   triggerLabel?: string;
   /** Built-in trigger: a trailing icon (e.g. `"chevron-down"` for a select look). */
   triggerIconTrailing?: string;
-  /** Accessible name for an icon-only trigger (no visible label). Ignored when
-   *  `triggerLabel` is set: that text is already the name, and an `aria-label`
-   *  over it REPLACES the name rather than adding to it, so a trigger reading
-   *  "High" that answers to "Reasoning effort" is unusable by speech input
-   *  (WCAG 2.5.3, Label in Name).
+  /** Accessible name for a trigger with no visible label. Ignored when
+   *  `triggerLabel` is set, which is already the visible name.
    *
-   *  It still applies over a slotted `slot="trigger"`, which is documented as
-   *  VISUAL content (a `+` or an `<svg>`, not a name) and cannot be told apart
-   *  from a name programmatically. So if you slot a real WORD, name the trigger
-   *  with that same word or leave `label` off; otherwise you reintroduce the
-   *  mismatch this prop is careful to avoid on `triggerLabel`. */
+   *  It DOES name a slotted `slot="trigger"`, and that is a difference in what
+   *  the two slots MEAN, not a limitation. `<kai-button>`'s slot IS the button's
+   *  label, so text slotted there is the name and `label` steps aside. This slot
+   *  is VISUAL content, a `+` or an `<svg>`, with the name supplied separately:
+   *  decoration beside a name, never a second name competing with one. So
+   *  `label` names the trigger here by design.
+   *
+   *  Slotting a real WORD rather than a glyph makes that word a visible label,
+   *  and an accessible name has to contain the visible text. Then either drop
+   *  `label` or make it contain the word you slotted. */
   label?: string;
   /** Drive/observe open state (Shoelace-style: settable + reflected to the `open`
    *  attribute, the menu still self-manages on click/keyboard). Set `el.open = true`,
@@ -196,8 +203,12 @@ defineWebComponent<Props, Events>('kai-menu', {
         // slotted/shadow text), so `label` must not be layered over it: aria-label
         // REPLACES the computed name, and a trigger reading "High" that answers to
         // "Reasoning effort" locks speech-input users out (WCAG 2.5.3). Same rule
-        // kai-checkpoint and kai-button follow. A slotted trigger is deliberately
-        // NOT treated this way — see the `label` prop doc.
+        // kai-checkpoint and kai-button follow.
+        //
+        // A SLOTTED trigger keeps `label`, and that is the contract rather than a
+        // gap: kai-button's slot IS the label, so text there is the name; this
+        // slot is visual content with the name supplied separately. Two slots,
+        // two meanings, so the same rule should not apply to both. See `label`.
         aria-label={props.triggerLabel ? undefined : (props.label ?? 'Open menu')}
       >
         {/* Slotted trigger wins; otherwise build one from the trigger* props;
