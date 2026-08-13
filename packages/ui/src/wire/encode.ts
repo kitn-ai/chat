@@ -5,7 +5,8 @@
 // No provider SDK, no fetch, no DOM. Pure functions over the content model.
 import type { ChatMessage, MessagePart } from '../elements/chat-types';
 import type { ToolPart } from '../components/tool-types';
-import { classifyAttachment, type ClassifiedFile } from './files';
+import { classifyAttachment, textFileContent, type ClassifiedFile } from './files';
+import { resolveMediaPolicy, type MediaPolicy, type MediaTypeFilter } from './media-types';
 
 export interface OpenAIToolCall {
   id: string;
@@ -41,7 +42,10 @@ export interface OpenAIWireMessage {
   reasoning_details?: OpenAIReasoningDetail[];
 }
 
-export interface OpenAIEncodeOptions {
+/** EXTENDS rather than restates the file options: `onUnencodableFile` and
+ *  `accept` mean the same thing on both wires, and a second declaration of them
+ *  here is a second place to forget to update. */
+export interface OpenAIEncodeOptions extends FileEncodeOptions {
   /**
    * Whether to send the assistant's own reasoning back with the thread.
    *
@@ -64,9 +68,6 @@ export interface OpenAIEncodeOptions {
    * or rebuilt thinking block there is a hard 400.
    */
   reasoning?: 'omit' | 'include';
-
-  /** See `FileEncodeOptions`. */
-  onUnencodableFile?: UnencodableFilePolicy;
 }
 
 /**
@@ -86,6 +87,19 @@ export type UnencodableFilePolicy = 'throw' | 'skip';
 
 export interface FileEncodeOptions {
   onUnencodableFile?: UnencodableFilePolicy;
+  /**
+   * Narrow which attachment media types reach the wire, as HTML `accept` syntax
+   * (`'image/*,application/pdf'`) or an array of the same.
+   *
+   * THE SAME STRING the composer takes as `<kai-chat accept="...">`, resolved by
+   * the same function against the same declaration -- so a developer writes the
+   * set once as a constant and hands it to both ends. Omitted means the kit's
+   * full capability set, which is `encodableMediaTypes()`.
+   *
+   * It can only NARROW. Naming a type the encoders cannot represent does not
+   * enable it; that would just move the failure to a provider 400.
+   */
+  accept?: MediaTypeFilter;
 }
 
 export type AnthropicEncodeOptions = FileEncodeOptions;
@@ -156,9 +170,10 @@ function encodeFilePart<T>(
   messageId: string,
   partIndex: number,
   policy: UnencodableFilePolicy,
+  media: MediaPolicy,
   toBlock: (file: ClassifiedFile) => WireFileResult<T>,
 ): T | null {
-  const classified = classifyAttachment(part.attachment);
+  const classified = classifyAttachment(part.attachment, media);
   if (classified.status === 'kit-side') return null;
 
   const refuse = (reason: string): null => {
@@ -177,8 +192,14 @@ function encodeFilePart<T>(
 }
 
 /** `image_url` takes an https URL and a `data:` URI in the same field, so an
- *  image is one shape here. A PDF is not: `file_data` is base64-only. */
+ *  image is one shape here. A PDF is not: `file_data` is base64-only. A text
+ *  file is neither: it becomes ordinary text content, because that is the only
+ *  thing either API's block set can express it as. */
 const openAIFileBlock = (file: ClassifiedFile): WireFileResult<OpenAIContentPart> => {
+  if (file.kind === 'text') {
+    return { ok: true, block: { type: 'text', text: textFileContent(file) } };
+  }
+
   if (file.kind === 'image') {
     const url = file.source.type === 'base64' ? file.source.dataUri : file.source.url;
     return { ok: true, block: { type: 'image_url', image_url: { url } } };
@@ -203,18 +224,29 @@ const openAIFileBlock = (file: ClassifiedFile): WireFileResult<OpenAIContentPart
   };
 };
 
-/** Both block types take the same two source shapes, which is why this wire has
- *  no gap where OpenAI has one. */
-const anthropicFileBlock = (file: ClassifiedFile): WireFileResult<AnthropicContentBlock> => ({
-  ok: true,
-  block: {
-    type: file.kind === 'image' ? 'image' : 'document',
-    source:
-      file.source.type === 'base64'
-        ? { type: 'base64', media_type: file.source.mediaType, data: file.source.data }
-        : { type: 'url', url: file.source.url },
-  },
-});
+/** The image and document blocks take the same two source shapes, which is why
+ *  this wire has no gap where OpenAI has one. Text is the third case and is not
+ *  a `document` block: this API's content-block set is text / image / document
+ *  with no arbitrary-file member, so an inlined text file IS a text block.
+ *  (A `document` block CAN carry text via the Files API, which would buy
+ *  citations -- see the design note; it needs an upload step this layer cannot
+ *  make, because it does no I/O.) */
+const anthropicFileBlock = (file: ClassifiedFile): WireFileResult<AnthropicContentBlock> => {
+  if (file.kind === 'text') {
+    return { ok: true, block: { type: 'text', text: textFileContent(file) } };
+  }
+
+  return {
+    ok: true,
+    block: {
+      type: file.kind === 'image' ? 'image' : 'document',
+      source:
+        file.source.type === 'base64'
+          ? { type: 'base64', media_type: file.source.mediaType, data: file.source.data }
+          : { type: 'url', url: file.source.url },
+    },
+  };
+};
 
 /** A tool is encodable only once it has a RESULT. Both APIs require every echoed
  *  tool call to have exactly one matching result, so a call with no answer yet is
@@ -397,6 +429,7 @@ export function toOpenAIMessages(
 ): OpenAIWireMessage[] {
   const includeReasoning = options.reasoning === 'include';
   const filePolicy = options.onUnencodableFile ?? 'throw';
+  const media = resolveMediaPolicy({ accept: options.accept });
   const out: OpenAIWireMessage[] = [];
 
   for (const message of messages) {
@@ -422,7 +455,7 @@ export function toOpenAIMessages(
           return;
         }
         if (part.type !== 'file') return;
-        const block = encodeFilePart(part, message.id, partIndex, filePolicy, openAIFileBlock);
+        const block = encodeFilePart(part, message.id, partIndex, filePolicy, media, openAIFileBlock);
         if (!block) return;
         flushText();
         content.push(block);
@@ -545,6 +578,7 @@ export function toAnthropicMessages(
   options: AnthropicEncodeOptions = {},
 ): AnthropicWireMessage[] {
   const filePolicy = options.onUnencodableFile ?? 'throw';
+  const media = resolveMediaPolicy({ accept: options.accept });
   const out: AnthropicWireMessage[] = [];
 
   /** Append to the trailing user message when there is one, so the wire never
@@ -565,7 +599,7 @@ export function toAnthropicMessages(
           return;
         }
         if (part.type !== 'file') return;
-        const block = encodeFilePart(part, message.id, partIndex, filePolicy, anthropicFileBlock);
+        const block = encodeFilePart(part, message.id, partIndex, filePolicy, media, anthropicFileBlock);
         if (block) userBlocks.push(block);
       });
       if (userBlocks.length > 0) pushUser(userBlocks);

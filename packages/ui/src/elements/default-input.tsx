@@ -16,6 +16,24 @@ import {
 } from '../components/attachments';
 import { actionIcon } from '../ui/action-icons';
 import type { CustomAction } from './chat-types';
+// The LEAF module, deliberately not the `../wire` barrel: this needs the media
+// declaration, and importing the barrel would pull the whole stream adapter into
+// the elements bundle for a table of strings. Sharing the module itself (rather
+// than copying the list into the composer) is the entire point -- a second list
+// here is the drift this design exists to prevent.
+import { resolveMediaPolicy, type MediaTypeFilter } from '../wire/media-types';
+
+/** One file the composer refused, as facts rather than as a message. The kit
+ *  says what happened; the application decides what the user reads. */
+export interface RejectedAttachment {
+  filename: string;
+  /** The browser's media type for the file, or `''` when it could not tell --
+   *  which is itself the usual reason a source file gets rejected. */
+  mediaType: string;
+  /** `'filtered'` = this kit could have sent it, your `accept` excluded it.
+   *  `'unsupported'` = no API takes this as message content at all. */
+  reason: 'filtered' | 'unsupported';
+}
 
 export interface DefaultPromptInputProps {
   /** String = controlled text mirror; ComposerDoc = a seed that pre-populates pills. */
@@ -31,6 +49,19 @@ export interface DefaultPromptInputProps {
    *  `onAttachmentsChange` is provided (e.g. when a `+` menu already covers
    *  file-attach). Defaults to `true`. */
   attach?: boolean;
+  /** Which attachment media types the user may stage, in HTML `accept` syntax
+   *  (`'image/*,application/pdf'`). Omitted means no filter, exactly as before.
+   *
+   *  NARROWED BY WHAT THE ENCODERS CAN SEND: `'image/*'` here resolves to the
+   *  four image formats both APIs actually accept, not to every image type the
+   *  OS will offer. It is the same string, resolved by the same function against
+   *  the same declaration, as `toOpenAIMessages(msgs, { accept })` -- so a file
+   *  the picker allows is a file the wire can carry. */
+  accept?: MediaTypeFilter;
+  /** Files that were dropped because `accept` excluded them. Carries the facts
+   *  (name, media type, reason) and renders nothing itself: what the user should
+   *  see is the application's call, not the kit's. */
+  onAttachmentsRejected?: (rejected: RejectedAttachment[]) => void;
   /** Show a Search (Globe) button in the left toolbar; calls `onSearch`. */
   search?: boolean;
   /** Show a Voice (Mic) button in the left toolbar; calls `onVoice`. */
@@ -101,11 +132,37 @@ export function DefaultPromptInput(props: DefaultPromptInputProps) {
   const attachments = () => props.attachments ?? [];
   const canAttach = () => !!props.onAttachmentsChange;
 
+  // The SAME resolver the encoders call, on the same declaration. Recomputed
+  // reactively so a host that swaps `accept` at runtime moves the picker hint
+  // and the filter together.
+  const mediaPolicy = () => resolveMediaPolicy({ accept: props.accept });
+
   const addFiles = async (files: FileList | null) => {
     if (!files?.length || !props.onAttachmentsChange) return;
+
+    // The `accept` ATTRIBUTE below is only a hint — every OS dialog offers an
+    // "All Files" escape, and it does not apply to drag-and-drop at all. So the
+    // filter that actually holds is this one, in JS, on the files as staged.
+    const policy = mediaPolicy();
+    const allowed: File[] = [];
+    const rejected: RejectedAttachment[] = [];
+    for (const file of Array.from(files)) {
+      // No `accept` means no filtering, which is what every existing consumer
+      // gets today. Opting in is what turns the picker into a guarantee.
+      if (props.accept === undefined) {
+        allowed.push(file);
+        continue;
+      }
+      const decision = policy.decide(file.type);
+      if (decision.status === 'allowed') allowed.push(file);
+      else rejected.push({ filename: file.name, mediaType: file.type, reason: decision.status });
+    }
+    if (rejected.length > 0) props.onAttachmentsRejected?.(rejected);
+    if (allowed.length === 0) return;
+
     // Read all of them before publishing once: a per-file append would make the
     // list order depend on which file finished reading first.
-    const staged = await Promise.all(Array.from(files).map(fileToAttachment));
+    const staged = await Promise.all(allowed.map(fileToAttachment));
     // Re-read `attachments()` AFTER the await — a second drop while these were
     // being read would otherwise be overwritten by this call's stale snapshot.
     props.onAttachmentsChange?.([...attachments(), ...staged]);
@@ -179,6 +236,11 @@ export function DefaultPromptInput(props: DefaultPromptInputProps) {
                 type="file"
                 multiple
                 class="hidden"
+                // Derived from the same policy as the filter above, never spelled
+                // out again. `accept="image/*"` narrows to the image formats the
+                // wire can actually carry, so the OS dialog greys out the SVG
+                // that would otherwise 400 at request time.
+                accept={props.accept === undefined ? undefined : mediaPolicy().accept}
                 onChange={(e) => {
                   // Reading is async now, so this is deliberately not awaited.
                   // `addFiles` captures the FileList synchronously, before its

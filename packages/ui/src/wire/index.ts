@@ -29,6 +29,23 @@ export type {
   UnencodableFilePolicy,
 } from './encode';
 
+// What the encoders CAN represent, published as a value.
+//
+// The point is not introspection. A consumer who wants their own file picker,
+// their own validation and their own error copy can build all three off
+// `encodableMediaTypes()` and `resolveMediaPolicy(...).decide(...)` without
+// using our composer at all -- the kit states a fact about itself and the
+// application decides what to do about it. `<kai-chat accept="...">` is a
+// convenience over exactly this, not a separate mechanism.
+export { encodableMediaTypes, resolveMediaPolicy } from './media-types';
+export type {
+  EncodableKind,
+  MediaDecision,
+  MediaPolicy,
+  MediaPolicyOptions,
+  MediaTypeFilter,
+} from './media-types';
+
 export { openaiChatFormat } from './formats/openai';
 export { anthropicMessagesFormat } from './formats/anthropic';
 

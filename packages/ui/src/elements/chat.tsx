@@ -5,6 +5,7 @@ import { ChatThread, type ChatThreadProps, type ChatThreadContextUsage, type Cha
 import { cardComponentsFromTags } from './message';
 import { createMessagesGuard } from './validate-messages';
 import type { AttachmentData } from '../components/attachments';
+import type { RejectedAttachment } from './default-input';
 import type { ChatMessage } from './chat-types';
 import type { TriggerDef } from '../components/composer';
 import type { ComposerDoc } from '../primitives/composer-model';
@@ -13,7 +14,20 @@ import type { ModelOption } from '../types';
 
 type Props = Omit<ChatThreadProps,
   'class' | 'onValueChange' | 'onSubmit' | 'onAttachmentsChange' | 'onSuggestionClick' | 'onModelChange'
-  | 'onMessageAction' | 'onSearch' | 'onVoice' | 'controllerRef' | 'cardTypes' | 'cardSchemas' | 'messages'> & Record<string, unknown> & {
+  | 'onMessageAction' | 'onSearch' | 'onVoice' | 'controllerRef' | 'cardTypes' | 'cardSchemas' | 'messages'
+  | 'accept' | 'onAttachmentsRejected'> & Record<string, unknown> & {
+    /** Which attachment media types the user may stage, in HTML `accept` syntax:
+     *  `<kai-chat accept="image/*,application/pdf">`. A plain string, so unlike
+     *  `messages` it DOES work as an attribute. Omitted means no filter.
+     *
+     *  It can only NARROW what the kit can already encode: `accept="image/*"`
+     *  resolves to the four image formats both APIs take, not to every image type
+     *  the OS offers. Pass the SAME string to `toOpenAIMessages(msgs, { accept })`
+     *  and the picker and the wire cannot disagree -- both resolve it through
+     *  `resolveMediaPolicy` against one declaration. That declaration is readable
+     *  as `encodableMediaTypes()` from `@kitn.ai/ui/wire`, if you would rather
+     *  build your own picker than use this prop. */
+    accept?: string;
     /** The full message thread to render, newest last. Each entry carries its
      *  role, ordered `parts`, and optional actions/avatar/feedback. Set as a JS
      *  property (`el.messages = [...]`); a NEW array reference per streaming
@@ -54,6 +68,11 @@ interface Events {
   /** The staged attachments changed (file added or removed). Carries the full
    *  current list so a consumer can react in real time. */
   'kai-attachments-change': { attachments: AttachmentData[] };
+  /** One or more picked files were refused because `accept` excluded them. The
+   *  element renders NO message of its own: it reports the facts (name, media
+   *  type, whether the kit could have sent it) and what the user should see is
+   *  the application's call. Only ever fires when `accept` is set. */
+  'kai-attachments-rejected': { rejected: RejectedAttachment[] };
   /** A suggestion chip was clicked (only in `suggestion-mode="fill"`). */
   'kai-suggestion-click': { value: string };
   /** An action button on a message was clicked. `action` is the built-in name or
@@ -74,7 +93,7 @@ defineWebComponent<Props, Events>('kai-chat', {
   codeTheme: 'github-dark-dimmed', codeHighlight: true, chatTitle: undefined,
   models: undefined, currentModel: undefined, context: undefined, scrollButton: true,
   search: false, voice: false, triggers: undefined, kindIcons: undefined,
-  actionsReveal: 'always', cardTypes: undefined, cardSchemas: undefined,
+  actionsReveal: 'always', cardTypes: undefined, cardSchemas: undefined, accept: undefined,
 }, (props, { dispatch, flag, element, expose }) => {
   // `messages` is an untyped boundary: a consumer can hand it anything at
   // runtime (a pre-0.20.0 `{ id, role, content }` array, in particular). Skip
@@ -145,7 +164,9 @@ defineWebComponent<Props, Events>('kai-chat', {
     cardSchemas={props.cardSchemas as Record<string, object> | undefined}
     onValueChange={(value) => dispatch('kai-value-change', { value })}
     onSubmit={(detail) => dispatch('kai-submit', detail)}
+    accept={props.accept as string | undefined}
     onAttachmentsChange={(attachments) => dispatch('kai-attachments-change', { attachments })}
+    onAttachmentsRejected={(rejected) => dispatch('kai-attachments-rejected', { rejected })}
     onSuggestionClick={(value) => dispatch('kai-suggestion-click', { value })}
     onModelChange={(modelId) => dispatch('kai-model-change', { modelId })}
     onMessageAction={(detail) => dispatch('kai-message-action', detail)}

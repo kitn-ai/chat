@@ -11,7 +11,8 @@ import {
   Context, ContextTrigger, ContextContent, ContextContentHeader,
   ContextContentBody, ContextContentFooter, ContextInputUsage, ContextOutputUsage,
 } from './context';
-import { DefaultPromptInput } from '../elements/default-input';
+import { DefaultPromptInput, type RejectedAttachment } from '../elements/default-input';
+import type { MediaTypeFilter } from '../wire/media-types';
 import type { TriggerDef } from './composer';
 import type { ChatMessage } from '../elements/chat-types';
 import type { ProseSize } from '../primitives/chat-config';
@@ -112,6 +113,13 @@ export interface ChatThreadProps {
   composerActions?: boolean;
   /** INJECT: footer row below the composer (disclaimers, token meter, …). */
   footer?: boolean;
+  /** Which attachment media types the user may stage, in HTML `accept` syntax
+   *  (`'image/*,application/pdf'`). Omitted means no filter. Narrowed by what the
+   *  encoders can actually send — the same string, and the same resolver, as
+   *  `toOpenAIMessages(msgs, { accept })`. */
+  accept?: MediaTypeFilter;
+  /** Files the composer refused because `accept` excluded them. */
+  onAttachmentsRejected?: (rejected: RejectedAttachment[]) => void;
   /** Show a Search (Globe) button in the input toolbar; fires a `search` event. */
   search?: boolean;
   /** Show a Voice (Mic) button in the input toolbar; fires a `voice` event. */
@@ -392,6 +400,7 @@ export function ChatThread(props: ChatThreadProps) {
                   <DefaultPromptInput
                     value={current()} placeholder={props.placeholder} loading={props.loading === true}
                     suggestions={visibleSuggestions()} attachments={attachments()}
+                    accept={props.accept} onAttachmentsRejected={props.onAttachmentsRejected}
                     search={props.search === true} voice={props.voice === true}
                     triggers={props.triggers} kindIcons={props.kindIcons}
                     onValueChange={handleChange} onSubmit={handleSubmit} onSuggestionClick={handleSuggestionClick}
