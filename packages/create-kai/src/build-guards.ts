@@ -220,6 +220,52 @@ export function declaredPathsProblem(
   );
 }
 
+/**
+ * The name a starter carries its ignore file under, and the one an emitted
+ * project gets back.
+ *
+ * Declared here because the rule below is the thing that asserts it: `build.mjs`
+ * renames THIS name to `GITIGNORE_TEMPLATE_NAME` (src/generate.ts) and both ends
+ * of that rename now read their name from the one place it is written down. The
+ * underscored half deliberately lives with `generate()`, which is what renames
+ * it back — this module is bundled by `build.mjs` through `loadTs()`, and
+ * importing `generate.ts` here would drag the catalog and the kit's source in
+ * with it, which is the same reason `appPathProblem` takes `goLiveThread` as an
+ * argument instead of importing it.
+ */
+export const GITIGNORE_SOURCE_NAME = '.gitignore';
+
+/**
+ * Refuse to build a template whose starter has no `.gitignore`.
+ *
+ * NOT COSMETIC, and the one guard here whose absence is a security bug rather
+ * than a broken scaffold. Without it the emitted project ignores nothing, so
+ * `node_modules/` is untracked-but-not-ignored and — for a keyed gateway —
+ * so is `.env.local`. A scaffold whose first `git add .` stages the user's API
+ * key is the worst version of this, and the user never sees a warning: the
+ * missing file is the failure.
+ *
+ * This rule was written inside `copyTemplate` in `scripts/build.mjs`, a function
+ * whose other job is `cp`. That is the shape the rest of this module exists to
+ * undo — a rule reachable only by running the whole build is a rule nobody has
+ * watched fail, and the anti-rot check in `test/build-guards.test.ts` reads
+ * top-level names, so it could not see this one at all. Out here it is a
+ * predicate over a filename, and the test drives it directly.
+ *
+ * Checked BEFORE the rename, on the name the starter uses. Afterwards the file
+ * is `_gitignore` and the question no longer has the same answer.
+ *
+ * The message is byte-identical to the one this threw inside `copyTemplate`; the
+ * reasoning above is a comment rather than payload because that is where it was.
+ */
+export function gitignoreProblem(
+  templateDir: string,
+  exists: (relativePath: string) => boolean,
+): string | null {
+  if (exists(GITIGNORE_SOURCE_NAME)) return null;
+  return `create-kai build: starter '${templateDir}' has no ${GITIGNORE_SOURCE_NAME} — an emitted project needs one`;
+}
+
 /** Only the fields these rules read. Both real manifests have far more. */
 export interface Manifest {
   dependencies?: Record<string, string>;
