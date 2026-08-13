@@ -41,13 +41,20 @@ it is named instead. Run the command.
 
 ## 0. Do this first
 
+> **§9 was appended later, verified at `16c14c2`.** Sections 0 through 8 are as written at `bce481e`
+> and have not been edited except for pointers like this one. Read §9 for what landed after, and for
+> which claims below are now retired.
+
 1. **`git log --oneline --first-parent bce481e..origin/main`** and **`gh pr list --state open`**.
    Nothing from this session was left open. Main moved twice while this was being written.
 2. **`@kitn.ai/ui@0.22.0` is PUBLISHED and is `latest`** (§2). Rob merged the release PR mid-session.
    Two breaking changes shipped with it. Anything that was "gated on 0.22.0" is now unblocked (§6).
+   *(Still true at `16c14c2`; a 0.22.1 release PR is now open and unmerged. §9.)*
 3. **The `create-kai` root cause is only PARTLY closed.** #201 moved the content rules into a tested
    module, but `scripts/build.mjs` still runs `main()` at module scope with no test importing it, and
    four guards still live inside it. Read §5.9 before assuming that finding is retired.
+   *(RETIRED at `16c14c2` by #203 and #205, but not in the way this sentence would predict: the
+   guards left, `main()` at module scope did not. §9.1.)*
 
 ---
 
@@ -356,6 +363,12 @@ code is the one that ships.
 
 ### 5.9 The root cause, from #201 (merged as `bce481e`, and only PARTLY closed)
 
+> **Status at `16c14c2`: the finding is closed, this section's stated condition is still true.** #203
+> and #205 moved every rule out of `scripts/build.mjs` and added an anti-rot test, so the "four guards
+> remain inside it" claim below is now false. `main().catch(...)` at module scope with no test
+> importing it is **unchanged**, because the fix was to move the rules out rather than make the file
+> reachable. The paragraphs below are left as written at `bce481e`. §9.1.
+
 **A guard you cannot invoke in isolation is a guard nobody has watched fail.**
 
 `packages/create-kai/scripts/build.mjs` calls `main()` at module scope, and no test imports it. So
@@ -451,6 +464,10 @@ it covers is closed by construction.
 ---
 
 ## 6. Still open, and what is next
+
+> **Status at `16c14c2`: item 2 has SHIPPED as #204, and the §5.9 finding below is half retired.**
+> The remaining `create-kai` work is item 1, the three chat apps. §9.7 has the corrections; the list
+> below is left as written at `bce481e`.
 
 **`gh pr list --state open` is the authority.** Nothing from this session was left open at `bce481e`.
 #201 was the last to land, and it closed the two defects earlier rounds had found and deliberately
@@ -561,6 +578,409 @@ when a report mixes them, check the state ones first.
    closed a live finding. Re-reading the file took one command. **Had this document been re-anchored by
    find-and-replace instead of re-derived, §5.9 would have shipped announcing that the root cause was
    fixed**: a check-that-proves-nothing claim, inside the document cataloguing them. §5.9.
+
+---
+
+## 9. What landed after `bce481e`
+
+**Verified against `origin/main` at `16c14c2752d88c777a5b5e01b3d50593d7bded41`**
+(`fix(agent-tooling): derive the emitted accept from the media-type declaration (#210)`).
+
+**Everything above this section was accurate at `bce481e`, and none of it has been rewritten.** This
+section records what landed after that SHA. Where something above is now retired, the section carries
+a short status marker pointing here instead of being edited in place, because the anchoring is the
+point: a reader who wants to know what was true at `bce481e` can still find out, and a document that
+quietly re-writes its own history teaches the failure mode §8 exists to catch.
+
+This section was commissioned from a narrative, like the rest of the file. Every claim in that
+narrative was checked against this tree, and §9.8 lists the ones that did not survive. Same rule as
+§8: the corrections are recorded, not smoothed over.
+
+Derive the landed set rather than trusting any list:
+
+```
+git log --oneline --first-parent bce481e..origin/main
+```
+
+**Note what that range does not contain: #209 never merged.** It is the open release-please PR for
+0.22.1, and `npm view @kitn.ai/ui dist-tags` still reads `0.22.0`. So everything in this section is on
+main and none of it is published, and §2's account of why a release PR can only be merged with
+`--admin` applies to it unchanged. A reader working from PR numbers alone will read the gap between
+#208 and #210 as a missing merge; it is a held release.
+
+### 9.1 The `create-kai` root cause: closed by relocation, and §5.9's literal condition still holds (#203, #205)
+
+**§5.9 and §6 status: the finding is retired, the sentence stating it is still literally true.** Both
+halves matter and the difference between them is the whole content of this entry.
+
+§5.9 names the root cause as two clauses. Re-derive each:
+
+```
+tail -5 packages/create-kai/scripts/build.mjs
+grep -rn "scripts/build" packages/create-kai/test/
+grep -n "^async function" packages/create-kai/scripts/build.mjs
+```
+
+- **"`scripts/build.mjs` still runs `main()` at module scope with no test importing it"** is
+  **UNCHANGED**, and deliberately so. The file still ends `main().catch(...)`. No test imports it,
+  and none can. #203 did not make the file reachable; it accepted that the file is unreachable and
+  moved the rules out from under it. One test now *reads* `build.mjs` as text (see below), which is
+  why the second grep returns more than it did, but reading is not importing and the distinction is
+  the one §5.9 was making.
+- **"four guards still live inside it"** is **now FALSE.** The third grep no longer returns a single
+  `verify`-shaped name. What remains is `loadTs`, `copyTemplate`, `walk`, `readTemplateFiles` and
+  `main`, which is filesystem plumbing rather than rules.
+
+So the honest status is that the shape §5.9 identified is **gone from that file**, and the property
+§5.9 used to describe it is **still a property of that file**. Do not report the first without the
+second, and do not read the second as the finding still being open.
+
+**#203 moved five, not the four §5.9 counted.** §5.9 listed `verifyPatches`, `verifyAppPath`,
+`verifyDeclaredPaths` and `verifySharedDevDeps` as guards and classified `verifyEmittedContent` as
+orchestration alongside `copyTemplate` and `walk`. #203 moved that one too. They are now
+`patchMatchProblem`, `appPathProblem`, `declaredPathsProblem`, `sharedDevDepsProblem` and
+`emittedContentProblem` in `packages/create-kai/src/build-guards.ts`, with
+`test/build-guards.test.ts` alongside.
+
+Three shape decisions in that module, all stated in its docblock and worth reading before adding a
+sixth rule:
+
+- **The rules return their message instead of throwing it.** The message names the file, states why
+  the rule exists and says which table to edit, so it is the thing a test most needs to assert.
+  Throwing puts it back where only a build run can read it, which is the defect being removed.
+  `build.mjs` throws what they return, so a failing build reads exactly as it did.
+- **The filesystem arrives as an argument.** A rule that only runs against a real template tree drags
+  a template copy and a bundle step into any test that wants to watch it fail. `build.mjs` passes a
+  reader over the copied tree, a test passes one over a literal.
+- **`build-guards.ts` cannot import `generate.ts`.** Doing so pulls the catalog and the kit's source
+  into the bundle `build.mjs` builds through `loadTs()`. That is why `appPathProblem` takes
+  `goLiveThread` as a parameter, and why the two gitignore names live in two files (below).
+
+**The move is held in place by an anti-rot test**, and this is the part that makes the finding stay
+closed rather than being closed once. `test/build-guards.test.ts` asserts `build.mjs` declares no
+guard-shaped name, in either the `function` or the `const` spelling, and its failure message points
+the next author at `src/build-guards.ts`. That test is the one that reads `build.mjs` as text.
+
+**It states its own limit rather than overstating its reach**, which is the same discipline §5.10
+records: it reads top-level names, so it catches a guard someone declares and misses one inlined into
+a function that already does the reading. Catching that needs a parser.
+
+**#205 closed the two defects #203 found and deliberately left**, and it is two defects rather than
+the one its subject's first clause suggests:
+
+- **`GITIGNORE_TEMPLATE_NAME` was declared twice**, exported from `src/generate.ts` and restated as a
+  local in `scripts/build.mjs`. **Drift between them is silent and only reachable in the published
+  package**: the build writes a template filename `generate()` never renames back, so the scaffolded
+  project ships with no working `.gitignore`, and that file is what stops a user's first `git add .`
+  staging an API key. `build.mjs` already loaded `generate.ts` through `loadTs()`, so it now reads the
+  exported constant. **No guard was added, deliberately**: the second declaration is gone, so a check
+  over a fact that now exists once is machinery over nothing.
+- **The rule requiring a starter to HAVE a `.gitignore` was inlined in `copyTemplate`**, a function
+  whose other job is `cp`. It is now `gitignoreProblem()` in `build-guards.ts`. This is the entry
+  #203's anti-rot check had named as the one live instance its regex provably could not see, so the
+  blind spot is now real but empty, and the test says exactly that rather than deleting the caveat.
+
+The two names are each declared once: `GITIGNORE_SOURCE_NAME` with the rule that asserts it,
+`GITIGNORE_TEMPLATE_NAME` with the `generate()` that renames it back.
+
+### 9.2 `lint-silent-drops`, and why zero matches is a hard failure there (#204)
+
+**§6 item 2 is SHIPPED, not deferred.** See §9.7.
+
+Scope is `packages/ui/src/wire/` only, and the reasoning for that narrowness is the entry's value: it
+is the one layer where a quiet decision is **irreversible**. The encoders turn `parts` into a provider
+request, so a variant they do not encode is gone once the request leaves the process. A UI component
+that renders only `text` parts is fine, because the data is still there.
+
+The rule: a function in `src/wire` that discriminates a `MessagePart` at all must account for every
+variant, **with the variant list read from the union in `src/elements/chat-types.ts` rather than
+restated**, or declare the drop by name at the site. That derivation is the same one `verify:scaffold`
+already uses on the emitted Solid `renderPart`, generalised from the scaffolder's output to the kit's
+own encoders.
+
+**The waiver is a parsed directive and not prose BECAUSE PROSE ALREADY FAILED.** This is the entry to
+carry forward. The pre-fix encoder already carried a comment saying `card, source and file parts are
+never encoded; they are kit-side ... which is why a user turn carrying only an attachment encodes to
+nothing`, plus a `default:` clause whose entire body was a comment saying the same thing and a
+`break;`. **A guard that honoured comments would have passed, unchanged, the exact source that shipped
+the bug.** So the waiver form is:
+
+```
+// lint-silent-drops: drops card,source -- reason
+```
+
+and it covers **only the variants it spells out**. That is what makes it fire forever rather than
+once: adding a seventh member to the union re-fires every waived site, naming only the new variant,
+instead of being swallowed by a suppression written before that variant existed. Read the live ones
+with `grep -n "lint-silent-drops:" packages/ui/src/wire/encode.ts`; they are intended drops whose
+reasons were already written in prose, now converted into an enforced contract with no behaviour
+change.
+
+**Validated against the real defect, from git history, not a synthetic case.** Run against `2c0634a`
+it exits 1, and every finding names `file` as silently dropped. `2c0634a` is #187, and it is the
+**parent of #186** on first-parent order, which is a live instance of §1's warning that PR numbers are
+not merge order. The one that matters most is `textOf`: it is the helper that made a user turn encode
+to nothing, **it contains no string literal at all**, and it is caught through resolving the local
+type-guard predicate in `parts.filter(isTextPart)`.
+
+**It catches one of four historical defects and says so in its own scorecard.** The three it does not
+catch were each rejected on evidence rather than omitted: the `url: cond ? work() : undefined` shape
+was measured to have a precision low enough that the rule would be blanket-suppressed, and **a
+disabled rule is worse than none because it leaves everyone believing the class is covered**; the
+`content ?? ''` shape lives inside template-literal route snippets a TS AST over the host file cannot
+see, where `verify:scaffold`'s route-compile gate is already the right instrument; and a missing
+`.gitignore` is an *absence*, with no text to match, so a source linter is the wrong instrument
+entirely. That last one was then fixed properly by #205 (§9.1).
+
+**A zero-match run is a HARD FAILURE**, and there are three distinct tripwires rather than one,
+because there are three ways for the scan to become vacuous: parsing zero variants out of the union
+(`would pass everything`), walking zero non-test wire files (`matched nothing, which is a broken scan,
+not a clean tree`), and finding zero functions that discriminate a `MessagePart` at all. A waiver
+naming a variant that is not in the union, or carrying a reason too short to be a reason, is also
+fatal.
+
+Run it in isolation with no build: `node packages/ui/scripts/lint-silent-drops.mjs`, plus
+`--package-root <dir>` to point it at a historical checkout and `--self-test` to watch it detect. The
+CI wiring is `pnpm --filter @kitn.ai/ui run lint:silent-drops` in the required `test` job, and the npm
+script runs the self-test half first. `tests/scripts/silent-drop-guard-wiring.test.ts` guards that
+wiring by running the linter against synthesized trees and requiring a non-zero exit, rather than
+trusting the script's self-report.
+
+### 9.3 Object URLs on attachment `url`, and the opposite zero-match rule (#206, #207)
+
+Three live instances of the pattern #186 removed from the kit, in the three places a consumer is most
+likely to copy from:
+
+- **A Storybook story** (#206), the "With File Attachments" story in
+  `packages/ui/src/stories/prompt-input-variants.stories.tsx`, which staged an object URL for images
+  and no `url` at all for anything else. Both halves are unencodable. The story is explicitly teaching
+  manual wiring, so it was teaching the defect, and its hand-written "Show code" panel, which is the
+  surface readers actually copy, omitted the attach wiring entirely.
+- **A live docs demo** (#207), `apps/docs/src/components/AttachmentsFlowDemo.tsx`.
+- **Published MDX whose comment RECOMMENDED it** (#207),
+  `apps/docs/src/content/docs/patterns/attachments-flow.mdx`, carrying
+  `create an object URL if you want an image preview in the hover card`. This is the worst of the
+  three: the docs were recommending a pattern the library already rejects, since `toOpenAIMessages`
+  and `toAnthropicMessages` refuse a `blob:` URL with a written reason.
+
+All now follow `readAsDataUrl` in `src/elements/default-input.tsx`: a `data:` URI for **every** file
+rather than only images, snapshotting the file list before the first await because the upload element
+is free to clear it as soon as the handler yields, and re-reading `attachments` after the await so a
+second drop landing mid-read is appended to rather than overwritten.
+
+**A fourth instance turned up that the guard cannot reach, and #207 says so rather than implying
+coverage.** The `AttachmentData` props table described `url` as `Object URL or CDN URL — enables image
+previews in the hover card`: the anti-pattern named first, and the field framed as a preview hint
+rather than as the thing the wire encodes. No AST rule can reach a table cell. **The guard did not
+find it and would not have**, prose stays a review problem, and the script itself states this.
+
+#### The contrast with §9.2, which must not be collapsed
+
+**These are two different kinds of check, and conflating them breaks one of them.**
+
+| | `lint-silent-drops` | `lint-attachment-object-urls` |
+|---|---|---|
+| scans for | dispatch sites it **knows exist** | a pattern that **should not exist** |
+| zero findings | **FATAL.** Zero means the scan broke | **PASS.** Zero is the healthy steady state |
+| vacuity tripwire | zero variants parsed, zero files, zero discriminating functions | **zero FILES walked**, plus `--self-test` |
+
+Copying the zero-match-fails behaviour across to the reintroduction guard would make it fail on the
+clean tree it was written to protect. Copying the zero-match-passes behaviour back to
+`lint-silent-drops` would make a broken scan indistinguishable from a clean encoder. The script's own
+header records this reasoning; do not "harmonise" the two.
+
+Detection is structural, on a real TS parse, and reaches markdown fences and script blocks as well as
+source. It is anchored on the one wrong function feeding the one field, a `url` property or `.url`
+member whose value comes from `createObjectURL`, rather than on the ternary shape `lint-silent-drops`
+records as considered and rejected. Minting an object URL to render bytes in-tab, which
+`components/image.tsx` and `components/voice-output.tsx` legitimately do, binds a variable rather than
+a `url` property and is never matched.
+
+**The `--self-test` earned its keep during development**, and the story is the argument for writing
+one: a first cut worked on blanked text and regex windows, and on `.tsx` an apostrophe in JSX prose
+opened a string literal that blanked a real defect out of the input and **reported the tree clean**.
+Three of its cases pin that failure dead.
+
+CI wiring is `pnpm --filter @kitn.ai/ui run lint:attachment-object-urls` in the required `test` job.
+Note that it excludes `apps/docs/public/kitn/`, a gitignored copy of built kit output, because
+including it made the walked-file count depend on whether a build had run.
+
+**A chain worth noticing:** #204's own writeup recorded, as a side finding it was not fixing, that the
+defective idiom survived in the prompt-input story. #206 then closed it. A guard that reports what it
+is not covering is how the next PR knows what to do.
+
+### 9.4 A docstring that described the URL its function had stopped emitting (#208)
+
+`fileToAttachmentLines` in `packages/ui/src/agent-tooling/mcp/tools/scaffold.ts` emits
+`FileReader.readAsDataURL` and stages a `data:` URI. Its docstring said the opposite **and recommended
+it**: `The object URL is what makes an image preview a real thumbnail rather than a generic icon; it
+is deliberately not revoked here, and the comment says why rather than leaving a silent leak.` Both
+halves were false. There is no object URL, so there is nothing
+to revoke, and the sentence taught a reader that the anti-pattern was a considered choice rather than
+the thing #186 removed.
+
+**`git log -L` dates the two ranges exactly, and that is the technique to reuse.** The function body
+was last written by #186 (`ad8de3b`); the docstring has not been touched since #185 (`476a16b`)
+introduced it, when it was still true. Re-derive it by running `git log -L <range>:<file>` over each
+range at `0a7f4b3^`. The body at that parent already carried an emitted comment reading
+`A data: URI, NOT URL.createObjectURL`, directly under a docstring recommending the object URL, which
+is the shape to look for: **the code was corrected and the prose above it was not.**
+
+The replacement names no media type, on the same rule #190 settled for the emitted note:
+`encodableMediaTypes()` is the set, and a docstring is a worse place for a second copy of it than the
+note is, not a better one. #210 is the same rule applied to the attribute (§9.5).
+
+This is the second time in that one file that code moved and its prose did not. Treat a comment above
+a recently rewritten function as unverified until read.
+
+### 9.5 The scaffolder steered users away from the types #190 made encodable (#210)
+
+The emitters in `mcp/tools/scaffold.ts` hardcoded `accept="image/*,application/pdf"`, one per
+framework target. **That was correct when images and PDFs were the whole capability set, and stopped
+being correct at #190**, which made `text/*`, `application/json`, `application/xml` and two YAML
+spellings encodable and published `encodableMediaTypes()` precisely so that nothing would have to
+restate the set. `ATTACHMENT_WIRE_NOTE`, three lines above, already told the reader "this list moves,
+read `encodableMediaTypes()`", over an attribute that had stopped moving.
+
+**The list did not go wrong in this repo. It went wrong in every app scaffolded from it**, which is
+the worst possible place for a copy of a moving fact to live, because nothing there can ever check it.
+All emitters now interpolate `ATTACHMENT_ACCEPT`, which reads `encodableMediaTypes()` from
+`wire/media-types.ts`, so the emitted attribute moves on its own the next time the declaration does.
+
+**Scope, stated so nobody over-reads the fix:** `accept` reaches the native `<input accept>` and
+nothing else. The OS dialog always offers an "All Files" escape, and `accept` does not apply to
+drag-and-drop at all, since `components/file-upload.tsx` hands `dataTransfer.files` straight to
+`onFilesAdded` with no filtering. So the defect was a scaffolded picker **steering users away from**
+file types the kit can now send, not blocking them. A scaffolded app that wants a filter that *holds*
+calls `resolveMediaPolicy().decide()` on what it staged, and the emitted note points at it.
+
+#### The guard has two halves, and the second is the interesting one
+
+Both live in `scaffold.test.ts`, next to the block that already forbids media types in the emitted
+note. Same rule, other half: the note must not *name* media types, the attribute must *derive* them.
+They fail at different times.
+
+- **The output check** requires every `Framework.options` entry, derived rather than hand-listed, to
+  emit `encodableMediaTypes().join(',')` verbatim, with an anti-vacuity check that each emitted at
+  least one `accept=`. It catches an attribute that disagrees with the declaration **today**.
+- **The source check** forbids any `accept="<media types>"` literal in `scaffold.ts` at all. It
+  catches a literal that **AGREES with the declaration today**, which the output check cannot see
+  until `ENCODABLE` next changes, one release too late.
+
+That second half was watched failing in the only way that proves it: hardcoding the
+**currently-correct** full set turned every output assertion **green** and reddened only the source
+check. **A literal that is correct today is the defect.** It stops moving when the capability set
+does, in code that ships to a user repo where nothing checks it.
+
+This generalises past `accept`, and it is the sharpest statement of the duplicated-fact rule this
+document has: correctness at the moment of writing is not evidence about a copied fact. Only the
+derivation is.
+
+### 9.6 The `accept` fix that was nearly shipped instead, and why omission is not the safe default
+
+Recorded as a correction, and it is the supervising session's own (§9.8 item 6). **The proposed fix
+was to emit no `accept` at all**, on the reasoning that an absent filter means the full capability
+set. Verify the two halves before reusing either:
+
+**True of `resolveMediaPolicy`.** With `accept === undefined` it pushes every `ENCODABLE` capability
+into the effective set, so the resolver's answer for an absent filter really is the whole capability
+set. Read the top of `resolveMediaPolicy` in `packages/ui/src/wire/media-types.ts`.
+
+**Irrelevant on the tags the scaffolder emits.** `<kai-file-upload>` in
+`packages/ui/src/elements/file-upload.tsx` passes `accept` straight to the Solid `<FileUpload>` in
+`packages/ui/src/components/file-upload.tsx`, which passes it straight to `<input type="file">`.
+Neither file imports `resolveMediaPolicy` or filters anything, and the drop path hands
+`dataTransfer.files` to `onFilesAdded` untouched. So on these tags an absent attribute is not the
+capability set, **it is WIDER than the capability set**: the dialog offers a `.zip`, the emitted
+`toAttachment` stages it, and the encoder throws on a file the picker itself volunteered, **in a
+starter with no `onAttachmentsRejected` path**, so it lands as an unhandled throw.
+
+Omission is a third behaviour matching neither layer. Deriving is the only form that tracks the
+declaration. The cost is a long attribute, which is real noise in a starter, but it is honest noise.
+
+**One refinement on that reasoning, since the contrast is easy to overstate.** `<kai-chat>` does
+resolve the policy in `elements/default-input.tsx`, but only when `accept` is **set**: with it absent
+the composer also does no filtering, and the code says why (`No accept means no filtering, which is
+what every existing consumer gets today. Opting in is what turns the picker into a guarantee`). So the
+real distinction is not "`<kai-chat>` filters and `<kai-file-upload>` does not". It is that **setting
+`accept` on `<kai-chat>` buys a JS filter that holds, while setting it on `<kai-file-upload>` buys
+only a picker hint.** That strengthens the case for deriving rather than omitting; it does not weaken
+it.
+
+#### A rejected follow-up, recorded so nobody revives it
+
+**Defaulting `<kai-file-upload accept>` to the capability set.** #190 considered exactly this question
+for the composer and shipped the other way. Its own words, from the PR body, under a heading reading
+**"Decisions left open for Rob"**:
+
+> **Should the composer default to the kit's capability set when `accept` is absent?** Shipped: **no
+> filter** — back-compat, zero behaviour change. Defaulting it on would structurally close the #186
+> class, at the cost of blocking attachments a consumer stages for their own non-model purpose.
+
+Two things to carry accurately rather than the gist. **The reasoning is exactly as summarised**: it
+would block attachments a consumer stages for non-model purposes. But **#190 did not "decide against"
+it**; it shipped the back-compatible behaviour and listed the question as open for Rob, alongside the
+text-file wrapper form and the list-vs-predicate call. And it was asked about `<kai-chat accept>`, a
+different element from `<kai-file-upload accept>`. The reasoning transfers. The status does not, and
+"#190 rejected this" would be the kind of hardened relay §8 is about.
+
+### 9.7 §6 corrections
+
+**Item 2, "Lint for silent drops, truncations and swallowed errors. NOW UNBLOCKED", is SHIPPED**, as
+#204. §9.2. It was built the way that item specified, as a lint rule rather than a one-time sweep, and
+the pairing that item predicted held: the rule has a seam by construction, is invokable with no build,
+and is wired into the required job. The broad "whether vs how" review of every existing prop remains
+**explicitly dropped and should not be revived**.
+
+**Item 1, the three chat apps, is the remaining `create-kai` work and is unchanged.**
+`packages/create-kai/src/frameworks.ts` still carries `solid`, `nextjs` and `tanstack-start` as
+`status: 'planned'`, for the reasons §4 gives, which are unaffected by anything in this section.
+
+**Item 3, re-measuring the timeout budget, is unchanged.**
+
+**The two things §6 records as deliberately left behind by #201 are both still true**, and both still
+should be: `examples/starters/angular/angular.json` still names the Angular project after our example,
+and `examples/starters/solid/index.html` still carries its own title. Neither is a defect. Do not
+"fix" either.
+
+**"The one open finding in that package is §5.9's" is half retired.** See §9.1: the four guards are
+out, the module-scope `main()` is not, and #203 chose the first as the fix rather than the second.
+
+### 9.8 What this section's commissioning narrative got wrong
+
+Same discipline as §8, and the same shape of result: the narrative was substantially right, and what
+failed was mostly the *status* of things rather than the *structure* of them.
+
+1. **"#203 completes the root cause §5.9 records as half-fixed."** The finding is closed and the
+   sentence stating it is not. `build.mjs` still ends `main().catch(...)` and still has no test
+   importing it; what changed is that no rule lives there any more. Reporting "the root cause is
+   closed" without that distinction is the same over-claim §8.8 catches one PR earlier, in the
+   opposite direction.
+2. **"the four guards still inside `build.mjs`."** #203 moved five. §5.9 had counted
+   `verifyEmittedContent` as orchestration rather than as a guard; #203 moved it with the rest.
+3. **#205 described as the `GITIGNORE_TEMPLATE_NAME` de-duplication.** It was two defects. It also
+   extracted the "a starter must have a `.gitignore`" rule out of `copyTemplate`, which is what
+   emptied the blind spot #203's anti-rot check had named as its one live instance. Its subject says
+   both: "one declaration **and a seam**".
+4. **"#206, #207" treated as one change covering three sites.** #206 is the Storybook story alone.
+   #207 is the docs demo, the published MDX, and the lint. #207 also found a fourth instance, the
+   props-table prose, and states that its own guard did not find it and would not.
+5. **The zero-match contrast stated as one tripwire each.** `lint-silent-drops` has three distinct
+   vacuity failures, not one. The contrast with the reintroduction guard is exactly as the narrative
+   framed it and is stated in §9.3.
+6. **The `accept` correction understated one half.** "`<kai-file-upload>` never resolves a policy" is
+   verified. But `<kai-chat>` does not filter either when `accept` is absent, so the distinction is
+   about what *setting* the prop buys on each tag, not about which tag filters. §9.6.
+7. **"#190 considered exactly that and decided against it."** The reasoning is verbatim correct. The
+   status is not: #190 shipped the back-compatible behaviour and filed the question under "Decisions
+   left open for Rob". §9.6.
+8. **The gap at #209 read as a merged PR.** It is the open release-please PR for 0.22.1. Nothing in
+   this section is published; `npm view @kitn.ai/ui dist-tags` still reads 0.22.0.
+
+Note the split, because it is the same one §8 measured: **six of these eight are status claims, and
+two are about the code.** The structural claims in the narrative held up almost entirely. The claims
+about what a PR *did*, what a decision *was*, and what shipped are the ones that needed checking.
+That ratio has now held across two consecutive handoffs. Check the status claims first.
 
 ---
 
