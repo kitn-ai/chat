@@ -9,6 +9,12 @@ import type { Integration } from '../types';
 // one of them throws on it, the other quietly sends it.
 import { toAnthropicMessages, toOpenAIMessages, WireEncodeError } from '../../wire/encode';
 import type { ChatMessage } from '../../elements/chat-types';
+// The declaration itself, so the accept guard below compares the emitted
+// attribute against the source of truth rather than against a copy of it.
+import { encodableMediaTypes } from '../../wire/media-types';
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 
 /**
  * scaffold composes a working chat surface from four axes:
@@ -3943,5 +3949,83 @@ describe('the emitted attachment note points at the capability, never restates i
     const text = (out.content as { type: string; text: string }[])[0].text;
     expect(text).toContain('encodableMediaTypes()');
     expect(text).toContain(ATTACHMENT_WIRE_NOTE[0]);
+  });
+});
+
+/**
+ * The other half of the same rule, and the half that was broken.
+ *
+ * The block above stops the emitted PROSE naming a media type. Seven emitters
+ * were meanwhile writing `accept="image/*,application/pdf"` into the markup, so
+ * the note said "this list moves, read `encodableMediaTypes()`" three lines above
+ * an attribute that had already stopped moving: #190 made `text/*`,
+ * `application/json`, `application/xml` and YAML encodable and the attribute
+ * still steered users to images and PDFs. A comment can point at the function; an
+ * attribute has to contain the answer, which is the only reason this half is a
+ * different check rather than the same regex.
+ *
+ * TWO ASSERTIONS, DELIBERATELY, because they fail at different times:
+ *   · the OUTPUT check catches an attribute that disagrees with the declaration
+ *     today;
+ *   · the SOURCE check catches a literal that AGREES with the declaration today,
+ *     which the output check cannot see until `ENCODABLE` next changes — i.e. at
+ *     exactly the moment the copy starts doing harm, one release too late.
+ *
+ * The framework axis is `Framework.options`, not a list written here. A
+ * hand-written list is how a target gets added and covered by nothing, which is
+ * the failure `loadCatalogAxes` in verify-scaffold-compiles.mjs was built to stop
+ * repeating.
+ */
+describe('the emitted accept attribute is DERIVED, never restated', () => {
+  const EXPECTED = encodableMediaTypes().join(',');
+
+  // Every `accept="..."` in one scaffold's output, however the framework spells
+  // the surrounding attribute.
+  const acceptsIn = (text: string): string[] =>
+    [...text.matchAll(/accept="([^"]*)"/g)].map((m) => m[1]);
+
+  const emit = async (framework: string): Promise<string> => {
+    const out = await scaffold.handler({
+      components: ['kai-chat', 'kai-file-upload', 'kai-attachments'],
+      integration: 'openai',
+      placement: 'full-page',
+      framework,
+    });
+    return (out.content as { type: string; text: string }[])[0].text;
+  };
+
+  it.each(Framework.options)('%s emits the kit capability set verbatim', async (framework) => {
+    const found = acceptsIn(await emit(framework));
+    // Anti-vacuity. A target that stopped emitting a picker at all would
+    // otherwise pass this by having nothing to disagree with -- and the
+    // attachment surface is requested explicitly above, so zero is a real
+    // regression rather than a shape this scaffold is allowed to have.
+    expect(found.length, `${framework} emitted no accept= at all`).toBeGreaterThan(0);
+    for (const value of found) expect(value).toBe(EXPECTED);
+  });
+
+  it('has no media-type literal in any emitter, even a currently-correct one', async () => {
+    // `fileURLToPath(import.meta.url)` on the STRING, then `join` -- the shape
+    // manifest.test.ts and slots.test.ts already use. Building a `new URL()`
+    // first hands node's `fileURLToPath` jsdom's URL implementation instead of
+    // its own, which throws "The URL must be of scheme file" under this project's
+    // jsdom environment.
+    const here = dirname(fileURLToPath(import.meta.url));
+    const file = join(here, 'tools', 'scaffold.ts');
+    const source = await readFile(file, 'utf8');
+    // Only `accept="..."` sites: `application/json` is a legitimate literal
+    // elsewhere in this file (every emitted route sets that Content-Type), and a
+    // blanket scan would fail on it forever.
+    const literals = [...source.matchAll(/accept="([^"]*)"/g)]
+      .map((m) => m[1])
+      .filter((v) => /\b[a-z]+\/[a-z0-9*.+-]+/i.test(v));
+    expect(
+      literals,
+      `an emitter hardcodes a media-type list in accept=: ${JSON.stringify(literals)}. ` +
+        'Interpolate ATTACHMENT_ACCEPT instead -- it reads encodableMediaTypes() from ' +
+        'wire/media-types.ts, which is the one declaration the composer and the encoders ' +
+        'already share. A literal that is correct today is the defect: it stops moving when ' +
+        'the capability set does, in code that ships to a user repo where nothing checks it.',
+    ).toEqual([]);
   });
 });
