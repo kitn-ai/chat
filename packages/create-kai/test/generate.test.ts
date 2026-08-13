@@ -11,7 +11,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { GITIGNORE_TEMPLATE_NAME, generate } from '../src/generate';
+import { GITIGNORE_TEMPLATE_NAME, generate, goLiveThread } from '../src/generate';
+import { FRAMEWORKS, getFramework } from '../src/frameworks';
 import type { ProjectPlan } from '../src/types';
 
 const TEMPLATE_ROOT = path.resolve(__dirname, '../dist/templates');
@@ -304,5 +305,150 @@ describe('generate (vue + full-screen + conversations + mock)', () => {
     }
     // vue-tsc, not tsc — the emitted build has to typecheck SFC templates.
     expect(pkg.scripts.build).toContain('vue-tsc');
+  });
+});
+
+/**
+ * Angular is the structurally odd one of the four `elements` cells: its
+ * index.html is at `src/index.html` rather than the project root, it has no
+ * vite.config at all (the builder is configured by `angular.json`), and its
+ * app file is a decorated class rather than a component template. So the values
+ * that differ from Vue's are asserted here rather than assumed to follow.
+ */
+describe('generate (angular + full-screen + conversations + mock)', () => {
+  let root: string;
+  let dir: string;
+  let files: string[];
+
+  beforeAll(async () => {
+    root = await mkdtemp(path.join(tmpdir(), 'create-kai-ng-'));
+    dir = path.join(root, 'ng-app');
+    const result = await generate(plan(dir, { frameworkId: 'angular', name: 'ng-app' }), {
+      templateRoot: TEMPLATE_ROOT,
+    });
+    files = result.files;
+  });
+
+  afterAll(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it('emits the composed workspace as Angular components', async () => {
+    expect(files).toEqual(
+      expect.arrayContaining([
+        'angular.json',
+        'src/app/app.ts',
+        'src/app/components/sidebar/sidebar.ts',
+        'src/app/components/thread-view/thread-view.ts',
+        'src/app/components/composer/composer.ts',
+        'src/app/state/chat.store.ts',
+      ]),
+    );
+  });
+
+  it('names the browser tab after the user app, at angular’s own index path', async () => {
+    // `src/index.html`, not the root `index.html` React and Vue patch. A patch
+    // row copied from those would target a file this template does not have.
+    const html = await readFile(path.join(dir, 'src/index.html'), 'utf8');
+    expect(html).toContain('<title>ng-app</title>');
+    expect(html).not.toContain('Angular example');
+  });
+
+  it('records angular paths in kai.json', async () => {
+    const kai = JSON.parse(await readFile(path.join(dir, 'kai.json'), 'utf8'));
+    expect(kai).toMatchObject({ framework: 'angular', registration: 'elements', gateway: 'mock' });
+    expect(kai.paths.app).toBe('src/app/app.ts');
+    expect(kai.paths.css).toBe('src/styles.css');
+  });
+
+  it('points the README at the expression this project actually has', async () => {
+    const readme = await readFile(path.join(dir, 'README.md'), 'utf8');
+    expect(readme).toContain('`src/app/app.ts`');
+    expect(readme).not.toContain('src/App.tsx');
+    // Angular reads its thread off the injected store, through a signal call.
+    expect(readme).toContain('toOpenAIMessages(this.chat.messages())');
+  });
+
+  it('emits a package.json a user can install', async () => {
+    const pkg = JSON.parse(await readFile(path.join(dir, 'package.json'), 'utf8'));
+    expect(pkg.name).toBe('ng-app');
+    expect(pkg.private).toBeUndefined();
+    expect(pkg.dependencies['@kitn.ai/ui']).toBe('^9.9.9');
+    expect(pkg.dependencies['@angular/core']).toBeDefined();
+    for (const spec of Object.values(pkg.dependencies as Record<string, string>)) {
+      expect(spec).not.toMatch(/^(?:workspace:|file:\.\.|link:)/);
+    }
+    expect(pkg.scripts.build).toContain('ng build');
+  });
+
+  it('ships the .gitignore back under its real name', async () => {
+    expect(files).toContain('.gitignore');
+    expect(files).not.toContain(GITIGNORE_TEMPLATE_NAME);
+  });
+});
+
+/**
+ * The cross-framework version of the `paths` check, over the EMITTED project
+ * rather than the template.
+ *
+ * `kai.json` hands these paths to a v2 `add`, so a wrong one is a command that
+ * writes to a file that is not there — reported against the user's project
+ * rather than against the table that was wrong. `scripts/build.mjs` gates the
+ * same invariant, but only at build time and only for whoever runs the build;
+ * this puts it in the suite, and it widens by itself the moment another
+ * framework flips to `ready`.
+ */
+describe('every ready framework declares paths its emitted project has', () => {
+  for (const framework of FRAMEWORKS.filter((f) => f.status === 'ready')) {
+    it(`${framework.id}: entry, app, components and css all exist`, async () => {
+      const root = await mkdtemp(path.join(tmpdir(), `create-kai-paths-${framework.id}-`));
+      try {
+        const dir = path.join(root, 'paths-app');
+        await generate(plan(dir, { frameworkId: framework.id, name: 'paths-app' }), {
+          templateRoot: TEMPLATE_ROOT,
+        });
+        for (const key of ['entry', 'app', 'components', 'css'] as const) {
+          expect(
+            existsSync(path.join(dir, framework.paths[key])),
+            `${framework.id} declares paths.${key}='${framework.paths[key]}', which the emitted project does not have`,
+          ).toBe(true);
+        }
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    });
+  }
+});
+
+/**
+ * A focused control on the go-live extraction, because the emitted README's
+ * snippet is the one piece of this CLI's output a user pastes verbatim.
+ */
+describe('goLiveThread', () => {
+  const fw = getFramework('angular')!;
+
+  it('keeps a call expression balanced', () => {
+    // The regression: `[^)]+` returned `this.chat.messages(` here, and the
+    // README emitted an unclosed call.
+    expect(goLiveThread('toOpenAIMessages(this.chat.messages())', fw)).toBe(
+      'this.chat.messages()',
+    );
+  });
+
+  it('still reads the paren-free expressions react and vue use', () => {
+    expect(goLiveThread('toOpenAIMessages(chat.messages)', fw)).toBe('chat.messages');
+    expect(goLiveThread('toOpenAIMessages(messages.value)', fw)).toBe('messages.value');
+  });
+
+  it('handles nesting rather than stopping at the first close', () => {
+    expect(goLiveThread('toOpenAIMessages(sel(get(state)))', fw)).toBe('sel(get(state))');
+  });
+
+  it('throws rather than inventing one when the call never closes', () => {
+    expect(() => goLiveThread('toOpenAIMessages(this.chat.messages(', fw)).toThrow(/balanced/);
+  });
+
+  it('throws when the app file carries no such call', () => {
+    expect(() => goLiveThread('const x = 1;', fw)).toThrow(/balanced/);
   });
 });
