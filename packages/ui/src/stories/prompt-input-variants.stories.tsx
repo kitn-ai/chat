@@ -304,28 +304,54 @@ import { ArrowUp, Paperclip } from 'lucide-solid';`,
   ),
 };
 
+/** The staged file as a `data:` URI — the same thing `<kai-prompt-input>` does
+ *  for you internally (see `elements/default-input.tsx`).
+ *
+ *  NOT `URL.createObjectURL`. An object URL resolves only inside the tab that
+ *  minted it, so it renders a perfect thumbnail here and is meaningless to
+ *  anything downstream — `toOpenAIMessages` / `toAnthropicMessages` refuse it
+ *  with a written reason. A data URI previews identically and is the one form
+ *  both providers actually take. */
+const readAsDataUrl = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error(`Could not read ${file.name}`));
+    reader.readAsDataURL(file);
+  });
+
 export const WithFileAttachments: Story = {
   name: 'With File Attachments',
   render: () => {
     const [value, setValue] = createSignal('');
+    // Illustrative seeds: they populate the previews so the story has something
+    // to show before you attach anything. The remote one carries `mediaType`,
+    // which is what makes an https URL encodable; the pdf has no `url` at all
+    // and is a preview only — files staged by `addFiles` below get the real
+    // treatment.
     const [attachments, setAttachments] = createSignal<AttachmentData[]>([
       { id: 'a1', type: 'file', filename: 'architecture.pdf', mediaType: 'application/pdf' },
       { id: 'a2', type: 'file', filename: 'screenshot.png', mediaType: 'image/png', url: 'https://placehold.co/120x80/e2e8f0/94a3b8?text=PNG' },
     ]);
     let fileInput: HTMLInputElement | undefined;
 
-    const addFiles = (files: FileList | null) => {
+    const addFiles = async (files: FileList | null) => {
       if (!files?.length) return;
-      setAttachments((prev) => [
-        ...prev,
-        ...Array.from(files).map((f) => ({
+      // Snapshot synchronously, before the first await: the caller clears the
+      // input immediately after calling this, which empties the live FileList.
+      const picked = Array.from(files);
+      const staged = await Promise.all(
+        picked.map(async (f) => ({
           id: crypto.randomUUID(),
           type: 'file' as const,
           filename: f.name,
           mediaType: f.type || undefined,
-          url: f.type.startsWith('image/') ? URL.createObjectURL(f) : undefined,
+          // EVERY file, not just images. A document used to get no `url` at all,
+          // which left it unencodable for exactly the same reason a blob: URL is.
+          url: await readAsDataUrl(f),
         })),
-      ]);
+      );
+      setAttachments((prev) => [...prev, ...staged]);
     };
 
     const removeAttachment = (id: string) =>
@@ -344,7 +370,13 @@ export const WithFileAttachments: Story = {
           type="file"
           multiple
           class="hidden"
-          onChange={(e) => { addFiles(e.currentTarget.files); e.currentTarget.value = ''; }}
+          onChange={(e) => {
+            // Reading is async, so this is deliberately not awaited. `addFiles`
+            // captures the FileList synchronously, before its first await, so
+            // clearing the input below cannot race it.
+            void addFiles(e.currentTarget.files);
+            e.currentTarget.value = ''; // allow re-picking the same file
+          }}
         />
         <PromptInput value={value()} onValueChange={setValue} onSubmit={handleSubmit}>
           <Show when={attachments().length > 0}>
@@ -392,12 +424,55 @@ export const WithFileAttachments: Story = {
   ...src(
     `const [attachments, setAttachments] = createSignal<AttachmentData[]>([
   { id: 'a1', type: 'file', filename: 'architecture.pdf', mediaType: 'application/pdf' },
-  { id: 'a2', type: 'file', filename: 'screenshot.png', mediaType: 'image/png', url: '/screenshot.png' },
+  { id: 'a2', type: 'file', filename: 'screenshot.png', mediaType: 'image/png', url: 'https://example.com/screenshot.png' },
 ]);
+
+// Stage the file as a data: URI, NOT URL.createObjectURL. An object URL resolves
+// only inside the tab that minted it: it previews perfectly and is meaningless
+// to a model, and toOpenAIMessages / toAnthropicMessages refuse it outright.
+// Do it for EVERY file, not just images — a document with no url is unencodable
+// for exactly the same reason.
+const readAsDataUrl = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+
+const addFiles = async (files: FileList | null) => {
+  if (!files?.length) return;
+  // Snapshot before the first await: clearing the input empties the FileList.
+  const picked = Array.from(files);
+  const staged = await Promise.all(
+    picked.map(async (f) => ({
+      id: crypto.randomUUID(),
+      type: 'file' as const,
+      filename: f.name,
+      mediaType: f.type || undefined,
+      url: await readAsDataUrl(f),
+    })),
+  );
+  setAttachments((prev) => [...prev, ...staged]);
+};
 
 const removeAttachment = (id: string) =>
   setAttachments((prev) => prev.filter((a) => a.id !== id));
 
+let fileInput: HTMLInputElement | undefined;
+
+<input
+  ref={fileInput}
+  type="file"
+  multiple
+  class="hidden"
+  onChange={(e) => {
+    // Not awaited: addFiles captures the FileList before its first await, so
+    // clearing the input below cannot race it.
+    void addFiles(e.currentTarget.files);
+    e.currentTarget.value = ''; // allow re-picking the same file
+  }}
+/>
 <PromptInput value={value()} onValueChange={setValue} onSubmit={send}>
   <Show when={attachments().length > 0}>
     <div class="px-3 pt-3">
@@ -416,7 +491,7 @@ const removeAttachment = (id: string) =>
   </Show>
   <PromptInputTextarea placeholder="Describe or ask about the attached files..." class="pt-3 pl-4" />
   <PromptInputActions class="justify-between">
-    <Button variant="ghost" size="icon-sm" aria-label="Attach file"><Paperclip class="size-4 text-muted-foreground" /></Button>
+    <Button variant="ghost" size="icon-sm" aria-label="Attach file" onClick={() => fileInput?.click()}><Paperclip class="size-4 text-muted-foreground" /></Button>
     <Button variant="default" size="icon-sm" class="rounded-full" disabled={!value() && attachments().length === 0} aria-label="Send message">
       <ArrowUp class="size-4" />
     </Button>
