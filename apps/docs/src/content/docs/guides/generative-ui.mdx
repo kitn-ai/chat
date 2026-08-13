@@ -24,16 +24,19 @@ One **envelope** is what the agent *sends* (addressed data, not UI); one **card*
 
 ## The Card Contract
 
-Everything the agent sends is a `CardEnvelope`:
+Everything the agent sends is a `CardEnvelope`. The kit exports the type, so import it
+rather than keeping a copy — a copy drifts the moment the contract gains a field:
 
 ```ts
-interface CardEnvelope {
-  type: string;   // which card — confirm | choice | form | tasks | link | embed | artifact
-  id: string;     // stable id; every event correlates back to it
-  data: unknown;  // conforms to that type's JSON Schema
-  title?: string; // optional card-chrome heading
-  resolution?: CardResolution; // set once resolved → renders the read-only view
-}
+import type { CardEnvelope } from '@kitn.ai/ui';
+
+const envelope: CardEnvelope = {
+  type: 'confirm',                // which card — confirm | choice | form | tasks | link | embed | artifact
+  id: 'deploy-prod',              // stable id; every event correlates back to it
+  data: { target: 'production' }, // conforms to that type's JSON Schema
+  title: 'Deploy to production?', // optional card-chrome heading
+  resolution: { kind: 'action', action: 'confirm' }, // set once resolved → renders the read-only view
+};
 ```
 
 The built-in types and the element each renders:

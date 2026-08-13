@@ -167,19 +167,22 @@ createCardBridge({
 
 ## CardEnvelope shape
 
+The kit exports this type. Import it instead of restating it:
+
 ```ts
-interface CardEnvelope {
-  type: string;          // maps to a renderer type on the provider
-  id: string;            // stable across re-renders — correlates every CardEvent
-  title?: string;        // optional heading
-  data: unknown;         // passed verbatim to the renderer's mount()
-  resolution?: {         // set to freeze the card in a resolved state
-    kind: 'action';  action: string; payload?: unknown; at?: string;
-  } | {
-    kind: 'submit';  data: unknown; at?: string;
-  };
-}
+import type { CardEnvelope } from '@kitn.ai/ui';
+
+const envelope: CardEnvelope = {
+  type: 'booking',                // maps to a renderer type on the provider
+  id: 'bk_1',                     // stable across re-renders — correlates every CardEvent
+  title: 'Confirm your booking',  // optional heading
+  data: { slot: '2026-01-05' },   // passed verbatim to the renderer's mount()
+  resolution: { kind: 'submit', data: { slot: '2026-01-05' } }, // freezes the card resolved
+};
 ```
+
+`resolution` is a `CardResolution`, which has **four** kinds — `action`, `submit`,
+`dismissed` and `expired`, each with an optional `at` timestamp.
 
 ## CardEvent kinds
 
