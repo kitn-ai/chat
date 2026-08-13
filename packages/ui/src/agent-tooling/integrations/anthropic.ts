@@ -35,10 +35,19 @@ const anthropic: Integration = {
   // No per-framework templates: the handler below is web-standard, so the
   // scaffolder wraps it in whatever the target framework routes with.
   routeTemplates: {},
-  webRoute: `/** One Anthropic content block. Open union on the wire; these are the four the
+  webRoute: `/** Where an image or document's bytes come from. Anthropic takes both forms
+ *  for both block types, which is why this route has no gap where the
+ *  OpenAI-shaped one does: a chat-completions \`file\` part is base64-only. */
+type AnthropicSource =
+  | { type: 'base64'; media_type: string; data: string }
+  | { type: 'url'; url: string };
+
+/** One Anthropic content block. Open union on the wire; these are the ones the
  *  scaffold's own thread can produce. */
 type AnthropicBlock =
   | { type: 'text'; text: string }
+  | { type: 'image'; source: AnthropicSource }
+  | { type: 'document'; source: AnthropicSource }
   | { type: 'tool_use'; id: string; name: string; input: unknown }
   | { type: 'tool_result'; tool_use_id: string; content: string };
 
@@ -121,12 +130,24 @@ function toAnthropicBody(messages: ChatRequestBody['messages']): {
     switch (message.role) {
       case 'system': {
         // TOP-LEVEL, not a message. Several system turns concatenate.
-        const text = message.content ?? '';
+        const text = wireText(message.content);
         system = system === undefined ? text : \`\${system}\\n\\n\${text}\`;
         break;
       }
       case 'user': {
-        if (message.content) pushUser([{ type: 'text', text: message.content }]);
+        // Attachments ride HERE, as image and document blocks beside the text,
+        // in the order the thread authored them.
+        const blocks = wireParts(message.content).map((part): AnthropicBlock => {
+          if (part.kind === 'text') return { type: 'text', text: part.text };
+          const source: AnthropicSource =
+            part.source.type === 'data'
+              ? { type: 'base64', media_type: part.mediaType, data: part.source.data }
+              : { type: 'url', url: part.source.url };
+          // \`image/png\` and the bare top-level \`image\` both mean an image; a URL
+          // source reports only the segment because the wire carries no more.
+          return part.mediaType.startsWith('image') ? { type: 'image', source } : { type: 'document', source };
+        });
+        if (blocks.length > 0) pushUser(blocks);
         break;
       }
       case 'tool': {
@@ -135,14 +156,15 @@ function toAnthropicBody(messages: ChatRequestBody['messages']): {
           {
             type: 'tool_result',
             tool_use_id: message.tool_call_id ?? '',
-            content: message.content ?? '',
+            content: wireText(message.content),
           },
         ]);
         break;
       }
       case 'assistant': {
         const content: AnthropicBlock[] = [];
-        if (message.content) content.push({ type: 'text', text: message.content });
+        const text = wireText(message.content);
+        if (text) content.push({ type: 'text', text });
         for (const call of message.tool_calls ?? []) {
           content.push({
             type: 'tool_use',

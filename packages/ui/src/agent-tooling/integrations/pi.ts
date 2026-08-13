@@ -23,7 +23,25 @@ app.use(express.json());
 // POST /api/chat: bridge a Pi RPC session to the browser as SSE.
 app.post('/api/chat', (req, res) => {
   const { messages } = req.body as { messages: OpenAIWireMessage[] };
-  const prompt = messages.at(-1)?.content ?? '';
+  const last = messages.at(-1)?.content;
+  // \`content\` is a plain string until the turn carries an attachment, at which
+  // point it is an ARRAY of content parts. Pi's RPC mode takes a TEXT prompt and
+  // has no channel for a file, so an attachment is REFUSED here. Passing the
+  // array straight through would JSON.stringify an object graph into the prompt
+  // — no type error, no crash, just a model reading serialised noise.
+  if (Array.isArray(last) && last.some((part) => part.type !== 'text')) {
+    res.status(400).json({
+      error: {
+        message:
+          'This Pi bridge forwards a text prompt only and has no channel for an attachment. Extract the file content into the message text, or send it through a tool.',
+      },
+    });
+    return;
+  }
+  const prompt =
+    typeof last === 'string'
+      ? last
+      : (last ?? []).map((part) => (part.type === 'text' ? part.text : '')).join('');
 
   // Headers before the first frame: without text/event-stream the browser
   // buffers the body and readOpenAIStream never sees a frame.

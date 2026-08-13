@@ -10,7 +10,7 @@ const pydanticAi: Integration = {
   routeTemplates: {
     fastapi: `# main.py
 import json
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -23,15 +23,41 @@ app.add_middleware(
     CORSMiddleware, allow_origins=['*'], allow_methods=['*'], allow_headers=['*']
 )
 
+class ContentPart(BaseModel):
+    type: str
+    text: str | None = None
+
 class Message(BaseModel):
     role: str
-    content: str
+    # A plain string until the turn carries an attachment, at which point the
+    # wire sends an ARRAY of content parts. Declaring this \`str\` alone made a
+    # message with a file a 422 that named pydantic rather than the cause.
+    content: str | list[ContentPart] | None = None
 
 class ChatRequest(BaseModel):
     messages: list[Message]
 
+def prompt_text(message: Message) -> str:
+    """The text of a turn, refusing what this route cannot carry.
+
+    agent.run_stream() takes a TEXT prompt, so an image or a document has no
+    channel here. Dropping it would send the model a turn that silently lost the
+    user's file; a 400 that names the reason is the honest failure.
+    """
+    if message.content is None:
+        return ''
+    if isinstance(message.content, str):
+        return message.content
+    if any(part.type != 'text' for part in message.content):
+        raise HTTPException(
+            status_code=400,
+            detail='This route forwards a text prompt only and has no channel for an attachment. '
+            'Extract the file content into the message text, or send it through a tool.',
+        )
+    return ''.join(part.text or '' for part in message.content)
+
 async def openai_sse(messages: list[Message]):
-    prompt = messages[-1].content if messages else ''
+    prompt = prompt_text(messages[-1]) if messages else ''
     async with agent.run_stream(prompt) as result:
         async for delta in result.stream_text(delta=True):
             chunk = {'choices': [{'delta': {'content': delta}}]}

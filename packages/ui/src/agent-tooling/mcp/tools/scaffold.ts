@@ -1121,11 +1121,14 @@ export function attachmentEmitPlan(components: readonly string[]): { staging: bo
  */
 const ATTACHMENT_WIRE_NOTE = [
   '// The staged files ride along on the message as `file` parts, so they RENDER',
-  '// in the thread. They are NOT sent to the model: toOpenAIMessages /',
-  '// toAnthropicMessages do not encode `file` parts (a stated v1 limit of',
-  '// @kitn.ai/ui/wire), so nothing here reaches the provider. To send one, encode',
-  '// it into your OWN route request — every provider spells file content',
-  '// differently (base64 image_url, a files API id, a document block).',
+  '// in the thread AND reach the model: toOpenAIMessages / toAnthropicMessages',
+  '// encode them (image_url + file_data on the OpenAI wire, image + document',
+  '// blocks on the Anthropic one).',
+  '// Which is why toAttachment below stages a `data:` URI rather than a',
+  '// URL.createObjectURL blob: an object URL previews fine and resolves ONLY',
+  '// inside this tab, so the encoder rejects it rather than send an address the',
+  '// provider cannot fetch. Images and PDFs encode today; any other media type',
+  '// throws at encode time instead of going missing in the request.',
 ];
 
 /**
@@ -1146,7 +1149,17 @@ const ATTACHMENT_WIRE_NOTE = [
 function fileToAttachmentLines(pad: string, typeName: string): string[] {
   return [
     `${pad}/** <kai-file-upload> hands over File objects; <kai-attachments> renders these. */`,
-    `${pad}function toAttachment(file: File): ${typeName} {`,
+    `${pad}async function toAttachment(file: File): Promise<${typeName}> {`,
+    `${pad}  // A data: URI, NOT URL.createObjectURL. Both preview identically, but an`,
+    `${pad}  // object URL resolves only inside this tab, so it can never reach a model —`,
+    `${pad}  // the encoder rejects one rather than send an address the provider cannot`,
+    `${pad}  // fetch. Reading is async, which is why this function is.`,
+    `${pad}  const url = await new Promise<string>((resolve, reject) => {`,
+    `${pad}    const reader = new FileReader();`,
+    `${pad}    reader.onload = () => resolve(String(reader.result));`,
+    `${pad}    reader.onerror = () => reject(reader.error ?? new Error('Could not read ' + file.name));`,
+    `${pad}    reader.readAsDataURL(file);`,
+    `${pad}  });`,
     `${pad}  return {`,
     `${pad}    id: crypto.randomUUID(),`,
     `${pad}    type: 'file',`,
@@ -1154,10 +1167,7 @@ function fileToAttachmentLines(pad: string, typeName: string): string[] {
     `${pad}    // '' for an extensionless file, and an empty mediaType would render as a`,
     `${pad}    // blank detail line rather than falling back to the generic icon.`,
     `${pad}    mediaType: file.type || undefined,`,
-    `${pad}    // The object URL is what makes an image preview an actual thumbnail. It`,
-    `${pad}    // lives until the document unloads — revoke it yourself if you drop`,
-    `${pad}    // long threads while the page stays open.`,
-    `${pad}    url: URL.createObjectURL(file),`,
+    `${pad}    url,`,
     `${pad}  };`,
     `${pad}}`,
   ];
@@ -1487,9 +1497,11 @@ function htmlModule(ctx: RenderCtx, components: readonly string[]): string {
         `  // A NEW array per write — same contract as chat.messages.`,
         `  const showStaged = () => { attachmentsEl.items = [...staged]; };`,
         ``,
-        `  uploadEl.addEventListener('kai-files-added', (event: Event) => {`,
+        `  uploadEl.addEventListener('kai-files-added', async (event: Event) => {`,
         `    const { files } = (event as CustomEvent<{ files: File[] }>).detail;`,
-        `    staged = [...staged, ...files.map(toAttachment)];`,
+        `    // Read every file BEFORE appending: a per-file append would order the`,
+        `    // list by whichever finished reading first.`,
+        `    staged = [...staged, ...(await Promise.all(files.map(toAttachment)))];`,
         `    showStaged();`,
         `  });`,
         `  attachmentsEl.addEventListener('kai-remove', (event: Event) => {`,
@@ -1799,8 +1811,12 @@ function renderJsx(components: readonly string[], ctx: RenderCtx, framework: str
   const attachmentStateInit = attachments
     ? [
         `  const [staged, setStaged] = useState<AttachmentData[]>([]);`,
-        `  const onFilesAdded = (e: CustomEvent<{ files: File[] }>) =>`,
-        `    setStaged((prev) => [...prev, ...e.detail.files.map(toAttachment)]);`,
+        `  const onFilesAdded = async (e: CustomEvent<{ files: File[] }>) => {`,
+        `    // Read every file BEFORE appending: a per-file append would order the`,
+        `    // list by whichever finished reading first.`,
+        `    const added = await Promise.all(e.detail.files.map(toAttachment));`,
+        `    setStaged((prev) => [...prev, ...added]);`,
+        `  };`,
         `  const onRemoveAttachment = (e: CustomEvent<{ id: string }>) =>`,
         `    setStaged((prev) => prev.filter((a) => a.id !== e.detail.id));`,
       ].join('\n')
@@ -2151,9 +2167,12 @@ function renderVue(components: readonly string[], ctx: RenderCtx): string {
         ``,
         ...fileToAttachmentLines('', 'AttachmentData'),
         ``,
-        `function onFilesAdded(event: Event) {`,
+        `async function onFilesAdded(event: Event) {`,
         `  const { files } = (event as CustomEvent<{ files: File[] }>).detail;`,
-        `  staged.value = [...staged.value, ...files.map(toAttachment)];`,
+        `  // Read every file BEFORE appending: a per-file append would order the`,
+        `  // list by whichever finished reading first.`,
+        `  const added = await Promise.all(files.map(toAttachment));`,
+        `  staged.value = [...staged.value, ...added];`,
         `}`,
         `function onRemoveAttachment(event: Event) {`,
         `  const { id } = (event as CustomEvent<{ id: string }>).detail;`,
@@ -2474,8 +2493,11 @@ function renderSvelte(components: readonly string[], ctx: RenderCtx): string {
         `  $effect(() => { if (attachmentsEl && defined) { attachmentsEl.items = staged; } });`,
         ``,
         ...fileToAttachmentLines('  ', 'AttachmentData'),
-        `  function onFilesAdded(e: CustomEvent<{ files: File[] }>) {`,
-        `    staged = [...staged, ...e.detail.files.map(toAttachment)];`,
+        `  async function onFilesAdded(e: CustomEvent<{ files: File[] }>) {`,
+        `    // Read every file BEFORE appending: a per-file append would order the`,
+        `    // list by whichever finished reading first.`,
+        `    const added = await Promise.all(e.detail.files.map(toAttachment));`,
+        `    staged = [...staged, ...added];`,
         `  }`,
         `  function onRemoveAttachment(e: CustomEvent<{ id: string }>) {`,
         `    staged = staged.filter((a) => a.id !== e.detail.id);`,
@@ -2685,8 +2707,12 @@ function renderTanstackStart(components: readonly string[], ctx: RenderCtx): str
   const attachmentStateInit = attachments
     ? [
         `  const [staged, setStaged] = useState<AttachmentData[]>([]);`,
-        `  const onFilesAdded = (e: CustomEvent<{ files: File[] }>) =>`,
-        `    setStaged((prev) => [...prev, ...e.detail.files.map(toAttachment)]);`,
+        `  const onFilesAdded = async (e: CustomEvent<{ files: File[] }>) => {`,
+        `    // Read every file BEFORE appending: a per-file append would order the`,
+        `    // list by whichever finished reading first.`,
+        `    const added = await Promise.all(e.detail.files.map(toAttachment));`,
+        `    setStaged((prev) => [...prev, ...added]);`,
+        `  };`,
         `  const onRemoveAttachment = (e: CustomEvent<{ id: string }>) =>`,
         `    setStaged((prev) => prev.filter((a) => a.id !== e.detail.id));`,
       ].join('\n')
@@ -2961,9 +2987,12 @@ function renderAngular(components: readonly string[], ctx: RenderCtx): string {
         ``,
         `  // Same Event-not-CustomEvent rule as onSubmit below: strictTemplates types`,
         `  // $event on an unknown custom-element event as a plain Event.`,
-        `  onFilesAdded(event: Event) {`,
+        `  async onFilesAdded(event: Event) {`,
         `    const { files } = (event as CustomEvent<{ files: File[] }>).detail;`,
-        `    this.staged.set([...this.staged(), ...files.map(toAttachment)]);`,
+        `    // Read every file BEFORE appending: a per-file append would order the`,
+        `    // list by whichever finished reading first.`,
+        `    const added = await Promise.all(files.map(toAttachment));`,
+        `    this.staged.set([...this.staged(), ...added]);`,
         `  }`,
         `  onRemoveAttachment(event: Event) {`,
         `    const { id } = (event as CustomEvent<{ id: string }>).detail;`,
@@ -3441,7 +3470,12 @@ function renderSolid(components: readonly string[], ctx: RenderCtx): string {
         ? [
             `      {/* Drop files here to stage them for the NEXT message. */}`,
             `      <div class="flex flex-col gap-2 pb-3">`,
-            `        <FileUpload accept="image/*,application/pdf" onFilesAdded={(files) => setStaged([...staged(), ...files.map(toAttachment)])}>`,
+            `        {/* Read every file BEFORE appending: a per-file append would order`,
+            `            the list by whichever finished reading first. */}`,
+            `        <FileUpload`,
+            `          accept="image/*,application/pdf"`,
+            `          onFilesAdded={async (files) => setStaged([...staged(), ...(await Promise.all(files.map(toAttachment)))])}`,
+            `        >`,
             `          <FileUploadTrigger class="border-border text-muted-foreground w-full rounded-xl border border-dashed px-4 py-3 text-center text-sm">`,
             `            Click or drop files to attach`,
             `          </FileUploadTrigger>`,
@@ -4397,6 +4431,85 @@ const CHAT_REQUEST_BODY_DECL = [
 ];
 
 /**
+ * Attachments, on the way IN.
+ *
+ * A user turn's `content` is a plain string until it carries a file, at which
+ * point `toOpenAIMessages` emits the ARRAY form. Every route that re-maps
+ * messages into some other SDK's shape has to handle both, and the three that do
+ * (anthropic, mastra, vercel-ai-sdk) were each written when only the string form
+ * existed — so each one would have quietly dropped the attachment while still
+ * compiling, which is the same defect the encoder was just fixed for.
+ *
+ * These two helpers are the shared half of that: flattening the wire shape is
+ * identical everywhere, while the target shape is not, so each route maps
+ * `WirePart[]` into its own SDK itself rather than inheriting a lowest common
+ * denominator.
+ *
+ * Only injected into routes that actually call them — the eight pass-through
+ * integrations forward `messages` untouched and need none of this, and an unused
+ * declaration is a hard error under the gate's `--noUnusedLocals`.
+ */
+const CONTENT_PARTS_DECL = [
+  `/** Where an attachment's bytes are: inline base64, or an address the PROVIDER`,
+  ` *  fetches. Never both. */`,
+  `type WireFileSource = { type: 'data'; data: string } | { type: 'url'; url: string };`,
+  ``,
+  `/** One piece of a turn, with the string and array content forms flattened into`,
+  ` *  a single shape. */`,
+  `type WirePart =`,
+  `  | { kind: 'text'; text: string }`,
+  `  | { kind: 'file'; mediaType: string; filename?: string; source: WireFileSource };`,
+  ``,
+  `const DATA_URI = /^data:([^;,]+);base64,([\\s\\S]*)$/;`,
+  ``,
+  `/**`,
+  ` * Flatten a wire message's content into parts.`,
+  ` *`,
+  ` * An image sent by URL has no media type here — \`image_url\` carries only the`,
+  ` * address — so it reports the top-level segment \`'image'\`, which is all a URL`,
+  ` * source needs. Only images can reach that branch: the kit refuses to encode a`,
+  ` * remote PDF rather than guess at one.`,
+  ` */`,
+  `function wireParts(content: OpenAIWireMessage['content']): WirePart[] {`,
+  `  if (content == null) return [];`,
+  `  if (typeof content === 'string') return content === '' ? [] : [{ kind: 'text', text: content }];`,
+  `  return content.map((part): WirePart => {`,
+  `    if (part.type === 'text') return { kind: 'text', text: part.text };`,
+  `    if (part.type === 'image_url') {`,
+  `      const asData = DATA_URI.exec(part.image_url.url);`,
+  `      return asData`,
+  `        ? { kind: 'file', mediaType: asData[1], source: { type: 'data', data: asData[2] } }`,
+  `        : { kind: 'file', mediaType: 'image', source: { type: 'url', url: part.image_url.url } };`,
+  `    }`,
+  `    const asData = DATA_URI.exec(part.file.file_data);`,
+  `    if (!asData) {`,
+  `      // LOUD on purpose. \`file_data\` is a data URI on this wire; anything else`,
+  `      // cannot be turned into bytes without fetching it, and forwarding a turn`,
+  `      // with the attachment quietly missing is the bug this whole path exists`,
+  `      // to prevent.`,
+  `      throw new Error(`,
+  `        'Unsupported file content part: file_data must be a data: URI of the form data:<media type>;base64,<data>.',`,
+  `      );`,
+  `    }`,
+  `    return {`,
+  `      kind: 'file',`,
+  `      mediaType: asData[1],`,
+  `      filename: part.file.filename,`,
+  `      source: { type: 'data', data: asData[2] },`,
+  `    };`,
+  `  });`,
+  `}`,
+  ``,
+  `/** Just the text of a turn. System, assistant and tool messages are text-only`,
+  ` *  on this wire, so this collapses the array form for them. */`,
+  `function wireText(content: OpenAIWireMessage['content']): string {`,
+  `  return wireParts(content)`,
+  `    .map((p) => (p.kind === 'text' ? p.text : ''))`,
+  `    .join('');`,
+  `}`,
+];
+
+/**
  * Slot the body type in just above `chatHandler`.
  *
  * Not at the very top: a fragment may open with its own imports (langgraph,
@@ -4406,11 +4519,16 @@ const CHAT_REQUEST_BODY_DECL = [
  * written it.
  */
 function withChatRequestBody(fragment: string): string {
+  // The content helpers ride along only where the route calls them; see
+  // CONTENT_PARTS_DECL for why an unconditional injection would not compile.
+  const decl = /\bwire(?:Parts|Text)\s*\(/.test(fragment)
+    ? [...CHAT_REQUEST_BODY_DECL, ``, ...CONTENT_PARTS_DECL]
+    : CHAT_REQUEST_BODY_DECL;
   const lines = fragment.split('\n');
   let at = lines.findIndex((l) => /^(?:export\s+)?async function chatHandler\b/.test(l));
-  if (at < 0) return [...CHAT_REQUEST_BODY_DECL, ``, ...lines].join('\n');
+  if (at < 0) return [...decl, ``, ...lines].join('\n');
   while (at > 0 && /^\s*(?:\/\/|\/\*|\*)/.test(lines[at - 1])) at -= 1;
-  return [...lines.slice(0, at), ...CHAT_REQUEST_BODY_DECL, ``, ...lines.slice(at)].join('\n');
+  return [...lines.slice(0, at), ...decl, ``, ...lines.slice(at)].join('\n');
 }
 
 /** Wrap an integration's portable handler in the target framework's declaration. */

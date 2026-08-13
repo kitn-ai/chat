@@ -1401,6 +1401,53 @@ async function assertRoutesAreSurfaceIndependent(scaffold, reference) {
 }
 
 /**
+ * How the Python route CONSUMES `content`, asserted over the real AST.
+ *
+ * This exists because the TypeScript routes have a compiler watching them and
+ * this one does not, by construction. When `toOpenAIMessages` started emitting
+ * the ARRAY content form for a turn carrying an attachment, three TS
+ * integrations went red instantly and this route stayed green while declaring
+ * `content: str` — a shape that 422s on the first message with a file, naming
+ * pydantic rather than the cause. No type change will ever reach it, so the
+ * assertion has to be written out.
+ *
+ * Over the AST rather than as a substring search: `code.includes('list')` would
+ * pass on a comment mentioning lists, which is the kind of green that costs a
+ * day. `ast.unparse` needs python3.9+, and the whole check is skipped (loudly)
+ * when python3 is missing, exactly as the syntax parse is.
+ */
+const PY_STRUCTURE_CHECK = `
+import ast, sys
+tree = ast.parse(sys.stdin.read())
+problems = []
+
+msg = next((n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name == 'Message'), None)
+if msg is None:
+    problems.append('no Message model, so nothing narrows the POSTed body')
+else:
+    ann = next(
+        (ast.unparse(n.annotation) for n in msg.body
+         if isinstance(n, ast.AnnAssign) and getattr(n.target, 'id', None) == 'content'),
+        None,
+    )
+    if ann is None:
+        problems.append('Message declares no content field')
+    elif 'list' not in ann:
+        problems.append(
+            'Message.content is "' + ann + '" — a turn carrying an attachment sends an ARRAY '
+            'of content parts and would 422 before the route ran'
+        )
+
+if not any(isinstance(n, ast.Raise) and 'HTTPException' in ast.unparse(n) for n in ast.walk(tree)):
+    problems.append(
+        'nothing raises HTTPException — a non-text content part would be dropped silently, '
+        'which is the bug the wire encoder was just fixed for'
+    )
+
+sys.stdout.write('\\n'.join(problems))
+`;
+
+/**
  * The FastAPI route, which tsc cannot see because it is Python.
  *
  * Compiled with the real `ast.parse` when python3 is on PATH — that is a genuine
@@ -1419,10 +1466,12 @@ function pythonCheck(cells) {
   for (const { label, code } of cells) {
     if (python3) {
       try {
-        execFileSync('python3', ['-c', 'import ast,sys; ast.parse(sys.stdin.read())'], {
+        const problems = execFileSync('python3', ['-c', PY_STRUCTURE_CHECK], {
           input: code,
-          stdio: ['pipe', 'ignore', 'pipe'],
-        });
+          stdio: ['pipe', 'pipe', 'pipe'],
+          encoding: 'utf8',
+        }).trim();
+        if (problems) for (const p of problems.split('\n')) failures.push(`${label}: ${p}`);
       } catch (e) {
         failures.push(`${label}: the emitted Python does not parse: ${`${e.stderr ?? ''}`.trim().split('\n').pop()}`);
         continue;
@@ -1445,7 +1494,7 @@ function pythonCheck(cells) {
     fail(`${failures.length} python route problem(s).`);
   }
   console.log(
-    `  ✓ ${cells.length} python routes: ${python3 ? 'parse (ast.parse)' : 'STRUCTURE ONLY — python3 not on PATH, syntax UNCHECKED'} + stream as SSE on /api/chat`,
+    `  ✓ ${cells.length} python routes: ${python3 ? 'parse (ast.parse) + content-part consumption over the AST' : 'STRUCTURE ONLY — python3 not on PATH, syntax AND content-part handling UNCHECKED'} + stream as SSE on /api/chat`,
   );
 }
 

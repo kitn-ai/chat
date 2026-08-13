@@ -18,11 +18,15 @@ export { applyToolOutput, applyToolFailure, bufferText } from './sink-helpers';
 export { toOpenAIMessages, toAnthropicMessages, WireEncodeError } from './encode';
 export type {
   AnthropicContentBlock,
+  AnthropicEncodeOptions,
   AnthropicWireMessage,
+  FileEncodeOptions,
+  OpenAIContentPart,
   OpenAIEncodeOptions,
   OpenAIReasoningDetail,
   OpenAIToolCall,
   OpenAIWireMessage,
+  UnencodableFilePolicy,
 } from './encode';
 
 export { openaiChatFormat } from './formats/openai';
