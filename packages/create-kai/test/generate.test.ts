@@ -364,6 +364,26 @@ describe('generate (angular + full-screen + conversations + mock)', () => {
     expect(html).not.toContain('Angular example');
   });
 
+  it('builds into the user’s own dist, not the kit example’s', async () => {
+    // `angular.json` is where Angular's builder learns the project name, and it
+    // is the one starter config nothing rewrote: `rewritePackageJson` only
+    // touches package.json. So a scaffolded `ng-app` used to `ng build` into
+    // `dist/ui-example-angular` — the emitted package.json and browser tab both
+    // said `ng-app` while the build output was named after our example.
+    const raw = await readFile(path.join(dir, 'angular.json'), 'utf8');
+    expect(raw).not.toContain('ui-example-angular');
+
+    const json = JSON.parse(raw);
+    expect(Object.keys(json.projects)).toEqual(['ng-app']);
+    expect(json.projects['ng-app'].architect.build.options.outputPath).toBe('dist/ng-app');
+    // `ng serve` resolves these; a target naming a project that no longer
+    // exists is a dev server that will not start.
+    expect(json.projects['ng-app'].architect.serve.configurations).toMatchObject({
+      production: { buildTarget: 'ng-app:build:production' },
+      development: { buildTarget: 'ng-app:build:development' },
+    });
+  });
+
   it('records angular paths in kai.json', async () => {
     const kai = JSON.parse(await readFile(path.join(dir, 'kai.json'), 'utf8'));
     expect(kai).toMatchObject({ framework: 'angular', registration: 'elements', gateway: 'mock' });
