@@ -15,9 +15,18 @@
  *      start is fast. `@clack/prompts` and `picocolors` are bundled in; so is
  *      the kit's `agent-tooling` catalog, which is why the CLI can hand out real
  *      `Integration` objects without depending on `@kitn.ai/ui` at runtime.
+ *
+ * THE RULES THEMSELVES ARE NOT IN THIS FILE, and that is deliberate. This module
+ * ends in `main().catch(...)`, so importing it runs a build — nothing here can
+ * be reached from a test, and a check nobody can watch fail is a check nobody
+ * should trust. Every rule lives in `src/build-guards.ts` (structural) or
+ * `src/template-guards.ts` (content), where `test/build-guards.test.ts` and
+ * `test/template-guards.test.ts` drive each one directly. What is left here is
+ * the filesystem: copy the tree, read the bytes, hand them to a rule, throw what
+ * it returns.
  */
 import { chmod, cp, mkdir, readFile, readdir, rename, rm, stat } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as esbuild from 'esbuild';
@@ -124,201 +133,54 @@ async function walk(dir) {
 }
 
 /**
- * Every patch matches its file, and matches it the number of times it claims to.
+ * Every file under `root`, as a `[relative path, contents]` pair.
  *
- * Zero matches is fatal for every patch, opted-in or not. More than one is fatal
- * only WITHOUT `multiple`, which is the entirety of the opt-in; why that hole is
- * the right shape lives on the flag in src/patches.ts rather than being
- * half-stated in both places.
+ * Templates are small, so nothing is skipped and everything is read up front.
+ * The rules in `src/build-guards.ts` take bytes rather than paths, which is what
+ * lets a test drive them without a template tree on disk. A file that cannot be
+ * read is dropped HERE rather than there: it carries no instruction for a user
+ * either way, and being unable to open it is a filesystem fact, not a rule.
  */
-async function verifyPatches(templateDir, root, patchesFor, countMatches) {
-  const patches = patchesFor(templateDir);
-  for (const patch of patches) {
-    const file = path.join(root, patch.file);
-    if (!existsSync(file)) {
-      throw new Error(
-        `create-kai build: patch targets ${patch.file}, which template '${templateDir}' does not have`,
-      );
-    }
-    const count = countMatches(patch, await readFile(file, 'utf8'));
-    if (count === 0) {
-      throw new Error(
-        `create-kai build: patch for ${templateDir}/${patch.file} no longer matches.\n` +
-          `  why it exists: ${patch.why}\n` +
-          (patch.multiple
-            ? '  it is a `multiple` patch, so this is a rename that would now rename nothing\n'
-            : '') +
-          '  the starter changed — update PATCHES in src/patches.ts',
-      );
-    }
-    if (count > 1 && !patch.multiple) {
-      throw new Error(
-        `create-kai build: patch for ${templateDir}/${patch.file} matches ${count} times; ` +
-          'it must be unambiguous.\n' +
-          '  A non-global replace rewrites only the first, so the rest would ship unpatched.\n' +
-          '  Narrow the `find`, or set `multiple: true` if every occurrence should change.',
-      );
-    }
-  }
-  return patches.length;
-}
-
-/**
- * Apply this template's patches in memory and check what survives them.
- *
- * The patches go through the CLI's own `applyPatch` rather than a
- * reimplementation of it. This function used to rebuild the regex by hand, which
- * meant it could not see a `multiple` patch: it would check a half-patched file
- * no user would ever receive, and report on bytes that do not exist.
- *
- * Two families of rule run over the result, kept apart because their fixes
- * differ — a repo-internal instruction wants a new patch, a wrong title wants
- * that patch to name the project. Both live in `src/template-guards.ts`, where a
- * test can watch each one fail.
- */
-async function verifyEmittedContent(templateDir, root, patchesFor, guards, applyPatch) {
-  const patches = patchesFor(templateDir);
-  const internals = [];
-  const titles = [];
-
-  for (const file of await walk(root)) {
-    const rel = path.relative(root, file);
-
-    let source;
+async function readTemplateFiles(root) {
+  const files = [];
+  for (const abs of await walk(root)) {
     try {
-      source = await readFile(file, 'utf8');
+      files.push([path.relative(root, abs), await readFile(abs, 'utf8')]);
     } catch {
       continue;
     }
-    if (source.includes('\u0000')) continue; // binary; nothing to instruct a user with
-
-    for (const patch of patches) {
-      // PROBE_NAME, not a plausible stand-in: the title rule asserts a patched
-      // title EQUALS it, which only proves anything if the string could not have
-      // arrived by any route other than this substitution.
-      if (patch.file === rel) source = applyPatch(patch, source, guards.PROBE_NAME);
-    }
-
-    internals.push(...guards.repoInternalProblems(rel, source));
-    titles.push(...guards.titleProblems(rel, source, guards.PROBE_NAME));
   }
-
-  const render = (problems) =>
-    problems.map((p) => `  · ${templateDir}/${p.file}: ${p.detail}\n      ${p.why}`).join('\n');
-
-  if (internals.length > 0) {
-    throw new Error(
-      `create-kai build: template '${templateDir}' would ship repo-internal instructions ` +
-        `to a user.\nAdd a patch in src/patches.ts for each of these:\n${render(internals)}`,
-    );
-  }
-  if (titles.length > 0) {
-    throw new Error(
-      `create-kai build: template '${templateDir}' would ship a browser tab that does not name ` +
-        `the user's project.\n${render(titles)}`,
-    );
-  }
+  return files;
 }
 
-/**
- * Assert the template's app file is where `paths.app` says and carries the
- * expression the emitted README quotes.
- *
- * `paths.app` is written into `kai.json` for a v2 `add` to read, and the README
- * tells the user "one expression in <paths.app> changes" — so a wrong path is
- * two lies at once, and nothing else in the build would notice, because the path
- * is never opened at build time. Vue's is `src/App.vue` where React's is
- * `src/App.tsx`, which is exactly the kind of per-framework value that gets
- * copied from the row above.
- */
-async function verifyAppPath(framework, root, goLiveThread) {
-  const app = path.join(root, framework.paths.app);
-  if (!existsSync(app)) {
-    throw new Error(
-      `create-kai build: framework '${framework.id}' declares paths.app='${framework.paths.app}', ` +
-        `which template '${framework.templateDir}' does not have.\n` +
-        '  kai.json records that path and the emitted README points the user at it.',
-    );
-  }
-  // Throws with its own explanation if the go-live expression is missing.
-  goLiveThread(await readFile(app, 'utf8'), framework);
+/** Read one file out of a copied template by its relative path; null if absent. */
+function templateReader(root) {
+  return (relative) => {
+    const abs = path.join(root, relative);
+    return existsSync(abs) ? readFileSync(abs, 'utf8') : null;
+  };
 }
 
-/**
- * Assert every OTHER path the framework declares exists in its template too.
- *
- * `verifyAppPath` covers `paths.app` because the README quotes it. The rest of
- * the block is written verbatim into the emitted `kai.json`, where a v2 `add`
- * reads it to decide where to put a generated component or which stylesheet to
- * append an `@import` to — so a wrong entry here is a v2 command that writes to
- * a file that is not there, reported against the user's project rather than
- * against this table.
- *
- * Nothing else in the build opens these. They are strings that get copied down
- * from the row above and then diverge silently: `solid` declares
- * `css: 'src/index.css'` while its starter's stylesheet has always been
- * `src/styles.css`, and it has been wrong for as long as the row has existed
- * because a `planned` framework is never checked against its template at all.
- *
- * `env` is exempt — `.env.local` is the file the user is told to CREATE for a
- * keyed gateway, so a template carrying one would be the bug.
- */
-async function verifyDeclaredPaths(framework, root) {
-  const missing = Object.entries(framework.paths)
-    .filter(([key]) => key !== 'env' && key !== 'app')
-    .filter(([, rel]) => !existsSync(path.join(root, rel)))
-    .map(([key, rel]) => `  · paths.${key} = '${rel}'`);
-
-  if (missing.length > 0) {
-    throw new Error(
-      `create-kai build: framework '${framework.id}' declares paths that template ` +
-        `'${framework.templateDir}' does not have:\n${missing.join('\n')}\n` +
-        '  These are copied verbatim into the emitted kai.json for a v2 `add` to read.',
-    );
-  }
-}
-
-/**
- * Refuse to build if this package's shared devDependency ranges disagree with
- * the kit's.
- *
- * `.npmrc` sets `node-linker=hoisted`, so ONE version of each package wins for
- * the whole workspace. Declaring `@types/node: ^22` here — copied thoughtlessly
- * out of a starter's package.json — silently downgraded the hoisted
- * `@types/node` from 26 to 22 for `packages/ui` too, and its emitted-code suite
- * started timing out. Nothing in that failure pointed back here.
- *
- * So the ranges are checked rather than commented. Anything both packages
- * declare has to agree.
- */
-async function verifySharedDevDeps() {
-  const mine = JSON.parse(await readFile(path.join(pkgRoot, 'package.json'), 'utf8'));
-  const kit = JSON.parse(await readFile(path.join(repoRoot, 'packages/ui/package.json'), 'utf8'));
-  const kitDev = { ...kit.dependencies, ...kit.devDependencies };
-  const clashes = [];
-  for (const [name, range] of Object.entries(mine.devDependencies ?? {})) {
-    if (kitDev[name] && kitDev[name] !== range) {
-      clashes.push(`  · ${name}: create-kai wants ${range}, packages/ui wants ${kitDev[name]}`);
-    }
-  }
-  if (clashes.length > 0) {
-    throw new Error(
-      'create-kai build: devDependency ranges disagree with packages/ui.\n' +
-        'node-linker=hoisted means one version wins for the whole workspace, so a\n' +
-        'mismatch here changes what the KIT compiles against.\n' +
-        clashes.join('\n'),
-    );
-  }
+/** Throw what a guard returned, or carry on when it returned nothing. */
+function failIf(problem) {
+  if (problem !== null) throw new Error(problem);
 }
 
 async function main() {
-  await verifySharedDevDeps();
+  const guards = await loadTs('src/build-guards.ts');
+
+  failIf(
+    guards.sharedDevDepsProblem(
+      JSON.parse(await readFile(path.join(pkgRoot, 'package.json'), 'utf8')),
+      JSON.parse(await readFile(path.join(repoRoot, 'packages/ui/package.json'), 'utf8')),
+    ),
+  );
+
   await rm(dist, { recursive: true, force: true });
   await mkdir(templatesOut, { recursive: true });
 
   const { FRAMEWORKS } = await loadTs('src/frameworks.ts');
-  const { patchesFor, applyPatch, countMatches } = await loadTs('src/patches.ts');
-  const guards = await loadTs('src/template-guards.ts');
+  const { patchesFor } = await loadTs('src/patches.ts');
   const { goLiveThread } = await loadTs('src/generate.ts');
 
   const ready = FRAMEWORKS.filter((f) => f.status === 'ready');
@@ -327,13 +189,21 @@ async function main() {
   let patchCount = 0;
   for (const framework of ready) {
     const root = await copyTemplate(framework.templateDir);
-    // Order matters: `verifyEmittedContent` applies the patches, and `applyPatch`
+    const read = templateReader(root);
+    const exists = (relative) => existsSync(path.join(root, relative));
+    const patches = patchesFor(framework.templateDir);
+
+    // Order matters: `emittedContentProblem` applies the patches, and `applyPatch`
     // throws on one that does not match, so the specific "this patch went stale"
     // message has to come first or it is replaced by a generic one.
-    patchCount += await verifyPatches(framework.templateDir, root, patchesFor, countMatches);
-    await verifyEmittedContent(framework.templateDir, root, patchesFor, guards, applyPatch);
-    await verifyAppPath(framework, root, goLiveThread);
-    await verifyDeclaredPaths(framework, root);
+    failIf(guards.patchMatchProblem(framework.templateDir, patches, read));
+    failIf(
+      guards.emittedContentProblem(framework.templateDir, patches, await readTemplateFiles(root)),
+    );
+    failIf(guards.appPathProblem(framework, read, goLiveThread));
+    failIf(guards.declaredPathsProblem(framework, exists));
+
+    patchCount += patches.length;
     console.log(`  template  ${framework.id.padEnd(16)} <- examples/starters/${framework.templateDir}`);
   }
 
