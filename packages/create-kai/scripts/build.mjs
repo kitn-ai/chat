@@ -24,6 +24,12 @@
  * `test/template-guards.test.ts` drive each one directly. What is left here is
  * the filesystem: copy the tree, read the bytes, hand them to a rule, throw what
  * it returns.
+ *
+ * SO THIS FILE STATES NO RULE TEXT OF ITS OWN. Every message a failing build
+ * prints was written by a rule and arrived here as a return value; `failIf` is
+ * the only thing that throws. `test/build-guards.test.ts` parses this file and
+ * holds it to that — a guard-shaped function at any depth, or a message literal
+ * authored here, fails the suite and points at `src/build-guards.ts`.
  */
 import { chmod, cp, mkdir, readFile, readdir, rename, rm, stat } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
@@ -89,19 +95,19 @@ async function loadTs(relative) {
   return import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
 }
 
+/** Where a framework's starter lives. Both the rule and the copy ask for it. */
+const starterPath = (templateDir) => path.join(startersRoot, templateDir);
+
 /**
- * Copy one starter into `dist/templates/`. Filesystem only — the requirement
- * that it carry a `.gitignore` is a RULE, and lives in `src/build-guards.ts`
- * with the others where a test can drive it. `main()` checks it against the
- * copied tree and then does the rename.
+ * Copy one starter into `dist/templates/`. Filesystem only — the requirements
+ * that the starter EXIST and that it carry a `.gitignore` are both RULES, and
+ * live in `src/build-guards.ts` with the others where a test can drive them.
+ * `main()` runs the first before calling this and the second against the copied
+ * tree, then does the rename.
  */
 async function copyTemplate(templateDir) {
-  const from = path.join(startersRoot, templateDir);
   const to = path.join(templatesOut, templateDir);
-  if (!existsSync(from)) {
-    throw new Error(`create-kai build: no starter at ${from}`);
-  }
-  await cp(from, to, {
+  await cp(starterPath(templateDir), to, {
     recursive: true,
     filter: (src) => !SKIP.has(path.basename(src)),
   });
@@ -176,10 +182,11 @@ async function main() {
   const { GITIGNORE_TEMPLATE_NAME, goLiveThread } = await loadTs('src/generate.ts');
 
   const ready = FRAMEWORKS.filter((f) => f.status === 'ready');
-  if (ready.length === 0) throw new Error('create-kai build: no framework is marked ready');
+  failIf(guards.readyFrameworksProblem(ready));
 
   let patchCount = 0;
   for (const framework of ready) {
+    failIf(guards.missingStarterProblem(starterPath(framework.templateDir), existsSync));
     const root = await copyTemplate(framework.templateDir);
     const read = templateReader(root);
     const exists = (relative) => existsSync(path.join(root, relative));

@@ -12,10 +12,11 @@
  * no seam to grab cannot be watched at all.
  *
  * `template-guards.ts` holds the CONTENT rules — what an emitted file is allowed
- * to say. These are the STRUCTURAL ones: does a patch still match, is the app
- * where the table claims, do the declared paths exist, do the shared dependency
- * ranges agree. Two files because the two answer different questions and fail
- * for different reasons, not because one grew too long.
+ * to say. These are the STRUCTURAL ones: is there anything to build, is there a
+ * starter behind the row, does a patch still match, is the app where the table
+ * claims, do the declared paths exist, do the shared dependency ranges agree.
+ * Two files because the two answer different questions and fail for different
+ * reasons, not because one grew too long.
  *
  * WHY EACH RULE RETURNS A MESSAGE INSTEAD OF THROWING. The message is the
  * guard's payload — it names the file, states why the rule exists and tells you
@@ -218,6 +219,55 @@ export function declaredPathsProblem(
     `'${framework.templateDir}' does not have:\n${missing.join('\n')}\n` +
     '  These are copied verbatim into the emitted kai.json for a v2 `add` to read.'
   );
+}
+
+/**
+ * Refuse to build when the framework table marks nothing `ready`.
+ *
+ * `status: 'ready'` is what decides which starters get copied, so an empty set
+ * builds a CLI with an EMPTY `dist/templates` and exits 0. The reason that is
+ * worth a rule is that most of what would catch it reads the same table:
+ * `test/generate.test.ts` loops `FRAMEWORKS.filter(status === 'ready')` to
+ * generate and grade a project per framework, and a zero-length list makes those
+ * `describe`s VANISH rather than fail.
+ *
+ * Two things do notice, and neither names the cause: `kit-contract`'s "templates
+ * import nothing from @kitn.ai/ui" assertion, and `verify:pack`'s "no
+ * dist/templates/** in the tarball". Both report a symptom several steps from
+ * the row somebody flipped to `planned`.
+ *
+ * It was written inline in `main()` — no name, no seam, and invisible to the
+ * anti-rot check in `test/build-guards.test.ts` twice over: nested, and unnamed.
+ */
+export function readyFrameworksProblem(ready: readonly FrameworkDef[]): string | null {
+  if (ready.length > 0) return null;
+  return 'create-kai build: no framework is marked ready';
+}
+
+/**
+ * Refuse to build a `ready` framework whose `templateDir` names no starter.
+ *
+ * HONEST ABOUT ITS OWN WEIGHT, because the repo's rule is that a check which
+ * overstates its reach is worse than none: without this the build still fails.
+ * `cp` throws ENOENT on a source that is not there. What the rule buys is the
+ * message — `templateDir` is a string in `frameworks.ts`, and an ENOENT on an
+ * absolute path under `examples/starters/` does not say that a table is wrong.
+ * It is the claim `declaredPathsProblem` makes about the rest of the block, one
+ * level up: the paths in that table are never opened until something opens them.
+ *
+ * It lived inside `copyTemplate`, beside the `cp` it explains. That is the shape
+ * #205 pulled the `.gitignore` rule out of; this one stayed because the anti-rot
+ * check read top-level names and could not see either.
+ *
+ * Takes the absolute path rather than building it, for the same reason the rest
+ * of this module takes a reader: joining paths is the caller's filesystem job.
+ */
+export function missingStarterProblem(
+  starterPath: string,
+  exists: (absolutePath: string) => boolean,
+): string | null {
+  if (exists(starterPath)) return null;
+  return `create-kai build: no starter at ${starterPath}`;
 }
 
 /**
