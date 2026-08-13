@@ -81,6 +81,22 @@ const quotedList = (values: readonly string[]): string => values.map((v) => `"${
  * nothing. `atob` yields a binary string (one char per byte), which is then read
  * as UTF-8 -- going straight from `atob` to text would mangle every non-ASCII
  * character in the file.
+ *
+ * ★ WHAT A CLEAN DECODE PROVES, AND WHAT IT DOES NOT. It proves the bytes are
+ * well-formed UTF-8. It does not prove they are meaningful text, and the gap is
+ * not hypothetical: every byte below 0x80 is valid UTF-8 on its own, so a small
+ * binary made of low bytes decodes cleanly. A bare zip header -- `50 4b 03 04`
+ * followed by NULs -- is exactly that. This matters most on the path where
+ * nothing named the file, because there the decode is the ONLY evidence there is.
+ *
+ * A NUL-byte heuristic (git's rule for "is this binary") would catch most of
+ * them, and it is deliberately NOT here. This same function serves the LABELLED
+ * text path, where a host that said `text/plain` has asserted something the kit
+ * has no business overruling, and a text file that legitimately contains a NUL
+ * would start being refused on a rule nobody asked for. Weigh the two failures:
+ * being wrong the current way sends a block of gibberish the model can see and
+ * describe, and being wrong the other way silently refuses a real text file.
+ * Only the first is recoverable by the person it happens to.
  */
 function decodeBase64Text(data: string): { ok: true; text: string; bytes: number } | { ok: false } {
   try {

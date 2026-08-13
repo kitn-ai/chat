@@ -20,6 +20,11 @@ type Props = Omit<ChatThreadProps,
      *  `<kai-chat accept="image/*,application/pdf">`. A plain string, so unlike
      *  `messages` it DOES work as an attribute. Omitted means no filter.
      *
+     *  MEDIA TYPES ONLY -- exact (`image/png`) or subtype wildcard (`text/*`).
+     *  HTML allows a file extension here and this does not: `accept=".py"` THROWS
+     *  with the entry named, rather than silently resolving to a picker that
+     *  accepts nothing.
+     *
      *  It can only NARROW what the kit can already encode: `accept="image/*"`
      *  resolves to the four image formats both APIs take, not to every image type
      *  the OS offers. Pass the SAME string to `toOpenAIMessages(msgs, { accept })`
