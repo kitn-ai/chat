@@ -18,15 +18,17 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
+  GITIGNORE_SOURCE_NAME,
   appPathProblem,
   declaredPathsProblem,
   emittedContentProblem,
+  gitignoreProblem,
   patchMatchProblem,
   sharedDevDepsProblem,
 } from '../src/build-guards';
 import type { TemplateReader } from '../src/build-guards';
 import { FRAMEWORKS, getFramework } from '../src/frameworks';
-import { goLiveThread } from '../src/generate';
+import { GITIGNORE_TEMPLATE_NAME, goLiveThread } from '../src/generate';
 import { patchesFor } from '../src/patches';
 
 const PKG_ROOT = path.resolve(__dirname, '..');
@@ -335,6 +337,54 @@ describe('the shared-devDeps guard', () => {
   });
 });
 
+describe('the gitignore guard', () => {
+  it('rejects a starter with no .gitignore', () => {
+    // The tree a `create-vite`-derived starter has when someone forgets the
+    // file, or when a copy filter starts eating it: everything else present.
+    const files = new Set(['package.json', 'index.html', 'src/App.tsx']);
+
+    expectRejected(
+      gitignoreProblem('react', (rel) => files.has(rel)),
+      "starter 'react' has no .gitignore",
+      'an emitted project needs one',
+    );
+  });
+
+  it('accepts one that has it, under the name a starter uses', () => {
+    // THE CONTROL. Note which name satisfies it: the guard runs against the
+    // COPIED tree before the build renames the file, so `.gitignore` is what
+    // must be there. A template already carrying the underscored name has not
+    // satisfied this rule — it is what the rule's output becomes.
+    expect(gitignoreProblem('react', (rel) => rel === GITIGNORE_SOURCE_NAME)).toBeNull();
+    expectRejected(
+      gitignoreProblem('react', (rel) => rel === GITIGNORE_TEMPLATE_NAME),
+      'has no .gitignore',
+    );
+  });
+
+  it('holds every ready framework against its real starter', () => {
+    // The live check, and the reason this rule is worth its own seam: these are
+    // the five trees a published `npx create-kai` actually copies.
+    for (const framework of READY) {
+      expect(
+        gitignoreProblem(framework.templateDir, starterExists(framework.templateDir)),
+        `${framework.id}: its starter must carry a ${GITIGNORE_SOURCE_NAME}`,
+      ).toBeNull();
+    }
+  });
+
+  it('names the file the same way generate() does, so the rename round-trips', () => {
+    // The drift this pair exists to prevent: `build.mjs` renames
+    // GITIGNORE_SOURCE_NAME -> GITIGNORE_TEMPLATE_NAME, `generate()` renames it
+    // back. They are declared once each and must not converge or collide.
+    expect(GITIGNORE_SOURCE_NAME).toBe('.gitignore');
+    expect(GITIGNORE_TEMPLATE_NAME).toBe('_gitignore');
+    expect(GITIGNORE_TEMPLATE_NAME).not.toBe(GITIGNORE_SOURCE_NAME);
+    // npm strips a packed `.gitignore`; the travelling name must not be one.
+    expect(GITIGNORE_TEMPLATE_NAME.startsWith('.')).toBe(false);
+  });
+});
+
 describe('the seam these rules were moved to have', () => {
   /**
    * Assert the move cannot rot back.
@@ -349,14 +399,18 @@ describe('the seam these rules were moved to have', () => {
    * `copyTemplate`, `walk` and `readTemplateFiles` are filesystem plumbing and
    * belong there. What must not reappear is a RULE.
    *
-   * KNOWN LIMIT, stated rather than papered over: this reads NAMES at the top
-   * level, so it catches a guard someone declares and misses one they inline
-   * into a function that already does the reading. `copyTemplate` has exactly
-   * one of those today — the `.gitignore` requirement, which is a real rule
-   * (without it a keyed scaffold's first `git add .` stages an API key) sitting
-   * in a function whose other job is `cp`. Catching that shape needs a parser
-   * rather than a regex, and a check that overstates its reach is the thing this
-   * file exists to argue against.
+   * KNOWN LIMIT, unchanged and stated rather than papered over: this reads NAMES
+   * at the top level, so it catches a guard someone declares and misses one they
+   * inline into a function that already does the reading. Catching that shape
+   * needs a parser rather than a regex, and a check that overstates its reach is
+   * the thing this file exists to argue against.
+   *
+   * `copyTemplate` used to hold exactly one of those — the `.gitignore`
+   * requirement, named here when this check was written because it was the one
+   * rule the regex provably could not see. It now lives in
+   * `gitignoreProblem`, so the blind spot is real but currently empty; the
+   * paragraph above stays because the NEXT inlined rule will be just as
+   * invisible.
    */
   it('has no guard left in build.mjs, where nothing could reach it', () => {
     const source = readFileSync(path.join(PKG_ROOT, 'scripts/build.mjs'), 'utf8');

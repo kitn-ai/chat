@@ -70,13 +70,6 @@ const SKIP = new Set([
   'bun.lockb',
 ]);
 
-/**
- * npm strips `.gitignore` out of a published tarball, so it travels as
- * `_gitignore` and `generate()` renames it back. See the comment on
- * `GITIGNORE_TEMPLATE_NAME`.
- */
-const GITIGNORE_TEMPLATE_NAME = '_gitignore';
-
 async function loadTs(relative) {
   // The framework table and the patch table are TypeScript the CLI owns. The
   // build reads them rather than restating which templates to copy or which
@@ -96,6 +89,12 @@ async function loadTs(relative) {
   return import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
 }
 
+/**
+ * Copy one starter into `dist/templates/`. Filesystem only — the requirement
+ * that it carry a `.gitignore` is a RULE, and lives in `src/build-guards.ts`
+ * with the others where a test can drive it. `main()` checks it against the
+ * copied tree and then does the rename.
+ */
 async function copyTemplate(templateDir) {
   const from = path.join(startersRoot, templateDir);
   const to = path.join(templatesOut, templateDir);
@@ -106,18 +105,6 @@ async function copyTemplate(templateDir) {
     recursive: true,
     filter: (src) => !SKIP.has(path.basename(src)),
   });
-
-  const gitignore = path.join(to, '.gitignore');
-  if (existsSync(gitignore)) {
-    await rename(gitignore, path.join(to, GITIGNORE_TEMPLATE_NAME));
-  } else {
-    // Not cosmetic. Without a `.gitignore` the emitted project does not ignore
-    // `node_modules/` or `.env.local`, and the second one means a keyed
-    // scaffold's first `git add .` stages an API key.
-    throw new Error(
-      `create-kai build: starter '${templateDir}' has no .gitignore — an emitted project needs one`,
-    );
-  }
   return to;
 }
 
@@ -181,7 +168,12 @@ async function main() {
 
   const { FRAMEWORKS } = await loadTs('src/frameworks.ts');
   const { patchesFor } = await loadTs('src/patches.ts');
-  const { goLiveThread } = await loadTs('src/generate.ts');
+  // `GITIGNORE_TEMPLATE_NAME` is read from `generate.ts` rather than restated
+  // here. `generate()` is what renames it back, so a local copy that drifted
+  // would have this build write a name the CLI never looks for — and nothing
+  // would fail: the emitted project would simply have no `.gitignore`, which is
+  // the API-key-staging bug, visible only in the published package.
+  const { GITIGNORE_TEMPLATE_NAME, goLiveThread } = await loadTs('src/generate.ts');
 
   const ready = FRAMEWORKS.filter((f) => f.status === 'ready');
   if (ready.length === 0) throw new Error('create-kai build: no framework is marked ready');
@@ -192,6 +184,13 @@ async function main() {
     const read = templateReader(root);
     const exists = (relative) => existsSync(path.join(root, relative));
     const patches = patchesFor(framework.templateDir);
+
+    // Before the rename, because the rule asks about the name the starter uses.
+    failIf(guards.gitignoreProblem(framework.templateDir, exists));
+    await rename(
+      path.join(root, guards.GITIGNORE_SOURCE_NAME),
+      path.join(root, GITIGNORE_TEMPLATE_NAME),
+    );
 
     // Order matters: `emittedContentProblem` applies the patches, and `applyPatch`
     // throws on one that does not match, so the specific "this patch went stale"
