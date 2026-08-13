@@ -14,8 +14,10 @@
  */
 import { readFileSync } from 'node:fs';
 import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import type * as TSApi from 'typescript';
 
 import {
   GITIGNORE_SOURCE_NAME,
@@ -23,11 +25,14 @@ import {
   declaredPathsProblem,
   emittedContentProblem,
   gitignoreProblem,
+  missingStarterProblem,
   patchMatchProblem,
+  readyFrameworksProblem,
   sharedDevDepsProblem,
 } from '../src/build-guards';
 import type { TemplateReader } from '../src/build-guards';
 import { FRAMEWORKS, getFramework } from '../src/frameworks';
+import type { FrameworkDef } from '../src/frameworks';
 import { GITIGNORE_TEMPLATE_NAME, goLiveThread } from '../src/generate';
 import { patchesFor } from '../src/patches';
 
@@ -337,6 +342,46 @@ describe('the shared-devDeps guard', () => {
   });
 });
 
+describe('the ready-framework guard', () => {
+  it('rejects a table where the last ready row has been flipped to planned', () => {
+    // The real table, with the one field that decides this flipped on every row
+    // — the drift that actually happens, rather than a hand-written empty array.
+    // Typed as the table it stands in for, so the filter below is the build's.
+    const allPlanned: FrameworkDef[] = FRAMEWORKS.map((f) => ({ ...f, status: 'planned' }));
+
+    expectRejected(
+      readyFrameworksProblem(allPlanned.filter((f) => f.status === 'ready')),
+      'no framework is marked ready',
+    );
+  });
+
+  it('accepts the table as it stands', () => {
+    // THE CONTROL, and the reason this rule is not ceremony: an empty set builds
+    // an empty dist/templates and exits 0, while `generate.test.ts` loops over
+    // this same list — so the suite that should catch it goes to zero tests.
+    expect(readyFrameworksProblem(READY)).toBeNull();
+  });
+});
+
+describe('the missing-starter guard', () => {
+  it('rejects a templateDir that names no starter', () => {
+    const absent = path.join(STARTERS, 'framework-someone-renamed');
+
+    expectRejected(missingStarterProblem(absent, existsSync), `no starter at ${absent}`);
+  });
+
+  it('holds every ready framework against the tree', () => {
+    // THE CONTROL and the live check at once: these are the five directories a
+    // published `npx create-kai` copies, named by `templateDir` in frameworks.ts.
+    for (const framework of READY) {
+      expect(
+        missingStarterProblem(path.join(STARTERS, framework.templateDir), existsSync),
+        `${framework.id}: templateDir must name a real starter`,
+      ).toBeNull();
+    }
+  });
+});
+
 describe('the gitignore guard', () => {
   it('rejects a starter with no .gitignore', () => {
     // The tree a `create-vite`-derived starter has when someone forgets the
@@ -385,37 +430,161 @@ describe('the gitignore guard', () => {
   });
 });
 
+/**
+ * Assert the move cannot rot back.
+ *
+ * `scripts/build.mjs` ends in `main().catch(...)`, so importing it runs a build:
+ * anything defined there is unreachable from a test by construction, and a rule
+ * nobody can watch fail is a rule nobody should trust. That is not a style
+ * preference, it is the property the move bought, and the next person to add a
+ * guard will reach for the file that already does the reading.
+ *
+ * WHY THIS IS A PARSE AND NOT A GREP, which is a correction rather than a
+ * polish. It was a regex over line-anchored declarations named
+ * `verify|check|assert|guard`, and it had TWO holes — both demonstrated against
+ * this tree by planting the shape and watching the suite stay green:
+ *
+ *   - A rule nested inside a function was invisible, because `^` cannot match an
+ *     indented declaration. That hole was disclosed in the note this replaces.
+ *   - A rule at the TOP LEVEL was invisible too, if it was named the way every
+ *     rule in `src/build-guards.ts` is named. `patchMatchProblem`,
+ *     `gitignoreProblem`, `sharedDevDepsProblem`: none of the four prefixes that
+ *     regex looked for is the convention this repo actually uses, so the one
+ *     name a next author would copy off the neighbours was the one name that
+ *     slipped through. That hole was INSIDE the check's stated reach and was not
+ *     disclosed — which makes it the worse of the two.
+ *
+ * AND THE BLIND SPOT WAS NOT EMPTY. The first thing the parse found was two
+ * rules still living in `build.mjs`: `no framework is marked ready`, inlined in
+ * `main()`, and `no starter at ...`, inlined in `copyTemplate` beside the `cp`
+ * it explains — the same function #205 pulled the `.gitignore` rule out of. Both
+ * are now in `src/build-guards.ts` with the tests above.
+ *
+ * So the check asks two questions of the parsed file, because a rule can hide
+ * from either one alone:
+ *
+ *   1. Is there a guard-shaped FUNCTION at any depth? `copyTemplate`, `walk` and
+ *      `readTemplateFiles` are filesystem plumbing and belong there. What must
+ *      not reappear is a rule.
+ *   2. Does the file write a MESSAGE of its own? A rule's payload is its message,
+ *      and `build.mjs` throws what a rule returned — so an authored message is a
+ *      rule, whatever it is called and even if it is called nothing. That is the
+ *      only one of the two that could have seen the anonymous `.gitignore`
+ *      requirement #205 had to extract.
+ *
+ * KNOWN LIMIT, stated at the size it is now rather than papered over: a rule
+ * that declares no guard-shaped name AND writes no message of its own is still
+ * invisible — one that reuses another rule's text, or one that silently drops
+ * something instead of failing. `SKIP` is that shape deliberately: it is a copy
+ * filter, not a check, and nothing it does can fail a build.
+ */
 describe('the seam these rules were moved to have', () => {
+  const BUILD_MJS = path.join(PKG_ROOT, 'scripts/build.mjs');
+
+  // `createRequire` rather than `import ts from 'typescript'`: the package is
+  // 8MB of CJS, and putting it through vite's transform pipeline costs a second
+  // and prints a sourcemap warning on every run. Nothing here needs a program or
+  // a type checker — just the syntax tree of one file. The types come from the
+  // type-only import at the top, which erases.
+  const ts = createRequire(import.meta.url)('typescript') as typeof TSApi;
+
   /**
-   * Assert the move cannot rot back.
-   *
-   * `scripts/build.mjs` ends in `main().catch(...)`, so importing it runs a
-   * build: anything defined there is unreachable from a test by construction,
-   * and a rule nobody can watch fail is a rule nobody should trust. That is not
-   * a style preference, it is the property this refactor bought, and the next
-   * person to add a guard will reach for the file that already does the reading.
-   *
-   * So this greps for a guard-shaped declaration rather than for any function —
-   * `copyTemplate`, `walk` and `readTemplateFiles` are filesystem plumbing and
-   * belong there. What must not reappear is a RULE.
-   *
-   * KNOWN LIMIT, unchanged and stated rather than papered over: this reads NAMES
-   * at the top level, so it catches a guard someone declares and misses one they
-   * inline into a function that already does the reading. Catching that shape
-   * needs a parser rather than a regex, and a check that overstates its reach is
-   * the thing this file exists to argue against.
-   *
-   * `copyTemplate` used to hold exactly one of those — the `.gitignore`
-   * requirement, named here when this check was written because it was the one
-   * rule the regex provably could not see. It now lives in
-   * `gitignoreProblem`, so the blind spot is real but currently empty; the
-   * paragraph above stays because the NEXT inlined rule will be just as
-   * invisible.
+   * Every node in `source`, at any depth. Comments are trivia rather than nodes,
+   * so nothing built on this can be tripped by prose — which is half of why a
+   * parse replaced the regex in a file that explains itself at this length.
    */
-  it('has no guard left in build.mjs, where nothing could reach it', () => {
-    const source = readFileSync(path.join(PKG_ROOT, 'scripts/build.mjs'), 'utf8');
-    const GUARD_SHAPED = /^(?:(?:async\s+)?function|const)\s+((?:verify|check|assert|guard)\w*)/gm;
-    const declarations = [...source.matchAll(GUARD_SHAPED)].map((m) => m[1]);
+  function walkSource(source: string, visit: (node: TSApi.Node) => void): void {
+    const file = ts.createSourceFile(
+      'build.mjs',
+      source,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.JS,
+    );
+    const step = (node: TSApi.Node): void => {
+      visit(node);
+      ts.forEachChild(node, step);
+    };
+    ts.forEachChild(file, step);
+  }
+
+  /**
+   * Guard-shaped by the two conventions this repo actually uses for a rule: the
+   * imperative prefixes, and the `Problem` suffix every rule in
+   * `src/build-guards.ts` carries. The prefix needs an uppercase letter after it
+   * so that `guards`, the local holding the loaded module, is not a false
+   * positive — a plural noun is a handle, not a rule.
+   */
+  const guardShaped = (name: string) =>
+    /^(?:verify|check|assert|guard|ensure|validate)[A-Z_]/.test(name) || /Problems?$/.test(name);
+
+  /**
+   * Every named FUNCTION in `source`, at any depth.
+   *
+   * Functions rather than any binding, on purpose. `const guards = await
+   * loadTs(...)` is a module handle and `const { gitignoreProblem } = guards`
+   * would be a rule being USED, which is what this file wants build.mjs to do.
+   * Neither declares a rule, and flagging them would make the check noise.
+   */
+  function declaredFunctions(source: string): string[] {
+    const names: string[] = [];
+    walkSource(source, (node) => {
+      if (ts.isFunctionDeclaration(node) && node.name) names.push(node.name.text);
+      else if (
+        ts.isVariableDeclaration(node) &&
+        ts.isIdentifier(node.name) &&
+        node.initializer &&
+        (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))
+      ) {
+        names.push(node.name.text);
+      }
+    });
+    return names;
+  }
+
+  /**
+   * The prefix a rule's message carries, read off a real rule rather than
+   * restated here — a copy would keep agreeing with itself after the convention
+   * moved.
+   */
+  const RULE_PREFIX = `${gitignoreProblem('probe', () => false)!.split(':')[0]}:`;
+
+  /**
+   * Every message `source` writes ITSELF, by either of the two routes a rule
+   * inlined here would take.
+   *
+   * Comments are not literals, so the prose in `build.mjs` — which quotes rule
+   * names and explains why they left — cannot trip this. That is the other half
+   * of why a parse replaced the regex.
+   */
+  function authoredRuleText(source: string): string[] {
+    const found = new Set<string>();
+    const literal = (node: TSApi.Node): string | null => {
+      if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
+      if (ts.isTemplateExpression(node)) {
+        return node.head.text + node.templateSpans.map((s) => s.literal.text).join('');
+      }
+      return null;
+    };
+    walkSource(source, (node) => {
+      // (a) A message this file THROWS. `failIf` throws an identifier — the thing
+      //     a rule returned. A rule inlined here throws its own words instead.
+      if (ts.isThrowStatement(node) && node.expression && ts.isNewExpression(node.expression)) {
+        for (const argument of node.expression.arguments ?? []) {
+          const text = literal(argument);
+          if (text !== null) found.add(text);
+        }
+      }
+      // (b) Rule payload text anywhere, thrown or not: `failIf(cond ? '...' :
+      //     null)` states a rule without ever throwing.
+      const text = literal(node);
+      if (text !== null && text.startsWith(RULE_PREFIX)) found.add(text);
+    });
+    return [...found];
+  }
+
+  it('has no guard-shaped function left in build.mjs, at any depth', () => {
+    const declarations = declaredFunctions(readFileSync(BUILD_MJS, 'utf8')).filter(guardShaped);
 
     expect(
       declarations,
@@ -423,5 +592,60 @@ describe('the seam these rules were moved to have', () => {
         'be watched failing. Move the rule into src/build-guards.ts as a function over data and ' +
         'test it there; leave build.mjs the reading of files.',
     ).toEqual([]);
+  });
+
+  it('states no rule of its own: build.mjs throws what a rule returned', () => {
+    const authored = authoredRuleText(readFileSync(BUILD_MJS, 'utf8'));
+
+    expect(
+      authored,
+      'build.mjs wrote this message, so the rule behind it lives in build.mjs — reachable only ' +
+        'by running the whole build. A rule returns its message from src/build-guards.ts and ' +
+        '`failIf` throws it; the payload is the thing a test most needs to assert.',
+    ).toEqual([]);
+  });
+
+  it('sees the shapes the regex it replaced could not', () => {
+    // THE CONTROL FOR THE CHECK ITSELF. Both collectors above return [] against
+    // build.mjs today, and [] is exactly what a broken walker returns too. So
+    // plant every shape that has actually hidden here and watch them come back.
+    const planted = [
+      'async function copyTemplate(templateDir) {',
+      '  function checkGitignore(dir) {',
+      "    if (!exists(dir)) throw new Error('create-kai build: no .gitignore');",
+      '  }',
+      '  checkGitignore(templateDir);',
+      '}',
+      'function readyFrameworksProblem(ready) { return ready.length ? null : MESSAGE; }',
+      "if (!ok) throw new Error(`create-kai build: no starter at ${from}`);",
+    ].join('\n');
+
+    // Nested (indentation beat the old `^`) and top-level-but-conventionally-named
+    // (no prefix the old regex knew) — the two holes, in one snippet.
+    expect(declaredFunctions(planted).filter(guardShaped)).toEqual([
+      'checkGitignore',
+      'readyFrameworksProblem',
+    ]);
+    // And the anonymous throw, which no name-based check can ever see. This is
+    // the shape the `.gitignore` requirement had while it lived in copyTemplate.
+    expect(authoredRuleText(planted)).toEqual([
+      'create-kai build: no .gitignore',
+      'create-kai build: no starter at ',
+    ]);
+  });
+
+  it('does not flag build.mjs for USING a rule, or for its prose', () => {
+    // The other way this check could be wrong: over-broad, so the next author
+    // works around it instead of with it.
+    const legitimate = [
+      '/** copyTemplate once held checkGitignore, which threw create-kai build: ... */',
+      "const guards = await loadTs('src/build-guards.ts');",
+      'const { gitignoreProblem } = guards;',
+      'failIf(gitignoreProblem(dir, exists));',
+      'function failIf(problem) { if (problem !== null) throw new Error(problem); }',
+    ].join('\n');
+
+    expect(declaredFunctions(legitimate).filter(guardShaped)).toEqual([]);
+    expect(authoredRuleText(legitimate)).toEqual([]);
   });
 });
