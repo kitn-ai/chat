@@ -59,16 +59,38 @@ async function walk(dir: string): Promise<string[]> {
   return out;
 }
 
+/**
+ * The names in an `import { … }` list, as the kit would have to export them.
+ *
+ * `import { a, type B }` — the INLINE type modifier is stripped per specifier.
+ * `IMPORT_RE` only strips the leading `import type {…}` form, so before this the
+ * specifier arrived as the literal string `type SetMessages` and was looked up
+ * under that name, which no `.d.ts` can ever export. That is a false RED, not a
+ * false green: it reported the Vue starter's `type SetMessages` /
+ * `type AssistantStream` as missing while `dist/state/index.d.ts` exports both,
+ * and `vue-tsc -b` on the emitted project compiled them fine.
+ *
+ * React never tripped it because React consumes the kit's own `useKaiChat`; the
+ * three starters that hand-port it — vue, svelte, angular — all write this exact
+ * import, so the bug was waiting behind every one of them.
+ */
+export function parseNamedSpecifiers(list: string): string[] {
+  return list
+    .split(',')
+    .map((s) => s.trim().replace(/^type\s+/, '').split(/\s+as\s+/)[0].trim())
+    .filter(Boolean);
+}
+
 async function collectImports(): Promise<TemplateImport[]> {
   const found: TemplateImport[] = [];
   for (const file of await walk(TEMPLATE_ROOT)) {
     const source = await readFile(file, 'utf8');
     for (const match of source.matchAll(IMPORT_RE)) {
-      const named = (match[1] ?? '')
-        .split(',')
-        .map((s) => s.trim().split(/\s+as\s+/)[0].trim())
-        .filter(Boolean);
-      found.push({ file: path.relative(TEMPLATE_ROOT, file), specifier: match[2], named });
+      found.push({
+        file: path.relative(TEMPLATE_ROOT, file),
+        specifier: match[2],
+        named: parseNamedSpecifiers(match[1] ?? ''),
+      });
     }
   }
   return found;
@@ -126,27 +148,57 @@ describe('templates agree with the workspace kit', () => {
       .map((i) => `${i.file}: ${i.specifier}`);
     expect(unknown).toEqual([]);
   });
+});
 
-  it('imports only names the kit exports', async () => {
-    const kitPkg = JSON.parse(await readFile(path.join(KIT_ROOT, 'package.json'), 'utf8'));
-    const imports = await collectImports();
-    const missing: string[] = [];
+/** The names an import list asks for that the kit does not export. */
+async function missingNames(imports: TemplateImport[]): Promise<string[]> {
+  const kitPkg = JSON.parse(await readFile(path.join(KIT_ROOT, 'package.json'), 'utf8'));
+  const missing: string[] = [];
 
-    for (const entry of imports) {
-      if (entry.named.length === 0) continue;
-      const types = resolveTypes(kitPkg.exports, entry.specifier);
-      if (!types) continue;
-      const dtsPath = path.join(KIT_ROOT, types);
-      if (!existsSync(dtsPath)) {
-        missing.push(`${entry.file}: ${entry.specifier} has no built types at ${types}`);
-        continue;
-      }
-      const names = exportedNames(await readFile(dtsPath, 'utf8'));
-      for (const name of entry.named) {
-        if (!names.has(name)) missing.push(`${entry.file}: ${entry.specifier} has no '${name}'`);
-      }
+  for (const entry of imports) {
+    if (entry.named.length === 0) continue;
+    const types = resolveTypes(kitPkg.exports, entry.specifier);
+    if (!types) continue;
+    const dtsPath = path.join(KIT_ROOT, types);
+    if (!existsSync(dtsPath)) {
+      missing.push(`${entry.file}: ${entry.specifier} has no built types at ${types}`);
+      continue;
     }
+    const names = exportedNames(await readFile(dtsPath, 'utf8'));
+    for (const name of entry.named) {
+      if (!names.has(name)) missing.push(`${entry.file}: ${entry.specifier} has no '${name}'`);
+    }
+  }
+  return missing;
+}
 
-    expect(missing).toEqual([]);
+describe('templates agree with the workspace kit (cont.)', () => {
+  it('imports only names the kit exports', async () => {
+    expect(await missingNames(await collectImports())).toEqual([]);
+  });
+
+  /**
+   * THE NEGATIVE CONTROL for the inline-`type` fix above.
+   *
+   * Stripping `type ` off a specifier is one character away from stripping the
+   * specifier's meaning, and a guard that stops reporting anything looks exactly
+   * like a guard that passes. So this runs a synthetic import through the SAME
+   * `missingNames` lookup the real test uses and asserts both halves at once: a
+   * real inline-type name resolves, and a fake one beside it is still caught.
+   *
+   * Without the fix the first name fails too, so this test is red before AND
+   * after in different ways — which is the point.
+   */
+  it('still catches a name the kit lacks, inline type modifier or not', async () => {
+    const missing = await missingNames([
+      {
+        file: 'synthetic/useChat.ts',
+        specifier: '@kitn.ai/ui/state',
+        named: parseNamedSpecifiers('appendMessage, type SetMessages, type NotAKitExport'),
+      },
+    ]);
+    expect(missing).toEqual([
+      "synthetic/useChat.ts: @kitn.ai/ui/state has no 'NotAKitExport'",
+    ]);
   });
 });

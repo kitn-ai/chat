@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { getIntegration, mockIntegration } from './catalog';
 import { resolveSurface } from './features';
 import { getFramework } from './frameworks';
+import type { FrameworkDef } from './frameworks';
 import { buildKaiJson, stringifyKaiJson } from './kai-json';
 import { rewritePackageJson, stringifyPackageJson } from './package-json';
 import { applyPatch, patchesFor } from './patches';
@@ -116,7 +117,12 @@ export async function generate(
     'utf8',
   );
 
-  await writeFile(path.join(plan.dir, 'README.md'), renderReadme(plan, integration.docsSlug), 'utf8');
+  const appSource = await readFile(path.join(plan.dir, framework.paths.app), 'utf8');
+  await writeFile(
+    path.join(plan.dir, 'README.md'),
+    renderReadme(plan, framework, goLiveThread(appSource, framework), integration.docsSlug),
+    'utf8',
+  );
 
   return {
     dir: plan.dir,
@@ -127,7 +133,42 @@ export async function generate(
   };
 }
 
-function renderReadme(plan: ProjectPlan, docsSlug: string): string {
+/**
+ * How THIS framework's app reads its thread back, taken out of the emitted app
+ * file rather than restated.
+ *
+ * The README's go-live diff is a snippet a user pastes, so it has to name real
+ * identifiers in the file it points at. Restating React's worked while React was
+ * the only ready framework and broke the moment Vue landed: React's thread is
+ * `chat.messages`, Vue's is a ref and reads `messages.value`, and the hard-coded
+ * React version emitted into a Vue project would have serialized a Ref object.
+ *
+ * Both starters already carry the expression in the comment above the mock call,
+ * because both had to tell their own reader the same thing. So this reads that
+ * instead of keeping a second table of it in the CLI, and `scripts/build.mjs`
+ * fails the build if a ready template stops carrying one — which is why the
+ * throw below cannot reach a user.
+ */
+const GO_LIVE_THREAD = /toOpenAIMessages\(([^)]+)\)/;
+
+export function goLiveThread(appSource: string, framework: FrameworkDef): string {
+  const match = appSource.match(GO_LIVE_THREAD);
+  if (!match) {
+    throw new Error(
+      `create-kai: ${framework.paths.app} carries no toOpenAIMessages(...) expression, so the ` +
+        'README cannot state how to go live without inventing one. Restore the comment in the ' +
+        `examples/starters/${framework.templateDir} starter.`,
+    );
+  }
+  return match[1];
+}
+
+function renderReadme(
+  plan: ProjectPlan,
+  framework: FrameworkDef,
+  thread: string,
+  docsSlug: string,
+): string {
   return `# ${plan.name}
 
 A chat app built with [\`@kitn.ai/ui\`](https://ui.kitn.ai), scaffolded by \`create-kai\`.
@@ -144,14 +185,17 @@ rendering path with a fake reply. Every frame is tagged \`_kai_mock\`, the strea
 opens with a \`: kai-mock\` comment and usage reports zero tokens, so nothing here
 can be mistaken for a real turn.
 
-To go live, one expression in \`src/App.tsx\` changes:
+To go live, one expression in \`${framework.paths.app}\` changes:
 
 \`\`\`diff
+- import { readOpenAIStream } from '@kitn.ai/ui/wire';
++ import { readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';
+
 - await readOpenAIStream(mockResponse(text), stream);
 + const res = await fetch('/api/chat', {
 +   method: 'POST',
 +   headers: { 'content-type': 'application/json' },
-+   body: JSON.stringify({ messages: toOpenAIMessages(chat.messages) }),
++   body: JSON.stringify({ messages: toOpenAIMessages(${thread}) }),
 + });
 + await readOpenAIStream(res, stream);
 \`\`\`

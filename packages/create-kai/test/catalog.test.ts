@@ -268,4 +268,29 @@ describe('framework table', () => {
     expect(react.status).toBe('ready');
     expect(react.composedWorkspace).toBe(true);
   });
+
+  it('ships vue ready', () => {
+    const vue = getFramework('vue')!;
+    expect(vue.status).toBe('ready');
+    // Vue is the representative of the four `elements` + composed-workspace
+    // cells; svelte, angular and html share this shape and are next.
+    expect(vue.registration).toBe('elements');
+    expect(vue.composedWorkspace).toBe(true);
+  });
+
+  /**
+   * A `note` is what `--list` prints beside a framework to state the gap. On a
+   * READY framework it is a leftover that contradicts the row it sits on — Vue's
+   * said "not yet run end to end by this CLI" right up until it had been, and
+   * nothing but reading the diff would have caught it staying.
+   */
+  it('states a gap for every planned framework and none for a ready one', () => {
+    for (const framework of FRAMEWORKS) {
+      if (framework.status === 'ready') {
+        expect(framework.note, `${framework.id} is ready but still carries a note`).toBeUndefined();
+      } else {
+        expect(framework.note, `${framework.id} is planned with no stated reason`).toBeTruthy();
+      }
+    }
+  });
 });
