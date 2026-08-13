@@ -106,17 +106,40 @@ When you want a large drop target for a whole page or panel — not just the com
 const upload = document.getElementById('upload');
 const prompt = document.getElementById('prompt');
 
-upload.addEventListener('kai-files-added', (e) => {
-  const current = prompt.attachments ?? [];
-  const added = e.detail.files.map((f) => ({
-    id: crypto.randomUUID(),
-    type: 'file',
-    filename: f.name,
-    mediaType: f.type || undefined,
-    // create an object URL if you want an image preview in the hover card
-    url: f.type.startsWith('image/') ? URL.createObjectURL(f) : undefined,
-  }));
-  prompt.attachments = [...current, ...added];
+/** Every file, as a `data:` URI. NOT URL.createObjectURL: an object URL renders
+ *  a perfect thumbnail here and resolves only inside the tab that minted it, so
+ *  `toOpenAIMessages` / `toAnthropicMessages` refuse it rather than send the
+ *  model an address it can never fetch. A data URI previews identically and is
+ *  the form both providers actually take. */
+const readAsDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error(`Could not read ${file.name}`));
+    reader.readAsDataURL(file);
+  });
+
+upload.addEventListener('kai-files-added', async (e) => {
+  // Snapshot before the first await: the upload element is free to clear its
+  // own list as soon as the handler yields.
+  const files = Array.from(e.detail.files ?? []);
+  if (!files.length) return;
+
+  const added = await Promise.all(
+    files.map(async (f) => ({
+      id: crypto.randomUUID(),
+      type: 'file',
+      filename: f.name,
+      mediaType: f.type || undefined,
+      // Every file, not just images. A document with no `url` is unencodable
+      // for exactly the same reason a blob: URL is.
+      url: await readAsDataUrl(f),
+    })),
+  );
+
+  // Re-read AFTER the await rather than reusing a value captured before it, so
+  // a second drop landing mid-read is appended to instead of overwritten.
+  prompt.attachments = [...(prompt.attachments ?? []), ...added];
 });
 ```
 
