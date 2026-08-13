@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.22.1](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.22.0...@kitn.ai/ui-v0.22.1) (2026-08-13)
+
+
+### Bug Fixes
+
+* **agent-tooling:** derive the emitted accept from the media-type declaration ([#210](https://github.com/kitn-ai/ui/issues/210)) ([16c14c2](https://github.com/kitn-ai/ui/commit/16c14c2752d88c777a5b5e01b3d50593d7bded41))
+* **docs:** stage attachments as data: URIs, not object URLs ([#207](https://github.com/kitn-ai/ui/issues/207)) ([f809d04](https://github.com/kitn-ai/ui/commit/f809d04289ecdbcf1347b1593ee5e74f4d286d46))
+
 ## [0.22.0](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.21.0...@kitn.ai/ui-v0.22.0) (2026-08-13)
 
 
