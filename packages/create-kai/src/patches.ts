@@ -19,12 +19,75 @@
 export interface Patch {
   /** path relative to the template root */
   file: string;
-  /** must match exactly once in the template */
+  /** must match exactly once in the template, unless `multiple` opts out */
   find: RegExp;
   /** replacement, given the project name */
   replace: (projectName: string) => string;
   /** why this patch exists, printed when it stops matching */
   why: string;
+  /**
+   * Replace EVERY occurrence instead of requiring exactly one.
+   *
+   * WHAT THE UNAMBIGUITY GUARD IS ACTUALLY FOR, because this flag is a hole in
+   * it and the hole has to be the right shape. `String.replace` with a
+   * non-global regex rewrites the FIRST match and silently leaves the rest, so a
+   * `find` that matches twice is usually a `find` written too loosely: the
+   * author meant one site, hit two, and shipped a half-applied edit. Refusing
+   * that is worth a build failure.
+   *
+   * It is the wrong answer for a RENAME. `angular.json` names the project four
+   * times — the `projects` key, `outputPath`, and both `serve` buildTargets —
+   * and those four are not an ambiguity to resolve. They are one fact stated
+   * four times, and the count belongs to Angular's config schema rather than to
+   * anything we decided.
+   *
+   * The alternative was four context-pinned patches, one per site. That is
+   * WORSE, not merely more typing: four patches that each match once satisfy the
+   * guard completely, so the build stays green while covering a fixed four of an
+   * unbounded set. Add a `test` or `extract-i18n` target — an Angular CLI
+   * upgrade does this on its own — and the fifth reference to the old name
+   * ships into a user's project with every check passing. A guard that reports
+   * success over the occurrence it cannot see is the failure this repo keeps
+   * paying for; encoding an unbounded fact at fixed arity is how you build one.
+   *
+   * SO THE HOLE IS NARROW. Only a patch that opts in may match more than once —
+   * every other patch is held to exactly one, unchanged. And an opted-in patch
+   * that matches ZERO times is still a hard failure in both `applyPatch` and the
+   * build's `verifyPatches`, because "replace every occurrence" that replaces
+   * nothing is a rename that silently did not happen, which is the same vacuous
+   * pass wearing the opposite disguise.
+   */
+  multiple?: true;
+}
+
+/**
+ * The regex `applyPatch` will actually run: global only when a patch opted into
+ * `multiple`, so a single-site patch still rewrites exactly one occurrence.
+ *
+ * Flags are normalised rather than concatenated. `new RegExp(src, flags + 'g')`
+ * — which is what the build did — throws `SyntaxError: Invalid flags` the day
+ * someone writes `/…/g` in the table above. And a global regex reused across
+ * calls carries its `lastIndex`, so a second scaffold in the same process would
+ * start searching where the first stopped. Built fresh every call for both
+ * reasons.
+ */
+function baseFlags(patch: Patch): string {
+  return patch.find.flags.replace(/g/g, '');
+}
+
+export function patchRegExp(patch: Patch): RegExp {
+  const flags = baseFlags(patch);
+  return new RegExp(patch.find.source, patch.multiple === true ? `${flags}g` : flags);
+}
+
+/**
+ * How many times a patch matches — every occurrence, whether or not it opted
+ * into `multiple`. This is what `scripts/build.mjs` counts to decide between
+ * "does not match at all" (always fatal) and "matches more than once" (fatal
+ * only without the opt-in).
+ */
+export function countMatches(patch: Patch, source: string): number {
+  return [...source.matchAll(new RegExp(patch.find.source, `${baseFlags(patch)}g`))].length;
 }
 
 export const PATCHES: Record<string, readonly Patch[]> = {
@@ -84,6 +147,33 @@ export const PATCHES: Record<string, readonly Patch[]> = {
       find: /<title>@kitn\.ai\/ui Angular example<\/title>/,
       replace: (name) => `<title>${name}</title>`,
       why: 'the browser tab should name the user\'s app, not the kit\'s example',
+    },
+    {
+      /**
+       * The one patch in this table that renames rather than rewrites, and the
+       * only reason `multiple` exists — see the flag's docblock for why four
+       * separate patches would have been the worse answer.
+       *
+       * `angular.json` is where Angular's builder learns what the project is
+       * called, and unlike every other starter's config it is copied verbatim
+       * with nothing rewriting it: `rewritePackageJson` only touches
+       * package.json, and READMEs never reach a template at all. So a user who
+       * scaffolded `my-app` got `ng build` writing into `dist/ui-example-angular`
+       * and `ng serve` resolving a build target named after our example. Same
+       * class as the "@kitn.ai/ui Vue example" browser tab, in the one file no
+       * patch had ever opened.
+       *
+       * Matching the bare name rather than each quoted string is deliberate:
+       * two of the four sites embed it in a longer value
+       * (`dist/ui-example-angular`, `ui-example-angular:build:production`), so a
+       * `"…"`-anchored find would need two shapes to cover what one substring
+       * covers exactly.
+       */
+      file: 'angular.json',
+      find: /ui-example-angular/,
+      multiple: true,
+      replace: (name) => name,
+      why: 'angular.json names the project; a scaffolded app must build into its own dist/<name>, not dist/ui-example-angular',
     },
   ],
   svelte: [
@@ -147,15 +237,27 @@ export const PATCHES: Record<string, readonly Patch[]> = {
   ],
 };
 
-/** Apply every patch for a template. Throws if one does not match. */
+/**
+ * Apply one patch. Throws if it does not match.
+ *
+ * The throw covers `multiple` patches too, and that is the whole point of
+ * putting it before the replace rather than checking the result: `replace` with
+ * a global regex that matches nothing returns the source unchanged and reports
+ * success, so a rename that quietly stopped renaming would look identical to one
+ * that worked.
+ */
 export function applyPatch(patch: Patch, source: string, projectName: string): string {
-  if (!patch.find.test(source)) {
+  const find = patchRegExp(patch);
+  if (!find.test(source)) {
     throw new Error(
       `create-kai: patch for ${patch.file} no longer matches its template (${patch.why}). ` +
         'The starter changed; update PATCHES in src/patches.ts.',
     );
   }
-  return source.replace(patch.find, () => patch.replace(projectName));
+  // `test` advanced `lastIndex` if `find` is global. `replace` resets it itself,
+  // but depending on that is a subtlety a reader should not have to know.
+  find.lastIndex = 0;
+  return source.replace(find, () => patch.replace(projectName));
 }
 
 export function patchesFor(templateDir: string): readonly Patch[] {

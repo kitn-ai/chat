@@ -8,7 +8,9 @@
  *      consumer wires the kit, and they are CI-built, so drift is caught there.
  *   2. Verify every template patch still matches the file it patches, and fail
  *      loudly if one does not. A patch that silently stops matching ships a
- *      `workspace:*` instruction into a user's project.
+ *      `workspace:*` instruction into a user's project. Then check the PATCHED
+ *      result against `src/template-guards.ts` — the patches you did not write
+ *      are the ones that ship the defect, so the output is what gets graded.
  *   3. Bundle `src/index.ts` to one zero-dependency ESM file, so `npx` cold
  *      start is fast. `@clack/prompts` and `picocolors` are bundled in; so is
  *      the kit's `agent-tooling` catalog, which is why the CLI can hand out real
@@ -41,8 +43,9 @@ const templatesOut = path.join(dist, 'templates');
  *
  * Only the two STANDALONE starters have one today (nextjs, tanstack-start), and
  * neither is `ready` — so this is a latent bug, caught by the `file:` pattern in
- * REPO_INTERNAL below rather than by review. create-vite ships no lockfile for
- * the same reason: the first `npm install` is what should write it.
+ * `REPO_INTERNAL` (src/template-guards.ts) rather than by review. create-vite
+ * ships no lockfile for the same reason: the first `npm install` is what should
+ * write it.
  */
 const SKIP = new Set([
   'node_modules',
@@ -109,91 +112,6 @@ async function copyTemplate(templateDir) {
   return to;
 }
 
-/**
- * Instructions that make sense inside this monorepo and are unfollowable in a
- * user's project.
- *
- * THIS IS THE CHECK THE PATCH TABLE COULD NOT MAKE. `verifyPatches` proves the
- * patches you WROTE still match. It says nothing about the patches you did not
- * write, so a framework flipped to `ready` with an empty patch list passes it
- * vacuously — which is exactly what happened to Vue: the build printed
- * `2 patches verified`, both of them React's, and emitted a Vue project whose
- * browser tab read "@kitn.ai/ui Vue example" and whose vite.config told the user
- * to run `nx build ui`. Every remaining starter carries the same two lines, so
- * the same silent pass was waiting for svelte, angular and html.
- *
- * Checking the OUTPUT instead of the patch list is what makes it a real gate:
- * a new framework cannot go `ready` without either patching these out or
- * explaining itself here.
- */
-const REPO_INTERNAL = [
-  {
-    pattern: /workspace:\*/,
-    why: 'a `workspace:*` spec is a pnpm-only instruction; a user cannot install it',
-  },
-  {
-    pattern: /nx build ui/,
-    why: 'an emitted project is not a workspace member and has no `nx build ui` to run',
-  },
-  {
-    pattern: /pnpm --filter/,
-    why: 'a repo-internal command, unrunnable from a scaffolded project',
-  },
-  {
-    /**
-     * A monorepo-relative path to the kit.
-     *
-     * `workspace:*` is how the six LINKED starters name the kit; the two
-     * STANDALONE ones (nextjs, tanstack-start) instead say
-     * `file:../../../packages/ui`, which climbs out of the project and resolves
-     * to nothing once that project is somewhere else on disk. It is the same
-     * defect as `workspace:*` wearing different clothes, and the pattern above
-     * does not match it.
-     *
-     * `rewritePackageJson` already replaces this spec in package.json — which is
-     * why package.json is exempt from this whole check — but it is the ONLY file
-     * rewritten, and the standalone starters carry the same path in two others:
-     * their package-lock.json and their .npmrc comment. A lockfile pinning the
-     * kit to a path that does not exist is not a cosmetic leak; it is an
-     * `npm install` that resolves the wrong thing and an `npm ci` that refuses
-     * outright.
-     */
-    pattern: /file:(?:\.\.\/)+packages\/ui/,
-    why: 'a monorepo-relative path to the kit; from a user\'s project it resolves to nothing',
-  },
-  {
-    /**
-     * The kit's own example title, in any of the shapes the starters write it.
-     *
-     * The first version of this was `\s+\S+\s+example`, which reads "the kit
-     * name, ONE token, then `example`". That is the shape the five Vite
-     * starters happen to use ("@kitn.ai/ui Vue example"), and it silently
-     * misses every longer one: both SSR starters title themselves
-     * "@kitn.ai/ui — Next.js App Router example" and
-     * "@kitn.ai/ui — TanStack Start example", and neither tripped the guard.
-     * A pattern fitted to the examples in front of it is how this check passes
-     * over the next starter, which is the same vacuity #193 closed one layer up.
-     *
-     * So it now spans the whole title rather than a fixed token count, and it
-     * anchors on the SPACE after the kit name, which is what makes it a title
-     * rather than any other mention. Three real strings in the tree are excluded
-     * by that one character, and all three would otherwise be false reds:
-     *
-     *   `@kitn.ai/ui` is linked into this example ...  a backtick — vite.config
-     *        prose, repo-internal for a DIFFERENT reason, already caught and
-     *        patched out as `workspace:*`. Matching it here would report one
-     *        defect twice and pin this pattern to a line another patch owns.
-     *   @kitn.ai/ui-example-nextjs                    a hyphen — the starter's
-     *        own package NAME. package.json is exempt from this check, but that
-     *        name also appears in the standalone starters' package-lock.json.
-     *   @kitn.ai/ui/react                             a slash — a subpath
-     *        import, which can sit on a line whose comment says "example".
-     */
-    pattern: /@kitn\.ai\/ui[ \t]+[^\n`]{0,40}?\bexamples?\b/i,
-    why: "the kit's own example title — the user's app should be named after the user's app",
-  },
-];
-
 /** Every file under `dir`, absolute, ignoring nothing (templates are small). */
 async function walk(dir) {
   const out = [];
@@ -205,7 +123,15 @@ async function walk(dir) {
   return out;
 }
 
-async function verifyPatches(templateDir, root, patchesFor) {
+/**
+ * Every patch matches its file, and matches it the number of times it claims to.
+ *
+ * Zero matches is fatal for every patch, opted-in or not. More than one is fatal
+ * only WITHOUT `multiple`, which is the entirety of the opt-in; why that hole is
+ * the right shape lives on the flag in src/patches.ts rather than being
+ * half-stated in both places.
+ */
+async function verifyPatches(templateDir, root, patchesFor, countMatches) {
   const patches = patchesFor(templateDir);
   for (const patch of patches) {
     const file = path.join(root, patch.file);
@@ -214,19 +140,23 @@ async function verifyPatches(templateDir, root, patchesFor) {
         `create-kai build: patch targets ${patch.file}, which template '${templateDir}' does not have`,
       );
     }
-    const source = await readFile(file, 'utf8');
-    const matches = source.match(new RegExp(patch.find.source, `${patch.find.flags}g`));
-    if (!matches) {
+    const count = countMatches(patch, await readFile(file, 'utf8'));
+    if (count === 0) {
       throw new Error(
         `create-kai build: patch for ${templateDir}/${patch.file} no longer matches.\n` +
           `  why it exists: ${patch.why}\n` +
+          (patch.multiple
+            ? '  it is a `multiple` patch, so this is a rename that would now rename nothing\n'
+            : '') +
           '  the starter changed — update PATCHES in src/patches.ts',
       );
     }
-    if (matches.length > 1) {
+    if (count > 1 && !patch.multiple) {
       throw new Error(
-        `create-kai build: patch for ${templateDir}/${patch.file} matches ${matches.length} times; ` +
-          'it must be unambiguous',
+        `create-kai build: patch for ${templateDir}/${patch.file} matches ${count} times; ` +
+          'it must be unambiguous.\n' +
+          '  A non-global replace rewrites only the first, so the rest would ship unpatched.\n' +
+          '  Narrow the `find`, or set `multiple: true` if every occurrence should change.',
       );
     }
   }
@@ -234,20 +164,25 @@ async function verifyPatches(templateDir, root, patchesFor) {
 }
 
 /**
- * Apply this template's patches in memory and assert nothing repo-internal
- * survives them.
+ * Apply this template's patches in memory and check what survives them.
  *
- * `package.json` is exempt because it is not patched at all — `rewritePackageJson`
- * replaces the `workspace:*` kit spec wholesale at scaffold time, and
- * generate.test.ts asserts no local spec reaches the emitted file.
+ * The patches go through the CLI's own `applyPatch` rather than a
+ * reimplementation of it. This function used to rebuild the regex by hand, which
+ * meant it could not see a `multiple` patch: it would check a half-patched file
+ * no user would ever receive, and report on bytes that do not exist.
+ *
+ * Two families of rule run over the result, kept apart because their fixes
+ * differ — a repo-internal instruction wants a new patch, a wrong title wants
+ * that patch to name the project. Both live in `src/template-guards.ts`, where a
+ * test can watch each one fail.
  */
-async function verifyNoRepoInternals(templateDir, root, patchesFor) {
+async function verifyEmittedContent(templateDir, root, patchesFor, guards, applyPatch) {
   const patches = patchesFor(templateDir);
-  const problems = [];
+  const internals = [];
+  const titles = [];
 
   for (const file of await walk(root)) {
     const rel = path.relative(root, file);
-    if (rel === 'package.json') continue;
 
     let source;
     try {
@@ -258,27 +193,29 @@ async function verifyNoRepoInternals(templateDir, root, patchesFor) {
     if (source.includes('\u0000')) continue; // binary; nothing to instruct a user with
 
     for (const patch of patches) {
-      if (patch.file !== rel) continue;
-      source = source.replace(
-        new RegExp(patch.find.source, patch.find.flags),
-        // the project name is irrelevant to this check; any name proves the
-        // patch removed the marker rather than renaming it
-        () => patch.replace('my-app'),
-      );
+      // PROBE_NAME, not a plausible stand-in: the title rule asserts a patched
+      // title EQUALS it, which only proves anything if the string could not have
+      // arrived by any route other than this substitution.
+      if (patch.file === rel) source = applyPatch(patch, source, guards.PROBE_NAME);
     }
 
-    for (const { pattern, why } of REPO_INTERNAL) {
-      if (pattern.test(source)) {
-        problems.push(`  · ${templateDir}/${rel}: ${pattern.source}\n      ${why}`);
-      }
-    }
+    internals.push(...guards.repoInternalProblems(rel, source));
+    titles.push(...guards.titleProblems(rel, source, guards.PROBE_NAME));
   }
 
-  if (problems.length > 0) {
+  const render = (problems) =>
+    problems.map((p) => `  · ${templateDir}/${p.file}: ${p.detail}\n      ${p.why}`).join('\n');
+
+  if (internals.length > 0) {
     throw new Error(
       `create-kai build: template '${templateDir}' would ship repo-internal instructions ` +
-        'to a user.\nAdd a patch in src/patches.ts for each of these:\n' +
-        problems.join('\n'),
+        `to a user.\nAdd a patch in src/patches.ts for each of these:\n${render(internals)}`,
+    );
+  }
+  if (titles.length > 0) {
+    throw new Error(
+      `create-kai build: template '${templateDir}' would ship a browser tab that does not name ` +
+        `the user's project.\n${render(titles)}`,
     );
   }
 }
@@ -380,7 +317,8 @@ async function main() {
   await mkdir(templatesOut, { recursive: true });
 
   const { FRAMEWORKS } = await loadTs('src/frameworks.ts');
-  const { patchesFor } = await loadTs('src/patches.ts');
+  const { patchesFor, applyPatch, countMatches } = await loadTs('src/patches.ts');
+  const guards = await loadTs('src/template-guards.ts');
   const { goLiveThread } = await loadTs('src/generate.ts');
 
   const ready = FRAMEWORKS.filter((f) => f.status === 'ready');
@@ -389,8 +327,11 @@ async function main() {
   let patchCount = 0;
   for (const framework of ready) {
     const root = await copyTemplate(framework.templateDir);
-    patchCount += await verifyPatches(framework.templateDir, root, patchesFor);
-    await verifyNoRepoInternals(framework.templateDir, root, patchesFor);
+    // Order matters: `verifyEmittedContent` applies the patches, and `applyPatch`
+    // throws on one that does not match, so the specific "this patch went stale"
+    // message has to come first or it is replaced by a generic one.
+    patchCount += await verifyPatches(framework.templateDir, root, patchesFor, countMatches);
+    await verifyEmittedContent(framework.templateDir, root, patchesFor, guards, applyPatch);
     await verifyAppPath(framework, root, goLiveThread);
     await verifyDeclaredPaths(framework, root);
     console.log(`  template  ${framework.id.padEnd(16)} <- examples/starters/${framework.templateDir}`);
