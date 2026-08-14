@@ -3,12 +3,13 @@ import type { Theme } from '../../types';
 import type { Conversation } from '../../../chat-data';
 
 /**
- * The conversation rail — a thin wrapper over `<kai-conversations>`. The `.sidebar`
- * div owns the shell's right border (kept OFF the element so it follows the shell's
- * light/dark tokens, not the element's own re-scoped ones). The rail's `collapsed`
- * is CONTROLLED by the app's collapsed state, so it stays in sync with the parent
- * `<kai-resizable-item collapsed>` and re-expands the list on restore; the internal
- * hamburger still reports the toggle intent up via `(kai-toggle-sidebar)`.
+ * The conversation rail — a thin wrapper over `<kai-conversations>`. The `.sidebar` div
+ * owns the shell's right border (kept OFF the element so it follows the shell's
+ * light/dark tokens, not the light-mode ones the element pins on itself at `:host`).
+ * The rail's `collapsed` is CONTROLLED by the app's collapsed state, so it stays in
+ * sync with the parent `<kai-resizable-item collapsed>` and re-expands the list on
+ * restore; the internal hamburger still reports the toggle intent up via
+ * `(kai-toggle-sidebar)`.
  *
  * Array/object props (`groups`, `conversations`) are set as DOM PROPERTIES via
  * Angular property binding (`[groups]`, `[conversations]`). `collapsed` is a boolean

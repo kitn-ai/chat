@@ -87,11 +87,13 @@ registry yields.
 
    What it costs you is narrower than "nothing is styled", and worth knowing so
    you can recognise it: dark mode is unaffected (those tokens are a plain
-   `.dark` rule), and anything nested inside a `kai-*` element still resolves,
-   because the elements re-scope their own tokens onto slotted content. The
-   casualty is your own chrome *outside* the elements — here `.app` computes
-   `background-color: rgba(0, 0, 0, 0)` in light mode. The page looks nearly
-   right, which is why this is worth checking rather than eyeballing.
+   `.dark` rule), and anything nested inside a `kai-*` element still resolves.
+   Nothing re-scopes anything — Tailwind emits `@theme` to `:root, :host`, so
+   the elements' own compiled CSS pins the tokens on every host and children
+   inherit off it. The casualty is your own chrome *outside* the elements —
+   here `.app` computes `background-color: rgba(0, 0, 0, 0)` in light mode. The
+   page looks nearly right, which is why this is worth checking rather than
+   eyeballing.
 
    The rule is "does Tailwind process this file", not "never import `theme.css`":
    an app that *does* run Tailwind should import `theme.css`, which is then

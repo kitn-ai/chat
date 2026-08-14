@@ -9,12 +9,17 @@ import {
 // The kit's design tokens, as PLAIN COMPILED CSS.
 //
 // IT MUST BE `theme.tokens.css`, NOT `theme.css`. They are not two spellings of
-// one file: `@kitn.ai/ui/theme.css` is Tailwind v4 SOURCE — its tokens live inside
-// an `@theme { … }` block, which is a Tailwind at-rule, not CSS. Without the
-// Tailwind plugin in the pipeline it reaches the browser verbatim, where an
-// unknown at-rule is DISCARDED WHOLE, so every `--color-*` token silently
-// resolves to nothing and the app renders with the fallbacks. It builds green
-// either way, which is what makes this worth a paragraph.
+// one file: `@kitn.ai/ui/theme.css` is Tailwind v4 SOURCE — its light tokens live
+// inside an `@theme { … }` block, which is a Tailwind at-rule, not CSS. The test
+// is whether TAILWIND PROCESSES THE FILE, not which specifier you import: this app
+// runs none, so `theme.css` would reach the browser verbatim, where an unknown
+// at-rule is DISCARDED WHOLE. (The Solid starter imports that same file and is
+// right to — it runs Tailwind, so the block is compiled rather than discarded.)
+//
+// The damage is narrow, which is why it survives review. Dark mode is unaffected
+// (those tokens are a plain `.dark` rule), and anything inside a `kai-*` element
+// still resolves. What loses its colours is the chrome OUTSIDE every element —
+// here `html`/`body` and `.app`. It builds green either way.
 //
 // Importing it from the root route is what puts it in the SERVER-rendered <head>:
 // React 19 hoists the stylesheet link out of the module graph and emits it with

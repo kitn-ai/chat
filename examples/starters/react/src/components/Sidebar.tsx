@@ -13,12 +13,12 @@ interface SidebarProps {
 }
 
 /**
- * The conversation rail — a thin wrapper over `<kai-conversations>`. The `.sidebar`
- * div owns the shell's right border (kept OFF the element so it follows the shell's
- * light/dark tokens, not the element's own re-scoped ones). The rail's `collapsed`
- * is CONTROLLED by the app's collapsed state, so it stays in sync with the parent
- * `<ResizableItem collapsed>` and re-expands the list on restore; `onToggleSidebar`
- * still reports the toggle intent up via `onToggle`.
+ * The conversation rail — a thin wrapper over `<kai-conversations>`. The `.sidebar` div
+ * owns the shell's right border (kept OFF the element so it follows the shell's
+ * light/dark tokens, not the light-mode ones the element pins on itself at `:host`).
+ * The rail's `collapsed` is CONTROLLED by the app's collapsed state, so it stays in
+ * sync with the parent `<ResizableItem collapsed>` and re-expands the list on restore;
+ * `onToggleSidebar` still reports the toggle intent up via `onToggle`.
  */
 export function Sidebar({ theme, conversations, activeId, collapsed, onSelect, onNewChat, onToggle }: SidebarProps) {
   return (

@@ -72,13 +72,17 @@ a real `npm install` from the registry yields.
    `src/routes/`; shared components live *outside* it, in `src/components/`,
    because the router plugin compiles `routes/` to build the route tree.
 2. **Import `@kitn.ai/ui/theme.tokens.css`, not `@kitn.ai/ui/theme.css`.** The
-   latter is Tailwind v4 *source*: its tokens live in an `@theme { … }` block,
-   which is a Tailwind at-rule rather than CSS. Without the Tailwind plugin it
-   reaches the browser verbatim, an unknown at-rule is discarded whole, and every
-   `--color-*` token silently resolves to nothing. It builds green either way,
-   which is what makes it worth knowing. Importing the tokens from `__root.tsx`
-   is what puts the `<link rel="stylesheet">` in the **server-rendered** `<head>`,
-   so there is no flash of unstyled custom elements.
+   latter is Tailwind v4 *source*: its light tokens live in an `@theme { … }`
+   block, which is a Tailwind at-rule rather than CSS. The test is whether
+   Tailwind processes the file, not which specifier you import — this app runs no
+   Tailwind, so the at-rule reaches the browser and is discarded whole. (An app
+   that *does* run Tailwind, like the Solid starter, should import `theme.css`.)
+   The loss is narrower than "nothing is styled": dark mode is unaffected and
+   anything inside a `kai-*` element still resolves, so the casualty is your own
+   chrome *outside* the elements — here `html`/`body` and `.app`. It builds green
+   either way, which is what makes it worth knowing. Importing the tokens from
+   `__root.tsx` is what puts the `<link rel="stylesheet">` in the
+   **server-rendered** `<head>`, so there is no flash of unstyled custom elements.
 3. **No `'use client'`-style directive** is needed — the wrappers self-guard with
    `typeof window`, so they're inert during SSR and only touch `customElements`
    in the browser.
