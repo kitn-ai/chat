@@ -174,7 +174,7 @@
     "verify:scaffold": "node scripts/verify-scaffold-compiles.mjs",
     "verify:schemas": "node scripts/verify-schemas-exported.mjs --self-test && node scripts/verify-schemas-exported.mjs",
     "verify:shader-lazy": "node scripts/verify-shader-lazy.mjs --self-test && node scripts/verify-shader-lazy.mjs",
-    "verify:solid-coverage": "node scripts/verify-solid-coverage.mjs",
+    "verify:solid-coverage": "node scripts/verify-solid-coverage.mjs --self-test && node scripts/verify-solid-coverage.mjs",
     "verify:tool-schemas": "node scripts/verify-tool-schemas.mjs",
     "verify:ssr": "node scripts/verify-ssr-imports.mjs && node scripts/verify-ssr-render.mjs",
     "verify:ssr:imports": "node scripts/verify-ssr-imports.mjs",
