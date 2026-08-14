@@ -1,0 +1,41 @@
+[
+  {
+    "id": "create-kai@0.1.1",
+    "name": "create-kai",
+    "version": "0.1.1",
+    "size": 143076,
+    "unpackedSize": 553064,
+    "shasum": "0dc0cba62c753782d2c061d73291cf45f8ea6de4",
+    "integrity": "sha512-Wkpqs3+F3vLM3h5Fp4BGK774j8cIIJEKTiTfNhwHiHJtTIwBa9zcvCqC5SvnWzDiVWghNmx/hc8GDd1LMuqr9w==",
+    "filename": "create-kai-0.1.1.tgz",
+    "files": [
+      {
+        "path": "package.json",
+        "size": 1423,
+        "mode": 420
+      },
+      {
+        "path": "dist/index.js",
+        "size": 226731,
+        "mode": 493
+      },
+      {
+        "path": "dist/templates/nextjs/package.json",
+        "size": 514,
+        "mode": 420
+      },
+      {
+        "path": "dist/templates/nextjs/_npmrc",
+        "size": 370,
+        "mode": 420
+      },
+      {
+        "path": "dist/templates/nextjs/_gitignore",
+        "size": 100,
+        "mode": 420
+      }
+    ],
+    "entryCount": 178,
+    "bundled": []
+  }
+]

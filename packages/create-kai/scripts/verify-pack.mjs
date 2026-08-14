@@ -42,6 +42,12 @@
  * stronger — it holds whatever a future npm decides to do with the file.
  *
  * Run after `npm run build`.
+ *
+ * READING THE PACKED LISTING IS ITS OWN PROBLEM, and it broke a release: npm 12
+ * moved the top level of `npm pack --json` from an array to an object keyed by
+ * package name, so the one-liner that used to live here threw a TypeError at
+ * publish time. That parse now lives in ./pack-listing.mjs, which carries the
+ * measurement and is graded against captured fixtures of both shapes.
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
@@ -49,6 +55,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { loadTs } from './load-ts.mjs';
+import { readPackListing } from './pack-listing.mjs';
 
 /** This package, wherever `--package-root` points the packed tree. */
 const selfRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -72,12 +79,47 @@ const pkgRoot = flagIndex === -1 ? selfRoot : path.resolve(process.argv[flagInde
 const { STRIPPED_DOTFILES, travellingName } = await loadTs(selfRoot, 'src/template-dotfiles.ts');
 const { PATCHES, GATEWAY_PATCHES } = await loadTs(selfRoot, 'src/patches.ts');
 
-const raw = execFileSync('npm', ['pack', '--dry-run', '--json'], {
-  cwd: pkgRoot,
-  encoding: 'utf8',
-  stdio: ['ignore', 'pipe', 'ignore'],
-});
-const files = JSON.parse(raw)[0].files.map((f) => f.path);
+/**
+ * The npm this runs under, which is NOT always the one on PATH.
+ *
+ * `VERIFY_PACK_NPM` points at a specific npm binary so CI can exercise this
+ * guard under the npm the release job pins, without `npm install -g` perturbing
+ * every step after it in the job. See the docblock in ./pack-listing.mjs: the
+ * publish that this file broke was the first time it had ever run under npm 12,
+ * because the test job runs node 22's bundled npm 10 and nothing else did.
+ */
+const NPM = process.env.VERIFY_PACK_NPM || 'npm';
+
+/** Reported on success and named in every parse failure. */
+const npmVersion = execFileSync(NPM, ['--version'], { encoding: 'utf8' }).trim();
+
+let raw;
+try {
+  raw = execFileSync(NPM, ['pack', '--dry-run', '--json'], {
+    cwd: pkgRoot,
+    encoding: 'utf8',
+    // stderr is CAPTURED, not discarded: it used to go to 'ignore', so an npm
+    // that failed to pack at all produced a bare non-zero exit with nothing to
+    // read. npm's warnings go here too (the `always-auth` lines in the release
+    // log), which is exactly why they never polluted the JSON on stdout.
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+} catch (err) {
+  console.error(
+    `create-kai: \`${NPM} pack --dry-run --json\` failed under npm ${npmVersion}\n` +
+      `${err.stderr ?? ''}${err.stdout ?? ''}`,
+  );
+  process.exit(1);
+}
+
+let files;
+let packShape;
+try {
+  ({ paths: files, shape: packShape } = readPackListing(raw, { npmVersion }));
+} catch (err) {
+  console.error(`create-kai: ${err.message}`);
+  process.exit(1);
+}
 
 const problems = [];
 
@@ -226,8 +268,13 @@ if (problems.length > 0) {
 // "8 of 8" rather than a bare count: the old line read `8 template(s), 7
 // _gitignore` on a tree that was already broken, and printing the two numbers
 // apart is what made that look like a pass.
+// The npm version and the container shape are PRINTED, not just used. The
+// failure this file is downstream of was invisible in every green log precisely
+// because nothing recorded which npm produced the listing; now a reader can see
+// at a glance whether a given run exercised the array shape or the keyed one.
 console.log(
   `create-kai: tarball OK — ${files.length} files, ` +
     `${templateDirs.length} template(s), ` +
-    `${withIgnore.size} of ${templateDirs.length} with a _gitignore`,
+    `${withIgnore.size} of ${templateDirs.length} with a _gitignore ` +
+    `[npm ${npmVersion}, ${packShape} listing]`,
 );
