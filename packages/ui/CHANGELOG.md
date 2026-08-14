@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.24.0](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.23.0...@kitn.ai/ui-v0.24.0) (2026-08-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* three published `AssistantStream` signatures narrow — `addSource`, `upsertTool`'s patch and `appendReasoning`'s opts now reject an argument carrying a key owned by a sibling bag. Code passing the correct payload is unaffected; code passing the wrong one stops compiling, which is the point. No data type changed, so `element-meta.json`, `docs/web-components.md`, `llms-full.txt` and `custom-elements.json` are byte-identical after a `--skip-nx-cache` build.
+
+### Bug Fixes
+
+* stop AssistantStream's weak parameters absorbing each other's bags ([#236](https://github.com/kitn-ai/ui/issues/236)) ([8bb7dd7](https://github.com/kitn-ai/ui/commit/8bb7dd70b3b0793be68a8f3b91e10bace6ca151a))
+
 ## [0.23.0](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.22.2...@kitn.ai/ui-v0.23.0) (2026-08-14)
 
 
