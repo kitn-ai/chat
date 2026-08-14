@@ -241,16 +241,25 @@ export const FRAMEWORKS: readonly FrameworkDef[] = [
     templateDir: 'tanstack-start',
     renderer: 'tanstack-start',
     registration: 'elements',
-    composedWorkspace: false,
-    status: 'planned',
+    // The starter is now the hand-composed workspace, server-rendered: a
+    // `<Resizable>` split, `<Conversations>` in the rail, `<Thread>` fed by
+    // `useKaiChat`, `<PromptInput>` below it, and the kit's `createMockResponder`
+    // streaming through `readOpenAIStream`. So `conversations` is emittable here
+    // exactly as it is for the five Vite rows.
+    composedWorkspace: true,
+    status: 'ready',
     paths: {
       entry: 'src/router.tsx',
       app: 'src/routes/index.tsx',
-      components: 'src/routes',
+      // `src/components`, NOT `src/routes`, which this row used to claim. The
+      // route files are compiled by the TanStack Router plugin to build the route
+      // tree, so a v2 `add` dropping a plain component in there would be writing
+      // into generated-routing territory. The starter keeps its shared components
+      // outside `routes/` for the same reason.
+      components: 'src/components',
       css: 'src/styles.css',
       env: '.env.local',
     },
-    note: 'starter is an SSR compatibility demo, not a chat app; no thread, composer or mock stream to run',
   },
 ];
 

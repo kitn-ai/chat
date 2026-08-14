@@ -1,154 +1,135 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
+import { Button, Resizable, ResizableItem, useKaiChat } from '@kitn.ai/ui/react';
+import { readOpenAIStream } from '@kitn.ai/ui/wire';
+import { CONVERSATIONS, THREADS, SUGGESTIONS, TRIGGERS, newId, mockResponse } from '../chat-data';
+import { Sidebar } from '../components/Sidebar';
+import { ThreadView } from '../components/ThreadView';
+import { Composer } from '../components/Composer';
+import { ThemeToggle } from '../components/ThemeToggle';
+import { HydrationBadge } from '../components/HydrationBadge';
+import { useConversations } from '../hooks';
+import type { Theme } from '../theme';
 
-// Typed React wrappers over the `kai-*` custom elements. Importing a wrapper is
-// enough — it lazily registers its own element on the client (in a layout
-// effect), so there's no separate `import '@kitn.ai/ui/elements'` side effect
-// and the unused elements stay tree-shaken out of the bundle.
-//
-// `Conversations` is included on purpose: its element file ships as
-// `conversation-list.js`, and the wrapper imports it under that name. It
-// resolves natively here — no consumer-side specifier shim needed.
-import { Button, Chat, Conversations } from '@kitn.ai/ui/react';
-import type { MessagePart } from '@kitn.ai/ui';
-
+/**
+ * A mini chat **workspace composed by hand** from @kitn.ai/ui's individual
+ * elements — server-rendered by TanStack Start, then hydrated and streamed into.
+ *
+ *   <Resizable>/<ResizableItem>  — the draggable sidebar | main split
+ *   <Conversations>  — the sidebar list (fed `conversations`, emits select/new)
+ *   <Thread>         — the scrolling message list (kai-thread; stick-to-bottom built in)
+ *   <PromptInput>    — the composer at the bottom
+ *
+ * `useKaiChat` owns the message array + streaming; everything else is plain React
+ * state. Swap `mockResponse(text)` for a real `fetch` to ship a real app.
+ *
+ * WHAT THIS ROUTE PROVES ABOUT SERVER RENDERING
+ * ---------------------------------------------
+ * This starter exists to show that the `kai-*` web components survive SSR. It used
+ * to show that with a static `<Chat>` fed a frozen array. A composed thread that
+ * hydrates and then STREAMS proves strictly more, so the demonstration moved here
+ * rather than being kept alongside:
+ *
+ *   1. The server emits BARE TAGS. `@kitn.ai/ui/react` registers each element from
+ *      a layout effect, and layout effects do not run on the server, so the SSR'd
+ *      HTML contains `<kai-thread></kai-thread>` and nothing inside it. View source
+ *      and you will find empty elements — that is correct, not a bug.
+ *   2. Array and object props NEVER become attributes. `messages`, `conversations`
+ *      and `triggers` are assigned as live DOM properties after hydration, so
+ *      there is no serialize/parse step and no `messages="[{...}]"` in the markup.
+ *      The static version proved this ONCE, at mount.
+ *   3. Streaming proves the channel KEEPS working. Every chunk assigns a new
+ *      `messages` array reference to the same element that the server rendered
+ *      empty. A page that hydrated badly can still look right; it cannot stream.
+ *      The badge in the top bar reports which of those you are looking at.
+ *
+ * Nothing on this page is fetched from the server: no loader, no server function.
+ * The reply comes from the kit's mock responder in the browser. That keeps the SSR
+ * question — does the ELEMENT survive hydration — separate from a data-loading
+ * question this starter is not about.
+ */
 export const Route = createFileRoute('/')({
   component: Home,
 });
 
-// A message thread — passed as a JS *property* (an array of objects) through the
-// wrapper. This is the data-driven prop that proves array round-tripping
-// survives SSR + hydration: the server emits a bare <kai-chat>, then after
-// hydration the wrapper assigns `el.messages = [...]` and the element populates.
-type ChatMessage = {
-  id: string;
-  role: 'user' | 'assistant';
-  parts: MessagePart[];
-  actions?: ('copy' | 'like' | 'dislike' | 'regenerate' | 'edit')[];
-};
-
-const MESSAGES: ChatMessage[] = [
-  {
-    id: 'm-1',
-    role: 'user',
-    parts: [{ type: 'text', text: 'Does @kitn.ai/ui work with TanStack Start?' }],
-  },
-  {
-    id: 'm-2',
-    role: 'assistant',
-    parts: [
-      {
-        type: 'text',
-        text:
-          'Yes — the `kai-*` web components server-render as bare tags and then ' +
-          'register + hydrate on the client. This thread is a `messages` **array** ' +
-          'prop set through the React wrapper.',
-      },
-    ],
-    actions: ['copy', 'like'],
-  },
-];
-
-// A second data-driven element — also set as a JS *property* array.
-type Conversation = {
-  id: string;
-  title: string;
-  scope: { type: 'document' | 'collection' };
-  messageCount: number;
-  lastMessageAt: string;
-  updatedAt: string;
-};
-
-const CONVERSATIONS: Conversation[] = [
-  {
-    id: 'c-1',
-    title: 'React + web components',
-    scope: { type: 'collection' },
-    messageCount: 2,
-    lastMessageAt: '2026-06-10T15:30:00.000Z',
-    updatedAt: '2026-06-10T15:30:00.000Z',
-  },
-  {
-    id: 'c-2',
-    title: 'Centering a div',
-    scope: { type: 'collection' },
-    messageCount: 2,
-    lastMessageAt: '2026-06-09T14:20:00.000Z',
-    updatedAt: '2026-06-09T14:20:00.000Z',
-  },
-  {
-    id: 'c-3',
-    title: 'TypeScript generics',
-    scope: { type: 'collection' },
-    messageCount: 4,
-    lastMessageAt: '2026-06-08T11:05:00.000Z',
-    updatedAt: '2026-06-08T11:05:00.000Z',
-  },
-];
-
 function Home() {
-  const [clicks, setClicks] = useState(0);
-  const [activeId, setActiveId] = useState('c-1');
+  const [theme, setTheme] = useState<Theme>('dark');
+  const [collapsed, setCollapsed] = useState(false);
+  const chat = useKaiChat({ initialMessages: THREADS[CONVERSATIONS[0].id] ?? [] });
+  const { conversations, activeId, selectConversation, newChat } = useConversations(chat, CONVERSATIONS);
 
-  // Client-only probe: confirm the elements registered after hydration. On the
-  // server this stays "registering…" (the wrappers never touch `customElements`
-  // during SSR); after hydration the layout effects define the elements. We
-  // include `kai-conversations` — the previously-mis-specified one — to prove it
-  // now registers natively.
-  const [registered, setRegistered] = useState<string | null>(null);
-  useEffect(() => {
-    let raf = 0;
-    const check = () => {
-      const ok =
-        typeof customElements !== 'undefined' &&
-        !!customElements.get('kai-button') &&
-        !!customElements.get('kai-chat') &&
-        !!customElements.get('kai-conversations');
-      setRegistered(ok ? 'registered' : 'registering…');
-      if (!ok) raf = requestAnimationFrame(check);
-    };
-    check();
-    return () => cancelAnimationFrame(raf);
-  }, []);
+  const send = useCallback(
+    async (raw: string) => {
+      const text = raw.trim();
+      if (!text) return;
+      // The Composer already cleared its own input; here we just append the user
+      // message and stream the (mock) assistant reply.
+      chat.append({ id: newId(), role: 'user', parts: [{ type: 'text', text }] });
+      const stream = chat.streamAssistant();
+      // NO BACKEND AND NO PROVIDER. mockResponse() yields canned SSE frames that
+      // go through the SAME reader a real model's response would, so this preview
+      // exercises the real path. To go live, only this one expression changes —
+      // `mockResponse(text)` becomes a POST to a TanStack server route, with
+      // toOpenAIMessages(chat.messages) as the body. The line below stays.
+      await readOpenAIStream(mockResponse(text), stream);
+      stream.done();
+    },
+    [chat],
+  );
 
   return (
-    <main>
-      <h1>@kitn.ai/ui on TanStack Start</h1>
-      <p className="lede">
-        Framework-agnostic web components, consumed through the typed React
-        wrappers, server-rendered and hydrated by TanStack Start.
-      </p>
+    <div className={`app${theme === 'dark' ? ' dark' : ''}`}>
+      {/* <kai-resizable> owns the sidebar width + the divider. The handle defaults
+          to the `line` hairline (transparent at rest, tinting on hover/drag);
+          collapsing the sidebar maps to <ResizableItem collapsed>. */}
+      <Resizable theme={theme} orientation="horizontal">
+        <ResizableItem theme={theme} size="280px" min="220px" max="420px" collapsed={collapsed}>
+          <Sidebar
+            theme={theme}
+            conversations={conversations}
+            activeId={activeId}
+            collapsed={collapsed}
+            onSelect={selectConversation}
+            onNewChat={newChat}
+            onToggle={() => setCollapsed((c) => !c)}
+          />
+        </ResizableItem>
 
-      <div className="row">
-        <Button variant="default" onClick={() => setClicks((c) => c + 1)}>
-          Clicked {clicks}×
-        </Button>
-        <Button variant="outline" icon="sparkles">
-          Outline
-        </Button>
-        <Button variant="subtle" disabled>
-          Disabled
-        </Button>
-        <span data-testid="registration-status">
-          elements: {registered ?? '…'}
-        </span>
-      </div>
+        <ResizableItem theme={theme}>
+          <main className="main">
+            <header className="bar">
+              <div className="bar-left">
+                {collapsed && (
+                  <Button
+                    theme={theme}
+                    variant="ghost"
+                    size="icon"
+                    icon="panel-left"
+                    label="Show sidebar"
+                    onClick={() => setCollapsed(false)}
+                  />
+                )}
+                <span className="brand">@kitn.ai/ui · composed chat on TanStack Start</span>
+              </div>
+              <div className="bar-right">
+                <HydrationBadge />
+                <ThemeToggle theme={theme} onToggle={() => setTheme((t) => (t === 'light' ? 'dark' : 'light'))} />
+              </div>
+            </header>
 
-      <div className="panes">
-        <Conversations
-          className="pane-rail"
-          groups={[]}
-          conversations={CONVERSATIONS}
-          activeId={activeId}
-          onConversationSelect={(e) => setActiveId(e.detail.id)}
-        />
-        <Chat
-          className="pane-chat"
-          messages={MESSAGES}
-          chatTitle="Demo thread"
-          placeholder="Ask anything…"
-        />
-      </div>
-    </main>
+            <ThreadView theme={theme} messages={chat.messages} />
+
+            <Composer
+              theme={theme}
+              loading={chat.loading}
+              suggestions={chat.messages.length <= 2 ? SUGGESTIONS : []}
+              triggers={TRIGGERS}
+              onSubmit={send}
+              onSuggestionClick={send}
+            />
+          </main>
+        </ResizableItem>
+      </Resizable>
+    </div>
   );
 }

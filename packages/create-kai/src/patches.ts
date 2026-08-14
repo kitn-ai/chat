@@ -235,6 +235,77 @@ export const PATCHES: Record<string, readonly Patch[]> = {
       why: 'a scaffolded project is not a workspace member and has no `nx build ui` to run',
     },
   ],
+  /**
+   * The first STANDALONE starter to go `ready`, and it needs a different pair of
+   * patches from the five Vite rows above — neither of the two files below exists
+   * in any of them.
+   *
+   * The six linked starters name the kit `workspace:*` and carry the repo-internal
+   * instruction in `vite.config.ts`. This one names it
+   * `file:../../../packages/ui`, and its vite.config says nothing about the
+   * monorepo at all, so the React-shaped `vite.config.ts` patch would find nothing
+   * to match here. Copying the row above is the wrong move; these are the two
+   * files that actually carry the leak.
+   */
+  'tanstack-start': [
+    {
+      /**
+       * THE BROWSER TAB, SET IN JAVASCRIPT RATHER THAN HTML.
+       *
+       * TanStack Start has no `index.html`: the document title is a `head()` meta
+       * entry on the root route, which is why this patch targets a `.tsx` file
+       * where every other title patch in this table targets HTML.
+       *
+       * THAT DIFFERENCE COSTS REAL COVERAGE, and it is worth knowing rather than
+       * discovering. `verifyTitles` (src/template-guards.ts) only reads `.html`
+       * files, so it cannot grade this one — see the KNOWN LIMIT paragraph on
+       * `titleProblems`, which names this exact case. What holds this title true
+       * is therefore narrower than what holds the other five true:
+       *
+       *   · `patchMatchProblem` fails the build if this `find` stops matching or
+       *     starts matching twice, so the title cannot be reworded silently.
+       *   · `generate.test.ts`'s tanstack-start block asserts the EMITTED
+       *     `__root.tsx` carries the project's name and no longer mentions the
+       *     kit's example, which is the assertion `verifyTitles` would have made.
+       *
+       * What neither covers is a SECOND document title added elsewhere in the
+       * project — a new route with its own `head()`. Closing that needs
+       * `titleProblems` to read a JS meta array, which needs a parser rather than
+       * a regex (an object field named `title` is card data far more often than
+       * it is a document title). Left as a stated gap rather than a regex that
+       * would half-cover it.
+       */
+      file: 'src/routes/__root.tsx',
+      find: /'@kitn\.ai\/ui — TanStack Start example'/,
+      replace: (name) => `'${name}'`,
+      why: 'the browser tab should name the user\'s app, not the kit\'s example',
+    },
+    {
+      /**
+       * The `.npmrc` comment, which is pure monorepo geography.
+       *
+       * `install-links=true` itself is worth keeping — it is a general npm setting
+       * with a general justification — but the three comment lines above it
+       * explain why THIS EXAMPLE points at `file:../../../packages/ui`, a path
+       * that climbs out of a user's project and resolves to nothing. That spec is
+       * caught by the `file:` pattern in REPO_INTERNAL; `rewritePackageJson`
+       * scrubs it from package.json, and the starter's package-lock.json never
+       * reaches a template because `scripts/build.mjs` skips lockfiles. This
+       * comment is the third and last place it appears.
+       *
+       * So the patch replaces the explanation rather than the directive, on the
+       * same principle as the vanilla row above: keep the half that is about npm,
+       * drop the half that is about where this repo keeps its packages.
+       */
+      file: '.npmrc',
+      find: /# Pack the local `@kitn\.ai\/ui`[\s\S]*?\n(?=install-links=true)/,
+      replace: () =>
+        '# A `file:` dependency pointing at a DIRECTORY is copied into node_modules\n' +
+        '# rather than symlinked, so a local package resolves the way a published one\n' +
+        '# does. Harmless if this project has none.\n',
+      why: 'the comment explains a monorepo-relative kit path that does not exist in a user\'s project',
+    },
+  ],
 };
 
 /**

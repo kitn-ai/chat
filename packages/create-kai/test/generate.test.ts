@@ -13,6 +13,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { GITIGNORE_TEMPLATE_NAME, generate, goLiveThread } from '../src/generate';
 import { FRAMEWORKS, getFramework } from '../src/frameworks';
+import { buildTypechecks, scriptsToRun } from '../src/starter-scripts';
 import type { ProjectPlan } from '../src/types';
 
 const TEMPLATE_ROOT = path.resolve(__dirname, '../dist/templates');
@@ -599,6 +600,127 @@ describe('generate (html + full-screen + conversations + mock)', () => {
     expect(pkg.scripts.build).toContain('tsc');
     expect(pkg.scripts.build).not.toContain('vue-tsc');
     expect(pkg.scripts.build).not.toContain('svelte-check');
+  });
+});
+
+/**
+ * The SERVER-RENDERED cell, and the first STANDALONE starter to be `ready`.
+ *
+ * Two things here are covered by nothing else in the suite, which is why this
+ * block is not just a copy of the five above:
+ *
+ *   1. THE BROWSER TAB. `verifyTitles` in the build reads `.html` files, and this
+ *      framework has none — the document title is a `head()` meta entry in
+ *      `src/routes/__root.tsx`. See the KNOWN LIMIT paragraph on `titleProblems`
+ *      (src/template-guards.ts), which names this exact case and hands the gap to
+ *      whoever makes an SSR row ready. The title assertion below is that gap
+ *      closed for the title this project HAS. (A second `head()` added in a new
+ *      route is still uncovered; that needs a parser, not a regex.)
+ *   2. THE KIT SPEC OUTSIDE package.json. The six linked starters say
+ *      `workspace:*`; this one says `file:../../../packages/ui`, and it repeats
+ *      that path in `.npmrc`, which `rewritePackageJson` never opens.
+ */
+describe('generate (tanstack-start + full-screen + conversations + mock)', () => {
+  let root: string;
+  let dir: string;
+  let files: string[];
+
+  beforeAll(async () => {
+    root = await mkdtemp(path.join(tmpdir(), 'create-kai-tanstack-'));
+    dir = path.join(root, 'tanstack-app');
+    const result = await generate(
+      plan(dir, { frameworkId: 'tanstack-start', name: 'tanstack-app' }),
+      { templateRoot: TEMPLATE_ROOT },
+    );
+    files = result.files;
+  });
+
+  afterAll(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it('emits the composed workspace as routes plus components, not a static <Chat>', async () => {
+    expect(files).toEqual(
+      expect.arrayContaining([
+        'src/routes/index.tsx',
+        'src/routes/__root.tsx',
+        'src/chat-data.ts',
+        'src/components/Sidebar.tsx',
+        'src/components/ThreadView.tsx',
+        'src/components/Composer.tsx',
+        'src/hooks/useConversations.ts',
+      ]),
+    );
+    // This starter used to be a static demo: one batteries-included <Chat> fed a
+    // frozen MESSAGES array, with no composer and no stream. Asserting the files
+    // exist would pass on that too, so assert what makes it a chat APP.
+    const app = await readFile(path.join(dir, 'src/routes/index.tsx'), 'utf8');
+    expect(app).toContain('useKaiChat');
+    expect(app).toContain('readOpenAIStream');
+    expect(app).toContain('streamAssistant');
+
+    // The drop-in is gone, checked against the IMPORT LIST rather than by
+    // searching the source for `<Chat`. The first version of this assertion did
+    // the latter and failed on the file's own header comment, which explains why
+    // the static `<Chat>` demo was replaced — a check that reads prose reports on
+    // what a file SAYS instead of what it does.
+    const named = app.match(/import \{([^}]*)\} from '@kitn\.ai\/ui\/react'/)?.[1];
+    expect(named, 'the app must import the composed pieces from @kitn.ai/ui/react').toBeDefined();
+    const imported = named!.split(',').map((s) => s.trim());
+    expect(imported).toContain('useKaiChat');
+    expect(imported).not.toContain('Chat');
+  });
+
+  it('names the browser tab after the user app, in the head() meta the build cannot read', async () => {
+    const rootRoute = await readFile(path.join(dir, 'src/routes/__root.tsx'), 'utf8');
+    expect(rootRoute).toContain("{ title: 'tanstack-app' }");
+    expect(rootRoute).not.toContain('TanStack Start example');
+  });
+
+  it('leaves no monorepo-relative kit path in .npmrc, which no rewrite opens', async () => {
+    const npmrc = await readFile(path.join(dir, '.npmrc'), 'utf8');
+    expect(npmrc).not.toMatch(/file:(?:\.\.\/)+packages\/ui/);
+    // The directive survives; only the explanation of OUR layout is replaced.
+    expect(npmrc).toContain('install-links=true');
+  });
+
+  it('records tanstack paths in kai.json, with components outside routes/', async () => {
+    const kai = JSON.parse(await readFile(path.join(dir, 'kai.json'), 'utf8'));
+    expect(kai).toMatchObject({
+      framework: 'tanstack-start',
+      registration: 'elements',
+      gateway: 'mock',
+    });
+    expect(kai.paths.app).toBe('src/routes/index.tsx');
+    expect(kai.paths.entry).toBe('src/router.tsx');
+    // NOT `src/routes`: the router plugin compiles that directory to build the
+    // route tree, so a v2 `add` must not drop a plain component into it.
+    expect(kai.paths.components).toBe('src/components');
+  });
+
+  it('points the README at this project\'s own thread expression', async () => {
+    const readme = await readFile(path.join(dir, 'README.md'), 'utf8');
+    expect(readme).toContain('# tanstack-app');
+    expect(readme).toContain('`src/routes/index.tsx`');
+    expect(readme).toContain('toOpenAIMessages(chat.messages)');
+  });
+
+  it('emits a build that does NOT typecheck, plus the typecheck script that covers it', async () => {
+    const pkg = JSON.parse(await readFile(path.join(dir, 'package.json'), 'utf8'));
+    expect(pkg.name).toBe('tanstack-app');
+    expect(pkg.dependencies['@kitn.ai/ui']).toBe('^9.9.9');
+    for (const spec of Object.values(pkg.dependencies as Record<string, string>)) {
+      expect(spec).not.toMatch(/^(?:workspace:|file:\.\.|link:)/);
+    }
+    // THE #195 HOLE, PINNED. A bare `vite build` strips types with esbuild rather
+    // than checking them, so this project bundles green with type errors in it.
+    // `scriptsToRun` is what makes smoke run `typecheck` as well — if this build
+    // ever gains a `tsc`, that rule stops adding it, and this assertion is what
+    // says so out loud rather than letting coverage quietly shrink.
+    expect(pkg.scripts.build).toBe('vite build');
+    expect(buildTypechecks(pkg.scripts.build)).toBe(false);
+    expect(pkg.scripts.typecheck).toContain('tsc');
+    expect(scriptsToRun(pkg.scripts)).toEqual(['build', 'typecheck']);
   });
 });
 
