@@ -45,6 +45,25 @@
 // Emptiness is covered too: a generator that writes zero bytes clears the
 // sentinel but fails the structural sanity check below.
 //
+// WHAT THE SENTINEL DOES NOT COVER, AND WHY `--self-test` EXISTS
+// -------------------------------------------------------------
+// An audit put this precisely: the sentinel proves the generators RE-RAN, and
+// nothing proved the COMPARATOR still notices drift. Those are different halves.
+// The sentinel could keep working perfectly while the `a.equals(b)` half was
+// deleted, inverted, or fed the wrong buffers, and every run would stay green on
+// a tree with stale artifacts — which is the exact defect fc40a10 shipped and
+// this guard was written to catch. So `--self-test` builds throwaway repos with
+// a stub generator, lets the sentinel clear NORMALLY, and plants a DRIFTED
+// artifact: the comparator alone has to produce the red.
+//
+//   node scripts/verify-generated-sync.mjs                        # the real tree
+//   node scripts/verify-generated-sync.mjs --self-test            # prove it still detects
+//   node scripts/verify-generated-sync.mjs --fixture-config <f>   # any synthesized repo
+//
+// It also pins the promise this guard makes about YOUR tree: it rewrites these
+// files for the duration of a run, and must restore every one of them, pass or
+// fail. A self-test case asserts the bytes are back afterwards.
+//
 // The guard is read-only with respect to your tree: every file is snapshotted up
 // front and restored on the way out, pass or fail, including on Ctrl-C. It never
 // silently fixes the drift it is reporting.
@@ -53,19 +72,29 @@
 // pass genuinely rewrites these files for the duration of the run. Do not run
 // this concurrently with the test suite, Storybook or a dev server in the same
 // worktree; they read the same files. CI runs it as its own sequential step.
+// (This is also why the self-test synthesizes its own repos rather than planting
+// drift in yours, and why the wiring test never runs the real configuration.)
 //
 // No network, no build required — build:api writes dist/custom-elements.json
 // itself before the downstream generators read it.
 //   node scripts/verify-generated-sync.mjs [--verbose]
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, mkdtempSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { resolve, dirname } from 'node:path';
+import { resolve, dirname, join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { randomBytes } from 'node:crypto';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..'); // packages/ui
 const REPO = resolve(ROOT, '..', '..');
-const VERBOSE = process.argv.includes('--verbose');
+const argv = process.argv.slice(2);
+const argOf = (flag) => {
+  const i = argv.indexOf(flag);
+  return i === -1 ? undefined : argv[i + 1];
+};
+const VERBOSE = argv.includes('--verbose');
+const SELF_TEST = argv.includes('--self-test');
+const FIXTURE_CONFIG = argOf('--fixture-config');
 
 // The command that regenerates everything, run FROM packages/ui. This is the
 // literal fix printed on failure — the guard runs it, so it cannot drift.
@@ -93,210 +122,430 @@ const GENERATED = [
   { file: 'docs/web-components.md', probe: 'in-block' },
 ];
 
-const abs = (f) => resolve(REPO, f);
-const fail = (msg) => {
-  console.error(`\n✗ verify-generated-sync: ${msg}\n`);
-  process.exit(1);
+/** The real configuration. `--self-test` and `--fixture-config` swap this out. */
+const REAL = {
+  repoRoot: REPO,
+  pkgRoot: ROOT,
+  generated: GENERATED,
+  // argv form so a fixture can name a stub generator without a shell.
+  genCommand: { cmd: 'npm', args: ['run', 'build:api'] },
+  // The artifact whose STRUCTURE is sanity-checked: a generator that writes
+  // valid-but-empty output clears the sentinel and would otherwise pass.
+  metaFile: 'packages/ui/src/elements/element-meta.json',
+  fix: FIX,
 };
 
-// ------------------------------------------------------------- preconditions
-// A missing or untracked artifact means the guard's coverage silently shrank.
-// Fail rather than quietly guard less than the list claims.
-if (GENERATED.length === 0) fail('the generated-file list is empty — the guard would assert nothing.');
-
-for (const { file } of GENERATED) {
-  if (!existsSync(abs(file))) {
-    fail(
-      `${file} does not exist.\n` +
-        '  It is on this guard\'s list of generated artifacts. If it was renamed or\n' +
-        '  retired, update GENERATED in scripts/verify-generated-sync.mjs — do not\n' +
-        '  leave the guard pointing at a file that is gone.',
-    );
-  }
-}
-
-{
-  const paths = GENERATED.map((g) => g.file);
-  const r = spawnSync('git', ['ls-files', '--', ...paths], { cwd: REPO, encoding: 'utf8' });
-  if (r.status !== 0) fail(`\`git ls-files\` failed: ${`${r.stderr}`.trim()}`);
-  const tracked = new Set(`${r.stdout}`.split('\n').filter(Boolean));
-  const untracked = paths.filter((p) => !tracked.has(p));
-  if (untracked.length) {
-    fail(
-      `${untracked.length} generated artifact(s) are not tracked by git:\n` +
-        untracked.map((p) => `    ${p}`).join('\n') +
-        '\n  An untracked artifact cannot drift in the repo, so guarding it proves nothing.',
-    );
-  }
-}
-
-// ------------------------------------------------------------------ snapshot
-const before = new Map();
-for (const { file } of GENERATED) {
-  before.set(file, readFileSync(abs(file)));
-}
-
-let restored = false;
-const restoreAll = () => {
-  if (restored) return;
-  restored = true;
-  for (const [file, buf] of before) {
-    try {
-      writeFileSync(abs(file), buf);
-    } catch (e) {
-      console.error(`  ! could not restore ${file}: ${e.message}`);
-    }
-  }
-};
-for (const sig of ['SIGINT', 'SIGTERM']) {
-  process.on(sig, () => {
-    restoreAll();
-    process.exit(130);
-  });
-}
-
-// -------------------------------------------------------------- plant sentinel
-// Random per run, so a sentinel accidentally committed into a file can never
-// stand in for a real regeneration.
-const SENTINEL = `__KAI_GENERATED_SYNC_SENTINEL_${randomBytes(8).toString('hex')}__`;
 const SPEC_MARKER = /<!-- spec:[a-z0-9-]+ -->/;
 
-try {
-  for (const { file, probe } of GENERATED) {
-    if (probe === 'overwrite') {
-      writeFileSync(abs(file), SENTINEL);
-      continue;
-    }
-    // 'in-block'
-    const src = before.get(file).toString('utf8');
-    const m = src.match(SPEC_MARKER);
-    if (!m) {
-      restoreAll();
-      fail(
-        `${file} contains no \`<!-- spec:TAG -->\` marker.\n` +
-          '  That marker delimits the generated region. Without it the generator\n' +
-          '  rewrites nothing in this file and the guard cannot prove it is current.',
+/**
+ * One complete run against ONE repo. Returns the problems it found (empty is the
+ * pass) plus the notes worth printing. Every file it touches is restored before
+ * it returns, whatever happens — the caller does the exiting.
+ *
+ * Written as a pure-ish function of `cfg` so `--self-test` can drive the SAME
+ * code path over synthesized repos. A self-test that exercised a reimplementation
+ * would prove nothing about this one.
+ */
+function runGuard(cfg, { log = () => {} } = {}) {
+  const abs = (f) => resolve(cfg.repoRoot, f);
+  const problems = [];
+  const p = (msg) => (problems.push(msg), problems);
+
+  // ----------------------------------------------------------- preconditions
+  // A missing or untracked artifact means the guard's coverage silently shrank.
+  // Fail rather than quietly guard less than the list claims.
+  if (cfg.generated.length === 0) return p('the generated-file list is empty — the guard would assert nothing.');
+
+  for (const { file } of cfg.generated) {
+    if (!existsSync(abs(file))) {
+      return p(
+        `${file} does not exist.\n` +
+          "  It is on this guard's list of generated artifacts. If it was renamed or\n" +
+          '  retired, update GENERATED in scripts/verify-generated-sync.mjs — do not\n' +
+          '  leave the guard pointing at a file that is gone.',
       );
     }
-    writeFileSync(abs(file), src.replace(m[0], `${m[0]}\n${SENTINEL}`));
   }
 
-  // ------------------------------------------------------------ run generator
-  console.log(`verify-generated-sync: regenerating ${GENERATED.length} artifacts via \`npm run build:api\`\n`);
-  const gen = spawnSync('npm', ['run', 'build:api'], {
-    cwd: ROOT,
-    encoding: 'utf8',
-    timeout: 10 * 60_000,
-    shell: process.platform === 'win32',
-  });
-  if (VERBOSE && gen.stdout) console.log(`${gen.stdout}`.trim().replace(/^/gm, '    '));
-  if (gen.status !== 0) {
-    restoreAll();
-    fail(
-      `the generator itself failed (exit ${gen.status}).\n` +
-        '  This guard cannot say anything about drift until it runs.\n\n' +
-        `${`${gen.stdout || ''}${gen.stderr || ''}`.trim().replace(/^/gm, '    ')}`,
-    );
-  }
-
-  // ------------------------------------------- anti-vacuity: was it REWRITTEN?
-  const after = new Map();
-  const notWritten = [];
-  for (const { file } of GENERATED) {
-    const buf = readFileSync(abs(file));
-    after.set(file, buf);
-    if (buf.includes(SENTINEL)) notWritten.push(file);
-  }
-  if (notWritten.length) {
-    restoreAll();
-    fail(
-      `the generator did NOT write ${notWritten.length} of the ${GENERATED.length} artifacts this guard claims to cover:\n` +
-        notWritten.map((p) => `    ${p}`).join('\n') +
-        '\n\n  Each file was seeded with a sentinel before the run and still contains it,\n' +
-        '  so nothing regenerated it. A diff-based check would have reported "in sync"\n' +
-        '  here and covered nothing. Either the generator stopped emitting this output\n' +
-        '  or the path moved.',
-    );
-  }
-
-  // ------------------------------------------- anti-vacuity: is it SUBSTANTIVE?
-  // Clearing the sentinel by writing zero bytes must not read as success.
-  const empty = [...after].filter(([, buf]) => buf.length === 0).map(([file]) => file);
-  if (empty.length) {
-    restoreAll();
-    fail(
-      `the generator wrote an EMPTY file for:\n` +
-        empty.map((p) => `    ${p}`).join('\n') +
-        '\n  The generator ran but produced nothing. This is a generator bug, not drift.',
-    );
-  }
   {
-    const metaPath = 'packages/ui/src/elements/element-meta.json';
-    let meta;
-    try {
-      meta = JSON.parse(after.get(metaPath).toString('utf8'));
-    } catch (e) {
-      restoreAll();
-      fail(`the regenerated ${metaPath} is not valid JSON: ${e.message}`);
-    }
-    const tags = Array.isArray(meta) ? meta.filter((el) => typeof el?.tag === 'string' && el.tag.startsWith('kai-')) : [];
-    if (tags.length === 0) {
-      restoreAll();
-      fail(
-        `the regenerated ${metaPath} describes no kai-* elements.\n` +
-          '  The generator produced a structurally empty model, so comparing against it\n' +
-          '  would prove nothing about any element.',
+    const paths = cfg.generated.map((g) => g.file);
+    const r = spawnSync('git', ['ls-files', '--', ...paths], { cwd: cfg.repoRoot, encoding: 'utf8' });
+    if (r.status !== 0) return p(`\`git ls-files\` failed: ${`${r.stderr}`.trim()}`);
+    const tracked = new Set(`${r.stdout}`.split('\n').filter(Boolean));
+    const untracked = paths.filter((x) => !tracked.has(x));
+    if (untracked.length) {
+      return p(
+        `${untracked.length} generated artifact(s) are not tracked by git:\n` +
+          untracked.map((x) => `    ${x}`).join('\n') +
+          '\n  An untracked artifact cannot drift in the repo, so guarding it proves nothing.',
       );
     }
-    console.log(`  · model parsed: ${tags.length} kai-* elements\n`);
   }
 
-  // ------------------------------------------------------------------- diff
-  const drifted = [];
-  for (const { file } of GENERATED) {
-    const a = before.get(file);
-    const b = after.get(file);
-    if (a.equals(b)) {
-      console.log(`  ✓ ${file}`);
-      continue;
+  // ---------------------------------------------------------------- snapshot
+  const before = new Map();
+  for (const { file } of cfg.generated) before.set(file, readFileSync(abs(file)));
+
+  let restored = false;
+  const restoreAll = () => {
+    if (restored) return;
+    restored = true;
+    for (const [file, buf] of before) {
+      try {
+        writeFileSync(abs(file), buf);
+      } catch (e) {
+        console.error(`  ! could not restore ${file}: ${e.message}`);
+      }
     }
-    drifted.push(file);
-    const aL = a.toString('utf8').split('\n');
-    const bL = b.toString('utf8').split('\n');
-    let i = 0;
-    while (i < aL.length && i < bL.length && aL[i] === bL[i]) i++;
-    // One side runs out when the other file is strictly longer — say so rather
-    // than printing a blank line that reads as "identical".
-    const trim = (s) => (s === undefined ? '<end of file>' : s.length > 120 ? `${s.slice(0, 120)}…` : s);
-    console.log(`  ✗ ${file}  (first differs at line ${i + 1})`);
-    console.log(`        in tree:    ${trim(aL[i])}`);
-    console.log(`        generated:  ${trim(bL[i])}`);
-  }
+  };
+  const onSignal = () => {
+    restoreAll();
+    process.exit(130);
+  };
+  for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, onSignal);
 
-  restoreAll();
+  try {
+    // ---------------------------------------------------------- plant sentinel
+    // Random per run, so a sentinel accidentally committed into a file can never
+    // stand in for a real regeneration.
+    const SENTINEL = `__KAI_GENERATED_SYNC_SENTINEL_${randomBytes(8).toString('hex')}__`;
+    for (const { file, probe } of cfg.generated) {
+      if (probe === 'overwrite') {
+        writeFileSync(abs(file), SENTINEL);
+        continue;
+      }
+      // 'in-block'
+      const src = before.get(file).toString('utf8');
+      const m = src.match(SPEC_MARKER);
+      if (!m) {
+        return p(
+          `${file} contains no \`<!-- spec:TAG -->\` marker.\n` +
+            '  That marker delimits the generated region. Without it the generator\n' +
+            '  rewrites nothing in this file and the guard cannot prove it is current.',
+        );
+      }
+      writeFileSync(abs(file), src.replace(m[0], `${m[0]}\n${SENTINEL}`));
+    }
 
-  if (drifted.length) {
-    fail(
-      `${drifted.length} generated artifact(s) are STALE — they do not match what the generator produces from the current source:\n` +
-        drifted.map((p) => `    ${p}`).join('\n') +
-        '\n\n  These are derived from src/elements/ by scripts/gen-element-api.mjs. The `kai`\n' +
-        '  MCP\'s component_reference and the docs site\'s PartTable.astro read them, so a\n' +
-        '  prop, event or ::part you added to the source is invisible to every tool a\n' +
-        '  developer would use to discover it until these are regenerated.\n\n' +
-        '  Fix — run, then commit the files listed above:\n' +
-        `    ${FIX}\n\n` +
-        '  Do not reach for `nx build ui` instead. It regenerates these only when it\n' +
-        '  actually runs the target; on a cache HIT it restores dist/ and skips these\n' +
-        '  SOURCE-tree side effects while still printing "Successfully ran target build",\n' +
-        '  so a cached build is indistinguishable from a successful one. build:api above\n' +
-        '  (or `nx build ui --skip-nx-cache`) has no such failure mode.',
-    );
+    // ------------------------------------------------------------ run generator
+    log(`verify-generated-sync: regenerating ${cfg.generated.length} artifacts via \`${cfg.genCommand.cmd} ${cfg.genCommand.args.join(' ')}\`\n`);
+    const gen = spawnSync(cfg.genCommand.cmd, cfg.genCommand.args, {
+      cwd: cfg.pkgRoot,
+      encoding: 'utf8',
+      timeout: 10 * 60_000,
+      shell: process.platform === 'win32',
+    });
+    if (VERBOSE && gen.stdout) log(`${gen.stdout}`.trim().replace(/^/gm, '    '));
+    if (gen.status !== 0) {
+      return p(
+        `the generator itself failed (exit ${gen.status}).\n` +
+          '  This guard cannot say anything about drift until it runs.\n\n' +
+          `${`${gen.stdout || ''}${gen.stderr || ''}`.trim().replace(/^/gm, '    ')}`,
+      );
+    }
+
+    // ------------------------------------------- anti-vacuity: was it REWRITTEN?
+    const after = new Map();
+    const notWritten = [];
+    for (const { file } of cfg.generated) {
+      const buf = readFileSync(abs(file));
+      after.set(file, buf);
+      if (buf.includes(SENTINEL)) notWritten.push(file);
+    }
+    if (notWritten.length) {
+      return p(
+        `the generator did NOT write ${notWritten.length} of the ${cfg.generated.length} artifacts this guard claims to cover:\n` +
+          notWritten.map((x) => `    ${x}`).join('\n') +
+          '\n\n  Each file was seeded with a sentinel before the run and still contains it,\n' +
+          '  so nothing regenerated it. A diff-based check would have reported "in sync"\n' +
+          '  here and covered nothing. Either the generator stopped emitting this output\n' +
+          '  or the path moved.',
+      );
+    }
+
+    // ------------------------------------------- anti-vacuity: is it SUBSTANTIVE?
+    // Clearing the sentinel by writing zero bytes must not read as success.
+    const empty = [...after].filter(([, buf]) => buf.length === 0).map(([file]) => file);
+    if (empty.length) {
+      return p(
+        `the generator wrote an EMPTY file for:\n` +
+          empty.map((x) => `    ${x}`).join('\n') +
+          '\n  The generator ran but produced nothing. This is a generator bug, not drift.',
+      );
+    }
+    {
+      let meta;
+      try {
+        meta = JSON.parse(after.get(cfg.metaFile).toString('utf8'));
+      } catch (e) {
+        return p(`the regenerated ${cfg.metaFile} is not valid JSON: ${e.message}`);
+      }
+      const tags = Array.isArray(meta) ? meta.filter((el) => typeof el?.tag === 'string' && el.tag.startsWith('kai-')) : [];
+      if (tags.length === 0) {
+        return p(
+          `the regenerated ${cfg.metaFile} describes no kai-* elements.\n` +
+            '  The generator produced a structurally empty model, so comparing against it\n' +
+            '  would prove nothing about any element.',
+        );
+      }
+      log(`  · model parsed: ${tags.length} kai-* elements\n`);
+    }
+
+    // ------------------------------------------------------------------- diff
+    // THE HALF THE SENTINEL DOES NOT COVER. Everything above proves the generator
+    // ran and produced something; only this notices that what it produced differs
+    // from what is committed.
+    const drifted = [];
+    for (const { file } of cfg.generated) {
+      const a = before.get(file);
+      const b = after.get(file);
+      if (a.equals(b)) {
+        log(`  ✓ ${file}`);
+        continue;
+      }
+      drifted.push(file);
+      const aL = a.toString('utf8').split('\n');
+      const bL = b.toString('utf8').split('\n');
+      let i = 0;
+      while (i < aL.length && i < bL.length && aL[i] === bL[i]) i++;
+      // One side runs out when the other file is strictly longer — say so rather
+      // than printing a blank line that reads as "identical".
+      const trim = (s) => (s === undefined ? '<end of file>' : s.length > 120 ? `${s.slice(0, 120)}…` : s);
+      log(`  ✗ ${file}  (first differs at line ${i + 1})`);
+      log(`        in tree:    ${trim(aL[i])}`);
+      log(`        generated:  ${trim(bL[i])}`);
+    }
+
+    if (drifted.length) {
+      return p(
+        `${drifted.length} generated artifact(s) are STALE — they do not match what the generator produces from the current source:\n` +
+          drifted.map((x) => `    ${x}`).join('\n') +
+          '\n\n  These are derived from src/elements/ by scripts/gen-element-api.mjs. The `kai`\n' +
+          "  MCP's component_reference and the docs site's PartTable.astro read them, so a\n" +
+          '  prop, event or ::part you added to the source is invisible to every tool a\n' +
+          '  developer would use to discover it until these are regenerated.\n\n' +
+          '  Fix — run, then commit the files listed above:\n' +
+          `    ${cfg.fix}\n\n` +
+          '  Do not reach for `nx build ui` instead. It regenerates these only when it\n' +
+          '  actually runs the target; on a cache HIT it restores dist/ and skips these\n' +
+          '  SOURCE-tree side effects while still printing "Successfully ran target build",\n' +
+          '  so a cached build is indistinguishable from a successful one. build:api above\n' +
+          '  (or `nx build ui --skip-nx-cache`) has no such failure mode.',
+      );
+    }
+    return problems;
+  } finally {
+    restoreAll();
+    for (const sig of ['SIGINT', 'SIGTERM']) process.off(sig, onSignal);
   }
-} finally {
-  restoreAll();
 }
 
-console.log(
-  `\n✓ verify-generated-sync: all ${GENERATED.length} generated artifacts match their source ` +
-    '(each one proven rewritten this run).',
-);
+// ---------------------------------------------------------------------------
+// self-test: synthesized repos with a STUB generator, so the sentinel clears
+// normally and each planted defect has to be found by the check that owns it.
+// ---------------------------------------------------------------------------
+const META_REL = 'packages/ui/src/elements/element-meta.json';
+const DOC_REL = 'docs/web-components.md';
+const META_CONTENT = JSON.stringify([{ tag: 'kai-chat', displayName: 'Chat' }], null, 2) + '\n';
+const DOC_CONTENT = `# Web components\n\nHand-written prose.\n\n<!-- spec:kai-chat -->\nGENERATED BLOCK\n<!-- /spec:kai-chat -->\n`;
+
+/**
+ * A stub generator whose behaviour is read from `gen-mode` at run time, so one
+ * fixture shape covers every failure mode. It writes the SAME bytes the fixture
+ * committed, which is what makes the clean case clean and the drift case drift.
+ */
+const GEN_STUB = `
+import { readFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+const repo = resolve(process.argv[2]);
+const mode = readFileSync(resolve(repo, 'gen-mode'), 'utf8').trim();
+if (mode === 'fail') { console.error('stub generator exploded'); process.exit(3); }
+const meta = ${JSON.stringify(META_CONTENT)};
+const doc = ${JSON.stringify(DOC_CONTENT)};
+if (mode !== 'skip-meta') {
+  writeFileSync(resolve(repo, ${JSON.stringify(META_REL)}), mode === 'empty-meta' ? '[]' : mode === 'zero-bytes' ? '' : meta);
+}
+writeFileSync(resolve(repo, ${JSON.stringify(DOC_REL)}), doc);
+`;
+
+function fixtureRepo({ mode = 'normal', tree = {}, track = true } = {}) {
+  const root = mkdtempSync(join(tmpdir(), 'generated-sync-selftest-'));
+  const files = {
+    'gen-mode': `${mode}\n`,
+    'gen.mjs': GEN_STUB,
+    'pkg/.keep': '',
+    [META_REL]: META_CONTENT,
+    [DOC_REL]: DOC_CONTENT,
+    ...tree,
+  };
+  for (const [rel, content] of Object.entries(files)) {
+    if (content === null) continue;
+    const p2 = join(root, rel);
+    mkdirSync(dirname(p2), { recursive: true });
+    writeFileSync(p2, content);
+  }
+  const git = (...args) => spawnSync('git', args, { cwd: root, encoding: 'utf8' });
+  git('init', '-q');
+  git('config', 'user.email', 'guard@example.com');
+  git('config', 'user.name', 'guard');
+  if (track) git('add', '-A');
+  return root;
+}
+
+const fixtureConfig = (root, over = {}) => ({
+  repoRoot: root,
+  pkgRoot: join(root, 'pkg'),
+  generated: [
+    { file: META_REL, probe: 'overwrite' },
+    { file: DOC_REL, probe: 'in-block' },
+  ],
+  genCommand: { cmd: process.execPath, args: [join(root, 'gen.mjs'), root] },
+  metaFile: META_REL,
+  fix: 'pnpm --filter @kitn.ai/ui run build:api',
+  ...over,
+});
+
+const SELF_TEST_CASES = [
+  {
+    name: 'a tree matching its generator is in sync',
+    build: () => fixtureConfig(fixtureRepo()),
+    expect: [],
+  },
+  {
+    name: 'DRIFT: a committed artifact the generator no longer produces (the comparator, alone)',
+    // The sentinel clears normally here — the generator runs and rewrites both
+    // files. Only the comparison can produce this red, which is the half the
+    // audit found untested.
+    build: () =>
+      fixtureConfig(
+        fixtureRepo({
+          tree: {
+            [META_REL]: JSON.stringify([{ tag: 'kai-chat', displayName: 'Chat', parts: ['citaitons'] }], null, 2) + '\n',
+          },
+        }),
+      ),
+    // The per-file "first differs at line" detail goes to stdout rather than into
+    // the problem, so it is asserted in the wiring test, which reads the real
+    // process output.
+    expect: ['are STALE', META_REL],
+    reject: ['did NOT write', 'EMPTY file'],
+  },
+  {
+    name: 'DRIFT in the in-block artifact is caught too',
+    build: () =>
+      fixtureConfig(
+        fixtureRepo({
+          tree: { [DOC_REL]: DOC_CONTENT.replace('GENERATED BLOCK', 'STALE BLOCK') },
+        }),
+      ),
+    expect: ['are STALE', DOC_REL],
+  },
+  {
+    name: 'the generator no-ops on one artifact (the sentinel survives)',
+    build: () => fixtureConfig(fixtureRepo({ mode: 'skip-meta' })),
+    expect: ['did NOT write', META_REL],
+    reject: ['are STALE'],
+  },
+  {
+    name: 'the generator writes zero bytes',
+    build: () => fixtureConfig(fixtureRepo({ mode: 'zero-bytes' })),
+    expect: ['EMPTY file'],
+  },
+  {
+    name: 'the generator produces a structurally empty model',
+    build: () => fixtureConfig(fixtureRepo({ mode: 'empty-meta' })),
+    expect: ['describes no kai-* elements'],
+  },
+  {
+    name: 'the generator itself fails',
+    build: () => fixtureConfig(fixtureRepo({ mode: 'fail' })),
+    expect: ['the generator itself failed', 'exit 3'],
+  },
+  {
+    name: 'a listed artifact is not on disk',
+    build: () => fixtureConfig(fixtureRepo({ tree: { [META_REL]: null } })),
+    expect: ['does not exist'],
+  },
+  {
+    name: 'a listed artifact is not tracked by git',
+    build: () => fixtureConfig(fixtureRepo({ track: false })),
+    expect: ['not tracked by git'],
+  },
+  {
+    name: 'an in-block artifact with no <!-- spec:TAG --> marker',
+    build: () => fixtureConfig(fixtureRepo({ tree: { [DOC_REL]: '# Web components\n\nNo marker here.\n' } })),
+    expect: ['contains no `<!-- spec:TAG -->` marker'],
+  },
+  {
+    name: 'an empty generated list asserts nothing',
+    build: () => fixtureConfig(fixtureRepo(), { generated: [] }),
+    expect: ['list is empty'],
+  },
+];
+
+if (SELF_TEST) {
+  let failed = 0;
+  for (const c of SELF_TEST_CASES) {
+    const cfg = c.build();
+    const problems = runGuard(cfg);
+    const text = problems.join('\n');
+    const missingExpected = c.expect.filter((s) => !text.includes(s));
+    const wrongfullyPresent = (c.reject ?? []).filter((s) => text.includes(s));
+    const cleanMismatch = c.expect.length === 0 && problems.length > 0;
+    let ok = missingExpected.length === 0 && wrongfullyPresent.length === 0 && !cleanMismatch;
+
+    // THE PROMISE THIS GUARD MAKES ABOUT YOUR TREE: it rewrites these files during
+    // a run and must put every one of them back, pass or fail. Checked on every
+    // case, because the failure paths are exactly where an early return could skip
+    // the restore.
+    let restoreNote = '';
+    for (const { file } of cfg.generated) {
+      const p2 = resolve(cfg.repoRoot, file);
+      if (!existsSync(p2)) continue;
+      const now = readFileSync(p2, 'utf8');
+      if (now.includes('__KAI_GENERATED_SYNC_SENTINEL_')) {
+        ok = false;
+        restoreNote = `    LEFT A SENTINEL BEHIND in ${file} — the run did not restore the tree`;
+      }
+    }
+
+    if (!ok) failed++;
+    console.log(
+      `${ok ? '✓' : '✗'} ${c.name} (expected ${c.expect.length === 0 ? 'clean' : c.expect.map((s) => `"${s}"`).join(' + ')}, got ${problems.length === 0 ? 'clean' : `${problems.length} problem(s)`})`,
+    );
+    if (missingExpected.length > 0) console.log(`    missing: ${missingExpected.map((s) => `"${s}"`).join(', ')}`);
+    if (wrongfullyPresent.length > 0) console.log(`    fired for the wrong reason: ${wrongfullyPresent.map((s) => `"${s}"`).join(', ')}`);
+    if (cleanMismatch) console.log(`    unexpected: ${text.split('\n')[0]}`);
+    if (restoreNote) console.log(restoreNote);
+  }
+  if (failed > 0) {
+    console.error(`\n✗ verify-generated-sync self-test: ${failed}/${SELF_TEST_CASES.length} case(s) failed.`);
+    process.exit(1);
+  }
+  console.log(
+    `\n✓ verify-generated-sync self-test: ${SELF_TEST_CASES.length}/${SELF_TEST_CASES.length} cases behave as specified, ` +
+      'and every run restored the tree it touched.',
+  );
+  process.exit(0);
+}
+
+// ---------------------------------------------------------------------------
+// the real run (or a synthesized one named by --fixture-config)
+// ---------------------------------------------------------------------------
+let cfg = REAL;
+if (FIXTURE_CONFIG) {
+  const raw = JSON.parse(readFileSync(resolve(FIXTURE_CONFIG), 'utf8'));
+  cfg = { ...raw, repoRoot: resolve(raw.repoRoot), pkgRoot: resolve(raw.pkgRoot) };
+}
+
+const problems = runGuard(cfg, { log: (m) => console.log(m) });
+
+if (problems.length === 0) {
+  console.log(
+    `\n✓ verify-generated-sync: all ${cfg.generated.length} generated artifacts match their source ` +
+      '(each one proven rewritten this run).',
+  );
+  process.exit(0);
+}
+for (const problem of problems) console.error(`\n✗ verify-generated-sync: ${problem}\n`);
+process.exit(1);
