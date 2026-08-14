@@ -1,6 +1,6 @@
 {
   "name": "create-kai",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "description": "Scaffold a runnable @kitn.ai/ui chat app. `npm create kai@latest`",
   "license": "MIT",
@@ -43,6 +43,7 @@
     "dist"
   ],
   "scripts": {
+    "prepublishOnly": "npm run build && npm run verify:pack",
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
