@@ -18,10 +18,9 @@ package and loaded from a CDN rather than out of the app's bundle. It attaches t
 recorder living inside the kit and shows the things a browser devtool structurally
 cannot, starting with frames in versus parts out.
 
-**One open decision, marked in place:** how the panel gets onto the page (a script tag,
-an element the developer drops in, or the kit self-injecting when it sees the signal)
-is the repo owner's call. The options and their tradeoffs are in "Activation, and who
-decides"; everything else in this document is the same under all three.
+Delivery is **a script tag from a CDN**, decided rather than assumed, because on a CMS
+that is frequently the only injection point there is. The reasoning and the priced
+alternatives are in "Activation, and who decides".
 
 Two rulings carry the design. It is **not in the consumer's bundle and not versioned
 with the kit**, so diagnostics can improve for apps that have not upgraded. And capture
@@ -44,8 +43,8 @@ pattern that is **not** importable through a bundler, because it resolves siblin
 element modules relative to its own `import.meta.url` and a bundler relocates that. The
 same delivery, for a different reason: the autoloader is CDN-only because of how it
 resolves modules, the devtool is CDN-first because it must not be in the app's bundle
-at all. That last clause is the one option B in the next section trades away, which is
-why it is priced there rather than assumed here.
+at all. That last clause is what option B in the next section would have traded away,
+and is one of the two reasons it lost.
 
 **Version decoupling requires a separate package.** A file inside `@kitn.ai/ui`
 is pinned to whatever the app installed, which is the opposite of the goal. So it
@@ -55,33 +54,63 @@ version.
 
 ## Activation, and who decides
 
-**How the panel gets onto the page is UNRESOLVED and is the repo owner's call.** Three
-options, and they differ in who is deciding what:
+**Delivery is a script tag from a CDN. Decided, option A.**
 
-| Option | How it looks | Tradeoff |
+```html
+<script type="module" src="https://unpkg.com/@kitn.ai/devtools"></script>
+```
+
+**On a CMS, a script tag is frequently the only injection point that exists.** WordPress
+(header or footer injection, or a plugin), Shopify (`theme.liquid` or Additional
+Scripts), Wix (Settings, Custom Code) and Webflow (Project Settings, Custom Code) each
+expose a script slot, and none of them give you a build step, an `npm install` or a
+bundler plugin. Anything that needs an `import` statement is unreachable there. That
+does not merely price option B for that audience, it removes it.
+
+Not hypothetical for this kit. `html` is a ready framework target in `create-kai`, and
+`packages/ui/README.md` documents loading the element bundle straight from jsDelivr or
+unpkg inside a `<script type="module">` with no install and no bundler.
+`src/elements/autoloader.ts` is the per-element version of that delivery, and its header
+says it resolves sibling modules from its own `import.meta.url` and 404s if a bundler
+touches it. Someone on Shopify is already loading the kit itself by script tag. The
+panel has to reach that person the same way.
+
+What was weighed:
+
+| Option | How it looks | Why not |
 |---|---|---|
-| **A. Script tag from a CDN** | the app adds `<script type="module" src="https://unpkg.com/@kitn.ai/devtools">` in the environments it wants | The app decides what code its page loads, which is the answer this repo's scope rule points at. Costs one line per environment, and the line is easy to leave in a production build by accident. |
-| **B. An element the developer drops in** | `<kai-devtools>` placed in the app's own markup, resolved through the package it already installs | Most familiar, and it composes with the app's own conditionals. But it puts the panel back in the consumer's bundle and pins it to the installed version, which is the ruling above reversed. |
-| **C. The kit self-injects on seeing the signal** | no app change at all; the recorder sees the signal and dynamically imports the panel from a CDN | Best experience by a distance, and reachable on a deployed staging URL with a query param and nothing else. But the kit would be deciding to make a third-party network request from the app's page, which lands in a CSP policy and a vendor review, and CSP is likeliest to be strict in exactly the production setting the feature is for. |
+| **A. Script tag from a CDN. CHOSEN.** | the app pastes one tag in the environments it wants | Reaches the CMS audience, which nothing else does. The app decides what code its page loads, which is where this repo's scope rule points. Costs: one line per environment, and a line that is easy to leave live on production, which the data-exposure section takes seriously rather than waving at. |
+| **B. An element the developer drops in** | `<kai-devtools>` in the app's own markup, resolved through the installed package | Needs an import and a build, so it cannot reach a CMS at all. It also puts the panel back in the consumer's bundle and pins it to the installed version, reversing both rulings above. |
+| **C. The kit self-injects on seeing the signal** | no app change; the recorder imports the panel from a CDN when the signal is set | The best ergonomics of the three, and still rejected: the kit would be deciding to make a third-party network request from the app's page. That lands in a CSP policy and a vendor review, and CSP is strictest in exactly the production setting this feature is for. |
 
-**This document assumes A** so the rest of it stays concrete, and A is the conservative
-answer rather than the best one: it is the only option where nobody but the app decides
-what the page loads. B and C change the paragraphs that mention a script tag and
-nothing else; the recorder, the capture model, the hook and the event contract are
-identical under all three. C additionally needs a documented CDN origin for the app's
-CSP, and a decision about what happens when the fetch is blocked (report it in the
-console, never silently).
+**This decision is cheap to revisit,** which is the other reason to record the reasoning
+rather than just the verdict. The recorder, the capture model, the hook and the event
+contract are identical under all three; only the paragraphs that mention a script tag
+would change.
 
-Whichever wins: **activation is never inferred from `NODE_ENV`.** The whole point is
-that the bug you cannot reproduce locally is in staging.
+**Activation is never inferred from `NODE_ENV`.** The whole point is that the bug you
+cannot reproduce locally is in staging.
 
-**The activation signal is read once, synchronously, at kit init.** Three sources,
-checked in this order, first hit wins:
+**The script tag is not the signal, and cannot be.** The tag is a delivery mechanism
+that arrives whenever the page gets around to it, and CMS platforms typically inject
+custom code into the footer, after the app's own scripts. So the panel may execute long
+after kit init, by which point the "am I wanted?" check has already run and, if nothing
+said yes, the recorder has already taken the not-wanted branch.
+
+That makes the tag better rather than worse. It can be pasted once and left there
+permanently, dormant and near-free, because it does nothing until a signal says so.
+That is exactly right for a CMS, where editing a live theme is awkward and
+"install once, activate by URL" is the ergonomics you want.
+
+**The activation signal is read once, synchronously, at kit init**, and is independent
+of the tag and earlier than it. Three sources, checked in this order, first hit wins:
 
 1. `localStorage['kai-devtools']`. Survives a reload, and a repro usually needs one.
 2. A global set before the kit loads (`window.__KAI_DEVTOOLS__ = true`). For an app
-   that wants to gate on its own feature flag or its own auth.
-3. `?kai-devtools` in the query string. Shareable, and works against a deployed
+   that wants to gate on its own feature flag or its own auth. This is a plain boolean
+   and is a different name from the hook in "Connection shape", which is the kit's own
+   object.
+3. `?kai-devtools=1` in the query string. Shareable, and works against a deployed
    staging URL without a build.
 
 Synchronous is a hard requirement, not a preference: an async answer means an interval
@@ -91,6 +120,34 @@ string, so the answer is no and the recorder never starts. That falls out of the
 rule the kit's own entries already follow: `src/elements/register.ts` gates
 registration behind a browser check and a dynamic import so the elements entry is
 SSR-import-safe, and `src/wire/read.ts` touches no global at module scope.
+
+### First run: the tag is in, no signal is set
+
+This is the path most people hit first, and it has to read as "not activated" rather
+than as broken. What happens, in order:
+
+1. The kit initialises, finds no signal, and takes the not-wanted branch. No buffer,
+   emission is a no-op, and the hook is installed and empty.
+2. The panel module loads whenever the page gets to it and registers `<kai-devtools>`.
+3. **It renders nothing.** No floating button, no badge, no corner widget. A live
+   storefront must not grow visible UI because somebody pasted a tag, and this is what
+   makes the tag safe to leave in permanently.
+4. It writes one console line, once, naming the state and both ways out:
+   `[kai-devtools] loaded, not activated. Add ?kai-devtools=1 to the URL, or run
+   __KAI_DEVTOOLS_HOOK__.activate(), to record from the next page load.`
+
+`activate()` writes `localStorage['kai-devtools']` and reloads. It lives on the kit's
+hook rather than on the panel because the kit owns the signal it writes.
+
+**Reload is the primary path because it is the only one that yields history.** After the
+reload the signal is set before the first event, so the panel opens with the session
+from its beginning, which is where the answer usually is. Attaching live without a
+reload stays possible, since `subscribe` works at any time, and gives events from that
+moment forward with no history; the panel offers it as the secondary action for someone
+who cannot afford to lose the session they are in.
+
+Nothing here is silent. The one console line is the whole discovery surface, and it
+names the exact next step rather than reporting a state.
 
 ## The capture model
 
@@ -102,9 +159,11 @@ call into an empty function on the emit path, which is what "free" means on a ho
 the cost that matters, retained memory growing for the whole session, is genuinely
 zero.
 
-The hook itself is still installed in this branch, because it is a few bytes and it is
-what lets a panel attach later (see below). Emission re-arms on the first `subscribe`
-and goes back to the empty function when the last subscriber leaves.
+The hook itself is still installed in this branch. It is a few bytes, and it is what
+carries `activate()` and what lets a panel attach later at all. Emission re-arms on the
+first `subscribe` and goes back to the empty function when the last subscriber leaves.
+A dormant panel does not subscribe, which is what keeps a permanently pasted tag
+genuinely dormant rather than quietly recording.
 
 **Wanted.** It captures from the first event, uncapped, before the panel exists. When
 the panel attaches it drains the history and then streams live.
@@ -126,11 +185,10 @@ data lives in the panel rather than in the kit. A session where the signal is on
 panel ever attaches is a developer choosing to hold a buffer on their own machine.
 
 **The cost of the model, stated plainly.** A session that started with no signal has no
-history, so opening the panel mid-session shows live events from that moment forward
-and nothing before it. That is the price of charging nobody for the buffer, and it is
-the right trade because the fix is one click: the panel's empty state sets
-`localStorage['kai-devtools']` and reloads, which is why that signal is first in the
-list.
+history, so attaching mid-session gives live events from that moment forward and
+nothing before it. That is the price of charging nobody for the buffer, and it is the
+right trade because the fix is one call: `activate()` sets the signal and reloads, and
+the next load records from the first event. See "First run" above for the whole path.
 
 ## Connection shape
 
@@ -142,6 +200,7 @@ window.__KAI_DEVTOOLS_HOOK__ = {
   version: 1,
   drain(): DiagnosticEvent[],              // history, and clears it
   subscribe(fn: (e: DiagnosticEvent) => void): () => void,
+  activate(): void,                        // sets the signal, then reloads
 };
 ```
 
@@ -214,18 +273,39 @@ It can run in production, so it can display thread content and encoded request b
 That is the app's users' conversation data, and by the scope rule it is the app's
 decision, not ours.
 
-- **Never on automatically.** Covered by the activation model above; restated here
-  because this is the section someone reads when they are worried.
-- **Metadata by default.** Event kinds, counts, sizes, timings, variants, formats,
-  element registration. Enough to diagnose the silent-dialect case, the buffering
-  case and the contract violations without rendering a single token.
+**The delivery decision makes this concrete, so state it here rather than leave it
+implied.** A tag pasted into a live Shopify theme is permanently installed, and
+`?kai-devtools=1` is guessable. Anyone who knows it can open the panel over a real
+customer's session. That is the direct consequence of the ergonomics the decision buys,
+and it is not a defect to engineer away: it is the app's call whether to leave the tag
+on a production storefront at all.
+
+**What limits the blast radius is the default, and it is checkable rather than
+promised.** The default stream is metadata: counts, byte and character sizes, timings,
+variant names, format ids, status codes. A stranger who activates the panel sees the
+shape of a conversation, not its content. Content requires the separate payload switch,
+and spec 1's field-level rule is what makes that boundary reviewable, since every
+content-bearing field lives under one optional `payload` key instead of scattered among
+the metadata.
+
+**And the seam is already there for an app that wants more.** The global signal
+(`window.__KAI_DEVTOOLS__`) is set by the app's own code, so an app can gate activation
+behind its own auth or feature flag, and can keep the tag out of the environments where
+it does not want a query param to be enough. We surface that; we do not decide it, and
+we add no mitigation that decides it for them.
+
+The rules, compactly:
+
+- **Never on automatically**, and never visible without a signal. Restated here because
+  this is the section someone reads when they are worried.
+- **Metadata is enough to do the job.** The silent-dialect case, the buffering
+  signature and the contract violations are all diagnosable without rendering a single
+  token, which is what makes the default defensible rather than merely cautious.
 - **Payload capture is a separate, deliberate switch**, off by default, with its own
   signal rather than a checkbox buried in the panel. Turning it on is what makes
   message text and request bodies visible.
-- **We surface the capability and state plainly what enabling it exposes.** We do not
-  decide how much of it a given app may show, or to whom.
-- Nothing is transmitted anywhere. There is no endpoint, no telemetry and no phone
-  home. This is a panel, not a service.
+- **Nothing is transmitted anywhere.** No endpoint, no telemetry, no phone home. This
+  is a panel, not a service.
 
 ## Non-goals
 
@@ -252,6 +332,9 @@ guard, and it ships first. This product adds event types under the same envelope
 | Claim | Check |
 |---|---|
 | CDN and static-only delivery has a precedent | the header comment in `packages/ui/src/elements/autoloader.ts`, and the `./autoloader` entry in `packages/ui/package.json` |
+| The autoloader 404s through a bundler, by design | the IMPORTANT block at the top of `packages/ui/src/elements/autoloader.ts`, and the warning text in `warnOnce` |
+| Script-tag consumption is already a documented path | the jsDelivr and unpkg `<script type="module">` blocks in `packages/ui/README.md` |
+| `html` is a ready framework target | the `id: 'html'` row in `packages/create-kai/src/frameworks.ts` |
 | The kit's entries are SSR-safe by browser check plus dynamic import | `packages/ui/src/elements/register.ts` |
 | Every element registers through one function | `defineWebComponent` in `packages/ui/src/elements/define.tsx`, and `git grep -l defineWebComponent -- packages/ui/src` |
 | Tag to module map already exists | `packages/ui/src/elements/element-manifest.json` |
