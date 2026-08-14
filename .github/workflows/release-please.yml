@@ -38,35 +38,79 @@ jobs:
       - uses: actions/setup-node@v4
         if: ${{ steps.release.outputs.release_created || steps.release.outputs.releases_created || github.event_name == 'workflow_dispatch' }}
         with:
-          node-version: 22 # trusted publishing needs Node >= 22.14
+          # Node 24 (Krypton, active LTS), NOT a floating 22, and the npm below is
+          # pinned rather than @latest. Together those remove a real trap on the one
+          # job that publishes.
+          #
+          # `node-version: 22` resolves to the newest 22.x, which is v22.23.2, while
+          # npm 12.0.2 declares `engines.node: ^22.22.2 || ^24.15.0 || >=26.0.0`.
+          # That works today on ONE MINOR of margin, and the margin is npm's to
+          # spend: npm raises those floors to track node's security releases, so a
+          # floor moving to ^22.24.x before a 22.24.x exists would EBADENGINE this
+          # step -- at publish time, on a tag that has already been cut.
+          #
+          # Pinning npm is what actually closes it, because a pinned npm's engines
+          # cannot move. Node stays floating WITHIN 24.x so security patches still
+          # land, and every 24.x that will ever exist is >= 24.19.0 and so satisfies
+          # `^24.15.0` for the life of the line. Bumping the major is then a
+          # deliberate edit when Krypton goes EOL, not a surprise mid-release.
+          node-version: 24
           registry-url: https://registry.npmjs.org
 
       - run: pnpm install --frozen-lockfile
         if: ${{ steps.release.outputs.release_created || steps.release.outputs.releases_created || github.event_name == 'workflow_dispatch' }}
 
-      # OIDC trusted publishing needs npm >= 11.5.1 (Node 22 ships an older npm).
-      - run: npm install -g npm@latest
+      # OIDC trusted publishing needs npm >= 11.5.1. Node 24.19.0 bundles 11.17.0,
+      # so this is no longer load-bearing for that floor the way it was on Node 22
+      # (which bundles 10.9.8) -- it is here to make the publishing npm an explicit,
+      # reviewable version instead of whatever the runner image happens to carry.
+      # EXACT, not @latest: see the node-version comment above. Bump deliberately.
+      - run: npm install -g npm@12.0.2
         if: ${{ steps.release.outputs.release_created || steps.release.outputs.releases_created || github.event_name == 'workflow_dispatch' }}
 
       # Publish with the npm CLI (NOT pnpm publish -- pnpm does not do npm's OIDC
       # token exchange, so it publishes unauthenticated and gets E404). Run from the
       # package dir; prepublishOnly runs the build. No NODE_AUTH_TOKEN; provenance
       # is automatic with OIDC for a public package.
+      # ORDER IS LOAD-BEARING: packages/ui publishes FIRST. create-kai's build pins
+      # `^<the kit's version>` into every project it emits, so publishing it ahead of
+      # the kit would ship a scaffold whose own dependency is not on the registry
+      # yet -- `npm install` in the user's brand new project fails. The loop runs
+      # under `bash -e`, so if the kit fails to publish the step aborts and
+      # create-kai is never reached, which is what keeps that ordering true rather
+      # than merely intended.
       - name: Publish to npm (OIDC trusted publishing)
-        working-directory: packages/ui
-        # Idempotent publish. release-please re-emits releases_created for the LAST
-        # release on a plain push to main (the first non-release push after a
-        # release), which would otherwise hard-fail this step with "cannot publish
-        # over <version>". Skip when this exact name@version is already on the
-        # registry so the run stays green; a genuinely new version (real release or
-        # workflow_dispatch) is not yet on npm, so it still publishes. Also absorbs
-        # the benign E403-after-success republish retry.
+        # Idempotent publish, PER PACKAGE. release-please re-emits releases_created
+        # for the LAST release on a plain push to main (the first non-release push
+        # after a release), which would otherwise hard-fail this step with "cannot
+        # publish over <version>". Skip when this exact name@version is already on
+        # the registry so the run stays green; a genuinely new version (real release
+        # or workflow_dispatch) is not yet on npm, so it still publishes. Also
+        # absorbs the benign E403-after-success republish retry.
+        #
+        # The guard stays per-package and stays an existence check. Do NOT swap it
+        # for release-please's per-path `release_created` outputs: that output
+        # over-firing on a plain push is the exact thing this absorbs, so keying on
+        # it would reintroduce the failure the guard was written for. With two
+        # packages the over-fire also gets worse -- a re-emit names whichever
+        # package released last, and the other one must still be skipped rather than
+        # attempted.
+        #
+        # npm, never `pnpm publish`: pnpm does not do npm's OIDC token exchange, so
+        # it publishes unauthenticated and gets E404. Each publish runs INSIDE its
+        # own package dir so that package's own prepublishOnly fires -- that hook is
+        # what builds the thing being shipped, and for create-kai it is the only
+        # thing standing between a fresh checkout and a tarball with no CLI in it.
+        # No NODE_AUTH_TOKEN; provenance is automatic with OIDC for a public package.
         run: |
-          NAME=$(node -p "require('./package.json').name")
-          VERSION=$(node -p "require('./package.json').version")
-          if npm view "$NAME@$VERSION" version > /dev/null 2>&1; then
-            echo "$NAME@$VERSION is already published — skipping publish."
-            exit 0
-          fi
-          npm publish --access public
+          for pkg in packages/ui packages/create-kai; do
+            NAME=$(node -p "require('./$pkg/package.json').name")
+            VERSION=$(node -p "require('./$pkg/package.json').version")
+            if npm view "$NAME@$VERSION" version > /dev/null 2>&1; then
+              echo "$NAME@$VERSION is already published — skipping publish."
+              continue
+            fi
+            echo "Publishing $NAME@$VERSION from $pkg..."
+            (cd "$pkg" && npm publish --access public)
+          done
         if: ${{ steps.release.outputs.release_created || steps.release.outputs.releases_created || github.event_name == 'workflow_dispatch' }}
