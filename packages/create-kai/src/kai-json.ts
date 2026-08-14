@@ -29,7 +29,19 @@ export interface KaiJson {
   features: string[];
   gateway: string;
   registration: string;
-  paths: FrameworkDef['paths'];
+  /**
+   * The five copied paths, plus `route`.
+   *
+   * `route` is DERIVED from `framework.route` rather than stored beside the
+   * others on `FrameworkDef.paths`, because the build guard that grades that
+   * block asserts each path names a file the template already has — true of the
+   * five, false of a route by construction. The docblock on `FrameworkDef.route`
+   * has the full reasoning. It is `null` for a framework create-kai cannot emit
+   * a route for, and for a project on the mock gateway, which needs no route at
+   * all: a v2 `add` reading this can tell "no route here" from "route lives at
+   * X" without re-deriving either.
+   */
+  paths: FrameworkDef['paths'] & { route: string | null };
   theme: { tokens: string; default: string };
 }
 
@@ -44,7 +56,12 @@ export function buildKaiJson(plan: ProjectPlan, framework: FrameworkDef): KaiJso
     features: [...plan.featureIds],
     gateway: plan.gatewayId,
     registration: framework.registration,
-    paths: framework.paths,
+    paths: {
+      ...framework.paths,
+      // No gateway means no route was written, so reporting where one WOULD go
+      // would be reporting a file that does not exist.
+      route: plan.gatewayId === 'mock' ? null : (framework.route?.file ?? null),
+    },
     theme: { tokens: '@kitn.ai/ui/theme.tokens.css', default: 'dark' },
   };
 }

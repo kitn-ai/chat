@@ -34,11 +34,33 @@ describe('catalog reuse', () => {
     expect(openai.keyExposure).toBe('needs-proxy');
   });
 
-  it('offers only gateways it can wire', () => {
-    expect([...WIRED_GATEWAYS]).toEqual(['mock']);
+  /**
+   * `wired` REPORTS `WIRED_GATEWAYS`, whatever is in it.
+   *
+   * This used to assert the set EQUALS `['mock']`, which made widening the CLI
+   * fail a test whose subject is the reporting, not the roster. The repo's own
+   * rule about restated lists applies to tests too: a roster written here goes
+   * stale the moment the thing it mirrors moves, and the failure it produces
+   * points at the wrong file. What is worth holding is the invariant — that the
+   * flag and the set never disagree — plus the two properties below that would
+   * actually be bugs.
+   */
+  it('reports `wired` from WIRED_GATEWAYS and nowhere else', () => {
     for (const gateway of listGateways()) {
-      expect(gateway.wired).toBe(gateway.integration.id === 'mock');
+      expect(gateway.wired).toBe(WIRED_GATEWAYS.has(gateway.integration.id));
     }
+  });
+
+  it('never wires a gateway the kit catalog does not have', () => {
+    const known = new Set(listGateways().map((g) => g.integration.id));
+    for (const id of WIRED_GATEWAYS) expect(known.has(id)).toBe(true);
+  });
+
+  it('always keeps the zero-config gateway wired', () => {
+    // `mock` is what makes `--yes` produce a project that streams with no key
+    // and no backend. Dropping it from the set would leave the default path
+    // pointing at a gateway the CLI refuses.
+    expect(WIRED_GATEWAYS.has('mock')).toBe(true);
   });
 
   it('carries the mock integration with its own run note and docs slug', () => {

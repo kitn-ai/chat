@@ -33,7 +33,7 @@
  */
 import type { FrameworkDef } from './frameworks';
 import { applyPatch, countMatches } from './patches';
-import type { Patch } from './patches';
+import type { Matchable, Patch } from './patches';
 import { PROBE_NAME, repoInternalProblems, titleProblems } from './template-guards';
 import type { GuardProblem } from './template-guards';
 
@@ -45,6 +45,16 @@ import type { GuardProblem } from './template-guards';
 export type TemplateReader = (relativePath: string) => string | null;
 
 /**
+ * What this rule needs of a patch, which is less than either patch table is.
+ *
+ * Typed structurally so `PATCHES` and `GATEWAY_PATCHES` are graded by the SAME
+ * function. They differ only in what their `replace` takes, which is nothing
+ * this rule looks at — and a second near-identical copy of the checks below is
+ * how one table ends up with a fix the other does not.
+ */
+export type CheckablePatch = Matchable & { file: string; why: string };
+
+/**
  * Every patch matches its file, and matches it the number of times it claims to.
  *
  * Zero matches is fatal for every patch, opted-in or not. More than one is fatal
@@ -54,8 +64,15 @@ export type TemplateReader = (relativePath: string) => string | null;
  */
 export function patchMatchProblem(
   templateDir: string,
-  patches: readonly Patch[],
+  patches: readonly CheckablePatch[],
   read: TemplateReader,
+  /**
+   * Which table to send the reader to. Two tables go through this rule now, and
+   * a message naming the wrong one sends someone to a file where the string they
+   * are hunting does not appear — measured, not hypothetical: the first run of
+   * this guard against a broken gateway patch said "update PATCHES".
+   */
+  tableName = 'PATCHES',
 ): string | null {
   for (const patch of patches) {
     const source = read(patch.file);
@@ -72,7 +89,7 @@ export function patchMatchProblem(
         (patch.multiple
           ? '  it is a `multiple` patch, so this is a rename that would now rename nothing\n'
           : '') +
-        '  the starter changed — update PATCHES in src/patches.ts'
+        `  the starter changed — update ${tableName} in src/patches.ts`
       );
     }
     if (count > 1 && !patch.multiple) {
@@ -219,6 +236,130 @@ export function declaredPathsProblem(
     `'${framework.templateDir}' does not have:\n${missing.join('\n')}\n` +
     '  These are copied verbatim into the emitted kai.json for a v2 `add` to read.'
   );
+}
+
+/**
+ * The emitted route file declares everything the kit said that fragment needs.
+ *
+ * WHAT THIS STILL CATCHES NOW THAT THE PREAMBLE IS EXPORTED, because the earlier
+ * version of this rule no longer has a job. It used to compare the fragment
+ * against a HAND-COPIED preamble in this package, and its purpose was to notice
+ * when that copy drifted from the kit's private original. The copy is gone;
+ * `chatRoutePreamble` is one function with one answer, so "does this package's
+ * preamble match the kit's" is not a question that can be wrong any more, and a
+ * guard over it would be machinery over nothing.
+ *
+ * What CAN still be wrong is one step later: `emitRoute` assembles a file, and
+ * it is the assembly — not the kit — that decides whether those declarations
+ * actually reach the page. So this now grades the EMITTED TEXT. Drop the
+ * `preamble.decl` spread out of `emitRoute`, reorder it below the handler in a
+ * way the type alias cannot survive, or add a host whose `before` lines shadow
+ * it, and every one of those ships a route that does not compile while the kit's
+ * own tests stay green — because the kit never sees this file.
+ *
+ * WHAT IT DELIBERATELY DOES NOT COVER: whether the kit's answer was complete.
+ * `chatRoutePreamble` tests for a CALL, so a fragment that only ANNOTATES with
+ * `WirePart` and never calls a helper would be told it needs nothing. That gap
+ * is the kit's, it is documented at that function, and `scaffold.test.ts` grades
+ * it. Re-checking it here would be a second copy of someone else's check — the
+ * exact thing this rule was just rewritten to stop doing.
+ */
+export function routeSymbolsProblem(
+  gatewayId: string,
+  webRoute: string | undefined,
+  emitted: string,
+  required: readonly string[],
+): string | null {
+  if (webRoute === undefined) {
+    return (
+      `create-kai build: gateway '${gatewayId}' is wired but its integration declares no webRoute.\n` +
+      '  A keyed gateway needs a server route, and there is no portable handler to emit.\n' +
+      '  Remove it from WIRED_GATEWAYS in src/catalog.ts, or give the integration a webRoute.'
+    );
+  }
+
+  if (required.length === 0) {
+    return (
+      `create-kai build: the kit's chatRoutePreamble says gateway '${gatewayId}'s route needs no ` +
+      'declarations.\n' +
+      '  Every webRoute in the catalog narrows its body through readChatRequest, so a preamble with\n' +
+      '  nothing in it means the contract moved. Re-read chatRoutePreamble in\n' +
+      '  agent-tooling/mcp/tools/scaffold.ts before trusting this emit.'
+    );
+  }
+
+  // Declared, not merely mentioned: the fragment itself CALLS these names, so a
+  // substring test would pass on a file that dropped the declarations entirely.
+  const declared = (symbol: string) =>
+    new RegExp(`(?:^|\\n)(?:export\\s+)?(?:async\\s+)?(?:function|type|interface|const|class)\\s+${symbol}\\b`).test(
+      emitted,
+    );
+
+  const missing = required.filter((symbol) => !declared(symbol));
+  if (missing.length > 0) {
+    return (
+      `create-kai build: the emitted route for '${gatewayId}' does not declare ${missing.join(', ')}, ` +
+      "which the kit's chatRoutePreamble says that handler needs.\n" +
+      '  The fragment CALLS those names, so this route will not compile in a user\'s project.\n' +
+      '  emitRoute in src/routes.ts is dropping or misplacing the preamble it was handed.'
+    );
+  }
+
+  return null;
+}
+
+/**
+ * What the BROWSER receives, which is not what `streamFormat` describes.
+ *
+ * THE FAILURE THIS EXISTS FOR IS SILENT, and the kit's own catalog says so in as
+ * many words: feeding a non-OpenAI SSE dialect to `readOpenAIStream` "does not
+ * throw — it parses to nothing and the turn ends silently empty". So a gateway
+ * wired without checking this emits a project that installs, builds, typechecks,
+ * passes the smoke test, and answers every message with an empty bubble. There
+ * is no other check in this package or the kit that would notice.
+ *
+ * IT CANNOT BE DERIVED FROM `streamFormat`, which is the trap. That field
+ * describes what the PROVIDER emits, not what the route hands the browser, and
+ * the two differ for the most important case: `anthropic` is `streamFormat:
+ * 'native'` and is nonetheless correct here, because its route re-frames every
+ * frame to OpenAI form (`reframeToOpenAISse`) before returning it. Gating on
+ * `streamFormat === 'openai-sse'` would have refused a gateway that works and
+ * accepted `vercel-ai-sdk`, whose route returns an AI-SDK stream that
+ * `readOpenAIStream` cannot read.
+ *
+ * So it is a DECLARATION rather than a derivation, and it belongs to this
+ * package rather than the kit: it is a fact about the reader the go-live patch
+ * emits, and the go-live patch is ours. `GATEWAY_PATCHES` writes
+ * `readOpenAIStream`, so a gateway may be wired only if its route delivers
+ * OpenAI-format SSE. Wiring one forces someone to answer the question.
+ */
+export function routeWireProblem(
+  gatewayId: string,
+  browserWire: Readonly<Record<string, string>>,
+  readerFormat: string,
+): string | null {
+  const declared = browserWire[gatewayId];
+  if (declared === undefined) {
+    return (
+      `create-kai build: gateway '${gatewayId}' is wired but BROWSER_WIRE in src/catalog.ts does not ` +
+      'say what its route hands the browser.\n' +
+      `  The emitted front end reads the response with a ${readerFormat} parser, and a mismatch is\n` +
+      '  SILENT — the stream parses to nothing and every turn ends as an empty bubble.\n' +
+      "  Do not copy the integration's `streamFormat`: that describes the PROVIDER. anthropic is\n" +
+      "  'native' and still correct here because its route re-frames to OpenAI form. Read the route."
+    );
+  }
+  if (declared !== readerFormat) {
+    return (
+      `create-kai build: gateway '${gatewayId}'s route hands the browser '${declared}', but the ` +
+      `emitted front end reads '${readerFormat}'.\n` +
+      '  readOpenAIStream does not throw on a dialect it cannot read — it yields nothing, and the\n' +
+      '  turn ends silently empty.\n' +
+      '  Either the route must re-frame, or the go-live patch needs a reader axis before this\n' +
+      '  gateway can be wired.'
+    );
+  }
+  return null;
 }
 
 /**
