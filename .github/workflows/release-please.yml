@@ -38,33 +38,36 @@ jobs:
       - uses: actions/setup-node@v4
         if: ${{ steps.release.outputs.release_created || steps.release.outputs.releases_created || github.event_name == 'workflow_dispatch' }}
         with:
-          # Node 24 (Krypton, active LTS), NOT a floating 22, and the npm below is
-          # pinned rather than @latest. Together those remove a real trap on the one
-          # job that publishes.
+          # STAYS 22, deliberately, and MUST match the node-version in
+          # .github/workflows/test.yml. That workflow typechecks, unit-tests and
+          # builds on 22; this one builds the artifact that actually ships. Letting
+          # them diverge means publishing a compiled package built on a Node major
+          # nothing tests on, which is a worse exposure than the one below.
           #
-          # `node-version: 22` resolves to the newest 22.x, which is v22.23.2, while
-          # npm 12.0.2 declares `engines.node: ^22.22.2 || ^24.15.0 || >=26.0.0`.
-          # That works today on ONE MINOR of margin, and the margin is npm's to
-          # spend: npm raises those floors to track node's security releases, so a
-          # floor moving to ^22.24.x before a 22.24.x exists would EBADENGINE this
-          # step -- at publish time, on a tag that has already been cut.
+          # The hazard here was `npm install -g npm@latest` on a floating node.
+          # `node-version: 22` resolves to the newest 22.x (v22.23.2 today) while
+          # npm 12.0.2 declares `engines.node: ^22.22.2 || ^24.15.0 || >=26.0.0` --
+          # one minor of margin, and the margin is npm's to spend, since it raises
+          # those floors to track node's security releases. A floor moving to
+          # ^22.24.x before a 22.24.x existed would EBADENGINE the publish step at
+          # publish time, on a tag already cut.
           #
-          # Pinning npm is what actually closes it, because a pinned npm's engines
-          # cannot move. Node stays floating WITHIN 24.x so security patches still
-          # land, and every 24.x that will ever exist is >= 24.19.0 and so satisfies
-          # `^24.15.0` for the life of the line. Bumping the major is then a
-          # deliberate edit when Krypton goes EOL, not a surprise mid-release.
-          node-version: 24
+          # The fix is the EXACT npm pin below, not a node bump: a pinned npm's
+          # engines cannot move, so the drift is closed without touching the
+          # toolchain the rest of CI is tested on. When node 22 goes EOL, bump this
+          # and test.yml together as their own change.
+          node-version: 22
           registry-url: https://registry.npmjs.org
 
       - run: pnpm install --frozen-lockfile
         if: ${{ steps.release.outputs.release_created || steps.release.outputs.releases_created || github.event_name == 'workflow_dispatch' }}
 
-      # OIDC trusted publishing needs npm >= 11.5.1. Node 24.19.0 bundles 11.17.0,
-      # so this is no longer load-bearing for that floor the way it was on Node 22
-      # (which bundles 10.9.8) -- it is here to make the publishing npm an explicit,
-      # reviewable version instead of whatever the runner image happens to carry.
-      # EXACT, not @latest: see the node-version comment above. Bump deliberately.
+      # OIDC trusted publishing needs npm >= 11.5.1, and Node 22 bundles 10.9.8, so
+      # this line is load-bearing: without it the publish goes out unauthenticated
+      # and gets E404. EXACT, not @latest -- see the node-version comment above; the
+      # pin is what stops a future npm engine bump breaking this job mid-release.
+      # Verified on node 22: npm@12.0.2 installs, reports 12.0.2 and reaches the
+      # registry. Bump it deliberately, in step with node-version.
       - run: npm install -g npm@12.0.2
         if: ${{ steps.release.outputs.release_created || steps.release.outputs.releases_created || github.event_name == 'workflow_dispatch' }}
 
