@@ -12,14 +12,16 @@
 // one raw `@theme {`, and `--color-background` was defined nowhere else.
 //
 // WHAT THAT ACTUALLY BREAKS, stated at its real size, because "the app renders on
-// fallbacks" is the easy version and it is wrong. Dark mode is fine — those
-// tokens are a plain `.dark` rule. In light mode `:root` defines no `--color-*`
-// at all, but anything nested inside a `kai-*` element still resolves, since the
-// elements re-scope their own tokens onto slotted content. What loses its colours
-// is the chrome OUTSIDE every element — this app's `.app` shell and `html`/`body`,
-// measured computing `background-color: rgba(0, 0, 0, 0)`. Theming host-page
-// chrome is exactly what this stylesheet is for, and the narrowness is why the
-// bug survived: the page looks nearly right.
+// fallbacks" is the easy version and it is wrong. Dark mode is fine — those tokens
+// are a plain `.dark` rule. In light mode `:root` defines no `--color-*` at all,
+// but anything nested inside a `kai-*` element still resolves — nothing re-scopes
+// anything: Tailwind emits `@theme` to `:root, :host`, so the elements' own
+// compiled CSS pins the tokens on every host and children inherit off it, slotted
+// or not. What loses its colours is the chrome OUTSIDE every element — this app's
+// `.app` shell and `html`/`body`, measured computing
+// `background-color: rgba(0, 0, 0, 0)`. Theming host-page chrome is exactly what
+// this stylesheet is for, and the narrowness is why the bug survived: the page
+// looks nearly right.
 //
 // THE RULE IS "DOES TAILWIND PROCESS THIS FILE", NOT "NEVER IMPORT theme.css".
 // The Solid starter imports the very same `theme.css` and is correct, because its

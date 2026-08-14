@@ -6,10 +6,11 @@
   /**
    * The conversation rail — a thin wrapper over `<kai-conversations>`. The `.sidebar`
    * div owns the shell's right border (kept OFF the element so it follows the shell's
-   * light/dark tokens, not the element's own re-scoped ones). The rail's `collapsed`
-   * is CONTROLLED by the app's collapsed state, so it stays in sync with the parent
-   * `<kai-resizable-item collapsed>` and re-expands on restore; the internal hamburger
-   * still reports the toggle intent up via `onkai-toggle-sidebar`.
+   * light/dark tokens, not the light-mode ones the element pins on itself at `:host`).
+   * The rail's `collapsed` is CONTROLLED by the app's collapsed state, so it stays in
+   * sync with the parent `<kai-resizable-item collapsed>` and re-expands on restore;
+   * the internal hamburger still reports the toggle intent up via
+   * `onkai-toggle-sidebar`.
    *
    * Array/object props (`groups`, `conversations`) and the boolean `collapsed` flag
    * are set imperatively as DOM PROPERTIES (`bind:this` + `$effect`) so they land on

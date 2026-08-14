@@ -26,8 +26,9 @@ interface SidebarProps {
  * it imports is already in the client graph. Repeating it on each leaf would be
  * harmless noise that teaches the wrong rule.
  *
- * The `.sidebar` div owns the shell's right border (kept OFF the element so it
- * follows the shell's light/dark tokens, not the element's own re-scoped ones).
+ * The `.sidebar` div owns the shell's right border (kept OFF the element so it follows
+ * the shell's light/dark tokens, not the light-mode ones the element pins on itself at
+ * `:host`).
  */
 export function Sidebar({ theme, conversations, activeId, collapsed, onSelect, onNewChat, onToggle }: SidebarProps) {
   return (

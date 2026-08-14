@@ -3,7 +3,10 @@
 
    READ THE TOKEN IMPORT NOTE IN `__root.tsx` BEFORE CHANGING IT. The tokens have
    to be the COMPILED stylesheet, not `@kitn.ai/ui/theme.css` — that one is
-   Tailwind v4 source, and every rule below would silently fall back. */
+   Tailwind v4 source, this app runs no Tailwind, and `html`/`body`/`.app` would
+   silently lose their light-mode colours with a completely green build. The rules
+   that sit INSIDE <kai-resizable> (`.sidebar`, `.bar`, `.composer`) would survive
+   it, which is what makes the failure hard to see. */
 
 html,
 body {

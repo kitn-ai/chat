@@ -21,8 +21,9 @@ interface SidebarProps {
  * attribute anywhere, because the wrapper assigns the property from a layout
  * effect that only ever runs in the browser.
  *
- * The `.sidebar` div owns the shell's right border (kept OFF the element so it
- * follows the shell's light/dark tokens, not the element's own re-scoped ones).
+ * The `.sidebar` div owns the shell's right border (kept OFF the element so it follows
+ * the shell's light/dark tokens, not the light-mode ones the element pins on itself at
+ * `:host`).
  */
 export function Sidebar({ theme, conversations, activeId, collapsed, onSelect, onNewChat, onToggle }: SidebarProps) {
   return (
