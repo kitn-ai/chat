@@ -593,6 +593,34 @@ jobs:
       - name: create-kai packed-tarball shape
         run: pnpm --filter create-kai run verify:pack
 
+      # AND AGAIN UNDER THE NPM THAT ACTUALLY PUBLISHES, which is not this one.
+      #
+      # The step above runs node 22's bundled npm (10.9.8). release-please.yml
+      # installs npm@12.0.2 for OIDC trusted publishing, and `verify:pack` is the
+      # second half of create-kai's `prepublishOnly` hook -- so npm 12 is the npm
+      # it has to work under, and until this step existed it was the one npm it
+      # was never run under. That skew cost a release: npm 12 moved the top level
+      # of `npm pack --json` from an array to an object keyed by package name,
+      # and the run that published @kitn.ai/ui@0.24.0 then died in create-kai's
+      # hook with `TypeError: Cannot read properties of undefined (reading
+      # 'files')`, leaving the broken create-kai@0.1.0 on the registry with its
+      # own fix unpublishable. Every check was green; none of them ran npm 12.
+      #
+      # The parser is version-independent on its own merits and graded against
+      # committed captures of both shapes (packages/create-kai/test/pack-listing.test.ts),
+      # so this step is the end-to-end half rather than the whole guard.
+      #
+      # Installed into RUNNER_TEMP and reached BY PATH, deliberately not
+      # `npm install -g`: every step after this one keeps the npm the rest of CI
+      # is tested on. The version below is asserted to equal the release job's
+      # pin by packages/create-kai/test/publish-shape.test.ts, so the two cannot
+      # drift apart silently -- which is the only way this step goes back to
+      # testing an npm nothing publishes with.
+      - name: create-kai packed-tarball shape (under the npm the release job pins)
+        run: |
+          npm install --prefix "$RUNNER_TEMP/npm-release-pin" npm@12.0.2 --no-audit --no-fund
+          VERIFY_PACK_NPM="$RUNNER_TEMP/npm-release-pin/node_modules/.bin/npm" pnpm --filter create-kai run verify:pack
+
       - name: React adapter tests
         run: pnpm --filter @kitn.ai/ui test:react
 
