@@ -279,7 +279,10 @@ async function main() {
   ).version;
   const cliVersion = JSON.parse(await readFile(path.join(pkgRoot, 'package.json'), 'utf8')).version;
 
-  await esbuild.build({
+  // `metafile` is asked for so the bundle's real module graph can be graded —
+  // see `bundleGraphProblem`. Reading the output text instead would grade a
+  // grep, which is not the same question.
+  const bundled = await esbuild.build({
     entryPoints: [path.join(pkgRoot, 'src/index.ts')],
     outfile: path.join(dist, 'index.js'),
     bundle: true,
@@ -287,12 +290,14 @@ async function main() {
     target: 'node20.19',
     format: 'esm',
     minify: false,
+    metafile: true,
     banner: { js: '#!/usr/bin/env node' },
     define: {
       __KIT_VERSION__: JSON.stringify(kitVersion),
       __CLI_VERSION__: JSON.stringify(cliVersion),
     },
   });
+  failIf(guards.bundleGraphProblem(Object.keys(bundled.metafile.inputs)));
   await stat(path.join(dist, 'index.js')).then((s) =>
     console.log(`  bundle    dist/index.js    ${(s.size / 1024).toFixed(1)} kB`),
   );

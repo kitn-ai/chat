@@ -8,8 +8,14 @@
  * dev-time tooling, not runtime API, and `create-kai` is deliberately not a
  * runtime dependency of anything. Bundling the source at build time gives the
  * CLI the real `Integration` objects (with `deps`, `keyExposure`, `envVars`,
- * `runNote`, `docsSlug`) AND the real `renderSurface`, which a generated
+ * `runNote`, `docsSlug`) and the real `chatRoutePreamble`, which a generated
  * `catalog.json` could not carry — a function does not survive JSON.
+ *
+ * This paragraph used to end "AND the real `renderSurface`", and that was never
+ * true: nothing here imports it, and `generate()` throws on the `generated`
+ * surface path rather than emit one. It matters which because `renderSurface`
+ * lives in `mcp/tools/scaffold.ts`, the module the note below is about — so
+ * wiring that path is a move-it-to-a-leaf job, not an import.
  *
  * The rule this file exists to enforce: if the CLI needs a dependency list, an
  * env var name, a route template or a mock implementation, it reads it from
@@ -37,12 +43,22 @@ import {
  * two guards to notice when it drifted. Both are gone — the copy because there
  * is now one source, and one of the guards with it (see `build-guards.ts` for
  * which survived and what it still catches).
+ *
+ * THE MODULE THIS COMES FROM IS THE POINT, not a detail of where a symbol
+ * happens to sit. These three were briefly exported from
+ * `mcp/tools/scaffold.ts`, which builds a zod schema at module scope; a module-
+ * scope side effect is not tree-shakeable, so esbuild had to keep all 5,300
+ * lines of that file and all of zod with it. `dist/index.js` went 203 kB ->
+ * 904 kB — 505 kB of it zod this CLI never executes — and every `npx create-kai`
+ * user downloaded it. `route-emit.ts` is a leaf whose only import is type-only.
+ * Do not reach into `mcp/tools/scaffold` from this package for any reason;
+ * `bundleGraphProblem` in `build-guards.ts` fails the build if something does.
  */
 import {
   CLIENT_MODEL_IDS,
   chatRoutePreamble,
   defaultModelFor,
-} from '../../ui/src/agent-tooling/mcp/tools/scaffold';
+} from '../../ui/src/agent-tooling/route-emit';
 import type { Integration } from '../../ui/src/agent-tooling/types';
 
 export { BASE_COMPONENT, getIntegration, listIntegrations };
