@@ -92,6 +92,41 @@ export default defineConfig({
     ],
   },
   test: {
+    // COVERAGE — diagnostic only. INERT unless you pass `--coverage`.
+    //
+    // Vitest collects nothing without that flag (or `coverage.enabled`), so this
+    // block costs a normal `vitest run` exactly zero. There is deliberately NO
+    // `thresholds` key and no CI step: this exists to produce a module-level map
+    // of what has no tests at all, which is the one question line coverage
+    // answers well. A percentage would become a target, get gamed, and then get
+    // believed. See docs/superpowers/coverage-diagnostic-2026-08-14.md.
+    //
+    // `include` is the load-bearing option, and it is NOT cosmetic scoping. By
+    // default v8 reports only files some test IMPORTED, so a module with zero
+    // tests is absent from the report rather than shown at 0% — the untested
+    // modules, the entire point of the exercise, are exactly the ones that go
+    // missing. Naming the source globs here is what makes them appear. (This
+    // replaces `coverage.all`, removed in Vitest 3.)
+    //
+    // READ THE OUTPUT AS "EXERCISED", NEVER AS "TESTED". A covered line is one
+    // that RAN, not one anything would notice being wrong. That distinction is
+    // not theoretical here — see the report for five defects this repo shipped
+    // in code that executed fine.
+    coverage: {
+      provider: 'v8',
+      reporter: ['text-summary', 'json', 'html'],
+      reportsDirectory: './coverage',
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: [
+        'src/**/*.stories.{ts,tsx}',
+        'src/**/*.d.ts',
+        'src/test-utils/**',
+        'src/stories/**',
+      ],
+      // Report every project's files against the same source list, so a module
+      // covered only by the storybook project is visibly attributed to it.
+      reportOnFailure: true,
+    },
     // Allow ?raw / ?inline imports of compiled.css to pass through vitest's CSS interception.
     // vitest:css-disable and vitest:css-empty-post skip files matched by css.include.
     css: {

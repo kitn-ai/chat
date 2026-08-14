@@ -1,6 +1,8 @@
 node_modules/
 dist/
 storybook-static/
+# One-off coverage diagnostic output (`--coverage`); never produced in CI.
+coverage/
 packages/ui/src/elements/compiled.css
 *.log
 .DS_Store
