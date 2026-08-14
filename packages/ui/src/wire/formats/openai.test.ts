@@ -103,6 +103,60 @@ describe('openaiChatFormat', () => {
     ).toBe('abc');
   });
 
+  it('reads `reasoning_content`, the sibling name DeepSeek first-party emits', () => {
+    const out = push({ choices: [{ delta: { reasoning_content: 'Weighing options.' } }] });
+    expect(out).toHaveLength(1);
+    expect(out[0].reasoning).toBe('Weighing options.');
+    // No block list came with it, so there is nothing to round-trip.
+    expect(out[0].reasoningRaw).toBeUndefined();
+  });
+
+  it('coalesces the sibling reasoning names rather than concatenating them', () => {
+    // A gateway that aliases one spelling onto the other puts the SAME text in
+    // both, so summing them doubles every token exactly the way summing
+    // `reasoning` and `reasoning_details` does.
+    const out = push({
+      choices: [
+        { delta: { reasoning: 'Weighing options.', reasoning_content: 'Weighing options.' } },
+      ],
+    });
+    expect(out[0].reasoning).toBe('Weighing options.');
+  });
+
+  it('prefers `reasoning` over `reasoning_content` when the two disagree', () => {
+    // The order is fixed this way so that adding `reasoning_content` cannot
+    // change how any stream that already carried `reasoning` parses.
+    const out = push({
+      choices: [{ delta: { reasoning: 'from reasoning', reasoning_content: 'from _content' } }],
+    });
+    expect(out[0].reasoning).toBe('from reasoning');
+  });
+
+  it('falls through an empty `reasoning` to `reasoning_content`', () => {
+    expect(
+      push({ choices: [{ delta: { reasoning: '', reasoning_content: 'abc' } }] })[0].reasoning,
+    ).toBe('abc');
+  });
+
+  it('prefers `reasoning_content` over reasoning_details text', () => {
+    // Both sibling strings outrank the details fallback: details are the block
+    // list, and their text is only ever a stand-in for a missing sibling.
+    const out = push({
+      choices: [
+        {
+          delta: {
+            reasoning_content: 'from _content',
+            reasoning_details: [{ type: 'reasoning.text', text: 'from details', index: 2 }],
+          },
+        },
+      ],
+    });
+    expect(out[0].reasoning).toBe('from _content');
+    // The block list still rides along whole, same as in the `reasoning` case.
+    expect(out[0].reasoningIndex).toBe(2);
+    expect(out[0].reasoningRaw?.source).toBe('openai.reasoning_details');
+  });
+
   it('emits an EMPTY reasoning delta for an encrypted-only detail entry', () => {
     // No readable text, but a payload that must round-trip. This is exactly the
     // case the old `if (chunk.reasoning)` guard threw away.
