@@ -45,7 +45,18 @@ import { existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const pkgRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+/**
+ * `--package-root <dir>` points this at a throwaway tree instead of the real
+ * package, which is the seam `test/verify-pack.test.ts` uses to watch each rule
+ * REJECT a planted defect. Same flag, same purpose, as the guards under
+ * packages/ui/scripts. Without it the rules here are only reachable by breaking
+ * the real dist/, which is why they went into CI ungraded.
+ */
+const flagIndex = process.argv.indexOf('--package-root');
+const pkgRoot =
+  flagIndex === -1
+    ? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+    : path.resolve(process.argv[flagIndex + 1]);
 
 const raw = execFileSync('npm', ['pack', '--dry-run', '--json'], {
   cwd: pkgRoot,
