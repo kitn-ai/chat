@@ -231,6 +231,15 @@ rather than the order a UI renders them. Derive the variants from the union in
 `lint:silent-drops` already read, so the next union member appears here without a
 second list to update.
 
+**Which model actually answered.** The `model` the stream itself reported, from
+`wire.frame`. It comes off the response rather than the request, so it survives the
+case where the app built its own fetch and the kit never saw what was asked for, and it
+is usually the resolved id rather than the alias, which is what makes model drift
+visible. Where the kit also knows what was requested, `<kai-model-switcher>`'s current
+selection being the obvious case, show both: "selected Claude, served gpt-4o" is the
+finding. Never derive one from the other, and render served as absent when the stream
+did not say, per the rule in spec 1.
+
 **The encoded request.** What `toOpenAIMessages` (or `toAnthropicMessages`) produced
 from the current thread, which is the input to every "why did the model do that"
 question and is otherwise only visible by unfolding a request body by hand.
@@ -340,4 +349,5 @@ guard, and it ships first. This product adds event types under the same envelope
 | Tag to module map already exists | `packages/ui/src/elements/element-manifest.json` |
 | The SSR starters already check registration | `HydrationBadge.tsx` in the `nextjs` and `tanstack-start` starters |
 | The part variants are derivable, not restated | the `MessagePart` union in `packages/ui/src/elements/chat-types.ts` |
+| The kit knows a REQUESTED model in at least one place | the selected-model prop on `<kai-model-switcher>` in `packages/ui/src/elements/model-switcher.tsx` |
 | The silent case this exists to diagnose | the empirical results in `2026-08-14-endpoint-choice-design.md` |

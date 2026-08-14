@@ -396,7 +396,7 @@ not from what a panel would like to draw.
 | Event | Emitted at | Fields |
 |---|---|---|
 | `wire.open` | `readModelStream`, after the source resolves, before the first frame | `format` (`opts.format.id`), `source` (`response` / `stream` / `iterable`) |
-| `wire.frame` | the frame loop in `readModelStream` | `seq`, `bytes`, `chunks` (neutral chunks this frame yielded), `fields` (the keys each chunk carried: `text`, `reasoning`, `toolCalls`, `sources`, `usage`, `finishReason`, `error`) |
+| `wire.frame` | the frame loop in `readModelStream` | `seq`, `bytes`, `chunks` (neutral chunks this frame yielded), `fields` (the keys each chunk carried: `text`, `reasoning`, `toolCalls`, `sources`, `usage`, `finishReason`, `error`, `model`), `model` when this frame stated one |
 | `wire.part` | the parts recorder in `consumeModelStream` | `variant` (the `MessagePart` type), `index`, `chars` (length of this delta) |
 | `wire.close` | the return of `consumeModelStream` | `frames`, `chunks`, `parts` (count per variant), `finishReason`, `stopReason`, `errorCode`, `usage`, `ms` |
 | `wire.failed` | the `WireError` throw path in `toByteSource` | `status`, `statusText`, `bodyBytes`, `bodyIsJson`, `providerCode` (the parsed body's `error.code`, found by the walk `providerMessage()` already does for the message; extracting the code is a small addition to that function) |
@@ -414,14 +414,58 @@ which a chunk count alone cannot:
 - Frames arriving and every one yielding `chunks: 0` is the wrong-dialect case, and
   `wire.close` reports `chunks: 0` beside a non-zero `frames`. This is the half already
   covered by `empty-stream`.
-- Frames arriving, chunks coming out, and `fields` never carrying anything but
-  `finishReason` and `usage`, next to a `wire.close` whose `parts` map is empty, is the
-  case that is silent today. Exactly what was measured: `chunks: 1`, `parts: []`,
-  `error: undefined`.
+- Frames arriving, chunks coming out, and `fields` never once carrying a content key
+  (`text`, `reasoning`, `toolCalls`, `sources`), next to a `wire.close` whose `parts`
+  map is empty, is the case that is silent today. Exactly what was measured:
+  `chunks: 1`, `parts: []`, `error: undefined`. Stated as "no content key" rather than
+  as a list of what it did carry, because `model` below joins `finishReason` and
+  `usage` on exactly these frames.
 
 `frames`, `chunks` and the `parts` map on `wire.close` are also the whole input the
 widened empty-turn guard needs, so the guard and the stream are one piece of work
 rather than two.
+
+**`model` is a small addition, not an existing capability.** Neither format reads it
+today (`grep -n "model" packages/ui/src/wire/formats/openai.ts` and the same for
+`anthropic.ts` both return nothing) and `ModelTurn` has no field for it. The data is on
+the wire in both dialects, in this repo's own recorded live fixtures: an OpenAI chunk
+carries a top-level `"model"` beside `id` and `created`, and Anthropic's `message_start`
+carries `message.model` right beside the `message.usage` its handler already
+destructures. So the addition is `model?: string` on `ModelStreamChunk`, populated by
+each format from its own dialect, and reported on the frame that stated it. It goes in
+the default stream because it is identity by the rule below, not content.
+
+It earns its place for four reasons, and the first is the one that survives the
+bring-your-own-endpoint case:
+
+1. **It is read from the RESPONSE, not the request.** The app builds its own fetch and
+   the kit never sees what was asked for. This works anyway.
+2. **Providers commonly return the resolved id.** Ask for `gpt-4o`, get
+   `gpt-4o-2024-08-06`. Model drift explaining a behaviour change is a real debugging
+   session, and the resolved id is the evidence. Through a gateway the value is the
+   gateway's own id instead (the fixtures here, captured through OpenRouter, say
+   `openai/gpt-4o-mini` and `anthropic/claude-haiku-4.5`), which is another reason to
+   report the string verbatim rather than interpret it.
+3. **A selector makes mismatch the finding.** "I selected Claude and the response says
+   gpt-4o" is the most useful single line a panel can show. Requested and served are two
+   different facts.
+4. **It says whether to expect reasoning at all**, which connects straight to the
+   `reasoning_content` gap above: an empty thinking panel means one thing from a
+   reasoning model and another thing from a model that never thinks.
+
+**Report it; never infer it.** It is not guaranteed. A proxy can strip or rewrite it and
+a custom endpoint may omit it entirely, so the event carries what the stream said and
+nothing else, and a consumer renders it as absent when it is absent. A display that
+filled the gap with the requested id would lie in exactly the mismatch case the field
+exists to catch, which is the failure class this repo keeps paying for.
+
+**One ordering dependency, because this field can weaken the empty-turn guard.** An
+OpenAI frame states the model whether or not it carries content, so once
+`openaiChatFormat` surfaces it, frames that produce nothing else start yielding a chunk.
+A stream that today trips `chunkCount === 0` and reports `empty-stream` would then have
+a non-zero chunk count and go quiet. Land the widened guard, which judges on parts
+produced rather than on raw chunk count, with or before this field, and keep
+`wire.close`'s emptiness read off the `parts` map for the same reason.
 
 **Forward compatibility, both directions.** The panel is CDN-delivered and floats free
 of the kit, so an old panel will meet new events and a new panel will meet an old kit.
@@ -466,5 +510,6 @@ echo request content back inside it.
 | Wrong dialect, chunks but no parts | Drive `readOpenAIStream` with an OpenAI-shaped frame carrying an unread field; `turn.error` is `undefined` |
 | `reasoning_content` unread | `git grep -n "reasoning_content" -- packages/ui/src` returns nothing |
 | The correlator already exists | `nextStreamId()` in `packages/ui/src/wire/consume.ts`, assigned inside `consumeModelStream` |
+| `model` is unread today, and on the wire in both dialects | `grep -n "model"` over both files in `packages/ui/src/wire/formats/`, plus the first `data:` frame of `fixtures/openai/text-only.sse` and the `message_start` frame of `fixtures/anthropic/text-only.sse` |
 | `fields` costs nothing to compute | the `out` object each format reader builds, e.g. `pushOpenAI` in `packages/ui/src/wire/formats/openai.ts` |
 | Starter shapes | the `scripts` and dependency blocks of each `examples/starters/*/package.json` |
