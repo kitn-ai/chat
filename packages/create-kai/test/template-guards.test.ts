@@ -138,10 +138,139 @@ describe('the title guard', () => {
     expect(titleProblems('index.html', source)).toEqual([]);
   });
 
-  it('only reads HTML documents', () => {
-    // A `title:` field in a component is app data, not a browser tab.
+  it('does not mistake app data for a browser tab', () => {
+    // A bare `title:` field in a component is app data. This assertion predates
+    // the JS half below and is kept EXACTLY as it was: it is the control that
+    // proves reading JavaScript did not turn every card heading into a red.
     expect(documentTitles('src/cards.tsx', "const c = { title: 'Centering a div' };")).toEqual([]);
     expect(documentTitles('index.html', html('x'))).toEqual(['x']);
+  });
+});
+
+/**
+ * The JS half — the class #216 left open.
+ *
+ * `titleProblems` read HTML and nothing else, so a title declared in JavaScript
+ * was invisible to it. That was survivable while both SSR starters were
+ * `planned`; TanStack Start then went `ready` with its title in a `head()` meta
+ * array, covered by a patch-match plus one bespoke assertion in generate.test.ts
+ * — the STRING was held, the CLASS was not. Next.js declares titles the same way
+ * and is the next row in the queue.
+ *
+ * Every rejection below is a title the `REPO_INTERNAL` prose row cannot see, so
+ * nothing here can pass by accident on the older rule: watched by planting each
+ * into a real template and running the build, which stopped on the title message
+ * rather than the repo-internals one.
+ */
+describe('the title guard, on titles declared in JavaScript', () => {
+  const nextMetadata = (title: string) =>
+    `import type { Metadata } from 'next';\nexport const metadata = {\n  title: '${title}',\n  description: 'x',\n};\n`;
+
+  const tanstackHead = (title: string) =>
+    `export const Route = createRootRoute({\n  head: () => ({\n    meta: [\n      { charSet: 'utf-8' },\n      { title: '${title}' },\n    ],\n  }),\n});\n`;
+
+  it('reads the two shapes the SSR starters actually use', () => {
+    expect(documentTitles('app/layout.tsx', nextMetadata('kai-chat playground'))).toEqual([
+      'kai-chat playground',
+    ]);
+    expect(documentTitles('src/routes/__root.tsx', tanstackHead('AI/UI showcase'))).toEqual([
+      'AI/UI showcase',
+    ]);
+  });
+
+  it('rejects a JS-declared title that is not the project name', () => {
+    for (const [file, source] of [
+      ['app/layout.tsx', nextMetadata('kai-chat playground')],
+      ['src/routes/__root.tsx', tanstackHead('AI/UI showcase')],
+      // Next's other documented entry point, and its object form.
+      ['app/page.tsx', "export async function generateMetadata() { return { title: 'kitn demo' }; }"],
+      ['app/layout.tsx', "export const metadata = { title: { default: 'kitn demo' } };"],
+      ['app/layout.tsx', "export const metadata = { title: 'x' } satisfies Metadata;"],
+      // Framework-independent, and the one shape that needs no anchor.
+      ['src/main.ts', "document.title = 'kitn cat showcase';"],
+    ] as const) {
+      expect(titleProblems(file, source), source).toHaveLength(1);
+      // THE CONTROL FOR THE CONTROL: none of these is reachable by the older,
+      // name-anchored prose rule, so each one genuinely needed this parse.
+      expect(KIT_TITLE_PATTERN.test(source), source).toBe(false);
+    }
+  });
+
+  it('accepts a JS-declared title the patch machinery produced', () => {
+    expect(titleProblems('src/routes/__root.tsx', tanstackHead(PROBE_NAME))).toEqual([]);
+    expect(titleProblems('app/layout.tsx', nextMetadata(PROBE_NAME))).toEqual([]);
+  });
+
+  it('quotes the offending title the way the file spells it', () => {
+    // The message has to be greppable in the file it names, and a `.tsx` file
+    // contains no `<title>` element to point at.
+    const [problem] = titleProblems('app/layout.tsx', nextMetadata('kai-chat playground'));
+    expect(problem.detail).toBe("title: 'kai-chat playground'");
+    expect(titleProblems('index.html', html('kai-chat playground'))[0].detail).toBe(
+      '<title>kai-chat playground</title>',
+    );
+  });
+
+  /**
+   * THE REASON THIS IS A PARSE. Eight `title:` fields live in the two SSR
+   * starters and not one of them is a document title. A regex that reached the
+   * two real titles would report all eight; the note this replaced named exactly
+   * that as the reason to leave the gap open.
+   */
+  it('leaves every non-title `title` in the tree alone', () => {
+    for (const [file, source] of [
+      // Card headings — the three InteractiveIsland.tsx names by the old note.
+      ['app/InteractiveIsland.tsx', "const TASKS = [{ id: 1, title: 'Wire up streaming responses' }];"],
+      // Conversation names, and a `title` that is a TYPE rather than a value.
+      ['src/chat-data.ts', "export interface C { title: string }\nexport const C1 = [{ id: 'c1', title: 'Server rendering' }];"],
+      // A JSX attribute is not an object property at all.
+      ['src/components/HydrationBadge.tsx', "export const B = () => <span title={'hydrated'}>ok</span>;"],
+      // A `meta` object that is not an array of descriptors.
+      ['src/config.ts', "export const config = { meta: { title: 'not a descriptor array' } };"],
+      // Next's `template` is a pattern, never literal tab text.
+      ['app/layout.tsx', "export const metadata = { title: { template: '%s | kitn' } };"],
+      // A non-exported `metadata` is a local, not Next's contract.
+      ['src/util.ts', "const metadata = { title: 'kitn internal' };\nexport const x = 1;"],
+    ] as const) {
+      expect(documentTitles(file, source), source).toEqual([]);
+    }
+  });
+
+  it('yields nothing for a file that is not a script', () => {
+    for (const file of ['styles.css', 'package.json', '.npmrc', 'logo.svg']) {
+      expect(documentTitles(file, "{ title: 'x' }"), file).toEqual([]);
+    }
+  });
+
+  /**
+   * The live half, read off the tree rather than from a literal.
+   *
+   * VACUITY GUARD FIRST: these two files are the whole reason the JS half
+   * exists, and an assertion loop over an empty list is this repo's most
+   * expensive recurring defect. If a starter is restructured so its title moves,
+   * this fails loudly instead of passing having read nothing.
+   */
+  it('sees the real title in each SSR starter, unpatched', async () => {
+    const found: [string, string[]][] = [];
+    for (const rel of ['nextjs/app/layout.tsx', 'tanstack-start/src/routes/__root.tsx']) {
+      const source = await readFile(path.join(STARTERS, rel), 'utf8');
+      // The REAL file, not a reconstruction: each carries a module's worth of
+      // imports, JSX and prose around the one line that matters, which is the
+      // thing a literal in this file could never prove it survives.
+      found.push([rel, documentTitles(rel, source)]);
+      expect(titleProblems(rel, source), rel).toHaveLength(1);
+    }
+
+    expect(
+      found.map(([file, titles]) => [file, titles.length]),
+      'an SSR starter no longer declares its title where this looked',
+    ).toEqual([
+      ['nextjs/app/layout.tsx', 1],
+      ['tanstack-start/src/routes/__root.tsx', 1],
+    ]);
+    // Each is the kit's own example title today, which is what makes the
+    // rejection above meaningful rather than incidental.
+    for (const [where, [title]] of found) expect(title, where).toContain('@kitn.ai/ui');
   });
 
   it('is live on every ready starter’s title, not just the one it was written for', async () => {

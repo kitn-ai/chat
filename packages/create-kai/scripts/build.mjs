@@ -31,10 +31,10 @@
  * holds it to that — a guard-shaped function at any depth, or a message literal
  * authored here, fails the suite and points at `src/build-guards.ts`.
  */
-import { chmod, cp, mkdir, readFile, readdir, rename, rm, stat } from 'node:fs/promises';
+import { chmod, cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as esbuild from 'esbuild';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -76,6 +76,28 @@ const SKIP = new Set([
   'bun.lockb',
 ]);
 
+/**
+ * Where `loadTs` puts the module it just bundled.
+ *
+ * ON DISK, AND UNDER `node_modules/`, for one reason: a module has to be
+ * SOMEWHERE to resolve a bare specifier. This used to import a
+ * `data:text/javascript;base64,…` URL, which has no directory, so anything left
+ * external threw `ERR_UNSUPPORTED_RESOLVE_REQUEST` at import and `createRequire`
+ * could not be constructed against it at all.
+ *
+ * That was a live trap rather than a tidy-up. `external: ['zod']` below has
+ * always been one reachable import away from the same failure — it works today
+ * only because nothing in the loaded tables calls into the catalog at runtime.
+ * And it is what stopped `src/template-guards.ts` reading a JS-declared document
+ * title: bundling `typescript` inlines 9.5MB of CJS whose dynamic `require("fs")`
+ * throws on first call, and leaving it external could not resolve. From a real
+ * file both work, because `node_modules/.cache/` resolves up into the package's
+ * own `node_modules/`.
+ *
+ * Not `dist/`: `main()` deletes that after the first `loadTs` call.
+ */
+const loadedTsDir = path.join(pkgRoot, 'node_modules/.cache/create-kai-build');
+
 async function loadTs(relative) {
   // The framework table and the patch table are TypeScript the CLI owns. The
   // build reads them rather than restating which templates to copy or which
@@ -88,11 +110,17 @@ async function loadTs(relative) {
     format: 'esm',
     platform: 'node',
     // The catalog reaches into the kit's source; nothing in the two tables we
-    // load here needs it at runtime, so keep the temp module small.
-    external: ['zod'],
+    // load here needs it at runtime, so keep the temp module small. `typescript`
+    // is external because a guard parses one file with it — 9.5MB of CJS that
+    // must not be inlined.
+    external: ['zod', 'typescript'],
   });
-  const code = built.outputFiles[0].text;
-  return import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
+  await mkdir(loadedTsDir, { recursive: true });
+  // Named after the entry point so two loaded modules cannot collide, and
+  // cache-busted so a rebuild in the same process never re-imports stale bytes.
+  const out = path.join(loadedTsDir, `${path.basename(relative, '.ts')}-${process.pid}.mjs`);
+  await writeFile(out, built.outputFiles[0].text);
+  return import(`${pathToFileURL(out).href}?v=${Date.now()}`);
 }
 
 /** Where a framework's starter lives. Both the rule and the copy ask for it. */
@@ -160,6 +188,10 @@ function failIf(problem) {
 }
 
 async function main() {
+  // Cleared per run: the files below are named by pid, so without this the cache
+  // directory grows by one module per build forever.
+  await rm(loadedTsDir, { recursive: true, force: true });
+
   const guards = await loadTs('src/build-guards.ts');
 
   failIf(
