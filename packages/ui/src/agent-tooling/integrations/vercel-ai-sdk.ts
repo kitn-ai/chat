@@ -10,12 +10,44 @@ const vercelAiSdk: Integration = {
   // No per-framework templates: the handler below is web-standard, so the
   // scaffolder wraps it in the target framework's own route declaration.
   routeTemplates: {},
-  webRoute: `import { streamText } from 'ai';
-import type { ModelMessage, AssistantContent, UserContent, FilePart, ToolResultPart } from 'ai';
+  webRoute: `import { dynamicTool, jsonSchema, streamText } from 'ai';
+import type {
+  AssistantContent,
+  FilePart,
+  JSONSchema7,
+  ModelMessage,
+  ToolResultPart,
+  ToolSet,
+  UserContent,
+} from 'ai';
 
 // Next.js only: add \`export const maxDuration = 30\` to the route file to allow
 // long streaming responses. It is a Next route-segment config, not part of the
 // handler, so it lives in the file rather than in here.
+
+/**
+ * The model, PINNED — and deliberately NOT read off the request body.
+ *
+ * Change THIS LINE to change the model; it is the only place one is named. The
+ * AI Gateway takes a \`creator/model-name\` string, so any id it routes works
+ * here without touching another import.
+ *
+ * Why it is not forwarded from the client, unlike the openai / openrouter /
+ * anthropic routes:
+ *
+ *   · Those three POST to ONE host with ONE id space, so the scaffold can seed a
+ *     valid default. The Gateway is a router across every vendor's id space at
+ *     once, so there is no default that is right for it — only one vendor's guess
+ *     baked into a provider-agnostic template.
+ *   · A forwarded model id on a \`needs-proxy\` route is a spend lever handed to
+ *     anything that can POST here, and the Gateway bills per token per model.
+ *
+ * \`deepseek/deepseek-v4-flash-0731\` rather than a bigger default because it is
+ * the id this route has actually been driven against live (text, a single tool
+ * call and a four-round tool loop, through the Gateway), and it is cheap enough
+ * that a first \`npm run dev\` costs a fraction of a cent.
+ */
+const MODEL = 'deepseek/deepseek-v4-flash-0731';
 
 /**
  * One attachment to an AI SDK FilePart.
@@ -88,21 +120,186 @@ function toModelMessages(messages: ChatRequestBody['messages']): ModelMessage[] 
   });
 }
 
+/** The OpenAI function-calling envelope the front end sends, narrowed from
+ *  \`unknown[]\`. Declared as this integration's \`clientToolFormat\`. */
+type OpenAIFunctionTool = {
+  function?: { name?: string; description?: string; parameters?: unknown };
+};
+
+/**
+ * OpenAI function schemas -> the AI SDK's own ToolSet.
+ *
+ * \`dynamicTool\` is the helper for a schema known only at RUNTIME. The ordinary
+ * \`tool()\` infers its input type from a Zod schema written in the route, which
+ * a list arriving in the request body cannot have.
+ *
+ * NO \`execute\`, deliberately. A tool the SDK can run makes the ROUTE the loop
+ * owner: streamText would call it, feed the result back and answer in a single
+ * response, so the tool call would never reach the browser and \`<kai-tool>\`
+ * would have nothing to render. Without \`execute\` the SDK emits the call and
+ * stops, which is the contract the kit's front end already implements — run the
+ * tool, \`applyToolOutput\`, POST the thread again.
+ */
+function toToolSet(tools: ChatRequestBody['tools']): ToolSet | undefined {
+  if (!tools?.length) return undefined;
+  const out: ToolSet = {};
+  for (const raw of tools) {
+    const fn = (raw as OpenAIFunctionTool).function;
+    if (!fn?.name) continue;
+    out[fn.name] = dynamicTool({
+      description: fn.description ?? '',
+      inputSchema: jsonSchema((fn.parameters as JSONSchema7 | undefined) ?? { type: 'object' }),
+    });
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/** AI SDK finish reasons -> OpenAI's spelling. They agree on 'stop', 'length'
+ *  and 'error' and disagree on the other two, and readOpenAIStream's table reads
+ *  OpenAI's — so an unmapped 'tool-calls' normalises to 'other' and the turn
+ *  stops saying why it stopped. */
+const FINISH_REASONS: Record<string, string> = {
+  'tool-calls': 'tool_calls',
+  'content-filter': 'content_filter',
+};
+
 async function chatHandler(request: Request): Promise<Response> {
-  const { messages } = await readChatRequest(request);
+  const { messages, tools } = await readChatRequest(request);
+  const toolSet = toToolSet(tools);
 
   const result = streamText({
-    model: 'openai/gpt-4o', // AI Gateway id; needs AI_GATEWAY_API_KEY
+    model: MODEL, // AI Gateway id; needs AI_GATEWAY_API_KEY
     messages: toModelMessages(messages),
+    ...(toolSet ? { tools: toolSet } : {}),
   });
 
   const encoder = new TextEncoder();
+
+  // OpenAI correlates tool-call fragments by their POSITION in the tool_calls
+  // array; the SDK identifies each call by id and never sends a position. So one
+  // is derived from the other, in first-seen order, and every fragment of a call
+  // carries the same number. Getting this wrong does not throw — the fragments
+  // land on the wrong call and the arguments come out as spliced JSON.
+  const toolIndex = new Map<string, number>();
+  const indexOf = (id: string): number => {
+    const known = toolIndex.get(id);
+    if (known !== undefined) return known;
+    const next = toolIndex.size;
+    toolIndex.set(id, next);
+    return next;
+  };
+  // How many argument characters a call streamed. \`tool-call\` re-sends the whole
+  // input at the end, so emitting it unconditionally would DOUBLE the arguments
+  // of every call that streamed — and skipping it unconditionally would empty
+  // the arguments of any provider that does not stream them. Neither is safe to
+  // assume, so the decision is made per call from what actually arrived.
+  const streamedArgs = new Map<string, number>();
+
   const sse = new ReadableStream({
     async start(controller) {
+      const send = (chunk: unknown): void => {
+        controller.enqueue(encoder.encode(\`data: \${JSON.stringify(chunk)}\\n\\n\`));
+      };
       try {
-        for await (const delta of result.textStream) {
-          const chunk = { choices: [{ delta: { content: delta } }] };
-          controller.enqueue(encoder.encode(\`data: \${JSON.stringify(chunk)}\\n\\n\`));
+        // fullStream, NOT textStream. textStream is text deltas only: a tool call
+        // or a reasoning block goes past it silently, so a route built on it
+        // emits a plain answer and nothing else however the model replied.
+        for await (const part of result.fullStream) {
+          switch (part.type) {
+            case 'text-delta':
+              send({ choices: [{ delta: { content: part.text } }] });
+              break;
+
+            case 'reasoning-delta':
+              send({ choices: [{ delta: { reasoning: part.text } }] });
+              break;
+
+            // The call is ANNOUNCED here, before its arguments exist, which is
+            // what lets <kai-tool> open a panel with the tool's name in it while
+            // the arguments are still being written.
+            case 'tool-input-start':
+              streamedArgs.set(part.id, 0);
+              send({
+                choices: [{
+                  delta: {
+                    tool_calls: [{
+                      index: indexOf(part.id),
+                      id: part.id,
+                      type: 'function',
+                      function: { name: part.toolName, arguments: '' },
+                    }],
+                  },
+                }],
+              });
+              break;
+
+            case 'tool-input-delta':
+              streamedArgs.set(part.id, (streamedArgs.get(part.id) ?? 0) + part.delta.length);
+              send({
+                choices: [{
+                  delta: { tool_calls: [{ index: indexOf(part.id), function: { arguments: part.delta } }] },
+                }],
+              });
+              break;
+
+            case 'tool-call':
+              // Only when nothing streamed: see \`streamedArgs\`.
+              if ((streamedArgs.get(part.toolCallId) ?? 0) === 0) {
+                send({
+                  choices: [{
+                    delta: {
+                      tool_calls: [{
+                        index: indexOf(part.toolCallId),
+                        id: part.toolCallId,
+                        type: 'function',
+                        function: {
+                          name: part.toolName,
+                          arguments: JSON.stringify(part.input ?? {}),
+                        },
+                      }],
+                    },
+                  }],
+                });
+              }
+              break;
+
+            // One frame carries both, the way chat-completions sends them.
+            // \`reasoning_tokens\` is the number that proves thinking happened even
+            // when the provider streamed no reasoning text.
+            case 'finish':
+              send({
+                choices: [{
+                  delta: {},
+                  finish_reason: FINISH_REASONS[part.finishReason] ?? part.finishReason,
+                }],
+                usage: {
+                  prompt_tokens: part.totalUsage.inputTokens,
+                  completion_tokens: part.totalUsage.outputTokens,
+                  total_tokens: part.totalUsage.totalTokens,
+                  completion_tokens_details: {
+                    reasoning_tokens: part.totalUsage.outputTokenDetails.reasoningTokens,
+                  },
+                },
+              });
+              break;
+
+            // An error the SDK caught mid-stream. The status is long spent, so it
+            // goes IN BAND like the catch below.
+            case 'error':
+              send({
+                error: {
+                  message: part.error instanceof Error ? part.error.message : String(part.error),
+                },
+              });
+              break;
+
+            // Everything else — text-start/end, tool-input-end, sources, files,
+            // step boundaries, raw provider frames — has no OpenAI-wire spelling
+            // and is dropped. \`source\` is the one worth knowing about: map it to
+            // \`delta.annotations[].url_citation\` if your model cites its sources.
+            default:
+              break;
+          }
         }
       } catch (err) {
         // The status is spent by the time the SDK fails — the headers went out
@@ -110,7 +307,7 @@ async function chatHandler(request: Request): Promise<Response> {
         // this on turn.error and keeps whatever streamed before it. Without it a
         // failed key is an empty bubble and nothing in the console.
         const message = err instanceof Error ? err.message : 'Model stream failed';
-        controller.enqueue(encoder.encode(\`data: \${JSON.stringify({ error: { message } })}\\n\\n\`));
+        send({ error: { message } });
       }
       controller.enqueue(encoder.encode('data: [DONE]\\n\\n'));
       controller.close();
@@ -127,12 +324,26 @@ async function chatHandler(request: Request): Promise<Response> {
     },
   });
 }`,
-  streamMapping: "The Vercel AI SDK's toUIMessageStreamResponse() and toTextStreamResponse() don't emit OpenAI-format SSE. Wrap result.textStream manually: iterate text deltas and emit data: {choices:[{delta:{content}}]} frames, closing with data: [DONE]. readOpenAIStream from @kitn.ai/ui/wire parses tool calls and reasoning too, but textStream carries neither: it is text deltas only. Switch to result.fullStream, which yields typed parts, and re-frame its tool-call and reasoning parts onto delta.tool_calls and delta.reasoning to get them.",
-  runNote: 'Set AI_GATEWAY_API_KEY for the AI Gateway (string model id form: creator/model-name). For direct provider access, import its provider package (e.g. @ai-sdk/openai) and set the corresponding key (e.g. OPENAI_API_KEY).',
+  streamMapping:
+    "The Vercel AI SDK's toUIMessageStreamResponse() and toTextStreamResponse() don't emit OpenAI-format SSE, so the route re-frames the stream itself and readOpenAIStream from @kitn.ai/ui/wire parses it exactly as it does every other integration. Iterate result.fullStream, NOT result.textStream: textStream carries text deltas only, so a route built on it emits a plain answer however the model replied and drops every tool call and every reasoning block silently. fullStream yields typed parts: text-delta.text -> delta.content, reasoning-delta.text -> delta.reasoning, tool-input-start plus its tool-input-delta fragments -> delta.tool_calls, finish -> finish_reason plus a usage frame, error -> an in-band {error:{message}}. Two traps. (1) OpenAI correlates tool-call fragments by their POSITION in the tool_calls array and the SDK only ever gives an id, so the route keeps an id -> index map; passing anything else through as the index splices one call's arguments into another. (2) fullStream sends the complete input AGAIN on the tool-call part after streaming it in fragments, so emitting both doubles the arguments — the route tracks how much each call streamed and emits the tool-call part only for a provider that streamed none. Parts with no OpenAI spelling (text-start/end, tool-input-end, step boundaries, raw) are dropped; source parts have one — delta.annotations[].url_citation — and are left unmapped because the SDK's Source union carries document sources a url_citation cannot express.",
+  runNote:
+    "Set AI_GATEWAY_API_KEY for the AI Gateway (string model id form: creator/model-name). The route pins `const MODEL = 'deepseek/deepseek-v4-flash-0731'` — one line, at the top, and any id the Gateway routes works in it. For direct provider access, import its provider package (e.g. @ai-sdk/openai) and set the corresponding key (e.g. OPENAI_API_KEY). The tools the front end posts become `dynamicTool`s with NO `execute`, which is what keeps the tool loop in the app: the SDK emits the call and stops, the app runs it, renders it in <kai-tool> and posts the thread back. Give a tool an `execute` and the SDK runs the whole loop server-side, so nothing reaches the browser but the final sentence.",
   docsSlug: 'integrations/vercel-ai-sdk',
-  // Nothing. The route pins model: 'openai/gpt-4o' in the streamText() call and
-  // defines any tools there too, so neither belongs in the front end.
-  forwardsFromClient: [],
+  // `tools` only. `model` is deliberately NOT forwarded — the route pins it in
+  // one named const, and see that const's comment for why the Gateway is the one
+  // host where a client-supplied id has no correct default. The catalog check
+  // agrees from the other direction: `every integration that forwards a model
+  // emits one valid for the host it POSTs to` reads the host off the route's own
+  // fetch(), and this route makes no fetch call at all — the SDK owns the
+  // transport — so a forwarded model here could not be validated against
+  // anything.
+  forwardsFromClient: ['tools'],
+  // 'openai': the ROUTE's request contract, not the SDK's own. `toToolSet` reads
+  // `raw.function.name` / `.function.parameters` off each entry — the OpenAI
+  // function-calling envelope — and rebuilds it as a `dynamicTool` with a
+  // `jsonSchema()` input. Sending the SDK's own tool shape from the client would
+  // leave `.function` undefined and every tool would arrive nameless.
+  clientToolFormat: 'openai',
   // `ai` only. A direct provider (e.g. @ai-sdk/openai) is the alternative path
   // described in runNote, not what this route imports, so it is not listed: the
   // rule is what the emitted code actually imports.

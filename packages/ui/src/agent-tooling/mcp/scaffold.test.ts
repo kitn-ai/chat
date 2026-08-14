@@ -2565,15 +2565,33 @@ describe('real-backend scaffolds send what the panel needs and survive a failure
       expect(route, `${integration}: route never reads tools`).toMatch(
         /const \{[^}]*\btools\b[^}]*\} = await readChatRequest\(request\);/,
       );
+      // Two shapes, one claim: the destructured value reaches the upstream call
+      // rather than being dropped on the floor.
+      //
+      // POSTED AS JSON — what a route that speaks HTTP itself does.
       // `[\s\S]*?` rather than `[^}]*`: a route that CONVERTS the body before
       // sending it (anthropic maps OpenAI tool schemas onto `input_schema`) has
       // nested braces between `JSON.stringify({` and `tools`, which a
       // no-close-brace class cannot cross. It stayed non-greedy so the match
       // still has to find `tools` inside the upstream body and not somewhere
       // later in the file.
-      expect(route, `${integration}: route never sends tools`).toMatch(
-        /JSON\.stringify\(\{[\s\S]*?\btools\b[\s\S]*?\}\)/,
-      );
+      const posted = /JSON\.stringify\(\{[\s\S]*?\btools\b[\s\S]*?\}\)/.test(route);
+      // HANDED TO AN SDK — a route built on a client library has no
+      // JSON.stringify anywhere, because the library owns the transport.
+      // vercel-ai-sdk converts the OpenAI schemas into the AI SDK's own ToolSet
+      // and passes that to streamText().
+      //
+      // The converter has to be CALLED on the destructured value and its result
+      // KEPT: `function toToolSet(tools: …)` deliberately does not match, since
+      // a declaration nothing calls is exactly the dead-const defect this check
+      // exists to catch. What happens to the result is verify:scaffold's job —
+      // `noUnusedLocals` fails a binding the route never spends.
+      const converted = /=\s*\w+\(\s*tools\s*\)/.test(route);
+      expect(
+        posted || converted,
+        `${integration}: route never sends tools — it is destructured off the request body and then ` +
+          'neither posted upstream nor converted into the SDK type it is passed to',
+      ).toBe(true);
     },
   );
 
