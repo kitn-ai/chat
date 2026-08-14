@@ -162,14 +162,27 @@ describe('the emitted-content guard', () => {
   });
 
   it('reports the title family for a name no pattern lists', () => {
-    // The Solid starter titles itself "kai-chat — SolidJS Primitives Example":
-    // an element name standing in for a product that has since been renamed. It
-    // contains no `@kitn.ai/ui`, so the repo-internal patterns are blind to it
-    // and the OTHER family is what catches it. Two families, two fixes — a
-    // repo-internal instruction wants a new patch, a wrong title wants that
-    // patch to name the project.
+    // The Solid starter titled itself "kai-chat — SolidJS Primitives Example"
+    // until it became a `ready` chat app: an element name standing in for a
+    // product that has since been renamed. It contains no `@kitn.ai/ui`, so the
+    // repo-internal patterns are blind to it and the OTHER family is what
+    // catches it. Two families, two fixes — a repo-internal instruction wants a
+    // new patch, a wrong title wants that patch to name the project.
+    //
+    // A LITERAL, NOT THE LIVE FILE, and the distinction is the whole test. Every
+    // starter's title now matches the `@kitn.ai/ui … example` shape, so the
+    // repo-internal family fires on all of them and would win this race — read
+    // live, this would assert the title rule while actually exercising the one
+    // above it. The fixture has to be a title NO pattern lists or the test does
+    // not test what it is named for. `test/template-guards.test.ts` keeps the
+    // live sweep over every starter's real title.
+    const source =
+      '<!doctype html>\n<html lang="en">\n  <head>\n    <meta charset="utf-8" />\n' +
+      '    <title>kai-chat — SolidJS Primitives Example</title>\n  </head>\n' +
+      '  <body><div id="root"></div></body>\n</html>\n';
+
     expectRejected(
-      emittedContentProblem('solid', [], [['index.html', starterFile('solid', 'index.html')]]),
+      emittedContentProblem('solid', [], [['index.html', source]]),
       'would ship a browser tab that does not name',
       'kai-chat — SolidJS Primitives Example',
     );

@@ -106,8 +106,8 @@ function resolveTypes(exportsMap: Record<string, unknown>, specifier: string): s
   return types ?? null;
 }
 
-/** Names re-exported by a bundled `.d.ts`, from its `export { … }` lists. */
-function exportedNames(dts: string): Set<string> {
+/** Names declared or re-exported BY NAME in one `.d.ts`'s own text. */
+function ownExportedNames(dts: string): Set<string> {
   const names = new Set<string>();
   for (const match of dts.matchAll(/export\s+(?:type\s+)?\{([^}]*)\}/g)) {
     for (const raw of match[1].split(',')) {
@@ -122,6 +122,44 @@ function exportedNames(dts: string): Set<string> {
   }
   for (const match of dts.matchAll(/export\s+(?:interface|type|enum)\s+([A-Za-z_$][\w$]*)/g)) {
     names.add(match[1]);
+  }
+  return names;
+}
+
+/** `export * from './index.js'` — a re-export with no names to read. */
+const STAR_REEXPORT_RE = /export\s+\*\s+from\s*['"](\.[^'"]*)['"]/g;
+
+/**
+ * Every name a `.d.ts` exports, FOLLOWING `export *` re-exports.
+ *
+ * WHY THE RECURSION, because the flat version was a false-negative generator and
+ * it took a sixth `ready` framework to expose it. `dist/solid.d.ts` is
+ * `export * from './index.js'` plus the Solid-only additions — that star is the
+ * entire reason `@kitn.ai/ui/solid` is a strict superset of `.`. Reading only
+ * the file's own text therefore found the ~40 names Solid ADDS and none of the
+ * ~250 it inherits, so the first Solid template to import `Button` or `Message`
+ * was told the kit has no such export. Twenty-eight of those, all wrong.
+ *
+ * That direction of error is the loud one — a red build over working code — and
+ * it is the survivable half. The dangerous half is the same blind spot pointing
+ * the other way: any kit entry that re-exports through a star could drop a name
+ * the templates use and this rule would keep passing, because it was never
+ * reading through the star to notice. It asserted over a fraction of the surface
+ * while its name claimed all of it.
+ *
+ * `seen` guards against a cyclic re-export chain rather than trusting the
+ * kit's barrels to stay acyclic — a cycle here would be an infinite loop in the
+ * test suite, which is a much worse failure than a wrong answer.
+ */
+async function exportedNames(dtsPath: string, seen = new Set<string>()): Promise<Set<string>> {
+  if (seen.has(dtsPath) || !existsSync(dtsPath)) return new Set();
+  seen.add(dtsPath);
+
+  const source = await readFile(dtsPath, 'utf8');
+  const names = ownExportedNames(source);
+  for (const match of source.matchAll(STAR_REEXPORT_RE)) {
+    const target = path.resolve(path.dirname(dtsPath), match[1].replace(/\.js$/, '.d.ts'));
+    for (const name of await exportedNames(target, seen)) names.add(name);
   }
   return names;
 }
@@ -164,7 +202,7 @@ async function missingNames(imports: TemplateImport[]): Promise<string[]> {
       missing.push(`${entry.file}: ${entry.specifier} has no built types at ${types}`);
       continue;
     }
-    const names = exportedNames(await readFile(dtsPath, 'utf8'));
+    const names = await exportedNames(dtsPath);
     for (const name of entry.named) {
       if (!names.has(name)) missing.push(`${entry.file}: ${entry.specifier} has no '${name}'`);
     }
@@ -199,6 +237,35 @@ describe('templates agree with the workspace kit (cont.)', () => {
     ]);
     expect(missing).toEqual([
       "synthetic/useChat.ts: @kitn.ai/ui/state has no 'NotAKitExport'",
+    ]);
+  });
+
+  /**
+   * Names reached through `export *` resolve, and a fake one beside them is
+   * still caught.
+   *
+   * `dist/solid.d.ts` is `export * from './index.js'` plus the Solid-only
+   * additions — the star IS the "strict superset" invariant. `Button`,
+   * `Message` and `ChatMessage` are declared on `./index.js` and appear nowhere
+   * in solid.d.ts's own text, so before the recursion in `exportedNames` all
+   * three came back missing and the Solid template reported 28 phantom errors
+   * over imports that compile.
+   *
+   * The fake name is the half that keeps this from being a rule that says yes to
+   * everything: following a star re-export is one edit away from collecting so
+   * many names that nothing is ever missing, and that failure would look
+   * identical to a pass.
+   */
+  it('resolves names inherited through an `export *`, and still catches a fake', async () => {
+    const missing = await missingNames([
+      {
+        file: 'synthetic/App.tsx',
+        specifier: '@kitn.ai/ui/solid',
+        named: parseNamedSpecifiers('Button, Message, type ChatMessage, NotASolidExport'),
+      },
+    ]);
+    expect(missing).toEqual([
+      "synthetic/App.tsx: @kitn.ai/ui/solid has no 'NotASolidExport'",
     ]);
   });
 });

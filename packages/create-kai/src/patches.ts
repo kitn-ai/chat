@@ -201,6 +201,37 @@ export const PATCHES: Record<string, readonly Patch[]> = {
       why: 'a scaffolded project is not a workspace member and has no `nx build ui` to run',
     },
   ],
+  solid: [
+    {
+      /**
+       * The ONLY patch this template needs, and worth stating why rather than
+       * leaving a reader to wonder which one went missing: every other Vite
+       * starter also patches its `vite.config.ts` to strip the `workspace:*`
+       * paragraph, and Solid's config has no such paragraph to strip. It is four
+       * lines registering two plugins, with the kit resolved through its own
+       * `exports` map. `emittedContentProblem` is what proves that — it scans the
+       * PATCHED bytes of every file for repo-internal instructions — so this
+       * comment is a signpost, not the evidence.
+       *
+       * WHAT THIS TITLE USED TO BE, because it is the string `titleProblems` was
+       * written against:
+       *
+       *     kai-chat — SolidJS Primitives Example
+       *
+       * Two separate things had gone stale in it. `kai-chat` is an ELEMENT name
+       * being used as a product name, and the product it stood for was since
+       * renamed to `@kitn.ai/ui`. The result contained no `@kitn.ai/ui` anywhere,
+       * so the REPO_INTERNAL row could not match it and it would have shipped
+       * into a user's browser tab the day this row flipped to `ready` — which is
+       * exactly the hole `titleProblems` exists to close, and it caught this one
+       * on the first build with the status flipped.
+       */
+      file: 'index.html',
+      find: /<title>@kitn\.ai\/ui SolidJS example<\/title>/,
+      replace: (name) => `<title>${name}</title>`,
+      why: 'the browser tab should name the user\'s app, not the kit\'s example',
+    },
+  ],
   vanilla: [
     {
       file: 'index.html',

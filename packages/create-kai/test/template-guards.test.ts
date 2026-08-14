@@ -10,7 +10,8 @@
  * REJECTING a real string taken from the tree, next to a control showing the
  * rule that preceded it accepting the same string.
  */
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -31,13 +32,31 @@ const html = (title: string) =>
   `<!doctype html>\n<html lang="en">\n  <head>\n    <meta charset="utf-8" />\n    <title>${title}</title>\n  </head>\n  <body><div id="root"></div></body>\n</html>\n`;
 
 describe('the title guard', () => {
-  it('rejects the Solid starter’s real title, which the name-anchored pattern cannot see', async () => {
-    // Read from the starter rather than restated here. A copy of the string in
-    // this file would keep passing after someone edited the starter, which is
-    // the failure mode this whole module exists to stop.
-    const source = await readFile(path.join(STARTERS, 'solid/index.html'), 'utf8');
+  /**
+   * THE SPECIMEN THIS TEST WAS BUILT ON, now historical.
+   *
+   * The Solid starter titled itself exactly this until it became a `ready` chat
+   * app: an ELEMENT name (`kai-chat`) standing in for a product that had since
+   * been renamed to `@kitn.ai/ui`. Two independent drifts in one string, and the
+   * result contains no `@kitn.ai/ui` at all — which is what made it the perfect
+   * demonstration that a name-anchored blacklist cannot be the rule.
+   *
+   * It USED to be read live out of `examples/starters/solid/index.html`, on the
+   * reasoning that a copy in this file would keep passing after someone edited
+   * the starter. That reasoning was right and its premise is now gone: the
+   * starter was fixed, so there is no longer a specimen in the tree to read, and
+   * a test pinned to one file's current contents would have to be rewritten
+   * every time that file is legitimately corrected. What survives the starter is
+   * the RULE, so the string is a literal here and the live tree is covered by
+   * the sweep below instead — which asserts over EVERY starter rather than the
+   * one that happened to be broken.
+   */
+  const HISTORICAL_SOLID_TITLE = 'kai-chat — SolidJS Primitives Example';
+
+  it('rejects a self-description the name-anchored pattern cannot see', () => {
+    const source = html(HISTORICAL_SOLID_TITLE);
     const [title] = documentTitles('index.html', source);
-    expect(title).toBe('kai-chat — SolidJS Primitives Example');
+    expect(title).toBe(HISTORICAL_SOLID_TITLE);
 
     // THE CONTROL. #195 anchored on `@kitn.ai/ui` plus whitespace. This title
     // names the kit by an element name under a product name that has since been
@@ -49,7 +68,38 @@ describe('the title guard', () => {
 
     const problems = titleProblems('index.html', source);
     expect(problems).toHaveLength(1);
-    expect(problems[0].detail).toContain('kai-chat — SolidJS Primitives Example');
+    expect(problems[0].detail).toContain(HISTORICAL_SOLID_TITLE);
+  });
+
+  /**
+   * The live half, over the whole tree rather than one file.
+   *
+   * Every starter's UNPATCHED title must be rejected. That is the invariant the
+   * build actually depends on — `emittedContentProblem` applies each template's
+   * patches and then requires the result to equal the project name, so a starter
+   * whose raw title already satisfied the rule would be one whose patch does
+   * nothing and nobody would learn.
+   *
+   * VACUITY GUARD: finding no HTML titles at all would make this pass having
+   * asserted nothing, which is this repo's most expensive recurring defect. The
+   * count is asserted first.
+   */
+  it('rejects every starter’s own title, before its patch runs', async () => {
+    const titles: [string, string][] = [];
+    for (const dir of await readdir(STARTERS)) {
+      for (const rel of ['index.html', 'src/index.html']) {
+        const file = path.join(STARTERS, dir, rel);
+        if (!existsSync(file)) continue;
+        for (const title of documentTitles('index.html', await readFile(file, 'utf8'))) {
+          titles.push([`${dir}/${rel}`, title]);
+        }
+      }
+    }
+
+    expect(titles.length, 'no starter titles found — this asserted nothing').toBeGreaterThanOrEqual(6);
+    for (const [where, title] of titles) {
+      expect(titleProblems('index.html', html(title)), `${where}: ${title}`).toHaveLength(1);
+    }
   });
 
   it('accepts a title the patch machinery actually produced, and nothing else', () => {
