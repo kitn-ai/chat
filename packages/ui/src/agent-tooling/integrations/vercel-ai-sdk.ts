@@ -16,6 +16,7 @@ import type {
   FilePart,
   JSONSchema7,
   ModelMessage,
+  SystemModelMessage,
   ToolResultPart,
   ToolSet,
   UserContent,
@@ -42,12 +43,16 @@ import type {
  *   · A forwarded model id on a \`needs-proxy\` route is a spend lever handed to
  *     anything that can POST here, and the Gateway bills per token per model.
  *
- * \`deepseek/deepseek-v4-flash-0731\` rather than a bigger default because it is
- * the id this route has actually been driven against live (text, a single tool
- * call and a four-round tool loop, through the Gateway), and it is cheap enough
- * that a first \`npm run dev\` costs a fraction of a cent.
+ * WHY THIS ID. It is the one this route has actually been driven against live —
+ * text, a single tool call and a multi-round tool loop, through the Gateway —
+ * and, unlike a frontier default, it ANSWERS ON A FREE GATEWAY ACCOUNT. A paid
+ * id fails a first \`npm run dev\` with
+ * \`Free tier users do not have access to this model\`, which reads as a broken
+ * scaffold rather than as a billing setting. It also supports tools and
+ * reasoning, so the two things this route re-frames are reachable by default,
+ * and it is cheaper than gpt-4o by roughly two orders of magnitude.
  */
-const MODEL = 'deepseek/deepseek-v4-flash-0731';
+const MODEL = 'openai/gpt-oss-120b';
 
 /**
  * One attachment to an AI SDK FilePart.
@@ -166,10 +171,35 @@ const FINISH_REASONS: Record<string, string> = {
 async function chatHandler(request: Request): Promise<Response> {
   const { messages, tools } = await readChatRequest(request);
   const toolSet = toToolSet(tools);
+  const prompt = toModelMessages(messages);
 
+  // THE SYSTEM TURN DOES NOT GO IN \`messages\`, and this is the one that costs a
+  // live run to find. \`SystemModelMessage\` is still part of the \`ModelMessage\`
+  // union, so a system entry in this array TYPECHECKS — and then \`ai\` v7's
+  // \`standardizePrompt\` throws \`InvalidPromptError: System messages are not
+  // allowed in the prompt or messages fields. Use the instructions option
+  // instead.\` The kit's own encoder puts the system prompt at \`messages[0]\`, so
+  // that is every single turn of a scaffolded app, not an edge case.
+  //
+  // Hoisted rather than joined into a string: \`instructions\` takes the message
+  // array, so several system turns keep their order and their count.
+  //
+  // On \`ai\` v5/v6 there is no \`instructions\` option and a system message in
+  // \`messages\` is correct — drop this split and pass \`prompt\` straight through
+  // if you pin an older SDK.
+  const instructions = prompt.filter((m): m is SystemModelMessage => m.role === 'system');
+  const conversation = prompt.filter((m) => m.role !== 'system');
+
+  // \`streamText\` is not awaited: it returns synchronously and does its work as
+  // the stream is iterated. Prompt validation is part of that work, so an
+  // invalid prompt surfaces from \`for await (… of result.fullStream)\` below
+  // rather than from this line — which is why the catch that reports it lives
+  // in the stream and not around this call. Confirmed by observation: a rejected
+  // prompt reached the browser as an in-band error frame, not as a 500.
   const result = streamText({
     model: MODEL, // AI Gateway id; needs AI_GATEWAY_API_KEY
-    messages: toModelMessages(messages),
+    ...(instructions.length > 0 ? { instructions } : {}),
+    messages: conversation,
     ...(toolSet ? { tools: toolSet } : {}),
   });
 
@@ -325,9 +355,9 @@ async function chatHandler(request: Request): Promise<Response> {
   });
 }`,
   streamMapping:
-    "The Vercel AI SDK's toUIMessageStreamResponse() and toTextStreamResponse() don't emit OpenAI-format SSE, so the route re-frames the stream itself and readOpenAIStream from @kitn.ai/ui/wire parses it exactly as it does every other integration. Iterate result.fullStream, NOT result.textStream: textStream carries text deltas only, so a route built on it emits a plain answer however the model replied and drops every tool call and every reasoning block silently. fullStream yields typed parts: text-delta.text -> delta.content, reasoning-delta.text -> delta.reasoning, tool-input-start plus its tool-input-delta fragments -> delta.tool_calls, finish -> finish_reason plus a usage frame, error -> an in-band {error:{message}}. Two traps. (1) OpenAI correlates tool-call fragments by their POSITION in the tool_calls array and the SDK only ever gives an id, so the route keeps an id -> index map; passing anything else through as the index splices one call's arguments into another. (2) fullStream sends the complete input AGAIN on the tool-call part after streaming it in fragments, so emitting both doubles the arguments — the route tracks how much each call streamed and emits the tool-call part only for a provider that streamed none. Parts with no OpenAI spelling (text-start/end, tool-input-end, step boundaries, raw) are dropped; source parts have one — delta.annotations[].url_citation — and are left unmapped because the SDK's Source union carries document sources a url_citation cannot express.",
+    "The Vercel AI SDK's toUIMessageStreamResponse() and toTextStreamResponse() don't emit OpenAI-format SSE, so the route re-frames the stream itself and readOpenAIStream from @kitn.ai/ui/wire parses it exactly as it does every other integration. Iterate result.fullStream, NOT result.textStream: textStream carries text deltas only, so a route built on it emits a plain answer however the model replied and drops every tool call and every reasoning block silently. fullStream yields typed parts: text-delta.text -> delta.content, reasoning-delta.text -> delta.reasoning, tool-input-start plus its tool-input-delta fragments -> delta.tool_calls, finish -> finish_reason plus a usage frame, error -> an in-band {error:{message}}. Two traps. (1) OpenAI correlates tool-call fragments by their POSITION in the tool_calls array and the SDK only ever gives an id, so the route keeps an id -> index map; passing anything else through as the index splices one call's arguments into another. (2) fullStream sends the complete input AGAIN on the tool-call part after streaming it in fragments, so emitting both doubles the arguments — the route tracks how much each call streamed and emits the tool-call part only for a provider that streamed none. Parts with no OpenAI spelling (text-start/end, tool-input-end, step boundaries, raw) are dropped; source parts have one — delta.annotations[].url_citation — and are left unmapped because the SDK's Source union carries document sources a url_citation cannot express. On the REQUEST side the trap that only a live run finds: ai v7 REFUSES a system message inside `messages` (InvalidPromptError, 'Use the instructions option instead') even though SystemModelMessage is still in the ModelMessage union and therefore typechecks — and the kit's encoder puts the system prompt at messages[0], so that is every turn. Hoist system turns into `instructions` and pass the rest as `messages`. That failure arrives from ITERATING fullStream, not from the streamText() call — streamText returns synchronously and validates as the stream is read — so the in-band catch around the loop is what reports it, and it reaches the browser as an error frame rather than as a 500.",
   runNote:
-    "Set AI_GATEWAY_API_KEY for the AI Gateway (string model id form: creator/model-name). The route pins `const MODEL = 'deepseek/deepseek-v4-flash-0731'` — one line, at the top, and any id the Gateway routes works in it. For direct provider access, import its provider package (e.g. @ai-sdk/openai) and set the corresponding key (e.g. OPENAI_API_KEY). The tools the front end posts become `dynamicTool`s with NO `execute`, which is what keeps the tool loop in the app: the SDK emits the call and stops, the app runs it, renders it in <kai-tool> and posts the thread back. Give a tool an `execute` and the SDK runs the whole loop server-side, so nothing reaches the browser but the final sentence.",
+    "Set AI_GATEWAY_API_KEY for the AI Gateway (string model id form: creator/model-name). The route pins `const MODEL = 'openai/gpt-oss-120b'` — one line, at the top, and any id the Gateway routes works in it. That id is pinned because it answers on a FREE Gateway account: most ids (deepseek/*, meta/*, anthropic/*) return `Free tier users do not have access to this model` or a free-tier rate limit until the account has paid credits, which looks like a broken scaffold rather than a billing setting. For direct provider access, import its provider package (e.g. @ai-sdk/openai) and set the corresponding key (e.g. OPENAI_API_KEY). The tools the front end posts become `dynamicTool`s with NO `execute`, which is what keeps the tool loop in the app: the SDK emits the call and stops, the app runs it, renders it in <kai-tool> and posts the thread back. Give a tool an `execute` and the SDK runs the whole loop server-side, so nothing reaches the browser but the final sentence.",
   docsSlug: 'integrations/vercel-ai-sdk',
   // `tools` only. `model` is deliberately NOT forwarded — the route pins it in
   // one named const, and see that const's comment for why the Gateway is the one
