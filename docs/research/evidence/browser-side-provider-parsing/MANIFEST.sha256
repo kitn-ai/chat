@@ -1,0 +1,24 @@
+# SHA-256 manifest -- browser-side provider parsing, research evidence
+#
+# Recorded 2026-08-14 from the per-session scratch directories
+#   .../scratchpad/agent-{t1,t2,t3,u1,u2}/
+# where these reports were written. Those directories are temporary by
+# construction; the copies beside this manifest are the surviving record.
+#
+# Each copy was verified byte-identical to its source with `cmp` at copy time.
+# The digests exist so a later reader can tell whether a file here has been
+# edited since -- these reports carry retracted claims and inter-report
+# contradictions on purpose, and silently tidying them would destroy the thing
+# they are kept for.
+#
+# Verify (should print 5x OK and nothing else):
+#   shasum -a 256 -c MANIFEST.sha256
+#
+# README.md is deliberately absent: it was written here, it is not preserved
+# evidence, and it is expected to change.
+#
+8c23cd566215a7b8230c8eb2f74358e05478d3d53c453d5b8a095fb7c38c81fe  livekit-elements-promptkit.md
+9a1b1baf2adf91ed5056b42a3bb5ec76f466c24f35cb4c3aad6fa528280b7347  normalization-landscape.md
+f5c3a8759a7553212df104dc84983e2d250d209045c81a362e68b62aa4692f72  parser-trajectory-risk.md
+d2b3b43506be1df1e2c963f70482ccf22bdeb8ebedc81ccc3ec97ecde0a91dc5  peer-ui-kits.md
+2b06ab249356692191c44bfd7d6a113dd024f6bc90674d2c4b1623228a19397d  t3-chat-and-opencode.md
