@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/kitn-ai/ui/compare/create-kai-v0.1.1...create-kai-v0.1.2) (2026-08-14)
+
+
+### Bug Fixes
+
+* **create-kai:** read the packed listing on npm 12, which failed the release publish ([#241](https://github.com/kitn-ai/ui/issues/241)) ([df4b428](https://github.com/kitn-ai/ui/commit/df4b42851038ab09da62e9e57b6c858503e73922))
+
 ## [0.1.1](https://github.com/kitn-ai/ui/compare/create-kai-v0.1.0...create-kai-v0.1.1) (2026-08-14)
 
 
