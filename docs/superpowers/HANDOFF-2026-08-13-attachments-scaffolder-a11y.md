@@ -45,12 +45,21 @@ it is named instead. Run the command.
 > and have not been edited except for pointers like this one. Read §9 for what landed after, and for
 > which claims below are now retired.
 >
-> **§10 (`67365c8`) and §11 (`12a51da`) were appended the same way.** Read §11 before §4 or §6:
-> `create-kai` now runs every framework in its table, so §4's ready/planned split, and the scope
-> decision built on it, are history rather than current state.
+> **§10 (`67365c8`), §11 (`12a51da`) and §12 (`6afe8a0`) were appended the same way.** Read §11
+> before §4 or §6: `create-kai` now runs every framework in its table, so §4's ready/planned split,
+> and the scope decision built on it, are history rather than current state.
+>
+> **§12 IS THE NEWEST ANCHOR. Start there, and derive your range from `6afe8a0`, not from any
+> SHA a summary hands you.** The brief that commissioned §12 named §9's anchor as the newest and
+> was ten commits out of date; §12's opening paragraph is that correction. §12 also carries the
+> one factual retraction in this file that has a live consumer consequence: #227's claim that a
+> `vercel-ai-sdk` defect broke "every turn of every scaffolded app" is FALSE, and §12.5 refutes it
+> from the types. Do not repeat it.
 
 1. **`git log --oneline --first-parent bce481e..origin/main`** and **`gh pr list --state open`**.
    Nothing from this session was left open. Main moved twice while this was being written.
+   *(At `6afe8a0` two PRs ARE open and both matter: #228, the 0.23.0 release carrying the #227 fix,
+   and #231, the coverage diagnostic whose report is not on main. §12.2 and §12.7.)*
 2. **`@kitn.ai/ui@0.22.0` is PUBLISHED and is `latest`** (§2). Rob merged the release PR mid-session.
    Two breaking changes shipped with it. Anything that was "gated on 0.22.0" is now unblocked (§6).
    *(Still true at `16c14c2`; a 0.22.1 release PR is now open and unmerged. §9.)*
@@ -506,6 +515,10 @@ it covers is closed by construction.
 > **Status at `12a51da`: item 1 is SHIPPED too, so nothing on this list is `create-kai` work any
 > more.** Item 3 is the only one still open. §11.6 has the corrections, including one bullet below
 > whose prediction came true and therefore stopped being true.
+>
+> **Status at `6afe8a0`: item 3 is still the only one open**, and it has now been carried across
+> three anchors untouched, which is itself worth noticing before carrying it a fourth time. The
+> current next list is §12.8, and nothing on it is on this one.
 
 **`gh pr list --state open` is the authority.** Nothing from this session was left open at `bce481e`.
 #201 was the last to land, and it closed the two defects earlier rounds had found and deliberately
@@ -1148,6 +1161,13 @@ is a new variant worth watching.
 
 ### 11.1 §4 is superseded: the queue is empty (#216, #217, #220)
 
+> **Still true at `6afe8a0`, and now the smaller half of the story.** The FRAMEWORK queue is empty.
+> The (gateway, framework) CELL grid is mostly empty in the other direction: #225 wired the first
+> real gateway, and only `react` and `nextjs` declare a route host, so six of these eight ready rows
+> cannot be scaffolded against a real provider at all. `create-kai` is also still at version `0.0.0`,
+> is absent from `release-please-config.json`, and 404s on npm. "Complete" needs both qualifiers.
+> §12.4 and §12.2.
+
 **Every row in `packages/create-kai/src/frameworks.ts` now carries `status: 'ready'` and
 `composedWorkspace: true`.** #216 rewrote `tanstack-start`, #217 rewrote `solid`, #220 rewrote
 `nextjs`, and each flipped its own row last. §4's split, and the scope decision built on it, are
@@ -1189,6 +1209,12 @@ Two shape decisions carried across all three, both worth knowing before touching
   errors into a numbered link.
 
 ### 11.2 One `theme.css` defect, three starters, three narrowings
+
+> **A FOURTH pass landed as #222**, over the comments these earlier passes left in the starters. It
+> found one over-broad claim (TanStack, "every `--color-*` token silently resolves to nothing") and
+> one WRONG MECHANISM (Next.js, "the elements re-scope their own tokens"; nothing re-scopes, Tailwind
+> emits `@theme` to `:root, :host` and the `:host` half pins the tokens per element). The narrowing
+> was not finished when this section said it was. §12.1.
 
 **Record this as one finding with three passes, not as three bugs.** Each pass found another instance
 and made the claim smaller, and the version that would have been written after any single pass would
@@ -1378,6 +1404,11 @@ shipped table and let it be the tripwire.
 
 ### 11.7 The strongest evidence in this round is not executable
 
+> **Unchanged at `6afe8a0`, re-derived rather than assumed.** Both greps below still return nothing,
+> and the probe is still referenced from no `package.json` and no workflow. #223 added a check on a
+> THIRD surface (the emitted Solid scaffold, structurally) rather than wiring up either of these
+> two, so the gap this section names has been stepped around once more. §12.9.
+
 **Worth stating plainly, because it is a different failure from the one §5 catalogues and it is easy
 to feel good about.** The two sharpest empirical claims from these PRs are:
 
@@ -1429,6 +1460,12 @@ thread. Do not confuse them with #176's own figures, which were 1 of 6 against 6
 `<kai-thread>`.
 
 ### 11.8 Still open: the instance #176 named is not the instance that got fixed
+
+> **CLOSED at `6afe8a0` by #223.** The emitted Solid front end now passes `role={m().role}` to
+> `<Message>`. Read §12.1 before re-running the two greps below: the first returns the fix, and
+> **the second still returns nothing**, because the check went into `verify:scaffold` as
+> `solidSpeakerSemanticsCheck` rather than into `scaffold.test.ts` where this section predicted it.
+> A negative grep is evidence about a location, not about a property.
 
 **#176 is a PR, not an issue**, and its sweep filed the emitted Solid front end in
 `packages/ui/src/agent-tooling/mcp/tools/scaffold.ts` as unfixed: the emitter reads `m().role` for
@@ -1511,6 +1548,603 @@ wrong. **"#216 kept the SSR proof and strengthened it"** is true of the demonstr
 assertion: there was no committed check before or after, which is §11.7. And **"removed the `<Chat>`
 drop-in rather than keeping a second route"** describes a rejected alternative; no second route ever
 existed to remove.
+
+---
+
+## 12. What landed after `12a51da`: a real gateway, a live provider run, and the first offline route harness
+
+**Verified against `origin/main` at `6afe8a036403fd593f24aacb00988932d76e2445`**
+(`test(agent-tooling): run every emitted route against its real SDK, offline (#230)`).
+
+Same rule as §9, §10 and §11. Nothing above this section is rewritten; where a claim above is now
+wrong it carries a marker pointing here.
+
+**Start by fixing the anchor, because the brief that commissioned this section got it wrong and the
+error is instructive.** It said nineteen commits had landed since `16c14c2`. Both halves are
+defensible and the conclusion is not: nineteen is the right count for `16c14c2..origin/main`, and
+`16c14c2` is **§9's** anchor, not this document's. §10 anchored at `67365c8` and §11 anchored at
+`12a51da`, so ten of those nineteen were already read and written up. Deriving the range from the
+newest anchor in the file rather than from the one a summary named cut the work in half and, more to
+the point, stopped this section re-describing #216, #217 and #220 as though they were new.
+
+```
+git log --oneline --first-parent 12a51da..origin/main
+```
+
+Nine commits, and they group into five pieces of work plus a release:
+
+- **#221, #222, #223** are this document paying its own debts. #221 IS §11. §12.1.
+- **#214** is the held 0.22.2 release, merged and published. §12.2.
+- **#226 then #229** are one seam, opened and then moved. §12.3.
+- **#225** is `create-kai`'s first gateway past the mock. §12.4.
+- **#227** is the `vercel-ai-sdk` route driven against a live model, and it carries the correction
+  this section most wants to survive. §12.5.
+- **#230** is the route-contract harness. §12.6.
+
+Two PRs are OPEN and neither is in that range: **#228**, the 0.23.0 release, and **#231**, a coverage
+diagnostic. §12.2 and §12.7. This is the fourth consecutive section that has had to explain a gap in
+the PR numbering as a held release rather than a lost merge, and it is now safe to expect.
+
+This section was commissioned from a narrative, like §9 and §11. Every claim in it was checked
+against this tree, and §12.11 lists the ones that did not survive. The ratio held for the fourth
+time.
+
+### 12.1 The three closures this document earned (#221, #222, #223)
+
+**#221 is §11 itself.** Worth stating so that a reader deriving the range does not go looking for
+what it changed in the kit: nothing. It is the handoff.
+
+**#222 corrected §11.2's own comments, and the shape of both errors is the point.** §11.2 recorded
+the `theme.css` defect as one finding narrowed over three passes. #222 is a fourth pass over the
+comments those passes left in the starters, and it found the two failure modes this document
+catalogues, one of each:
+
+- **Over-broad.** The TanStack comment said "every `--color-*` token silently resolves to nothing and
+  the app renders with the fallbacks". #220 had already measured otherwise: dark mode is a plain
+  `.dark` rule and is unaffected, and chrome inside any `kai-*` element still resolves. Only chrome
+  outside every element breaks. That narrowness is exactly why the bug survived three starters, so
+  the starter that made narrowness the point was the worst place to leave the wide version.
+- **Wrong mechanism, which is worse than no mechanism.** The Next.js comment said "the elements
+  re-scope their own tokens onto slotted content". Nothing re-scopes. Tailwind emits `@theme` to
+  `:root, :host`, adopted into every element's shadow root, so the `:host` half pins the tokens on
+  each host and descendants inherit off it. Same observed behaviour, wrong cause. #222's own summary
+  is the sentence to keep: a wrong cause is worse than none, because the next person reasons from it.
+
+Both comments now state the CONDITION, does Tailwind process this file, rather than the import
+specifier. That is #218's rule holding after the fact.
+
+**#223 CLOSES §11.8, which §11 called the highest-value item it was leaving.** The emitted Solid
+front end read `m().role` for its alignment classes and then dropped it, so every Solid app
+scaffolded through the published `kai` MCP shipped unlabelled message rows. It now passes
+`role={m().role}` to `<Message>`. Solid is the only target that renders the SolidJS component
+directly rather than through `<kai-chat>`, so it inherits none of the facade's a11y work; the other
+seven emit `<kai-chat>`, and #223 states that it verified that rather than assuming it.
+
+**One thing about that closure is a trap for anyone grepping, and it is this document's own subject
+again.** §11.8 handed the reader two derivations. Re-run at this SHA:
+
+```
+grep -n "role=" packages/ui/src/agent-tooling/mcp/tools/scaffold.ts
+grep -n "speaker\|aria-label" packages/ui/src/agent-tooling/mcp/scaffold.test.ts
+```
+
+The first now returns the fix. **The second still returns nothing, and the finding is closed
+anyway.** The check did not go where §11.8 predicted. It went into `verify:scaffold` as
+`solidSpeakerSemanticsCheck` (`packages/ui/scripts/verify-scaffold-compiles.mjs`), which reads the
+emitted code across every solid cell rather than one sampled configuration the way a string
+assertion in `scaffold.test.ts` would. #223's reasoning for that placement is worth copying: `role`
+is optional on `MessageProps`, so omitting it compiles perfectly, which is the same class as
+`solidPartCoverageCheck` next to it, valid code with missing behaviour. It also strips comments
+before locating the tag, because the emitted tag now carries a prose block containing the literal
+`role="article"`, so a substring search over raw text would be satisfied by the comment rather than
+by the attribute. Confirmed by mutation. **A negative grep is evidence about a location, not about a
+property.**
+
+### 12.2 The release, and the package that has no release at all
+
+**0.22.2 is merged and published.** `.release-please-manifest.json` on main and
+`npm view @kitn.ai/ui dist-tags` agree at this SHA, which is not something to restate here; run both,
+and §2 explains why they are kept apart and why the merge needs `--admin`.
+
+**#228 is OPEN, is 0.23.0, and is the repo owner's call.** It carries #225 and #227, which means it
+carries the `vercel-ai-sdk` fix in §12.5. Until it merges, the shipped `vercel-ai-sdk` route on npm
+still fails on `ai` v7 for any app that sends a system message. That is the one thing on the open
+list with a live consumer consequence.
+
+**`create-kai` is not published, and no pipeline would publish it.** This matters because §11.1 and
+the brief for this section both describe `create-kai` as complete, which is true of its framework
+table and false of its delivery. Derive it:
+
+```
+grep '"version"' packages/create-kai/package.json     # 0.0.0
+cat release-please-config.json                        # packages/ui only
+npm view create-kai version                           # 404
+```
+
+The package has a `bin`, a `files` array and a `verify:pack` script, so it is publishable in shape.
+It has never been published, and `release-please-config.json` has one entry. Nobody can run
+`npm create kai@latest` today, which is the exact command the package's own `description` field
+advertises. This is not tracked by any PR.
+
+### 12.3 The preamble seam: opened by #226, moved by #229
+
+One seam, two commits, and the second exists because the first landed it in the wrong file.
+
+**#226 exported it.** `Integration.webRoute` is not emittable on its own: the fragments reference
+declarations that were module-private in the kit, so PR #225 was carrying a checked copy plus two
+build guards to notice when it drifted. #226 exports `chatRoutePreamble(fragment)` rather than the
+constants the copy was made from, and the reasoning generalises past this repo: a flat preamble is
+the shape that got it wrong, because one declaration is injected only where the route calls it (an
+unused declaration is a hard error under `--noUnusedLocals`), so a consumer handed the other constant
+alone emits some routes that compile and some that do not, and finds out only for the ones it
+happened to wire first. **"What goes above THIS fragment" cannot be answered half-right, so the
+export is a function and not a table.** It also exports `CLIENT_MODEL_IDS` and `defaultModelFor`,
+because `openrouter` forwards the client's `model` and a front end posting messages alone gets a 400
+that no build or typecheck can see.
+
+**#229 moved it, and the reason is a build-graph fact nobody would predict from reading the export.**
+`mcp/tools/scaffold.ts` builds the MCP tool's input schema at MODULE SCOPE, and a module-scope side
+effect is not tree-shakeable, so esbuild asked for any one of those three exports had to keep the
+whole file and everything it imports. The consequence landed on `create-kai`, whose CLI is one
+bundled zero-dependency file: most of the bundle became zod, in the graph and never executed,
+downloaded by every user of a command that does not exist yet (§12.2). The preamble now lives in
+`packages/ui/src/agent-tooling/route-emit.ts`.
+
+**Two pieces of method in #229 are worth more than the fix.** First, it measured the before and after
+**on the same commit**, and its message says why: both ends had drifted since the regression landed,
+so quoting either half against a different commit is how these numbers go wrong. Second, "it is a
+leaf" is a claim about imports, and it checked it rather than asserting it: esbuild's metafile puts
+exactly one module in that file's graph, itself. And the null result it reports, emitted output
+unchanged, is not a blind one: **the same harness moved hundreds of rows between the two preceding
+commits**, so it is a harness that has been seen to move. A null result from an instrument nobody has
+watched move is not evidence.
+
+### 12.4 `create-kai`'s first real gateway (#225), and what "complete" does and does not mean
+
+**Every row in `packages/create-kai/src/frameworks.ts` carries `status: 'ready'` and
+`composedWorkspace: true`, and none carries `planned`.** Re-derived at this SHA. That was already
+§11.1's finding at `12a51da`; it is restated here only because it is the claim most likely to be
+carried forward without its qualifier, and the qualifier is below.
+
+**`WIRED_GATEWAYS` is `{ mock, openrouter, anthropic }`**, widened from `{ mock }` by #225. The
+authority is `packages/create-kai/src/catalog.ts`; the CLI prints the live version with
+`create-kai --list --json`, and the previous handoff's note that the gateway prompt stays flat
+"until `WIRED_GATEWAYS` widens" is now the deferral that came due.
+
+**Now the qualifier, and it is load-bearing.** "Complete" is true on the framework axis and false on
+the gateway axis, and the catalog says so in a comment worth reading in place: *"WIDENING IS NOT ONE
+AXIS. A gateway is wirable only in a (gateway, framework) CELL."* Derive the cells:
+
+```
+grep -n "route:" packages/create-kai/src/frameworks.ts
+```
+
+Only `react` and `nextjs` name a route host. `vue`, `svelte`, `solid`, `angular`, `html` and
+`tanstack-start` are all `route: null`, so `wirableGateway` refuses every keyed gateway for them with
+a message saying which frameworks declare one. **Every ready framework other than those two cannot be
+scaffolded against a real provider at all** (that is most of the table at this SHA; run the grep
+rather than quoting a fraction, because this is exactly the ratio that moves next), and #225 chose
+react and nextjs deliberately, as the two
+ends of the route-destination axis rather than as a fan-out: Next is the cheapest correct destination
+(one file, ships in production) and a Vite SPA is the most expensive (three files plus a
+`vite.config.ts` edit, and development only, because `vite build` emits no server).
+
+**What #225 exercised, in its own words, and what it did not.** Exercised: scaffold, install, and
+`npm run build` for both cells, plus a boot probe with the upstream repointed at a dead local port
+(app boots, route mounted, handler ran, a wrong path still 404s so the 502 is not a generic fallback,
+dev server survives). **Not exercised: any real round trip, any streaming from a live model, or
+whether the emitted model id is currently valid. No provider was called.** It also states its own
+vacuity: `openrouter.deps.npm` is empty, so that smoke run proves nothing about dependency emission,
+and the claim is graded by a unit test against `langgraph` instead.
+
+**A defect only running it could find**, recorded because it is the argument for the boot probe: the
+Vite plugin's async middleware is not awaited by Connect, so an upstream network failure was an
+unhandled rejection that killed `npm run dev`. Observed, then fixed with a try/catch returning 502.
+
+**On "each framework was proven in a real browser, never by a green build."** That is the right
+description of the method and it needs two corrections. It is not what `scripts/smoke.mjs` does;
+that script's own docblock is explicit that it scaffolds, installs and BUILDS, that it does not call
+a provider, and that "what happens on a real first message is not covered by this script". The
+browser runs are real and are recorded in PR bodies: #216, #217 and #220 each scaffolded through the
+CLI into a temp dir **outside the repo**, installed, built, and drove Chromium with text sampled
+growing over time and page identity asserted on the document title rather than on a port. But #217's
+console was clean *apart from* Vite's connect and the mock responder's deliberate "no provider was
+contacted" notice, so "clean console" is a summary and not a quotation. And §5.6 of this document
+records one of those browser verifications driving a leaked dev server from a previous run, which is
+the method failing once and being caught. **The method is right. "Never by a green build" is a claim
+about intent that the tree cannot confirm, and none of those runs is in CI (§11.7 is still true).**
+
+### 12.5 The live `vercel-ai-sdk` run (#227), and the correction this section most wants to survive
+
+**Phase one: the route could only ever emit text.** `result.textStream` carries text deltas only, so
+a tool call or a reasoning block went past it silently and the route answered every turn as plain
+prose however the model replied. The integration's own `streamMapping` said so and named the fix. It
+is now on `result.fullStream`, re-framed onto the OpenAI wire that `readOpenAIStream` already parses.
+Part names were checked against the installed `ai` typings rather than from memory, because they have
+changed across majors and a wrong name is a route that compiles and emits nothing. Two silent traps
+are handled in the route and documented there: OpenAI correlates tool-call fragments by POSITION
+while the SDK only gives an id, so the route keeps an id-to-index map; and `fullStream` re-sends the
+complete input on `tool-call` after streaming it in fragments, so emitting both doubles every call's
+arguments while skipping it unconditionally empties them for a provider that streams none. Tools are
+converted to the SDK's own `ToolSet` deliberately WITHOUT `execute`, because an executable tool makes
+the route the loop owner and the call never reaches the browser.
+
+**Phase two: the live run found a defect no gate could.** Driving the shipped route (generated from
+`scaffold.handler`, never hand-copied) against the AI Gateway threw on the first request:
+
+```
+InvalidPromptError: System messages are not allowed in the prompt or messages
+fields. Use the instructions option instead.
+```
+
+`SystemModelMessage` is still a member of the `ModelMessage` union, so a system entry in `messages`
+typechecks and `verify:scaffold` stayed green, while `ai` v7's `standardizePrompt` refuses it at run
+time. Fixed by hoisting system turns into `instructions`, which takes the message array, so several
+of them keep their order and their count instead of being flattened into one string. The route says
+where the v5/v6 split is, because on those versions there is no `instructions` option and a system
+message in `messages` is correct.
+
+Fixtures for every live cell are committed under
+`examples/internal/openrouter-spike/fixtures/live/`, in per-backend directories so the gateway column
+and its OpenRouter control do not share one, and both replay with no key and no network. Spend was
+under a cent.
+
+**Two guards this run earned, each watched red first, and both are the failure mode this document is
+named for.** `seesAssistantProse` refused nothing: the first live run threw on every request, the app
+rendered its own `_The request failed: ..._` notice, and the scenario went GREEN on the error message
+for the bug it exists to catch. And `recordFixture` accepted an error-only stream as a recording *and
+cleared the directory first*, so a rate-limited retry wrote one billing message over two good tool
+rounds. An error-only stream is well formed and terminated, so the truncation guard waved it through.
+
+---
+
+**THE CORRECTION, and it is the single most important paragraph in this section. #227's PR body and
+its commit message both say the failure was "every turn of every scaffolded app" on this integration.
+That is WRONG, it was relayed onward at least twice, and the tree refutes it in four independent
+places.**
+
+```
+grep -n "role:" packages/ui/src/elements/chat-types.ts
+grep -n "system" packages/ui/src/wire/encode.ts
+grep -n "system" packages/ui/src/agent-tooling/mcp/tools/scaffold.ts
+grep -rn "role: 'system'" examples/starters/
+```
+
+1. **`ChatMessage.role` is `'user' | 'assistant'`.** There is no third member. A system turn is not
+   representable in the thread the kit hands the encoder.
+2. **`toOpenAIMessages` never emits a system message.** The string `system` appears once in
+   `packages/ui/src/wire/encode.ts`, in the `OpenAIWireMessage` role union that describes what the
+   wire ACCEPTS. No code path in that file constructs one.
+3. **The scaffolder emits no system prompt.** The word does not occur in
+   `packages/ui/src/agent-tooling/mcp/tools/scaffold.ts` at all, and the emitted front end posts
+   `messages: toOpenAIMessages(thread)`.
+4. **No starter sends one.** The grep over `examples/starters/` is empty.
+
+The only client in this repo that prepends one is the internal spike, at
+`examples/internal/openrouter-spike/src/hooks/useSpikeChat.ts`, on the line that builds the OpenAI
+request:
+
+```ts
+: [{ role: 'system', content: systemPrompt }, ...toOpenAIMessages(mirror)];
+```
+
+**The APP prepends it. The kit's encoder does not.** So a stock scaffold on this integration did not
+fail. It failed the moment anyone added a system prompt, which is a normal thing to do and is what
+the harness that found this does. **Urgency unchanged, blast radius overstated.**
+
+Why this one is worth the space. The false version is the more quotable one, exactly as root
+`CLAUDE.md` warns: "every turn of every scaffolded app" is a better sentence than "every turn of any
+app that adds a system prompt", and the compression is what dropped the qualifier that made it true.
+It also survived review, a merge, and a relay into a handoff brief, because it is downstream of a
+true and alarming fact (a runtime failure invisible to the type system) and nobody re-derived the
+premise attached to it. **The type that refutes it is four lines long and was never read.**
+
+**One consequence to carry:** the fix is still correct and still urgent, because the hoist is what
+makes the route usable by anyone with a system prompt. It is unreleased until #228 merges (§12.2).
+And a second-order gap this opens: since `ChatMessage.role` has no system member, an application
+carrying a system prompt has nowhere in the kit's own model to put it, and every integration invents
+its own handling. That is a design question, not a defect, and it is not tracked.
+
+**Also left behind by #227, in its own reviewer notes:** `apps/docs/src/content/docs/integrations/
+vercel-ai-sdk.mdx` still teaches `textStream` and `gpt-4o` throughout. Confirmed unchanged at this
+SHA. The published docs therefore teach the shape #227 replaced, including an aside instructing the
+reader to re-frame `textStream`.
+
+### 12.6 The route-contract harness (#230): every emitted route against its real SDK, offline
+
+**`packages/ui/tests/agent-tooling/emitted-route-contract.live.test.ts`**, and it is the answer to
+§12.5's question of how a route that compiles can be broken. It imports each emitted backend route,
+drives a real request through it, and asserts the stream that comes back, against the integration's
+real SDK, with no network.
+
+**It runs on every CI pass and needed no workflow edit.** It is picked up by the `emitted` vitest
+project (`packages/ui/emitted-code-tests.ts` declares the directory and the `.live.test.ts` suffix),
+which the required `test` job runs. That wiring is itself asserted by
+`tests/agent-tooling/emitted-project-wiring.test.ts`, so deleting the CI step turns a unit test red
+rather than quietly reducing coverage. Note the file suffix says `live` and the harness is the
+opposite of live; the suffix is the vitest project selector, not a claim about the network.
+
+**Offline is enforced, not assumed.** `globalThis.fetch` is replaced at module scope, before any
+emitted route is dynamically imported, and it **throws** rather than returning a default if a route
+calls it outside a driven request. The file states its own two limits, which is why they can be
+repeated here: only `globalThis.fetch` is replaced, so an SDK on `node:http` would escape (loudly,
+after one request left), and env keys are set with `??=` so a developer's real key is not
+overwritten, though no transport exists to spend it.
+
+**How the covered set is derived**, which matters more than its size: `cellsFor` walks
+`listIntegrations()` and emits a cell for every integration with a `webRoute` (hosted in a Next
+route) plus one for every `routeTemplates` key that has a host. Today that is a Next cell for
+`openai`, `anthropic`, `openrouter`, `vercel-ai-sdk`, `langgraph`, `cloudflare`, `ollama` and
+`mastra`, plus `cloudflare`'s worker cell. Nothing is listed by hand, so a new integration with a
+`webRoute` is covered the day it lands.
+
+**`cloudflare`'s worker cell is the interesting one** and is the reason the harness is not simply a
+fetch recorder. That route's only transport is an `env.AI` binding, so the harness stubs the binding
+and records the call. Grepping the worker template for `fetch` returns exactly one hit, the handler
+declaration `async fetch(req, env)`, and no call. `cloudflare.webRoute`, used for the Next cell, does
+call `fetch`, so the same integration is covered through both transports.
+
+**The uncovered set, and the one place the brief overstated it.** Three integrations are excluded:
+`mock` (emits no backend route at all), `pydantic-ai` (Python) and `pi` (its route is an Express
+server that spawns the `pi` binary). The claim that these are "re-derived each run" is **half right,
+and the half that is wrong is the half a reader would rely on**:
+
+- The three **ids are hardcoded**, as keys of a `NOT_EXECUTABLE` map. Nothing derives them.
+- Each id's **justification is re-derived every run**, by a `check(integration)` predicate beside the
+  prose reason: `mock` must still have no `webRoute` and no `routeTemplates`; `pydantic-ai` must
+  still be `language: 'python'`; `pi` must still have no `webRoute`, be `local-binary`, and have a
+  route template that spawns or listens. If a catalog entry changes so a reason stops being true, the
+  test fails naming the reason.
+- **The complement is derived**, and this is what makes the hardcoding safe: any integration in the
+  registry that is neither covered nor in `NOT_EXECUTABLE` fails the suite. A new integration cannot
+  slip through unnoticed, it can only be added to one list or the other deliberately.
+
+That distinction is worth keeping because "derived" and "hardcoded but validated" fail differently.
+The first cannot go stale. The second can only go stale loudly.
+
+**`outOfBand` does not decide reachability, and assuming it does is the trap.** It is a required
+field on every integration describing what must already be running (`none`, `local-server`,
+`local-binary`, `language-runtime`). `ollama` and `mastra` are both `local-server` and **both are
+covered**, because both have a `webRoute` and the harness drives the route, not the provider.
+`outOfBand` is not an input to `cellsFor` at all. It appears once, as one conjunct of the `pi`
+exclusion predicate, where it helps validate an exclusion rather than decide one.
+
+### 12.7 The coverage diagnostic (#231): MERGED as `addfe2d`, and its report is on main
+
+> **Written at `6afe8a0` while #231 was open. It merged as `addfe2d`, which is `6afe8a0`'s immediate
+> successor.** This heading read "**OPEN, and its report is not on main**", and the framing that
+> stood here opened "**Read this section knowing the artifact is not in the tree**", recording that
+> #231 adds `docs/superpowers/coverage-diagnostic-2026-08-14.md` and a `coverage` block in
+> `packages/ui/vitest.config.ts`, that neither was on main at that SHA, that
+> `git ls-files | grep -i coverage` returned nothing that is a report, and that if #231 were closed
+> rather than merged this section would be its only surviving record. All of that was true at
+> `6afe8a0`. None of it is true now: `git ls-tree -r --name-only origin/main | grep -i coverage`
+> lists the report, and `git show origin/main:packages/ui/vitest.config.ts | grep -n coverage` finds
+> the block. **The findings below are reproducible by running a command rather than by reading a
+> PR**, the command the report itself names:
+> `nx build ui && npm run build:css && npx vitest run --project=unit --project=emitted --coverage`,
+> from `packages/ui`.
+>
+> **The heading is corrected rather than left to rot, which is the opposite of what §4 gets, and the
+> difference is whether the rot teaches anything.** §4's heading is a row count in a file that opens
+> by swearing off counts, so leaving it rotted is the worked example. This one teaches nothing and
+> would only send a reader hunting for a file already sitting in front of them. §12's own opening
+> still lists #231 as one of two open PRs, and that stays as written, like every other claim at this
+> section's anchor. **§12.10.**
+>
+> **Re-derived at `addfe2d`, because "the config block is inert unless `--coverage` is passed" was a
+> claim about a PR and is now a claim about the tree: it holds.** The block declares no
+> `coverage.enabled` key, and the only `enabled: true` in that file is `browser.enabled` on the
+> storybook project. It carries no `thresholds` key. And
+> `git grep -- '--coverage' origin/main -- '.github/**' 'packages/ui/package.json' 'package.json'`
+> returns nothing, so no workflow and no script turns it on, and Vitest collects only when the flag
+> or that key is set.
+> `@vitest/coverage-v8` was already declared at `6afe8a0`, and `git diff --stat 6afe8a0 addfe2d` is
+> three files with no source, no test and no lockfile among them, so the merge cost the suite
+> nothing and every structural finding below still reads off the current tree unchanged.
+
+**It is a diagnostic and not a gate**, and it should stay one: no threshold is proposed, the config
+block is inert unless `--coverage` is passed, and `@vitest/coverage-v8` was already a declared
+devDependency so nothing was installed. Its own caveat is the right frame for every figure in it:
+**coverage says a line ran, not that anything would notice if it were wrong.** High-coverage areas
+are reported as "exercised", never "tested".
+
+**Percentages here are measurements from a dated run against `e796bee`, not properties of the
+repo.** They are recorded with that label or not at all, per this file's opening rule. What follows
+instead are the structural findings, which are falsifiable by grep and do not rot.
+
+**1. The expectation inverts.** `wire/` and `state/` measured as the two BEST-covered library folders,
+not the worst. That is the finding, and the number is not needed to state it.
+
+**2. `state/stream.ts` is the real hole, and it is a silent-corruption path.** Verified structurally
+at this SHA, independent of any coverage run. `onStreamSettled` returns a **hand-written delegation
+wrapper**: an object literal with one line per `AssistantStream` method, each of the form
+`inner.X(...); return wrapper;`. Eight rows. Four are exercised through the wrapper by tests
+(`appendText`, `done`, `abort`, `addCard`, the last of these by a test literally named for it). **Four
+are not: `appendReasoning`, `upsertTool`, `addSource`, `addFile`.** All four are exercised only on the
+bare stream from `createAssistantStream`, never through the wrapper. `addSource` and `addFile` are
+not called anywhere in `packages/ui`'s tests at all; their only call sites in the repo are in the
+spike, a different vitest project. **A copy-paste slip in an unexercised row, `inner.addCard` where
+`inner.addSource` was meant, would corrupt a message and pass the entire suite today.** Four
+assertions close it. Name the four rows rather than the count when you write the test, because the
+count moves the moment a ninth method is added and the names are what a reviewer can check.
+
+**3. `elements/autoloader.ts` is a published entry point at zero.** `packages/ui/package.json` exports
+it as `./autoloader` with its own types, `apps/docs` documents it as a consumer entry and copies the
+built file out as a raw CDN asset. **One qualifier the headline drops:** it is a CDN and static-only
+entry by design, and importing it through a bundler 404s deliberately. That constrains how it can be
+tested and is why it is at zero, but it does not make it less published.
+
+**4. The guard-script gap is real and the figure is wrong in both directions.** #231's report says
+"10 of them have neither a unit test nor a `--self-test`" and that the repo "has already solved this
+for five scripts", applied "to a third of the guards". Re-derived here:
+
+- **The five WITH a self-test are exactly right**, scoped to `packages/ui/scripts/`:
+  `grep -ln "self-test\|selfTest" packages/ui/scripts/*.mjs` returns `lint-silent-drops`,
+  `lint-attachment-object-urls`, `ssr-render-probe`, `verify-ssr-render`, `verify-scaffold-compiles`.
+  **It misses a sixth outside that directory**, `.github/scripts/spike-ci-guard.mjs`, which carries a
+  `selfTest()` invoked unconditionally.
+- **The ten WITHOUT is a named list, not a complete one.** All ten are genuinely unguarded. At least
+  three more in the same directory are too, and all three gate every build:
+  `verify-elements-bundle.mjs`, `verify-react-wrappers.mjs` and `verify-shader-lazy.mjs` run inside
+  `packages/ui`'s own `build` script, so they gate CI as hard as anything on the list. Add
+  `verify-ssr-imports.mjs`, which is wired into the required workflow and **looks** covered because
+  its name appears in `tests/scripts/ssr-render-guard-wiring.test.ts`, where it is named only as the
+  insufficient prior state that guard exists to prevent reverting to. Add `audit-a11y.mjs` and
+  `packages/create-kai/scripts/verify-pack.mjs`, and no scoping tried reproduces ten.
+- **So "a third of the guards" understates the gap**, and the recommendation built on it is
+  unaffected: closing it is still the highest-value item on the list. Just do not treat the ten as a
+  worklist that ends.
+- One thing that does NOT close the gap, checked because it looks like it might:
+  `packages/ui/tests/scripts/main-module-guards.test.ts` sweeps every `.mjs` in the repo, but it
+  tests one cross-cutting idiom (that the entry-point check survives a percent-encoded path), not any
+  script's guard logic.
+
+**5. Code exercised only by the storybook job is unprotected in practice**, because that job is
+advisory and does not block a merge. The LOC figure is a measurement from that dated run; the
+structural claim, that a whole component family lives only in the non-blocking tier, is the part to
+carry.
+
+### 12.8 What is next, in priority order
+
+1. **The unguarded CI guard scripts.** Highest value because they protect the rest of the gate, and
+   cheap because the pattern is already written five times in this repo: a `--self-test` mode that
+   plants a defect and requires the guard to fire, plus a `tests/scripts/*-wiring.test.ts` asserting
+   both that it fires AND that a run discriminating nothing is a failure rather than a pass. Work
+   from a freshly derived list, not from #231's ten (§12.7 item 4).
+2. **`state/stream.ts`'s delegation table.** Four assertions against a real silent-corruption path,
+   named in §12.7 item 2. Assert through the `onStreamSettled` wrapper, not the bare stream, because
+   that is the distinction the gap is made of.
+3. **v0 Gateway and HuggingFace into the catalog, then widen `WIRED_GATEWAYS` further.** Note the
+   axis problem from §12.4 before scoping this: widening the set is necessary and not sufficient, and
+   the more valuable half may be giving more frameworks a route host so the existing gateways reach
+   them.
+4. **The harness-layer discussion the repo owner asked to be reminded about.**
+5. **Mutation testing, scoped to `wire/` plus `state/parts.ts` plus `state/messages.ts` and nowhere
+   else.** Pure, fast, high-coverage folds, which is exactly where "exercised but not tested" is both
+   most likely and cheapest to disprove.
+
+### 12.9 Still open, and smaller
+
+- **`create-kai` is unpublishable as configured.** §12.2. Version `0.0.0`, absent from
+  `release-please-config.json`, 404 on npm, while its own description advertises
+  `npm create kai@latest`.
+- **The `vercel-ai-sdk` docs page teaches the replaced shape.** §12.5. Named by #227 as a follow-up
+  and untouched since.
+- **`elements/autoloader.ts` has no test at all**, and its CDN-only delivery is the reason a
+  straightforward import test does not work. §12.7 item 3.
+- **`scenario-assertion-control` is flaky, and the fix that suggests itself is wrong.** It is a CI
+  job, not a script: the only job in `.github/workflows/spike-conformance-control.yml`, advisory and
+  path-filtered, running the conformance suite inverted so every scenario assertion must go RED
+  against a control fixture. The flake is a transient-phase race: the tests wait for
+  `html[data-kai-phase="running"]` through `waitForPhase`, which is a plain `waitForSelector` with no
+  already-past escape hatch, and `running` is replaced by `done` once a sub-second replay settles.
+  The workflow records one occurrence and a re-run of the same commit passed. **Do NOT "fix" it by
+  making the wait accept "already past".** That wait is what detects a genuine stall, and accepting a
+  terminal phase would make every real stall pass. `retries: 0` is deliberate in that harness for the
+  same reason. If it is worth fixing, subscribe to the phase transition rather than polling for a
+  state that is transient by construction.
+- **The composed-path a11y probe is wired into nothing.**
+  `packages/ui/scripts/probe-thread-row-semantics.mjs` reads chromium's real accessibility tree over
+  CDP, which is the only way to measure a computed name (jsdom has no accessibility tree). A
+  repo-wide grep for its name returns its own usage header, a doc comment in
+  `tests/elements/thread-row-speaker.test.tsx` pointing at it, and this document. No `package.json`,
+  no workflow. It runs when somebody types it.
+- **The direct-render a11y path is now checked structurally and still not executed.** #223 added
+  `solidSpeakerSemanticsCheck` over emitted code (§12.1), and #223 itself states the limit: the
+  `emitted` vitest project cannot reach Solid, which emits TSX needing `babel-preset-solid` that
+  harness has no transform for, so a structural check over emitted code is the strongest evidence
+  available and is not equivalent to executing it.
+- **The SSR proof is still asserted only in PR bodies.** §11.7 said this and it is unchanged:
+  `grep -rn "messagesAttr\|SSR emitted\|messages= attribute"` still returns nothing.
+- **Hand-written `.d.mts` files let drift hide from tsc.** Two exist,
+  `examples/internal/openrouter-spike/harness/reasoning-coverage.d.mts` and `models.d.mts`. #227 hit
+  the failure mode and its commit message states it precisely: tsc checks every caller against
+  whatever the declaration claims and never against the implementation, so adding a parameter to the
+  function and its call site while leaving the declaration behind is drift the compiler reports at
+  the caller and nowhere else. #227 fixed the declaration and then pinned the behaviour with a test,
+  which is the right pairing; the class is still open for the other file.
+
+### 12.10 Corrections to earlier sections
+
+**§12.7's heading and opening framing are CORRECTED, and this entry is the odd one on the list.**
+Every other correction here, and every one in §9.7 and §11.9, points back at an earlier round. This
+one points at this round. §12.7 said the coverage report and the `coverage` block were not on main;
+both statements were true at this section's anchor `6afe8a0` and both stopped being true at the very
+next commit, when #231 merged as `addfe2d`. The heading is rewritten and the original wording is
+quoted inside the marker rather than deleted. Nothing else in §12.7 changed, and nothing else needed
+to: `addfe2d`'s parent is `6afe8a0` and its diff touches no source and no test, so the structural
+findings were read off a tree identical to the one that now carries the report. **The interval is
+the part worth carrying.** `TZ=UTC git show -s --format='%h %ad' --date=iso-local 2344e14 addfe2d`
+puts §12's own commit and #231's merge minutes apart, which is the third time this file has gone
+stale while being written and by far the fastest. The intro argues that a handoff without a SHA is
+unfalsifiable; this is the case for the corollary, that a section written about an OPEN PR is
+already carrying a fuse. §12.7, §12.11.
+
+**§11.8 is CLOSED** by #223, and its second derivation still returns nothing. §12.1.
+
+**§11.2's comments were corrected in the tree** by #222, in both directions this document
+catalogues. §12.1.
+
+**§11.1's "the queue is empty" is still true and is now the smaller half of the story.** The
+framework queue is empty; the (gateway, framework) cell grid is mostly empty in the other direction.
+§12.4.
+
+**§11.7 is unchanged.** Neither the SSR probe nor the a11y probe reached CI, and #223 added a check
+on a third surface rather than wiring either of them up.
+
+**§6 item 3 is the only survivor of §6.** Re-measuring the timeout budget on a genuinely quiet box,
+with `packages/ui/scripts/measure-timings.mjs`. Item 1 shipped at `12a51da` (§11.9) and item 2 shipped
+as #204 (§9.7).
+
+**§10's expectation about missing PR numbers has now held four times running.** #209, #214 and #228
+were each a held release, not a lost merge.
+
+### 12.11 What this section's commissioning narrative got wrong
+
+Same discipline as §8, §9.8 and §11.10. The narrative was substantially right about structure for
+the fourth time, and it was right in the way that matters most: it carried the §12.5 correction
+itself, having already caught that #227's blast-radius claim was false, and it asked for that to be
+recorded prominently rather than quietly. Everything below is smaller than that.
+
+1. **"19 commits since the last anchor `16c14c2`."** The count is right for that range and the anchor
+   is not this document's newest. §11 anchored at `12a51da`; the real delta is nine commits, and ten
+   of the nineteen were already written up in §10 and §11. Deriving from the file rather than from
+   the summary is what caught it, which is the same instruction the summary itself gave.
+2. **"`create-kai` is COMPLETE."** True of the framework table and false of two things a reader would
+   assume from the word. Six of the eight ready frameworks declare no route host, so no keyed gateway
+   can be wired for them at all (§12.4). And the package is at version `0.0.0`, is absent from
+   `release-please-config.json`, and 404s on npm, so the CLI cannot be run by anyone outside this
+   repo (§12.2).
+3. **"Each was proven by ... observing text stream in a real browser with a clean console, never by a
+   green build."** The method is right and the description overstates its reach. It is not what
+   `smoke.mjs` does, and that script says so itself. #217's console was clean apart from two known
+   benign sources. And §5.6 of this document records one such browser verification driving a leaked
+   dev server from a previous run, so the method has failed once and been caught. "Never by a green
+   build" is unfalsifiable from the tree.
+4. **"Uncovered with reasons re-derived each run."** Half right, and the wrong half is the one a
+   reader would rely on. The three excluded ids are hardcoded map keys. What is re-derived each run
+   is each exclusion's justification, plus the complement check that fails on any unaccounted
+   integration. §12.6.
+5. **"10 CI guard scripts have neither a unit test nor a `--self-test`; five others already got that
+   treatment."** Both figures come from #231's report and both understate. The five is right only if
+   you scope to `packages/ui/scripts/` and miss `.github/scripts/spike-ci-guard.mjs`. The ten is a
+   named list, not a complete one: at least three more build-gating guards and two others are equally
+   unguarded, and no scoping reproduces ten. The recommendation is unaffected. §12.7 item 4.
+
+Two smaller ones, recorded because the wording would mislead rather than because the substance is
+wrong. **"`state/stream.ts` has 8 of 31 functions never called"** is exact as a coverage function
+count, and it counts function NODES, so a reader expecting 31 named declarations in a short file will
+not find them; the delegation-table half of that finding is the durable one and is stated by row name
+in §12.7. And **"the coverage report is not on main"** is true and slightly undersells the situation:
+neither the report nor the config is on main, so nothing in §12.7 can be reproduced from this tree by
+running a command, only by reading the PR.
+*(TRUE at `6afe8a0` and FALSE one commit later. #231 merged as `addfe2d`, `6afe8a0`'s immediate
+successor, putting both the report and the `coverage` block on main. §12.7 is now reproducible by
+command, the one its own report names:
+`nx build ui && npm run build:css && npx vitest run --project=unit --project=emitted --coverage`,
+from `packages/ui`. The narrative was right when it was written, and the situation it undersold
+resolved in the other direction inside three minutes. §12.7, §12.10.)*
 
 ---
 
