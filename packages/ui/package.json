@@ -169,7 +169,7 @@
     "verify:elements-bundle": "node scripts/verify-elements-bundle.mjs --self-test && node scripts/verify-elements-bundle.mjs",
     "verify:dts:consumer": "node scripts/verify-dts-consumer.mjs",
     "verify:generated": "node scripts/verify-generated-sync.mjs --self-test && node scripts/verify-generated-sync.mjs",
-    "verify:quarantine": "node scripts/verify-quarantine.mjs",
+    "verify:quarantine": "node scripts/verify-quarantine.mjs --self-test && node scripts/verify-quarantine.mjs",
     "verify:react-wrappers": "node scripts/verify-react-wrappers.mjs --self-test && node scripts/verify-react-wrappers.mjs",
     "verify:scaffold": "node scripts/verify-scaffold-compiles.mjs",
     "verify:schemas": "node scripts/verify-schemas-exported.mjs",
