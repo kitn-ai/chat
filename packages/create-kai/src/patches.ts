@@ -71,11 +71,22 @@ export interface Patch {
  * start searching where the first stopped. Built fresh every call for both
  * reasons.
  */
-function baseFlags(patch: Patch): string {
+/**
+ * The part of a patch the matching helpers need.
+ *
+ * Narrowed to this rather than taking a `Patch`, so the gateway table below —
+ * whose `replace` takes a context object rather than a project name — goes
+ * through the SAME matching and counting code instead of a second copy of it.
+ * The alternative was two near-identical helpers, which is how one of them gets
+ * a fix the other does not.
+ */
+export type Matchable = Pick<Patch, 'find'> & { multiple?: true };
+
+function baseFlags(patch: Matchable): string {
   return patch.find.flags.replace(/g/g, '');
 }
 
-export function patchRegExp(patch: Patch): RegExp {
+export function patchRegExp(patch: Matchable): RegExp {
   const flags = baseFlags(patch);
   return new RegExp(patch.find.source, patch.multiple === true ? `${flags}g` : flags);
 }
@@ -86,7 +97,7 @@ export function patchRegExp(patch: Patch): RegExp {
  * "does not match at all" (always fatal) and "matches more than once" (fatal
  * only without the opt-in).
  */
-export function countMatches(patch: Patch, source: string): number {
+export function countMatches(patch: Matchable, source: string): number {
   return [...source.matchAll(new RegExp(patch.find.source, `${baseFlags(patch)}g`))].length;
 }
 
@@ -389,6 +400,204 @@ export const PATCHES: Record<string, readonly Patch[]> = {
     },
   ],
 };
+
+/**
+ * ── GATEWAY PATCHES ──────────────────────────────────────────────────────────
+ *
+ * The edits that take a starter OFF the mock responder and onto a real route.
+ * Applied only when a gateway was chosen; on `mock` the table above is the whole
+ * of what changes, which is what keeps the zero-config path byte-identical to
+ * the reviewed starter.
+ *
+ * WHY THESE ARE A SEPARATE TABLE AND NOT A `when` FLAG ON THE ONE ABOVE. The
+ * build verifies that every patch in `PATCHES` matches its template, and it must
+ * keep doing that unconditionally. These have the same requirement but a
+ * different arity: they exist only for the frameworks that have a route host, so
+ * a single table would have to encode "this row is expected to be absent for six
+ * of the eight frameworks", which is the shape that makes a guard stop meaning
+ * anything. Two tables, each checked completely, says the same thing without the
+ * exception.
+ *
+ * WHY THE REPLACEMENT TAKES A CONTEXT AND NOT JUST A NAME. The fetch body has to
+ * name the thread the way THIS framework reads it, and that expression is read
+ * out of the starter by `goLiveThread` — the same function the README already
+ * uses for the same reason, and for the same failure it was written against: a
+ * hard-coded `chat.messages` is right for React and serializes a Ref object in
+ * Vue. So the CLI never states the expression; it quotes the app file.
+ */
+export interface GatewayPatchContext {
+  /** how this framework's app reads its thread back, from `goLiveThread` */
+  thread: string;
+  /** where the route was written, for the comment that points at it */
+  routeFile: string;
+  /** the gateway's catalog title, e.g. "OpenRouter" */
+  gatewayTitle: string;
+  /**
+   * The model id to post, or undefined when this gateway's route pins its own.
+   *
+   * From `clientModelFor`, which reads `forwardsFromClient` off the catalog. It
+   * is `undefined` rather than a default for the integrations whose route never
+   * reads the field — emitting an editable constant there would be a knob that
+   * does nothing.
+   */
+  model: string | undefined;
+}
+
+export interface GatewayPatch {
+  file: string;
+  find: RegExp;
+  why: string;
+  multiple?: true;
+  replace: (context: GatewayPatchContext) => string;
+}
+
+/**
+ * The two edits every composed starter needs, whatever its framework.
+ *
+ * Both starters wired today carry these byte-identically, because both compose
+ * the same way — `useKaiChat` + `readOpenAIStream` over `mockResponse`. That is
+ * a fact about the current starters rather than a rule, so this is a helper the
+ * rows call rather than a default they inherit: a starter that composes
+ * differently gets its own rows and the build tells you which, because a patch
+ * that stops matching is fatal.
+ */
+function goLivePatches(): GatewayPatch[] {
+  return [
+    {
+      file: '',
+      find: /import \{ readOpenAIStream \} from '@kitn\.ai\/ui\/wire';/,
+      replace: () => `import { readOpenAIStream, toOpenAIMessages } from '@kitn.ai/ui/wire';`,
+      why: 'the live path encodes the thread with toOpenAIMessages before POSTing it',
+    },
+    {
+      /**
+       * Drop `mockResponse` from the import.
+       *
+       * NOT COSMETIC. Both starters compile under `noUnusedLocals: true`, so an
+       * import left behind after its only call site is rewritten is TS6133 and a
+       * hard `npm run build` failure in the emitted project — which is precisely
+       * the class of defect the smoke test exists to catch, and the reason it
+       * runs a real build rather than checking that files exist.
+       */
+      file: '',
+      find: /, newId, mockResponse \} from '\.\/chat-data';/,
+      replace: () => `, newId } from './chat-data';`,
+      why: 'mockResponse is no longer called, and noUnusedLocals makes an unused import a build failure',
+    },
+    {
+      /**
+       * The doc comment above the component, which tells its reader the app runs
+       * on a mock. It does not any more.
+       *
+       * The optional `\n \*` in the middle is not sloppiness: React's starter
+       * wraps this sentence across two comment lines and Next's does not, and a
+       * regex written against either one alone silently leaves the other's stale
+       * sentence in a user's project.
+       */
+      file: '',
+      find: /Swap(\n \*)? `mockResponse\(text\)` for a real `fetch` to ship a real app\./,
+      replace: ({ routeFile }) => `Its \`send\` posts to \`/api/chat\`, served by \`${routeFile}\`.`,
+      why: 'the emitted app no longer runs on the mock, so the comment describing it would be false',
+    },
+    {
+      /**
+       * The line above the append, which calls the reply a mock. It is not one
+       * any more. Small, and included for the same reason the docblock sentence
+       * above is: a comment that describes the wrong program is worse than no
+       * comment, and these are the three places the starters say "mock" outside
+       * the block that gets replaced wholesale.
+       */
+      file: '',
+      find: /message and stream the \(mock\) assistant reply\./,
+      replace: () => `message and stream the assistant reply.`,
+      why: 'the reply is no longer a mock, so the comment calling it one would be false',
+    },
+    {
+      /**
+       * The call site itself — the one expression the README's go-live diff has
+       * always described, applied for the user instead of handed to them.
+       *
+       * The `find` spans the whole NO-BACKEND comment block as well as the call,
+       * because the comment explains a mock that is no longer there. Leaving it
+       * would ship five lines telling the reader their real provider call is
+       * canned SSE frames.
+       */
+      file: '',
+      find: /\/\/ NO BACKEND AND NO PROVIDER\.[\s\S]*?await readOpenAIStream\(mockResponse\(text\), stream\);/,
+      replace: ({ thread, routeFile, gatewayTitle, model }) =>
+        [
+          `// The key never reaches the browser: \`${routeFile}\` reads it from the`,
+          `      // environment and forwards this request to ${gatewayTitle}. The reply is`,
+          `      // parsed by the SAME reader that parsed the mock's frames.`,
+          `      const res = await fetch('/api/chat', {`,
+          `        method: 'POST',`,
+          `        headers: { 'content-type': 'application/json' },`,
+          ...(model
+            ? [
+                `        // Change this to any model id ${gatewayTitle} accepts. The route forwards`,
+                `        // it verbatim, so this is the whole of "use a different model".`,
+                `        body: JSON.stringify({ model: '${model}', messages: toOpenAIMessages(${thread}) }),`,
+              ]
+            : [`        body: JSON.stringify({ messages: toOpenAIMessages(${thread}) }),`]),
+          `      });`,
+          `      await readOpenAIStream(res, stream);`,
+        ].join('\n'),
+      why: 'the emitted app must call the route instead of the mock responder',
+    },
+  ];
+}
+
+/** `goLivePatches()` with the app file filled in, since only the path differs. */
+function goLivePatchesFor(appFile: string): GatewayPatch[] {
+  return goLivePatches().map((patch) => ({ ...patch, file: appFile }));
+}
+
+export const GATEWAY_PATCHES: Record<string, readonly GatewayPatch[]> = {
+  react: [
+    ...goLivePatchesFor('src/App.tsx'),
+    {
+      file: 'vite.config.ts',
+      find: /import react from '@vitejs\/plugin-react';/,
+      replace: () =>
+        `import react from '@vitejs/plugin-react';\n` +
+        `// Mounts the chat route on the dev server. A Vite SPA has no server routes,\n` +
+        `// so without this \`fetch('/api/chat')\` 404s with an HTML body.\n` +
+        `import { chatApiPlugin } from './vite-chat-api';`,
+      why: 'a Vite SPA needs the dev-server plugin imported before it can be registered',
+    },
+    {
+      file: 'vite.config.ts',
+      find: /plugins: \[react\(\)\],/,
+      replace: () => `plugins: [react(), chatApiPlugin()],`,
+      why: 'the chat-api plugin has to be in the plugin list or the middleware never mounts',
+    },
+  ],
+  nextjs: goLivePatchesFor('app/workspace.tsx'),
+};
+
+export function gatewayPatchesFor(templateDir: string): readonly GatewayPatch[] {
+  return GATEWAY_PATCHES[templateDir] ?? [];
+}
+
+/**
+ * Apply one gateway patch. Throws if it does not match, for the same reason
+ * `applyPatch` does — see that function.
+ */
+export function applyGatewayPatch(
+  patch: GatewayPatch,
+  source: string,
+  context: GatewayPatchContext,
+): string {
+  const find = patchRegExp(patch);
+  if (!find.test(source)) {
+    throw new Error(
+      `create-kai: gateway patch for ${patch.file} no longer matches its template (${patch.why}). ` +
+        'The starter changed; update GATEWAY_PATCHES in src/patches.ts.',
+    );
+  }
+  find.lastIndex = 0;
+  return source.replace(find, () => patch.replace(context));
+}
 
 /**
  * Apply one patch. Throws if it does not match.

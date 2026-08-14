@@ -64,6 +64,8 @@
  * kit's own example title. The build's repo-internals check is what stands
  * behind that, and generate.test.ts asserts the html patches by their effect.
  */
+import { NEXT_ROUTE_HOST, REACT_ROUTE_HOST } from './routes';
+import type { RouteHost } from './routes';
 import type { Registration } from './types';
 
 export interface FrameworkDef {
@@ -92,6 +94,29 @@ export interface FrameworkDef {
     css: string;
     env: string;
   };
+  /**
+   * Where this framework puts a server route, or `null` when create-kai cannot
+   * emit one for it yet.
+   *
+   * DELIBERATELY NOT IN `paths` ABOVE, even though `kai.json` reports it beside
+   * those. `declaredPathsProblem` grades every `paths` entry by asserting the
+   * file EXISTS in the template, which is exactly right for the five that are
+   * copied and exactly wrong for a route: a route is the one file with no
+   * starter behind it, because every starter runs on the mock and the mock has
+   * no server side. `env` is already exempted there for the same reason and the
+   * comment on that exemption says so. Adding a third exemption to a guard whose
+   * job is "these paths are real" would have made the guard mean less; deriving
+   * `kai.json`'s `paths.route` from this field instead (see `buildKaiJson`)
+   * keeps the guard grading only what it can actually check.
+   *
+   * `null` is not a gap to be filled in by copying a neighbouring row. The route
+   * destination is the part of this table the eight frameworks disagree about
+   * most — a file route for the meta-frameworks, a dev-server middleware plus a
+   * config edit for the SPAs, an SSR Express file for Angular, nothing at all
+   * for a static page — so each one is its own piece of work. `README.md`
+   * records what each costs.
+   */
+  route: RouteHost | null;
   /** shown next to a `planned` entry so the gap is stated, not hidden */
   note?: string;
 }
@@ -112,6 +137,8 @@ export const FRAMEWORKS: readonly FrameworkDef[] = [
       css: 'src/index.css',
       env: '.env.local',
     },
+    // A Vite SPA has no server, so the handler needs a dev-server plugin beside it.
+    route: REACT_ROUTE_HOST,
   },
   {
     id: 'vue',
@@ -128,6 +155,7 @@ export const FRAMEWORKS: readonly FrameworkDef[] = [
       css: 'src/index.css',
       env: '.env.local',
     },
+    route: null,
   },
   {
     id: 'svelte',
@@ -144,6 +172,7 @@ export const FRAMEWORKS: readonly FrameworkDef[] = [
       css: 'src/index.css',
       env: '.env.local',
     },
+    route: null,
   },
   {
     id: 'solid',
@@ -186,6 +215,7 @@ export const FRAMEWORKS: readonly FrameworkDef[] = [
       css: 'src/styles.css',
       env: '.env.local',
     },
+    route: null,
   },
   {
     id: 'angular',
@@ -202,6 +232,7 @@ export const FRAMEWORKS: readonly FrameworkDef[] = [
       css: 'src/styles.css',
       env: '.env.local',
     },
+    route: null,
   },
   {
     id: 'html',
@@ -218,6 +249,7 @@ export const FRAMEWORKS: readonly FrameworkDef[] = [
       css: 'src/index.css',
       env: '.env.local',
     },
+    route: null,
   },
   {
     id: 'nextjs',
@@ -291,6 +323,9 @@ export const FRAMEWORKS: readonly FrameworkDef[] = [
       css: 'app/globals.css',
       env: '.env.local',
     },
+    // The cheapest correct destination in the table: one file, no config edit,
+    // and the same route answers `next dev` and `next start`.
+    route: NEXT_ROUTE_HOST,
   },
   {
     id: 'tanstack-start',
@@ -317,6 +352,7 @@ export const FRAMEWORKS: readonly FrameworkDef[] = [
       css: 'src/styles.css',
       env: '.env.local',
     },
+    route: null,
   },
 ];
 

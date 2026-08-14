@@ -22,7 +22,7 @@ import * as p from '@clack/prompts';
 import pc from 'picocolors';
 
 import { ZERO_CONFIG, normalizeGateway, parseArgs, validateProjectName } from './args';
-import { WIRED_GATEWAYS, listGateways } from './catalog';
+import { WIRED_GATEWAYS, listGateways, wirableGateway } from './catalog';
 import { DEFAULT_FEATURES, FEATURES, availableFeatures, getFeature } from './features';
 import { FRAMEWORKS, getFramework, readyFrameworks } from './frameworks';
 import { generate } from './generate';
@@ -160,7 +160,12 @@ async function main(): Promise<number> {
 
   // ── 4. gateway ─────────────────────────────────────────────────────────────
   const gateways = listGateways();
-  const wired = gateways.filter((g) => g.wired);
+  // Only the gateways this FRAMEWORK can host. A wired gateway still needs
+  // somewhere to put its route, and offering one the chosen framework has no
+  // destination for would put a choice in the menu that fails after it is made.
+  const wired = gateways.filter(
+    (g) => g.wired && wirableGateway(g.integration.id, framework) === null,
+  );
   const gatewayId = normalizeGateway(args.gateway) ?? (nonInteractive || wired.length === 1
     ? ZERO_CONFIG.gateway
     : await ask(
@@ -170,20 +175,19 @@ async function main(): Promise<number> {
           options: wired.map((g) => ({
             value: g.integration.id,
             label: g.integration.id === 'mock' ? 'None' : g.integration.title,
-            hint: g.integration.id === 'mock' ? 'local mock, no key, no backend' : undefined,
+            hint:
+              g.integration.id === 'mock'
+                ? 'local mock, no key, no backend'
+                : `${g.integration.envVars.join(', ')} — a server route is scaffolded for you`,
           })),
         }),
       ));
 
-  if (!WIRED_GATEWAYS.has(gatewayId)) {
-    const known = gateways.some((g) => g.integration.id === gatewayId);
-    return fail(
-      known
-        ? `gateway '${gatewayId}' is in the kit catalog but is not wired by this release yet. ` +
-            `Available: none${[...WIRED_GATEWAYS].filter((g) => g !== 'mock').map((g) => `, ${g}`).join('')}`
-        : `unknown gateway '${gatewayId}'`,
-    );
+  if (!gateways.some((g) => g.integration.id === gatewayId)) {
+    return fail(`unknown gateway '${gatewayId}'`);
   }
+  const gatewayProblem = wirableGateway(gatewayId, framework);
+  if (gatewayProblem) return fail(gatewayProblem);
 
   const plan: ProjectPlan = {
     dir,
@@ -229,9 +233,18 @@ async function main(): Promise<number> {
 
   // ── 7. next steps ──────────────────────────────────────────────────────────
   const relative = path.relative(process.cwd(), dir);
+  const integration = gateways.find((g) => g.integration.id === gatewayId)?.integration;
+  // The key step goes BEFORE `npm run dev`, because that is the order it has to
+  // happen in: a placeholder key reaches the provider as a 401 and the first
+  // message fails.
+  const keyStep =
+    gatewayId !== 'mock' && integration && integration.envVars.length > 0
+      ? `# put your key in ${framework.paths.env} (${integration.envVars.join(', ')})`
+      : null;
   const steps = [
     relative ? `cd ${relative}` : null,
     installed ? null : pm.install.join(' '),
+    keyStep,
     pm.run,
   ].filter(Boolean) as string[];
 
@@ -239,7 +252,11 @@ async function main(): Promise<number> {
 
   p.outro(
     [
-      `${pc.dim('Gateway:')} ${gatewayId === 'mock' ? 'none — the kit\'s local mock responder. No key, no backend.' : gatewayId}`,
+      `${pc.dim('Gateway:')} ${
+        gatewayId === 'mock'
+          ? "none — the kit's local mock responder. No key, no backend."
+          : `${integration?.title ?? gatewayId} — route at ${framework.route?.file}`
+      }`,
       `${pc.dim('Files:')}   ${result.files.length} written, including kai.json`,
       `${pc.dim('Docs:')}    https://ui.kitn.ai/${result.docsSlug}`,
     ].join('\n'),
@@ -286,6 +303,10 @@ function printMatrix(asJson: boolean): void {
       status: f.status,
       registration: f.registration,
       composedWorkspace: f.composedWorkspace,
+      // Where a keyed gateway's route would go, or null when this framework has
+      // no destination declared yet. An agent reading this can tell "gateway not
+      // wired" from "gateway wired but not for this framework" without guessing.
+      route: f.route ? { file: f.route.file, runtime: f.route.runtime, production: f.route.production } : null,
       ...(f.note ? { note: f.note } : {}),
     })),
     layouts: LAYOUTS.map((l) => ({ id: l.id, status: l.status, ...(l.note ? { note: l.note } : {}) })),
@@ -296,6 +317,15 @@ function printMatrix(asJson: boolean): void {
       wired: g.wired,
       envVars: g.integration.envVars,
       keyExposure: g.integration.keyExposure,
+      // What a scaffold cannot provide for you: 'none' means a key is the whole
+      // of it, anything else means a process has to already be running.
+      outOfBand: g.integration.outOfBand,
+      language: g.integration.language,
+      // Derived, never restated: the frameworks this gateway can actually be
+      // scaffolded onto today.
+      frameworks: g.wired
+        ? FRAMEWORKS.filter((f) => f.status === 'ready' && !wirableGateway(g.integration.id, f)).map((f) => f.id)
+        : [],
     })),
   };
 

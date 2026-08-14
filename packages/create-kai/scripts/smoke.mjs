@@ -18,6 +18,25 @@
  *   node scripts/smoke.mjs --keep               # leave the project on disk to `npm run dev`
  *   node scripts/smoke.mjs --framework vue      # one framework
  *   node scripts/smoke.mjs --framework all      # every ready framework, in order
+ *   node scripts/smoke.mjs --gateway openrouter --framework all   # the wired cells
+ *
+ * WHY `--gateway` EXISTS, and what it does NOT prove. The gateway path emits a
+ * server route, and a route is the only code create-kai GENERATES rather than
+ * copies — so it is the only code with no CI-built starter behind it. Compiling
+ * it is therefore worth more here than anywhere else: `npm run build` puts the
+ * emitted handler through the emitted project's own tsconfig, which for a Vite
+ * app is a NODE project with no DOM lib, where `request.json()` is
+ * `Promise<unknown>` and a route that destructures it does not compile.
+ *
+ * It proves the route COMPILES and the app BUILDS. It does not call a provider,
+ * and nothing here should ever be made to: `.env.local` is emitted with a
+ * placeholder, and a real key would turn a smoke run into spend. What happens on
+ * a real first message is not covered by this script.
+ *
+ * `--gateway all` is deliberately absent. A gateway is wirable per (gateway,
+ * framework) CELL, not per gateway, so "all" would have to mean the product —
+ * and the CLI refuses the cells it cannot wire, which would read as a smoke
+ * failure. Pass the pair you mean.
  *
  * WHY `--framework` EXISTS. This script is documented as how you find out
  * whether a newly-`ready` framework runs, and it took `--yes` with no framework
@@ -51,6 +70,7 @@ const flag = (name) => {
 };
 const kitOverride = flag('kit');
 const frameworkArg = flag('framework');
+const gatewayArg = flag('gateway');
 
 const step = (message) => console.log(`\n• ${message}`);
 const sh = (cmd, args, cwd) =>
@@ -103,23 +123,34 @@ async function main() {
     // through its own `--list --json` introspection rather than a list restated
     // here. So it widens on its own the moment a framework flips to `ready`, and
     // it cannot disagree with what the CLI actually offers.
+    const matrix = JSON.parse(
+      execFileSync('node', [path.join(pkgRoot, 'dist/index.js'), '--list', '--json'], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'inherit'],
+      }),
+    );
+
+    // With a gateway, `all` means the frameworks THAT GATEWAY can be wired onto,
+    // which the CLI already computes and reports — asking for the ready list
+    // instead would scaffold cells the CLI correctly refuses and read the
+    // refusal as a smoke failure.
+    const readyIds = matrix.frameworks.filter((f) => f.status === 'ready').map((f) => f.id);
+    const wirableIds = gatewayArg
+      ? (matrix.gateways.find((g) => g.id === gatewayArg)?.frameworks ?? [])
+      : readyIds;
+
+    if (gatewayArg && wirableIds.length === 0) {
+      throw new Error(
+        `no framework declares a route host for gateway '${gatewayArg}' — see \`--list --json\``,
+      );
+    }
+
     const targets =
-      frameworkArg === 'all'
-        ? JSON.parse(
-            execFileSync('node', [path.join(pkgRoot, 'dist/index.js'), '--list', '--json'], {
-              encoding: 'utf8',
-              stdio: ['ignore', 'pipe', 'inherit'],
-            }),
-          ).frameworks
-            .filter((f) => f.status === 'ready')
-            .map((f) => f.id)
-        : frameworkArg
-          ? [frameworkArg]
-          : [null];
+      frameworkArg === 'all' ? wirableIds : frameworkArg ? [frameworkArg] : [null];
 
     for (const framework of targets) {
-      const label = framework ?? 'zero-config (react)';
-      const appName = `smoke-${framework ?? 'default'}`;
+      const label = `${framework ?? 'zero-config (react)'}${gatewayArg ? ` + ${gatewayArg}` : ''}`;
+      const appName = `smoke-${framework ?? 'default'}${gatewayArg ? `-${gatewayArg}` : ''}`;
 
       step(`scaffolding ${label}`);
       // Beyond the target, --yes and (optionally) --framework, no flags: this is
@@ -135,6 +166,7 @@ async function main() {
           '--kit',
           kitSpec,
           ...(framework ? ['--framework', framework] : []),
+          ...(gatewayArg ? ['--gateway', gatewayArg] : []),
         ],
         work,
       );

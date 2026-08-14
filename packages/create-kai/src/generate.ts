@@ -9,12 +9,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { getIntegration, mockIntegration } from './catalog';
+import type { Integration } from './catalog';
 import { resolveSurface } from './features';
 import { getFramework } from './frameworks';
 import type { FrameworkDef } from './frameworks';
 import { buildKaiJson, stringifyKaiJson } from './kai-json';
 import { rewritePackageJson, stringifyPackageJson } from './package-json';
-import { applyPatch, patchesFor } from './patches';
+import { applyGatewayPatch, applyPatch, gatewayPatchesFor, patchesFor } from './patches';
+import { clientModelFor, emitRoute } from './routes';
 import type { ProjectPlan } from './types';
 
 /**
@@ -111,16 +113,83 @@ export async function generate(
   });
   await writeFile(pkgPath, stringifyPackageJson(json), 'utf8');
 
+  // Read BEFORE the gateway patches rewrite the call site: `goLiveThread` looks
+  // for `toOpenAIMessages(...)`, which the mock-path starter carries only in the
+  // comment above the mock call — and that comment is one of the things the
+  // gateway patches replace. Reading after would throw on exactly the projects
+  // that went live.
+  const appSource = await readFile(path.join(plan.dir, framework.paths.app), 'utf8');
+  const thread = goLiveThread(appSource, framework);
+
+  // ── the gateway, when one was chosen ────────────────────────────────────────
+  //
+  // Everything above this point is identical for `mock` and for a real gateway,
+  // which is the property that keeps the zero-config path a byte-for-byte copy
+  // of a reviewed starter.
+  const routeFiles = plan.gatewayId === 'mock' ? [] : emitRoute(integration, framework);
+  if (plan.gatewayId !== 'mock') {
+    if (routeFiles.length === 0) {
+      // Refusing beats emitting. A project whose front end POSTs to `/api/chat`
+      // with nothing serving that path installs, builds, and fails on the first
+      // message with an HTML 404 parsed as SSE — which is the failure mode the
+      // gateway prompt exists to avoid, arriving later and looking like a bug in
+      // the kit.
+      //
+      // NAMING WHICH HALF IS MISSING, because the two are fixed in different
+      // files by different people: a missing route host is a row in
+      // `src/frameworks.ts`, a missing handler is an integration in the kit
+      // catalog. `routeSymbolsProblem` already refuses the second at build time,
+      // so reaching it here means the tables disagree.
+      throw new Error(
+        framework.route === null
+          ? `create-kai: '${framework.id}' has no route destination, so gateway ` +
+            `'${plan.gatewayId}' cannot be wired for it. Scaffold with --gateway none, or use a ` +
+            'framework whose route host is declared (see `--list --json`).'
+          : `create-kai: gateway '${plan.gatewayId}' declares no webRoute, so there is no handler ` +
+            `to emit into ${framework.route.file}. It should not be in WIRED_GATEWAYS.`,
+      );
+    }
+
+    for (const file of routeFiles) {
+      const abs = path.join(plan.dir, file.path);
+      await mkdir(path.dirname(abs), { recursive: true });
+      await writeFile(abs, file.contents, 'utf8');
+    }
+
+    for (const patch of gatewayPatchesFor(framework.templateDir)) {
+      const file = path.join(plan.dir, patch.file);
+      await writeFile(
+        file,
+        applyGatewayPatch(patch, await readFile(file, 'utf8'), {
+          thread,
+          routeFile: routeFiles[0].path,
+          gatewayTitle: integration.title,
+          model: clientModelFor(integration),
+        }),
+        'utf8',
+      );
+    }
+
+    if (integration.envVars.length > 0) {
+      await writeFile(
+        path.join(plan.dir, framework.paths.env),
+        renderEnvFile(integration.envVars, integration.runNote),
+        'utf8',
+      );
+    }
+  }
+
   await writeFile(
     path.join(plan.dir, 'kai.json'),
     stringifyKaiJson(buildKaiJson(plan, framework)),
     'utf8',
   );
 
-  const appSource = await readFile(path.join(plan.dir, framework.paths.app), 'utf8');
   await writeFile(
     path.join(plan.dir, 'README.md'),
-    renderReadme(plan, framework, goLiveThread(appSource, framework), integration.docsSlug),
+    plan.gatewayId === 'mock'
+      ? renderMockReadme(plan, framework, thread, integration.docsSlug)
+      : renderGatewayReadme(plan, framework, integration, routeFiles[0].path),
     'utf8',
   );
 
@@ -131,6 +200,31 @@ export async function generate(
     runNote: integration.runNote,
     docsSlug: integration.docsSlug,
   };
+}
+
+/**
+ * `.env.local`, with the declared variable names and a placeholder value.
+ *
+ * NAMES FROM THE CATALOG, never restated: `integration.envVars` is what the
+ * emitted route reads, so a second list here would be a file naming a variable
+ * nothing looks at, which fails as a blank reply rather than as an error.
+ *
+ * The value is a placeholder rather than empty on purpose. An empty assignment
+ * loads as the empty string, so the route sends `Authorization: Bearer ` and the
+ * provider answers 401 — legible, but only after a round trip. A value that is
+ * obviously not a key is what a reader replaces without wondering whether it was
+ * already set.
+ */
+export function renderEnvFile(envVars: readonly string[], runNote: string): string {
+  return [
+    `# ${runNote}`,
+    `#`,
+    `# Read by the chat route on the server. This file is gitignored — the key`,
+    `# never reaches the browser and must never be committed.`,
+    ``,
+    ...envVars.map((name) => `${name}=replace-me`),
+    ``,
+  ].join('\n');
 }
 
 /**
@@ -189,7 +283,69 @@ export function goLiveThread(appSource: string, framework: FrameworkDef): string
   );
 }
 
-function renderReadme(
+/**
+ * The README for a project that WENT LIVE at scaffold time.
+ *
+ * The mock README's whole body is a go-live diff — the one expression a user
+ * changes. That paste is already applied here, so repeating it would tell a
+ * reader to make an edit their project has. What replaces it is the two things
+ * they now have to do that the mock path never needed: put a key in the file,
+ * and know where the route runs. `production` is stated because it is the one
+ * property of the emitted route the user cannot see from the file: a Next route
+ * handler ships, a Vite dev-server plugin does not.
+ */
+function renderGatewayReadme(
+  plan: ProjectPlan,
+  framework: FrameworkDef,
+  integration: Integration,
+  routeFile: string,
+): string {
+  const host = framework.route;
+  return `# ${plan.name}
+
+A chat app built with [\`@kitn.ai/ui\`](https://ui.kitn.ai), scaffolded by \`create-kai\`
+and wired to ${integration.title}.
+
+\`\`\`bash
+npm install
+npm run dev
+\`\`\`
+
+## Your key
+
+${integration.runNote}
+
+\`${framework.paths.env}\` was created with ${
+    integration.envVars.length === 1 ? 'the variable' : 'the variables'
+  } ${integration.envVars.map((v) => `\`${v}\``).join(', ')} set to a placeholder.
+Replace ${integration.envVars.length === 1 ? 'it' : 'them'} with your own before \`npm run dev\`.
+That file is gitignored, and only the server route reads it — the key never
+reaches the browser.
+
+## The route
+
+\`${routeFile}\` holds the provider call. The front end in
+\`${framework.paths.app}\` POSTs the thread to \`/api/chat\` and streams the
+reply back through \`readOpenAIStream\`, the same parser the mock path used.
+
+Runtime: ${host?.runtime ?? 'unknown'}.
+${
+  host?.production === false
+    ? `
+**Development only.** \`vite build\` emits static assets and no server, so a
+deployed build has nothing behind \`/api/chat\`. To ship, deploy the handler in
+\`${routeFile}\` to a real server — a Next route, a SvelteKit endpoint, a Worker,
+Express — and point the fetch at it.
+`
+    : ''
+}
+\`kai.json\` records what was scaffolded, including where the route lives.
+
+Docs: https://ui.kitn.ai/${integration.docsSlug}
+`;
+}
+
+function renderMockReadme(
   plan: ProjectPlan,
   framework: FrameworkDef,
   thread: string,

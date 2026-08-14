@@ -178,7 +178,12 @@ async function main() {
   await mkdir(templatesOut, { recursive: true });
 
   const { FRAMEWORKS } = await loadTs('src/frameworks.ts');
-  const { patchesFor } = await loadTs('src/patches.ts');
+  const { patchesFor, gatewayPatchesFor } = await loadTs('src/patches.ts');
+  const { PREAMBLE_SYMBOLS, CLIENT_MODEL_IDS } = await loadTs('src/routes.ts');
+  // The catalog reaches into the kit, so this is the one loaded module that
+  // needs its `zod` left resolvable — `loadTs` keeps it external and the import
+  // below resolves it out of the package's own node_modules.
+  const { WIRED_GATEWAYS, getIntegration } = await loadTs('src/catalog.ts');
   // `GITIGNORE_TEMPLATE_NAME` is read from `generate.ts` rather than restated
   // here. `generate()` is what renames it back, so a local copy that drifted
   // would have this build write a name the CLI never looks for — and nothing
@@ -189,7 +194,21 @@ async function main() {
   const ready = FRAMEWORKS.filter((f) => f.status === 'ready');
   failIf(guards.readyFrameworksProblem(ready));
 
+  // Every wired gateway's route must be emittable with the preamble this CLI
+  // carries. Checked once, before any template work: it is a property of the
+  // catalog, not of a template, and it is the check standing behind the one
+  // thing `src/routes.ts` duplicates from the kit.
+  for (const gatewayId of WIRED_GATEWAYS) {
+    if (gatewayId === 'mock') continue;
+    const integration = getIntegration(gatewayId);
+    failIf(guards.routeSymbolsProblem(gatewayId, integration?.webRoute, PREAMBLE_SYMBOLS));
+    failIf(
+      guards.routeModelProblem(gatewayId, integration?.forwardsFromClient ?? [], CLIENT_MODEL_IDS),
+    );
+  }
+
   let patchCount = 0;
+  let gatewayPatchCount = 0;
   for (const framework of ready) {
     failIf(guards.missingStarterProblem(starterPath(framework.templateDir), existsSync));
 
@@ -218,6 +237,19 @@ async function main() {
     // throws on one that does not match, so the specific "this patch went stale"
     // message has to come first or it is replaced by a generic one.
     failIf(guards.patchMatchProblem(framework.templateDir, patches, read));
+    // The gateway patches go through the SAME match rule, so one that stops
+    // matching fails the build rather than failing in the terminal of whoever
+    // first scaffolds with a gateway. They are not run through
+    // `emittedContentProblem`: that rule grades the bytes EVERY emitted project
+    // carries, and these bytes only exist on the gateway path.
+    failIf(
+      guards.patchMatchProblem(
+        framework.templateDir,
+        gatewayPatchesFor(framework.templateDir),
+        read,
+        'GATEWAY_PATCHES',
+      ),
+    );
     failIf(
       guards.emittedContentProblem(framework.templateDir, patches, await readTemplateFiles(root)),
     );
@@ -225,6 +257,7 @@ async function main() {
     failIf(guards.declaredPathsProblem(framework, exists));
 
     patchCount += patches.length;
+    gatewayPatchCount += gatewayPatchesFor(framework.templateDir).length;
     console.log(`  template  ${framework.id.padEnd(16)} <- examples/starters/${framework.templateDir}`);
   }
 
@@ -255,6 +288,7 @@ async function main() {
   await chmod(path.join(dist, 'index.js'), 0o755);
 
   console.log(`  patches   ${patchCount} verified against their templates`);
+  console.log(`  gateway   ${gatewayPatchCount} go-live patches verified, ${[...WIRED_GATEWAYS].filter((g) => g !== 'mock').length} gateway(s) wired`);
   console.log(`  kit pin   ^${kitVersion}`);
 }
 

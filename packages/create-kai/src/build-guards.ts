@@ -33,7 +33,7 @@
  */
 import type { FrameworkDef } from './frameworks';
 import { applyPatch, countMatches } from './patches';
-import type { Patch } from './patches';
+import type { Matchable, Patch } from './patches';
 import { PROBE_NAME, repoInternalProblems, titleProblems } from './template-guards';
 import type { GuardProblem } from './template-guards';
 
@@ -45,6 +45,16 @@ import type { GuardProblem } from './template-guards';
 export type TemplateReader = (relativePath: string) => string | null;
 
 /**
+ * What this rule needs of a patch, which is less than either patch table is.
+ *
+ * Typed structurally so `PATCHES` and `GATEWAY_PATCHES` are graded by the SAME
+ * function. They differ only in what their `replace` takes, which is nothing
+ * this rule looks at — and a second near-identical copy of the checks below is
+ * how one table ends up with a fix the other does not.
+ */
+export type CheckablePatch = Matchable & { file: string; why: string };
+
+/**
  * Every patch matches its file, and matches it the number of times it claims to.
  *
  * Zero matches is fatal for every patch, opted-in or not. More than one is fatal
@@ -54,8 +64,15 @@ export type TemplateReader = (relativePath: string) => string | null;
  */
 export function patchMatchProblem(
   templateDir: string,
-  patches: readonly Patch[],
+  patches: readonly CheckablePatch[],
   read: TemplateReader,
+  /**
+   * Which table to send the reader to. Two tables go through this rule now, and
+   * a message naming the wrong one sends someone to a file where the string they
+   * are hunting does not appear — measured, not hypothetical: the first run of
+   * this guard against a broken gateway patch said "update PATCHES".
+   */
+  tableName = 'PATCHES',
 ): string | null {
   for (const patch of patches) {
     const source = read(patch.file);
@@ -72,7 +89,7 @@ export function patchMatchProblem(
         (patch.multiple
           ? '  it is a `multiple` patch, so this is a rename that would now rename nothing\n'
           : '') +
-        '  the starter changed — update PATCHES in src/patches.ts'
+        `  the starter changed — update ${tableName} in src/patches.ts`
       );
     }
     if (count > 1 && !patch.multiple) {
@@ -218,6 +235,124 @@ export function declaredPathsProblem(
     `create-kai build: framework '${framework.id}' declares paths that template ` +
     `'${framework.templateDir}' does not have:\n${missing.join('\n')}\n` +
     '  These are copied verbatim into the emitted kai.json for a v2 `add` to read.'
+  );
+}
+
+/**
+ * The helper symbols the KIT injects around a `webRoute` fragment, which the
+ * fragment itself therefore never defines.
+ *
+ * There are two such preambles in `agent-tooling/mcp/tools/scaffold.ts`:
+ * `CHAT_REQUEST_BODY_DECL` (always injected) and the content-parts helpers
+ * (injected only when the fragment calls them). Neither is exported, so
+ * create-kai carries its own copy of the first and none of the second — see the
+ * docblock on `src/routes.ts`.
+ *
+ * This list is what turns that arrangement from a hope into a check. It is
+ * deliberately a list of NAMES rather than a parse: the failure being prevented
+ * is a fragment referencing a helper create-kai does not supply, and every such
+ * helper is one of these four by construction, because they are the only things
+ * the kit injects.
+ */
+export const KIT_INJECTED_ROUTE_SYMBOLS: readonly string[] = [
+  'ChatRequestBody',
+  'readChatRequest',
+  'wireParts',
+  'wireText',
+];
+
+/**
+ * Refuse to wire a gateway whose route needs something this CLI does not emit.
+ *
+ * TWO FAILURES, AND THEY POINT DIFFERENT WAYS.
+ *
+ * The first is a fragment referencing an injected helper that `routes.ts` does
+ * not supply. That is what `anthropic`, `mastra` and `vercel-ai-sdk` do today —
+ * each re-maps message content and calls `wireParts` / `wireText` — so adding
+ * any of them to `WIRED_GATEWAYS` without also carrying the content-parts
+ * preamble emits a route that does not compile. tsc in the user's project is the
+ * only thing that would otherwise catch it, which is far too late.
+ *
+ * The second is the reverse and is the one that protects the DUPLICATE: a
+ * fragment that references NONE of the supplied symbols. Every `webRoute` in the
+ * catalog calls `readChatRequest`, so a wired integration that stopped doing so
+ * means the kit changed the preamble contract underneath this copy of it. That
+ * fires as a build failure here rather than as a stale duplicate nobody notices,
+ * which is the whole reason the duplication was acceptable.
+ *
+ * Takes the fragment rather than an `Integration` so a test can drive it with a
+ * three-line string instead of standing up a catalog entry.
+ */
+export function routeSymbolsProblem(
+  gatewayId: string,
+  webRoute: string | undefined,
+  supplied: readonly string[],
+): string | null {
+  if (webRoute === undefined) {
+    return (
+      `create-kai build: gateway '${gatewayId}' is wired but its integration declares no webRoute.\n` +
+      '  A keyed gateway needs a server route, and there is no portable handler to emit.\n' +
+      '  Remove it from WIRED_GATEWAYS in src/catalog.ts, or give the integration a webRoute.'
+    );
+  }
+
+  const referenced = KIT_INJECTED_ROUTE_SYMBOLS.filter((symbol) =>
+    new RegExp(`\\b${symbol}\\b`).test(webRoute),
+  );
+
+  const missing = referenced.filter((symbol) => !supplied.includes(symbol));
+  if (missing.length > 0) {
+    return (
+      `create-kai build: gateway '${gatewayId}'s route references ${missing.join(', ')}, which ` +
+      'the emitted route does not define.\n' +
+      '  The kit injects those around the fragment and does not export the injection, so this CLI\n' +
+      '  carries its own copy of one preamble and none of the other (see src/routes.ts).\n' +
+      '  Either carry the missing preamble too, or drop this gateway from WIRED_GATEWAYS.'
+    );
+  }
+
+  if (referenced.length === 0) {
+    return (
+      `create-kai build: gateway '${gatewayId}'s route references none of the kit's injected ` +
+      'helpers.\n' +
+      '  Every webRoute in the catalog narrows its body through readChatRequest, so this means the\n' +
+      "  kit's route preamble changed and src/routes.ts is now a stale copy of it.\n" +
+      '  Re-read CHAT_REQUEST_BODY_DECL in agent-tooling/mcp/tools/scaffold.ts.'
+    );
+  }
+
+  return null;
+}
+
+/**
+ * Refuse to wire a gateway that forwards the client's `model` without a model id.
+ *
+ * The failure this prevents is not a compile error — it is a project that
+ * installs, builds, passes the smoke test, and then answers the first message
+ * with a 400. `openrouter`'s handler puts the client's `model` straight into its
+ * `/chat/completions` body, so a front end that omits it sends no model at all.
+ *
+ * Mirrors the kit's own throw in `defaultModelFor`, and refuses a fallback for
+ * the same recorded reason: a default model id is only ever valid for one host,
+ * so inheriting one across integrations emits a scaffold that 404s.
+ *
+ * `forwardsFromClient` is read from the integration, never guessed from the
+ * route text — see the note on `CLIENT_MODEL_IDS` in src/routes.ts.
+ */
+export function routeModelProblem(
+  gatewayId: string,
+  forwardsFromClient: readonly string[],
+  modelIds: Readonly<Record<string, string>>,
+): string | null {
+  if (!forwardsFromClient.includes('model')) return null;
+  if (modelIds[gatewayId] !== undefined) return null;
+  return (
+    `create-kai build: gateway '${gatewayId}' forwards the client's 'model' but has no ` +
+    'CLIENT_MODEL_IDS entry in src/routes.ts.\n' +
+    "  Its route reads that field, so the emitted app would post no model and the provider would\n" +
+    '  reject the first message — a failure no build or typecheck can see.\n' +
+    '  Add the id THIS provider accepts; there is deliberately no fallback, because a model id is\n' +
+    '  a per-host fact and an inherited one 404s.'
   );
 }
 

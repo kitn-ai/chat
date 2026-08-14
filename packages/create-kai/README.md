@@ -39,6 +39,96 @@ Nothing in the repo-internals list catches that — it is not an unfollowable
 instruction, just a sentence about the wrong project — so that patch rewrites
 the paragraph rather than stopping short of it.
 
+## Gateways
+
+`mock` needs nothing. A real gateway needs a **server route**, because its key
+must not reach the browser — `keyExposure: 'needs-proxy'` on the integration is
+what says so. So a gateway is wirable per **(gateway, framework) cell**, never
+per gateway: the integration has to have a route, and the framework has to
+declare somewhere to put it (`FrameworkDef.route`).
+
+`create-kai --list --json` reports both axes, including which frameworks each
+wired gateway can be scaffolded onto. Read that, not the paragraphs below —
+they explain the *shape* of the remaining work, and the counts move.
+
+**Wired today: `openrouter`,** on the frameworks whose route host is declared.
+It was the right first target for reasons that are catalog facts, not taste: its
+`deps.npm` is empty (the route is global `fetch`, no SDK), it returns
+`openai-sse` and forwards `upstream.body` unchanged so the front end needs no
+re-mapping, and its handler calls none of the kit's content helpers.
+
+### What the rest cost
+
+Three separate walls, and most of the remaining integrations are behind more
+than one. The groups are the kit registry's own — `listGatewayGroups()` — not a
+split invented here.
+
+**Cheap (same shape as `openrouter`).** `openai` and `anthropic`: `outOfBand:
+'none'`, TypeScript, a key and a remote endpoint. `openai` is nearly free.
+`anthropic` needs the kit's *second* injected preamble (the `wireParts` /
+`wireText` content helpers its route calls to re-map attachments), which this
+CLI does not carry — `routeSymbolsProblem` fails the build rather than letting
+it through, so the gap is enforced rather than documented. Same for
+`vercel-ai-sdk` and `mastra`, which call the same helpers. `vercel-ai-sdk` and
+`langgraph` also carry real `deps.npm`, which the `package.json` rewrite already
+handles but which `openrouter` never exercised.
+
+**Needs something running that a scaffold cannot provide.** `ollama` (a local
+server), `pi` (a local binary), `mastra` (a local server), `pydantic-ai` (a
+Python runtime). These are `outOfBand !== 'none'`, and the field exists to say
+exactly this. A scaffold can emit the route and the env file; it cannot make the
+thing answer. `ollama` is also the one integration that is `frontend-safe` *and*
+out-of-band — it needs no proxy at all, so wiring it is a different job from the
+others rather than a smaller one.
+
+**Cannot share the TypeScript route path at all.** `pydantic-ai` is
+`language: 'python'`, and `pi` has no `webRoute` — only an `express`
+`routeTemplate`. Neither goes through `emitRoute`, which assembles the portable
+handler; both need their own emit path and their own host.
+
+### The framework half
+
+The route destination is what the eight frameworks disagree about most, and it
+is the axis that actually gates widening:
+
+- **Meta-frameworks are cheap** — one file, no config edit, and the route ships
+  in production. `nextjs` is done (`app/api/chat/route.ts`); `svelte`
+  (`src/routes/api/chat/+server.ts`, and `POST(event)` not `POST(request)`) and
+  `tanstack-start` (`createFileRoute(...)({ server: { handlers } })`) are the
+  same shape with different declarations.
+- **Vite SPAs cost three files and a config edit**, and the result is
+  **development only** — `vite build` emits no server. `react` is done; `vue`,
+  `solid` and `html` are the same work. `vue`'s config edit is the risky one:
+  its plugin list carries `isCustomElement`, and clobbering it makes every
+  `kai-*` tag stop resolving.
+- **`angular` is its own shape** — the route belongs in the `src/server.ts` that
+  `ng add @angular/ssr` generates, registered *before* the catch-all, and a
+  non-SSR Angular app cannot host `/api/chat` at all.
+- **`html` has no server anywhere.** The handler has to run elsewhere and be
+  proxied.
+
+### Two things the kit does not export
+
+Both are recorded at their use site in `src/routes.ts`, and both are why this
+package carries a duplicate it would rather not:
+
+1. `CHAT_REQUEST_BODY_DECL` — the `ChatRequestBody` / `readChatRequest`
+   preamble. **Every** `webRoute` in the catalog calls `readChatRequest`, so
+   none of them compiles standalone (measured: `tsc --strict` over the bare
+   fragment gives `TS2304: Cannot find name 'readChatRequest'`).
+2. `CLIENT_MODEL_IDS` — the model id to send for a gateway whose route forwards
+   the client's `model`. Missing it is invisible to every build and typecheck;
+   it surfaces as a 400 on the user's first message.
+
+Exporting those two from `packages/ui/src/agent-tooling/mcp/tools/scaffold.ts`
+would let both copies here be deleted. Until then `routeSymbolsProblem` and
+`routeModelProblem` fail the build if either drifts.
+
+The per-framework *wrappers* are deliberately **not** shared with the kit MCP's
+`WEB_ROUTE_ADAPTERS`, and that is not an oversight: an MCP adapter emits one
+paste-able string that concatenates three files with `// ── separators ──` and a
+commented-out config line. This CLI writes real files that have to compile.
+
 ## How it is put together
 
 Two sources of truth, neither of them copied:

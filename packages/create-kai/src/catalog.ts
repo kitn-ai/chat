@@ -31,16 +31,60 @@ export type { Integration };
 /**
  * The gateways this CLI can wire end to end today.
  *
- * v1's first slice is the zero-config path, so that is `mock` alone. Everything
- * else in the catalog is still OFFERED in `--list` output but is not presented
- * as a choice, because a prompt that accepts a gateway and then does not wire it
- * is worse than one that says it is not ready: the user finds out at
+ * Everything else in the catalog is still OFFERED in `--list` output but is not
+ * presented as a choice, because a prompt that accepts a gateway and then does
+ * not wire it is worse than one that says it is not ready: the user finds out at
  * `npm run dev`, with a project that looks complete.
  *
- * Widening this set is the whole of "add a gateway" — the wiring reads
- * `envVars` / `deps` / `keyExposure` / `webRoute` off the integration itself.
+ * `openrouter` IS THE SECOND ENTRY, and it was picked over the other five keyed
+ * integrations for reasons that are properties of the catalog rather than
+ * preferences:
+ *
+ *   · `deps.npm` is EMPTY. Its route is global `fetch` and imports no SDK, so
+ *     nothing about it depends on a provider package resolving.
+ *   · `streamFormat` is `openai-sse` and the handler forwards `upstream.body`
+ *     unchanged, so the front end needs no re-mapping — `readOpenAIStream`
+ *     already parses exactly what comes back.
+ *   · its `webRoute` calls none of the kit's content helpers (`wireParts` /
+ *     `wireText`), which `anthropic`, `mastra` and `vercel-ai-sdk` all do. Those
+ *     three need a SECOND injected preamble that this CLI does not carry — see
+ *     `routeSymbolsProblem`, which fails the build rather than letting one
+ *     through.
+ *
+ * WIDENING IS NOT ONE AXIS. A gateway is wirable only in a (gateway, framework)
+ * CELL: the integration has to have a route, and the framework has to declare
+ * somewhere to put it. `wirableGateway` below is that check, and it is why
+ * flipping an id into this set is necessary but not sufficient.
  */
-export const WIRED_GATEWAYS: ReadonlySet<string> = new Set(['mock']);
+export const WIRED_GATEWAYS: ReadonlySet<string> = new Set(['mock', 'openrouter']);
+
+/**
+ * Why this (gateway, framework) pair cannot be scaffolded, or `null` when it can.
+ *
+ * Returns a MESSAGE rather than a boolean for the reason the build guards do:
+ * the two failures below are fixed in different files by different people, and
+ * "not supported" would send both of them to the wrong one.
+ */
+export function wirableGateway(
+  gatewayId: string,
+  framework: { id: string; route: unknown | null },
+): string | null {
+  if (gatewayId === 'mock') return null;
+  if (!WIRED_GATEWAYS.has(gatewayId)) {
+    return (
+      `gateway '${gatewayId}' is in the kit catalog but is not wired by this release yet. ` +
+      `Available: ${[...WIRED_GATEWAYS].map((g) => (g === 'mock' ? 'none' : g)).join(', ')}`
+    );
+  }
+  if (framework.route === null) {
+    return (
+      `'${framework.id}' has no route destination yet, so gateway '${gatewayId}' cannot be wired ` +
+      "for it. A keyed gateway needs a server route, and where that goes differs per framework. " +
+      'Run `--list --json` to see which frameworks declare one.'
+    );
+  }
+  return null;
+}
 
 /** The `mock` integration — the zero-config default. Present in every build. */
 export function mockIntegration(): Integration {
