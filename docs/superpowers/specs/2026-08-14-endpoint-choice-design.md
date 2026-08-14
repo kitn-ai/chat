@@ -9,8 +9,8 @@ Every claim below was read off that tree, and the results marked EMPIRICAL were
 executed against it rather than reasoned about. Where a figure would rot, the command
 that prints it is named instead.
 
-Companion spec: `2026-08-14-kai-devtools-design.md`. The diagnostic event stream this
-document introduces is the interface that one consumes; the seam is named in both.
+Companion spec: `2026-08-14-kai-devtools-design.md`. It consumes the interface defined
+here under "The diagnostic event stream", which is the seam between the two documents.
 
 ## Summary
 
@@ -381,10 +381,75 @@ whole stream arrives at once. We can often name these; we cannot fix them.
    editing the URL will read it.
 
 **The seam.** Each of those three wants the same underlying thing: the parse pipeline
-saying what it saw. Frames in, chunks out, parts by variant, which format was chosen,
-which fields were recognised. Emit that as a diagnostic event stream rather than a
-console message, and the console line becomes one subscriber of it. The devtools spec
-is the other, and the interface is the boundary between the two documents.
+saying what it saw. Emit that as a diagnostic event stream rather than a console
+message, and the console line becomes one subscriber of it. The devtools spec is the
+other. The interface is defined below rather than left between the two documents,
+because a seam nobody pinned is a seam the first implementer invents just wide enough
+for their own use.
+
+## The diagnostic event stream
+
+One envelope, `{ type: string; t: number; streamId?: string }` plus the fields for its
+type. The types below are derived from what the pipeline already knows at each point,
+not from what a panel would like to draw.
+
+| Event | Emitted at | Fields |
+|---|---|---|
+| `wire.open` | `readModelStream`, after the source resolves, before the first frame | `format` (`opts.format.id`), `source` (`response` / `stream` / `iterable`) |
+| `wire.frame` | the frame loop in `readModelStream` | `seq`, `bytes`, `chunks` (neutral chunks this frame yielded), `fields` (the keys each chunk carried: `text`, `reasoning`, `toolCalls`, `sources`, `usage`, `finishReason`, `error`) |
+| `wire.part` | the parts recorder in `consumeModelStream` | `variant` (the `MessagePart` type), `index`, `chars` (length of this delta) |
+| `wire.close` | the return of `consumeModelStream` | `frames`, `chunks`, `parts` (count per variant), `finishReason`, `stopReason`, `errorCode`, `usage`, `ms` |
+| `wire.failed` | the `WireError` throw path in `toByteSource` | `status`, `statusText`, `bodyBytes`, `bodyIsJson`, `providerCode` (the parsed body's `error.code`, found by the walk `providerMessage()` already does for the message; extracting the code is a small addition to that function) |
+
+`streamId` is the correlator and already exists: `nextStreamId()` in
+`src/wire/consume.ts`. It is assigned inside `consumeModelStream` today and has to move
+up one level, because `readModelStream` opens the format and counts frames before
+`consumeModelStream` runs.
+
+**`fields` is the field that earns this design.** It is `Object.keys(chunk)` on what the
+format reader returned, which the reader already builds; nothing new has to be
+computed. It is also what separates the two failures the measurements pulled apart,
+which a chunk count alone cannot:
+
+- Frames arriving and every one yielding `chunks: 0` is the wrong-dialect case, and
+  `wire.close` reports `chunks: 0` beside a non-zero `frames`. This is the half already
+  covered by `empty-stream`.
+- Frames arriving, chunks coming out, and `fields` never carrying anything but
+  `finishReason` and `usage`, next to a `wire.close` whose `parts` map is empty, is the
+  case that is silent today. Exactly what was measured: `chunks: 1`, `parts: []`,
+  `error: undefined`.
+
+`frames`, `chunks` and the `parts` map on `wire.close` are also the whole input the
+widened empty-turn guard needs, so the guard and the stream are one piece of work
+rather than two.
+
+**Forward compatibility, both directions.** The panel is CDN-delivered and floats free
+of the kit, so an old panel will meet new events and a new panel will meet an old kit.
+
+- A consumer MUST ignore an event `type` it does not recognise, and MUST ignore
+  unknown fields on a type it does recognise. Neither may throw.
+- A consumer MUST treat an event type it never sees as "this kit does not report it"
+  and say so, rather than rendering a confident zero.
+- A producer MUST NOT repurpose a field name or change what a value means. New
+  information is a new field or a new type. The only removals allowed are the ones
+  that come with an envelope version bump.
+- Error codes are the kit's own closed vocabulary (`empty-stream` and its siblings), so
+  a panel renders its own explanation keyed by code and never needs the message text.
+  That is what lets the default stream carry `errorCode` and not `message`.
+
+**Metadata by default; payload is the separate opt-in switch.** The rule, so the
+boundary is checkable rather than a matter of taste: **if a value comes from the model,
+the end user, or the app's data, it is payload. If it describes the shape, size, timing
+or identity of that value, it is metadata.**
+
+Every field in the table above is metadata by that rule, and that is the entire default
+stream. Content-bearing fields never sit beside them: they live under a single optional
+`payload` object on the event, absent unless payload capture is on, so a reviewer
+checks one key rather than reading every field name. What goes there: text and
+reasoning deltas, tool `input` and `output`, card envelopes, source URLs and titles,
+attachment names and bytes, the encoded request body, a `WireError`'s `bodyText`, and a
+provider's own error `message`, which belongs with the payload because some providers
+echo request content back inside it.
 
 ## How to check the claims in this spec
 
@@ -400,4 +465,6 @@ is the other, and the interface is the boundary between the two documents.
 | Wrong dialect, zero chunks | `chunkCount === 0` branch in `packages/ui/src/wire/consume.ts` |
 | Wrong dialect, chunks but no parts | Drive `readOpenAIStream` with an OpenAI-shaped frame carrying an unread field; `turn.error` is `undefined` |
 | `reasoning_content` unread | `git grep -n "reasoning_content" -- packages/ui/src` returns nothing |
+| The correlator already exists | `nextStreamId()` in `packages/ui/src/wire/consume.ts`, assigned inside `consumeModelStream` |
+| `fields` costs nothing to compute | the `out` object each format reader builds, e.g. `pushOpenAI` in `packages/ui/src/wire/formats/openai.ts` |
 | Starter shapes | the `scripts` and dependency blocks of each `examples/starters/*/package.json` |

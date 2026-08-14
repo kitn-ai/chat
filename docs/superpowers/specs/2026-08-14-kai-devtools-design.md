@@ -6,16 +6,22 @@ Verified against `origin/main` at `7ba376d` (`fix(create-kai): npm strips .npmrc
 nextjs and tanstack-start cannot scaffold at all (#239)`).
 
 Written now because the context is fresh, not because it is next. It consumes the
-diagnostic event stream specced in `2026-08-14-endpoint-choice-design.md`, and that
-stream is the seam between the two documents: the endpoint work emits the events
-because it needs one console line, this reads the same events and draws the picture.
+stream defined under "The diagnostic event stream" in
+`2026-08-14-endpoint-choice-design.md`, and that stream is the seam between the two
+documents: the endpoint work emits the events because it needs one console line and one
+widened guard, this reads the same events and draws the picture.
 
 ## Summary
 
 A separate product: `<kai-devtools>`, a `kai-*` web component shipped as its own npm
-package and loaded from a CDN by a script tag the app adds. It attaches to a recorder
-living inside the kit and shows the things a browser devtool structurally cannot,
-starting with frames in versus parts out.
+package and loaded from a CDN rather than out of the app's bundle. It attaches to a
+recorder living inside the kit and shows the things a browser devtool structurally
+cannot, starting with frames in versus parts out.
+
+**One open decision, marked in place:** how the panel gets onto the page (a script tag,
+an element the developer drops in, or the kit self-injecting when it sees the signal)
+is the repo owner's call. The options and their tradeoffs are in "Activation, and who
+decides"; everything else in this document is the same under all three.
 
 Two rulings carry the design. It is **not in the consumer's bundle and not versioned
 with the kit**, so diagnostics can improve for apps that have not upgraded. And capture
@@ -38,28 +44,36 @@ pattern that is **not** importable through a bundler, because it resolves siblin
 element modules relative to its own `import.meta.url` and a bundler relocates that. The
 same delivery, for a different reason: the autoloader is CDN-only because of how it
 resolves modules, the devtool is CDN-first because it must not be in the app's bundle
-at all.
+at all. That last clause is the one option B in the next section trades away, which is
+why it is priced there rather than assumed here.
 
 **Version decoupling requires a separate package.** A file inside `@kitn.ai/ui`
 is pinned to whatever the app installed, which is the opposite of the goal. So it
-ships as `@kitn.ai/devtools`, published on its own cadence, and the script tag points
-at a floating range. The kit and the panel meet at the event contract, not at a version.
+ships as `@kitn.ai/devtools`, published on its own cadence, and whatever references it
+points at a floating range. The kit and the panel meet at the event contract, not at a
+version.
 
 ## Activation, and who decides
 
-**The app decides whether the code is on the page. The signal decides whether it does
-anything.** The kit never fetches the panel on its own. A library that reaches out to a
-third-party CDN from a user's production page has decided something that lands in a
-policy document and probably in a CSP report, and by this repo's scope rule
-(`CLAUDE.md`: the kit decides HOW, the app decides WHETHER) that is not ours to decide.
-So the app adds one line, in whichever environments it wants the capability:
+**How the panel gets onto the page is UNRESOLVED and is the repo owner's call.** Three
+options, and they differ in who is deciding what:
 
-```html
-<script type="module" src="https://unpkg.com/@kitn.ai/devtools"></script>
-```
+| Option | How it looks | Tradeoff |
+|---|---|---|
+| **A. Script tag from a CDN** | the app adds `<script type="module" src="https://unpkg.com/@kitn.ai/devtools">` in the environments it wants | The app decides what code its page loads, which is the answer this repo's scope rule points at. Costs one line per environment, and the line is easy to leave in a production build by accident. |
+| **B. An element the developer drops in** | `<kai-devtools>` placed in the app's own markup, resolved through the package it already installs | Most familiar, and it composes with the app's own conditionals. But it puts the panel back in the consumer's bundle and pins it to the installed version, which is the ruling above reversed. |
+| **C. The kit self-injects on seeing the signal** | no app change at all; the recorder sees the signal and dynamically imports the panel from a CDN | Best experience by a distance, and reachable on a deployed staging URL with a query param and nothing else. But the kit would be deciding to make a third-party network request from the app's page, which lands in a CSP policy and a vendor review, and CSP is likeliest to be strict in exactly the production setting the feature is for. |
 
-Dev, staging or production, the app's call. **Never inferred from `NODE_ENV`.** The
-whole point is that the bug you cannot reproduce locally is in staging.
+**This document assumes A** so the rest of it stays concrete, and A is the conservative
+answer rather than the best one: it is the only option where nobody but the app decides
+what the page loads. B and C change the paragraphs that mention a script tag and
+nothing else; the recorder, the capture model, the hook and the event contract are
+identical under all three. C additionally needs a documented CDN origin for the app's
+CSP, and a decision about what happens when the fetch is blocked (report it in the
+console, never silently).
+
+Whichever wins: **activation is never inferred from `NODE_ENV`.** The whole point is
+that the bug you cannot reproduce locally is in staging.
 
 **The activation signal is read once, synchronously, at kit init.** Three sources,
 checked in this order, first hit wins:
@@ -106,7 +120,7 @@ instantly and the panel arriving three minutes later see the same history, so th
 developer who opens devtools after the bug happens is not told to reload and try again.
 
 **What bounds the buffer in a wanted session.** Until the panel attaches, nothing, and
-that window is the seconds it takes a script tag to load. After it attaches, the panel
+that window is the seconds it takes the panel to load. After it attaches, the panel
 owns retention and can cap or window as its own UI decides, because at that point the
 data lives in the panel rather than in the kit. A session where the signal is on and no
 panel ever attaches is a developer choosing to hold a buffer on their own machine.
@@ -225,12 +239,13 @@ decision, not ours.
 
 ## What has to exist first
 
-The diagnostic event stream from `2026-08-14-endpoint-choice-design.md`. That spec
-needs the kit to say "consumed frames, produced no parts" for one console line; the
-same emission, given a shape and a few more event kinds, is this product's entire input.
-Build it there as an event stream rather than a console message and this becomes a
-consumer of an interface that already exists. Build it there as a `console.error` and
-this starts by rewriting it.
+The diagnostic event stream, defined in the section of that name in
+`2026-08-14-endpoint-choice-design.md`: the envelope, the five wire event types, the
+forward-compatibility rule that lets an old panel meet a new kit, and the
+metadata-versus-payload boundary this document's data-exposure section depends on. That
+spec needs the stream anyway, for one console line and for the widened empty-turn
+guard, and it ships first. This product adds event types under the same envelope
+(element contract violations, the encoded request) and consumes the rest unchanged.
 
 ## How to check the claims in this spec
 
