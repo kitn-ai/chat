@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.23.0](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.22.2...@kitn.ai/ui-v0.23.0) (2026-08-14)
+
+
+### Features
+
+* **create-kai:** wire the openrouter gateway end to end (react + next.js) ([#225](https://github.com/kitn-ai/ui/issues/225)) ([ebb105e](https://github.com/kitn-ai/ui/commit/ebb105e0316233e6b9372e9e235670c702f57ca0))
+* **integrations:** vercel-ai-sdk on fullStream, proven live against the AI Gateway ([#227](https://github.com/kitn-ai/ui/issues/227)) ([457bd74](https://github.com/kitn-ai/ui/commit/457bd74598c6f51b2cc2da3cc06a9c79a012737e))
+
 ## [0.22.2](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.22.1...@kitn.ai/ui-v0.22.2) (2026-08-14)
 
 
