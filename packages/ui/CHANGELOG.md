@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.22.2](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.22.1...@kitn.ai/ui-v0.22.2) (2026-08-14)
+
+
+### Bug Fixes
+
+* clear a batch of small open items (5 of 5 were still live) ([#213](https://github.com/kitn-ai/ui/issues/213)) ([67365c8](https://github.com/kitn-ai/ui/commit/67365c8b21ff1cf01485ef5f93af4318e6dbe635))
+* **scaffold:** pass the speaker to &lt;Message&gt; in the emitted Solid thread ([#223](https://github.com/kitn-ai/ui/issues/223)) ([71f31e8](https://github.com/kitn-ai/ui/commit/71f31e872102d7fbfc9e8371ddb332059f4fea6a))
+
 ## [0.22.1](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.22.0...@kitn.ai/ui-v0.22.1) (2026-08-13)
 
 
