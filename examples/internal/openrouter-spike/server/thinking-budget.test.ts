@@ -31,6 +31,7 @@ const ANTHROPIC_FLOOR = 1024;
 
 const env = (over: Partial<ProxyEnv> = {}): ProxyEnv => ({
   key: 'test-key',
+  backend: 'openrouter',
   model: 'anthropic/claude-haiku-4.5',
   wire: 'openai',
   reasoningEffort: 'medium',

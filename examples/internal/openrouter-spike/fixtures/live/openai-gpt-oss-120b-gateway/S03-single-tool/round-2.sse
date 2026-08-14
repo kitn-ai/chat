@@ -1,0 +1,196 @@
+data: {"choices":[{"delta":{"reasoning":" have"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" weather"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" data"}}]}
+
+data: {"choices":[{"delta":{"reasoning":"."}}]}
+
+data: {"choices":[{"delta":{"reasoning":" Need"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" to"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" answer"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" short"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" natural"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" answer"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" in"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" markdown"}}]}
+
+data: {"choices":[{"delta":{"reasoning":","}}]}
+
+data: {"choices":[{"delta":{"reasoning":" under"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" "}}]}
+
+data: {"choices":[{"delta":{"reasoning":"120"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" words"}}]}
+
+data: {"choices":[{"delta":{"reasoning":"."}}]}
+
+data: {"choices":[{"delta":{"reasoning":" Provide"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" condition"}}]}
+
+data: {"choices":[{"delta":{"reasoning":","}}]}
+
+data: {"choices":[{"delta":{"reasoning":" temperature"}}]}
+
+data: {"choices":[{"delta":{"reasoning":","}}]}
+
+data: {"choices":[{"delta":{"reasoning":" humidity"}}]}
+
+data: {"choices":[{"delta":{"reasoning":","}}]}
+
+data: {"choices":[{"delta":{"reasoning":" wind"}}]}
+
+data: {"choices":[{"delta":{"reasoning":"."}}]}
+
+data: {"choices":[{"delta":{"reasoning":" Let's"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" craft"}}]}
+
+data: {"choices":[{"delta":{"reasoning":"."}}]}
+
+data: {"choices":[{"delta":{"content":"**"}}]}
+
+data: {"choices":[{"delta":{"content":"Paris"}}]}
+
+data: {"choices":[{"delta":{"content":" Weather"}}]}
+
+data: {"choices":[{"delta":{"content":" ("}}]}
+
+data: {"choices":[{"delta":{"content":"202"}}]}
+
+data: {"choices":[{"delta":{"content":"6"}}]}
+
+data: {"choices":[{"delta":{"content":"‑"}}]}
+
+data: {"choices":[{"delta":{"content":"08"}}]}
+
+data: {"choices":[{"delta":{"content":"‑"}}]}
+
+data: {"choices":[{"delta":{"content":"07"}}]}
+
+data: {"choices":[{"delta":{"content":")**"}}]}
+
+data: {"choices":[{"delta":{"content":"  \n"}}]}
+
+data: {"choices":[{"delta":{"content":"-"}}]}
+
+data: {"choices":[{"delta":{"content":" **"}}]}
+
+data: {"choices":[{"delta":{"content":"Condition"}}]}
+
+data: {"choices":[{"delta":{"content":":**"}}]}
+
+data: {"choices":[{"delta":{"content":" Light"}}]}
+
+data: {"choices":[{"delta":{"content":" rain"}}]}
+
+data: {"choices":[{"delta":{"content":"  \n"}}]}
+
+data: {"choices":[{"delta":{"content":"-"}}]}
+
+data: {"choices":[{"delta":{"content":" **"}}]}
+
+data: {"choices":[{"delta":{"content":"Temperature"}}]}
+
+data: {"choices":[{"delta":{"content":":**"}}]}
+
+data: {"choices":[{"delta":{"content":" "}}]}
+
+data: {"choices":[{"delta":{"content":"12"}}]}
+
+data: {"choices":[{"delta":{"content":" "}}]}
+
+data: {"choices":[{"delta":{"content":"°C"}}]}
+
+data: {"choices":[{"delta":{"content":"  \n"}}]}
+
+data: {"choices":[{"delta":{"content":"-"}}]}
+
+data: {"choices":[{"delta":{"content":" **"}}]}
+
+data: {"choices":[{"delta":{"content":"Humidity"}}]}
+
+data: {"choices":[{"delta":{"content":":**"}}]}
+
+data: {"choices":[{"delta":{"content":" "}}]}
+
+data: {"choices":[{"delta":{"content":"84"}}]}
+
+data: {"choices":[{"delta":{"content":" "}}]}
+
+data: {"choices":[{"delta":{"content":"%"}}]}
+
+data: {"choices":[{"delta":{"content":"  \n"}}]}
+
+data: {"choices":[{"delta":{"content":"-"}}]}
+
+data: {"choices":[{"delta":{"content":" **"}}]}
+
+data: {"choices":[{"delta":{"content":"Wind"}}]}
+
+data: {"choices":[{"delta":{"content":":**"}}]}
+
+data: {"choices":[{"delta":{"content":" "}}]}
+
+data: {"choices":[{"delta":{"content":"17"}}]}
+
+data: {"choices":[{"delta":{"content":" "}}]}
+
+data: {"choices":[{"delta":{"content":"km"}}]}
+
+data: {"choices":[{"delta":{"content":"/h"}}]}
+
+data: {"choices":[{"delta":{"content":"  \n\n"}}]}
+
+data: {"choices":[{"delta":{"content":"Looks"}}]}
+
+data: {"choices":[{"delta":{"content":" a"}}]}
+
+data: {"choices":[{"delta":{"content":" bit"}}]}
+
+data: {"choices":[{"delta":{"content":" damp"}}]}
+
+data: {"choices":[{"delta":{"content":","}}]}
+
+data: {"choices":[{"delta":{"content":" so"}}]}
+
+data: {"choices":[{"delta":{"content":" you"}}]}
+
+data: {"choices":[{"delta":{"content":" might"}}]}
+
+data: {"choices":[{"delta":{"content":" want"}}]}
+
+data: {"choices":[{"delta":{"content":" a"}}]}
+
+data: {"choices":[{"delta":{"content":" jacket"}}]}
+
+data: {"choices":[{"delta":{"content":" and"}}]}
+
+data: {"choices":[{"delta":{"content":" an"}}]}
+
+data: {"choices":[{"delta":{"content":" umbrella"}}]}
+
+data: {"choices":[{"delta":{"content":" if"}}]}
+
+data: {"choices":[{"delta":{"content":" you're"}}]}
+
+data: {"choices":[{"delta":{"content":" heading"}}]}
+
+data: {"choices":[{"delta":{"content":" out"}}]}
+
+data: {"choices":[{"delta":{"content":"."}}]}
+
+data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":328,"completion_tokens":103,"total_tokens":431,"completion_tokens_details":{"reasoning_tokens":0}}}
+
+data: [DONE]
+

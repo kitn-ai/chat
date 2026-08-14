@@ -51,6 +51,38 @@ opening the next and **cannot** produce that framing, so the Anthropic cell test
 a strictly weaker claim. Two identical `pass` glyphs would read the weaker one as
 the stronger. A scenario declares the difference with `provesByWire`.
 
+## Two backends, not one
+
+`SPIKE_BACKEND=gateway` swaps the OpenRouter proxy for the **shipped
+`vercel-ai-sdk` route** — the one `kai` scaffold hands a consumer — which calls
+Vercel's AI Gateway through `streamText()` and re-frames `result.fullStream` onto
+the OpenAI wire itself. The browser half of the app does not change: it still
+POSTs `{ messages, tools }` and still parses the reply with `readOpenAIStream`.
+The whole server hop in between does.
+
+```bash
+pnpm gateway:route                 # emit the route from the integration
+pnpm conformance:gateway           # replay, from what the gateway column recorded
+pnpm conformance:gateway:live      # hits the model through the shipped route
+```
+
+The route is **generated, never copied** (`harness/emit-gateway-route.mjs` calls
+`scaffold.handler` and writes block (2) verbatim to `server/generated/`), and
+every `conformance:gateway*` script regenerates it first. A hand-written copy
+would keep passing after the shipped route broke, which is the one thing this
+column exists to detect.
+
+Nothing here configures the model: that route pins its own in one `const MODEL`,
+and the proxy reads it back out of the generated source so `/api/config` reports
+what is really being driven. `gptoss-gw` and `gptoss-or` in `harness/models.mjs`
+are the pair — **same model id, same wire, different hop** — which is what makes
+a difference between those two rows attributable to the integration. It is the
+same argument that puts `haiku` and `haiku-oai` in the list one axis over.
+
+Fixture directories carry the backend for the same reason they carry the wire:
+the pair would otherwise share one directory and each run would overwrite the
+other's evidence.
+
 ## Two wires, not one
 
 OpenRouter's `/api/v1/chat/completions` normalises **every** model onto the OpenAI

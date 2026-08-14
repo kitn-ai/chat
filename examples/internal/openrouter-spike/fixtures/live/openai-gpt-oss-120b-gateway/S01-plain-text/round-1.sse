@@ -1,0 +1,160 @@
+data: {"choices":[{"delta":{"reasoning":" to"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" answer"}}]}
+
+data: {"choices":[{"delta":{"reasoning":":"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" definition"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" in"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" two"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" sentences"}}]}
+
+data: {"choices":[{"delta":{"reasoning":"."}}]}
+
+data: {"choices":[{"delta":{"reasoning":" Keep"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" under"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" "}}]}
+
+data: {"choices":[{"delta":{"reasoning":"120"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" words"}}]}
+
+data: {"choices":[{"delta":{"reasoning":"."}}]}
+
+data: {"choices":[{"delta":{"reasoning":" Provide"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" concise"}}]}
+
+data: {"choices":[{"delta":{"reasoning":".\n\n"}}]}
+
+data: {"choices":[{"delta":{"content":"A"}}]}
+
+data: {"choices":[{"delta":{"content":" web"}}]}
+
+data: {"choices":[{"delta":{"content":" component"}}]}
+
+data: {"choices":[{"delta":{"content":" is"}}]}
+
+data: {"choices":[{"delta":{"content":" a"}}]}
+
+data: {"choices":[{"delta":{"content":" reusable"}}]}
+
+data: {"choices":[{"delta":{"content":","}}]}
+
+data: {"choices":[{"delta":{"content":" encaps"}}]}
+
+data: {"choices":[{"delta":{"content":"ulated"}}]}
+
+data: {"choices":[{"delta":{"content":" custom"}}]}
+
+data: {"choices":[{"delta":{"content":" element"}}]}
+
+data: {"choices":[{"delta":{"content":" built"}}]}
+
+data: {"choices":[{"delta":{"content":" with"}}]}
+
+data: {"choices":[{"delta":{"content":" standard"}}]}
+
+data: {"choices":[{"delta":{"content":" web"}}]}
+
+data: {"choices":[{"delta":{"content":" APIs"}}]}
+
+data: {"choices":[{"delta":{"content":" ("}}]}
+
+data: {"choices":[{"delta":{"content":"HTML"}}]}
+
+data: {"choices":[{"delta":{"content":" templates"}}]}
+
+data: {"choices":[{"delta":{"content":","}}]}
+
+data: {"choices":[{"delta":{"content":" Shadow"}}]}
+
+data: {"choices":[{"delta":{"content":" DOM"}}]}
+
+data: {"choices":[{"delta":{"content":","}}]}
+
+data: {"choices":[{"delta":{"content":" and"}}]}
+
+data: {"choices":[{"delta":{"content":" custom"}}]}
+
+data: {"choices":[{"delta":{"content":" elements"}}]}
+
+data: {"choices":[{"delta":{"content":")"}}]}
+
+data: {"choices":[{"delta":{"content":" that"}}]}
+
+data: {"choices":[{"delta":{"content":" can"}}]}
+
+data: {"choices":[{"delta":{"content":" be"}}]}
+
+data: {"choices":[{"delta":{"content":" used"}}]}
+
+data: {"choices":[{"delta":{"content":" like"}}]}
+
+data: {"choices":[{"delta":{"content":" any"}}]}
+
+data: {"choices":[{"delta":{"content":" native"}}]}
+
+data: {"choices":[{"delta":{"content":" HTML"}}]}
+
+data: {"choices":[{"delta":{"content":" tag"}}]}
+
+data: {"choices":[{"delta":{"content":"."}}]}
+
+data: {"choices":[{"delta":{"content":" It"}}]}
+
+data: {"choices":[{"delta":{"content":" lets"}}]}
+
+data: {"choices":[{"delta":{"content":" developers"}}]}
+
+data: {"choices":[{"delta":{"content":" package"}}]}
+
+data: {"choices":[{"delta":{"content":" HTML"}}]}
+
+data: {"choices":[{"delta":{"content":","}}]}
+
+data: {"choices":[{"delta":{"content":" CSS"}}]}
+
+data: {"choices":[{"delta":{"content":","}}]}
+
+data: {"choices":[{"delta":{"content":" and"}}]}
+
+data: {"choices":[{"delta":{"content":" Java"}}]}
+
+data: {"choices":[{"delta":{"content":"Script"}}]}
+
+data: {"choices":[{"delta":{"content":" together"}}]}
+
+data: {"choices":[{"delta":{"content":","}}]}
+
+data: {"choices":[{"delta":{"content":" ensuring"}}]}
+
+data: {"choices":[{"delta":{"content":" style"}}]}
+
+data: {"choices":[{"delta":{"content":" and"}}]}
+
+data: {"choices":[{"delta":{"content":" behavior"}}]}
+
+data: {"choices":[{"delta":{"content":" isolation"}}]}
+
+data: {"choices":[{"delta":{"content":" across"}}]}
+
+data: {"choices":[{"delta":{"content":" different"}}]}
+
+data: {"choices":[{"delta":{"content":" pages"}}]}
+
+data: {"choices":[{"delta":{"content":" and"}}]}
+
+data: {"choices":[{"delta":{"content":" projects"}}]}
+
+data: {"choices":[{"delta":{"content":"."}}]}
+
+data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":135,"completion_tokens":85,"total_tokens":220,"completion_tokens_details":{"reasoning_tokens":0}}}
+
+data: [DONE]
+

@@ -117,7 +117,7 @@ describe('the matrix catalog declares what the guard needs', () => {
     // drifting: the guard would otherwise look for fixtures in a directory the
     // recorder never writes to, and read every column as unrecorded.
     for (const m of MODELS) {
-      expect(fixtureDirFor(m.model, m.wire), m.key).toBe(fixtureSlug(m.model, m.wire));
+      expect(fixtureDirFor(m.model, m.wire, m.backend), m.key).toBe(fixtureSlug(m.model, m.wire, m.backend));
     }
   });
 

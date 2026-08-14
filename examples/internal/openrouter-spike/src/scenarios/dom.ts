@@ -341,6 +341,16 @@ export async function waitForStableLength(
 }
 
 /**
+ * What `useSpikeChat` writes into the bubble when the turn FAILED. The app puts
+ * it there so a failure is visible rather than a blank bubble, which is right —
+ * but it is the app's own text, not the model's, and it must never satisfy a
+ * claim about what the model produced.
+ *
+ * Kept in step with `useSpikeChat` by `dom.failure-notice.test.ts`.
+ */
+export const FAILURE_NOTICE = 'The request failed:';
+
+/**
  * Assert THE ASSISTANT produced at least `min` characters of visible prose, and
  * hand that prose back.
  *
@@ -348,6 +358,13 @@ export async function waitForStableLength(
  * name says the speaker for the same reason: the version called `seesProse`
  * read `bubbles().last()` and every call site read as if it said "assistant"
  * while the code said "whatever is at the bottom".
+ *
+ * It cannot be satisfied by the app's own FAILURE NOTICE either, and that is not
+ * hypothetical: the first live run of the vercel-ai-sdk route through the AI
+ * Gateway threw `InvalidPromptError` on every request, rendered
+ * `_The request failed: System messages are not allowed…_` — 96 characters — and
+ * S01 went GREEN on it. A scenario that passes on the error message for the bug
+ * it is meant to catch is worse than no scenario.
  */
 export async function seesAssistantProse(
   page: Page,
@@ -358,6 +375,18 @@ export async function seesAssistantProse(
   let text = '';
   for (;;) {
     text = (await textNow(assistantBubble(page))).trim();
+    // Checked BEFORE the length test rather than after it: the notice is long
+    // enough to satisfy any `min` a scenario would sensibly ask for, so testing
+    // length first is what let the failure through in the first place. It is
+    // also raised immediately instead of waiting out the deadline — the turn is
+    // already over, and a 20-second timeout would bury the provider's own words.
+    if (text.includes(FAILURE_NOTICE)) {
+      throw new ScenarioAssertionError(
+        `the assistant bubble holds the app's FAILURE NOTICE, not model prose: ` +
+          `${JSON.stringify(text.slice(0, 300))}. The turn did not produce an answer, so no claim ` +
+          'about what the model rendered can be read off this run.',
+      );
+    }
     if (text.length >= min) {
       // Only now: a classification that resolves to the WRONG speaker is the
       // failure that stays green, so the cross-check guards the pass.

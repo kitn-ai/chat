@@ -101,14 +101,15 @@ export function usageFieldFor(wire) {
  *  under bare node with no build step. `server/reasoning-coverage.test.ts` pins
  *  this against the proxy's own functions for every catalog entry, so the copy
  *  cannot drift without a red test. */
-export function fixtureDirFor(model, wire) {
+export function fixtureDirFor(model, wire, backend = 'openrouter') {
   const slug =
     String(model)
       .replace(/^~/, '')
       .replace(/[^a-z0-9._-]+/gi, '-')
       .replace(/\.{2,}/g, '.')
       .toLowerCase() || 'unknown-model';
-  return wire === 'anthropic' ? `${slug}-anthropic-wire` : slug;
+  const wired = wire === 'anthropic' ? `${slug}-anthropic-wire` : slug;
+  return backend === 'gateway' ? `${wired}-gateway` : wired;
 }
 
 /** Every clean recording ends with this, in all three dialects the spike has
@@ -255,7 +256,7 @@ function auditColumn(fixturesRoot, entry) {
     return { ...base, verdict: 'undeclared', reason: `undeclared column: ${faults.join('; ')}` };
   }
 
-  const dir = fixtureDirFor(entry.model, entry.wire);
+  const dir = fixtureDirFor(entry.model, entry.wire, entry.backend);
   const columnRoot = join(fixturesRoot, 'live', dir);
   const scenarioDirs = dirsIn(columnRoot);
 
