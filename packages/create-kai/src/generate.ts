@@ -3,7 +3,7 @@
  * console output beyond what the caller asks for — so the interactive run and
  * the test run go through exactly the same code.
  */
-import { cp, mkdir, readFile, readdir, rename, stat, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,6 +17,7 @@ import { buildKaiJson, stringifyKaiJson } from './kai-json';
 import { rewritePackageJson, stringifyPackageJson } from './package-json';
 import { applyGatewayPatch, applyPatch, gatewayPatchesFor, patchesFor } from './patches';
 import { clientModelFor, emitRoute } from './routes';
+import type { EmittedFile } from './routes';
 import {
   GITIGNORE_SOURCE_NAME,
   STRIPPED_DOTFILES,
@@ -92,48 +93,149 @@ export async function generate(
     );
   }
 
-  await mkdir(plan.dir, { recursive: true });
-  await cp(templateDir, plan.dir, { recursive: true });
-
-  // The dotfiles npm refuses to pack, back from the names they travelled under.
-  // Best-effort per file: `.gitignore` is required of every starter and `.npmrc`
-  // only exists in the standalone ones, so absent means nothing to do. Before the
-  // patches, because a patch row names the REAL name — `.npmrc` is one of the
-  // files `PATCHES` opens.
-  for (const dotfile of STRIPPED_DOTFILES) {
-    const travelling = path.join(plan.dir, travellingName(dotfile));
-    if (existsSync(travelling)) await rename(travelling, path.join(plan.dir, dotfile));
-  }
-
-  // The named edits that turn a reviewed starter into the user's own project.
-  // Each one throws if it stops matching, and the package build runs them
-  // against the template so that throw happens here rather than in a user's
-  // terminal.
-  for (const patch of patchesFor(framework.templateDir)) {
-    const file = path.join(plan.dir, patch.file);
-    await writeFile(file, applyPatch(patch, await readFile(file, 'utf8'), plan.name), 'utf8');
-  }
-
-  // The one rewrite that turns a workspace member into a standalone consumer.
-  const pkgPath = path.join(plan.dir, 'package.json');
-  const { json, previousKitSpec } = rewritePackageJson(await readFile(pkgPath, 'utf8'), {
-    name: plan.name,
-    kit: plan.kit,
-    gatewayDeps: integration.deps.npm,
-  });
-  await writeFile(pkgPath, stringifyPackageJson(json), 'utf8');
-
-  // Read BEFORE the gateway patches rewrite the call site: `goLiveThread` looks
-  // for `toOpenAIMessages(...)`, which the mock-path starter carries only in the
-  // comment above the mock call — and that comment is one of the things the
-  // gateway patches replace. Reading after would throw on exactly the projects
-  // that went live.
-  const appSource = await readFile(path.join(plan.dir, framework.paths.app), 'utf8');
-  const thread = goLiveThread(appSource, framework);
-
-  // ── the gateway, when one was chosen ────────────────────────────────────────
+  // ── everything below is written into a staging directory ────────────────────
   //
-  // Everything above this point is identical for `mock` and for a real gateway,
+  // WHY THE PROJECT IS NOT BUILT IN PLACE. It was, and the failure that exposed
+  // it is the reason this function has a staging step at all: `create-kai@0.1.0`
+  // threw ENOENT on a missing `.npmrc` partway through, and left 20 files on
+  // disk — including a `package.json` still carrying `@kitn.ai/ui-example-nextjs`
+  // and `"@kitn.ai/ui": "file:../../../packages/ui"`, a monorepo path that
+  // resolves to nothing on a stranger's machine. The terse one-line error is easy
+  // to miss above a directory that looks scaffolded, and `npm install` in it
+  // fails a second time, further from the cause.
+  //
+  // ATOMIC MOVE RATHER THAN CLEANUP-ON-ERROR, chosen for two reasons that
+  // cleanup cannot cover. A `catch` only runs for a thrown error, so a Ctrl-C or
+  // a killed process still strands the half-written tree; staging strands a
+  // dot-prefixed directory nobody will mistake for their project. And cleanup
+  // means deleting a path the user named — `plan.dir` may be an existing empty
+  // directory the caller allowed — so the failure path would be a recursive
+  // delete of something this function did not create. Staging never has to
+  // decide that question.
+  //
+  // The staging directory is a SIBLING of the destination, not `os.tmpdir()`:
+  // `rename` is only atomic within one filesystem, and on macOS `/var/folders`
+  // is routinely a different one, which would make the last step an EXDEV
+  // failure at the end of a successful scaffold.
+  const parent = path.dirname(plan.dir);
+  await mkdir(parent, { recursive: true });
+  const out = await mkdtemp(path.join(parent, '.create-kai-'));
+
+  let previousKitSpec: string | undefined;
+  try {
+    await cp(templateDir, out, { recursive: true });
+
+    // The dotfiles npm refuses to pack, back from the names they travelled
+    // under. Best-effort per file: `.gitignore` is required of every starter and
+    // `.npmrc` only exists in the standalone ones, so absent means nothing to do.
+    // Before the patches, because a patch row names the REAL name — `.npmrc` is
+    // one of the files `PATCHES` opens.
+    for (const dotfile of STRIPPED_DOTFILES) {
+      const travelling = path.join(out, travellingName(dotfile));
+      if (existsSync(travelling)) await rename(travelling, path.join(out, dotfile));
+    }
+
+    // The named edits that turn a reviewed starter into the user's own project.
+    // Each one throws if it stops matching, and the package build runs them
+    // against the template so that throw happens here rather than in a user's
+    // terminal.
+    for (const patch of patchesFor(framework.templateDir)) {
+      const file = path.join(out, patch.file);
+      await writeFile(file, applyPatch(patch, await readFile(file, 'utf8'), plan.name), 'utf8');
+    }
+
+    // The one rewrite that turns a workspace member into a standalone consumer.
+    const pkgPath = path.join(out, 'package.json');
+    const rewritten = rewritePackageJson(await readFile(pkgPath, 'utf8'), {
+      name: plan.name,
+      kit: plan.kit,
+      gatewayDeps: integration.deps.npm,
+    });
+    previousKitSpec = rewritten.previousKitSpec;
+    await writeFile(pkgPath, stringifyPackageJson(rewritten.json), 'utf8');
+
+    // Read BEFORE the gateway patches rewrite the call site: `goLiveThread` looks
+    // for `toOpenAIMessages(...)`, which the mock-path starter carries only in the
+    // comment above the mock call — and that comment is one of the things the
+    // gateway patches replace. Reading after would throw on exactly the projects
+    // that went live.
+    const appSource = await readFile(path.join(out, framework.paths.app), 'utf8');
+    const thread = goLiveThread(appSource, framework);
+
+    const routeFiles = await writeGateway(plan, framework, integration, out, thread);
+
+    await writeFile(
+      path.join(out, 'kai.json'),
+      stringifyKaiJson(buildKaiJson(plan, framework)),
+      'utf8',
+    );
+
+    await writeFile(
+      path.join(out, 'README.md'),
+      plan.gatewayId === 'mock'
+        ? renderMockReadme(plan, framework, thread, integration.docsSlug)
+        : renderGatewayReadme(plan, framework, integration, routeFiles[0].path),
+      'utf8',
+    );
+  } catch (error) {
+    // The staging directory is this function's own, so removing it cannot touch
+    // anything the caller had.
+    await rm(out, { recursive: true, force: true });
+    throw error;
+  }
+
+  await commit(out, plan.dir);
+
+  return {
+    dir: plan.dir,
+    files: await listFiles(plan.dir),
+    previousKitSpec,
+    runNote: integration.runNote,
+    docsSlug: integration.docsSlug,
+  };
+}
+
+/**
+ * Move the finished project onto the path the user named.
+ *
+ * `rename` is the atomic case and the one that normally runs. It cannot always
+ * land on an EXISTING directory though — the caller permits an empty one, and
+ * Windows refuses that rename where POSIX allows it — so the copy below is the
+ * portability fallback, taken only for the errnos that mean exactly "rename
+ * cannot land here". Anything else is a real failure and is rethrown rather than
+ * quietly downgraded into a copy.
+ */
+async function commit(from: string, to: string): Promise<void> {
+  try {
+    await rename(from, to);
+    return;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== 'EEXIST' && code !== 'ENOTEMPTY' && code !== 'EPERM' && code !== 'EXDEV') {
+      throw error;
+    }
+  }
+  await cp(from, to, { recursive: true });
+  await rm(from, { recursive: true, force: true });
+}
+
+/**
+ * The route, the go-live patches and the env file — everything that exists only
+ * when a gateway was chosen.
+ *
+ * Lifted out of `generate()` when the staging directory went in, because the
+ * function was one `try` block deep enough that the gateway branch inside it
+ * read as nesting rather than as a stage. Nothing about it changed; `out` is the
+ * staging directory rather than the user's, which is the entire difference.
+ */
+async function writeGateway(
+  plan: ProjectPlan,
+  framework: FrameworkDef,
+  integration: Integration,
+  out: string,
+  thread: string,
+): Promise<readonly EmittedFile[]> {
+  // Everything before this point is identical for `mock` and for a real gateway,
   // which is the property that keeps the zero-config path a byte-for-byte copy
   // of a reviewed starter.
   const routeFiles = plan.gatewayId === 'mock' ? [] : emitRoute(integration, framework);
@@ -161,13 +263,13 @@ export async function generate(
     }
 
     for (const file of routeFiles) {
-      const abs = path.join(plan.dir, file.path);
+      const abs = path.join(out, file.path);
       await mkdir(path.dirname(abs), { recursive: true });
       await writeFile(abs, file.contents, 'utf8');
     }
 
     for (const patch of gatewayPatchesFor(framework.templateDir)) {
-      const file = path.join(plan.dir, patch.file);
+      const file = path.join(out, patch.file);
       await writeFile(
         file,
         applyGatewayPatch(patch, await readFile(file, 'utf8'), {
@@ -182,34 +284,16 @@ export async function generate(
 
     if (integration.envVars.length > 0) {
       await writeFile(
-        path.join(plan.dir, framework.paths.env),
+        path.join(out, framework.paths.env),
         renderEnvFile(integration.envVars, integration.runNote),
         'utf8',
       );
     }
   }
 
-  await writeFile(
-    path.join(plan.dir, 'kai.json'),
-    stringifyKaiJson(buildKaiJson(plan, framework)),
-    'utf8',
-  );
-
-  await writeFile(
-    path.join(plan.dir, 'README.md'),
-    plan.gatewayId === 'mock'
-      ? renderMockReadme(plan, framework, thread, integration.docsSlug)
-      : renderGatewayReadme(plan, framework, integration, routeFiles[0].path),
-    'utf8',
-  );
-
-  return {
-    dir: plan.dir,
-    files: await listFiles(plan.dir),
-    previousKitSpec,
-    runNote: integration.runNote,
-    docsSlug: integration.docsSlug,
-  };
+  // Handed back rather than kept: the README names the route file, and it is
+  // written for the mock path too, so the caller owns it.
+  return routeFiles;
 }
 
 /**

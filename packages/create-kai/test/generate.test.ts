@@ -5,7 +5,7 @@
  * only checks for the presence of `package.json` passes on a project that cannot
  * install. Each assertion below names something that breaks a user's first run.
  */
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -238,6 +238,52 @@ describe('generate (refusals)', () => {
       }),
     ).rejects.toThrow(/no template/);
     await rm(emptyRoot, { recursive: true, force: true });
+  });
+
+  /**
+   * A REFUSAL LEAVES NOTHING ON DISK.
+   *
+   * THE INCIDENT. `create-kai@0.1.0` threw ENOENT on a missing `.npmrc` partway
+   * through a Next.js scaffold and left 20 files behind — a directory that looks
+   * scaffolded, containing a `package.json` still naming
+   * `@kitn.ai/ui-example-nextjs` and depending on
+   * `"@kitn.ai/ui": "file:../../../packages/ui"`. That path is where the kit
+   * lives IN THIS REPO and resolves to nothing anywhere else, so a user who
+   * missed the one-line error and ran `npm install` got a second, stranger
+   * failure with no connection to the first.
+   *
+   * THE SUBJECT IS NOT THAT BUG, deliberately. `.npmrc` is fixed, so a test
+   * driving it would assert nothing the moment it passed. The property is that
+   * ANY refusal after the copy leaves the destination untouched, so this drives
+   * a refusal that cannot be fixed away: Vue has no route destination, so
+   * wiring a keyed gateway onto it throws from `writeGateway` — after the
+   * template copy, after the patches, after `package.json` was rewritten. That
+   * is the same position in the sequence the ENOENT had.
+   *
+   * AND IT CHECKS THE PARENT, not just the destination. Staging in a sibling
+   * directory is what makes the write atomic, so a staging directory left behind
+   * is this fix half-working: the user's project is clean and their `ls -a` is
+   * not.
+   */
+  it('leaves neither a project nor a staging directory behind when it refuses', async () => {
+    const parent = await mkdtemp(path.join(tmpdir(), 'create-kai-atomic-'));
+    const dir = path.join(parent, 'my-app');
+
+    await expect(
+      generate(plan(dir, { frameworkId: 'vue', gatewayId: 'openrouter' }), {
+        templateRoot: TEMPLATE_ROOT,
+      }),
+    ).rejects.toThrow(/no route destination/);
+
+    expect(existsSync(dir), 'a half-written project was left where the user asked for one').toBe(
+      false,
+    );
+    expect(
+      await readdir(parent),
+      'the staging directory survived the failure it exists to contain',
+    ).toEqual([]);
+
+    await rm(parent, { recursive: true, force: true });
   });
 });
 
