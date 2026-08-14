@@ -45,38 +45,6 @@ const dist = path.join(pkgRoot, 'dist');
 const templatesOut = path.join(dist, 'templates');
 
 /**
- * Never copied into a template: build output, installed deps, editor cruft —
- * and lockfiles.
- *
- * A LOCKFILE IS STALE THE MOMENT IT IS COPIED, so shipping one is strictly worse
- * than shipping none. The emitted project's dependency set is not the starter's:
- * `rewritePackageJson` replaces the `@kitn.ai/ui` spec (a monorepo-local
- * `file:../../../packages/ui` or `workspace:*` becomes a real range) and adds
- * the chosen gateway's deps. A copied lockfile still pins the old one, so
- * `npm ci` refuses the package.json/lock mismatch outright and `npm install`
- * resolves the kit from a path that climbed out of the user's project.
- *
- * Only the two STANDALONE starters have one today (nextjs, tanstack-start), and
- * neither is `ready` — so this is a latent bug, caught by the `file:` pattern in
- * `REPO_INTERNAL` (src/template-guards.ts) rather than by review. create-vite
- * ships no lockfile for the same reason: the first `npm install` is what should
- * write it.
- */
-const SKIP = new Set([
-  'node_modules',
-  'dist',
-  '.next',
-  '.vite',
-  '.turbo',
-  '.angular',
-  'README.md',
-  'package-lock.json',
-  'pnpm-lock.yaml',
-  'yarn.lock',
-  'bun.lockb',
-]);
-
-/**
  * Where `loadTs` puts the module it just bundled.
  *
  * ON DISK, AND UNDER `node_modules/`, for one reason: a module has to be
@@ -130,14 +98,19 @@ const starterPath = (templateDir) => path.join(startersRoot, templateDir);
  * Copy one starter into `dist/templates/`. Filesystem only — the requirements
  * that the starter EXIST and that it carry a `.gitignore` are both RULES, and
  * live in `src/build-guards.ts` with the others where a test can drive them.
- * `main()` runs the first before calling this and the second against the copied
- * tree, then does the rename.
+ * `main()` runs both before calling this, then does the rename.
+ *
+ * `skip` is `templateSkips(…)` from that module, derived from the starter's own
+ * `.gitignore`. It takes a path RELATIVE to the starter root rather than a
+ * basename, which is the whole point: `src/routeTree.gen.ts` is a path, and a
+ * basename set could not express it — see the note on that function.
  */
-async function copyTemplate(templateDir) {
+async function copyTemplate(templateDir, skip) {
+  const from = starterPath(templateDir);
   const to = path.join(templatesOut, templateDir);
-  await cp(starterPath(templateDir), to, {
+  await cp(from, to, {
     recursive: true,
-    filter: (src) => !SKIP.has(path.basename(src)),
+    filter: (src) => !skip(path.relative(from, src)),
   });
   return to;
 }
@@ -219,13 +192,23 @@ async function main() {
   let patchCount = 0;
   for (const framework of ready) {
     failIf(guards.missingStarterProblem(starterPath(framework.templateDir), existsSync));
-    const root = await copyTemplate(framework.templateDir);
+
+    // The `.gitignore` is read from the STARTER, before the copy, because it is
+    // what decides which files the copy makes. It is still the name the starter
+    // uses at this point; the rename below is what changes that.
+    const starterExists = (relative) => existsSync(path.join(starterPath(framework.templateDir), relative));
+    failIf(guards.gitignoreProblem(framework.templateDir, starterExists));
+    const gitignore = await readFile(
+      path.join(starterPath(framework.templateDir), guards.GITIGNORE_SOURCE_NAME),
+      'utf8',
+    );
+    failIf(guards.templateIgnoreProblem(framework.templateDir, gitignore));
+
+    const root = await copyTemplate(framework.templateDir, guards.templateSkips(gitignore));
     const read = templateReader(root);
     const exists = (relative) => existsSync(path.join(root, relative));
     const patches = patchesFor(framework.templateDir);
 
-    // Before the rename, because the rule asks about the name the starter uses.
-    failIf(guards.gitignoreProblem(framework.templateDir, exists));
     await rename(
       path.join(root, guards.GITIGNORE_SOURCE_NAME),
       path.join(root, GITIGNORE_TEMPLATE_NAME),
