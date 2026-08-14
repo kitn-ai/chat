@@ -44,6 +44,10 @@ it is named instead. Run the command.
 > **§9 was appended later, verified at `16c14c2`.** Sections 0 through 8 are as written at `bce481e`
 > and have not been edited except for pointers like this one. Read §9 for what landed after, and for
 > which claims below are now retired.
+>
+> **§10 (`67365c8`) and §11 (`12a51da`) were appended the same way.** Read §11 before §4 or §6:
+> `create-kai` now runs every framework in its table, so §4's ready/planned split, and the scope
+> decision built on it, are history rather than current state.
 
 1. **`git log --oneline --first-parent bce481e..origin/main`** and **`gh pr list --state open`**.
    Nothing from this session was left open. Main moved twice while this was being written.
@@ -206,6 +210,14 @@ ruling. Fix the sentence if you are in the file anyway.
 
 ## 4. `create-kai` v1: five frameworks are ready, three are not, and why
 
+> **SUPERSEDED at `12a51da`.** Every row in `packages/create-kai/src/frameworks.ts` is now `ready`,
+> including the three this section explains cannot be. #216, #217 and #220 wrote the chat apps this
+> section says would have to be written, and the scope decision below is history rather than a
+> standing call. **§11.1.** The section is left as written at `bce481e`, because the reasoning is
+> still why the work took the shape it did, and because the **heading is the worked example**: a row
+> count, in a heading, in a file that opens by declaring it holds no number a script can produce.
+> `grep -c "status: 'ready'"` produces it, and it rotted.
+
 Read `packages/create-kai/src/frameworks.ts`. It is the single table, and its docblock is the
 argument. `readyFrameworks()` is what the prompt offers, and `--list --json` is what a script should
 ask.
@@ -237,14 +249,25 @@ bearing fact and it is not a table edit away:
   A Button rendered from a server component, a static `messages` array, a registration probe. No
   composer, no `<kai-thread>` fed by `useKaiChat`, no mock responder, so there is no stream for a
   browser check to observe.
+  *(FALSE at `12a51da`. Both are hand-composed chat workspaces now: #216 for tanstack-start, #220 for
+  nextjs. Each kept its SSR proof by strengthening the demonstration rather than by keeping the demo
+  on a second route, and the registration probe survives in both as `HydrationBadge`. §11.1.)*
 - `examples/starters/solid` is a primitives showcase. It does not use `@kitn.ai/ui/wire` at all; it
   replays a canned part script through the `@kitn.ai/ui/state` folds. So it has no
   `toOpenAIMessages(...)` for the emitted README's go-live diff to quote, `goLiveThread` throws on it,
   and `scripts/build.mjs` stops there if the status is flipped. **That throw is the guard working.**
+  *(FALSE at `12a51da` by #217, and the throw is retired the right way: the starter gained the call
+  the guard was asking for rather than the guard being routed around. §11.1.)*
 
 `scripts/build.mjs` refuses all three today, watched, per #195 and #194.
+*(No longer refuses any of them, and the rule that does the refusing is now `appPathProblem` rather
+than `verifyAppPath`; the name in §5.9's list changed with the move #203 made. §11.1.)*
 
 ### The scope decision
+
+> **SPENT at `12a51da`, by being carried out rather than reversed.** The scoped project this decision
+> defers to is #216, #217 and #220. What is worth keeping is the shape of the call, not the outcome:
+> it named the work as a feature rather than a status flip, and that is exactly what it cost. §11.1.
 
 **v1 ships at the frameworks that are genuinely chat apps. Writing chat apps for the other three is
 its own scoped project, not the tail of this one.**
@@ -463,6 +486,10 @@ satisfy that, and a template whose title was never patched cannot pass vacuously
 to keep current. Its **known limit is stated in the code**: it reads HTML documents, which covers
 every `ready` framework; the two SSR starters set their titles in JS and are both `planned`, and
 telling a document title from an object field named `title` needs a parser.
+*(CLOSED at `12a51da`. #219 gave `documentTitles` the parser, and the docblock now opens with*
+`READS JS-DECLARED TITLES TOO, which is what the note here used to hand to "whoever makes an SSR row ready"`*.
+A narrower limit is stated in its place. Note that the limit was handed forward and then collected by
+the person it was handed to, which is the outcome a stated limit is for. §11.4.)*
 
 Note the shape of this fix, because it generalises: the old rule enumerated wrong outcomes and each
 new starter could invent one it had never seen. The new rule states the required outcome, so the set
@@ -475,6 +502,10 @@ it covers is closed by construction.
 > **Status at `16c14c2`: item 2 has SHIPPED as #204, and the §5.9 finding below is half retired.**
 > The remaining `create-kai` work is item 1, the three chat apps. §9.7 has the corrections; the list
 > below is left as written at `bce481e`.
+>
+> **Status at `12a51da`: item 1 is SHIPPED too, so nothing on this list is `create-kai` work any
+> more.** Item 3 is the only one still open. §11.6 has the corrections, including one bullet below
+> whose prediction came true and therefore stopped being true.
 
 **`gh pr list --state open` is the authority.** Nothing from this session was left open at `bce481e`.
 #201 was the last to land, and it closed the two defects earlier rounds had found and deliberately
@@ -492,6 +523,12 @@ description.** Both look like unfinished work and are not:
   not see it. Now `titleProblems` requires every emitted title to equal the sentinel, so flipping
   Solid to `ready` fails at the title guard, by design, before it reaches `goLiveThread`. That title
   becomes a real edit only when someone writes the Solid chat app.
+  *(FALSE at `12a51da` as a statement about the tree, and TRUE as a prediction. Someone wrote the
+  Solid chat app: #217 retitled the file and gave it the scaffold-time patch every other starter has,
+  and `titleProblems` caught it on the first build with the status flipped, exactly as this bullet
+  said it would. The old string survives only as `HISTORICAL_SOLID_TITLE` in
+  `test/template-guards.test.ts`, because fixing the starter removed the tree's only specimen for
+  "a title no name-anchored pattern can see". §11.6.)*
 
 **The one open finding in that package is §5.9's:** `scripts/build.mjs` still runs `main()` at module
 scope with no test importing it, and four guards still live inside it. Finishing that move is the
@@ -501,6 +538,10 @@ natural follow-up to #201 and is not tracked by any PR.
 
 1. **The three chat apps.** Writing a real thread + composer + mock stream for `solid`, `nextjs` and
    `tanstack-start`, SSR-safely, and only then flipping their rows. Scoped as its own project (§4).
+   *(SHIPPED at `12a51da`. Merge order was `tanstack-start` (#216), `solid` (#217), `nextjs` (#220),
+   which is neither this list's order nor its reverse. The per-framework SEQUENCE this item
+   prescribes, starter first and status flip last, is what each of the three actually followed.
+   §11.1.)*
 2. **Lint for silent drops, truncations and swallowed errors. NOW UNBLOCKED.** Carried from the
    previous handoff's board (§6 item 3 there), where it was **deliberately deferred until after
    0.22.0**. 0.22.0 shipped this session (§2), so the gate is gone. **Build it as a lint rule, not a
@@ -951,13 +992,19 @@ and is wired into the required job. The broad "whether vs how" review of every e
 **Item 1, the three chat apps, is the remaining `create-kai` work and is unchanged.**
 `packages/create-kai/src/frameworks.ts` still carries `solid`, `nextjs` and `tanstack-start` as
 `status: 'planned'`, for the reasons §4 gives, which are unaffected by anything in this section.
+*(FALSE at `12a51da`: no row carries `status: 'planned'`. §11.1.)*
 
 **Item 3, re-measuring the timeout budget, is unchanged.**
+*(Still unchanged at `12a51da`, and now the only item on §6's list that is.)*
 
 **The two things §6 records as deliberately left behind by #201 are both still true**, and both still
 should be: `examples/starters/angular/angular.json` still names the Angular project after our example,
 and `examples/starters/solid/index.html` still carries its own title. Neither is a defect. Do not
 "fix" either.
+*(HALF TRUE at `12a51da`. The angular.json half holds unchanged, all four sites. The Solid half does
+not: #217 retitled the file. Note that "still carries its own title" survives as a sentence while
+being wrong about the string, which is why §6's version quotes the title and this one does not.
+Quoting is what makes a claim falsifiable by grep. §11.6.)*
 
 **"The one open finding in that package is §5.9's" is half retired.** See §9.1: the four guards are
 out, the module-scope `main()` is not, and #203 chose the first as the fix rather than the second.
@@ -1071,6 +1118,399 @@ improved it, and each description overstated what had been checked: #203 disclos
 and not the naming one, #205 reported the blind spot emptied, and §9.1 relayed both as verified. The
 check written to enforce "watch it fail before trusting it" was itself the thing nobody watched
 fail.
+
+---
+
+## 11. What landed after `67365c8`: `create-kai` reached every framework in its table
+
+**Verified against `origin/main` at `12a51dad8534d505a7a8f12ea80b55d2ee1ea54d`**
+(`feat(create-kai): make the Next.js starter a composed chat app, and turn the last row on (#220)`).
+
+Same rule as §9 and §10. Nothing above is rewritten; where a claim above is now wrong it carries a
+marker pointing here, so a reader who wants to know what was believed at `67365c8` can still find
+out. Derive the landed set rather than trusting this heading:
+
+```
+git log --oneline --first-parent 67365c8..origin/main
+```
+
+**#214 is absent from that range and did not vanish.** It is the open release-please PR for 0.22.2,
+the third consecutive section that has had to say this about a gap in the numbering (§9 for #209 open,
+§10 for #209 merged). The pattern is now reliable enough to expect: a missing number in this repo is
+usually a held release, not a lost merge. `.release-please-manifest.json` on main gives the version
+the repo believes it is at and `npm view @kitn.ai/ui dist-tags` gives what is on npm; they are
+different facts, and §2 explains why the merge needs `--admin`.
+
+This section was commissioned from a narrative, like §9. Every claim in it was checked against this
+tree, and §11.10 lists the ones that did not survive. The ratio held for the third time: the
+structural claims were right, and what failed was **attribution** rather than status this round, which
+is a new variant worth watching.
+
+### 11.1 §4 is superseded: the queue is empty (#216, #217, #220)
+
+**Every row in `packages/create-kai/src/frameworks.ts` now carries `status: 'ready'` and
+`composedWorkspace: true`.** #216 rewrote `tanstack-start`, #217 rewrote `solid`, #220 rewrote
+`nextjs`, and each flipped its own row last. §4's split, and the scope decision built on it, are
+history.
+
+**This file states no count for that**, and the omission is the point rather than pedantry. §4 put a
+row count in a heading, root `CLAUDE.md` forbids exactly that (`Element/cell/route/test/row counts,
+timings and versions rot the moment the gate moves`), and it rotted inside a week. The roster lives in
+the table and at runtime in `create-kai --list --json`, and `packages/create-kai/README.md` already
+carries the tombstone for the last place that restated it: *"This paragraph used to name which
+frameworks were ready, and it was wrong within a day of each one landing [...]"* Ask the CLI.
+
+The table's docblock is the thing to read, not this paragraph. It records the same lesson twice more:
+that the roster is the `composedWorkspace` column and not prose, and that
+
+> THE QUEUE IS EMPTY as of the Next.js flip [...] That is a statement about today, not a rule [...]
+> `planned`, `note` and `composedWorkspace: false` are still live machinery for the NEXT framework
+> someone adds.
+
+**All three followed the sequence §6 item 1 prescribed**: write the starter, then flip. Solid is the
+clean worked example, and #217 states the part that matters for the guards. `goLiveThread` threw on
+the old Solid starter, §4 called that throw "the guard working", and it was: the throw went away
+because the starter gained the `toOpenAIMessages(...)` call the guard was asking for, not because
+anyone routed around it. A guard that stops complaining when the code becomes correct is the outcome;
+a guard that gets an exemption is not.
+
+Two shape decisions carried across all three, both worth knowing before touching a starter:
+
+- **The SSR demos were replaced, not kept on a second route.** A thread that hydrates and then
+  *streams* proves more than a static `messages` array proves once at mount, and `create-kai` copies
+  the whole starter into every scaffolded project, so a second demo route would be dead code in each
+  one. Note this is a **rejected alternative**, not a deletion: neither starter ever had a second
+  route.
+- **The registration probe survives as `HydrationBadge`** in both SSR starters, carrying the same
+  `data-testid="registration-status"` the old inline probe used. It reads `data-state="server"` in the
+  prerendered HTML and flips once client JS has defined the elements. The reason it earns its place is
+  stated in its own docblock: hydration failure otherwise looks exactly like success, and a screenshot
+  cannot tell them apart. It earns most on Next, where a production React build minifies hydration
+  errors into a numbered link.
+
+### 11.2 One `theme.css` defect, three starters, three narrowings
+
+**Record this as one finding with three passes, not as three bugs.** Each pass found another instance
+and made the claim smaller, and the version that would have been written after any single pass would
+have been wrong. It is the clearest worked example in this repo of the rule #218 added while it was
+happening (§11.3).
+
+The defect: `@kitn.ai/ui/theme.css` is Tailwind v4 **source**. Its light tokens live inside an
+`@theme { … }` block, which is a Tailwind at-rule and not CSS, and a browser discards an unknown
+at-rule **whole**. `@kitn.ai/ui/theme.tokens.css` is the compiled stylesheet. A pipeline with no
+Tailwind that imports the first one ships a document with no `--color-*` on `:root`, on a green build.
+
+**Pass 1, #216, TanStack: found.** The starter imported the source file, the emitted asset carried one
+raw `@theme {`, and `--color-background` was defined nowhere else. Measured on the built CSS rather
+than read off the config: `@theme` count went 1 to 0 after the switch, and a real `:root` block plus a
+`.dark` block now ship. The obvious lesson at this point is "never import `theme.css`".
+
+**Pass 2, no PR: that lesson is wrong, and the counter-example was already in the tree.**
+`examples/starters/solid/src/styles.css` imports the very same `@kitn.ai/ui/theme.css` and is correct,
+because it says `@import "tailwindcss"` above it and `@tailwindcss/vite` is in its pipeline, so
+`@theme` is **compiled** rather than discarded. **The condition is whether Tailwind processes the
+file, not which specifier you wrote.** "Never import `theme.css`" would have broken Solid.
+
+This pass is a check, not a change, which is why it has no commit of its own. Solid was **read** and
+left alone: `git log -- examples/starters/solid/src/styles.css` does not name #217. Its record is
+#218's `CLAUDE.md` rule and the note #219 wrote onto the `nextjs` row. Attributing this pass to #217
+because #217 is the Solid PR is the mistake §11.10 opens with.
+
+**Check that claim the tight way, because the loose way fails.** `git show 832f6aa | grep theme.css`
+returns three hits, so "#217 never mentions `theme.css`" is false. All three are about the `.dark`
+variant, in the README and an `App.tsx` comment, and #217 also documented Solid's `@source` line and
+its Tailwind setup. What it never states is the source-versus-compiled distinction or the condition
+that turns on it. **Adjacent prose is not the claim**, and a grep for the filename cannot tell them
+apart.
+
+**Pass 3, #219 and #220, Next: found again, then measured to its real size.** #219's audit of the
+`nextjs` row found the third instance without running anything: `app/layout.tsx` imported the source
+file while `postcss.config.mjs` declared `plugins: {}` and its own comment asserted the file was
+*"just custom properties"*. #220 fixed it and then **measured the blast radius against a defect twin
+running beside the fixed app in Chromium**, which is what turned an assertion into a size:
+
+- **Dark mode is unaffected**, and the reason is structural rather than lucky. `.dark` is a top-level
+  rule in `theme.css`, **outside** the `@theme` block, so a browser parses it even when the file
+  arrives as raw source. Only the light set is inside the at-rule that gets discarded.
+- **Chrome inside any `kai-*` element still resolves.** The starter comments attribute this to the
+  elements re-scoping "their own tokens onto slotted content", which describes the effect correctly
+  and the agency wrongly. There is no `::slotted()` token rule and nothing re-scopes: Tailwind v4
+  emits `@theme` tokens to **`:root, :host`**, `elements/styles.css` imports `theme.css` into the
+  compiled sheet `define.tsx` adopts into every shadow root, and the `:host` half sets the tokens on
+  the custom element itself, where slotted light-DOM children inherit them the ordinary way. The
+  `display: contents` wrapper carrying the `.dark` scope does the same for the dark set. **Plain
+  inheritance, off a token pin nobody added for this purpose.** Worth knowing before anyone "fixes"
+  it, since the behaviour depends on a Tailwind emit target rather than on kit code.
+- **What breaks is the chrome outside every element.** The app shell measured
+  `background-color: rgba(0, 0, 0, 0)` against `rgb(255, 255, 255)` on the twin, while `.sidebar`
+  matched on both.
+
+**That narrowness is why it survived three starters.** The page looks nearly right, so nothing about
+the failure recruits attention. `app/layout.tsx` now states the defect at that size, and names the
+easy version it is refusing: *"'the app renders on fallbacks' is the easy version and it is wrong."*
+
+The finding is not written down anywhere as one thing; each pass lives in its own PR body plus the
+comments it left in the starter it touched. That is why it is here. The single best in-tree statement
+is the block comment at the top of `examples/starters/nextjs/app/layout.tsx`, which is also the only
+place all three passes appear together. Do not look for this in
+`docs/package-consumer-issues.md`: its `theme.css` entry is a **different** defect, about token
+collisions inside a consumer that *does* run Tailwind.
+
+**The over-broad version is still in the tree, in the starter where the defect was first found.**
+#220's body says "Every comment stating the defect now states it at that size", and that is false:
+`git show --stat 12a51da -- examples/starters/tanstack-start/` is empty, and
+`examples/starters/tanstack-start/src/routes/__root.tsx` still reads that every `--color-*` token
+resolves to nothing and *"the app renders with the fallbacks"*, with the starter's README carrying the
+unqualified version too. The corrected size exists only in the Next starter and in `frameworks.ts`.
+
+Notice what that is. #220 measured the narrow claim, wrote it into the file in front of it, and then
+stated the sweep in the perfect tense without doing it, **inside the PR that establishes narrowness as
+the finding**. Nobody was careless; the third pass simply had no reason to open the first pass's
+starter. That is the cost of a finding whose only home is a series of PR bodies, and it is a concrete
+job for whoever picks this up: propagate the narrowed wording to TanStack, or delete the wording there
+and point both starters at one place.
+
+### 11.3 #218 turned that into a rule, and pass two is the rule's own evidence
+
+**`CLAUDE.md` gained one line**, and it is worth reading whole rather than in summary:
+
+> **Before generalising a fix into a rule, name a second instance of the class and check the rule
+> against it** [...] The second instance is nearly always already in the tree and cheap to check [...]
+> **The wrong version is always the more quotable one**: the compression is what drops the qualifier
+> that made it true, so a finding that shortens into something satisfying is exactly when to distrust
+> it.
+
+The commit message names three cases from one session where the obvious generalisation would have
+introduced a new defect and the counter-example was already sitting in the tree: the ARIA role a
+linter wanted on `kai-button`'s host (§5.4), "an absent `accept` means the full capability set"
+(§9.6), and this one.
+
+Two things about it are worth carrying. First, **the rule is downstream of §11.2 rather than applied
+to it**: #218 landed after the Solid counter-example had been found, so the theme.css entry is the
+rule's evidence, not its first customer. Second, the tell it names is testable on this document. §4's
+heading is more quotable than the table it points at, and it is the sentence that went wrong.
+
+### 11.4 The title guard grew a parser, and collected a limit that had been handed forward (#219)
+
+§5.10 recorded `titleProblems`'s stated limit: it read HTML documents, the two SSR starters declared
+their titles in JS, and both were `planned`, so the gap belonged to "whoever makes an SSR row ready".
+#219 is that person, and the docblock now opens by saying so:
+`READS JS-DECLARED TITLES TOO, which is what the note here used to hand to "whoever makes an SSR row ready"`.
+
+`documentTitles` in `packages/create-kai/src/template-guards.ts` dispatches HTML to the old regex and
+everything else to a **TypeScript compiler API parse**, loaded through `createRequire` rather than a
+static import because the module has to load under `scripts/build.mjs`. Three shapes, each a framework
+contract rather than a guess: Next's `export const metadata` and `generateMetadata()` (walking every
+`ReturnStatement` at any depth), a `{ title }` entry in a `meta:` array for TanStack Start and unhead,
+and `document.title =` anywhere.
+
+**Why a parse and not a regex is measured, not argued.** The two SSR starters carry eight `title:`
+fields that are not document titles: card headings, conversation names, a JSX attribute. A regex that
+reaches the two real ones reports all eight.
+
+**It states a narrower limit rather than claiming the class closed**, under `WHAT IS STILL NOT GRADED`:
+computed titles, Next's `title.template`, `.vue` and `.svelte` script blocks, and titles set through an
+indirection. Read "the JS-declared-title class is closed" as shorthand and check that list before
+relying on it.
+
+#219 is five loose ends, one commit each so any one reverts alone, and the other four are: the
+`frameworks.ts` header (stale in **both** halves after #216, plus a third stale reference to the
+long-renamed `verifyAppPath`); the template copy filter, now derived from each starter's own
+`.gitignore` because a flat basename set could not see a path like `src/routeTree.gen.ts`; a third
+hand-written element count in `docs/web-components.md`, **removed rather than derived**, because
+deriving it would have shipped a claim that is false; and an emitted-project test block for Solid,
+the one `ready` row that had none.
+
+### 11.5 An audit that read as complete recorded one of three `paths` problems (#220)
+
+#219's audit of the `nextjs` row is a good audit. It ran before the work, it found two live defects
+invisible at the time because a `planned` row is never graded against its template, and it wrote them
+into the table under a heading reading "TWO THINGS THIS ROW WILL WALK INTO, both found while auditing
+it". Both were real: `paths.css` named a file the starter did not have, and the theme.css import
+(§11.2).
+
+**#220 found two more in the same block**, and the distinction between them matters more than the
+count:
+
+- **`paths.components` was `'app'` and is now `'app/components'`. This one was a genuine defect and
+  the audit missed it.** It pointed at a real directory, so `declaredPathsProblem` passed it: that
+  rule only checks existence. A v2 `add` reads this field to decide where to WRITE a generated
+  component, and `app` would have scattered them among the route files. **An existence check cannot
+  see a path that exists and is wrong**, which is the same shape as §5.5 one axis over.
+- **`paths.app` moved from `'app/page.tsx'` to `'app/workspace.tsx'`, and calling that an error would
+  be wrong.** The old value named a file that existed; what it lacked was the `toOpenAIMessages(...)`
+  expression `appPathProblem` requires, and #219's own text said so explicitly and called it the guard
+  working. The value moved because the composed workspace landed in the client island rather than the
+  Server Component page. A consequence of the rewrite, not a defect the audit overlooked.
+
+**The transferable part is the first one. An audit that reads as complete is worth distrusting,
+especially when it names a sibling field**: recording `paths.css` made the whole `paths` block look
+inspected. The cheap defence is to say which keys were checked and against what, since
+`declaredPathsProblem` skips `env` and `app` by design and only tests existence for the rest.
+
+### 11.6 Three tests that had run out of a subject (#220)
+
+Every shipped row is now `composedWorkspace: true`, so a test needing "a framework with no composed
+starter" has nothing in the table to point at. Three tests were in that position and #220 re-pointed
+them. What each one actually did is more instructive than the summary:
+
+- **`catalog.test.ts`, "has a composed workspace behind every shipped framework".** The only one with
+  a true vacuity guard, and **it fired**: it filtered `FRAMEWORKS` on `!f.composedWorkspace` and
+  asserted the result was not empty, with the message *"every framework now has a composed workspace,
+  so this gap is closed and this test has no subject"*. It now asserts the shipped table directly and
+  stays live as the tripwire for the next framework added.
+- **`catalog.test.ts`, "refuses a composed-only feature on a framework with no composed starter".**
+  Hardcoded `getFramework('nextjs')`. **No vacuity guard**; it would simply have failed. This is the
+  one that now builds a **synthetic row**: `{ ...react, id: 'synthetic', composedWorkspace: false }`.
+- **`generate.test.ts`, "refuses at the surface gate rather than emitting a project without the
+  feature".** Also hardcoded `'nextjs'`. It now uses a **synthetic feature id** on a real framework,
+  not a synthetic row.
+
+**The mechanism is not the one the flip suggests.** None of the three selected on `status: 'planned'`.
+One filtered on `composedWorkspace`, two named `nextjs` outright. `nextjs` happened to be
+simultaneously the last `planned` row and the last non-composed row, which is why one flip took all
+three subjects at once and why the coincidence reads like a cause.
+
+**The lesson is the fix, not the failure.** A test whose specimen is whichever real row is currently
+off is a test the next success deletes. Synthetic rows cost nothing and cannot be flipped out from
+under the assertion. Where the property is genuinely about the shipped table, assert it about the
+shipped table and let it be the tripwire.
+
+### 11.7 The strongest evidence in this round is not executable
+
+**Worth stating plainly, because it is a different failure from the one §5 catalogues and it is easy
+to feel good about.** The two sharpest empirical claims from these PRs are:
+
+- #216 and #220: the server emits `<kai-thread>` with **no `messages` attribute**, and the elements
+  register after hydration.
+- #217: **0 of 4** rows carried a speaker name on the old Solid starter against **6 of 6** after,
+  measured by running the old version on a second port rather than asserting the fix.
+
+Both were really measured, in a real browser, and both are recorded only in PR bodies and commit
+messages. **Neither run is in the tree and neither runs in CI**, so neither can detect a regression.
+What the starters carry instead is prose: the TanStack README tells the reader to `curl` the app and
+look, which is an instruction, not an assertion.
+
+**The SSR half is unguarded outright.** `grep -rn "messagesAttr\|SSR emitted\|messages= attribute"`
+returns nothing, and the three SSR scripts in `packages/ui/scripts/` are a different axis: `verify:ssr`
+proves the module graph resolves under the `node` condition and that components survive execution in a
+DOM-free process. Neither reads a rendered document for `<kai-thread>` or for the absence of a
+`messages` attribute. `verify-starters.mjs` says as much about itself, calling itself the compile floor
+and naming "an array passed as an HTML attribute instead of a JS property" as the exact class it cannot
+see, which is the class these probes were built to check.
+
+**The a11y half is guarded, and saying "not in the tree" would be wrong. Say which surface instead.**
+#176 left a deliberate pair, and the pairing is the model to copy:
+
+- `packages/ui/tests/elements/thread-row-speaker.test.tsx` is the **cheap CI guard**. It asserts the
+  attributes that produce the accessible role and name, always through a populated `<kai-thread>` or
+  `<kai-chat>` and never by constructing a `<Message>`, because the original defect was an isolated
+  test staying green while the fix reached nobody through the primary path.
+- `packages/ui/scripts/probe-thread-row-semantics.mjs` is **the evidence**: Playwright plus a CDP read
+  of chromium's real accessibility tree, joined to the DOM by `backendNodeId`, since jsdom has no
+  accessibility tree to compute a name from. Both files carry the same warning against citing their
+  axe line as coverage, because axe was measured reporting zero violations over a fully unlabelled
+  thread.
+
+**What that pair does not cover is the surface these PRs were working on.** It drives the kit's
+elements; nothing points it at the starters, and `scaffold.test.ts` makes no speaker or `aria-label`
+assertion at all. The probe is also **unwired**: `grep -rn "probe-thread-row-semantics"` over every
+`package.json` and workflow returns nothing, so the computed-AX half runs only when somebody types it.
+Read §11.8 next. A good guard aimed at one surface is exactly how the same defect survives on another.
+
+§5 is about checks that pass while covering nothing. This is the mirror image: **coverage that was
+genuine at the moment it was taken and left nothing behind.** Anyone continuing this work should
+assume the SSR contract is unguarded until they see the guard, and should treat wiring that probe up
+as cheaper than the next round of manual browser runs.
+
+One consequence for reading #217's numbers: the denominators differ because they are different apps
+with different seed threads, so it is 0% against 100% rather than a four-to-six improvement in one
+thread. Do not confuse them with #176's own figures, which were 1 of 6 against 6 of 6 through
+`<kai-thread>`.
+
+### 11.8 Still open: the instance #176 named is not the instance that got fixed
+
+**#176 is a PR, not an issue**, and its sweep filed the emitted Solid front end in
+`packages/ui/src/agent-tooling/mcp/tools/scaffold.ts` as unfixed: the emitter reads `m().role` for
+alignment classes and never passes it to `<Message>`, so every scaffolded Solid app ships unlabelled
+rows. #217 fixed **the Solid starter**, which had the same shape, and its comment says so:
+*"That is #176: every framework reading `m.role` for its alignment classes and then not passing it
+on."*
+
+**The scaffolder's copy is unchanged at this SHA, and nothing asserts it.** Derive both:
+
+```
+grep -n "role=" packages/ui/src/agent-tooling/mcp/tools/scaffold.ts
+grep -n "speaker\|aria-label" packages/ui/src/agent-tooling/mcp/scaffold.test.ts
+```
+
+Both return nothing. The emitted `<Message>` around line 3502 still takes only `class`, and the
+scaffold suite has no assertion about a speaker name to fail. So the second instance was found and
+fixed while the first stayed open, which is #218's rule running in the direction nobody warns about:
+naming a second instance is what makes a rule safe to generalise, and it is also how the original ends
+up the one left behind. This is not tracked by any PR, and it is the highest-value item this section
+leaves: every Solid app scaffolded by the `kai` MCP still ships unlabelled message rows.
+
+### 11.9 §6 and §9.7 corrections
+
+**§6 item 1, the three chat apps, is SHIPPED.** §11.1. Nothing on §6's list is `create-kai` work any
+more; item 3, re-measuring the timeout budget on a quiet box, is the only one still open, and
+`packages/ui/scripts/measure-timings.mjs` still exists for it.
+
+**§6's Solid title bullet was right as a prediction and is now wrong as a description.** It said the
+title "becomes a real edit only when someone writes the Solid chat app", and #217 is that PR: the file
+was retitled and given the scaffold-time patch every other starter has, and `titleProblems` caught it
+on the first build with the status flipped, exactly as the bullet said it would. The old string
+survives as `HISTORICAL_SOLID_TITLE` in `test/template-guards.test.ts`, because fixing the starter
+removed the tree's only specimen of a title no name-anchored pattern can see. A new sweep now asserts
+over every starter's real title instead.
+
+**§6's angular.json bullet is unchanged and still correct.** All four sites still read
+`ui-example-angular`, and they should; the rename is a scaffold-time patch. Do not "fix" the starter.
+
+**§9.7's pairing of those two bullets as "both still true" is now half right**, which is worth one
+sentence of method. §6 quoted the Solid title; §9.7 described it as "still carries its own title".
+The description survived the change and stayed readable while being wrong about the string. **Quoting
+is what makes a claim falsifiable by grep**, and paraphrasing a quoted claim in a later section is how
+a document launders a fact it can no longer check.
+
+**§5.10's stated limit on `titleProblems` is closed**, by the person it was handed to. §11.4.
+
+### 11.10 What this section's commissioning narrative got wrong
+
+Same discipline as §8 and §9.8. The narrative was substantially right about structure again, and it
+was right about the theme.css finding in a way that mattered, having correctly identified it as one
+finding with three passes before this document checked it. Four claims did not survive, and the shape
+of the failures **moved**: §8 and §9.8 both found six status claims and two structural ones, while
+these four are almost all **attribution**, meaning who established a fact rather than whether it is
+true.
+
+1. **"#217 proved Solid imports the same file safely."** The fact is verified and the attribution is
+   not. #217's PR body never raises `theme.css`, it did not touch
+   `examples/starters/solid/src/styles.css`, and the three times its diff does say `theme.css` are all
+   about the `.dark` variant rather than about source versus compiled (§11.2). The counter-example was
+   found by whoever wrote #218, in the tree, after #217 landed. That is a better story than the one
+   offered, because it is the rule #218 was adding doing exactly what it says: *"the second instance
+   is nearly always already in the tree and cheap to check."* The narrative gave the credit to the PR
+   that made Solid prominent rather than to the pass that checked it.
+2. **"#220 found it a third time in Next."** #219's audit found it, before any Next.js work started,
+   and wrote it into the `frameworks.ts` row. #220 fixed it and measured the blast radius. Splitting
+   those two is what makes §11.5's point land: the same audit that found this one missed
+   `paths.components`, so it is not a story about one PR being thorough.
+3. **"#220 fixed two more `paths` errors."** One error and one move. `paths.components` was a genuine
+   defect the audit missed; `paths.app` moved because the workspace moved into the island, and #219's
+   own text had already named that file as the one `appPathProblem` would stop on. §11.5.
+4. **"Three tests were written against whichever framework was still `planned`, and their own vacuity
+   guards fired."** Three tests is right and the mechanism is wrong twice. None selected on `status`:
+   one filtered on `composedWorkspace`, two hardcoded `'nextjs'`. Only the first had a real vacuity
+   guard, and only the second re-points at a synthetic **row**; the third uses a synthetic feature id.
+   §11.6.
+
+Two smaller ones, recorded because the wording would mislead rather than because the substance is
+wrong. **"#216 kept the SSR proof and strengthened it"** is true of the demonstration and false of any
+assertion: there was no committed check before or after, which is §11.7. And **"removed the `<Chat>`
+drop-in rather than keeping a second route"** describes a rejected alternative; no second route ever
+existed to remove.
 
 ---
 
