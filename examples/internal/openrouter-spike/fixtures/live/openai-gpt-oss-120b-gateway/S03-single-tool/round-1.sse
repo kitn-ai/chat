@@ -1,0 +1,56 @@
+data: {"choices":[{"delta":{"reasoning":" need"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" to"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" call"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" get"}}]}
+
+data: {"choices":[{"delta":{"reasoning":"_weather"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" with"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" city"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" Paris"}}]}
+
+data: {"choices":[{"delta":{"reasoning":"."}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"chatcmpl-tool-956dd77582bd49c4af5d4d3cc90d238a","type":"function","function":{"name":"get_weather","arguments":""}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\n"}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":" "}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":" \""}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"city"}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\":"}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":" \""}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"Paris"}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\",\n"}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":" "}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":" \""}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"units"}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\":"}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":" \""}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"metric"}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"\n"}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"}"}}]}}]}
+
+data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":237,"completion_tokens":42,"total_tokens":279,"completion_tokens_details":{"reasoning_tokens":0}}}
+
+data: [DONE]
+

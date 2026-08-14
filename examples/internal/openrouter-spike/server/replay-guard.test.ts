@@ -6,8 +6,9 @@
 //
 // No key, no network, no server: these call the resolver directly.
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fixturePath, fixtureSlug, modelSlug, resolveWire } from './openrouter-proxy';
+import { fixturePath, fixtureSlug, gatewayModelFrom, modelSlug, resolveWire } from './openrouter-proxy';
 
 const ROOT = resolve('/tmp/spike-fixtures');
 
@@ -106,5 +107,50 @@ describe('fixtureSlug', () => {
     const slug = fixtureSlug('../../etc/passwd', 'anthropic');
     expect(slug).not.toContain('/');
     expect(slug).not.toContain('..');
+  });
+
+  it('separates the two BACKENDS of the same model on the same wire', () => {
+    // The gateway column and its OpenRouter control run the SAME pinned model id
+    // on the SAME wire — that is the entire point of the pair, since it makes
+    // any difference attributable to the integration. Which also means one
+    // directory name would serve both, and each run would overwrite the other's
+    // evidence: a comparison of a column against itself, with nothing to show
+    // for it but a plausible table.
+    const model = 'deepseek/deepseek-v4-flash-0731';
+    expect(fixtureSlug(model, 'openai', 'gateway')).not.toBe(fixtureSlug(model, 'openai', 'openrouter'));
+    expect(fixtureSlug(model, 'openai', 'gateway')).toBe('deepseek-deepseek-v4-flash-0731-gateway');
+  });
+
+  it('defaults to the openrouter backend, so every existing recording still resolves', () => {
+    const model = '~deepseek/deepseek-v4-flash-latest';
+    expect(fixtureSlug(model, 'openai')).toBe(fixtureSlug(model, 'openai', 'openrouter'));
+  });
+});
+
+describe('gatewayModelFrom', () => {
+  // The gateway column's model is not configurable HERE on purpose: the route
+  // pins it, and a server that could override it would make the two columns
+  // incomparable while still printing a tidy table. So it is read back out of
+  // the generated route, and this pins the one line that reading depends on.
+  it('reads the model the generated route pins', () => {
+    expect(gatewayModelFrom("const MODEL = 'deepseek/deepseek-v4-flash-0731';")).toBe(
+      'deepseek/deepseek-v4-flash-0731',
+    );
+  });
+
+  it('refuses to guess when the route stops pinning one', () => {
+    // Not a default. A guessed id would be recorded into a fixture directory
+    // named after a model that never ran.
+    expect(() => gatewayModelFrom('const model = getModel();')).toThrow(/no `const MODEL/);
+  });
+
+  it('reads the REAL generated route, so the two cannot drift', () => {
+    // The check that survives an edit to the integration: whatever the shipped
+    // route pins right now has to be readable by the rule above.
+    const source = readFileSync(
+      new URL('./generated/vercel-ai-sdk-route.ts', import.meta.url),
+      'utf8',
+    );
+    expect(gatewayModelFrom(source)).toMatch(/^[\w.~-]+\/[\w.-]+$/);
   });
 });

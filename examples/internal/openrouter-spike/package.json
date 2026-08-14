@@ -14,6 +14,9 @@
     "conformance": "playwright test --config harness/playwright.config.ts",
     "conformance:live": "SPIKE_MODE=live playwright test --config harness/playwright.config.ts",
     "conformance:control": "SPIKE_CONTROL=1 playwright test --config harness/playwright.config.ts",
+    "gateway:route": "node harness/emit-gateway-route.mjs",
+    "conformance:gateway": "npm run gateway:route && SPIKE_BACKEND=gateway SPIKE_PORT=5186 playwright test --config harness/playwright.config.ts",
+    "conformance:gateway:live": "npm run gateway:route && SPIKE_MODE=live SPIKE_BACKEND=gateway SPIKE_PORT=5186 playwright test --config harness/playwright.config.ts",
     "conformance:matrix": "node harness/run-matrix.mjs",
     "reasoning:coverage": "node harness/reasoning-coverage.mjs"
   },

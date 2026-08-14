@@ -1,0 +1,42 @@
+data: {"choices":[{"delta":{"reasoning":" have"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" Paris"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" weather"}}]}
+
+data: {"choices":[{"delta":{"reasoning":"."}}]}
+
+data: {"choices":[{"delta":{"reasoning":" Need"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" get"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" Tokyo"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" next"}}]}
+
+data: {"choices":[{"delta":{"reasoning":"."}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"chatcmpl-tool-5cfff3bcd89342c7a5eb9576d5988b2c","type":"function","function":{"name":"get_weather","arguments":""}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\""}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"city"}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\":\""}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"Tokyo"}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\",\""}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"units"}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\":\""}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"metric"}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"}"}}]}}]}
+
+data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":355,"completion_tokens":35,"total_tokens":390,"completion_tokens_details":{"reasoning_tokens":0}}}
+
+data: [DONE]
+

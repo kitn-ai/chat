@@ -17,8 +17,9 @@
 // bytes are forwarded UNTOUCHED, which is what every integration template in the
 // kit's catalog tells a consumer to do. `readOpenAIStream` in the browser is
 // what parses them.
-import { loadEnv, type Plugin } from 'vite';
+import { loadEnv, type Plugin, type ViteDevServer } from 'vite';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { readFileSync } from 'node:fs';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, resolve, sep } from 'node:path';
 import type { AnthropicWireMessage, OpenAIWireMessage } from '@kitn.ai/ui/wire';
@@ -49,8 +50,29 @@ const DEFAULT_REPLAY_DELAY_MS = 8;
  *  a public bundle can influence, and it cannot drift from the recorded stream. */
 export type WireKind = 'openai' | 'anthropic';
 
+/**
+ * WHICH BACKEND ANSWERS `/api/chat`. `SPIKE_BACKEND`, default `openrouter`.
+ *
+ * `openrouter` — the original: POST OpenRouter's HTTP endpoint directly and
+ * forward its SSE bytes untouched.
+ *
+ * `gateway` — drive the SHIPPED `vercel-ai-sdk` route instead. That route calls
+ * `streamText()` against Vercel's AI Gateway and re-frames `result.fullStream`
+ * onto the OpenAI wire itself, so the browser half of this app is unchanged: it
+ * still POSTs `{ messages, tools }` and still parses the reply with
+ * `readOpenAIStream`. What differs is the entire server hop in between, which is
+ * exactly what the pair is here to measure. Run the same scenarios down both
+ * with the same pinned model and any difference is the integration.
+ *
+ * The route is not copied into this directory — see `harness/emit-gateway-route.mjs`.
+ */
+export type Backend = 'openrouter' | 'gateway';
+
 export interface ProxyEnv {
   key: string;
+  /** Which backend `/api/chat` uses this session. Server-owned, like the model
+   *  and the wire: it decides where a fixture lands and what a row means. */
+  backend: Backend;
   model: string;
   wire: WireKind;
   /** `off` / `none` omits the reasoning field entirely. */
@@ -73,9 +95,30 @@ function readEnv(root: string, mode: string): ProxyEnv {
   // '' = no prefix filter. Without it Vite hands back only VITE_* vars.
   const env = loadEnv(mode, envDir, '');
   const pick = (name: string) => env[name] || process.env[name] || '';
+  const backend: Backend = pick('SPIKE_BACKEND') === 'gateway' ? 'gateway' : 'openrouter';
+
+  // The gateway backend owns NEITHER the model nor the wire, and that is the
+  // point of running it: the route pins its own model in one const and re-frames
+  // its own stream. Both are read back off the generated route rather than
+  // configured here, so `/api/config` reports what is actually being driven and
+  // `SPIKE_EXPECT_MODEL` still has something true to check.
+  if (backend === 'gateway') {
+    return {
+      key: pick('AI_GATEWAY_API_KEY'),
+      backend,
+      model: gatewayModel(root),
+      wire: 'openai',
+      reasoningEffort: pick('OPENROUTER_REASONING_EFFORT') || 'medium',
+      maxTokens: Number(pick('OPENROUTER_MAX_TOKENS')) || DEFAULT_MAX_TOKENS,
+      fixtureDir: resolve(root, 'fixtures'),
+      record: (pick('OPENROUTER_RECORD') || '1') !== '0',
+    };
+  }
+
   const model = pick('OPENROUTER_MODEL') || DEFAULT_MODEL;
   return {
     key: pick('OPENROUTER_API_KEY'),
+    backend,
     // Passed through VERBATIM, including the leading `~` of the floating-latest
     // alias: `~deepseek/deepseek-v4-flash-latest` is a real, cheaper slug than
     // the pinned `deepseek/deepseek-v4-flash`.
@@ -88,6 +131,49 @@ function readEnv(root: string, mode: string): ProxyEnv {
     // the offline suite stronger than it found it.
     record: (pick('OPENROUTER_RECORD') || '1') !== '0',
   };
+}
+
+/** Where `emit-gateway-route.mjs` writes the shipped route. Relative to the Vite
+ *  root so `ssrLoadModule` can take the same string. */
+const GATEWAY_ROUTE_PATH = '/server/generated/vercel-ai-sdk-route.ts';
+
+/**
+ * The model the GENERATED route pins, read back out of its source.
+ *
+ * The route names its model in exactly one place — `const MODEL = '…'` — and
+ * nothing here may override it: an env var that could point the gateway column
+ * at a different model than the route ships with would make the pair of columns
+ * incomparable while still printing a tidy table. Reading it back is also what
+ * lets `/api/config` report a true model and `SPIKE_EXPECT_MODEL` stay honest.
+ *
+ * Throws rather than defaulting. A guessed model id would be recorded into a
+ * fixture directory named after a model that never ran.
+ */
+export function gatewayModelFrom(source: string): string {
+  const match = /^const MODEL = '([^']+)';$/m.exec(source);
+  if (!match) {
+    throw new Error(
+      'The generated vercel-ai-sdk route declares no `const MODEL = \'…\';` line, so this server ' +
+        'cannot say which model it is driving. Re-run `pnpm gateway:route`; if the route stopped ' +
+        'pinning a model in one const, this reader has to change with it.',
+    );
+  }
+  return match[1];
+}
+
+function gatewayModel(root: string): string {
+  const file = join(root, GATEWAY_ROUTE_PATH);
+  let source: string;
+  try {
+    source = readFileSync(file, 'utf8');
+  } catch {
+    throw new Error(
+      `No generated route at ${GATEWAY_ROUTE_PATH}. SPIKE_BACKEND=gateway drives the SHIPPED ` +
+        'vercel-ai-sdk route rather than a copy of it, so it has to be emitted first: run ' +
+        '`pnpm gateway:route` (every `conformance:gateway*` script already does).',
+    );
+  }
+  return gatewayModelFrom(source);
 }
 
 /**
@@ -150,9 +236,16 @@ export function modelSlug(model: string): string {
  *  recording be replayed into the Anthropic reader, which does not fail loudly —
  *  it yields an empty turn. The default wire for a non-Anthropic model keeps the
  *  bare slug, so every existing recording still resolves. */
-export function fixtureSlug(model: string, wire: WireKind): string {
+export function fixtureSlug(model: string, wire: WireKind, backend: Backend = 'openrouter'): string {
   const slug = modelSlug(model);
-  return wire === 'anthropic' ? `${slug}-anthropic-wire` : slug;
+  const wired = wire === 'anthropic' ? `${slug}-anthropic-wire` : slug;
+  // The BACKEND is part of the identity for the same reason the wire is, and
+  // sharper here: the gateway column runs the SAME pinned model id as its
+  // OpenRouter control, so without this the two would write into one directory
+  // and each run would silently overwrite the other's evidence — leaving a
+  // comparison of a column against itself. `openrouter` keeps the bare slug, so
+  // every existing recording still resolves.
+  return backend === 'gateway' ? `${wired}-gateway` : wired;
 }
 
 // ── what the server saw happen to a replayed stream ─────────────────────────
@@ -345,7 +438,7 @@ export function openrouterProxy(): Plugin {
           // The fixture directory name for this model AND wire, so the harness
           // can point a replay at the streams THIS configuration produced
           // without re-deriving the slug rule in two places.
-          modelSlug: fixtureSlug(env.model, env.wire),
+          modelSlug: fixtureSlug(env.model, env.wire, env.backend),
           // Which SSE dialect the client must parse this turn with. Server-owned
           // (see resolveWire): the browser reads it, it never chooses it.
           wire: env.wire,
@@ -368,7 +461,7 @@ export function openrouterProxy(): Plugin {
 
       // POST /api/chat: add the key, forward the upstream SSE byte for byte.
       server.middlewares.use('/api/chat', (req, res) => {
-        void handleChat(req, res, readEnv(root, mode), replayLog);
+        void handleChat(req, res, readEnv(root, mode), replayLog, server);
       });
     },
   };
@@ -400,6 +493,7 @@ async function handleChat(
   res: ServerResponse,
   env: ProxyEnv,
   replayLog: ReplayLog,
+  server: ViteDevServer,
 ): Promise<void> {
   if (req.method !== 'POST') return json(res, 405, { error: { message: 'POST only' } });
 
@@ -411,23 +505,26 @@ async function handleChat(
   }
 
   // REPLAY is checked BEFORE the key, on purpose: a replay turn must run with no
-  // key and no socket at all, which is what makes the offline suite offline.
+  // key and no socket at all, which is what makes the offline suite offline. It
+  // is also checked before the BACKEND branch: a replay is bytes off the disk,
+  // so which backend recorded them is already baked into the fixture path.
   if (body.replay) return handleReplay(res, env, body.replay, replayLog);
 
   if (!env.key) {
-    return json(res, 503, {
-      error: {
-        code: 'missing_key',
-        message:
-          'OPENROUTER_API_KEY is not set. Copy .env.example to .env.local and paste your key ' +
-          '(UNPREFIXED, never VITE_OPENROUTER_API_KEY), then restart the dev server.',
-      },
-    });
+    const missing =
+      env.backend === 'gateway'
+        ? 'AI_GATEWAY_API_KEY is not set. The vercel-ai-sdk route reads it out of the environment ' +
+          'itself, inside streamText(). Put it in .env.local (UNPREFIXED) and restart the dev server.'
+        : 'OPENROUTER_API_KEY is not set. Copy .env.example to .env.local and paste your key ' +
+          '(UNPREFIXED, never VITE_OPENROUTER_API_KEY), then restart the dev server.';
+    return json(res, 503, { error: { code: 'missing_key', message: missing } });
   }
 
   if (!Array.isArray(body.messages) || body.messages.length === 0) {
     return json(res, 400, { error: { message: '`messages` must be a non-empty array' } });
   }
+
+  if (env.backend === 'gateway') return handleGatewayChat(req, res, env, body, server);
 
   // The wire is a SERVER decision, and the client encoded its messages against
   // whatever `/api/config` told it. If those have drifted — a page left open
@@ -483,21 +580,40 @@ async function handleChat(
 
   // Forward the bytes UNTOUCHED. Every integration template in the catalog does
   // exactly this, so the spike now exercises the same path a consumer takes.
+  await forwardSse(res, upstream.body, upstream.headers.get('content-type'), env, body);
+}
+
+/**
+ * Stream one SSE body to the client and tee it into a fixture on the way past.
+ *
+ * Shared by both backends, and it has to be: a recording is the evidence a cell
+ * rests on, and a gateway column whose fixtures were written by a second,
+ * slightly different copy of this loop would be comparing two recording
+ * mechanisms as much as two integrations.
+ *
+ * The captured bytes are always the ones the BROWSER received, which never
+ * contain a request header and therefore never contain a key.
+ */
+async function forwardSse(
+  res: ServerResponse,
+  stream: ReadableStream<Uint8Array>,
+  contentType: string | null,
+  env: ProxyEnv,
+  body: ChatBody,
+): Promise<void> {
   res.statusCode = 200;
-  res.setHeader('Content-Type', upstream.headers.get('content-type') ?? 'text/event-stream');
+  res.setHeader('Content-Type', contentType ?? 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no'); // don't let a proxy buffer the stream
   res.flushHeaders?.();
 
   // Tee the raw bytes into a fixture when the turn is harness-tagged, so every
-  // live run leaves the offline suite one stream stronger than it found it. The
-  // captured bytes are the PROVIDER's, which never contain the request headers
-  // and therefore never contain the key.
+  // live run leaves the offline suite one stream stronger than it found it.
   const capture: Buffer[] | null =
     env.record && body.harness?.scenario && typeof body.harness.round === 'number' ? [] : null;
 
-  const reader = upstream.body.getReader();
+  const reader = stream.getReader();
   try {
     for (;;) {
       const { value, done } = await reader.read();
@@ -523,6 +639,97 @@ async function handleChat(
       await recordFixture(env, body.harness!.scenario!, body.harness!.round!, Buffer.concat(capture));
     }
   }
+}
+
+/** What the generated route exports. `next`'s adapter names it `POST`. */
+interface GatewayRouteModule {
+  POST(request: Request): Promise<Response>;
+}
+
+/**
+ * Drive the SHIPPED `vercel-ai-sdk` route.
+ *
+ * `ssrLoadModule` rather than a static import, for two reasons that both matter:
+ * the file is GENERATED (a static import would make a missing generation a Vite
+ * resolve error at server start instead of a legible message here), and it is
+ * loaded through Vite's own transform, so the route runs as TypeScript exactly
+ * as the scaffolder emitted it — no build step of ours in between.
+ *
+ * The request handed over is a real web `Request`, because that is the ONLY
+ * thing the route's signature accepts and building it here is the whole test:
+ * everything the browser sent that the route does not read is dropped on the
+ * floor by this line, which is what makes `forwardsFromClient` a claim rather
+ * than a hope.
+ */
+async function handleGatewayChat(
+  req: IncomingMessage,
+  res: ServerResponse,
+  env: ProxyEnv,
+  body: ChatBody,
+  server: ViteDevServer,
+): Promise<void> {
+  // The AI SDK reads AI_GATEWAY_API_KEY out of `process.env` ITSELF, inside
+  // streamText() — that is the case the integration's `keyExposure` comment
+  // calls out, and it is why grepping the route for a key finds nothing.
+  // `loadEnv` does NOT populate process.env, so the value read from .env.local
+  // is placed there once, in this server process, and nowhere else. It is still
+  // never logged, never echoed into an error body and never sent to the browser.
+  if (!process.env.AI_GATEWAY_API_KEY) process.env.AI_GATEWAY_API_KEY = env.key;
+
+  let route: GatewayRouteModule;
+  try {
+    route = (await server.ssrLoadModule(GATEWAY_ROUTE_PATH)) as unknown as GatewayRouteModule;
+  } catch (e) {
+    return json(res, 500, {
+      error: {
+        code: 'gateway_route_unloadable',
+        message:
+          `Could not load ${GATEWAY_ROUTE_PATH}: ${errorText(e)}. Run \`pnpm gateway:route\` to ` +
+          'regenerate it from the shipped integration.',
+      },
+    });
+  }
+  if (typeof route.POST !== 'function') {
+    return json(res, 500, {
+      error: {
+        code: 'gateway_route_shape',
+        message: `${GATEWAY_ROUTE_PATH} exports no POST handler. The scaffolder's next adapter emits one; regenerate.`,
+      },
+    });
+  }
+
+  const abort = new AbortController();
+  req.on('close', () => abort.abort());
+
+  let response: Response;
+  try {
+    response = await route.POST(
+      new Request('http://localhost/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // ONLY what a scaffolded front end posts. `cardMode`, `system` and
+        // `wire` are this spike's own fields and the route has never heard of
+        // them; passing them would be testing a route nobody ships.
+        body: JSON.stringify({ messages: body.messages, tools: body.tools }),
+        signal: abort.signal,
+      }),
+    );
+  } catch (e) {
+    // A throw here is the route failing BEFORE it returned a Response — a bad
+    // model id, a rejected key. It never reached the stream, so there is a
+    // status left to spend.
+    return json(res, 502, { error: { message: `The vercel-ai-sdk route threw: ${errorText(e)}` } });
+  }
+
+  if (!response.ok || !response.body) {
+    res.statusCode = response.status;
+    res.setHeader('Content-Type', response.headers.get('content-type') ?? 'application/json');
+    res.setHeader('Cache-Control', 'no-store');
+    res.end(await response.text().catch(() => ''));
+    return;
+  }
+
+  await forwardSse(res, response.body, response.headers.get('content-type'), env, body);
 }
 
 /** An Anthropic tool definition. Same JSON Schema, one level shallower and
@@ -668,6 +875,48 @@ export function isCompleteCapture(bytes: Buffer): boolean {
 }
 
 /**
+ * A stream that carried NOTHING BUT AN ERROR.
+ *
+ * `isCompleteCapture` asks whether the bytes end properly, and an error-only
+ * stream does: the route reports the failure in band and then closes with
+ * `data: [DONE]`, so it is a well-formed recording of a turn that never
+ * happened. Written under a replayable name it is worse than a missing fixture,
+ * because a missing one reports as `skip` — a MISSING measurement — while this
+ * one replays as a real stream and reads as a model that answered with an error.
+ *
+ * That is not hypothetical either. The AI Gateway's free tier rate-limited the
+ * S04 tool loop mid-run; the retry was refused on round 1, and the one-frame
+ * error stream it produced OVERWROTE the two good tool rounds the first attempt
+ * had recorded — because round 1 empties the directory. Two rounds of real
+ * evidence replaced by a billing message, silently.
+ *
+ * "Nothing but" is the whole test: a stream that produced text or a tool call
+ * and THEN failed is a genuine recording of a provider failure (S16 exists for
+ * exactly that) and is kept.
+ */
+export function isErrorOnlyCapture(bytes: Buffer): boolean {
+  let sawError = false;
+  for (const line of bytes.toString('utf8').split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('data:')) continue;
+    const payload = trimmed.slice(5).trim();
+    if (payload === '' || payload === '[DONE]') continue;
+    let frame: unknown;
+    try {
+      frame = JSON.parse(payload);
+    } catch {
+      return false; // unreadable, but not provably error-only
+    }
+    if (frame !== null && typeof frame === 'object' && 'error' in frame) {
+      sawError = true;
+      continue;
+    }
+    return false; // a frame that is not an error: this stream carried content
+  }
+  return sawError;
+}
+
+/**
  * Write one captured round to `fixtures/live/<model>/<scenario>/round-N.sse`.
  *
  * Two things this refuses to do, both of which shipped:
@@ -689,6 +938,16 @@ export function isCompleteCapture(bytes: Buffer): boolean {
  *    settled in two rounds left the previous run's round-3 in place — recorded
  *    against a conversation that no longer exists. Two of those shipped in
  *    e352545 and inflated that sweep's measured cost by $0.002437.
+ *
+ *  · RECORD A TURN THAT NEVER HAPPENED. An error-only stream is well formed and
+ *    terminated, so the truncation guard above waves it through — see
+ *    `isErrorOnlyCapture` for the run where that cost two rounds of real
+ *    evidence. It is parked at `.error` for the same reason a truncated one is
+ *    parked at `.partial`: diagnosable, unreachable.
+ *
+ *    And the ORDER matters. This is checked BEFORE the directory is emptied, so
+ *    a refused round 1 no longer deletes a good recording on its way to writing
+ *    nothing — which is the specific way the evidence was lost.
  */
 export async function recordFixture(
   env: ProxyEnv,
@@ -696,10 +955,21 @@ export async function recordFixture(
   round: number,
   bytes: Buffer,
 ): Promise<void> {
-  const dir = join(env.fixtureDir, 'live', fixtureSlug(env.model, env.wire), scenarioSlug(scenario));
+  const dir = join(env.fixtureDir, 'live', fixtureSlug(env.model, env.wire, env.backend), scenarioSlug(scenario));
   const file = join(dir, `round-${round}.sse`);
   const complete = isCompleteCapture(bytes);
+  const errorOnly = isErrorOnlyCapture(bytes);
   try {
+    if (errorOnly) {
+      await mkdir(dir, { recursive: true });
+      await writeFile(`${file}.error`, bytes);
+      console.warn(
+        `[spike] ${scenario} round ${round}: the stream carried nothing but an error frame, so this ` +
+          `is NOT a recording of the scenario and was not written as a fixture (and did not clear ` +
+          `any earlier one). Kept at ${file}.error for diagnosis.`,
+      );
+      return;
+    }
     if (round === 1) await rm(dir, { recursive: true, force: true });
     await mkdir(dir, { recursive: true });
     if (complete) {

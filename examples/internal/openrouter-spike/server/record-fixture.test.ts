@@ -53,6 +53,7 @@ let root: string;
 
 const env = (over: Partial<ProxyEnv> = {}): ProxyEnv => ({
   key: '',
+  backend: 'openrouter',
   model: '~deepseek/deepseek-v4-flash-latest',
   wire: 'openai',
   reasoningEffort: 'medium',
@@ -107,6 +108,52 @@ describe('a complete capture is still recorded', () => {
     await record('S01-plain-text', 1, `${COMPLETE}\n`);
 
     expect(existsSync(join(dirFor('S01-plain-text'), 'round-1.sse'))).toBe(true);
+  });
+});
+
+describe('an error-only capture is not a recording of the scenario', () => {
+  /** What the route emits when the provider refused the request outright: one
+   *  in-band error frame and a clean terminator. Well formed, complete, and
+   *  evidence of nothing. This exact shape is what the AI Gateway's free-tier
+   *  rate limit produced. */
+  const ERROR_ONLY =
+    'data: {"error":{"message":"Free tier requests on this model are rate-limited."}}\n\n' + DONE;
+
+  it('does not write round-N.sse, even though the stream terminated cleanly', async () => {
+    await record('S03-single-tool', 1, ERROR_ONLY);
+
+    expect(existsSync(join(dirFor('S03-single-tool'), 'round-1.sse'))).toBe(false);
+    expect(await listing('S03-single-tool')).toEqual(['round-1.sse.error']);
+  });
+
+  it('does NOT clear the rounds an earlier run recorded', async () => {
+    // The one that cost real evidence: a refused round 1 emptied the directory
+    // on its way to writing nothing, so two good tool rounds from the previous
+    // attempt went with it.
+    for (const round of [1, 2]) await record('S04-multi-round', round, COMPLETE);
+
+    await record('S04-multi-round', 1, ERROR_ONLY);
+
+    expect(await listing('S04-multi-round')).toEqual([
+      'round-1.sse',
+      'round-1.sse.error',
+      'round-2.sse',
+    ]);
+    expect(await readFile(join(dirFor('S04-multi-round'), 'round-1.sse'), 'utf8')).toBe(COMPLETE);
+  });
+
+  it('KEEPS a stream that produced content and then failed', async () => {
+    // The other half. S16 exists to cover a provider dying mid-stream, and that
+    // recording is real: the distinction is "nothing but an error", not "an
+    // error appears".
+    const FAILED_MIDWAY =
+      'data: {"choices":[{"delta":{"content":"hel"}}]}\n\n' +
+      'data: {"error":{"message":"upstream died"}}\n\n' +
+      DONE;
+
+    await record('S16-mid-stream-error', 1, FAILED_MIDWAY);
+
+    expect(await listing('S16-mid-stream-error')).toEqual(['round-1.sse']);
   });
 });
 

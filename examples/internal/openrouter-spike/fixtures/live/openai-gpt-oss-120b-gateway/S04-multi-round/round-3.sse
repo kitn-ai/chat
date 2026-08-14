@@ -1,0 +1,90 @@
+data: {"choices":[{"delta":{"reasoning":" need"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" also"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" Berlin"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" weather"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" sequential"}}]}
+
+data: {"choices":[{"delta":{"reasoning":"ly"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" waiting"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" for"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" each"}}]}
+
+data: {"choices":[{"delta":{"reasoning":"."}}]}
+
+data: {"choices":[{"delta":{"reasoning":" We"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" already"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" did"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" Paris"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" and"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" Tokyo"}}]}
+
+data: {"choices":[{"delta":{"reasoning":"."}}]}
+
+data: {"choices":[{"delta":{"reasoning":" Need"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" to"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" request"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" Berlin"}}]}
+
+data: {"choices":[{"delta":{"reasoning":"."}}]}
+
+data: {"choices":[{"delta":{"reasoning":" Then"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" produce"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" one"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" short"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" paragraph"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" comparing"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" them"}}]}
+
+data: {"choices":[{"delta":{"reasoning":"."}}]}
+
+data: {"choices":[{"delta":{"reasoning":" Use"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" tool"}}]}
+
+data: {"choices":[{"delta":{"reasoning":"."}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"chatcmpl-tool-98741c0126424b1f8c821772e1f7e22a","type":"function","function":{"name":"get_weather","arguments":""}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\""}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"city"}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\":\""}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"Berlin"}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\",\""}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"units"}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\":\""}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"metric"}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"}"}}]}}]}
+
+data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":445,"completion_tokens":59,"total_tokens":504,"completion_tokens_details":{"reasoning_tokens":0}}}
+
+data: [DONE]
+

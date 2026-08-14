@@ -162,6 +162,13 @@ async function runOne(entry) {
         // `resolveWire`, so this is the same wire `auto` used to pick.
         OPENROUTER_MODEL: entry.model,
         OPENROUTER_WIRE: entry.wire,
+        // Declared, like the wire and for the same reason. On a `gateway` column
+        // the proxy IGNORES the two lines above — that route pins its own model
+        // and re-frames its own stream — and `SPIKE_EXPECT_MODEL` below is what
+        // holds the declaration and the route's pinned id together: change one
+        // without the other and the suite refuses the row rather than measuring
+        // it against the wrong recordings.
+        SPIKE_BACKEND: entry.backend,
         SPIKE_PORT: String(entry.port),
         SPIKE_MODE: MODE,
         SPIKE_EXPECT_MODEL: entry.model,

@@ -1,6 +1,6 @@
 // Types for `reasoning-coverage.mjs`, which stays JavaScript so `run-matrix.mjs`
 // can use it under bare node with no build step.
-import type { MatrixWire } from './models.mjs';
+import type { MatrixBackend, MatrixWire } from './models.mjs';
 
 /** Where a dialect puts its thinking-token count inside `usage`. */
 export interface UsageField {
@@ -13,9 +13,22 @@ export interface UsageField {
  *  parameter is `unknown` so the throwing branch is reachable from a test. */
 export declare function usageFieldFor(wire: unknown): UsageField;
 
-/** `fixtures/live/<dir>` for a (model, wire) pair. Pinned against the proxy's own
- *  `fixtureSlug` by `server/reasoning-coverage.test.ts`. */
-export declare function fixtureDirFor(model: string, wire: MatrixWire): string;
+/** `fixtures/live/<dir>` for a (model, wire, backend) triple. Pinned against the
+ *  proxy's own `fixtureSlug` by `server/reasoning-coverage.test.ts`.
+ *
+ *  `backend` is optional and defaults to `'openrouter'`, matching the .mjs — the
+ *  four original columns predate the backend axis and call it with two
+ *  arguments. Mirroring that default HERE rather than making the parameter
+ *  required is what keeps this declaration honest about the function it
+ *  describes: this file is hand-written, so tsc checks every caller against
+ *  whatever it claims and never against the implementation. Adding the parameter
+ *  to the .mjs and not to this line is precisely the drift that turned the
+ *  spike's typecheck red. */
+export declare function fixtureDirFor(
+  model: string,
+  wire: MatrixWire,
+  backend?: MatrixBackend,
+): string;
 
 export interface RoundReading {
   /** Whether the recording ends with `data: [DONE]`. False means the stream died

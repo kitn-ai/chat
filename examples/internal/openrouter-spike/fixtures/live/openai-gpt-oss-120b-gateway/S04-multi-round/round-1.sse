@@ -1,0 +1,92 @@
+data: {"choices":[{"delta":{"reasoning":" need"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" to"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" get"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" weather"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" for"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" Paris"}}]}
+
+data: {"choices":[{"delta":{"reasoning":","}}]}
+
+data: {"choices":[{"delta":{"reasoning":" then"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" Tokyo"}}]}
+
+data: {"choices":[{"delta":{"reasoning":","}}]}
+
+data: {"choices":[{"delta":{"reasoning":" then"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" Berlin"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" sequential"}}]}
+
+data: {"choices":[{"delta":{"reasoning":"ly"}}]}
+
+data: {"choices":[{"delta":{"reasoning":","}}]}
+
+data: {"choices":[{"delta":{"reasoning":" waiting"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" each"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" result"}}]}
+
+data: {"choices":[{"delta":{"reasoning":"."}}]}
+
+data: {"choices":[{"delta":{"reasoning":" So"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" first"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" call"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" get"}}]}
+
+data: {"choices":[{"delta":{"reasoning":"_weather"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" for"}}]}
+
+data: {"choices":[{"delta":{"reasoning":" Paris"}}]}
+
+data: {"choices":[{"delta":{"reasoning":"."}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"chatcmpl-tool-be2f4ee08ea343a5a26ce2a883a33e6a","type":"function","function":{"name":"get_weather","arguments":""}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\n"}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":" "}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":" \""}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"city"}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\":"}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":" \""}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"Paris"}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\",\n"}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":" "}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":" \""}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"units"}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\":"}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":" \""}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"metric"}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"\n"}}]}}]}
+
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"}"}}]}}]}
+
+data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":264,"completion_tokens":60,"total_tokens":324,"completion_tokens_details":{"reasoning_tokens":0}}}
+
+data: [DONE]
+
