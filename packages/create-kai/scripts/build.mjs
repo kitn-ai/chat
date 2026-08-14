@@ -179,11 +179,12 @@ async function main() {
 
   const { FRAMEWORKS } = await loadTs('src/frameworks.ts');
   const { patchesFor, gatewayPatchesFor } = await loadTs('src/patches.ts');
-  const { PREAMBLE_SYMBOLS, CLIENT_MODEL_IDS } = await loadTs('src/routes.ts');
+  const { emitRoute, emittedPreambleSymbols } = await loadTs('src/routes.ts');
   // The catalog reaches into the kit, so this is the one loaded module that
   // needs its `zod` left resolvable — `loadTs` keeps it external and the import
   // below resolves it out of the package's own node_modules.
-  const { WIRED_GATEWAYS, getIntegration } = await loadTs('src/catalog.ts');
+  const { WIRED_GATEWAYS, BROWSER_WIRE, EMITTED_READER_FORMAT, getIntegration } =
+    await loadTs('src/catalog.ts');
   // `GITIGNORE_TEMPLATE_NAME` is read from `generate.ts` rather than restated
   // here. `generate()` is what renames it back, so a local copy that drifted
   // would have this build write a name the CLI never looks for — and nothing
@@ -194,17 +195,29 @@ async function main() {
   const ready = FRAMEWORKS.filter((f) => f.status === 'ready');
   failIf(guards.readyFrameworksProblem(ready));
 
-  // Every wired gateway's route must be emittable with the preamble this CLI
-  // carries. Checked once, before any template work: it is a property of the
-  // catalog, not of a template, and it is the check standing behind the one
-  // thing `src/routes.ts` duplicates from the kit.
+  // Every wired gateway must emit a route that compiles and a stream the emitted
+  // front end can read. Both are properties of the (gateway, framework) pair
+  // rather than of a template, so they run over the real route this build would
+  // write — for every framework that declares somewhere to put one.
+  //
+  // There is no model check here any more. `defaultModelFor` throws for an
+  // integration that forwards `model` with no id registered, so the failure
+  // already happens at this moment, from the one place that owns the table.
   for (const gatewayId of WIRED_GATEWAYS) {
     if (gatewayId === 'mock') continue;
     const integration = getIntegration(gatewayId);
-    failIf(guards.routeSymbolsProblem(gatewayId, integration?.webRoute, PREAMBLE_SYMBOLS));
-    failIf(
-      guards.routeModelProblem(gatewayId, integration?.forwardsFromClient ?? [], CLIENT_MODEL_IDS),
-    );
+    failIf(guards.routeWireProblem(gatewayId, BROWSER_WIRE, EMITTED_READER_FORMAT));
+    for (const framework of ready.filter((f) => f.route)) {
+      const [route] = integration ? emitRoute(integration, framework) : [];
+      failIf(
+        guards.routeSymbolsProblem(
+          gatewayId,
+          integration?.webRoute,
+          route?.contents ?? '',
+          emittedPreambleSymbols(integration ?? {}),
+        ),
+      );
+    }
   }
 
   let patchCount = 0;

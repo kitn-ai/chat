@@ -68,11 +68,11 @@ interface PlacementStyle {
   altNote?: string[];
 }
 
-// The chat element must fill its container. In a `display: flex; flex-direction:
-// column` shell it's a flex child (`flex: 1; min-height: 0`); in a plain block
-// container it fills via `height: 100%`.
+// The chat element must fill its container. Every placement below is a
+// `display: flex; flex-direction: column` shell, so the element is always a flex
+// child and this is the only fill there is. A `height: 100%` variant for a plain
+// block container used to sit here beside it; nothing ever selected it.
 const FLEX_FILL = 'flex: 1; min-height: 0;';
-const BLOCK_FILL = 'height: 100%; width: 100%;';
 
 /**
  * full-page, and it has to be true in a STOCK starter — not just in an empty page.

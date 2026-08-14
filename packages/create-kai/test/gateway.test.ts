@@ -19,13 +19,22 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { routeModelProblem, routeSymbolsProblem } from '../src/build-guards';
-import { WIRED_GATEWAYS, getIntegration, wirableGateway } from '../src/catalog';
+import { routeSymbolsProblem, routeWireProblem } from '../src/build-guards';
+import {
+  BROWSER_WIRE,
+  EMITTED_READER_FORMAT,
+  WIRED_GATEWAYS,
+  getIntegration,
+  wirableGateway,
+} from '../src/catalog';
 import { generate, renderEnvFile } from '../src/generate';
 import { FRAMEWORKS, getFramework } from '../src/frameworks';
 import { rewritePackageJson } from '../src/package-json';
-import { CLIENT_MODEL_IDS, PREAMBLE_SYMBOLS, clientModelFor, emitRoute } from '../src/routes';
+import { clientModelFor, emitRoute, emittedPreambleSymbols } from '../src/routes';
 import type { ProjectPlan } from '../src/types';
+
+/** The keyed gateways this release wires, which is what most of this file loops. */
+const KEYED = [...WIRED_GATEWAYS].filter((id) => id !== 'mock');
 
 const TEMPLATE_ROOT = path.resolve(__dirname, '../dist/templates');
 
@@ -45,75 +54,125 @@ const plan = (dir: string, over: Partial<ProjectPlan> = {}): ProjectPlan => ({
 const wirable = (gatewayId: string) =>
   FRAMEWORKS.filter((f) => f.status === 'ready' && wirableGateway(gatewayId, f) === null);
 
-describe('routeSymbolsProblem — the guard standing behind the duplicated preamble', () => {
-  it('refuses a route needing a preamble this CLI does not carry', () => {
-    // The real shape of the failure: anthropic, mastra and vercel-ai-sdk all
-    // re-map message content and call the kit's `wireParts` / `wireText`
-    // helpers, which are injected by a SECOND private preamble create-kai has
-    // no copy of. Wiring one of them without noticing emits a route that does
-    // not compile, and the user's `npm run build` is the only other thing that
-    // would catch it.
-    const problem = routeSymbolsProblem(
-      'anthropic',
-      'async function chatHandler(r: Request) { const b = await readChatRequest(r); return wireText(b.messages[0].content); }',
-      PREAMBLE_SYMBOLS,
-    );
-    expect(problem).toContain('wireText');
-    expect(problem).toContain('WIRED_GATEWAYS');
+describe('routeSymbolsProblem — grades the EMITTED route, not the kit', () => {
+  /**
+   * WHAT THIS RULE IS FOR NOW. Until the kit exported `chatRoutePreamble`, this
+   * package carried a hand-copied preamble and this guard watched it for drift.
+   * There is one source now, so that question cannot be wrong and a guard over
+   * it would be machinery over nothing.
+   *
+   * What survives is one step later: `emitRoute` decides whether the kit's
+   * declarations actually reach the file. Every case below is a way this
+   * package can ship a non-compiling route while the kit's own tests stay green,
+   * because the kit never sees this file.
+   */
+  it('catches an emitted route that dropped the preamble it was handed', () => {
+    const anthropic = getIntegration('anthropic')!;
+    const required = emittedPreambleSymbols(anthropic);
+    // anthropic is the case that matters: its route calls wireParts/wireText, so
+    // the kit hands back the content helpers as well as the body narrowing.
+    expect(required).toContain('wireParts');
+
+    const problem = routeSymbolsProblem('anthropic', anthropic.webRoute, anthropic.webRoute!, required);
+    expect(problem).toContain('does not declare');
+    expect(problem).toContain('emitRoute');
   });
 
-  it('refuses a route that references none of the injected helpers', () => {
-    // The reverse failure, and the one that protects the duplicate itself:
-    // every webRoute in the catalog narrows its body through `readChatRequest`,
-    // so a wired route that references nothing means the kit changed the
-    // preamble contract and src/routes.ts is now a stale copy of it.
+  it('is not fooled by a name the fragment merely CALLS', () => {
+    // The fragment calls `readChatRequest`, so a substring test over the emitted
+    // file would pass on a file that dropped every declaration. This asserts the
+    // rule looks for a declaration.
     const problem = routeSymbolsProblem(
-      'someone',
-      'async function chatHandler(r: Request) { return fetch("https://example.test"); }',
-      PREAMBLE_SYMBOLS,
+      'x',
+      'async function chatHandler(r: Request) { return readChatRequest(r); }',
+      'async function chatHandler(r: Request) { return readChatRequest(r); }',
+      ['readChatRequest'],
     );
-    expect(problem).toContain('stale copy');
+    expect(problem).toContain('does not declare');
   });
 
   it('refuses a wired gateway with no webRoute at all', () => {
-    expect(routeSymbolsProblem('pi', undefined, PREAMBLE_SYMBOLS)).toContain('no webRoute');
+    expect(routeSymbolsProblem('pi', undefined, '', [])).toContain('no webRoute');
   });
 
-  it('passes every gateway actually wired today, against the real catalog', () => {
-    // Not a synthetic fixture: this is the assertion that would have to fail
-    // before a broken gateway could ship, so it reads the same integrations the
-    // build does.
-    for (const id of WIRED_GATEWAYS) {
-      if (id === 'mock') continue;
-      expect(routeSymbolsProblem(id, getIntegration(id)?.webRoute, PREAMBLE_SYMBOLS)).toBeNull();
+  it('refuses a preamble with nothing in it, which means the contract moved', () => {
+    expect(routeSymbolsProblem('x', 'async function chatHandler() {}', '', [])).toContain(
+      'contract moved',
+    );
+  });
+
+  it('passes the real emitted route for every wired cell', () => {
+    // The assertion that would have to fail before a broken gateway could ship:
+    // the same integrations, frameworks and emitter the build uses.
+    for (const id of KEYED) {
+      const integration = getIntegration(id)!;
+      for (const framework of FRAMEWORKS.filter((f) => f.status === 'ready' && f.route)) {
+        const [route] = emitRoute(integration, framework);
+        expect(
+          routeSymbolsProblem(id, integration.webRoute, route.contents, emittedPreambleSymbols(integration)),
+        ).toBeNull();
+      }
     }
   });
 });
 
-describe('routeModelProblem — the failure no build can see', () => {
-  it('refuses a gateway that forwards `model` with no id to send', () => {
-    // openrouter's handler puts the client's `model` straight into its
-    // /chat/completions body. A front end that omits it posts no model and the
-    // provider answers 400 — on a project that installed, built and smoked
-    // green.
-    const problem = routeModelProblem('openrouter', ['model', 'tools'], {});
-    expect(problem).toContain('CLIENT_MODEL_IDS');
-    expect(problem).toContain('no fallback');
+describe('routeWireProblem — what the BROWSER receives', () => {
+  /**
+   * THE FAILURE HERE IS SILENT, which is why it is worth a rule of its own. The
+   * kit's own catalog note says feeding a foreign SSE dialect to
+   * `readOpenAIStream` "does not throw — it parses to nothing and the turn ends
+   * silently empty". So the emitted project installs, builds, typechecks, smokes
+   * green, and answers every message with an empty bubble.
+   */
+  it('refuses a wired gateway that never says what its route returns', () => {
+    const problem = routeWireProblem('vercel-ai-sdk', BROWSER_WIRE, EMITTED_READER_FORMAT);
+    expect(problem).toContain('BROWSER_WIRE');
+    expect(problem).toContain('SILENT');
   });
 
-  it('is silent for a gateway whose route pins its own model', () => {
-    // langgraph, cloudflare, ollama and vercel-ai-sdk all build the model into
-    // the route. Emitting an editable constant for those is a knob that does
-    // nothing, which is why this reads `forwardsFromClient` rather than
-    // scanning the route text for the word `model`.
-    expect(routeModelProblem('langgraph', ['tools'], {})).toBeNull();
+  it('refuses a gateway whose route returns a dialect the front end cannot read', () => {
+    // The concrete near-future case: vercel-ai-sdk's route returns an AI-SDK
+    // stream. Wiring it needs a reader axis in the go-live patch first.
+    const problem = routeWireProblem('vercel-ai-sdk', { 'vercel-ai-sdk': 'ai-sdk' }, 'openai-sse');
+    expect(problem).toContain('reader axis');
   });
 
-  it('passes every wired gateway against the real catalog', () => {
-    for (const id of WIRED_GATEWAYS) {
-      if (id === 'mock') continue;
-      const integration = getIntegration(id);
-      expect(routeModelProblem(id, integration?.forwardsFromClient ?? [], CLIENT_MODEL_IDS)).toBeNull();
+  it('accepts anthropic even though its streamFormat is `native`', () => {
+    // THE WHOLE REASON THIS IS A DECLARATION AND NOT A DERIVATION. Gating on
+    // `streamFormat === 'openai-sse'` would refuse a gateway that works: the
+    // anthropic route re-frames every frame to OpenAI form before returning.
+    expect(getIntegration('anthropic')!.streamFormat).toBe('native');
+    expect(routeWireProblem('anthropic', BROWSER_WIRE, EMITTED_READER_FORMAT)).toBeNull();
+  });
+
+  it('passes every wired gateway', () => {
+    for (const id of KEYED) {
+      expect(routeWireProblem(id, BROWSER_WIRE, EMITTED_READER_FORMAT)).toBeNull();
+    }
+  });
+});
+
+describe('the model table comes from the kit', () => {
+  /**
+   * NO GUARD HERE ANY MORE, deliberately. This package used to carry a copy of
+   * `CLIENT_MODEL_IDS` and a `routeModelProblem` rule to notice a missing row.
+   * `defaultModelFor` is exported now and THROWS on exactly that condition, at
+   * exactly the moment ours fired, from the one place that owns the table — so
+   * the rule was a second copy of a check, which is the thing it existed to
+   * prevent. Deleting it is not a coverage loss; the assertion below is the
+   * behaviour that used to be ours.
+   */
+  it('throws for an integration that forwards `model` with no id registered', () => {
+    expect(() =>
+      clientModelFor({ ...getIntegration('openrouter')!, id: 'not-in-the-table' }),
+    ).toThrow(/CLIENT_MODEL_IDS/);
+  });
+
+  it('gives every wired gateway that forwards `model` a real id', () => {
+    for (const id of KEYED) {
+      const integration = getIntegration(id)!;
+      if (!integration.forwardsFromClient.includes('model')) continue;
+      expect(clientModelFor(integration)).toBeTruthy();
     }
   });
 });
@@ -131,7 +190,11 @@ describe('wirableGateway — a cell, not an axis', () => {
 
   it('refuses a gateway the release has not wired, even where a route could go', () => {
     const react = getFramework('react')!;
-    expect(wirableGateway('anthropic', react)).toContain('not wired by this release');
+    // `openai` is `outOfBand: 'none'`, TypeScript, and has a webRoute — it is
+    // the cheapest UNWIRED gateway there is, and it is still refused, because
+    // being wirable and being wired are different claims.
+    expect(WIRED_GATEWAYS.has('openai')).toBe(false);
+    expect(wirableGateway('openai', react)).toContain('not wired by this release');
   });
 
   it('always allows the mock, which needs no route anywhere', () => {
@@ -220,11 +283,17 @@ describe('renderEnvFile', () => {
   });
 });
 
-describe.each(wirable('openrouter').map((f) => f.id))('generate(%s + openrouter)', (frameworkId) => {
+/** Every (gateway, framework) cell this release claims to wire. */
+const CELLS = KEYED.flatMap((gatewayId) =>
+  wirable(gatewayId).map((f) => ({ gatewayId, frameworkId: f.id })),
+);
+
+describe.each(CELLS)('generate($frameworkId + $gatewayId)', ({ gatewayId, frameworkId }) => {
   let root: string;
   let dir: string;
   let files: string[];
   const framework = getFramework(frameworkId)!;
+  const integration = getIntegration(gatewayId)!;
 
   beforeAll(async () => {
     if (!existsSync(TEMPLATE_ROOT)) {
@@ -234,7 +303,9 @@ describe.each(wirable('openrouter').map((f) => f.id))('generate(%s + openrouter)
     }
     root = await mkdtemp(path.join(tmpdir(), 'create-kai-gw-'));
     dir = path.join(root, 'my-app');
-    files = (await generate(plan(dir, { frameworkId }), { templateRoot: TEMPLATE_ROOT })).files;
+    files = (
+      await generate(plan(dir, { frameworkId, gatewayId }), { templateRoot: TEMPLATE_ROOT })
+    ).files;
   });
 
   afterAll(async () => {
@@ -248,7 +319,7 @@ describe.each(wirable('openrouter').map((f) => f.id))('generate(%s + openrouter)
   it('writes .env.local with the declared variable and a placeholder', async () => {
     expect(files).toContain(framework.paths.env);
     const env = await readFile(path.join(dir, framework.paths.env), 'utf8');
-    for (const name of getIntegration('openrouter')!.envVars) {
+    for (const name of integration.envVars) {
       expect(env).toContain(`${name}=replace-me`);
     }
   });
@@ -265,12 +336,12 @@ describe.each(wirable('openrouter').map((f) => f.id))('generate(%s + openrouter)
 
   it('sends a model id, because this gateway\'s route forwards one', async () => {
     const app = await readFile(path.join(dir, framework.paths.app), 'utf8');
-    expect(app).toContain(`model: '${clientModelFor(getIntegration('openrouter')!)}'`);
+    expect(app).toContain(`model: '${clientModelFor(integration)}'`);
   });
 
   it('records the route path in kai.json for a v2 `add` to read', async () => {
     const kai = JSON.parse(await readFile(path.join(dir, 'kai.json'), 'utf8'));
-    expect(kai.gateway).toBe('openrouter');
+    expect(kai.gateway).toBe(gatewayId);
     expect(kai.paths.route).toBe(framework.route!.file);
   });
 
@@ -281,7 +352,7 @@ describe.each(wirable('openrouter').map((f) => f.id))('generate(%s + openrouter)
     const gitignore = await readFile(path.join(dir, '.gitignore'), 'utf8');
     expect(gitignore).toContain('.env.local');
     const app = await readFile(path.join(dir, framework.paths.app), 'utf8');
-    expect(app).not.toContain('OPENROUTER_API_KEY');
+    for (const name of integration.envVars) expect(app).not.toContain(name);
   });
 
   it('tells the README reader the route is there instead of how to add one', async () => {

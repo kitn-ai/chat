@@ -51,11 +51,34 @@ declare somewhere to put it (`FrameworkDef.route`).
 wired gateway can be scaffolded onto. Read that, not the paragraphs below —
 they explain the *shape* of the remaining work, and the counts move.
 
-**Wired today: `openrouter`,** on the frameworks whose route host is declared.
-It was the right first target for reasons that are catalog facts, not taste: its
-`deps.npm` is empty (the route is global `fetch`, no SDK), it returns
-`openai-sse` and forwards `upstream.body` unchanged so the front end needs no
-re-mapping, and its handler calls none of the kit's content helpers.
+**Wired today: `openrouter` and `anthropic`,** on the frameworks whose route
+host is declared.
+
+`openrouter` was the first because it needs the least: `deps.npm` is empty (the
+route is global `fetch`, no SDK), it returns `openai-sse` and forwards
+`upstream.body` unchanged, and its handler calls none of the kit's content
+helpers.
+
+`anthropic` was listed here as *cheap but blocked* until the kit exported
+`chatRoutePreamble` — its route calls `wireParts` / `wireText` to re-map
+attachments, and those declarations were private. It now costs one line, and
+two facts made that true which neither `streamFormat` nor any other field would
+tell you:
+
+- Its route **re-frames to OpenAI SSE** (`reframeToOpenAISse`) before returning,
+  so the emitted front end reads it with `readOpenAIStream` unchanged — despite
+  `streamFormat: 'native'`.
+- It takes OpenAI-shaped messages *in* and maps them server-side, so the front
+  end still sends `toOpenAIMessages(...)`. The go-live patch is untouched.
+
+### What the browser receives is not `streamFormat`
+
+`streamFormat` describes what the **provider** emits. `BROWSER_WIRE` in
+`src/catalog.ts` describes what comes back **out of the route**, and the two
+differ for `anthropic`. This matters because the mismatch is silent: the kit's
+own catalog note says feeding a foreign dialect to `readOpenAIStream` "does not
+throw — it parses to nothing and the turn ends silently empty". `routeWireProblem`
+requires an entry per wired gateway rather than defaulting one.
 
 ### What the rest cost
 
@@ -63,15 +86,20 @@ Three separate walls, and most of the remaining integrations are behind more
 than one. The groups are the kit registry's own — `listGatewayGroups()` — not a
 split invented here.
 
-**Cheap (same shape as `openrouter`).** `openai` and `anthropic`: `outOfBand:
-'none'`, TypeScript, a key and a remote endpoint. `openai` is nearly free.
-`anthropic` needs the kit's *second* injected preamble (the `wireParts` /
-`wireText` content helpers its route calls to re-map attachments), which this
-CLI does not carry — `routeSymbolsProblem` fails the build rather than letting
-it through, so the gap is enforced rather than documented. Same for
-`vercel-ai-sdk` and `mastra`, which call the same helpers. `vercel-ai-sdk` and
-`langgraph` also carry real `deps.npm`, which the `package.json` rewrite already
-handles but which `openrouter` never exercised.
+**Cheap.** `openai` is now the cheapest unwired one: `outOfBand: 'none'`,
+TypeScript, empty `deps.npm`, an OpenAI-format route. `mastra` is unblocked by
+the preamble export too, but is out-of-band (below).
+
+**Unblocked on the preamble, still blocked on the reader.** `vercel-ai-sdk`'s
+route returns an AI-SDK stream, which `readOpenAIStream` cannot read. Wiring it
+needs a **reader axis in the go-live patch** — the patch hard-codes
+`readOpenAIStream` today. `BROWSER_WIRE` refuses it rather than letting that be
+discovered as an empty bubble.
+
+`vercel-ai-sdk` and `langgraph` also carry real `deps.npm`, which the
+`package.json` rewrite already handles but which neither wired gateway
+exercises — both declare none. That claim is graded by a unit test against
+`langgraph` instead of by the smoke run.
 
 **Needs something running that a scaffold cannot provide.** `ollama` (a local
 server), `pi` (a local binary), `mastra` (a local server), `pydantic-ai` (a
@@ -107,27 +135,40 @@ is the axis that actually gates widening:
 - **`html` has no server anywhere.** The handler has to run elsewhere and be
   proxied.
 
-### Two things the kit does not export
+### What is read from the kit, and what it costs
 
-Both are recorded at their use site in `src/routes.ts`, and both are why this
-package carries a duplicate it would rather not:
+`chatRoutePreamble(fragment)`, `CLIENT_MODEL_IDS` and `defaultModelFor` come
+from `agent-tooling/mcp/tools/scaffold.ts`. This package used to carry copies of
+the first two plus guards to watch them drift; both copies and one guard are
+gone.
 
-1. `CHAT_REQUEST_BODY_DECL` — the `ChatRequestBody` / `readChatRequest`
-   preamble. **Every** `webRoute` in the catalog calls `readChatRequest`, so
-   none of them compiles standalone (measured: `tsc --strict` over the bare
-   fragment gives `TS2304: Cannot find name 'readChatRequest'`).
-2. `CLIENT_MODEL_IDS` — the model id to send for a gateway whose route forwards
-   the client's `model`. Missing it is invisible to every build and typecheck;
-   it surfaces as a 400 on the user's first message.
+The preamble is a **function**, not a constant, and that shape is load-bearing:
+the content helpers are injected only where a route calls them, because an
+unused declaration is a hard `--noUnusedLocals` error. Emitted proof — the
+`anthropic` route declares `wireParts` / `wireText` / `WirePart`, the
+`openrouter` route declares none of them, and both compile.
 
-Exporting those two from `packages/ui/src/agent-tooling/mcp/tools/scaffold.ts`
-would let both copies here be deleted. Until then `routeSymbolsProblem` and
-`routeModelProblem` fail the build if either drifts.
+**Two costs came with that import, and neither was priced in advance:**
 
-The per-framework *wrappers* are deliberately **not** shared with the kit MCP's
-`WEB_ROUTE_ADAPTERS`, and that is not an oversight: an MCP adapter emits one
-paste-able string that concatenates three files with `// ── separators ──` and a
-commented-out config line. This CLI writes real files that have to compile.
+1. **Bundle.** `dist/index.js` went 203 kB → 904 kB, of which **526 kB is zod** —
+   pulled in because `scaffold.ts` builds the MCP tool's schema at module scope,
+   which esbuild cannot tree-shake past. create-kai never executes zod. Cold
+   start measured 30 ms → 45 ms; packed tarball 0.25 MB.
+2. **tsconfig coupling.** The kit's source now joins this package's `tsc`
+   program, which runs `noUnusedLocals` while the kit's own typecheck does not.
+   That surfaced one genuinely dead constant in `scaffold.ts`.
+
+Both point the same way: these three exports want a **zod-free leaf module**,
+not the 5,300-line MCP tool file. Moving them there would drop the bundle back
+and decouple the typecheck.
+
+### What is deliberately not shared
+
+The per-framework **route wrappers**. The kit MCP's `WEB_ROUTE_ADAPTERS` emit one
+paste-able string concatenating three files with `// ── separators ──` and a
+commented-out config line. This CLI writes real files that have to compile, so
+the wrapper lives beside the framework table that owns every other per-framework
+path.
 
 ## How it is put together
 

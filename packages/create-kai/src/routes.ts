@@ -26,36 +26,24 @@
  * the same handler and diverge immediately after it, which is why the wrapper
  * lives with the framework table that owns every other per-framework path.
  *
- * ── THE ONE THING THAT IS DUPLICATED, AND THE GUARD THAT SAYS SO ─────────────
+ * ── THE PREAMBLE COMES FROM THE KIT ──────────────────────────────────────────
  *
- * `CHAT_REQUEST_PREAMBLE` below is a second copy of the kit's private
- * `CHAT_REQUEST_BODY_DECL`. That is a real duplication and it is not desirable:
- * CLAUDE.md's own rule for emitted routes is "don't hand-roll a second one".
+ * A bare `webRoute` does not compile. Every fragment in the catalog calls
+ * `readChatRequest`, and three (anthropic, mastra, vercel-ai-sdk) also call
+ * `wireParts` / `wireText` — measured across the catalog, the bare fragments are
+ * TS2304 on five distinct names. `chatRoutePreamble(fragment)` answers what goes
+ * above THIS fragment, and it is a function rather than a constant precisely
+ * because the content helpers are conditional: an unused declaration is a hard
+ * `--noUnusedLocals` error, so a flat preamble would compile for some routes and
+ * not others.
  *
- * It is here because the kit does not export the first one, and the handler does
- * not compile without it — every `webRoute` in the catalog calls
- * `readChatRequest(request)`, and on its own that is TS2304. Measured, not
- * assumed: writing `getIntegration('openrouter').webRoute` to a file and running
- * `tsc --strict` over it gives
- *
- *     error TS2304: Cannot find name 'readChatRequest'.
- *
- * So the choice was a duplicate or no route at all. What makes the duplicate
- * survivable is that it is CHECKED rather than trusted: `routeSymbolsProblem`
- * in `build-guards.ts` derives, from the integration's own `webRoute`, every
- * symbol the handler references but does not define, and fails the build if this
- * preamble does not supply one. So the kit renaming `readChatRequest`, or a
- * newly-wired integration needing the kit's SECOND injected preamble (the
- * `wireParts` / `wireText` content helpers that `anthropic`, `mastra` and
- * `vercel-ai-sdk` routes call), stops the build here instead of shipping a route
- * that does not compile.
- *
- * THE RIGHT FIX IS UPSTREAM and is one word: export `CHAT_REQUEST_BODY_DECL` /
- * `CHAT_REQUEST_BODY_IMPORT` from the kit's scaffold module and delete this
- * constant. That is a change to `packages/ui/src/agent-tooling/`, which this
- * work was scoped out of, so it is left as a stated seam rather than reached
- * across for.
+ * THIS FILE USED TO CARRY A COPY of one of those declarations, because the kit
+ * did not export them. It does now, so the copy is gone and so is the guard that
+ * watched it for drift. What is left is `routeSymbolsProblem`, which grades this
+ * emitter's OUTPUT rather than the kit's input — a different artifact, and one
+ * the kit's own tests cannot see. See `build-guards.ts`.
  */
+import { chatRoutePreamble, defaultModelFor } from './catalog';
 import type { Integration } from './catalog';
 import type { FrameworkDef } from './frameworks';
 
@@ -89,82 +77,19 @@ export interface RouteHost {
 }
 
 /**
- * The request-body narrowing every emitted route needs.
+ * The model id this integration's front end should post, or undefined.
  *
- * See the file docblock for why this is a duplicate of the kit's own and what
- * stops it drifting. `messages` is typed as the kit's encoder OUTPUT rather than
- * restated structurally, so the two halves of the scaffold stay pinned to one
- * type: the front end sends `toOpenAIMessages(thread)` and this is what that
- * returns. The import is type-only and erases, so the route ships no runtime
- * dependency on the kit.
+ * Straight through to the kit's `defaultModelFor`, which reads
+ * `forwardsFromClient` to decide whether the route reads the field at all and
+ * then looks the id up in `CLIENT_MODEL_IDS`. It THROWS for an integration that
+ * forwards `model` with no id registered, which is why this package no longer
+ * carries a guard for that case — the failure already happens, loudly, at the
+ * same moment ours did.
+ *
+ * Re-exported under this name rather than used inline so the call site reads as
+ * a question about the front end, which is what it is.
  */
-export const CHAT_REQUEST_IMPORT = `import type { OpenAIWireMessage } from '@kitn.ai/ui/wire';`;
-
-export const CHAT_REQUEST_PREAMBLE: readonly string[] = [
-  `/**`,
-  ` * What the front end POSTs. \`request.json()\` is \`unknown\` (it is whatever the`,
-  ` * client sent), so the body is narrowed once here instead of at every use —`,
-  ` * without it this route does not compile under a server tsconfig, where`,
-  ` * \`Request\` comes from undici rather than the DOM lib. Widen it as you add`,
-  ` * fields of your own.`,
-  ` */`,
-  `type ChatRequestBody = {`,
-  `  messages: OpenAIWireMessage[];`,
-  `  model?: string;`,
-  `  tools?: unknown[];`,
-  `};`,
-  ``,
-  `/** Narrow the JSON body once, at the edge. */`,
-  `async function readChatRequest(request: Request): Promise<ChatRequestBody> {`,
-  `  return (await request.json()) as ChatRequestBody;`,
-  `}`,
-];
-
-/**
- * The symbols `CHAT_REQUEST_PREAMBLE` defines, named once so the build guard
- * checks the real list rather than a copy of it.
- */
-export const PREAMBLE_SYMBOLS: readonly string[] = ['ChatRequestBody', 'readChatRequest'];
-
-/**
- * The model id to send for a gateway whose route reads the client's `model`.
- *
- * WHY THIS IS NEEDED AT ALL. `openrouter`'s handler destructures `model` off the
- * request body and puts it straight into the `/chat/completions` payload. A
- * front end that posts only `{ messages }` therefore sends `model: undefined`,
- * `JSON.stringify` drops the key, and OpenRouter answers 400 on the first
- * message. The emitted app would install, build, and fail the moment someone
- * typed into it.
- *
- * WHICH GATEWAYS NEED ONE IS READ FROM THE CATALOG, not decided here:
- * `integration.forwardsFromClient` states whether the route reads the field.
- * That flag exists because guessing from the route source got this wrong — a
- * substring test for `model` matched four integrations whose routes pin their
- * own and never read the client's, so those scaffolds shipped an editable
- * constant that did nothing.
- *
- * THE ID ITSELF IS A SECOND COPY, for the same reason `CHAT_REQUEST_PREAMBLE`
- * is: the kit has this table as a private `CLIENT_MODEL_IDS` in
- * `agent-tooling/mcp/tools/scaffold.ts` and does not export it. It is kept to
- * the wired gateways only — one row — and `routeModelProblem` fails the build if
- * a wired gateway forwards `model` and is missing from it.
- *
- * NO FALLBACK, deliberately, and this is worth carrying rather than
- * rediscovering: the kit's version of this table used to end in
- * `?? 'openai/gpt-4o-mini'`, which is an OpenRouter slug, and that default let a
- * first-party provider inherit it and emit a scaffold that 404s on its own host.
- * A model id is a per-host fact.
- */
-export const CLIENT_MODEL_IDS: Readonly<Record<string, string>> = {
-  // OpenRouter's own id space, and the one place the `vendor/` prefix belongs.
-  openrouter: 'openai/gpt-4o-mini',
-};
-
-/** The model id this integration's front end should post, or undefined. */
-export function clientModelFor(integration: Integration): string | undefined {
-  if (!integration.forwardsFromClient.includes('model')) return undefined;
-  return CLIENT_MODEL_IDS[integration.id];
-}
+export const clientModelFor = defaultModelFor;
 
 /**
  * Next.js — the cheapest correct destination in the table.
@@ -335,15 +260,20 @@ export function emitRoute(integration: Integration, framework: FrameworkDef): Em
   const fragment = integration.webRoute;
   if (!fragment) return [];
 
+  // What goes above THIS fragment, asked per fragment rather than assumed. The
+  // content helpers come back only for the routes that call them, so a route
+  // that does not is not handed declarations `--noUnusedLocals` would reject.
+  const preamble = chatRoutePreamble(fragment);
+
   return [
     {
       path: host.file,
       contents: [
         `// ${host.file} — ${host.runtime}`,
-        CHAT_REQUEST_IMPORT,
+        ...preamble.imports,
         ...(host.before ?? []),
         ``,
-        ...CHAT_REQUEST_PREAMBLE,
+        ...preamble.decl,
         ``,
         fragment,
         ...host.after,
@@ -352,4 +282,15 @@ export function emitRoute(integration: Integration, framework: FrameworkDef): Em
     },
     ...(host.extra ?? []),
   ];
+}
+
+/**
+ * Every symbol the emitted route file declares above the handler.
+ *
+ * Read back out of what `emitRoute` actually produced, for the build guard. The
+ * kit derives its own `symbols` from its declaration text for the same reason:
+ * a listed set is a restatement, and a restatement is what drifts.
+ */
+export function emittedPreambleSymbols(integration: Integration): readonly string[] {
+  return integration.webRoute ? chatRoutePreamble(integration.webRoute).symbols : [];
 }

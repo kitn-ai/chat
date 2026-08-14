@@ -239,54 +239,36 @@ export function declaredPathsProblem(
 }
 
 /**
- * The helper symbols the KIT injects around a `webRoute` fragment, which the
- * fragment itself therefore never defines.
+ * The emitted route file declares everything the kit said that fragment needs.
  *
- * There are two such preambles in `agent-tooling/mcp/tools/scaffold.ts`:
- * `CHAT_REQUEST_BODY_DECL` (always injected) and the content-parts helpers
- * (injected only when the fragment calls them). Neither is exported, so
- * create-kai carries its own copy of the first and none of the second — see the
- * docblock on `src/routes.ts`.
+ * WHAT THIS STILL CATCHES NOW THAT THE PREAMBLE IS EXPORTED, because the earlier
+ * version of this rule no longer has a job. It used to compare the fragment
+ * against a HAND-COPIED preamble in this package, and its purpose was to notice
+ * when that copy drifted from the kit's private original. The copy is gone;
+ * `chatRoutePreamble` is one function with one answer, so "does this package's
+ * preamble match the kit's" is not a question that can be wrong any more, and a
+ * guard over it would be machinery over nothing.
  *
- * This list is what turns that arrangement from a hope into a check. It is
- * deliberately a list of NAMES rather than a parse: the failure being prevented
- * is a fragment referencing a helper create-kai does not supply, and every such
- * helper is one of these four by construction, because they are the only things
- * the kit injects.
- */
-export const KIT_INJECTED_ROUTE_SYMBOLS: readonly string[] = [
-  'ChatRequestBody',
-  'readChatRequest',
-  'wireParts',
-  'wireText',
-];
-
-/**
- * Refuse to wire a gateway whose route needs something this CLI does not emit.
+ * What CAN still be wrong is one step later: `emitRoute` assembles a file, and
+ * it is the assembly — not the kit — that decides whether those declarations
+ * actually reach the page. So this now grades the EMITTED TEXT. Drop the
+ * `preamble.decl` spread out of `emitRoute`, reorder it below the handler in a
+ * way the type alias cannot survive, or add a host whose `before` lines shadow
+ * it, and every one of those ships a route that does not compile while the kit's
+ * own tests stay green — because the kit never sees this file.
  *
- * TWO FAILURES, AND THEY POINT DIFFERENT WAYS.
- *
- * The first is a fragment referencing an injected helper that `routes.ts` does
- * not supply. That is what `anthropic`, `mastra` and `vercel-ai-sdk` do today —
- * each re-maps message content and calls `wireParts` / `wireText` — so adding
- * any of them to `WIRED_GATEWAYS` without also carrying the content-parts
- * preamble emits a route that does not compile. tsc in the user's project is the
- * only thing that would otherwise catch it, which is far too late.
- *
- * The second is the reverse and is the one that protects the DUPLICATE: a
- * fragment that references NONE of the supplied symbols. Every `webRoute` in the
- * catalog calls `readChatRequest`, so a wired integration that stopped doing so
- * means the kit changed the preamble contract underneath this copy of it. That
- * fires as a build failure here rather than as a stale duplicate nobody notices,
- * which is the whole reason the duplication was acceptable.
- *
- * Takes the fragment rather than an `Integration` so a test can drive it with a
- * three-line string instead of standing up a catalog entry.
+ * WHAT IT DELIBERATELY DOES NOT COVER: whether the kit's answer was complete.
+ * `chatRoutePreamble` tests for a CALL, so a fragment that only ANNOTATES with
+ * `WirePart` and never calls a helper would be told it needs nothing. That gap
+ * is the kit's, it is documented at that function, and `scaffold.test.ts` grades
+ * it. Re-checking it here would be a second copy of someone else's check — the
+ * exact thing this rule was just rewritten to stop doing.
  */
 export function routeSymbolsProblem(
   gatewayId: string,
   webRoute: string | undefined,
-  supplied: readonly string[],
+  emitted: string,
+  required: readonly string[],
 ): string | null {
   if (webRoute === undefined) {
     return (
@@ -296,28 +278,30 @@ export function routeSymbolsProblem(
     );
   }
 
-  const referenced = KIT_INJECTED_ROUTE_SYMBOLS.filter((symbol) =>
-    new RegExp(`\\b${symbol}\\b`).test(webRoute),
-  );
-
-  const missing = referenced.filter((symbol) => !supplied.includes(symbol));
-  if (missing.length > 0) {
+  if (required.length === 0) {
     return (
-      `create-kai build: gateway '${gatewayId}'s route references ${missing.join(', ')}, which ` +
-      'the emitted route does not define.\n' +
-      '  The kit injects those around the fragment and does not export the injection, so this CLI\n' +
-      '  carries its own copy of one preamble and none of the other (see src/routes.ts).\n' +
-      '  Either carry the missing preamble too, or drop this gateway from WIRED_GATEWAYS.'
+      `create-kai build: the kit's chatRoutePreamble says gateway '${gatewayId}'s route needs no ` +
+      'declarations.\n' +
+      '  Every webRoute in the catalog narrows its body through readChatRequest, so a preamble with\n' +
+      '  nothing in it means the contract moved. Re-read chatRoutePreamble in\n' +
+      '  agent-tooling/mcp/tools/scaffold.ts before trusting this emit.'
     );
   }
 
-  if (referenced.length === 0) {
+  // Declared, not merely mentioned: the fragment itself CALLS these names, so a
+  // substring test would pass on a file that dropped the declarations entirely.
+  const declared = (symbol: string) =>
+    new RegExp(`(?:^|\\n)(?:export\\s+)?(?:async\\s+)?(?:function|type|interface|const|class)\\s+${symbol}\\b`).test(
+      emitted,
+    );
+
+  const missing = required.filter((symbol) => !declared(symbol));
+  if (missing.length > 0) {
     return (
-      `create-kai build: gateway '${gatewayId}'s route references none of the kit's injected ` +
-      'helpers.\n' +
-      '  Every webRoute in the catalog narrows its body through readChatRequest, so this means the\n' +
-      "  kit's route preamble changed and src/routes.ts is now a stale copy of it.\n" +
-      '  Re-read CHAT_REQUEST_BODY_DECL in agent-tooling/mcp/tools/scaffold.ts.'
+      `create-kai build: the emitted route for '${gatewayId}' does not declare ${missing.join(', ')}, ` +
+      "which the kit's chatRoutePreamble says that handler needs.\n" +
+      '  The fragment CALLS those names, so this route will not compile in a user\'s project.\n' +
+      '  emitRoute in src/routes.ts is dropping or misplacing the preamble it was handed.'
     );
   }
 
@@ -325,35 +309,57 @@ export function routeSymbolsProblem(
 }
 
 /**
- * Refuse to wire a gateway that forwards the client's `model` without a model id.
+ * What the BROWSER receives, which is not what `streamFormat` describes.
  *
- * The failure this prevents is not a compile error — it is a project that
- * installs, builds, passes the smoke test, and then answers the first message
- * with a 400. `openrouter`'s handler puts the client's `model` straight into its
- * `/chat/completions` body, so a front end that omits it sends no model at all.
+ * THE FAILURE THIS EXISTS FOR IS SILENT, and the kit's own catalog says so in as
+ * many words: feeding a non-OpenAI SSE dialect to `readOpenAIStream` "does not
+ * throw — it parses to nothing and the turn ends silently empty". So a gateway
+ * wired without checking this emits a project that installs, builds, typechecks,
+ * passes the smoke test, and answers every message with an empty bubble. There
+ * is no other check in this package or the kit that would notice.
  *
- * Mirrors the kit's own throw in `defaultModelFor`, and refuses a fallback for
- * the same recorded reason: a default model id is only ever valid for one host,
- * so inheriting one across integrations emits a scaffold that 404s.
+ * IT CANNOT BE DERIVED FROM `streamFormat`, which is the trap. That field
+ * describes what the PROVIDER emits, not what the route hands the browser, and
+ * the two differ for the most important case: `anthropic` is `streamFormat:
+ * 'native'` and is nonetheless correct here, because its route re-frames every
+ * frame to OpenAI form (`reframeToOpenAISse`) before returning it. Gating on
+ * `streamFormat === 'openai-sse'` would have refused a gateway that works and
+ * accepted `vercel-ai-sdk`, whose route returns an AI-SDK stream that
+ * `readOpenAIStream` cannot read.
  *
- * `forwardsFromClient` is read from the integration, never guessed from the
- * route text — see the note on `CLIENT_MODEL_IDS` in src/routes.ts.
+ * So it is a DECLARATION rather than a derivation, and it belongs to this
+ * package rather than the kit: it is a fact about the reader the go-live patch
+ * emits, and the go-live patch is ours. `GATEWAY_PATCHES` writes
+ * `readOpenAIStream`, so a gateway may be wired only if its route delivers
+ * OpenAI-format SSE. Wiring one forces someone to answer the question.
  */
-export function routeModelProblem(
+export function routeWireProblem(
   gatewayId: string,
-  forwardsFromClient: readonly string[],
-  modelIds: Readonly<Record<string, string>>,
+  browserWire: Readonly<Record<string, string>>,
+  readerFormat: string,
 ): string | null {
-  if (!forwardsFromClient.includes('model')) return null;
-  if (modelIds[gatewayId] !== undefined) return null;
-  return (
-    `create-kai build: gateway '${gatewayId}' forwards the client's 'model' but has no ` +
-    'CLIENT_MODEL_IDS entry in src/routes.ts.\n' +
-    "  Its route reads that field, so the emitted app would post no model and the provider would\n" +
-    '  reject the first message — a failure no build or typecheck can see.\n' +
-    '  Add the id THIS provider accepts; there is deliberately no fallback, because a model id is\n' +
-    '  a per-host fact and an inherited one 404s.'
-  );
+  const declared = browserWire[gatewayId];
+  if (declared === undefined) {
+    return (
+      `create-kai build: gateway '${gatewayId}' is wired but BROWSER_WIRE in src/catalog.ts does not ` +
+      'say what its route hands the browser.\n' +
+      `  The emitted front end reads the response with a ${readerFormat} parser, and a mismatch is\n` +
+      '  SILENT — the stream parses to nothing and every turn ends as an empty bubble.\n' +
+      "  Do not copy the integration's `streamFormat`: that describes the PROVIDER. anthropic is\n" +
+      "  'native' and still correct here because its route re-frames to OpenAI form. Read the route."
+    );
+  }
+  if (declared !== readerFormat) {
+    return (
+      `create-kai build: gateway '${gatewayId}'s route hands the browser '${declared}', but the ` +
+      `emitted front end reads '${readerFormat}'.\n` +
+      '  readOpenAIStream does not throw on a dialect it cannot read — it yields nothing, and the\n' +
+      '  turn ends silently empty.\n' +
+      '  Either the route must re-frame, or the go-live patch needs a reader axis before this\n' +
+      '  gateway can be wired.'
+    );
+  }
+  return null;
 }
 
 /**
