@@ -31,11 +31,34 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import { gatewayPatchesFor, patchesFor } from '../src/patches';
+import { STRIPPED_DOTFILES, travellingName } from '../src/template-dotfiles';
+
 const PKG_ROOT = path.resolve(__dirname, '..');
 const SCRIPT = path.join(PKG_ROOT, 'scripts/verify-pack.mjs');
 
 /** The shape of a built tree, as `dist/` relative paths. `null` omits a file. */
 type Tree = Record<string, string | null>;
+
+/**
+ * Every file the real patch tables open for `templateDir`, under the name a
+ * template packs it as.
+ *
+ * DERIVED, so the fixture cannot drift from the table. The script reads the same
+ * two tables to decide what the tarball must carry, so a hand-written fixture
+ * would have to be updated by hand every time a patch row was added — and the
+ * "clean tree" control below would go red for a reason that is not a defect,
+ * which is how a control gets deleted.
+ */
+const patchedFixtureFiles = (templateDir: string): Tree =>
+  Object.fromEntries(
+    [...patchesFor(templateDir), ...gatewayPatchesFor(templateDir)].map((patch) => {
+      const base = path.posix.basename(patch.file);
+      const dir = path.posix.dirname(patch.file);
+      const packed = STRIPPED_DOTFILES.includes(base) ? travellingName(base) : base;
+      return [`templates/${templateDir}/${dir === '.' ? packed : `${dir}/${packed}`}`, 'fixture\n'];
+    }),
+  );
 
 /** A believable built package: a bundled CLI plus two templates. */
 const tree = (over: Tree = {}): Tree => ({
@@ -46,6 +69,10 @@ const tree = (over: Tree = {}): Tree => ({
   'templates/vue/package.json': '{"name":"vue-app","private":true}\n',
   'templates/vue/_gitignore': 'node_modules/\n.env.local\n',
   'templates/vue/src/App.vue': '<template><div /></template>\n',
+  // The files the CLI patches in these two templates, so a clean fixture is
+  // clean by the completeness rule too.
+  ...patchedFixtureFiles('react'),
+  ...patchedFixtureFiles('vue'),
   ...over,
 });
 
@@ -144,6 +171,79 @@ describe('verify:pack still detects', () => {
     expect(output).toContain('react/.gitignore');
   });
 
+  /**
+   * THE 0.1.0 DEFECT, planted in the shape it actually shipped in.
+   *
+   * `create-kai@0.1.0` published `nextjs` and `tanstack-start` templates with a
+   * literal `.npmrc` — npm strips that name, so the tarball had neither `.npmrc`
+   * nor `_npmrc` — while the bundled CLI still had a `PATCHES` row that opens
+   * one. `npx create-kai myapp --framework nextjs -y` died with
+   * `ENOENT: ... open '.../myapp/.npmrc'`, and the version of this script that
+   * was in required CI printed `tarball OK — 176 files, 8 template(s), 8 of 8
+   * with a _gitignore` over exactly that package.
+   *
+   * The fixture uses the REAL template directory names, so the rule's derivation
+   * is what is being exercised: the script reads `src/patches.ts` from this
+   * package (never from `--package-root`, which only swaps the tree being
+   * packed), finds a `.npmrc` row for both, and looks for it under its packed
+   * name. Rename the row's file in that table and this test follows.
+   */
+  it('fires on the 0.1.0 defect: a patched file npm stripped out of the tarball', () => {
+    const root = fixtureRoot({
+      'index.js': '#!/usr/bin/env node\n',
+      // Both standalone templates, complete except for the one file npm eats.
+      'templates/nextjs/package.json': '{"name":"next-app","private":true}\n',
+      'templates/nextjs/_gitignore': 'node_modules/\n',
+      ...patchedFixtureFiles('nextjs'),
+      'templates/nextjs/_npmrc': null,
+      'templates/tanstack-start/package.json': '{"name":"ts-app","private":true}\n',
+      'templates/tanstack-start/_gitignore': 'node_modules/\n',
+      ...patchedFixtureFiles('tanstack-start'),
+      'templates/tanstack-start/_npmrc': null,
+    });
+    const { code, output } = runVerifier(root);
+
+    expect(code, 'a tarball the CLI cannot scaffold from was accepted').toBe(1);
+    // NAMED, both of them, with the file and the consequence.
+    expect(output).toContain("template 'nextjs' is missing '.npmrc'");
+    expect(output).toContain("template 'tanstack-start' is missing '.npmrc'");
+    expect(output).toContain('ENOENT');
+  });
+
+  it('accepts the same two templates once the file travels as _npmrc', () => {
+    // THE CONTROL FOR THE RULE ABOVE, and the thing the fix actually changed.
+    // Without it the assertion above is satisfied by a rule that rejects every
+    // standalone template, `.npmrc` or not.
+    const root = fixtureRoot({
+      'index.js': '#!/usr/bin/env node\n',
+      'templates/nextjs/package.json': '{"name":"next-app","private":true}\n',
+      'templates/nextjs/_gitignore': 'node_modules/\n',
+      ...patchedFixtureFiles('nextjs'),
+      'templates/tanstack-start/package.json': '{"name":"ts-app","private":true}\n',
+      'templates/tanstack-start/_gitignore': 'node_modules/\n',
+      ...patchedFixtureFiles('tanstack-start'),
+    });
+    const { code, output } = runVerifier(root);
+
+    expect(code, `the fixed shape was rejected: ${output}`).toBe(0);
+  });
+
+  it('fires on a literal .npmrc on disk, the same way it does for .gitignore', () => {
+    // The other half of the fix: the built tree is where a stripped file is
+    // still observable. This rule read only `.gitignore` and looked straight
+    // past `.npmrc` in 0.1.0; it now runs over STRIPPED_DOTFILES, so the list
+    // and the rule cannot disagree.
+    const root = fixtureRoot(
+      tree({ 'templates/react/.npmrc': 'install-links=true\n' }),
+    );
+    const { code, output } = runVerifier(root);
+
+    expect(code).toBe(1);
+    expect(output).toContain('a literal .npmrc');
+    expect(output).toContain('react/.npmrc');
+    expect(output).toContain('_npmrc');
+  });
+
   it('fires when the bin target is missing from the tarball', () => {
     const { code, output } = runVerifier(fixtureRoot(tree({ 'index.js': null })));
     expect(code).toBe(1);
@@ -185,21 +285,28 @@ describe('verify:pack still detects', () => {
       true,
     );
 
-    const root = mkdtempSync(path.join(tmpdir(), 'verify-pack-neutered-'));
-    const copy = path.join(root, 'verify-pack.mjs');
+    // THE COPY LIVES IN THE REAL `scripts/`, not a temp directory, and that is
+    // load-bearing rather than incidental. The script imports `./load-ts.mjs`
+    // and locates this package from its own path, so a copy anywhere else dies
+    // on an unresolvable import — which exits 1 and reads exactly like the
+    // control working, while actually proving that a broken file fails. Watched:
+    // from `os.tmpdir()` this case goes red with the neutered copy exiting 1.
+    const copy = path.join(PKG_ROOT, 'scripts', `verify-pack.neutered-${process.pid}.mjs`);
     writeFileSync(copy, disarmed);
 
-    const broken = fixtureRoot(tree({ 'templates/react/_gitignore': null }));
-    const { code } = runVerifier(broken, copy);
-    expect(
-      code,
-      'a neutered analyzer still failed the broken fixture, so the assertions above ' +
-        'may be passing on something other than the rules they name',
-    ).toBe(0);
+    try {
+      const broken = fixtureRoot(tree({ 'templates/react/_gitignore': null }));
+      const { code, output } = runVerifier(broken, copy);
+      expect(
+        code,
+        'a neutered analyzer still failed the broken fixture, so the assertions above ' +
+          `may be passing on something other than the rules they name: ${output}`,
+      ).toBe(0);
 
-    // And the real script on the SAME tree disagrees. That pair is the evidence.
-    expect(runVerifier(broken).code).toBe(1);
-
-    rmSync(root, { recursive: true, force: true });
+      // And the real script on the SAME tree disagrees. That pair is the evidence.
+      expect(runVerifier(broken).code).toBe(1);
+    } finally {
+      rmSync(copy, { force: true });
+    }
   });
 });

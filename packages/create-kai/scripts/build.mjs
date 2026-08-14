@@ -34,8 +34,10 @@
 import { chmod, cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import * as esbuild from 'esbuild';
+
+import { loadTs as loadTsFrom, loadedTsCacheDir } from './load-ts.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const pkgRoot = path.resolve(here, '..');
@@ -45,51 +47,17 @@ const dist = path.join(pkgRoot, 'dist');
 const templatesOut = path.join(dist, 'templates');
 
 /**
- * Where `loadTs` puts the module it just bundled.
+ * The framework table, the patch table and the dotfile list are TypeScript the
+ * CLI owns. The build reads them rather than restating which templates to copy,
+ * which patches to check or which files travel renamed — a second list is how a
+ * framework flips to `ready` with no template behind it.
  *
- * ON DISK, AND UNDER `node_modules/`, for one reason: a module has to be
- * SOMEWHERE to resolve a bare specifier. This used to import a
- * `data:text/javascript;base64,…` URL, which has no directory, so anything left
- * external threw `ERR_UNSUPPORTED_RESOLVE_REQUEST` at import and `createRequire`
- * could not be constructed against it at all.
- *
- * That was a live trap rather than a tidy-up. `external: ['zod']` below has
- * always been one reachable import away from the same failure — it works today
- * only because nothing in the loaded tables calls into the catalog at runtime.
- * And it is what stopped `src/template-guards.ts` reading a JS-declared document
- * title: bundling `typescript` inlines 9.5MB of CJS whose dynamic `require("fs")`
- * throws on first call, and leaving it external could not resolve. From a real
- * file both work, because `node_modules/.cache/` resolves up into the package's
- * own `node_modules/`.
- *
- * Not `dist/`: `main()` deletes that after the first `loadTs` call.
+ * The loader itself is `scripts/load-ts.mjs`, shared with
+ * `scripts/verify-pack.mjs`, which reads the same patch table to decide what the
+ * packed tarball must carry.
  */
-const loadedTsDir = path.join(pkgRoot, 'node_modules/.cache/create-kai-build');
-
-async function loadTs(relative) {
-  // The framework table and the patch table are TypeScript the CLI owns. The
-  // build reads them rather than restating which templates to copy or which
-  // patches to check — a second list is how a framework flips to `ready` with no
-  // template behind it.
-  const built = await esbuild.build({
-    entryPoints: [path.join(pkgRoot, relative)],
-    bundle: true,
-    write: false,
-    format: 'esm',
-    platform: 'node',
-    // The catalog reaches into the kit's source; nothing in the two tables we
-    // load here needs it at runtime, so keep the temp module small. `typescript`
-    // is external because a guard parses one file with it — 9.5MB of CJS that
-    // must not be inlined.
-    external: ['zod', 'typescript'],
-  });
-  await mkdir(loadedTsDir, { recursive: true });
-  // Named after the entry point so two loaded modules cannot collide, and
-  // cache-busted so a rebuild in the same process never re-imports stale bytes.
-  const out = path.join(loadedTsDir, `${path.basename(relative, '.ts')}-${process.pid}.mjs`);
-  await writeFile(out, built.outputFiles[0].text);
-  return import(`${pathToFileURL(out).href}?v=${Date.now()}`);
-}
+const loadedTsDir = loadedTsCacheDir(pkgRoot);
+const loadTs = (relative) => loadTsFrom(pkgRoot, relative);
 
 /** Where a framework's starter lives. Both the rule and the copy ask for it. */
 const starterPath = (templateDir) => path.join(startersRoot, templateDir);
