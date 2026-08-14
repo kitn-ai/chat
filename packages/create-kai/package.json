@@ -1,6 +1,6 @@
 {
   "name": "create-kai",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "Scaffold a runnable @kitn.ai/ui chat app. `npm create kai@latest`",
   "license": "MIT",
@@ -26,10 +26,15 @@
     "name": "create-kai",
     "targets": {
       "test": {
-        "dependsOn": ["build", "^build"]
+        "dependsOn": [
+          "build",
+          "^build"
+        ]
       },
       "typecheck": {
-        "dependsOn": ["^build"]
+        "dependsOn": [
+          "^build"
+        ]
       }
     }
   },
