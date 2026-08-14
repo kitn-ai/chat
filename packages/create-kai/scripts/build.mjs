@@ -34,8 +34,10 @@
 import { chmod, cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import * as esbuild from 'esbuild';
+
+import { loadTs as loadTsFrom, loadedTsCacheDir } from './load-ts.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const pkgRoot = path.resolve(here, '..');
@@ -45,51 +47,17 @@ const dist = path.join(pkgRoot, 'dist');
 const templatesOut = path.join(dist, 'templates');
 
 /**
- * Where `loadTs` puts the module it just bundled.
+ * The framework table, the patch table and the dotfile list are TypeScript the
+ * CLI owns. The build reads them rather than restating which templates to copy,
+ * which patches to check or which files travel renamed — a second list is how a
+ * framework flips to `ready` with no template behind it.
  *
- * ON DISK, AND UNDER `node_modules/`, for one reason: a module has to be
- * SOMEWHERE to resolve a bare specifier. This used to import a
- * `data:text/javascript;base64,…` URL, which has no directory, so anything left
- * external threw `ERR_UNSUPPORTED_RESOLVE_REQUEST` at import and `createRequire`
- * could not be constructed against it at all.
- *
- * That was a live trap rather than a tidy-up. `external: ['zod']` below has
- * always been one reachable import away from the same failure — it works today
- * only because nothing in the loaded tables calls into the catalog at runtime.
- * And it is what stopped `src/template-guards.ts` reading a JS-declared document
- * title: bundling `typescript` inlines 9.5MB of CJS whose dynamic `require("fs")`
- * throws on first call, and leaving it external could not resolve. From a real
- * file both work, because `node_modules/.cache/` resolves up into the package's
- * own `node_modules/`.
- *
- * Not `dist/`: `main()` deletes that after the first `loadTs` call.
+ * The loader itself is `scripts/load-ts.mjs`, shared with
+ * `scripts/verify-pack.mjs`, which reads the same patch table to decide what the
+ * packed tarball must carry.
  */
-const loadedTsDir = path.join(pkgRoot, 'node_modules/.cache/create-kai-build');
-
-async function loadTs(relative) {
-  // The framework table and the patch table are TypeScript the CLI owns. The
-  // build reads them rather than restating which templates to copy or which
-  // patches to check — a second list is how a framework flips to `ready` with no
-  // template behind it.
-  const built = await esbuild.build({
-    entryPoints: [path.join(pkgRoot, relative)],
-    bundle: true,
-    write: false,
-    format: 'esm',
-    platform: 'node',
-    // The catalog reaches into the kit's source; nothing in the two tables we
-    // load here needs it at runtime, so keep the temp module small. `typescript`
-    // is external because a guard parses one file with it — 9.5MB of CJS that
-    // must not be inlined.
-    external: ['zod', 'typescript'],
-  });
-  await mkdir(loadedTsDir, { recursive: true });
-  // Named after the entry point so two loaded modules cannot collide, and
-  // cache-busted so a rebuild in the same process never re-imports stale bytes.
-  const out = path.join(loadedTsDir, `${path.basename(relative, '.ts')}-${process.pid}.mjs`);
-  await writeFile(out, built.outputFiles[0].text);
-  return import(`${pathToFileURL(out).href}?v=${Date.now()}`);
-}
+const loadedTsDir = loadedTsCacheDir(pkgRoot);
+const loadTs = (relative) => loadTsFrom(pkgRoot, relative);
 
 /** Where a framework's starter lives. Both the rule and the copy ask for it. */
 const starterPath = (templateDir) => path.join(startersRoot, templateDir);
@@ -185,12 +153,15 @@ async function main() {
   // below resolves it out of the package's own node_modules.
   const { WIRED_GATEWAYS, BROWSER_WIRE, EMITTED_READER_FORMAT, getIntegration } =
     await loadTs('src/catalog.ts');
-  // `GITIGNORE_TEMPLATE_NAME` is read from `generate.ts` rather than restated
-  // here. `generate()` is what renames it back, so a local copy that drifted
-  // would have this build write a name the CLI never looks for — and nothing
-  // would fail: the emitted project would simply have no `.gitignore`, which is
-  // the API-key-staging bug, visible only in the published package.
-  const { GITIGNORE_TEMPLATE_NAME, goLiveThread } = await loadTs('src/generate.ts');
+  // The dotfile list is read from `src/template-dotfiles.ts` rather than
+  // restated here. `generate()` renames these back off the same list, so a local
+  // copy that drifted would have this build write a name the CLI never looks for
+  // — and nothing would fail at build time: the emitted project would simply be
+  // missing the file. For `.gitignore` that is the API-key-staging bug; for
+  // `.npmrc` it was an ENOENT on `npx create-kai --framework nextjs`. Both are
+  // visible only in the published package.
+  const { STRIPPED_DOTFILES, travellingName } = await loadTs('src/template-dotfiles.ts');
+  const { goLiveThread } = await loadTs('src/generate.ts');
 
   const ready = FRAMEWORKS.filter((f) => f.status === 'ready');
   failIf(guards.readyFrameworksProblem(ready));
@@ -241,11 +212,6 @@ async function main() {
     const exists = (relative) => existsSync(path.join(root, relative));
     const patches = patchesFor(framework.templateDir);
 
-    await rename(
-      path.join(root, guards.GITIGNORE_SOURCE_NAME),
-      path.join(root, GITIGNORE_TEMPLATE_NAME),
-    );
-
     // Order matters: `emittedContentProblem` applies the patches, and `applyPatch`
     // throws on one that does not match, so the specific "this patch went stale"
     // message has to come first or it is replaced by a generic one.
@@ -268,6 +234,17 @@ async function main() {
     );
     failIf(guards.appPathProblem(framework, read, goLiveThread));
     failIf(guards.declaredPathsProblem(framework, exists));
+
+    // AFTER every rule above, not before. npm strips these names out of a
+    // published tarball, so a template carries them underscored and `generate()`
+    // renames them back — but a patch row names the REAL name (`PATCHES` opens
+    // `.npmrc` for both standalone starters), so renaming first would take
+    // `patchMatchProblem` from "this patch went stale" to "this template has no
+    // such file" for a file that is right there.
+    for (const dotfile of STRIPPED_DOTFILES) {
+      const from = path.join(root, dotfile);
+      if (existsSync(from)) await rename(from, path.join(root, travellingName(dotfile)));
+    }
 
     patchCount += patches.length;
     gatewayPatchCount += gatewayPatchesFor(framework.templateDir).length;
