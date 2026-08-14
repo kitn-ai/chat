@@ -23,17 +23,20 @@
  * sent, and a reply streaming into `<kai-thread>`.
  *
  * NOT EVERY STARTER IS A CHAT APP, so for some rows flipping `status` is not a
- * table edit at all. Six starters (react, vue, svelte, solid, angular, vanilla)
- * are composed chat workspaces with a composer and the kit's mock responder
- * behind them. TWO ARE NOT: `nextjs` and `tanstack-start` are SSR/RSC
+ * table edit at all. A composed chat workspace has a composer, a thread fed by a
+ * chat controller, and the kit's mock responder behind it; the rest are
  * compatibility demos — a Button rendered from a server component, a static
- * `messages` array, a registration probe. Neither has a composer, a thread fed
- * by a chat controller, or a mock responder, so there is no stream for the
- * browser check to observe and nothing the `ready` standard above can be applied
- * to.
+ * `messages` array, a registration probe — with no stream for the browser check
+ * to observe and so nothing the `ready` standard above can be applied to.
  *
- * `scripts/build.mjs` already refuses them rather than emitting one: flip either
- * SSR row and the build stops at `verifyAppPath` with "app/page.tsx carries no
+ * WHICH ROWS ARE WHICH IS THE `composedWorkspace` COLUMN, not a roster restated
+ * here. This paragraph named six starters and excepted two by id; one of the two
+ * has since been rewritten and the sentence was wrong in both halves at once,
+ * which is the same failure the `status` note above already refuses to repeat.
+ * The column moves when the starter does.
+ *
+ * `scripts/build.mjs` already refuses a demo row rather than emitting one: flip
+ * one and the build stops at `appPathProblem` with "app/page.tsx carries no
  * toOpenAIMessages(...) expression", because the emitted README quotes that
  * expression out of the app file and there is none to quote. That throw is the
  * guard working, not a bug in it.
@@ -214,9 +217,35 @@ export const FRAMEWORKS: readonly FrameworkDef[] = [
     templateDir: 'nextjs',
     renderer: 'next',
     registration: 'elements',
-    // Real gap, recorded in the spec: Next and TanStack Start have renderers but
-    // no hand-composed workspace shell, so `conversations` is not reachable for
-    // them even once their status flips.
+    // Real gap, recorded in the spec: the starter has a renderer but no
+    // hand-composed workspace shell, so `conversations` is not reachable for it
+    // even once the status flips. TanStack Start was the other half of this note
+    // until its starter was rewritten; that is the sequence this row still owes.
+    //
+    // TWO THINGS THIS ROW WILL WALK INTO, both found while auditing it and both
+    // invisible today because a `planned` row is never graded against its
+    // template:
+    //
+    //   · `paths.css` names `app/globals.css`, which the starter does not have.
+    //     `declaredPathsProblem` only runs on a READY framework, so this is the
+    //     same defect Solid's `css` entry had — wrong since the row was written,
+    //     and it fails the moment the status flips rather than before.
+    //
+    //   · `app/layout.tsx` imports `@kitn.ai/ui/theme.css`, and the starter's
+    //     `postcss.config.mjs` declares `plugins: {}` with a comment calling that
+    //     file "just custom properties". IT IS NOT. `theme.css` is Tailwind v4
+    //     SOURCE: its tokens live in `@theme { … }`, an at-rule a browser
+    //     DISCARDS WHOLE, so every `--color-*` resolves to nothing and the app
+    //     renders on fallbacks — with a green build, which is what makes it
+    //     expensive. #216 hit exactly this in the TanStack starter.
+    //
+    //     THE RULE IS "DOES TAILWIND PROCESS THIS FILE", NOT "NEVER IMPORT
+    //     theme.css" — the second is the obvious lesson and it is wrong. Solid
+    //     imports the very same file and is correct, because its `styles.css`
+    //     says `@import "tailwindcss"` above it and `@tailwindcss/vite` is in the
+    //     pipeline, so `@theme` is COMPILED rather than discarded. A starter with
+    //     Tailwind imports `theme.css`; one without imports the pre-compiled
+    //     `theme.tokens.css`. This row has no Tailwind, so it wants the latter.
     composedWorkspace: false,
     status: 'planned',
     paths: {
