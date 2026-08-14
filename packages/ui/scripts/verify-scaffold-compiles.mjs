@@ -841,6 +841,96 @@ async function solidPartCoverageCheck(scaffold) {
 }
 
 /**
+ * Extract the `<Message ...>` OPENING TAG from the emitted Solid thread.
+ *
+ * Comments are stripped BEFORE the tag is located, and that ordering is the
+ * whole point. The emitted tag carries a prose block explaining what `role`
+ * means, so a substring search over the raw text would be satisfied by the
+ * COMMENT that says to pass the speaker rather than by the attribute that
+ * actually passes it — the exact defect under test, dressed as its own fix.
+ * `renderPartBody` strips for the same reason; this is that rule applied to a
+ * tag rather than a function body.
+ *
+ * Scans to the matching `>` tracking brace depth instead of regexing to the
+ * first one: the `class` attribute is a template literal holding `${...}`, and
+ * a lazy `[^>]*>` would be at the mercy of whatever lands inside it later.
+ *
+ * Returns null when there is no `<Message` at all, which upstream treats as a
+ * FAILURE and not a skip — a thread that renders no message rows must never
+ * read as "nothing missing".
+ */
+function messageOpenTag(front) {
+  const stripped = front
+    .replace(/^[ \t]*\/\/.*$/gm, '') // whole-line // comments
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, '') // JSX {/* ... */} comments
+    .replace(/\/\*[\s\S]*?\*\//g, ''); // bare /* ... */ trivia
+  // `<Message` proper, never `<MessageContent` / `<MessageBody`.
+  const at = stripped.search(/<Message(?=[\s/>])/);
+  if (at < 0) return null;
+  let depth = 0;
+  for (let i = at; i < stripped.length; i++) {
+    const c = stripped[i];
+    if (c === '{') depth++;
+    else if (c === '}') depth--;
+    else if (c === '>' && depth === 0) return stripped.slice(at, i + 1);
+  }
+  return null;
+}
+
+/**
+ * Every Solid thread must pass the SPEAKER to `<Message>`.
+ *
+ * Solid is the one target that renders the SolidJS `<Message>` component
+ * directly rather than through `<kai-chat>`, so it inherits none of the
+ * facade's accessibility work — including this. The emitted row read
+ * `m().role` to pick an alignment class and then dropped it, which is #176:
+ * a11y semantics derived into CSS and never reaching the DOM. Without the
+ * prop the row is an unlabelled `<div>` and a screen reader cannot tell the
+ * user's turn from the assistant's.
+ *
+ * WHY HERE AND NOT ONLY IN `scaffold.test.ts`. This sees the emitted CODE, over
+ * every solid cell the matrix can produce, so it fails for the whole target
+ * rather than for the one configuration a string test happens to sample. tsc
+ * cannot help: `role` is optional on `MessageProps`, so omitting it compiles
+ * perfectly — same class as `solidPartCoverageCheck` above, valid code with
+ * missing behaviour.
+ *
+ * The assertion is that the tag passes the message's OWN role accessor, not
+ * merely that some `role=` appears: a hard-coded `role="assistant"` would
+ * label every row identically and is worse than nothing.
+ */
+async function solidSpeakerSemanticsCheck(scaffold) {
+  const failures = [];
+  let checked = 0;
+  for (const surface of SURFACES) {
+    for (const integration of INTEGRATIONS) {
+      const label = `${surface.id}__${integration}__solid`;
+      if (FILTER && !label.includes(FILTER)) continue;
+      checked++;
+      const out = await scaffold.handler({ components: surface.components, integration, placement: "full-page", framework: "solid" });
+      const tag = messageOpenTag(frontEnd(out.content[0].text));
+      if (tag === null) {
+        failures.push(`${label}: no \`<Message\` opening tag in the emitted front end — the thread renders no message rows at all`);
+        continue;
+      }
+      if (!/\brole=\{m\(\)\.role\}/.test(tag))
+        failures.push(
+          `${label}: <Message> has no \`role={m().role}\` — the row ships as an unlabelled <div> ` +
+            `with no speaker semantics, so a screen reader cannot tell the user's turn from the ` +
+            `assistant's (tsc cannot see this: \`role\` is optional). Emitted tag:\n      ` +
+            tag.replace(/\s+/g, ' ').trim(),
+        );
+    }
+  }
+  if (failures.length) {
+    for (const f of failures) console.log(`  ✗ ${f}`);
+    cleanup();
+    fail(`${failures.length} solid scaffold(s) drop the speaker on <Message> (#176).`);
+  }
+  console.log(`  ✓ ${checked} solid scaffolds: <Message> carries role={m().role}, so each row gets role="article" + an aria-label naming the speaker`);
+}
+
+/**
  * The generative-UI card ROUND TRIP, which tsc cannot judge either.
  *
  * Cards are three pieces that only work together — a `createCardRegistry` the app
@@ -1991,6 +2081,7 @@ async function main() {
   await htmlStructureCheck(scaffold);
   await angularStructureCheck(scaffold);
   await solidPartCoverageCheck(scaffold);
+  await solidSpeakerSemanticsCheck(scaffold);
   await cardRoundTripCheck(scaffold, cardEmitPlan);
   await attachmentStagingCheck(scaffold, attachmentEmitPlan);
 
