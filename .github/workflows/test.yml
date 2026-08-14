@@ -581,6 +581,18 @@ jobs:
       - name: create-kai tests (incl. the published-kit contract gate)
         run: pnpm --filter create-kai exec vitest run
 
+      # What the TARBALL looks like, which nothing above can see. The suite runs
+      # against `dist/` in the working tree; npm ships a packed subset of it, and
+      # the two ways they differ are both silent. npm strips any file named
+      # `.gitignore`, so a template carrying one would emit projects that ignore
+      # nothing and eventually commit `.env.local`; and `files: ["dist"]` has to
+      # actually carry the templates, or `npx create-kai` installs cleanly and
+      # then finds no template on the user's first run. This packs and reads it.
+      # It is also the second half of the `prepublishOnly` hook, so running it
+      # here is what stops a publish being the first time it is ever exercised.
+      - name: create-kai packed-tarball shape
+        run: pnpm --filter create-kai run verify:pack
+
       - name: React adapter tests
         run: pnpm --filter @kitn.ai/ui test:react
 
