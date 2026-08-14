@@ -1909,13 +1909,39 @@ covered**, because both have a `webRoute` and the harness drives the route, not 
 `outOfBand` is not an input to `cellsFor` at all. It appears once, as one conjunct of the `pi`
 exclusion predicate, where it helps validate an exclusion rather than decide one.
 
-### 12.7 The coverage diagnostic (#231): OPEN, and its report is not on main
+### 12.7 The coverage diagnostic (#231): MERGED as `addfe2d`, and its report is on main
 
-**Read this section knowing the artifact is not in the tree.** #231 adds
-`docs/superpowers/coverage-diagnostic-2026-08-14.md` and a `coverage` block in
-`packages/ui/vitest.config.ts`; neither is on main at this SHA. `git ls-files | grep -i coverage`
-returns nothing that is a report, and no vitest config here has a `coverage` key. If #231 is closed
-rather than merged, everything below is the only surviving record of it.
+> **Written at `6afe8a0` while #231 was open. It merged as `addfe2d`, which is `6afe8a0`'s immediate
+> successor.** This heading read "**OPEN, and its report is not on main**", and the framing that
+> stood here opened "**Read this section knowing the artifact is not in the tree**", recording that
+> #231 adds `docs/superpowers/coverage-diagnostic-2026-08-14.md` and a `coverage` block in
+> `packages/ui/vitest.config.ts`, that neither was on main at that SHA, that
+> `git ls-files | grep -i coverage` returned nothing that is a report, and that if #231 were closed
+> rather than merged this section would be its only surviving record. All of that was true at
+> `6afe8a0`. None of it is true now: `git ls-tree -r --name-only origin/main | grep -i coverage`
+> lists the report, and `git show origin/main:packages/ui/vitest.config.ts | grep -n coverage` finds
+> the block. **The findings below are reproducible by running a command rather than by reading a
+> PR**, the command the report itself names:
+> `nx build ui && npm run build:css && npx vitest run --project=unit --project=emitted --coverage`,
+> from `packages/ui`.
+>
+> **The heading is corrected rather than left to rot, which is the opposite of what §4 gets, and the
+> difference is whether the rot teaches anything.** §4's heading is a row count in a file that opens
+> by swearing off counts, so leaving it rotted is the worked example. This one teaches nothing and
+> would only send a reader hunting for a file already sitting in front of them. §12's own opening
+> still lists #231 as one of two open PRs, and that stays as written, like every other claim at this
+> section's anchor. **§12.10.**
+>
+> **Re-derived at `addfe2d`, because "the config block is inert unless `--coverage` is passed" was a
+> claim about a PR and is now a claim about the tree: it holds.** The block declares no
+> `coverage.enabled` key, and the only `enabled: true` in that file is `browser.enabled` on the
+> storybook project. It carries no `thresholds` key. And
+> `git grep -- '--coverage' origin/main -- '.github/**' 'packages/ui/package.json' 'package.json'`
+> returns nothing, so no workflow and no script turns it on, and Vitest collects only when the flag
+> or that key is set.
+> `@vitest/coverage-v8` was already declared at `6afe8a0`, and `git diff --stat 6afe8a0 addfe2d` is
+> three files with no source, no test and no lockfile among them, so the merge cost the suite
+> nothing and every structural finding below still reads off the current tree unchanged.
 
 **It is a diagnostic and not a gate**, and it should stay one: no threshold is proposed, the config
 block is inert unless `--coverage` is passed, and `@vitest/coverage-v8` was already a declared
@@ -2041,6 +2067,20 @@ carry.
 
 ### 12.10 Corrections to earlier sections
 
+**§12.7's heading and opening framing are CORRECTED, and this entry is the odd one on the list.**
+Every other correction here, and every one in §9.7 and §11.9, points back at an earlier round. This
+one points at this round. §12.7 said the coverage report and the `coverage` block were not on main;
+both statements were true at this section's anchor `6afe8a0` and both stopped being true at the very
+next commit, when #231 merged as `addfe2d`. The heading is rewritten and the original wording is
+quoted inside the marker rather than deleted. Nothing else in §12.7 changed, and nothing else needed
+to: `addfe2d`'s parent is `6afe8a0` and its diff touches no source and no test, so the structural
+findings were read off a tree identical to the one that now carries the report. **The interval is
+the part worth carrying.** `TZ=UTC git show -s --format='%h %ad' --date=iso-local 2344e14 addfe2d`
+puts §12's own commit and #231's merge minutes apart, which is the third time this file has gone
+stale while being written and by far the fastest. The intro argues that a handoff without a SHA is
+unfalsifiable; this is the case for the corollary, that a section written about an OPEN PR is
+already carrying a fuse. §12.7, §12.11.
+
 **§11.8 is CLOSED** by #223, and its second derivation still returns nothing. §12.1.
 
 **§11.2's comments were corrected in the tree** by #222, in both directions this document
@@ -2099,6 +2139,12 @@ not find them; the delegation-table half of that finding is the durable one and 
 in §12.7. And **"the coverage report is not on main"** is true and slightly undersells the situation:
 neither the report nor the config is on main, so nothing in §12.7 can be reproduced from this tree by
 running a command, only by reading the PR.
+*(TRUE at `6afe8a0` and FALSE one commit later. #231 merged as `addfe2d`, `6afe8a0`'s immediate
+successor, putting both the report and the `coverage` block on main. §12.7 is now reproducible by
+command, the one its own report names:
+`nx build ui && npm run build:css && npx vitest run --project=unit --project=emitted --coverage`,
+from `packages/ui`. The narrative was right when it was written, and the situation it undersold
+resolved in the other direction inside three minutes. §12.7, §12.10.)*
 
 ---
 
