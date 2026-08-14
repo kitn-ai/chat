@@ -130,28 +130,36 @@ describe('feature availability', () => {
   });
 
   /**
-   * THE REPORTED GAP THAT REMAINS, and it is a different KIND of gap from the one
-   * `attachments` was: not "nothing renders these components" but "only a
-   * hand-written starter composes this surface". `renderSurface` has no
-   * `kai-conversations` branch, so a framework with no composed workspace shell
-   * has no way to produce the sidebar — Next, TanStack Start and Solid are the
-   * three, and this is what stops the CLI emitting them a project that runs
-   * without the feature they asked for.
+   * THE GAP THAT CLOSED, RECORDED RATHER THAN DELETED.
    *
-   * Asserted over ALL non-composed frameworks rather than one, so turning a
-   * composed shell on for one of them does not quietly leave the other two
-   * unchecked.
+   * This used to loop over every `composedWorkspace: false` row and assert
+   * `conversations` was reported unavailable there — Next, TanStack Start and
+   * Solid were the three. It carried a vacuity guard saying, in as many words,
+   * that an empty set means "this gap is closed and this test has no subject",
+   * and the Next.js flip is what made that fire. It did its job: the failure is
+   * how this edit was prompted rather than something a reader had to notice.
+   *
+   * What replaces it asserts the closure as a FACT about the shipped table, which
+   * is the half that still has a subject. The MECHANISM — a framework with no
+   * shell reports the feature unavailable — moved to the synthetic-row test in
+   * the `resolveSurface` block, where no future flip can take its subject away.
+   *
+   * Kept live rather than deleted because it is the tripwire for the next row
+   * added: land one with `composedWorkspace: false` and this fails, pointing at
+   * both the row and the shell it still owes.
    */
-  it('reports conversation history as unavailable wherever no composed starter exists', () => {
+  it('has a composed workspace behind every shipped framework, so conversations is offered by all of them', () => {
     const conversations = FEATURES.find((f) => f.id === 'conversations')!;
-    const nonComposed = FRAMEWORKS.filter((f) => !f.composedWorkspace);
+    expect(FRAMEWORKS.length, 'no frameworks — this asserted nothing').toBeGreaterThanOrEqual(8);
+    const withoutShell = FRAMEWORKS.filter((f) => !f.composedWorkspace).map((f) => f.id);
     expect(
-      nonComposed.map((f) => f.id),
-      'every framework now has a composed workspace, so this gap is closed and this test has no subject',
-    ).not.toHaveLength(0);
-    for (const framework of nonComposed) {
-      expect(featureEmit(conversations, framework), `${framework.id}`).toBe('unavailable');
-      expect(availableFeatures(framework).map((f) => f.id)).not.toContain('conversations');
+      withoutShell,
+      'this row has no composed workspace starter, so `conversations` cannot be emitted for it — ' +
+        'either give the starter a sidebar + thread + composer, or state the gap in its `note`',
+    ).toEqual([]);
+    for (const framework of FRAMEWORKS) {
+      expect(featureEmit(conversations, framework), `${framework.id}`).toBe('composed');
+      expect(availableFeatures(framework).map((f) => f.id)).toContain('conversations');
     }
   });
 
@@ -221,19 +229,30 @@ describe('resolveSurface', () => {
   });
 
   /**
-   * Was `resolveSurface(['attachments'], react)`, which is now a legal request.
-   * The subject moved to the gap that is still real: `conversations` on a
-   * framework with no composed workspace shell. Reachable by a user —
-   * `--framework nextjs` is accepted by the arg parser, not filtered to the
-   * ready set — so this is a live refusal, not dead code.
+   * THE COMPOSED-ONLY UNAVAILABILITY PATH, DRIVEN BY A SYNTHETIC ROW — and the
+   * reason is the same one the synthetic-FEATURE test below already gives.
+   *
+   * The subject was `attachments`, which became legal; then `conversations` on
+   * `nextjs`, which was the last framework with no composed workspace shell. That
+   * shell landed, so every shipped row is now `composedWorkspace: true` and the
+   * refusal has no real subject left. Pointing it at another real row is not
+   * available, and deleting it would drop the guard on a branch that is still
+   * live: it is what stands between a user and a project that compiles, runs, and
+   * silently lacks the sidebar they asked for. The NEXT framework someone adds
+   * arrives with `composedWorkspace: false` and walks straight into it.
+   *
+   * So it drives the pure function with a synthetic row. That tests the mechanism
+   * honestly and claims nothing about the shipped table; the assertion in
+   * `availableFeatures` below records the table's current state separately, so a
+   * real non-composed row landing later is visible rather than silent.
    *
    * The reason is asserted, not just `ok === false`. Three later checks in
    * `generate` also refuse, and a bare falsy assertion would pass if this one
    * stopped firing and a different rule caught the request instead.
    */
-  it('refuses an unavailable feature', () => {
-    const next = getFramework('nextjs')!;
-    const result = resolveSurface(['conversations'], next);
+  it('refuses a composed-only feature on a framework with no composed starter (mechanism, no shipped subject)', () => {
+    const noShell = { ...react, id: 'synthetic', label: 'Synthetic', composedWorkspace: false };
+    const result = resolveSurface(['conversations'], noShell);
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.reason).toMatch(/cannot be emitted/);
@@ -242,6 +261,10 @@ describe('resolveSurface', () => {
       // renderer plainly does branch on — the sentence this replaces did.
       expect(result.reason).not.toMatch(/no renderer branches on .*kai-resizable/);
     }
+    // And the control, so this cannot pass by the feature having become
+    // unavailable everywhere: the same request on the same row WITH a shell is
+    // accepted.
+    expect(resolveSurface(['conversations'], react).ok).toBe(true);
   });
 
   it('treats no features as the bare chat rather than an error', () => {

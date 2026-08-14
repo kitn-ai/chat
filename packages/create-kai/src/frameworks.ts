@@ -36,7 +36,7 @@
  * The column moves when the starter does.
  *
  * `scripts/build.mjs` already refuses a demo row rather than emitting one: flip
- * one and the build stops at `appPathProblem` with "app/page.tsx carries no
+ * one and the build stops at `appPathProblem` with "<paths.app> carries no
  * toOpenAIMessages(...) expression", because the emitted README quotes that
  * expression out of the app file and there is none to quote. That throw is the
  * guard working, not a bug in it.
@@ -49,6 +49,14 @@
  * as the other five, and only then flipped. The `goLiveThread` throw its old
  * note described was never a bug to route around; it went away when the starter
  * gained the call it was asking for.
+ *
+ * THE QUEUE IS EMPTY as of the Next.js flip: every row below is `ready` and every
+ * starter is a composed workspace. That is a statement about today, not a rule —
+ * `planned`, `note` and `composedWorkspace: false` are still live machinery for
+ * the NEXT framework someone adds, and the tests that grade them now drive
+ * synthetic rows rather than pointing at whichever real row was still off (see
+ * `catalog.test.ts`, which had run out of subjects to point at). Nothing here
+ * assumes the set stays full.
  *
  * WATCH THE `templateDir` COLUMN. It is not the id. `html` is served by
  * `examples/starters/vanilla`, and since patches are keyed by templateDir, a
@@ -217,27 +225,45 @@ export const FRAMEWORKS: readonly FrameworkDef[] = [
     templateDir: 'nextjs',
     renderer: 'next',
     registration: 'elements',
-    // Real gap, recorded in the spec: the starter has a renderer but no
-    // hand-composed workspace shell, so `conversations` is not reachable for it
-    // even once the status flips. TanStack Start was the other half of this note
-    // until its starter was rewritten; that is the sequence this row still owes.
+    // The starter is now the hand-composed workspace, prerendered by the App
+    // Router: a `<Resizable>` split, `<Conversations>` in the rail, `<Thread>`
+    // fed by `useKaiChat`, `<PromptInput>` below it, and the kit's
+    // `createMockResponder` streaming through `readOpenAIStream`. So
+    // `conversations` is emittable here exactly as it is for the six Vite rows.
     //
-    // TWO THINGS THIS ROW WILL WALK INTO, both found while auditing it and both
-    // invisible today because a `planned` row is never graded against its
-    // template:
+    // It was the last row to flip, and BOTH of the defects its old note predicted
+    // were real. Recorded here because each was a class, not a typo:
     //
-    //   · `paths.css` names `app/globals.css`, which the starter does not have.
-    //     `declaredPathsProblem` only runs on a READY framework, so this is the
-    //     same defect Solid's `css` entry had — wrong since the row was written,
-    //     and it fails the moment the status flips rather than before.
+    //   · `paths.css` named `app/globals.css`, which the starter did not have —
+    //     the third instance of a `css` entry copied down from the row above and
+    //     never opened, after Solid's and TanStack's. `declaredPathsProblem` only
+    //     runs on a READY framework, so a `planned` row is never graded against
+    //     its template and the defect waits for the flip. The composed starter
+    //     now HAS `app/globals.css`, so the path became true rather than being
+    //     edited to match a wrong file.
     //
-    //   · `app/layout.tsx` imports `@kitn.ai/ui/theme.css`, and the starter's
-    //     `postcss.config.mjs` declares `plugins: {}` with a comment calling that
-    //     file "just custom properties". IT IS NOT. `theme.css` is Tailwind v4
-    //     SOURCE: its tokens live in `@theme { … }`, an at-rule a browser
-    //     DISCARDS WHOLE, so every `--color-*` resolves to nothing and the app
-    //     renders on fallbacks — with a green build, which is what makes it
-    //     expensive. #216 hit exactly this in the TanStack starter.
+    //   · `app/layout.tsx` imported `@kitn.ai/ui/theme.css` while
+    //     `postcss.config.mjs` declared `plugins: {}` — the THIRD instance of the
+    //     Tailwind-source import (#216 hit it in TanStack, #217 proved Solid is
+    //     safe). Measured on the emitted asset before the fix: one raw `@theme {`
+    //     at-rule in `.next/static/css/*.css`, with `--color-background` defined
+    //     ONLY inside it. A browser discards an unknown at-rule whole, and
+    //     `next build` was green throughout. It now imports the pre-compiled
+    //     `theme.tokens.css` and the same count is zero.
+    //
+    //     ITS BLAST RADIUS IS NARROWER THAN "the app renders on fallbacks",
+    //     which is what the audit note said and what a reader would repeat.
+    //     Measured in Chromium against a scaffolded project, defect twin beside
+    //     fixed: DARK mode is unaffected, because those tokens are a plain
+    //     `.dark` rule rather than `@theme`. In LIGHT mode `:root` carries no
+    //     `--color-*` at all, but chrome INSIDE a `kai-*` element still resolves
+    //     — the elements re-scope their own tokens onto slotted content, so the
+    //     sidebar still computed `rgb(244, 244, 245)`. What actually broke is the
+    //     chrome OUTSIDE every element: `.app` computed
+    //     `background-color: rgba(0, 0, 0, 0)` against `rgb(255, 255, 255)`
+    //     fixed. That is precisely what `theme.tokens.css` is documented to be
+    //     for, and the narrowness is why it survived review — the page looks
+    //     nearly right.
     //
     //     THE RULE IS "DOES TAILWIND PROCESS THIS FILE", NOT "NEVER IMPORT
     //     theme.css" — the second is the obvious lesson and it is wrong. Solid
@@ -246,16 +272,25 @@ export const FRAMEWORKS: readonly FrameworkDef[] = [
     //     pipeline, so `@theme` is COMPILED rather than discarded. A starter with
     //     Tailwind imports `theme.css`; one without imports the pre-compiled
     //     `theme.tokens.css`. This row has no Tailwind, so it wants the latter.
-    composedWorkspace: false,
-    status: 'planned',
+    composedWorkspace: true,
+    status: 'ready',
     paths: {
       entry: 'app/layout.tsx',
-      app: 'app/page.tsx',
-      components: 'app',
+      // `app/workspace.tsx`, NOT `app/page.tsx`. The page is a Server Component
+      // that renders the client island next to it, which is the idiomatic App
+      // Router shape and the starter's answer to "where does `'use client'` go".
+      // The composed workspace — and so the `toOpenAIMessages(...)` expression the
+      // emitted README quotes — lives in the island.
+      app: 'app/workspace.tsx',
+      // `app/components`, not the bare `app` this row used to claim. Everything
+      // under `app/` that is not a `page`/`layout`/`route` file is ignored by the
+      // router, so colocation is fine — but a v2 `add` reads this to decide where
+      // to WRITE a generated component, and `app` would scatter them next to the
+      // route files.
+      components: 'app/components',
       css: 'app/globals.css',
       env: '.env.local',
     },
-    note: 'starter is an SSR compatibility demo, not a chat app; no thread, composer or mock stream to run',
   },
   {
     id: 'tanstack-start',

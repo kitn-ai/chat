@@ -267,9 +267,60 @@ export const PATCHES: Record<string, readonly Patch[]> = {
     },
   ],
   /**
+   * The other STANDALONE starter, and the same pair of patches as
+   * `tanstack-start` below for the same two reasons — a JS-declared document
+   * title, and a `.npmrc` comment naming a monorepo-relative kit path. Different
+   * files, because Next declares its title in `export const metadata` rather than
+   * a route's `head()`.
+   */
+  nextjs: [
+    {
+      /**
+       * THE BROWSER TAB, VIA NEXT'S METADATA API.
+       *
+       * Unlike the TanStack row below, this one IS graded. `titleProblems` now
+       * parses `export const metadata = { title }` and `generateMetadata()`
+       * (src/template-guards.ts), so a Next starter that stopped being patched —
+       * or that grew a second `metadata` export in a new route — fails the build
+       * on the emitted bytes rather than relying on this patch still matching.
+       * Both hold it: `patchMatchProblem` if the string is reworded,
+       * `emittedContentProblem` if the resulting title is not the project name.
+       *
+       * The one shape to avoid when editing this: anything the parser cannot
+       * read as a static string. A template literal, a variable, a call, or
+       * Next's `title.template` (`'%s | Acme'`) all yield NO title to compare, so
+       * the guard goes quiet rather than failing — see the stated limits on
+       * `titleProblems`. Keep it a plain string literal.
+       */
+      file: 'app/layout.tsx',
+      find: /'@kitn\.ai\/ui — Next\.js App Router example'/,
+      replace: (name) => `'${name}'`,
+      why: 'the browser tab should name the user\'s app, not the kit\'s example',
+    },
+    {
+      /**
+       * The `.npmrc` comment, which is pure monorepo geography — see the
+       * identical patch on the `tanstack-start` row for the full reasoning. The
+       * replacement keeps this starter's own justification for `install-links`,
+       * which is Next-specific and worth carrying into a user's project: webpack
+       * resolves symlinks to their realpath, which would put the kit's prebuilt
+       * `dist/` outside `node_modules` and hand it to the transpiler.
+       */
+      file: '.npmrc',
+      find: /# Pack the local `@kitn\.ai\/ui`[\s\S]*?\n(?=install-links=true)/,
+      replace: () =>
+        '# A `file:` dependency pointing at a DIRECTORY is copied into node_modules\n' +
+        '# rather than symlinked. Next/webpack resolves a symlink to its realpath, which\n' +
+        '# would put a linked package\'s prebuilt dist/ outside node_modules and hand it\n' +
+        '# to the transpiler. Harmless if this project has no local dependencies.\n',
+      why: 'the comment explains a monorepo-relative kit path that does not exist in a user\'s project',
+    },
+  ],
+  /**
    * The first STANDALONE starter to go `ready`, and it needs a different pair of
-   * patches from the five Vite rows above — neither of the two files below exists
-   * in any of them.
+   * patches from the VITE rows above — neither of the two files below exists in
+   * any of them. (`nextjs`, added later and also standalone, sits directly above
+   * with the same shape.)
    *
    * The six linked starters name the kit `workspace:*` and carry the repo-internal
    * instruction in `vite.config.ts`. This one names it

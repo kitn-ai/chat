@@ -162,37 +162,52 @@ describe('generate (refusals)', () => {
   });
 
   /**
-   * Was `featureIds: ['attachments']`, which the kit's catalog can now emit — so
-   * the request stopped being refused HERE and fell through to the next refusal
-   * ("generated feature surfaces are not wired"), which is the test above. That
-   * is two tests asserting one rule and none asserting this one.
+   * THAT `generate` STOPS AT A `resolveSurface` REFUSAL rather than emitting a
+   * project the user did not ask for.
    *
-   * The subject moved to `conversations` on Next.js: no composed workspace shell
-   * and no `kai-conversations` renderer branch, so nothing can produce it.
+   * The subject has moved twice and both moves were forced by the product getting
+   * better, which is worth recording because the next reader will be tempted to
+   * re-point it a third time:
+   *
+   *   · `featureIds: ['attachments']` — the kit's catalog can emit those now, so
+   *     the request fell through to the NEXT refusal ("generated feature surfaces
+   *     are not wired"), which is the test above. Two tests on one rule, none on
+   *     this one.
+   *   · `conversations` on Next.js — the last framework with no composed
+   *     workspace. Its starter is now one, so every shipped row can produce the
+   *     sidebar and that refusal has no real (framework, feature) subject left.
+   *
+   * So it drives the OTHER `resolveSurface` refusal that cannot run out: an
+   * unknown feature id. That is still a live path — `--feature` takes a string
+   * from the command line — and it is the same `if (!surface.ok) throw` this test
+   * has always been about. The composed-only mechanism is asserted directly, with
+   * a synthetic row, in catalog.test.ts.
    *
    * ORDER MATTERS AND IS ASSERTED. `generate` refuses in sequence — unknown
    * framework, unknown gateway, resolveSurface, unwired generated surface, no
-   * template — and Next.js has no template in `dist/templates` either, so a bare
-   * `rejects.toThrow()` here would pass on the LAST of those while this one
-   * silently stopped firing. Matching the reason pins which rule caught it.
+   * template — so a bare `rejects.toThrow()` would pass on a LATER rule while
+   * this one silently stopped firing. Matching the reason pins which rule caught
+   * it, and the two `not.toMatch` lines name the neighbours it must not be.
    */
-  it('refuses a feature no renderer and no starter can produce', async () => {
+  it('refuses at the surface gate rather than emitting a project without the feature', async () => {
     const error = await generate(
-      plan(path.join(root, 'b'), { frameworkId: 'nextjs', featureIds: ['conversations'] }),
+      plan(path.join(root, 'b'), { frameworkId: 'react', featureIds: ['not-a-shipped-feature'] }),
       { templateRoot: TEMPLATE_ROOT },
     ).then(
       () => null,
       (e: unknown) => e as Error,
     );
-    expect(error, 'generate accepted a feature nothing can produce').not.toBeNull();
-    // ONE error, both properties. Two separate `rejects` calls would let the
-    // "not the template refusal" half pass on its own while the first half was
-    // the thing that failed — and this cell reaches BOTH refusals, so which one
-    // fired is the entire question.
-    expect(error!.message).toMatch(/feature 'conversations' cannot be emitted for Next\.js/);
-    expect(error!.message, 'caught by the missing-template check, not the feature gate').not.toMatch(
+    expect(error, 'generate accepted a feature that does not exist').not.toBeNull();
+    // ONE error, every property. Separate `rejects` calls would let one half pass
+    // on its own while another was the thing that failed.
+    expect(error!.message).toMatch(/unknown feature 'not-a-shipped-feature'/);
+    expect(error!.message, 'caught by the missing-template check, not the surface gate').not.toMatch(
       /no template/,
     );
+    expect(
+      error!.message,
+      'caught by the unwired-generated-surface check, not the surface gate',
+    ).not.toMatch(/generated feature surfaces are not wired/);
   });
 
   /**
@@ -841,6 +856,164 @@ describe('generate (tanstack-start + full-screen + conversations + mock)', () =>
     expect(buildTypechecks(pkg.scripts.build)).toBe(false);
     expect(pkg.scripts.typecheck).toContain('tsc');
     expect(scriptsToRun(pkg.scripts)).toEqual(['build', 'typecheck']);
+  });
+});
+
+/**
+ * The RSC cell — the other standalone starter, and the last row to go `ready`.
+ *
+ * It shares the `.npmrc` and JS-declared-title shapes with tanstack-start above,
+ * so those are asserted here in their Next spellings rather than assumed. What is
+ * covered by NOTHING else in the suite is the pair below:
+ *
+ *   1. THE `'use client'` BOUNDARY. Next is the only framework where putting the
+ *      directive in the wrong file is a build error on one side and a silently
+ *      server-rendered dead page on the other. The emitted project has to keep
+ *      `app/page.tsx` a Server Component and `app/workspace.tsx` the island.
+ *   2. THE TOKEN STYLESHEET, third instance of a defect that has now cost three
+ *      starters (#216 TanStack, #217 Solid-is-safe, this row). `theme.css` is
+ *      Tailwind SOURCE; a project with no Tailwind must import the pre-compiled
+ *      `theme.tokens.css` or the browser discards its `@theme { … }` block whole
+ *      — measured in Chromium, that leaves the host-page chrome outside every
+ *      `kai-*` element with no light-mode colours (`.app` computes
+ *      `rgba(0, 0, 0, 0)`), with a completely green build. Asserted on the
+ *      IMPORT LIST, not by searching the file — the file's
+ *      own comment explains the trap and names `theme.css` in prose, so a
+ *      substring search would report on what the file SAYS instead of what it
+ *      does. That is the mistake #216 made writing the sibling assertion.
+ */
+describe('generate (nextjs + full-screen + conversations + mock)', () => {
+  let root: string;
+  let dir: string;
+  let files: string[];
+
+  /** The bare `import '<spec>'` specifiers in a module, in order. */
+  const sideEffectImports = (source: string) =>
+    [...source.matchAll(/^import\s+'([^']+)';/gm)].map((m) => m[1]);
+
+  beforeAll(async () => {
+    root = await mkdtemp(path.join(tmpdir(), 'create-kai-nextjs-'));
+    dir = path.join(root, 'next-app');
+    const result = await generate(plan(dir, { frameworkId: 'nextjs', name: 'next-app' }), {
+      templateRoot: TEMPLATE_ROOT,
+    });
+    files = result.files;
+  });
+
+  afterAll(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it('emits the composed workspace as an RSC page plus a client island', async () => {
+    expect(files).toEqual(
+      expect.arrayContaining([
+        'app/layout.tsx',
+        'app/page.tsx',
+        'app/workspace.tsx',
+        'app/globals.css',
+        'app/chat-data.ts',
+        'app/components/Sidebar.tsx',
+        'app/components/ThreadView.tsx',
+        'app/components/Composer.tsx',
+        'app/hooks/useConversations.ts',
+      ]),
+    );
+    // This starter used to be an SSR compatibility demo: a `<Button>` rendered
+    // from a Server Component and a `<Conversations>` fed a frozen array, with no
+    // composer and no stream. Asserting the files exist would pass on a project
+    // that still had that in it, so assert what makes it a chat APP.
+    const app = await readFile(path.join(dir, 'app/workspace.tsx'), 'utf8');
+    expect(app).toContain('useKaiChat');
+    expect(app).toContain('readOpenAIStream');
+    expect(app).toContain('streamAssistant');
+    expect(files).not.toContain('app/InteractiveIsland.tsx');
+
+    // The drop-in is gone, checked against the IMPORT LIST rather than by
+    // searching the source for `<Chat`: the file's header comment explains why
+    // the static demo was replaced, and a check that reads prose reports on what
+    // a file SAYS instead of what it does.
+    const named = app.match(/import \{([^}]*)\} from '@kitn\.ai\/ui\/react'/)?.[1];
+    expect(named, 'the app must import the composed pieces from @kitn.ai/ui/react').toBeDefined();
+    const imported = named!.split(',').map((s) => s.trim());
+    expect(imported).toContain('useKaiChat');
+    expect(imported).not.toContain('Chat');
+  });
+
+  it("puts 'use client' on the island and leaves the page a Server Component", async () => {
+    const page = await readFile(path.join(dir, 'app/page.tsx'), 'utf8');
+    const layout = await readFile(path.join(dir, 'app/layout.tsx'), 'utf8');
+    const workspace = await readFile(path.join(dir, 'app/workspace.tsx'), 'utf8');
+    // The directive is only a directive at the top of the file; anywhere else it
+    // is a string expression. So the first line is what is asserted, not
+    // `includes`, which both of these files would satisfy from their prose.
+    const firstLine = (s: string) => s.split('\n')[0].trim();
+    expect(firstLine(workspace)).toBe("'use client';");
+    expect(firstLine(page)).not.toBe("'use client';");
+    expect(firstLine(layout)).not.toBe("'use client';");
+  });
+
+  it('imports the COMPILED token stylesheet, not the Tailwind source', async () => {
+    const layout = await readFile(path.join(dir, 'app/layout.tsx'), 'utf8');
+    const specs = sideEffectImports(layout);
+    expect(specs).toContain('@kitn.ai/ui/theme.tokens.css');
+    // The defect: `@kitn.ai/ui/theme.css` is Tailwind v4 source, and this project
+    // runs no Tailwind (`postcss.config.mjs` declares no plugins), so the browser
+    // discards its `@theme { … }` block whole and `:root` ends up with no
+    // light-mode `--color-*` at all — with a completely green `next build`.
+    expect(specs).not.toContain('@kitn.ai/ui/theme.css');
+    // And the stylesheet it pairs with actually consumes those tokens, so this is
+    // not two files agreeing about an import nothing reads.
+    const css = await readFile(path.join(dir, 'app/globals.css'), 'utf8');
+    expect(css).toContain('var(--color-background)');
+  });
+
+  it('names the browser tab after the user app, in the metadata export the guard parses', async () => {
+    const layout = await readFile(path.join(dir, 'app/layout.tsx'), 'utf8');
+    expect(layout).toContain("title: 'next-app'");
+    expect(layout).not.toContain('Next.js App Router example');
+  });
+
+  it('leaves no monorepo-relative kit path in .npmrc, which no rewrite opens', async () => {
+    const npmrc = await readFile(path.join(dir, '.npmrc'), 'utf8');
+    expect(npmrc).not.toMatch(/file:(?:\.\.\/)+packages\/ui/);
+    // The directive survives; only the explanation of OUR layout is replaced.
+    expect(npmrc).toContain('install-links=true');
+  });
+
+  it('records next paths in kai.json, with components outside the route files', async () => {
+    const kai = JSON.parse(await readFile(path.join(dir, 'kai.json'), 'utf8'));
+    expect(kai).toMatchObject({ framework: 'nextjs', registration: 'elements', gateway: 'mock' });
+    // NOT `app/page.tsx`: the page is the Server Component, and the composed
+    // workspace — with the go-live expression in it — is the island.
+    expect(kai.paths.app).toBe('app/workspace.tsx');
+    expect(kai.paths.entry).toBe('app/layout.tsx');
+    // NOT the bare `app`, which would scatter a v2 `add`'s generated components
+    // in among page.tsx and layout.tsx.
+    expect(kai.paths.components).toBe('app/components');
+    expect(kai.paths.css).toBe('app/globals.css');
+  });
+
+  it("points the README at this project's own thread expression", async () => {
+    const readme = await readFile(path.join(dir, 'README.md'), 'utf8');
+    expect(readme).toContain('# next-app');
+    expect(readme).toContain('`app/workspace.tsx`');
+    expect(readme).toContain('toOpenAIMessages(chat.messages)');
+  });
+
+  it('emits a build that typechecks on its own, unlike TanStack Start', async () => {
+    const pkg = JSON.parse(await readFile(path.join(dir, 'package.json'), 'utf8'));
+    expect(pkg.name).toBe('next-app');
+    expect(pkg.dependencies['@kitn.ai/ui']).toBe('^9.9.9');
+    for (const spec of Object.values(pkg.dependencies as Record<string, string>)) {
+      expect(spec).not.toMatch(/^(?:workspace:|file:\.\.|link:)/);
+    }
+    // THE CONTRAST with tanstack-start, which bundles green with type errors in
+    // it: `next build` runs tsc unless `typescript.ignoreBuildErrors` is set, so
+    // `scriptsToRun` adds nothing after it. If this project ever gains that
+    // setting, this pair is what says so out loud.
+    expect(pkg.scripts.build).toBe('next build');
+    expect(buildTypechecks(pkg.scripts.build)).toBe(true);
+    expect(scriptsToRun(pkg.scripts)).toEqual(['build']);
   });
 });
 
