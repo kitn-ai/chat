@@ -1,6 +1,7 @@
 // src/state/stream.test.ts
 import { describe, it, expect } from 'vitest';
-import type { ChatMessage } from '../elements/chat-types';
+import type { ChatMessage, Source } from '../elements/chat-types';
+import type { AttachmentData } from '../components/attachment-types';
 import { createAssistantStream, onStreamSettled, type SetMessages } from './stream';
 
 /** A fake setter that records each emitted array + applies it. */
@@ -206,5 +207,62 @@ describe('createAssistantStream', () => {
     const parts = sink.get()[0].parts;
     expect(parts).toHaveLength(1);
     expect((parts[0] as { envelope: { data: unknown } }).envelope.data).toEqual({ a: 2 });
+  });
+
+  // Every row of the onStreamSettled wrapper is HAND-WRITTEN delegation -- one
+  // `inner.X(...); return wrapper;` per method -- so a copy-paste slip that points a
+  // row at the wrong inner method, drops an argument, or drops the `return wrapper`
+  // is invisible unless that row is driven through the WRAPPER. Exercising it on the
+  // bare stream from `createAssistantStream` proves nothing about the wrapper.
+  // appendText/addCard/done/abort are covered above; these four cover the rest.
+  //
+  // Each asserts both halves a slip breaks: the part the right inner method produced
+  // from the right arguments, and that the return value is the wrapper itself.
+  // Identity matters because `return inner` still chains -- only `toBe(s)` catches it.
+
+  it('appendReasoning delegates through the onStreamSettled wrapper, opts and all', () => {
+    const sink = makeSink();
+    const s = onStreamSettled(createAssistantStream(sink.set, { id: 'a1' }), () => {});
+    expect(s.appendReasoning('thinking', { index: 2, label: 'Reasoning' })).toBe(s);
+    // a non-default index: dropping the `opts` argument would silently land on 0.
+    expect(sink.get()[0].parts).toEqual([
+      { type: 'reasoning', text: 'thinking', index: 2, label: 'Reasoning', signature: undefined, raw: undefined },
+    ]);
+  });
+
+  it('upsertTool delegates through the onStreamSettled wrapper with both args', () => {
+    const sink = makeSink();
+    const s = onStreamSettled(createAssistantStream(sink.set, { id: 'a1' }), () => {});
+    expect(s.upsertTool('t1', { type: 'search', state: 'input-streaming', input: { q: 'x' } })).toBe(s);
+    s.upsertTool('t1', { state: 'output-available', output: { hits: 3 } });
+    const parts = sink.get()[0].parts;
+    expect(parts).toHaveLength(1);
+    const tool = (parts[0] as { tool: { toolCallId: string; state: string; input?: unknown; output?: unknown } }).tool;
+    // toolCallId proves arg 1 arrived; the surviving input proves arg 2 did, twice.
+    expect(tool.toolCallId).toBe('t1');
+    expect(tool.state).toBe('output-available');
+    expect(tool.input).toEqual({ q: 'x' });
+    expect(tool.output).toEqual({ hits: 3 });
+  });
+
+  it('addSource delegates through the onStreamSettled wrapper', () => {
+    const sink = makeSink();
+    const s = onStreamSettled(createAssistantStream(sink.set, { id: 'a1' }), () => {});
+    const source: Source = { id: 's1', url: 'https://example.com/a', title: 'A', index: 1 };
+    expect(s.addSource(source)).toBe(s);
+    const parts = sink.get()[0].parts;
+    expect(parts).toEqual([{ type: 'source', source }]);
+    // the same object, not a copy -- this is what pins the argument to inner.addSource.
+    expect((parts[0] as { source: unknown }).source).toBe(source);
+  });
+
+  it('addFile delegates through the onStreamSettled wrapper', () => {
+    const sink = makeSink();
+    const s = onStreamSettled(createAssistantStream(sink.set, { id: 'a1' }), () => {});
+    const attachment: AttachmentData = { id: 'f1', type: 'file', filename: 'notes.md', mediaType: 'text/markdown' };
+    expect(s.addFile(attachment)).toBe(s);
+    const parts = sink.get()[0].parts;
+    expect(parts).toEqual([{ type: 'file', attachment }]);
+    expect((parts[0] as { attachment: unknown }).attachment).toBe(attachment);
   });
 });
