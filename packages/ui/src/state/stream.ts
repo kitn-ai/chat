@@ -31,6 +31,46 @@ export type SetMessages = (updater: (prev: ChatMessage[]) => ChatMessage[]) => v
  * The forbidden key set is DERIVED from the `MessagePart` union, the same
  * derivation `verify:scaffold` and `lint:silent-drops` read, so a seventh
  * variant re-fires this on its own rather than quietly widening the hole.
+ *
+ * THE BOUNDARY — three things this deliberately does NOT cover. Each is a
+ * decision with a reason, not an unfinished edge; they are collected here so
+ * the whole boundary reads in one place instead of being met one at a time.
+ *
+ * 1. A KEY NO SIBLING BAG OWNS still passes. `Unmixed` is a denylist over the
+ *    sibling vocabulary, not an exact type, so a consumer's own superset of a
+ *    citation — `{ url, title, relevance }` — keeps compiling. Full exactness
+ *    would catch marginally more and push real callers toward a cast, and a
+ *    cast to `Source` from an attachment is the original bug. A guard people
+ *    route around is worse than a narrower guard they keep.
+ *
+ * 2. `addCard` / `addFile` ARE NOT WRAPPED. Both take STRONG types —
+ *    `CardEnvelope` requires type+id+data, `AttachmentData` requires id+type —
+ *    so ordinary assignability already does what `Unmixed` exists to do for a
+ *    weak bag. Measured, not assumed: wrapping `addCard` buys ZERO (no sibling
+ *    bag is assignable to `CardEnvelope`, because nothing else carries `data`).
+ *    Wrapping `addFile` buys exactly one pair — `addFile(c)` with
+ *    `c: CardEnvelope<'file', unknown>` — and costs two ordinary consumer
+ *    shapes, since the derived denylist owns `state` and `index`:
+ *
+ *        { id, type: 'file', filename, state: 'uploading' }  // upload progress
+ *        { id, type: 'file', filename, index: 3 }            // display position
+ *
+ *    That one pair needs a hand-written generic narrowing with no other
+ *    purpose; an ordinarily-inferred `CardEnvelope` is ALREADY rejected.
+ *    Rejecting likely code to block contrived code is the wrong trade — the
+ *    same trade point 1 refused. Both facts this rests on are pinned in
+ *    ./stream-types.test.ts, so it re-opens if either stops holding.
+ *
+ * 3. A HAND-BUILT PART BYPASSES ALL OF IT. `parts.push({ type: 'source',
+ *    source: attachmentVariable })` compiles, because these mutators are not
+ *    in the path. Closing it means intersecting the guard into `MessagePart`
+ *    itself — and `docs/web-components.md` and `llms-full.txt` inline that
+ *    union's fully-expanded structural text, so dozens of consumer-facing
+ *    prop-table rows would grow `type?: undefined; state?: undefined;
+ *    data?: undefined`. That cost lands on every consumer reading the docs
+ *    while the benefit reaches only someone who has already stepped around
+ *    the provided API. The mutators are the supported path; they are guarded.
+ *    This is where the supported path ends, not a gap in it.
  * ------------------------------------------------------------------------ */
 
 /** Every OBJECT payload a `MessagePart` variant carries. `type`/`raw` are the
@@ -51,7 +91,8 @@ type KeysOf<T> = T extends unknown ? keyof T : never;
 
 /** `Shape`, but any key that belongs exclusively to a SIBLING bag is a compile
  *  error. Keys `Shape` never heard of are untouched, so a consumer's own
- *  superset of a citation still passes — only the mix-ups fail. */
+ *  superset of a citation still passes — only the mix-ups fail. That is a
+ *  denylist, not an exact type, and deliberately so: boundary point 1. */
 type Unmixed<Shape> = Shape & { [K in Exclude<KeysOf<MutatorBag>, keyof Shape>]?: never };
 
 function newId(): string {
@@ -71,26 +112,8 @@ export interface AssistantStream {
    *  second copy of it. See `upsertCardPart`. */
   addCard(envelope: CardEnvelope): AssistantStream;
   addSource(source: Unmixed<Source>): AssistantStream;
-  /* addCard and addFile are deliberately NOT `Unmixed`, and this is a measured
-   * call rather than an oversight. Both take STRONG types — `CardEnvelope`
-   * requires type+id+data, `AttachmentData` requires id+type — so ordinary
-   * assignability already does the job `Unmixed` exists to do for a weak bag.
-   *
-   * Wrapping `addCard` buys ZERO: no sibling bag is assignable to
-   * `CardEnvelope`, because nothing else carries `data`. Wrapping `addFile`
-   * buys exactly one pair — `addFile(c)` with `c: CardEnvelope<'file', unknown>`
-   * — and costs two ordinary consumer shapes, since the derived denylist owns
-   * `state` and `index`:
-   *
-   *     { id, type: 'file', filename, state: 'uploading' }  // upload progress
-   *     { id, type: 'file', filename, index: 3 }            // display position
-   *
-   * That one pair needs a hand-written generic narrowing with no other purpose;
-   * an ordinarily-inferred `CardEnvelope` is ALREADY rejected. Rejecting likely
-   * code to block contrived code is the wrong trade — the same trade this file
-   * refused when it chose a sibling-key denylist over full exactness. KNOWN
-   * RESIDUAL, stated rather than silent. Both facts the call rests on are
-   * pinned in ./stream-types.test.ts, so it re-opens if either stops holding. */
+  /* Unwrapped on purpose — these two take STRONG types, so ordinary
+   * assignability already holds. Measurements and the trade: boundary point 2. */
   addFile(attachment: AttachmentData): AssistantStream;
   done(): void;
   abort(reason?: string): void;

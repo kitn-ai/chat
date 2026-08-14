@@ -162,7 +162,9 @@ describe('AssistantStream mutator parameters are bag-exclusive', () => {
       // (2) addFile already rejects an ordinarily-inferred envelope. The known
       //     residual (`CardEnvelope<'file', unknown>` reaching addFile) needs a
       //     hand-written generic narrowing, which is why it is not worth the two
-      //     ordinary consumer shapes wrapping addFile would break. See ./stream.
+      //     ordinary consumer shapes wrapping addFile would break. The full
+      //     trade, and the other two blind spots, are boundary points 1-3 in
+      //     ./stream.ts -- that comment is where the whole boundary lives.
       `// @ts-expect-error an ordinarily-inferred envelope is not an attachment`,
       `s.addFile(card);`,
     ].join('\n');
