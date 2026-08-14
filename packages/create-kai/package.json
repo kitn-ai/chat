@@ -43,6 +43,7 @@
     "dist"
   ],
   "scripts": {
+    "prepublishOnly": "npm run build && npm run verify:pack",
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
