@@ -23,14 +23,14 @@
  * sent, and a reply streaming into `<kai-thread>`.
  *
  * NOT EVERY STARTER IS A CHAT APP, so for some rows flipping `status` is not a
- * table edit at all. Five starters (react, vue, svelte, angular, vanilla) are
- * composed chat workspaces with a composer and the kit's mock responder behind
- * them. THREE ARE NOT: `nextjs` and `tanstack-start` are SSR/RSC compatibility
- * demos — a Button rendered from a server component, a static `messages` array,
- * a registration probe — and `solid` is likewise a component demo. None of the
- * three has a composer, a `<kai-thread>` fed by `useKaiChat`, or a mock
- * responder, so there is no stream for the browser check to observe and nothing
- * the `ready` standard above can be applied to.
+ * table edit at all. Six starters (react, vue, svelte, solid, angular, vanilla)
+ * are composed chat workspaces with a composer and the kit's mock responder
+ * behind them. TWO ARE NOT: `nextjs` and `tanstack-start` are SSR/RSC
+ * compatibility demos — a Button rendered from a server component, a static
+ * `messages` array, a registration probe. Neither has a composer, a thread fed
+ * by a chat controller, or a mock responder, so there is no stream for the
+ * browser check to observe and nothing the `ready` standard above can be applied
+ * to.
  *
  * `scripts/build.mjs` already refuses them rather than emitting one: flip either
  * SSR row and the build stops at `verifyAppPath` with "app/page.tsx carries no
@@ -40,7 +40,12 @@
  *
  * Turning one of these on is therefore work in `examples/starters/<dir>/` —
  * giving the starter a real thread + composer + mock stream, SSR-safely — and
- * only then a status flip here.
+ * only then a status flip here. SOLID IS THE WORKED EXAMPLE of that sequence:
+ * it sat `planned` for exactly this reason, was rewritten from a 533-line
+ * single-file primitives showcase into a composed workspace on the same gateway
+ * as the other five, and only then flipped. The `goLiveThread` throw its old
+ * note described was never a bug to route around; it went away when the starter
+ * gained the call it was asking for.
  *
  * WATCH THE `templateDir` COLUMN. It is not the id. `html` is served by
  * `examples/starters/vanilla`, and since patches are keyed by templateDir, a
@@ -139,12 +144,30 @@ export const FRAMEWORKS: readonly FrameworkDef[] = [
     // this, which is why `kai.json` records it rather than leaving it to be
     // re-derived by parsing the entry file.
     registration: 'solid',
-    composedWorkspace: false,
-    status: 'planned',
+    /**
+     * TRUE since the starter became a hand-composed chat workspace — a sidebar
+     * rail, a scrolling thread and a composer, wired to `createMockResponder()`
+     * through `readOpenAIStream`, the same gateway the other five run.
+     *
+     * It is composed HARDER than they are, which is the point of this row rather
+     * than an aside: the other five reach the thread through one `<kai-thread>`
+     * tag, and Solid spells the list out as `<ChatContainer>` + a `<Message>` /
+     * `<MessageBody>` per turn, because Solid is the kit's authored layer and
+     * renders the components directly. So `conversations` is emittable here for
+     * the same reason it is for React — there is a real rail to emit into.
+     */
+    composedWorkspace: true,
+    status: 'ready',
     paths: {
       entry: 'src/index.tsx',
       app: 'src/App.tsx',
-      components: 'src',
+      // `src/components`, not the `src` this said while the starter was a single
+      // 533-line `App.tsx` with nowhere else to put anything. It now has the same
+      // `components/` seam every other composed starter has, and this path is
+      // what a v2 `add` reads out of `kai.json` to decide where to WRITE a
+      // generated component — so pointing it at `src` would have scattered
+      // generated files next to the entry point.
+      components: 'src/components',
       // `src/styles.css`, not the `src/index.css` every other row carries. This
       // was wrong from the day the row was written and nothing caught it,
       // because `verifyDeclaredPaths` only runs against a READY framework's
@@ -152,36 +175,6 @@ export const FRAMEWORKS: readonly FrameworkDef[] = [
       css: 'src/styles.css',
       env: '.env.local',
     },
-    /**
-     * NOT a "nobody got to it yet" note, and NOT a bug list. Solid is the third
-     * instance of one shape, alongside `nextjs` and `tanstack-start`: THE
-     * STARTER IS NOT A CHAT APP, so there is nothing for the `ready` standard to
-     * be applied to.
-     *
-     * The Solid starter does not use `@kitn.ai/ui/wire` at all. It replays a
-     * canned part script through the `@kitn.ai/ui/state` folds to demonstrate
-     * the SolidJS primitives directly, so it has no `toOpenAIMessages` /
-     * `readOpenAIStream` call for the emitted README's go-live diff to quote.
-     * `goLiveThread` throws on it, and `scripts/build.mjs` stops there if the
-     * status is flipped. THAT THROW IS CORRECT — the diff this CLI emits would
-     * otherwise name identifiers the file does not contain.
-     *
-     * That is a product decision, not a defect to fix here. The starter is
-     * deliberately a primitives showcase; converting it into a gateway-backed
-     * chat app would destroy the thing it exists to demonstrate. Making Solid
-     * `ready` therefore means WRITING a Solid chat app, which is scoped
-     * separately — exactly as it is for the two SSR rows below.
-     *
-     * This note used to enumerate three blockers. #197 fixed two of them (the
-     * missing `.gitignore`, and a favicon linked to `../../internal/shared/`
-     * outside the project root), and a stale list of fixed defects is worse than
-     * no list: it sends a reader hunting for problems that are not there.
-     * Confirmed against the tree rather than assumed — the starter now carries
-     * its own `.gitignore`, and a build with this row flipped to `ready` gets
-     * past the template copy and stops at `goLiveThread`, which is the one
-     * blocker above and nothing else.
-     */
-    note: 'starter is a primitives showcase, not a chat app; no @kitn.ai/ui/wire call for the README go-live diff',
   },
   {
     id: 'angular',
