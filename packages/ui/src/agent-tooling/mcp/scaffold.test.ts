@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { cardEmitPlan, scaffold, renderSurface, NO_PROXY_CLAIM, PROXY_REQUIRED_CLAIM, ATTACHMENT_WIRE_NOTE } from './tools/scaffold';
+import {
+  cardEmitPlan, scaffold, renderSurface, NO_PROXY_CLAIM, PROXY_REQUIRED_CLAIM, ATTACHMENT_WIRE_NOTE,
+  // The route seam a second emitter consumes. Graded at the bottom of this file.
+  chatRoutePreamble, defaultModelFor, CLIENT_MODEL_IDS,
+} from './tools/scaffold';
 import {
   getArchetype, getIntegration, listArchetypes, listIntegrations, listSurfaceProbes,
 } from '../registry';
@@ -4027,5 +4031,220 @@ describe('the emitted accept attribute is DERIVED, never restated', () => {
         'already share. A literal that is correct today is the defect: it stops moving when ' +
         'the capability set does, in code that ships to a user repo where nothing checks it.',
     ).toEqual([]);
+  });
+});
+
+/**
+ * The route preamble, as a SECOND consumer sees it.
+ *
+ * `Integration.webRoute` reads like a self-contained handler and is not one.
+ * Every fragment in the catalog calls `readChatRequest`, and three of them also
+ * call the content helpers, so a bare fragment does not compile: measured over
+ * the catalog with `tsc --strict`, the eight `webRoute`s are TS2304 on five
+ * distinct names (`readChatRequest`, `ChatRequestBody`, `wireParts`, `wireText`,
+ * `WirePart`). Until now the declarations that supply them were module-private,
+ * so `create-kai` — which writes these handlers to real files that have to
+ * compile — carried a hand-copy of one of them and a build guard to notice when
+ * it drifted.
+ *
+ * These tests grade the exported accessor as the thing that deletes that copy:
+ * that it answers per-fragment rather than uniformly, that its symbol list is
+ * read back out of the declaration text instead of listed beside it, that it
+ * covers every fragment in the catalog, and that it is the SAME preamble the MCP
+ * itself injects rather than a parallel one that can drift.
+ */
+describe('chatRoutePreamble — the seam a file-writing consumer needs', () => {
+  /** A handler that only narrows the body. Five of eight catalog routes. */
+  const passthrough = `async function chatHandler(request: Request): Promise<Response> {
+  const { messages } = await readChatRequest(request);
+  return new Response(JSON.stringify({ messages }));
+}`;
+
+  /** A handler that re-maps content into another SDK's shape. Three of eight. */
+  const remapping = `async function chatHandler(request: Request): Promise<Response> {
+  const { messages } = await readChatRequest(request);
+  const parts: WirePart[] = wireParts(messages[0].content);
+  return new Response(wireText(messages[0].content) + parts.length);
+}`;
+
+  it('supplies the body narrowing every route needs', () => {
+    const { imports, symbols } = chatRoutePreamble(passthrough);
+    expect(imports).toEqual([`import type { OpenAIWireMessage } from '@kitn.ai/ui/wire';`]);
+    expect(symbols).toContain('readChatRequest');
+    expect(symbols).toContain('ChatRequestBody');
+  });
+
+  /**
+   * The half a two-constant export would have got wrong. `CONTENT_PARTS_DECL` is
+   * injected only where the route calls it, because an unused declaration is a
+   * hard error under the gate's --noUnusedLocals; a consumer handed one flat
+   * preamble would emit five routes that compile and three that do not.
+   */
+  it('adds the content helpers only for a route that calls them', () => {
+    expect(chatRoutePreamble(passthrough).symbols).not.toContain('wireParts');
+    const remap = chatRoutePreamble(remapping).symbols;
+    expect(remap).toContain('wireParts');
+    expect(remap).toContain('wireText');
+    expect(remap).toContain('WirePart');
+    // Still narrows the body too: the content helpers are additive, not a swap.
+    expect(remap).toContain('readChatRequest');
+  });
+
+  /**
+   * `symbols` is READ BACK out of `decl`, not listed beside it. That is the
+   * difference between a consumer's drift guard grading the real declaration
+   * text and grading a second copy of the same claim, which is the exact defect
+   * this whole export exists to delete.
+   */
+  it.each([['passthrough', passthrough], ['remapping', remapping]])(
+    'derives every symbol from the %s declaration text, in both directions',
+    (_label, fragment) => {
+      const { decl, symbols } = chatRoutePreamble(fragment);
+      for (const name of symbols) {
+        expect(
+          decl.some((line) => new RegExp(`^(?:export )?(?:async )?(?:function|type|interface|const|class) ${name}\\b`).test(line)),
+          `${name} is reported as declared but no line of decl declares it`,
+        ).toBe(true);
+      }
+      // …and nothing top-level in decl is missing from symbols. BOTH fragments,
+      // because the two differ by a whole declaration block: a hand-written list
+      // can match the remapping case and still over-report for the passthrough
+      // one, which is the direction that emits a route with unused declarations
+      // and fails --noUnusedLocals in a user's project.
+      const declared = decl
+        .map((line) => /^(?:export\s+)?(?:async\s+)?(?:function|type|interface|const|class)\s+([A-Za-z_$][\w$]*)/.exec(line)?.[1])
+        .filter((n): n is string => n !== undefined);
+      expect([...symbols].sort()).toEqual(declared.sort());
+    },
+  );
+
+  /**
+   * The names the preamble exists to supply, WRITTEN OUT rather than read back.
+   *
+   * This list started as `chatRoutePreamble('').symbols ∪
+   * chatRoutePreamble('wireParts()').symbols` and that version proved nothing:
+   * deleting the content-helper injection outright shrank the expectation along
+   * with the code, so the per-integration guard below went blind on exactly the
+   * three routes it exists for and stayed green. Watched, then fixed. An
+   * expectation derived from the field it is checking moves with the corruption
+   * — see the note above `the emitted scaffold is built from deps` below.
+   *
+   * So this is a tripwire, and it is meant to be edited BY HAND when the
+   * preamble gains or loses a declaration, because that edit is the moment
+   * someone has to think about whether every emitter still compiles.
+   */
+  const PREAMBLE_UNIVERSE = [
+    'ChatRequestBody', 'readChatRequest',
+    'WireFileSource', 'WirePart', 'DATA_URI', 'wireParts', 'wireText',
+  ] as const;
+
+  it('declares exactly the symbols an emitted route is allowed to reference', () => {
+    const everything = new Set([
+      ...chatRoutePreamble('').symbols,
+      ...chatRoutePreamble('wireParts(); wireText();').symbols,
+    ]);
+    expect(
+      [...everything].sort(),
+      'the route preamble gained or lost a declaration. Update PREAMBLE_UNIVERSE above, and check ' +
+        'that create-kai (which writes these handlers to real files) still compiles every route.',
+    ).toEqual([...PREAMBLE_UNIVERSE].sort());
+  });
+
+  /**
+   * THE GUARD. Every fragment in the catalog, against its own preamble.
+   *
+   * A route that references a preamble name its own fragment does not get fails
+   * here instead of shipping a handler that does not compile in a user's
+   * project. Bounded honestly: this catches a FRAGMENT reaching for something,
+   * and (via the tripwire above) the preamble dropping a block. It is not a free
+   * -variable analysis — the tsc proof that decl+fragment actually compiles is
+   * `verify:scaffold`, which builds all 99 routes.
+   */
+  it.each(listIntegrations().filter((i) => i.webRoute).map((i) => i.id))(
+    '%s webRoute has no symbol its own preamble fails to declare',
+    (id) => {
+      const fragment = getIntegration(id)!.webRoute!;
+      const supplied = new Set(chatRoutePreamble(fragment).symbols);
+      for (const name of PREAMBLE_UNIVERSE) {
+        // Only names the fragment REFERENCES and does not declare for itself.
+        if (!new RegExp(`\\b${name}\\b`).test(fragment)) continue;
+        if (new RegExp(`(?:function|type|interface|const|class)\\s+${name}\\b`).test(fragment)) continue;
+        expect(
+          supplied.has(name),
+          `${id}: webRoute references '${name}' but chatRoutePreamble does not declare it for this fragment, ` +
+            `so a consumer writing this handler to a file gets TS2304. Widen the injection in chatRoutePreamble.`,
+        ).toBe(true);
+      }
+    },
+  );
+
+  /**
+   * The exported accessor and the MCP's own emitted block are ONE code path.
+   *
+   * Two callers of the same declarations is how the duplication came back last
+   * time, so this reads the real emitted route and asserts the exported
+   * preamble's lines are literally in it, in order.
+   */
+  it('reconstructs the MCP route file byte for byte from the export alone', async () => {
+    const out = await scaffold.handler({
+      useCase: 'drop-in-chat',
+      integration: 'openrouter',
+      placement: 'full-page',
+      framework: 'next',
+    });
+    const route = (out.content as { type: string; text: string }[])[0].text.split(
+      '=== (2) BACKEND ROUTE ===',
+    )[1];
+    const fragment = getIntegration('openrouter')!.webRoute!;
+    const { imports, decl } = chatRoutePreamble(fragment);
+    // openrouter/next is the cell where the whole file IS import + preamble +
+    // fragment: the Next adapter contributes no `before` lines and this fragment
+    // opens on its handler, so nothing else can be hiding in between. An
+    // EXACT reconstruction rather than three `toContain`s, because a `toContain`
+    // on the decl passes even when the emitter appends a line of its own — which
+    // is precisely the drift a second copy of the preamble would introduce.
+    expect(route).toContain([...imports, ``, ...decl, ``, ...fragment.split('\n')].join('\n'));
+  });
+
+  /**
+   * …and no route anywhere carries two copies of the narrowing. A duplicated
+   * declaration is a redeclaration error, not a cosmetic one.
+   */
+  it.each(listIntegrations().filter((i) => i.webRoute).map((i) => i.id))(
+    '%s emits the preamble exactly once',
+    async (id) => {
+      const out = await scaffold.handler({
+        useCase: 'drop-in-chat', integration: id, placement: 'full-page', framework: 'next',
+      });
+      const route = (out.content as { type: string; text: string }[])[0].text
+        .split('=== (2) BACKEND ROUTE ===')[1].split('=== (3) RUN NOTE ===')[0];
+      const { decl } = chatRoutePreamble(getIntegration(id)!.webRoute!);
+      expect(route.split(decl.join('\n')).length - 1, `${id}: preamble not emitted exactly once`).toBe(1);
+    },
+  );
+
+  /**
+   * The failure no build and no typecheck can see.
+   *
+   * `openrouter`'s handler puts the client's `model` straight into its upstream
+   * payload, so a front end that posts `{ messages }` alone sends no model and
+   * the first message comes back 400. Both halves of the answer — WHETHER to
+   * send one and WHICH — now come from here, so a second emitter cannot get the
+   * first right and the second wrong.
+   */
+  it.each(listIntegrations().filter((i) => i.forwardsFromClient.includes('model')).map((i) => i.id))(
+    '%s forwards the client model and has an id to send',
+    (id) => {
+      const model = defaultModelFor(getIntegration(id)!);
+      expect(model, `${id} forwards 'model' with no CLIENT_MODEL_IDS row`).toBeTruthy();
+      expect(CLIENT_MODEL_IDS[id]).toBe(model);
+    },
+  );
+
+  it('sends no model for a route that pins its own', () => {
+    // langgraph builds the model into the agent and never reads the field; an
+    // editable const here would be the dead-const defect `forwardsFromClient`
+    // exists to prevent.
+    expect(defaultModelFor(getIntegration('langgraph')!)).toBeUndefined();
   });
 });

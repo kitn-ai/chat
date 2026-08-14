@@ -826,8 +826,16 @@ function realBodyPayload(opts: { defaultModel?: string; tools: boolean }): (thre
  * `scaffold.test.ts` → "the emitted model id is valid for the host its route
  * POSTs to", which reads the id out of the EMITTED scaffold and the host out of
  * the route source, so a new integration cannot reintroduce a wrong one.
+ *
+ * EXPORTED because a route is only half of the fact. `openrouter`'s handler puts
+ * the client's `model` straight into its upstream payload, so a front end that
+ * posts `{ messages }` alone sends no model, OpenRouter answers 400, and nothing
+ * in a build or a typecheck can see it. Any second emitter of these routes needs
+ * the same table; `defaultModelFor` below is the accessor, and the raw table is
+ * exported alongside it so a consumer can also check it for drift at ITS build
+ * time rather than discovering a missing row when a user types.
  */
-const CLIENT_MODEL_IDS: Record<string, string> = {
+export const CLIENT_MODEL_IDS: Record<string, string> = {
   // Vendor-prefixed `vendor/model`: OpenRouter's own id space, and the ONLY one
   // of the three where the prefix belongs.
   openrouter: 'openai/gpt-4o-mini',
@@ -849,8 +857,12 @@ const CLIENT_MODEL_IDS: Record<string, string> = {
  * scaffolds whose routes pin their own model and never read the field, so
  * changing it did nothing, and cloudflare's default was not even a valid Workers
  * AI id. `forwardsFromClient` states the fact instead of guessing at it.
+ *
+ * Exported for the same reason as `CLIENT_MODEL_IDS`: a second emitter of these
+ * routes has to answer "does this front end send a model, and which" the same
+ * way, and both halves of that answer live here.
  */
-function defaultModelFor(integration: Integration): string | undefined {
+export function defaultModelFor(integration: Integration): string | undefined {
   if (!integration.forwardsFromClient.includes('model')) return undefined;
   const id = CLIENT_MODEL_IDS[integration.id];
   // No fallback, deliberately — the old `?? 'openai/gpt-4o-mini'` is what let a
@@ -4605,6 +4617,66 @@ const CONTENT_PARTS_DECL = [
 ];
 
 /**
+ * What a bare `Integration.webRoute` needs above it before it will compile.
+ *
+ * WHY THIS IS A FUNCTION AND NOT TWO EXPORTED CONSTANTS. `webRoute` reads like a
+ * self-contained handler and is not one: every fragment in the catalog calls
+ * `readChatRequest`, and three of them (anthropic, mastra, vercel-ai-sdk) also
+ * call `wireParts` / `wireText` and annotate with `WirePart`. Measured over the
+ * catalog, a bare fragment under `tsc --strict` is TS2304 on five distinct names.
+ * A consumer handed `CHAT_REQUEST_BODY_DECL` alone would therefore emit five
+ * routes that compile and three that do not, and would find out only for the
+ * ones it happened to wire first. Asking the question the caller actually has —
+ * "what goes above THIS fragment" — is the shape that cannot be answered
+ * half-right, so that is what is exported.
+ *
+ * `symbols` is DERIVED from `decl` rather than listed beside it, so a rename
+ * inside either declaration block moves it and a consumer's drift guard grades
+ * the real text.
+ */
+export interface ChatRoutePreamble {
+  /** import lines the declarations need, emitted at the top of the route file */
+  readonly imports: readonly string[];
+  /** the declaration lines, emitted immediately above the handler */
+  readonly decl: readonly string[];
+  /** every symbol `decl` declares, read back out of `decl` */
+  readonly symbols: readonly string[];
+}
+
+/** A top-level declaration in a preamble block. Indented lines are bodies. */
+const PREAMBLE_DECLARATION = /^(?:export\s+)?(?:async\s+)?(?:function|type|interface|const|class)\s+([A-Za-z_$][\w$]*)/;
+
+/**
+ * The preamble a given handler fragment needs.
+ *
+ * Used by the MCP below to build its own route blocks, and exported for
+ * `create-kai`, which writes the same handler to a real file that has to
+ * compile. One code path, so the two cannot disagree about what a route needs.
+ */
+export function chatRoutePreamble(fragment: string): ChatRoutePreamble {
+  // The content helpers ride along only where the route calls them; see
+  // CONTENT_PARTS_DECL for why an unconditional injection would not compile.
+  //
+  // KNOWN GAP, live but not yet reachable: this tests for a CALL, so a fragment
+  // that only annotates with `WirePart` / `WireFileSource` and never calls
+  // either helper would be told it needs nothing and would not compile. No
+  // catalog route is shaped that way today — vercel-ai-sdk is the only one that
+  // names the type, and it calls `wireParts` two lines later — so widening the
+  // test would change no emitted byte, and that is exactly why it is left alone
+  // here rather than fixed blind. `scaffold.test.ts` → "webRoute has no symbol
+  // its own preamble fails to declare" is the check that turns this from a
+  // comment into a failing build the day an integration lands in that shape.
+  const decl = /\bwire(?:Parts|Text)\s*\(/.test(fragment)
+    ? [...CHAT_REQUEST_BODY_DECL, ``, ...CONTENT_PARTS_DECL]
+    : [...CHAT_REQUEST_BODY_DECL];
+  return {
+    imports: [CHAT_REQUEST_BODY_IMPORT],
+    decl,
+    symbols: decl.flatMap((line) => PREAMBLE_DECLARATION.exec(line)?.[1] ?? []),
+  };
+}
+
+/**
  * Slot the body type in just above `chatHandler`.
  *
  * Not at the very top: a fragment may open with its own imports (langgraph,
@@ -4614,11 +4686,7 @@ const CONTENT_PARTS_DECL = [
  * written it.
  */
 function withChatRequestBody(fragment: string): string {
-  // The content helpers ride along only where the route calls them; see
-  // CONTENT_PARTS_DECL for why an unconditional injection would not compile.
-  const decl = /\bwire(?:Parts|Text)\s*\(/.test(fragment)
-    ? [...CHAT_REQUEST_BODY_DECL, ``, ...CONTENT_PARTS_DECL]
-    : CHAT_REQUEST_BODY_DECL;
+  const { decl } = chatRoutePreamble(fragment);
   const lines = fragment.split('\n');
   let at = lines.findIndex((l) => /^(?:export\s+)?async function chatHandler\b/.test(l));
   if (at < 0) return [...decl, ``, ...lines].join('\n');
