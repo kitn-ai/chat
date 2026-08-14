@@ -71,6 +71,26 @@ export interface AssistantStream {
    *  second copy of it. See `upsertCardPart`. */
   addCard(envelope: CardEnvelope): AssistantStream;
   addSource(source: Unmixed<Source>): AssistantStream;
+  /* addCard and addFile are deliberately NOT `Unmixed`, and this is a measured
+   * call rather than an oversight. Both take STRONG types — `CardEnvelope`
+   * requires type+id+data, `AttachmentData` requires id+type — so ordinary
+   * assignability already does the job `Unmixed` exists to do for a weak bag.
+   *
+   * Wrapping `addCard` buys ZERO: no sibling bag is assignable to
+   * `CardEnvelope`, because nothing else carries `data`. Wrapping `addFile`
+   * buys exactly one pair — `addFile(c)` with `c: CardEnvelope<'file', unknown>`
+   * — and costs two ordinary consumer shapes, since the derived denylist owns
+   * `state` and `index`:
+   *
+   *     { id, type: 'file', filename, state: 'uploading' }  // upload progress
+   *     { id, type: 'file', filename, index: 3 }            // display position
+   *
+   * That one pair needs a hand-written generic narrowing with no other purpose;
+   * an ordinarily-inferred `CardEnvelope` is ALREADY rejected. Rejecting likely
+   * code to block contrived code is the wrong trade — the same trade this file
+   * refused when it chose a sibling-key denylist over full exactness. KNOWN
+   * RESIDUAL, stated rather than silent. Both facts the call rests on are
+   * pinned in ./stream-types.test.ts, so it re-opens if either stops holding. */
   addFile(attachment: AttachmentData): AssistantStream;
   done(): void;
   abort(reason?: string): void;

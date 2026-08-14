@@ -143,6 +143,33 @@ describe('AssistantStream mutator parameters are bag-exclusive', () => {
     expect(typecheckVirtualModule(probe)).toEqual([]);
   });
 
+  it('leaves addCard/addFile unwrapped on purpose — the strong types already hold', () => {
+    // Those two take types with required fields, so ordinary assignability does
+    // the job `Unmixed` exists to do for a weak bag. The decision rests on two
+    // facts, and this test is what re-opens it if either stops being true.
+    const probe = [
+      ...PREAMBLE,
+      // (1) Nothing a sibling bag produces reaches `CardEnvelope` — it requires
+      //     `data`, which no other bag carries. Wrapping addCard buys ZERO.
+      `// @ts-expect-error an attachment is not a card envelope`,
+      `s.addCard(attachment);`,
+      `// @ts-expect-error a tool part is not a card envelope`,
+      `s.addCard(tool);`,
+      `// @ts-expect-error a citation is not a card envelope`,
+      `s.addCard(source);`,
+      `// @ts-expect-error a reasoning options bag is not a card envelope`,
+      `s.addCard(reasoningOpts);`,
+      // (2) addFile already rejects an ordinarily-inferred envelope. The known
+      //     residual (`CardEnvelope<'file', unknown>` reaching addFile) needs a
+      //     hand-written generic narrowing, which is why it is not worth the two
+      //     ordinary consumer shapes wrapping addFile would break. See ./stream.
+      `// @ts-expect-error an ordinarily-inferred envelope is not an attachment`,
+      `s.addFile(card);`,
+    ].join('\n');
+
+    expect(typecheckVirtualModule(probe)).toEqual([]);
+  });
+
   it('derives the forbidden key set from the MessagePart union, not a hand-written list', () => {
     // A seventh variant must re-fire the guard on its own. Proxy for that: the
     // guard rejects a bag whose only foreign key is `resolution`, which nothing
