@@ -124,6 +124,24 @@ describe('L2 OpenAI captures', () => {
     expect(reasoning?.raw?.source).toBe('openai.reasoning_details');
   });
 
+  it('reasoning-content-deepseek keeps the reasoning DeepSeek first-party emits', async () => {
+    // The whole stream is `reasoning_content`: no `reasoning`, no
+    // `reasoning_details`. Everything in this directory came through
+    // OpenRouter, which renames it, so this shape used to parse to nothing.
+    const turn = await read('reasoning-content-deepseek');
+    expect(turn.reasoningChunks).toBeGreaterThan(0);
+    expect(turn.reasoning).toBe('We need 17 x 23. That is 391.');
+    const reasoning = turn.parts.find((p) => p.type === 'reasoning');
+    expect(reasoning).toBeDefined();
+    // A sibling string is the WHOLE payload here. There is no block list to
+    // round-trip, which is the shape difference an alias cannot paper over.
+    expect(reasoning?.raw).toBeUndefined();
+    expect(reasoning?.signature).toBeUndefined();
+    expect(turn.text).toBe('17 x 23 = 391.');
+    expect(turn.stopReason).toBe('stop');
+    expect(turn.usage?.reasoningTokens).toBe(13);
+  });
+
   it('usage-only-final-chunk reports usage without a stray part', async () => {
     const turn = await read('usage-only-final-chunk');
     expect(turn.usage?.inputTokens).toBeGreaterThan(0);

@@ -84,6 +84,19 @@ function detailField(details: unknown[], key: 'index' | 'signature'): unknown {
   return undefined;
 }
 
+/** The sibling reasoning STRINGS, in precedence order. See `applyReasoning`. */
+const REASONING_KEYS = ['reasoning', 'reasoning_content'] as const;
+
+/** First non-empty sibling string wins. These are alternative SPELLINGS of the
+ *  same text, never two halves of it, so this coalesces and never concatenates. */
+function siblingReasoning(delta: Record<string, unknown>): string | undefined {
+  for (const key of REASONING_KEYS) {
+    const raw = str(delta[key]);
+    if (raw !== undefined && raw !== '') return raw;
+  }
+  return undefined;
+}
+
 /**
  * FINDINGS: OpenRouter frequently puts the SAME text in `reasoning` AND in
  * `reasoning_details` on the same delta. Concatenating both doubles every
@@ -92,11 +105,34 @@ function detailField(details: unknown[], key: 'index' | 'signature'): unknown {
  * `reasoning_details` is still read in BOTH cases, for `reasoningRaw`, the block
  * index and the signature. It is the provider's own block list, and dropping it
  * is exactly the Anthropic 400 this entry exists to avoid.
+ *
+ * SIBLING NAMES. Chat-completions says nothing about reasoning, so every vendor
+ * extended it on its own and each parser in the wild reads a different subset:
+ * `reasoning` is what OpenRouter normalises to, `reasoning_content` is what
+ * DeepSeek's own API emits and what LiteLLM forwards. Nobody is ahead here and
+ * there is no canonical spelling. A stream that only ever went through
+ * OpenRouter never shows the other name, which is the whole reason this one
+ * stayed invisible: reading `reasoning` alone loses a DeepSeek-direct stream's
+ * reasoning completely, and silently.
+ *
+ * PRECEDENCE. The siblings coalesce, first non-empty wins, and both outrank the
+ * details text. `reasoning` is checked first, which is what keeps this additive:
+ * any stream that already carried `reasoning` parses byte for byte as it did
+ * before, so the order is only observable on a provider that disagrees with
+ * itself. A gateway that aliases one spelling onto the other sends identical
+ * text in both, and summing them would double every token exactly the way
+ * summing `reasoning` and `reasoning_details` does.
+ *
+ * SCOPE, and it is NOT a closed class. This covers the NAMING axis only.
+ * Reasoning on this wire is fragmented three ways STRUCTURALLY: a sibling string
+ * (here), a block array (`reasoning_details`), and reasoning carried inside a
+ * polymorphic `content` array. Aliasing bridges names, not shapes. A fourth
+ * spelling is one entry in REASONING_KEYS; a fourth SHAPE is not, and needs its
+ * own branch plus its own fixture.
  */
 function applyReasoning(delta: Record<string, unknown>, out: ModelStreamChunk): void {
   const details = Array.isArray(delta.reasoning_details) ? delta.reasoning_details : undefined;
-  const primaryRaw = str(delta.reasoning);
-  const primary = primaryRaw !== undefined && primaryRaw !== '' ? primaryRaw : undefined;
+  const primary = siblingReasoning(delta);
   const fallback = details ? detailText(details) : undefined;
   const hasDetails = details !== undefined && details.length > 0;
   const text = primary ?? fallback;
