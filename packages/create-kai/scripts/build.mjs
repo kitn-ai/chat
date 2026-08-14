@@ -31,10 +31,10 @@
  * holds it to that — a guard-shaped function at any depth, or a message literal
  * authored here, fails the suite and points at `src/build-guards.ts`.
  */
-import { chmod, cp, mkdir, readFile, readdir, rename, rm, stat } from 'node:fs/promises';
+import { chmod, cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as esbuild from 'esbuild';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -45,36 +45,26 @@ const dist = path.join(pkgRoot, 'dist');
 const templatesOut = path.join(dist, 'templates');
 
 /**
- * Never copied into a template: build output, installed deps, editor cruft —
- * and lockfiles.
+ * Where `loadTs` puts the module it just bundled.
  *
- * A LOCKFILE IS STALE THE MOMENT IT IS COPIED, so shipping one is strictly worse
- * than shipping none. The emitted project's dependency set is not the starter's:
- * `rewritePackageJson` replaces the `@kitn.ai/ui` spec (a monorepo-local
- * `file:../../../packages/ui` or `workspace:*` becomes a real range) and adds
- * the chosen gateway's deps. A copied lockfile still pins the old one, so
- * `npm ci` refuses the package.json/lock mismatch outright and `npm install`
- * resolves the kit from a path that climbed out of the user's project.
+ * ON DISK, AND UNDER `node_modules/`, for one reason: a module has to be
+ * SOMEWHERE to resolve a bare specifier. This used to import a
+ * `data:text/javascript;base64,…` URL, which has no directory, so anything left
+ * external threw `ERR_UNSUPPORTED_RESOLVE_REQUEST` at import and `createRequire`
+ * could not be constructed against it at all.
  *
- * Only the two STANDALONE starters have one today (nextjs, tanstack-start), and
- * neither is `ready` — so this is a latent bug, caught by the `file:` pattern in
- * `REPO_INTERNAL` (src/template-guards.ts) rather than by review. create-vite
- * ships no lockfile for the same reason: the first `npm install` is what should
- * write it.
+ * That was a live trap rather than a tidy-up. `external: ['zod']` below has
+ * always been one reachable import away from the same failure — it works today
+ * only because nothing in the loaded tables calls into the catalog at runtime.
+ * And it is what stopped `src/template-guards.ts` reading a JS-declared document
+ * title: bundling `typescript` inlines 9.5MB of CJS whose dynamic `require("fs")`
+ * throws on first call, and leaving it external could not resolve. From a real
+ * file both work, because `node_modules/.cache/` resolves up into the package's
+ * own `node_modules/`.
+ *
+ * Not `dist/`: `main()` deletes that after the first `loadTs` call.
  */
-const SKIP = new Set([
-  'node_modules',
-  'dist',
-  '.next',
-  '.vite',
-  '.turbo',
-  '.angular',
-  'README.md',
-  'package-lock.json',
-  'pnpm-lock.yaml',
-  'yarn.lock',
-  'bun.lockb',
-]);
+const loadedTsDir = path.join(pkgRoot, 'node_modules/.cache/create-kai-build');
 
 async function loadTs(relative) {
   // The framework table and the patch table are TypeScript the CLI owns. The
@@ -88,11 +78,17 @@ async function loadTs(relative) {
     format: 'esm',
     platform: 'node',
     // The catalog reaches into the kit's source; nothing in the two tables we
-    // load here needs it at runtime, so keep the temp module small.
-    external: ['zod'],
+    // load here needs it at runtime, so keep the temp module small. `typescript`
+    // is external because a guard parses one file with it — 9.5MB of CJS that
+    // must not be inlined.
+    external: ['zod', 'typescript'],
   });
-  const code = built.outputFiles[0].text;
-  return import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
+  await mkdir(loadedTsDir, { recursive: true });
+  // Named after the entry point so two loaded modules cannot collide, and
+  // cache-busted so a rebuild in the same process never re-imports stale bytes.
+  const out = path.join(loadedTsDir, `${path.basename(relative, '.ts')}-${process.pid}.mjs`);
+  await writeFile(out, built.outputFiles[0].text);
+  return import(`${pathToFileURL(out).href}?v=${Date.now()}`);
 }
 
 /** Where a framework's starter lives. Both the rule and the copy ask for it. */
@@ -102,14 +98,19 @@ const starterPath = (templateDir) => path.join(startersRoot, templateDir);
  * Copy one starter into `dist/templates/`. Filesystem only — the requirements
  * that the starter EXIST and that it carry a `.gitignore` are both RULES, and
  * live in `src/build-guards.ts` with the others where a test can drive them.
- * `main()` runs the first before calling this and the second against the copied
- * tree, then does the rename.
+ * `main()` runs both before calling this, then does the rename.
+ *
+ * `skip` is `templateSkips(…)` from that module, derived from the starter's own
+ * `.gitignore`. It takes a path RELATIVE to the starter root rather than a
+ * basename, which is the whole point: `src/routeTree.gen.ts` is a path, and a
+ * basename set could not express it — see the note on that function.
  */
-async function copyTemplate(templateDir) {
+async function copyTemplate(templateDir, skip) {
+  const from = starterPath(templateDir);
   const to = path.join(templatesOut, templateDir);
-  await cp(starterPath(templateDir), to, {
+  await cp(from, to, {
     recursive: true,
-    filter: (src) => !SKIP.has(path.basename(src)),
+    filter: (src) => !skip(path.relative(from, src)),
   });
   return to;
 }
@@ -160,6 +161,10 @@ function failIf(problem) {
 }
 
 async function main() {
+  // Cleared per run: the files below are named by pid, so without this the cache
+  // directory grows by one module per build forever.
+  await rm(loadedTsDir, { recursive: true, force: true });
+
   const guards = await loadTs('src/build-guards.ts');
 
   failIf(
@@ -187,13 +192,23 @@ async function main() {
   let patchCount = 0;
   for (const framework of ready) {
     failIf(guards.missingStarterProblem(starterPath(framework.templateDir), existsSync));
-    const root = await copyTemplate(framework.templateDir);
+
+    // The `.gitignore` is read from the STARTER, before the copy, because it is
+    // what decides which files the copy makes. It is still the name the starter
+    // uses at this point; the rename below is what changes that.
+    const starterExists = (relative) => existsSync(path.join(starterPath(framework.templateDir), relative));
+    failIf(guards.gitignoreProblem(framework.templateDir, starterExists));
+    const gitignore = await readFile(
+      path.join(starterPath(framework.templateDir), guards.GITIGNORE_SOURCE_NAME),
+      'utf8',
+    );
+    failIf(guards.templateIgnoreProblem(framework.templateDir, gitignore));
+
+    const root = await copyTemplate(framework.templateDir, guards.templateSkips(gitignore));
     const read = templateReader(root);
     const exists = (relative) => existsSync(path.join(root, relative));
     const patches = patchesFor(framework.templateDir);
 
-    // Before the rename, because the rule asks about the name the starter uses.
-    failIf(guards.gitignoreProblem(framework.templateDir, exists));
     await rename(
       path.join(root, guards.GITIGNORE_SOURCE_NAME),
       path.join(root, GITIGNORE_TEMPLATE_NAME),

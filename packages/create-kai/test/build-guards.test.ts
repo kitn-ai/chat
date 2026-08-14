@@ -29,6 +29,8 @@ import {
   patchMatchProblem,
   readyFrameworksProblem,
   sharedDevDepsProblem,
+  templateIgnoreProblem,
+  templateSkips,
 } from '../src/build-guards';
 import type { TemplateReader } from '../src/build-guards';
 import { FRAMEWORKS, getFramework } from '../src/frameworks';
@@ -440,6 +442,136 @@ describe('the gitignore guard', () => {
     expect(GITIGNORE_TEMPLATE_NAME).not.toBe(GITIGNORE_SOURCE_NAME);
     // npm strips a packed `.gitignore`; the travelling name must not be one.
     expect(GITIGNORE_TEMPLATE_NAME.startsWith('.')).toBe(false);
+  });
+});
+
+/**
+ * What the template copy is allowed to carry.
+ *
+ * The filter this replaces was a flat set of BASENAMES, and the defect was the
+ * shape rather than a missing row: `src/routeTree.gen.ts` is a path, so no
+ * basename could express it, and it landed in `dist/templates` if and only if a
+ * build had run first — `verify:starters` builds the starters before packaging,
+ * so CI and a clean checkout produced different template contents.
+ */
+describe('the template copy filter', () => {
+  /** The real thing, so these assertions cannot drift from the starter. */
+  const TANSTACK_IGNORE = readFileSync(
+    path.join(STARTERS, 'tanstack-start', GITIGNORE_SOURCE_NAME),
+    'utf8',
+  );
+
+  it('excludes the generated artifacts the basename set could not', () => {
+    const skip = templateSkips(TANSTACK_IGNORE);
+
+    // THE SPECIMEN. A path, not a basename — the reason the old filter's shape
+    // could not be patched with one more row.
+    expect(skip('src/routeTree.gen.ts')).toBe(true);
+
+    // And the four build trees that were missing outright. These are directories,
+    // so each one leaking is a whole subtree, not a file. Watched: with the old
+    // filter and these planted, the build copied all of them.
+    for (const rel of ['.output', '.output/server/index.mjs', '.nitro', '.tanstack', '.vinxi']) {
+      expect(skip(rel), rel).toBe(true);
+    }
+
+    // Globs and vendored archives, also absent before.
+    for (const rel of ['build.log', 'vendor', 'vendor/lib.tgz', '.DS_Store', '.env.local']) {
+      expect(skip(rel), rel).toBe(true);
+    }
+  });
+
+  it('still copies every file the template actually needs', () => {
+    const skip = templateSkips(TANSTACK_IGNORE);
+    // The control. A filter that returned true for everything would pass the
+    // test above having broken the product completely.
+    for (const rel of [
+      'package.json',
+      'src/routes/__root.tsx',
+      'src/routes/index.tsx',
+      'src/components/Sidebar.tsx',
+      'src/styles.css',
+      'vite.config.ts',
+      '.npmrc',
+      GITIGNORE_SOURCE_NAME,
+      // `src/router.tsx` sits next to the generated route tree and must survive.
+      'src/router.tsx',
+    ]) {
+      expect(skip(rel), rel).toBe(false);
+    }
+  });
+
+  it('keeps out the tracked files no .gitignore would name', () => {
+    // The floor: a README and a lockfile are COMMITTED, so deriving from
+    // .gitignore alone would ship both. A copied lockfile makes `npm ci` refuse
+    // the emitted project outright.
+    const skip = templateSkips(TANSTACK_IGNORE);
+    for (const rel of ['README.md', 'package-lock.json', 'pnpm-lock.yaml', 'yarn.lock']) {
+      expect(skip(rel), rel).toBe(true);
+    }
+  });
+
+  it('reads git’s anchoring rule, not just the name', () => {
+    // A pattern WITH a slash is relative to the ignore file; one without matches
+    // at any depth. Getting this backwards is how `src/routeTree.gen.ts` would
+    // either miss the file or take an unrelated `routeTree.gen.ts` elsewhere.
+    const skip = templateSkips('src/routeTree.gen.ts\ndist/\n*.log\n');
+    expect(skip('src/routeTree.gen.ts')).toBe(true);
+    expect(skip('app/src/routeTree.gen.ts')).toBe(false); // anchored: not this one
+    expect(skip('dist')).toBe(true);
+    expect(skip('packages/dist')).toBe(true); // no slash in pattern: any depth
+    expect(skip('src/nested/debug.log')).toBe(true);
+
+    // A pattern matches a WHOLE segment, never a prefix of one. Watched: with
+    // the segment regex relaxed from `^x$` to `^x`, these three go red and
+    // everything else in this file stays green — so without them a filter that
+    // ate `dist-config.ts` alongside `dist/` would ship unnoticed.
+    expect(skip('distances.ts')).toBe(false);
+    expect(skip('src/dist-config.ts')).toBe(false);
+    expect(skip('src/routeTree.gen.ts.bak')).toBe(false);
+  });
+
+  it('ignores comments and blank lines rather than matching them', () => {
+    const skip = templateSkips('\n# Auto-generated on first run.\n\n  \nsrc/routeTree.gen.ts\n');
+    expect(skip('src/routeTree.gen.ts')).toBe(true);
+    // A comment taken as a pattern would match a file named after it, and an
+    // empty line taken as a pattern matches EVERYTHING.
+    expect(skip('src/App.tsx')).toBe(false);
+    expect(skip('package.json')).toBe(false);
+  });
+
+  it('every ready starter keeps its own source files', () => {
+    // Live over the tree: whatever each starter ignores, its package.json and
+    // its declared app file must still travel. VACUITY GUARD on the count.
+    const ready = FRAMEWORKS.filter((f) => f.status === 'ready');
+    expect(ready.length, 'no ready frameworks — this asserted nothing').toBeGreaterThanOrEqual(7);
+    for (const framework of ready) {
+      const source = readFileSync(
+        path.join(STARTERS, framework.templateDir, GITIGNORE_SOURCE_NAME),
+        'utf8',
+      );
+      const skip = templateSkips(source);
+      expect(skip('package.json'), framework.id).toBe(false);
+      expect(skip(framework.paths.app), framework.id).toBe(false);
+      expect(skip(framework.paths.css), framework.id).toBe(false);
+    }
+  });
+
+  it('refuses a negation rather than silently dropping a source file', () => {
+    // `!keep.ts` means "actually DO track this". A filter that read the `!` as
+    // part of a name would drop the file, and the emitted project would be
+    // missing a source file with nothing to explain it.
+    const problem = templateIgnoreProblem('tanstack-start', 'dist/\n!src/keep.ts\n');
+    expect(problem).toContain('negated .gitignore rule');
+    expect(problem).toContain('!src/keep.ts');
+    // And the control: every real starter passes, so this is not just always-red.
+    for (const framework of FRAMEWORKS) {
+      const source = readFileSync(
+        path.join(STARTERS, framework.templateDir, GITIGNORE_SOURCE_NAME),
+        'utf8',
+      );
+      expect(templateIgnoreProblem(framework.id, source), framework.id).toBeNull();
+    }
   });
 });
 

@@ -51,7 +51,7 @@ The build is **ES-module only** by design. A UMD/IIFE build cannot code-split, s
 
 ### Register the elements
 
-Import the ES module as a side-effect. It registers all **40+ custom elements** via `customElements.define`:
+Import the ES module as a side-effect. Every element the bundle ships registers itself via `customElements.define`:
 
 ```js
 import '@kitn.ai/ui/elements';
