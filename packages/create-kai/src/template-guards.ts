@@ -255,13 +255,18 @@ function titlesInTitleValue(value: TSApi.Expression): string[] {
  *
  * WHY THIS IS A PARSE AND NOT A REGEX, which the note this replaces stated as a
  * reason to leave the gap open. An object field named `title` is app data far
- * more often than it is a document title: the two SSR starters carry EIGHT of
- * them — three card headings in `InteractiveIsland.tsx`, four conversation names
- * in `chat-data.ts` and `useConversations.ts`, and a JSX `title={…}` attribute on
- * `HydrationBadge.tsx`. A pattern that reached the two real titles would report
- * all eight, and one that did not report them would not reach the real two
- * either. So the rule anchors on STRUCTURE, and takes three shapes, each of which
- * is a framework's own contract for the document title rather than a guess:
+ * more often than it is a document title: the two SSR starters carry a pile of
+ * them — conversation names in `chat-data.ts` and `useConversations.ts`, and a
+ * JSX `title={…}` attribute on `HydrationBadge.tsx` — against exactly one real
+ * document title each. A pattern that reached the real ones would report all of
+ * them, and one that did not report them would not reach the real ones either.
+ * (The count was EIGHT when this was written, three of which were card headings
+ * in the Next starter's `InteractiveIsland.tsx`. That file went away when the
+ * starter became a composed chat app; the ratio is the point, and a literal
+ * census here would just go stale again — `test/template-guards.test.ts` drives
+ * every shape against literals instead.) So the rule anchors on STRUCTURE, and
+ * takes three shapes, each of which is a framework's own contract for the
+ * document title rather than a guess:
  *
  *   · `export const metadata = { title }`, and the object returned from
  *     `generateMetadata()`. This is Next.js's documented API, and it is how the

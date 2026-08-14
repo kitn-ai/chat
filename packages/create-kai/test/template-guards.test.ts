@@ -212,15 +212,21 @@ describe('the title guard, on titles declared in JavaScript', () => {
   });
 
   /**
-   * THE REASON THIS IS A PARSE. Eight `title:` fields live in the two SSR
-   * starters and not one of them is a document title. A regex that reached the
-   * two real titles would report all eight; the note this replaced named exactly
-   * that as the reason to leave the gap open.
+   * THE REASON THIS IS A PARSE. The two SSR starters carry far more `title:`
+   * fields than document titles, and a regex that reached the real ones would
+   * report every one of them; the note this replaced named exactly that as the
+   * reason to leave the gap open.
+   *
+   * The sources below are LITERALS, deliberately — the shapes matter, not which
+   * file happens to hold one this month. The first was lifted from the Next
+   * starter's `InteractiveIsland.tsx` before that starter became a composed chat
+   * app and the file went away; it stays because a card heading in app data is
+   * still the false positive this rule has to not report.
    */
   it('leaves every non-title `title` in the tree alone', () => {
     for (const [file, source] of [
-      // Card headings — the three InteractiveIsland.tsx names by the old note.
-      ['app/InteractiveIsland.tsx', "const TASKS = [{ id: 1, title: 'Wire up streaming responses' }];"],
+      // A card heading in app data.
+      ['app/CardData.tsx', "const TASKS = [{ id: 1, title: 'Wire up streaming responses' }];"],
       // Conversation names, and a `title` that is a TYPE rather than a value.
       ['src/chat-data.ts', "export interface C { title: string }\nexport const C1 = [{ id: 'c1', title: 'Server rendering' }];"],
       // A JSX attribute is not an object property at all.
