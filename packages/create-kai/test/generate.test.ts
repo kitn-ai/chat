@@ -13,6 +13,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { GITIGNORE_TEMPLATE_NAME, generate, goLiveThread } from '../src/generate';
 import { FRAMEWORKS, getFramework } from '../src/frameworks';
+import { STRIPPED_DOTFILES, travellingName } from '../src/template-dotfiles';
 import { buildTypechecks, scriptsToRun } from '../src/starter-scripts';
 import type { ProjectPlan } from '../src/types';
 
@@ -1048,6 +1049,70 @@ describe('every ready framework declares paths its emitted project has', () => {
       }
     });
   }
+});
+
+/**
+ * Every dotfile that travelled underscored arrives under its real name.
+ *
+ * WHY THIS IS A LOOP OVER A LIST AND NOT TWO NAMED TESTS. `_gitignore` had a
+ * named test from the start and `.npmrc` had none, which is the whole shape of
+ * the 0.1.0 defect: the mechanism was understood, tested, and applied to one
+ * file. So the subject is `STRIPPED_DOTFILES` — the list `scripts/build.mjs`
+ * renames from and `generate()` renames back to — and a row added there is
+ * covered here without anybody remembering this block exists.
+ *
+ * WHICH TEMPLATES CARRY WHICH FILE IS READ OFF DISK, not declared. `.gitignore`
+ * is required of every starter and `.npmrc` only exists in the two standalone
+ * ones; hard-coding that split would make this test wrong the day a Vite starter
+ * grows an `.npmrc`, and wrong in the silent direction.
+ *
+ * THE VACUITY GUARD AT THE END IS THE POINT. Every assertion in the loop is
+ * conditional on the template having the travelling file, so a build that
+ * emitted no `_npmrc` at all — which is precisely the regression — would run
+ * this block to completion, assert nothing about it, and pass.
+ */
+describe('the stripped-dotfile rename round-trips', () => {
+  const exercised = new Set<string>();
+
+  for (const framework of FRAMEWORKS.filter((f) => f.status === 'ready')) {
+    it(`${framework.id}: every travelling dotfile lands under its real name`, async () => {
+      const template = path.join(TEMPLATE_ROOT, framework.templateDir);
+      const travelling = STRIPPED_DOTFILES.filter((dotfile) =>
+        existsSync(path.join(template, travellingName(dotfile))),
+      );
+
+      const root = await mkdtemp(path.join(tmpdir(), `create-kai-dotfiles-${framework.id}-`));
+      try {
+        const dir = path.join(root, 'dot-app');
+        await generate(plan(dir, { frameworkId: framework.id, name: 'dot-app' }), {
+          templateRoot: TEMPLATE_ROOT,
+        });
+
+        for (const dotfile of travelling) {
+          exercised.add(dotfile);
+          expect(
+            existsSync(path.join(dir, dotfile)),
+            `${framework.id} ships ${travellingName(dotfile)} in its template, but the emitted ` +
+              `project has no ${dotfile} — npm strips that name, so this only breaks once published`,
+          ).toBe(true);
+          expect(
+            existsSync(path.join(dir, travellingName(dotfile))),
+            `${framework.id} left ${travellingName(dotfile)} in the emitted project`,
+          ).toBe(false);
+        }
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    });
+  }
+
+  it('exercised every name on the list, so none of the above was vacuous', () => {
+    // If a template stops carrying a travelling dotfile the loop above simply
+    // has nothing to assert for it and stays green. That is the regression, so
+    // it is asserted directly: each row must have been reached by at least one
+    // framework.
+    expect([...exercised].sort()).toEqual([...STRIPPED_DOTFILES].sort());
+  });
 });
 
 /**

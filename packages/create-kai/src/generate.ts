@@ -17,21 +17,27 @@ import { buildKaiJson, stringifyKaiJson } from './kai-json';
 import { rewritePackageJson, stringifyPackageJson } from './package-json';
 import { applyGatewayPatch, applyPatch, gatewayPatchesFor, patchesFor } from './patches';
 import { clientModelFor, emitRoute } from './routes';
+import {
+  GITIGNORE_SOURCE_NAME,
+  STRIPPED_DOTFILES,
+  travellingName,
+} from './template-dotfiles';
 import type { ProjectPlan } from './types';
 
 /**
- * npm strips a file named `.gitignore` out of a published tarball, so templates
- * carry it as `_gitignore` and it is renamed back on copy.
+ * What `_gitignore` arrives as, derived from the one list that decides which
+ * dotfiles travel underscored (src/template-dotfiles.ts).
  *
- * This is create-vite's own workaround and it is not optional: without it the
- * emitted project has no `.gitignore`, which means `node_modules/` and — for a
- * keyed gateway — `.env.local` are both untracked-but-not-ignored. A scaffold
- * whose first `git add .` stages an API key is the worst version of this bug,
- * and it only appears in the PUBLISHED package, never in a local run from the
- * repo. `scripts/verify-pack.mjs` asserts the packed tarball carries the
- * underscored name.
+ * Kept as a named export because `test/generate.test.ts` asserts the rename
+ * round-trips through it, and because the `.gitignore` case is the one with
+ * teeth: without the rename the emitted project ignores nothing, so
+ * `node_modules/` and — for a keyed gateway — `.env.local` are both
+ * untracked-but-not-ignored, and a scaffold whose first `git add .` stages an
+ * API key is the worst version of this bug. It only appears in the PUBLISHED
+ * package, never in a local run from the repo, which is why
+ * `scripts/verify-pack.mjs` reads the packed tarball rather than the tree.
  */
-export const GITIGNORE_TEMPLATE_NAME = '_gitignore';
+export const GITIGNORE_TEMPLATE_NAME = travellingName(GITIGNORE_SOURCE_NAME);
 
 /** Where the bundled templates live, relative to the built `dist/index.js`. */
 export function defaultTemplateRoot(): string {
@@ -89,10 +95,14 @@ export async function generate(
   await mkdir(plan.dir, { recursive: true });
   await cp(templateDir, plan.dir, { recursive: true });
 
-  // `.gitignore` back from its published-tarball-safe name.
-  const underscored = path.join(plan.dir, GITIGNORE_TEMPLATE_NAME);
-  if (existsSync(underscored)) {
-    await rename(underscored, path.join(plan.dir, '.gitignore'));
+  // The dotfiles npm refuses to pack, back from the names they travelled under.
+  // Best-effort per file: `.gitignore` is required of every starter and `.npmrc`
+  // only exists in the standalone ones, so absent means nothing to do. Before the
+  // patches, because a patch row names the REAL name — `.npmrc` is one of the
+  // files `PATCHES` opens.
+  for (const dotfile of STRIPPED_DOTFILES) {
+    const travelling = path.join(plan.dir, travellingName(dotfile));
+    if (existsSync(travelling)) await rename(travelling, path.join(plan.dir, dotfile));
   }
 
   // The named edits that turn a reviewed starter into the user's own project.

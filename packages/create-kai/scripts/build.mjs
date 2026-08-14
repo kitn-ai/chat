@@ -185,12 +185,15 @@ async function main() {
   // below resolves it out of the package's own node_modules.
   const { WIRED_GATEWAYS, BROWSER_WIRE, EMITTED_READER_FORMAT, getIntegration } =
     await loadTs('src/catalog.ts');
-  // `GITIGNORE_TEMPLATE_NAME` is read from `generate.ts` rather than restated
-  // here. `generate()` is what renames it back, so a local copy that drifted
-  // would have this build write a name the CLI never looks for — and nothing
-  // would fail: the emitted project would simply have no `.gitignore`, which is
-  // the API-key-staging bug, visible only in the published package.
-  const { GITIGNORE_TEMPLATE_NAME, goLiveThread } = await loadTs('src/generate.ts');
+  // The dotfile list is read from `src/template-dotfiles.ts` rather than
+  // restated here. `generate()` renames these back off the same list, so a local
+  // copy that drifted would have this build write a name the CLI never looks for
+  // — and nothing would fail at build time: the emitted project would simply be
+  // missing the file. For `.gitignore` that is the API-key-staging bug; for
+  // `.npmrc` it was an ENOENT on `npx create-kai --framework nextjs`. Both are
+  // visible only in the published package.
+  const { STRIPPED_DOTFILES, travellingName } = await loadTs('src/template-dotfiles.ts');
+  const { goLiveThread } = await loadTs('src/generate.ts');
 
   const ready = FRAMEWORKS.filter((f) => f.status === 'ready');
   failIf(guards.readyFrameworksProblem(ready));
@@ -241,11 +244,6 @@ async function main() {
     const exists = (relative) => existsSync(path.join(root, relative));
     const patches = patchesFor(framework.templateDir);
 
-    await rename(
-      path.join(root, guards.GITIGNORE_SOURCE_NAME),
-      path.join(root, GITIGNORE_TEMPLATE_NAME),
-    );
-
     // Order matters: `emittedContentProblem` applies the patches, and `applyPatch`
     // throws on one that does not match, so the specific "this patch went stale"
     // message has to come first or it is replaced by a generic one.
@@ -268,6 +266,17 @@ async function main() {
     );
     failIf(guards.appPathProblem(framework, read, goLiveThread));
     failIf(guards.declaredPathsProblem(framework, exists));
+
+    // AFTER every rule above, not before. npm strips these names out of a
+    // published tarball, so a template carries them underscored and `generate()`
+    // renames them back — but a patch row names the REAL name (`PATCHES` opens
+    // `.npmrc` for both standalone starters), so renaming first would take
+    // `patchMatchProblem` from "this patch went stale" to "this template has no
+    // such file" for a file that is right there.
+    for (const dotfile of STRIPPED_DOTFILES) {
+      const from = path.join(root, dotfile);
+      if (existsSync(from)) await rename(from, path.join(root, travellingName(dotfile)));
+    }
 
     patchCount += patches.length;
     gatewayPatchCount += gatewayPatchesFor(framework.templateDir).length;

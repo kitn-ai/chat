@@ -34,6 +34,7 @@
 import type { FrameworkDef } from './frameworks';
 import { applyPatch, countMatches } from './patches';
 import type { Matchable, Patch } from './patches';
+import { GITIGNORE_SOURCE_NAME } from './template-dotfiles';
 import { PROBE_NAME, repoInternalProblems, titleProblems } from './template-guards';
 import type { GuardProblem } from './template-guards';
 
@@ -412,19 +413,21 @@ export function missingStarterProblem(
 }
 
 /**
- * The name a starter carries its ignore file under, and the one an emitted
- * project gets back.
+ * The name a starter carries its ignore file under.
  *
- * Declared here because the rule below is the thing that asserts it: `build.mjs`
- * renames THIS name to `GITIGNORE_TEMPLATE_NAME` (src/generate.ts) and both ends
- * of that rename now read their name from the one place it is written down. The
- * underscored half deliberately lives with `generate()`, which is what renames
- * it back — this module is bundled by `build.mjs` through `loadTs()`, and
- * importing `generate.ts` here would drag the catalog and the kit's source in
- * with it, which is the same reason `appPathProblem` takes `goLiveThread` as an
- * argument instead of importing it.
+ * Re-exported rather than declared: it is one row of `STRIPPED_DOTFILES`
+ * (src/template-dotfiles.ts), the list `build.mjs` renames on the way into a
+ * template and `generate()` renames back on the way out. It keeps a name of its
+ * own because `gitignoreProblem` below asserts something the list does not — that
+ * a starter HAS this file, where the rest of the list is optional per starter.
+ *
+ * That leaf module has no imports, which is what lets both ends of the rename
+ * share it: this one is bundled by `build.mjs` through `loadTs()`, `generate.ts`
+ * is bundled into the CLI, and importing either from the other would drag the
+ * catalog or the TypeScript-parsing guards along — the same reason
+ * `appPathProblem` takes `goLiveThread` as an argument instead of importing it.
  */
-export const GITIGNORE_SOURCE_NAME = '.gitignore';
+export { GITIGNORE_SOURCE_NAME };
 
 /**
  * Never copied into a template, whatever the starter's `.gitignore` says.
