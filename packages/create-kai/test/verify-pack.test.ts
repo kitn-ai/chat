@@ -107,17 +107,39 @@ function fixtureRoot(files: Tree, label = 'verify-pack-'): string {
 }
 
 /** Runs the real script against a fixture and returns its exit code + output. */
-function runVerifier(root: string, script = SCRIPT): { code: number; output: string } {
+function runVerifier(
+  root: string,
+  script = SCRIPT,
+  env: NodeJS.ProcessEnv = {},
+): { code: number; output: string } {
   try {
     const stdout = execFileSync('node', [script, '--package-root', root], {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, ...env },
     });
     return { code: 0, output: stdout };
   } catch (err) {
     const e = err as { status?: number; stdout?: string; stderr?: string };
     return { code: e.status ?? -1, output: `${e.stdout ?? ''}${e.stderr ?? ''}` };
   }
+}
+
+/**
+ * A stand-in `npm` on disk, so `VERIFY_PACK_NPM` can be watched being obeyed.
+ *
+ * `body` receives the argv the script passed and returns what the fake prints.
+ * Written executable into a temp dir, because the script spawns it as a binary.
+ */
+function fakeNpm(body: string): string {
+  const dir = mkdtempSync(path.join(tmpdir(), 'fake-npm-'));
+  const file = path.join(dir, 'npm');
+  writeFileSync(
+    file,
+    `#!/usr/bin/env node\nconst args = process.argv.slice(2);\n${body}\n`,
+    { mode: 0o755 },
+  );
+  return file;
 }
 
 describe('verify:pack still detects', () => {
@@ -308,5 +330,84 @@ describe('verify:pack still detects', () => {
     } finally {
       rmSync(copy, { force: true });
     }
+  });
+});
+
+/**
+ * The npm the script runs under, and the knob CI uses to change it.
+ *
+ * WHY THIS BLOCK EXISTS. The cases above shell out to whatever npm is on PATH,
+ * which is how the npm 12 defect hid: on npm 10 every one of them is green
+ * regardless of whether the script can read npm 12's listing at all. The parse
+ * itself is graded shape-by-shape against captured fixtures in
+ * test/pack-listing.test.ts. What is left, and what is here, is the wiring —
+ * `VERIFY_PACK_NPM` is what .github/workflows/test.yml uses to run this guard
+ * under the npm the release job pins, and if the script ever stopped reading it
+ * that step would quietly fall back to the ambient npm 10 and go on passing
+ * while claiming to cover npm 12. That is the same "check that proves nothing"
+ * shape as the neutered analyzer above, one layer out.
+ */
+describe('which npm the verifier uses', () => {
+  it('obeys VERIFY_PACK_NPM, and reports the version and shape it saw', () => {
+    // A stand-in npm that delegates to the real one and then forces the npm 12
+    // KEYED container, whatever the box's npm produced. So this asserts three
+    // things at once, on any npm: the env var is honoured (the version printed
+    // is the fake's, which no real npm reports), the keyed shape parses
+    // end-to-end through the real script, and the reported shape is not a
+    // hardcoded label.
+    const npm = fakeNpm(`
+      if (args[0] === '--version') { console.log('99.99.99-stub'); process.exit(0); }
+      const { execFileSync } = require('node:child_process');
+      const parsed = JSON.parse(execFileSync('npm', args, { encoding: 'utf8' }));
+      const keyed = Array.isArray(parsed)
+        ? Object.fromEntries(parsed.map((e) => [e.name, e]))
+        : parsed;
+      process.stdout.write(JSON.stringify(keyed));
+    `);
+
+    const { code, output } = runVerifier(fixtureRoot(tree()), SCRIPT, { VERIFY_PACK_NPM: npm });
+
+    expect(code, `a clean tree was rejected through the keyed shape: ${output}`).toBe(0);
+    expect(output).toContain('npm 99.99.99-stub');
+    expect(output).toContain('keyed listing');
+  });
+
+  it('still FIRES through that path — the keyed shape is not a way to pass vacuously', () => {
+    // THE CONTROL FOR THE CASE ABOVE. A parser that returned an empty listing on
+    // the keyed shape would also "accept" a clean tree; only a planted defect
+    // separates reading the listing from ignoring it.
+    const npm = fakeNpm(`
+      if (args[0] === '--version') { console.log('99.99.99-stub'); process.exit(0); }
+      const { execFileSync } = require('node:child_process');
+      const parsed = JSON.parse(execFileSync('npm', args, { encoding: 'utf8' }));
+      const keyed = Array.isArray(parsed)
+        ? Object.fromEntries(parsed.map((e) => [e.name, e]))
+        : parsed;
+      process.stdout.write(JSON.stringify(keyed));
+    `);
+
+    const broken = fixtureRoot(tree({ 'templates/react/_gitignore': null }));
+    const { code, output } = runVerifier(broken, SCRIPT, { VERIFY_PACK_NPM: npm });
+
+    expect(code, 'a broken tree passed through the keyed shape').toBe(1);
+    expect(output).toContain('1 of 2 template(s)');
+    expect(output).toContain('react');
+  });
+
+  it('fails with a message naming the npm version when the shape is unrecognised', () => {
+    // NOT a TypeError, which is what the release actually got, and not a silent
+    // empty listing. The version is the one fact that turns the report into a
+    // diagnosis.
+    const npm = fakeNpm(`
+      if (args[0] === '--version') { console.log('77.0.0-stub'); process.exit(0); }
+      process.stdout.write('"a string"');
+    `);
+
+    const { code, output } = runVerifier(fixtureRoot(tree()), SCRIPT, { VERIFY_PACK_NPM: npm });
+
+    expect(code).toBe(1);
+    expect(output).toContain('npm version: 77.0.0-stub');
+    expect(output).toContain('does not recognise');
+    expect(output).not.toContain('TypeError');
   });
 });

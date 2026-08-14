@@ -312,8 +312,90 @@ describe('the CI wiring for the tarball verifier', () => {
     // Vacuity: a parse that found nothing at all would "pass" the removal case.
     expect(commands.length, 'parsed no run: commands — the matcher is broken').toBeGreaterThan(10);
 
+    const found = invokesVerifyPack(commands);
+    // Counted rather than assumed to be one: the workflow runs verify:pack twice
+    // on purpose (see the npm-pin block below), and hardcoding `- 1` here would
+    // have to be edited by hand every time that changes — which is how a control
+    // gets "fixed" into passing.
+    expect(found.length).toBeGreaterThan(0);
+
     const without = commands.filter((c) => !(c.includes('create-kai') && c.includes('verify:pack')));
-    expect(without.length).toBe(commands.length - 1);
+    expect(without.length).toBe(commands.length - found.length);
     expect(invokesVerifyPack(without)).toEqual([]);
+  });
+});
+
+/**
+ * THE SKEW THAT LET AN NPM CHANGE TAKE DOWN A RELEASE.
+ *
+ * `verify:pack` runs in the test job under node 22's bundled npm (10.9.8) and in
+ * `prepublishOnly` under the npm the RELEASE job installs for OIDC trusted
+ * publishing. Those were different majors and nothing said so. npm 12 moved the
+ * top level of `npm pack --json` from an array to an object keyed by package
+ * name, so the guard threw `TypeError: Cannot read properties of undefined
+ * (reading 'files')` the first time it ever ran under npm 12 — which was at
+ * publish time, on a cut tag, after @kitn.ai/ui@0.24.0 had already gone out.
+ *
+ * The fix has three parts, and this is the third: the parser handles both shapes
+ * (scripts/pack-listing.mjs), the test job now runs `verify:pack` a second time
+ * under the pinned npm (.github/workflows/test.yml), and THIS keeps those two
+ * workflows naming the same version. Without it the pin can be bumped in the
+ * release workflow alone and the extra CI step goes back to exercising an npm
+ * nobody publishes with, silently — the failure mode, one level up, is identical
+ * to the one it is guarding.
+ */
+describe('the npm the release job pins is the npm CI exercises', () => {
+  const RELEASE_WORKFLOW = path.resolve(PKG_ROOT, '../../.github/workflows/release-please.yml');
+
+  /** The exact version the release job installs globally before publishing. */
+  const releasePin = (yaml: string): string[] =>
+    [...yaml.matchAll(/npm install -g npm@(\d+\.\d+\.\d+)/g)].map((m) => m[1]!);
+
+  /** The versions the test job installs to re-run verify:pack under. */
+  const testJobPins = (yaml: string): string[] =>
+    runCommandsIn(yaml)
+      .filter((c) => c.includes('VERIFY_PACK_NPM'))
+      .flatMap((c) => [...c.matchAll(/npm@(\d+\.\d+\.\d+)/g)].map((m) => m[1]!));
+
+  /** Same flattening as above; duplicated locally so the blocks stay independent. */
+  function runCommandsIn(workflow: string): string[] {
+    return [
+      ...workflow.matchAll(/^\s*(?:- )?run: (?:\|[-+]?\s*\n)?([\s\S]*?)(?=\n\s*(?:- |[a-z-]+:))/gm),
+    ]
+      .map((m) => m[1]!.trim())
+      .filter(Boolean);
+  }
+
+  it('finds an exact pin in the release workflow', () => {
+    // VACUITY CONTROL. Every assertion below compares two extractions; if either
+    // regex stopped matching, the comparison would be [] === [] and pass.
+    expect(releasePin(readFileSync(RELEASE_WORKFLOW, 'utf8'))).toHaveLength(1);
+  });
+
+  it('finds the test job running verify:pack under an explicitly installed npm', () => {
+    const pins = testJobPins(readFileSync(WORKFLOW, 'utf8'));
+    expect(pins, 'no VERIFY_PACK_NPM step in test.yml — the guard runs on one npm again').toHaveLength(
+      1,
+    );
+  });
+
+  it('and they are the same version', () => {
+    const [release] = releasePin(readFileSync(RELEASE_WORKFLOW, 'utf8'));
+    const [test] = testJobPins(readFileSync(WORKFLOW, 'utf8'));
+    expect(test, `test.yml exercises npm ${test}, but the release publishes on npm ${release}`).toBe(
+      release,
+    );
+  });
+
+  it('would notice a drift', () => {
+    // THE CONTROL FOR THE COMPARISON. Bump the release pin in a copy of the YAML
+    // and require the equality to break — otherwise "they are the same version"
+    // is satisfied by two extractions that are both undefined.
+    const drifted = readFileSync(RELEASE_WORKFLOW, 'utf8').replace(
+      /npm install -g npm@\d+\.\d+\.\d+/,
+      'npm install -g npm@13.4.5',
+    );
+    expect(releasePin(drifted)).toEqual(['13.4.5']);
+    expect(testJobPins(readFileSync(WORKFLOW, 'utf8'))[0]).not.toBe('13.4.5');
   });
 });
