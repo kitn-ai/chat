@@ -138,9 +138,9 @@ is the axis that actually gates widening:
 ### What is read from the kit, and what it costs
 
 `chatRoutePreamble(fragment)`, `CLIENT_MODEL_IDS` and `defaultModelFor` come
-from `agent-tooling/mcp/tools/scaffold.ts`. This package used to carry copies of
-the first two plus guards to watch them drift; both copies and one guard are
-gone.
+from `agent-tooling/route-emit.ts` — a **leaf module** whose only import is
+type-only. This package used to carry copies of the first two plus guards to
+watch them drift; both copies and one guard are gone.
 
 The preamble is a **function**, not a constant, and that shape is load-bearing:
 the content helpers are injected only where a route calls them, because an
@@ -148,19 +148,44 @@ unused declaration is a hard `--noUnusedLocals` error. Emitted proof — the
 `anthropic` route declares `wireParts` / `wireText` / `WirePart`, the
 `openrouter` route declares none of them, and both compile.
 
-**Two costs came with that import, and neither was priced in advance:**
+**WHICH MODULE THEY COME FROM IS THE WHOLE COST.** They were briefly exported
+from `agent-tooling/mcp/tools/scaffold.ts` instead, and that one import line cost
+two things nobody priced in advance:
 
-1. **Bundle.** `dist/index.js` went 203 kB → 904 kB, of which **526 kB is zod** —
-   pulled in because `scaffold.ts` builds the MCP tool's schema at module scope,
-   which esbuild cannot tree-shake past. create-kai never executes zod. Cold
-   start measured 30 ms → 45 ms; packed tarball 0.25 MB.
-2. **tsconfig coupling.** The kit's source now joins this package's `tsc`
-   program, which runs `noUnusedLocals` while the kit's own typecheck does not.
-   That surfaced one genuinely dead constant in `scaffold.ts`.
+1. **Bundle.** `dist/index.js` went 203 kB → 904 kB, **505 kB of it zod the CLI
+   never executes** — because `scaffold.ts` builds the MCP tool's input schema at
+   module scope, and a module-scope side effect is not tree-shakeable, so esbuild
+   had to keep all 5,300 lines and everything they import. Cold start 30 ms →
+   45 ms, on every `npx create-kai`.
+2. **tsconfig coupling.** 5,300 lines of kit source joined this package's `tsc`
+   program, which runs `noUnusedLocals` while the kit's own typecheck does not —
+   so a flag this package chose became a constraint on a file it does not own,
+   and it forced a deletion in the kit to keep this build green.
 
-Both point the same way: these three exports want a **zod-free leaf module**,
-not the 5,300-line MCP tool file. Moving them there would drop the bundle back
-and decouple the typecheck.
+Moving them to `route-emit.ts` undid both: **917.2 kB → 220.3 kB** measured on the
+same commit (zod entirely out of the graph, not merely smaller), and
+`scaffold.ts` out of this package's `tsc` program.
+
+Two pairs of numbers appear above and they are not in conflict: **203 → 904 kB**
+is what the regression cost when it landed, and **917.2 → 220.3 kB** is this
+package built with and without the fix on today's base. Both ends drifted up by
+~13 kB in between because `integrations/vercel-ai-sdk.ts` grew, and that file is
+in the CLI's graph legitimately — it is a catalog entry. Re-measure both ends
+together rather than quoting either half against a different commit.
+
+**The coupling is reduced, not gone.** 15 kit source files are still in this
+package's `tsc` program under `noUnusedLocals` — the registry, `types.ts`, the
+11 integrations and `route-emit.ts`. That is the catalog this package exists to
+read, so it is the coupling that was always intended; what left is the MCP tool
+that was never meant to be here.
+
+`bundleGraphProblem` in `src/build-guards.ts` is what stops this coming back. It
+grades the esbuild **metafile's module graph** — not the output text and not a
+byte ceiling, because a ceiling has to be raised as the templates grow and
+raising it is the moment nobody looks. It bans `zod` (the cost) and everything
+under `agent-tooling/mcp/` (the cause). Watched failing three ways: the rule
+against a written-out graph, the rule against the real bundle, and `npm run
+build` exiting 1 with the same message when the original import is put back.
 
 ### What is deliberately not shared
 
@@ -214,6 +239,7 @@ not evidence.
 | `scripts/build.mjs` app-path check | `paths.app` naming a file the template does not have. It is written into `kai.json` and quoted in the emitted README, and nothing else opens it at build time — so React's `src/App.tsx` copied onto a Vue row would go unnoticed |
 | `scripts/build.mjs` devDep check | a devDependency range disagreeing with `packages/ui`. `.npmrc` sets `node-linker=hoisted`, so one version wins workspace-wide — an `@types/node: ^22` here downgraded the KIT from 26 and broke its emitted-code suite |
 | `test/kit-contract.test.ts` | a template importing something the kit does not export |
+| `scripts/build.mjs` bundle-graph check | the CLI bundle reaching a module it must not. Three symbols imported out of the MCP's `tools/scaffold.ts` took `dist/index.js` from 203 kB to 904 kB, 505 kB of it zod, and **every other check stayed green** — emitted output was byte-identical, `verify:scaffold` was 616/616. It grades the esbuild metafile's real module graph, so it bans the CAUSE (anything under `agent-tooling/mcp/`) and not only the symptom |
 | `scripts/verify-pack.mjs` | npm stripping `.gitignore` out of the tarball, and templates missing from `files` |
 | `scripts/smoke.mjs` | an emitted project that installs but does not build. `--framework all` covers every ready framework; without a flag it only ever built React, which meant it answered "does React still build" no matter which framework you had just turned on |
 

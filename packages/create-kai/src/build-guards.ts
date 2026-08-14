@@ -284,7 +284,7 @@ export function routeSymbolsProblem(
       'declarations.\n' +
       '  Every webRoute in the catalog narrows its body through readChatRequest, so a preamble with\n' +
       '  nothing in it means the contract moved. Re-read chatRoutePreamble in\n' +
-      '  agent-tooling/mcp/tools/scaffold.ts before trusting this emit.'
+      '  agent-tooling/route-emit.ts before trusting this emit.'
     );
   }
 
@@ -605,5 +605,87 @@ export function sharedDevDepsProblem(mine: Manifest, kit: Manifest): string | nu
     'node-linker=hoisted means one version wins for the whole workspace, so a\n' +
     'mismatch here changes what the KIT compiles against.\n' +
     clashes.join('\n')
+  );
+}
+
+/**
+ * What the CLI bundle is allowed to REACH.
+ *
+ * THE FAILURE THIS EXISTS FOR HAS ALREADY HAPPENED, and it was invisible at
+ * every seam that was being watched. One import — three symbols out of
+ * `agent-tooling/mcp/tools/scaffold.ts` — took `dist/index.js` from 203 kB to
+ * 904 kB, of which 505 kB was zod this CLI never executes, and pushed `npx` cold
+ * start from 30 ms to 45 ms. Nothing failed. Every test passed, the emitted
+ * output was byte-identical, and the build printed the new size as a fact rather
+ * than a problem. The only reason it was caught is that somebody read the
+ * number.
+ *
+ * The cause is not zod and not a size: it is that `tools/scaffold.ts` builds its
+ * MCP input schema at MODULE SCOPE, and a module-scope side effect is not
+ * tree-shakeable, so asking esbuild for one symbol out of that file obliges it
+ * to keep all 5,300 lines and everything they import. That is a property of the
+ * MODULE, not of what you took from it — which is why this rule is about the
+ * import graph and not about a byte ceiling. A ceiling would have to be raised
+ * every time the templates grow, and raising it is exactly the moment nobody
+ * looks.
+ *
+ * So two things are banned, and the second is the real one:
+ *
+ *   · `zod` — the 505 kB. Named directly because it is the cost, and because a
+ *     future route into it that does not pass through `mcp/` would still be a
+ *     bug this CLI should not pay for.
+ *   · anything under `agent-tooling/mcp/` — the CAUSE. `create-kai` is not the
+ *     `kai` MCP; the reuse boundary `src/catalog.ts` describes is the catalog,
+ *     and the three modules that serve it (`registry.ts`, `types.ts`,
+ *     `route-emit.ts`) all sit at the root of `agent-tooling/`. This half fires
+ *     even in the case where the offending module happens to shake clean today,
+ *     which is the version of this bug that comes back.
+ *
+ * ONE KNOWN FUTURE COLLISION, stated so it is not a surprise: `renderSurface`
+ * lives in `tools/scaffold.ts`, and `generate()` will need it the day the
+ * `generated` surface path is wired (it throws today rather than emit an unrun
+ * surface). This rule WILL refuse that import, and refusing is the right answer
+ * — the fix is to move `renderSurface` to a leaf the same way these three moved,
+ * not to add an exception here. An exception is how the 700 kB comes back.
+ *
+ * Takes the esbuild METAFILE's input keys rather than the output text: that is
+ * the real module graph, so a grep-proof rename or a comment mentioning zod
+ * cannot move it in either direction.
+ */
+export function bundleGraphProblem(inputs: readonly string[]): string | null {
+  const normalized = inputs.map((input) => input.replaceAll('\\', '/'));
+  const banned: { what: RegExp; why: string }[] = [
+    {
+      what: /(?:^|\/)node_modules\/zod\//,
+      why: 'zod — 505 kB the CLI never executes, on every `npx create-kai`',
+    },
+    {
+      what: /(?:^|\/)agent-tooling\/mcp\//,
+      why: "the kai MCP's own modules — they build zod schemas at module scope, which esbuild cannot shake past",
+    },
+  ];
+
+  const hits = banned
+    .map((rule) => ({ ...rule, files: normalized.filter((input) => rule.what.test(input)) }))
+    .filter((rule) => rule.files.length > 0);
+  if (hits.length === 0) return null;
+
+  return (
+    'create-kai build: the CLI bundle reaches modules it must not.\n' +
+    hits
+      .map(
+        (hit) =>
+          `  · ${hit.why}\n` +
+          hit.files
+            .slice(0, 5)
+            .map((file) => `      ${file}`)
+            .join('\n') +
+          (hit.files.length > 5 ? `\n      … and ${hit.files.length - 5} more` : ''),
+      )
+      .join('\n') +
+    '\n  The CLI is one bundled zero-dependency file so `npx` cold start is fast, and\n' +
+    '  every user downloads all of it. Read what you need from the LEAF modules at the\n' +
+    '  root of agent-tooling/ — registry.ts, types.ts, route-emit.ts. If the fact you\n' +
+    '  need only exists inside mcp/, move it to a leaf rather than importing the tool.'
   );
 }

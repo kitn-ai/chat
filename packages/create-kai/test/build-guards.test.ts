@@ -19,9 +19,12 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type * as TSApi from 'typescript';
 
+import * as esbuild from 'esbuild';
+
 import {
   GITIGNORE_SOURCE_NAME,
   appPathProblem,
+  bundleGraphProblem,
   declaredPathsProblem,
   emittedContentProblem,
   gitignoreProblem,
@@ -354,6 +357,88 @@ describe('the shared-devDeps guard', () => {
   it('holds the two live manifests against each other', () => {
     const read = (rel: string) => JSON.parse(readFileSync(path.join(PKG_ROOT, rel), 'utf8'));
     expect(sharedDevDepsProblem(read('package.json'), read('../ui/package.json'))).toBeNull();
+  });
+});
+
+/**
+ * The bundle-graph guard, against the regression it was written for.
+ *
+ * This one is not hypothetical and the numbers below are measured, not
+ * illustrative: exporting `chatRoutePreamble` + `CLIENT_MODEL_IDS` +
+ * `defaultModelFor` from `agent-tooling/mcp/tools/scaffold.ts` and importing
+ * them here took `dist/index.js` from 203 kB to 904 kB, 505 kB of it zod the CLI
+ * never executes. Every seam that was being watched stayed green — the emitted
+ * scaffold output was byte-identical, `verify:scaffold` was 616/616 and 99/99,
+ * the unit suites passed — because none of them ask what the bundle DRAGS. The
+ * build printed the new size as an informational line and nobody read it.
+ */
+describe('the bundle-graph guard', () => {
+  /** The real graph, minus the two entries under test. */
+  const legitimateGraph = [
+    'src/index.ts',
+    'src/catalog.ts',
+    'src/routes.ts',
+    '../ui/src/agent-tooling/registry.ts',
+    '../ui/src/agent-tooling/types.ts',
+    '../ui/src/agent-tooling/route-emit.ts',
+    '../ui/src/agent-tooling/integrations/anthropic.ts',
+    '../../node_modules/.pnpm/@clack+prompts@0.11.0/node_modules/@clack/prompts/dist/index.mjs',
+  ];
+
+  it('rejects the graph that shipped 505 kB of zod to every npx user', () => {
+    expectRejected(
+      bundleGraphProblem([
+        ...legitimateGraph,
+        '../../node_modules/.pnpm/zod@4.1.13/node_modules/zod/v4/classic/schemas.js',
+        '../../node_modules/.pnpm/zod@4.1.13/node_modules/zod/v4/core/parse.js',
+      ]),
+      'zod',
+      'npx create-kai',
+    );
+  });
+
+  /**
+   * THE HALF THAT MATTERS MORE. zod is the cost; the import is the cause, and
+   * the cause is a property of the module rather than of what you took from it —
+   * `tools/scaffold.ts` builds its MCP input schema at module scope, so esbuild
+   * has to keep all 5,300 lines of it. Grading only the zod half would go green
+   * on the day that file's own dependencies happen to shake clean, and the CLI
+   * would still be carrying a whole MCP tool it does not run.
+   */
+  it('rejects reaching into the MCP even when zod itself shook clean', () => {
+    expectRejected(
+      bundleGraphProblem([...legitimateGraph, '../ui/src/agent-tooling/mcp/tools/scaffold.ts']),
+      'agent-tooling/mcp/tools/scaffold.ts',
+      'move it to a leaf',
+    );
+    // …and it must not be satisfied by the leaf that replaced it. `route-emit.ts`
+    // sits at the root of agent-tooling/ precisely so this rule can tell the two
+    // apart; a rule keyed on `agent-tooling/` would reject the fix along with the
+    // defect.
+    expect(bundleGraphProblem(legitimateGraph)).toBeNull();
+  });
+
+  /**
+   * THE LIVE ONE. The three above grade the rule against a written-out graph,
+   * which cannot notice a real import landing in this package tomorrow. This
+   * bundles the actual CLI entry point and asks esbuild what it reached — the
+   * same question `scripts/build.mjs` asks, from the same metafile, so a
+   * regression fails here in the fast suite and not only in a build log.
+   */
+  it('holds the real CLI entry point', async () => {
+    const built = await esbuild.build({
+      entryPoints: [path.join(PKG_ROOT, 'src/index.ts')],
+      bundle: true,
+      write: false,
+      platform: 'node',
+      format: 'esm',
+      metafile: true,
+    });
+    const inputs = Object.keys(built.metafile.inputs);
+    // A guard over an empty graph would pass for the wrong reason; the bundle is
+    // ~90 modules, so anything near zero means the bundle step, not the rule.
+    expect(inputs.length).toBeGreaterThan(20);
+    expect(bundleGraphProblem(inputs)).toBeNull();
   });
 });
 

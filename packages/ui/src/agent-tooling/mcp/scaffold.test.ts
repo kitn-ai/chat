@@ -1,9 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import {
   cardEmitPlan, scaffold, renderSurface, NO_PROXY_CLAIM, PROXY_REQUIRED_CLAIM, ATTACHMENT_WIRE_NOTE,
-  // The route seam a second emitter consumes. Graded at the bottom of this file.
-  chatRoutePreamble, defaultModelFor, CLIENT_MODEL_IDS,
 } from './tools/scaffold';
+// The route seam a second emitter consumes, graded at the bottom of this file.
+// It lives in its own leaf module rather than in `tools/scaffold` — that file
+// builds a zod schema at module scope, so importing one symbol out of it drags
+// the whole thing plus zod into any bundle. See the header of `route-emit.ts`.
+import { chatRoutePreamble, defaultModelFor, CLIENT_MODEL_IDS } from '../route-emit';
 import {
   getArchetype, getIntegration, listArchetypes, listIntegrations, listSurfaceProbes,
 } from '../registry';
