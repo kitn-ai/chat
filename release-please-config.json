@@ -2,10 +2,15 @@
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
   "bump-minor-pre-major": true,
   "bump-patch-for-minor-pre-major": false,
+  "bootstrap-sha": "c3790041f41a4608847079a04f5508868ea449d8",
   "packages": {
     "packages/ui": {
       "release-type": "node",
       "package-name": "@kitn.ai/ui"
+    },
+    "packages/create-kai": {
+      "release-type": "node",
+      "package-name": "create-kai"
     }
   }
 }
