@@ -511,6 +511,126 @@ describe('generate (svelte + full-screen + conversations + mock)', () => {
 });
 
 /**
+ * SolidJS — the only row whose `registration` is not `elements`.
+ *
+ * IT WAS THE ONE `ready` FRAMEWORK WITHOUT A BLOCK HERE, which is the reason to
+ * write one: not that it was uncovered — the parameterized `paths` loop below
+ * asserts its emitted paths and `smoke.mjs` builds it — but that six of seven
+ * had a hand-written block and the seventh did not, which reads as a deliberate
+ * exemption and is not one.
+ *
+ * What it is FOR, rather than symmetry: every other starter reaches the kit by
+ * registering `kai-*` custom elements, and this one imports the SolidJS
+ * components directly from `@kitn.ai/ui/solid`, because Solid is the kit's
+ * authored layer. `kai.json` records that as `registration: 'solid'` so a future
+ * codegen branches on the field instead of re-deriving it by parsing the entry
+ * file — so the field being right is load-bearing, and nothing else asserts it
+ * on an emitted project.
+ */
+describe('generate (solid + full-screen + conversations + mock)', () => {
+  let root: string;
+  let dir: string;
+  let files: string[];
+
+  beforeAll(async () => {
+    root = await mkdtemp(path.join(tmpdir(), 'create-kai-solid-'));
+    dir = path.join(root, 'solid-app');
+    const result = await generate(plan(dir, { frameworkId: 'solid', name: 'solid-app' }), {
+      templateRoot: TEMPLATE_ROOT,
+    });
+    files = result.files;
+  });
+
+  afterAll(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it('emits the composed workspace as components plus lib modules', async () => {
+    expect(files).toEqual(
+      expect.arrayContaining([
+        'src/App.tsx',
+        'src/chat-data.ts',
+        'src/components/Sidebar.tsx',
+        'src/components/ThreadView.tsx',
+        'src/components/Composer.tsx',
+        'src/lib/chat.ts',
+        'src/lib/conversations.ts',
+      ]),
+    );
+    // This starter used to be a 533-line single-file primitives showcase with no
+    // composer and no stream. Asserting the files exist would pass on a shell, so
+    // assert what makes it a chat APP.
+    const app = await readFile(path.join(dir, 'src/App.tsx'), 'utf8');
+    expect(app).toContain('createChat');
+    expect(app).toContain('readOpenAIStream');
+  });
+
+  it('imports the Solid components directly instead of registering kai-* elements', async () => {
+    // THE POINT OF THIS ROW. Checked against the IMPORT LIST rather than by
+    // searching the source for `kai-`, which appears eight times in this
+    // starter's own prose explaining why it does NOT use the web components — a
+    // check that reads prose reports on what a file says, not what it does.
+    const app = await readFile(path.join(dir, 'src/App.tsx'), 'utf8');
+    expect(app).toMatch(/from '@kitn\.ai\/ui\/solid'/);
+    // The root entry is the wrong one for this target and the starter says so;
+    // `/solid` is the subpath that ships the authored components.
+    expect(app).not.toMatch(/from '@kitn\.ai\/ui'/);
+
+    const entry = await readFile(path.join(dir, 'src/index.tsx'), 'utf8');
+    expect(entry).toContain('solid-js/web');
+    expect(entry).not.toContain('@kitn.ai/ui/elements');
+  });
+
+  it('applies the solid patch — its only one', async () => {
+    const html = await readFile(path.join(dir, 'index.html'), 'utf8');
+    expect(html).toContain('<title>solid-app</title>');
+    expect(html).not.toContain('SolidJS example');
+    // Solid's vite.config has no `workspace:*` paragraph to strip, which is why
+    // this template needs one patch where every other Vite row needs two. The
+    // absence is asserted rather than assumed.
+    const viteConfig = await readFile(path.join(dir, 'vite.config.ts'), 'utf8');
+    expect(viteConfig).not.toContain('nx build ui');
+    expect(viteConfig).not.toContain('workspace:*');
+  });
+
+  it('records solid paths in kai.json, with the stylesheet this starter has', async () => {
+    const kai = JSON.parse(await readFile(path.join(dir, 'kai.json'), 'utf8'));
+    expect(kai).toMatchObject({ framework: 'solid', registration: 'solid', gateway: 'mock' });
+    expect(kai.paths.entry).toBe('src/index.tsx');
+    expect(kai.paths.app).toBe('src/App.tsx');
+    // `src/styles.css`, NOT the `src/index.css` every other row carries and this
+    // row claimed until it went `ready`. A `planned` framework is never checked
+    // against its template, so it was wrong for as long as the row existed.
+    expect(kai.paths.css).toBe('src/styles.css');
+    // `src/components`, not the `src` it said while the app was one file.
+    expect(kai.paths.components).toBe('src/components');
+  });
+
+  it('points the README at the file this project actually has', async () => {
+    const readme = await readFile(path.join(dir, 'README.md'), 'utf8');
+    expect(readme).toContain('# solid-app');
+    expect(readme).toContain('`src/App.tsx`');
+    expect(readme).not.toContain('src/App.svelte');
+    expect(readme).not.toContain('src/App.vue');
+  });
+
+  it('emits a package.json a user can install, with a build that typechecks', async () => {
+    const pkg = JSON.parse(await readFile(path.join(dir, 'package.json'), 'utf8'));
+    expect(pkg.name).toBe('solid-app');
+    expect(pkg.private).toBeUndefined();
+    expect(pkg.dependencies['@kitn.ai/ui']).toBe('^9.9.9');
+    expect(pkg.dependencies['solid-js']).toBeDefined();
+    for (const spec of Object.values(pkg.dependencies as Record<string, string>)) {
+      expect(spec).not.toMatch(/^(?:workspace:|file:\.\.|link:)/);
+    }
+    // The CONTRAST with tanstack-start, which bundles green with type errors in
+    // it. This build runs `tsc` first, so `scriptsToRun` has no typecheck to add.
+    expect(buildTypechecks(pkg.scripts.build)).toBe(true);
+    expect(scriptsToRun(pkg.scripts)).toEqual(['build']);
+  });
+});
+
+/**
  * HTML — the no-framework cell, and the only row whose `templateDir` is not its
  * `id`: `html` is served by `examples/starters/vanilla`.
  *
