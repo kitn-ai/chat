@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.1.3](https://github.com/kitn-ai/ui/compare/create-kai-v0.1.2...create-kai-v0.1.3) (2026-08-15)
+
+
+### Bug Fixes
+
+* **create-kai:** re-cut the kit pin, and stop it stranding on every kit minor ([#249](https://github.com/kitn-ai/ui/issues/249)) ([b892497](https://github.com/kitn-ai/ui/commit/b892497b3c9fc226f7b608ec79c0aa8fd74167b0))
+* **docs:** stop serving CDN URLs pinned to advisory-covered versions ([#252](https://github.com/kitn-ai/ui/issues/252)) ([8baffe4](https://github.com/kitn-ai/ui/commit/8baffe4d9568344128512ef5674652b1f83cc236))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @kitn.ai/ui bumped to 0.25.1
+
 ## [0.1.2](https://github.com/kitn-ai/ui/compare/create-kai-v0.1.1...create-kai-v0.1.2) (2026-08-14)
 
 
