@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.4](https://github.com/kitn-ai/ui/compare/create-kai-v0.1.3...create-kai-v0.1.4) (2026-08-15)
+
+
+### Bug Fixes
+
+* make a release rewrite the CDN pins it invalidates ([#258](https://github.com/kitn-ai/ui/issues/258)) ([b688ae7](https://github.com/kitn-ai/ui/commit/b688ae748a2f45648e5718dc19eb4d184cd59afc))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @kitn.ai/ui bumped to 0.25.2
+
 ## [0.1.3](https://github.com/kitn-ai/ui/compare/create-kai-v0.1.2...create-kai-v0.1.3) (2026-08-15)
 
 

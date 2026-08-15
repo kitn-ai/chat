@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.25.2](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.25.1...@kitn.ai/ui-v0.25.2) (2026-08-15)
+
+
+### Bug Fixes
+
+* make a release rewrite the CDN pins it invalidates ([#258](https://github.com/kitn-ai/ui/issues/258)) ([b688ae7](https://github.com/kitn-ai/ui/commit/b688ae748a2f45648e5718dc19eb4d184cd59afc))
+
 ## [0.25.1](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.25.0...@kitn.ai/ui-v0.25.1) (2026-08-15)
 
 
