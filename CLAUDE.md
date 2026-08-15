@@ -64,6 +64,7 @@ Two cheap guards cover the same ground in the required CI job, and both are wort
 - **Before generalising a fix into a rule, name a second instance of the class and check the rule against it** — if it only holds for the case you fixed, scope it to that case and say so. The second instance is nearly always already in the tree and cheap to check: "never import `@kitn.ai/ui/theme.css`" was the obvious lesson from a starter that shipped that file raw to a browser, which discards its Tailwind `@theme` block whole, but the Solid starter imports the same file safely because it runs Tailwind over it — the condition is whether Tailwind processes the file, not the import. **The wrong version is always the more quotable one**: the compression is what drops the qualifier that made it true, so a finding that shortens into something satisfying is exactly when to distrust it.
 - **No number in this file that a script can produce.** Element/cell/route/test/row counts, timings and versions rot the moment the gate moves — a stale scaffold count survived here through a whole change of axis. Name the command or artifact that prints it instead. Ports, paths, event names and contract details are not measurements; they stay.
 - Known consumer-packaging issues + their fixes: [`docs/package-consumer-issues.md`](docs/package-consumer-issues.md).
+- **Before you change one side of anything, check what else moves:** [`docs/coupling-map.md`](docs/coupling-map.md) — every pair in this repo that depends on the other, what breaks, and which guard catches it (or `NOTHING`).
 
 ## Map
 
