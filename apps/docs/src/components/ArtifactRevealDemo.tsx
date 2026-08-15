@@ -217,8 +217,10 @@ export default function ArtifactRevealDemo(props: Props) {
     artifactEl!.setAttribute('theme', theme());
     artifactEl!.setAttribute('iframe-title', 'Starboard artifact preview');
     artifactEl!.setAttribute('open-in-tab', '');
-    // First-party same-origin fixtures — opt into allow-same-origin so in-frame
-    // link clicks ("About →") keep the address field + back/forward truthful.
+    // DOCS-DEMO ONLY, and not a pattern to copy — see the same note in
+    // ArtifactsCanvasDemo. `allow-same-origin` gives the framed document THIS
+    // page's origin; it is acceptable here only because every url is a static
+    // fixture file we ship, so nothing model-supplied can reach `src`.
     artifactEl!.setAttribute('sandbox', 'allow-scripts allow-forms allow-same-origin');
     customElements.upgrade(artifactEl!);
     artifactEl!.files = FILES;
