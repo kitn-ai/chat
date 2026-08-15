@@ -191,7 +191,7 @@ The components are deliberately **transport-agnostic**: `<kai-chat>` just render
 </script>
 ```
 
-Key point: `chat.messages` has to be reassigned with a **new array containing a new object** for the streaming message on each chunk. That's what triggers the re-render. Mutating the existing object in place won't update the view. `createAssistantStream` is what satisfies that rule for you; if you drive `messages` by hand, you own it.
+Key point, and it is not only a streaming rule: `chat.messages` has to be reassigned with a **new array**, and any message you changed has to be a **new object**. The array reference is what tells the element something changed — reassigning the same array is a no-op even if you swapped a message inside it. The new message object is what makes the change visible, because the list keys its rows by item identity. Adds, removes and reorders need only the fresh array; editing an existing message needs both, and mutating one in place won't update the view even inside a fresh array. `createAssistantStream` satisfies both halves for you; if you drive `messages` by hand — editing a message, renaming a conversation — you own it.
 
 `@kitn.ai/ui/wire` also ships `readAnthropicStream`, the helpers for a multi-round tool loop, and a seam for a custom wire format. See the [wire adapter recipe](https://ui.kitn.ai/guides/recipes/wire-adapter/).
 

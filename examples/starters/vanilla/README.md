@@ -33,9 +33,22 @@ Consuming Shadow-DOM custom elements with no framework comes down to four things
   `conversations.conversations`, `promptInput.triggers`, `promptInput.suggestions`
   are set as **properties**. Scalars (`theme`, `placeholder`, `active-id`) can be
   attributes. Boolean flags like `voice` must be truthy **properties**
-  (`promptInput.voice = true`), never a bare `voice` attribute. Streaming needs a
-  **new array reference per chunk** — `state.ts` assigns a fresh `messages` array
-  on every update, which is what re-renders `<kai-thread>`.
+  (`promptInput.voice = true`), never a bare `voice` attribute.
+- **Updating a list needs a new array AND a new object for each item you changed.**
+  The new array reference is what tells the element something changed — assigning the
+  same array back is a no-op even if you swapped an item inside it. The new item object
+  is what makes the change visible, because the lists key their rows by item identity.
+  Adds, removes and reorders need only the fresh array; editing an existing item needs
+  both. `state.ts` assigns a fresh `messages` array on every update, which is what
+  re-renders `<kai-thread>`. To rename a conversation:
+  ```ts
+  // Stale: the title changed, but the item object did not, so the row never updates.
+  list.find((c) => c.id === id)!.title = 'Renamed';
+  conversationsEl.conversations = [...list];
+
+  // Renders: a new array, and the one item that changed is a new object.
+  conversationsEl.conversations = list.map((c) => (c.id === id ? { ...c, title: 'Renamed' } : c));
+  ```
 - **Events are non-bubbling `kai-*` CustomEvents.** Listen on the element itself
   with `addEventListener('kai-submit', …)`, `'kai-message-action'`,
   `'kai-conversation-select'`, … and read `(e as CustomEvent).detail`.

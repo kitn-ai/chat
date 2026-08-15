@@ -34,9 +34,17 @@ export function relativeTimeShort(iso?: string, now: number = Date.now()): strin
 export function ConversationItem(props: ConversationItemProps) {
   const [local] = splitProps(props, ['conversation', 'isActive', 'onSelect', 'compact', 'class']);
   // The trailing text: the consumer's own `trailing` field, else an auto relative
-  // time from updatedAt (fallback lastMessageAt). REACTIVITY: this (and the auto
-  // time) update when the consumer re-assigns the `conversations` array with a new
-  // reference — the kit's standard reactivity model — not via an internal clock.
+  // time from updatedAt (fallback lastMessageAt). Never an internal clock — it is a
+  // render-time snapshot.
+  //
+  // REACTIVITY, and the weaker version of this note is what #224 was filed against:
+  // a new `conversations` array reference is NOT sufficient. `ConversationList` renders
+  // these rows through a reference-keyed `<For>` that captures `conv` as a VALUE, so a
+  // row whose item object is unchanged is never re-invoked and never re-reads anything
+  // below. The consumer needs BOTH — a new array (which is what notifies at all) and a
+  // new object for the item that changed (which is what this row can see). Adds,
+  // removes and reorders are fine on a fresh array alone, since those rows' identities
+  // already differ. Pinned by `src/components/reactivity-contract.test.tsx`.
   const trailing = createMemo(
     () => local.conversation.trailing ?? relativeTimeShort(local.conversation.updatedAt ?? local.conversation.lastMessageAt),
   );

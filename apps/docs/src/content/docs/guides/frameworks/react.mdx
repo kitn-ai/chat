@@ -174,6 +174,25 @@ Event prop names strip the `kai-` prefix and PascalCase each hyphen-segment:
 
 Every wrapper also accepts `className`, `style`, `id`, `theme` (`'light' | 'dark' | 'auto'`), and `children` (for slotted content).
 
+### Updating an array
+
+**Assign a new array, and replace any item you changed with a new object.** Both halves matter, and each does a different job:
+
+- The **new array reference** is what tells the element something changed. Setting the same array back is a no-op, even if you replaced an item inside it.
+- The **new item object** is what makes the change visible. These lists key their rows by item identity, so an item you mutated in place renders stale even inside a brand-new array.
+
+Adding, removing and reordering need only the fresh array — each of those changes the list of item references, which is what the element diffs. Editing a field inside an item changes nothing about that list, which is why it needs the new object as well.
+
+```js
+// Stale: `title` really did change, but the item object did not, so the row never updates.
+setConversations((prev) => { prev.find((c) => c.id === id)!.title = 'Renamed'; return [...prev]; });
+
+// Renders: a new array, and the one item that changed is a new object.
+setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, title: 'Renamed' } : c)));
+```
+
+This is the same immutable update React already wants for its own state, so idiomatic React code satisfies it by default. The trap is reaching for a mutation to avoid a re-render, or handing the elements state from a store that mutates in place.
+
 <Aside type="tip" title="Image name collision">
 `kai-image` exports as `Image`, which shadows the browser global. Alias it on import: `import { Image as KaiImage } from '@kitn.ai/ui/react'`.
 </Aside>

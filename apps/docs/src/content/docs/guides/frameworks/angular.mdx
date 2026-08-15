@@ -224,6 +224,26 @@ onResize(e: Event) {
 Scalar attributes like `orientation="horizontal"` or `theme="dark"` can be plain HTML attributes (no brackets). Use `[prop]="…"` only for non-string values — arrays, objects, and Angular expressions.
 </Aside>
 
+### Updating an array
+
+**Assign a new array, and replace any item you changed with a new object.** Both halves matter, and each does a different job:
+
+- The **new array reference** is what tells the element something changed. Setting the same array back is a no-op, even if you replaced an item inside it.
+- The **new item object** is what makes the change visible. These lists key their rows by item identity, so an item you mutated in place renders stale even inside a brand-new array.
+
+Adding, removing and reordering need only the fresh array — each of those changes the list of item references, which is what the element diffs. Editing a field inside an item changes nothing about that list, which is why it needs the new object as well.
+
+```js
+// Stale: `title` really did change, but the item object did not, so the row never updates.
+this.conversations.find((c) => c.id === id)!.title = 'Renamed';
+this.conversations = [...this.conversations];
+
+// Renders: a new array, and the one item that changed is a new object.
+this.conversations = this.conversations.map((c) => (c.id === id ? { ...c, title: 'Renamed' } : c));
+```
+
+The same applies to a `signal()`: call `.set()` with a new array whose changed item is a new object. `.update()` that mutates and returns the same reference changes nothing the element can see.
+
 ## Standalone display elements
 
 You can drop individual display elements anywhere in your UI without adopting a full chat shell. `<kai-markdown>`, `<kai-code-block>`, `<kai-artifact>`, `<kai-reasoning>`, and `<kai-tool>` all render rich AI content as standalone elements:

@@ -31,9 +31,25 @@ Consuming Shadow-DOM custom elements from Vue comes down to four things:
 - **Array/object props are DOM properties, not attributes.** Use the `.prop`
   modifier for rich values: `:messages.prop`, `:conversations.prop`,
   `:groups.prop`, `:triggers.prop`, `:suggestions.prop`. Scalars (`theme`,
-  `placeholder`, `size`, `activeId`) bind normally. Streaming needs a **new array
-  reference per chunk** — `useChat` keeps `messages` in a `shallowRef` and assigns
-  a fresh array on every update.
+  `placeholder`, `size`, `activeId`) bind normally.
+- **Updating a list needs a new array AND a new object for each item you changed.**
+  The new array reference is what tells the element something changed — assigning the
+  same array back is a no-op even if you swapped an item inside it. The new item object
+  is what makes the change visible, because the lists key their rows by item identity.
+  Adds, removes and reorders need only the fresh array; editing an existing item needs
+  both. `useChat` and `useConversations` keep their arrays in a `shallowRef` and assign
+  a fresh one on every update. To rename a conversation:
+  ```ts
+  // Stale: the title changed, but the item object did not, so the row never updates.
+  conversations.value.find((c) => c.id === id)!.title = 'Renamed';
+  conversations.value = [...conversations.value];
+
+  // Renders: a new array, and the one item that changed is a new object.
+  conversations.value = conversations.value.map((c) => (c.id === id ? { ...c, title: 'Renamed' } : c));
+  ```
+  A plain `ref` makes this worse, not better: deep reactivity re-renders *your* template
+  off the in-place mutation while the element keeps the old title, so the state looks
+  correct in Vue DevTools and wrong on screen.
 - **Events are non-bubbling `kai-*` CustomEvents.** Listen on the element with
   `@kai-submit`, `@kai-message-action`, `@kai-conversation-select`, … and read
   `(e as CustomEvent).detail`.

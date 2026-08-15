@@ -37,9 +37,21 @@ Consuming Shadow-DOM custom elements from Angular comes down to five things:
   `[conversations]`, `[groups]`, `[triggers]`, `[suggestions]`) sets the DOM property
   on a custom element. Scalars the element reads as attributes bind with
   `[attr.active-id]`; the rest (`[theme]`, `[loading]`, `[collapsed]`) bind as
-  properties, and fixed strings like `size="280px"` are plain attributes. Streaming
-  needs a **new array reference per chunk** — `createChat` keeps `messages` in a
-  signal and assigns a fresh array on every update.
+  properties, and fixed strings like `size="280px"` are plain attributes.
+- **Updating a list needs a new array AND a new object for each item you changed.**
+  The new array reference is what tells the element something changed — assigning the
+  same array back is a no-op even if you swapped an item inside it. The new item object
+  is what makes the change visible, because the lists key their rows by item identity.
+  Adds, removes and reorders need only the fresh array; editing an existing item needs
+  both. `createChat` keeps `messages` in a signal and `.set()`s a fresh array on every
+  update. To rename a conversation:
+  ```ts
+  // Stale: the title changed, but the item object did not, so the row never updates.
+  conversations.update((list) => { list.find((c) => c.id === id)!.title = 'Renamed'; return [...list]; });
+
+  // Renders: a new array, and the one item that changed is a new object.
+  conversations.update((list) => list.map((c) => (c.id === id ? { ...c, title: 'Renamed' } : c)));
+  ```
 - **Boolean flags read the JS property first, then the attribute.** Bind `[voice]="true"`:
   the facade's `flag()` takes an explicit JS `false` over a present attribute, so the bound
   property is the one that can still turn a flag back off. A bare `voice` attribute is read

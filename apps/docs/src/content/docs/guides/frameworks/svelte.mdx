@@ -43,6 +43,28 @@ Svelte maps cleanly to this pattern:
 Svelte detects non-primitive values and assigns them as DOM properties rather than HTML attributes. This means `{messages}` always delivers a live JS array to the element — you never need `bind:this` just to set a property.
 </Aside>
 
+### Updating an array
+
+**Assign a new array, and replace any item you changed with a new object.** Both halves matter, and each does a different job:
+
+- The **new array reference** is what tells the element something changed. Setting the same array back is a no-op, even if you replaced an item inside it.
+- The **new item object** is what makes the change visible. These lists key their rows by item identity, so an item you mutated in place renders stale even inside a brand-new array.
+
+Adding, removing and reordering need only the fresh array — each of those changes the list of item references, which is what the element diffs. Editing a field inside an item changes nothing about that list, which is why it needs the new object as well.
+
+```js
+// Stale: `title` really did change, but the item object did not, so the row never updates.
+conversations.find((c) => c.id === id).title = 'Renamed';
+conversations = [...conversations];
+
+// Renders: a new array, and the one item that changed is a new object.
+conversations = conversations.map((c) => (c.id === id ? { ...c, title: 'Renamed' } : c));
+```
+
+<Aside type="caution" title="Use `$state.raw` for data you hand to an element">
+`$state.raw` only ever updates on reassignment, which is exactly the rule above — it makes an in-place mutation fail loudly in your own markup too, instead of leaving the element as the only place the staleness shows.
+</Aside>
+
 ## Example — streaming chat
 
 `<kai-chat>` is transport-agnostic: you own the API call, the element owns the UI. Pass a `messages` array and handle `kai-submit` to stream replies back into state.
