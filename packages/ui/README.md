@@ -30,11 +30,7 @@ npm install solid-js
 
 ### Option A — Web components (any framework / plain HTML)
 
-Build the bundle, then import it as a side-effect (it registers the custom elements):
-
-```bash
-npm run build   # emits dist/kai.es.js
-```
+`npm install` ships the built bundle, so there is nothing to compile. Import it once as a side effect and every element registers itself:
 
 ```html
 <body style="height: 100vh; margin: 0;">
@@ -78,7 +74,9 @@ The element bundle is a self-contained ES module — load it directly from [jsDe
 <kai-chat></kai-chat>
 ```
 
-The URLs above track the **latest** release — handy for trying things out. **For production, pin an exact version** (e.g. `@kitn.ai/ui@0.25.0/dist/kai.es.js`): pinned URLs are immutable and cached far more aggressively, and — since this package is pre-1.0 — pinning shields you from breaking changes in a future minor release.
+<!-- x-release-please-start-version -->
+The URLs above track the **latest** release — handy for trying things out. **For production, pin an exact version** (e.g. `@kitn.ai/ui@0.25.1/dist/kai.es.js`): pinned URLs are immutable and cached far more aggressively, and — since this package is pre-1.0 — pinning shields you from breaking changes in a future minor release.
+<!-- x-release-please-end -->
 
 > **Pin `0.25.0` or newer.** Every version from `0.14.1` through `0.24.0` is covered by a [critical security advisory](https://github.com/kitn-ai/ui/security/advisories) and is deprecated on npm. `npm install` warns you about a deprecated version; **a CDN fetch does not**, so an old pinned URL in a page keeps serving the vulnerable bundle silently.
 

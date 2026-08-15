@@ -22,6 +22,17 @@ export const GET: APIRoute = ({ props }) => {
     .replace(/<Aside[^>]*type="([^"]+)"[^>]*>/g, '\n> **$1:** ') // <Aside type="x"> → blockquote
     .replace(/<\/Aside>/g, '\n')
     .replace(/<[A-Z][A-Za-z0-9]*\b[^>]*\/>/g, '')               // drop self-closing JSX (e.g. <ModelContextDemo />)
+    // Release machinery, not prose: the CDN pin lines carry release-please
+    // `x-release-please-start-version` / `-end` markers so the version bump
+    // rewrites them (see release-please-config.json `extra-files`). They render
+    // to nothing in HTML, but this route dumps the RAW MDX body, so without this
+    // they show up in "Copy page" and in the .md an LLM fetches.
+    //
+    // Deliberately matched on the annotation itself rather than on `{/* ... */}`
+    // generally: `guides/theming.mdx` and `guides/frameworks/solid.mdx` both use
+    // `{/* your components */}` INSIDE fenced code blocks, where the comment is
+    // the illustration and must survive.
+    .replace(/^[ \t]*\{\/\*[ \t]*x-release-please-[^}]*\*\/\}[ \t]*\r?\n?/gm, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 

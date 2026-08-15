@@ -295,7 +295,9 @@ describe('verify:pack still detects', () => {
 
   /**
    * THE PIN `create-kai@0.1.2` SHIPPED. That release went to npm bundling
-   * `^0.24.0` after `@kitn.ai/ui@0.24.0` had been deprecated for a critical XSS,
+   * `^0.24.0`.
+   * lint-cdn-pins: historical -- the record is OF this exact version
+   * `@kitn.ai/ui@0.24.0` had been deprecated for a critical XSS,
    * and a pre-1.0 caret cannot cross a minor, so the emitted project could never
    * reach the fixed `0.25.0`. Every check in this file passed over that tarball,
    * because none of them read what the bundle SAYS.
