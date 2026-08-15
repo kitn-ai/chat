@@ -251,9 +251,12 @@ export default function ArtifactsCanvasDemo(props: Props) {
     artifactEl!.setAttribute('theme', theme());
     artifactEl!.setAttribute('iframe-title', 'Starboard artifact preview');
     artifactEl!.setAttribute('open-in-tab', '');
-    // Opt into allow-same-origin so the canvas observes in-frame link clicks
-    // (e.g. "About →") and keeps the address field + back/forward truthful.
-    // Safe here: the fixtures are first-party, same-origin files we ship.
+    // DOCS-DEMO ONLY, and not a pattern to copy: `allow-same-origin` hands the
+    // framed document THIS page's origin. It is acceptable here for one narrow
+    // reason -- every url in this demo is a static fixture file we ship, so no
+    // model or tool output can reach `src`/`files[].url`. In a real chat app it
+    // can, and then this setting is a zero-click XSS. The prose on
+    // examples/artifacts-canvas says so; do not quietly reintroduce it there.
     artifactEl!.setAttribute('sandbox', 'allow-scripts allow-forms allow-same-origin');
     customElements.upgrade(artifactEl!);
     artifactEl!.files = FILES;

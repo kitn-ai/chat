@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.25.0](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.24.0...@kitn.ai/ui-v0.25.0) (2026-08-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* **artifact:** a refused url no longer renders as a link. The PDF fallback drops the Open/Download controls for any address that is not http(s) or mailto and says the address was blocked; the open-in-new-tab button renders disabled; the preview frames `about:blank`. `data:` and `blob:` PDFs consequently lose their Download affordance -- neither scheme was ever in the safe list, and top-level `data:` navigation was already blocked by Chrome and Firefox, so it is the download that regresses in both cases. Every refusal is announced on the console. `currentUrl()`, the address field and `onNavigate` still report the url that arrived: the kit refuses to LINK it, it does not pretend it was never there.
+* **markdown:** raw HTML embedded in markdown content now renders as visible escaped text instead of live markup, and markdown links/images with non-http(s)/mailto schemes are no longer clickable. Nothing in this repo relied on inline HTML passthrough. There is deliberately no opt-in to restore it.
+
+### Bug Fixes
+
+* **artifact:** filter url schemes before href, window.open and the preview iframe ([#247](https://github.com/kitn-ai/ui/issues/247)) ([2b43f87](https://github.com/kitn-ai/ui/commit/2b43f871c27ccd51387fc78798746d1d35cf1928))
+* **markdown:** escape raw HTML and filter link schemes before innerHTML ([#246](https://github.com/kitn-ai/ui/issues/246)) ([18afa29](https://github.com/kitn-ai/ui/commit/18afa2900bacac1ed68dcd2da2a48a5e0fa44b3f))
+* **wire:** read delta.reasoning_content so DeepSeek-direct streams keep reasoning ([#243](https://github.com/kitn-ai/ui/issues/243)) ([17c7d0b](https://github.com/kitn-ai/ui/commit/17c7d0b6626b0bad97993eb5c8cb873e9db024dc))
+
 ## [0.24.0](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.23.0...@kitn.ai/ui-v0.24.0) (2026-08-14)
 
 

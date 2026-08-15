@@ -16,6 +16,7 @@ import { CodeBlock, CodeBlockCode } from './code-block';
 import { FileTree, type FileTreeFile } from './file-tree';
 import { Loader } from './loader';
 import { isPdfPreviewEnabled, renderPdfInto } from '../primitives/pdf-preview';
+import { isSafeUrl, isScriptUrl } from '../primitives/card-routing';
 import {
   ArrowLeft,
   ArrowRight,
@@ -123,6 +124,18 @@ export interface ArtifactProps extends Omit<JSX.HTMLAttributes<HTMLDivElement>, 
 
 const DEFAULT_SANDBOX = 'allow-scripts allow-forms';
 
+/** Refuse loudly. `src` and `files[].url` are MODEL-REACHABLE -- they arrive on
+ *  an `artifact` card envelope produced by a tool call, and the card schema
+ *  validates them only as `format: "uri"`, which constrains no scheme -- so
+ *  every url this component puts in an href, hands to `window.open`, or frames
+ *  is filtered. A refusal without a trace would be a decision made while hiding
+ *  that it happened; the component has no error channel of its own, so it warns
+ *  the way `card-routing` does. */
+function warnBlockedUrl(sink: string, url: string): void {
+  // eslint-disable-next-line no-console
+  console.warn(`[kai-artifact] blocked unsafe url in ${sink}: ${url}`);
+}
+
 /** Resolve a file's preview URL: explicit `url`, else `<src-origin> + /path`. */
 function resolveFileUrl(file: ArtifactFile, src: string | undefined): string {
   if (file.url) return file.url;
@@ -205,13 +218,46 @@ export function Artifact(props: ArtifactProps): JSX.Element {
   // navigations it initiates (path-edit, file-click, home, src changes) and
   // back/forward/reload operate on that. (In-frame relative-link clicks navigate
   // the iframe itself but can't be observed cross-origin — a known, accepted
-  // sandbox limitation; opt into `allow-same-origin` if the consumer trusts the
-  // artifact and wants those tracked.)
+  // sandbox limitation.)
+  //
+  // DO NOT add `allow-same-origin` to get those clicks tracked. This comment
+  // used to suggest exactly that "if the consumer trusts the artifact", and it
+  // was the worst advice in the file: `allow-same-origin` gives the framed
+  // document the HOST's origin, so a hostile `src` runs with full access to the
+  // embedding page, zero clicks -- confirmed executing in Chromium. And "the
+  // artifact is trusted" is not a premise you get to hold when the url can come
+  // from tool output: on the card path `src` and `files[].url` are
+  // model-supplied. The scheme filter below is a backstop, not a licence --
+  // `allow-same-origin` still hands the framed document the host's cookies,
+  // storage and DOM for everything else it does. Losing in-frame click tracking
+  // is the correct trade.
   const [history, setHistory] = createSignal<string[]>(local.src ? [local.src] : []);
   const [cursor, setCursor] = createSignal(local.src ? 0 : -1);
   const currentUrl = () => history()[cursor()] ?? '';
   const canBack = () => cursor() > 0;
   const canForward = () => cursor() < history().length - 1;
+
+  /** What the iframe is actually pointed at.
+   *
+   *  Separate from `currentUrl()` on purpose: the history stack and the address
+   *  field keep reporting what ARRIVED (a reader looking at a refused artifact
+   *  should see the address that was refused, not a blank), while this is the
+   *  only value that reaches the `src` sink.
+   *
+   *  `isScriptUrl` and not `isSafeUrl`: a `data:`/`blob:` src is a legitimate
+   *  artifact -- see the note on `displayUrl` -- and gets an opaque origin, so
+   *  it cannot touch the host page. `javascript:`/`vbscript:` run in the
+   *  EMBEDDER's origin, which the default sandbox already refuses but a
+   *  consumer-set `allow-same-origin` re-enables (see the note on the history
+   *  stack above for why nothing here recommends that setting). */
+  const framedUrl = createMemo(() => {
+    const u = currentUrl();
+    if (u && isScriptUrl(u)) {
+      warnBlockedUrl('preview', u);
+      return '';
+    }
+    return u;
+  });
 
   // Seed the internal tab: a present `tab` (controlled) wins; otherwise the
   // uncontrolled `defaultTab` (which merges to 'preview'). The user can then
@@ -230,14 +276,23 @@ export function Artifact(props: ArtifactProps): JSX.Element {
     local.onMaximizeChange?.(next);
   };
 
-  // Open-in-tab — only enabled when there's a concrete url to open.
+  // Open-in-tab — only enabled when there's a concrete SAFE url to open. The
+  // scheme filter is part of `canOpenInTab` rather than only of the handler so
+  // the button renders DISABLED for a url that would be refused: a control that
+  // looks live and does nothing is the worse failure.
   const canOpenInTab = createMemo(() => {
     const u = currentUrl();
-    return !!u && u !== 'about:blank';
+    return !!u && u !== 'about:blank' && isSafeUrl(u);
   });
   const openInNewTab = () => {
-    if (!canOpenInTab()) return;
-    window.open(currentUrl(), '_blank', 'noopener,noreferrer');
+    const u = currentUrl();
+    if (!canOpenInTab()) {
+      // `openExternal()` on the controller reaches this without any button, so
+      // the refusal has to be stated here and not only in the disabled state.
+      if (u && u !== 'about:blank') warnBlockedUrl('openExternal', u);
+      return;
+    }
+    window.open(u, '_blank', 'noopener,noreferrer');
   };
 
   // The expand button is suppressed in standalone (no enclosing resizable).
@@ -300,9 +355,11 @@ export function Artifact(props: ArtifactProps): JSX.Element {
 
   /** Point the iframe at the current cursor entry + emit `navigate`. */
   function loadCurrent() {
-    const url = currentUrl();
-    if (iframeEl) iframeEl.src = url || 'about:blank';
-    local.onNavigate?.(url);
+    if (iframeEl) iframeEl.src = framedUrl() || 'about:blank';
+    // Reports the REAL url, not the framed one: a consumer observing navigation
+    // (or a card patching `src` back into its envelope) must not be told the
+    // model sent something it did not.
+    local.onNavigate?.(currentUrl());
   }
 
   function selectTab(next: ArtifactTab) {
@@ -329,14 +386,13 @@ export function Artifact(props: ArtifactProps): JSX.Element {
     loadCurrent();
   };
   function reload() {
-    const url = currentUrl();
     if (iframeEl) {
       // Force a real reload even when the src is unchanged.
       iframeEl.src = 'about:blank';
-      iframeEl.src = url || 'about:blank';
+      iframeEl.src = framedUrl() || 'about:blank';
     }
     setReloadKey((k) => k + 1); // re-render the inline PDF viewer too
-    local.onNavigate?.(url);
+    local.onNavigate?.(currentUrl());
   }
   const goHome = () => {
     if (local.src) navigate(local.src);
@@ -458,7 +514,7 @@ export function Artifact(props: ArtifactProps): JSX.Element {
             fallback={
               <ArtifactPreview
                 ref={(el) => (iframeEl = el)}
-                src={currentUrl}
+                src={framedUrl}
                 sandbox={local.sandbox}
                 title={local.iframeTitle ?? 'Artifact preview'}
                 onLoad={onIframeLoad}
@@ -719,12 +775,30 @@ function ArtifactCode(props: CodeProps): JSX.Element {
 
 // --- ArtifactPdfFallback (internal) ---------------------------------------
 
-/** Shown when inline PDF rendering is disabled or fails (CORS / load / parse). */
+/** Shown when inline PDF rendering is disabled or fails (CORS / load / parse).
+ *
+ *  THIS IS THE DEFAULT VIEW FOR A HOSTILE URL, not an edge case: pdf.js has to
+ *  FETCH the document to render it inline, and it cannot fetch a `javascript:`
+ *  or `data:` one, so every such url fails straight through to here -- where two
+ *  anchors used to put it in an `href`, one click from executing in the host
+ *  page's origin. The url is model-reachable (`artifact` card `src` /
+ *  `files[].url`, schema-validated only as `format: "uri"`), so it is filtered
+ *  with the same `isSafeUrl` the markdown renderer and the card `open` verb use.
+ *  Relative paths pass, which matters here: `resolveFileUrl` returns a bare
+ *  `path` when the artifact has no `src`. */
 function ArtifactPdfFallback(props: { url: string }): JSX.Element {
   const name = () => {
     const path = props.url.split(/[?#]/)[0];
     return path.slice(path.lastIndexOf('/') + 1) || 'document.pdf';
   };
+  /** The url actually put in `href`, or `undefined` -- which OMITS the attribute.
+   *  Never `''`: an empty href navigates to the current page. */
+  const href = createMemo(() => {
+    if (!props.url) return undefined;
+    if (isSafeUrl(props.url)) return props.url;
+    warnBlockedUrl('pdf fallback', props.url);
+    return undefined;
+  });
   const linkClass =
     'inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
   return (
@@ -736,16 +810,28 @@ function ArtifactPdfFallback(props: { url: string }): JSX.Element {
       <FileText size={40} class="text-muted-foreground" aria-hidden="true" />
       <div class="text-sm font-medium text-foreground">{name()}</div>
       <div class="text-xs text-muted-foreground">Can't preview this PDF inline.</div>
-      <div class="flex flex-wrap items-center justify-center gap-2">
-        <a class={linkClass} href={props.url} target="_blank" rel="noopener noreferrer">
-          Open in new tab
-          <ExternalLink size={13} aria-hidden="true" />
-        </a>
-        <a class={linkClass} href={props.url} download="">
-          <Download size={13} aria-hidden="true" />
-          Download
-        </a>
-      </div>
+      {/* No safe address, no controls. Two buttons that silently do nothing
+          would be worse than saying what happened -- and a bare `<a>` with the
+          href dropped is exactly that. */}
+      <Show
+        when={href()}
+        fallback={
+          <div class="text-xs text-muted-foreground">
+            Blocked: that address uses a scheme this viewer won't open.
+          </div>
+        }
+      >
+        <div class="flex flex-wrap items-center justify-center gap-2">
+          <a class={linkClass} href={href()} target="_blank" rel="noopener noreferrer">
+            Open in new tab
+            <ExternalLink size={13} aria-hidden="true" />
+          </a>
+          <a class={linkClass} href={href()} download="">
+            <Download size={13} aria-hidden="true" />
+            Download
+          </a>
+        </div>
+      </Show>
     </div>
   );
 }

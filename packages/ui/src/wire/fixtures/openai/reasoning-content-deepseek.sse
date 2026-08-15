@@ -1,0 +1,44 @@
+: fixture: openai/reasoning-content-deepseek
+: capture: synthetic
+: provider: deepseek
+: model: deepseek-reasoner
+: captured: 2026-08-14
+: source: https://api-docs.deepseek.com/api/create-chat-completion, "Chat Completion Chunk" schema, whose choices[].delta is exactly {content, reasoning_content, role} -- no `reasoning` and no `reasoning_details`. The streaming order (reasoning_content arrives first with a null content, then content arrives with a null reasoning_content) is from https://api-docs.deepseek.com/guides/thinking_mode, which loops `if chunk.choices[0].delta.reasoning_content: ... else: content += ...`.
+: note: SYNTHETIC, and the reason it had to be. Nothing in this repo has ever talked to DeepSeek first-party -- every reasoning capture in this directory came through OpenRouter, which normalises the field to `reasoning`, which is precisely why this shape had no coverage and lost every reasoning token in silence. Envelope and field set follow the published chunk schema; the id, timestamps, fingerprint and token counts are invented, and the text is trimmed to two short sentences so the assertions can compare exact strings. Replace with a live capture the first time anyone here holds a DeepSeek key.
+: request: {"model":"deepseek-reasoner","stream":true,"messages":[{"role":"user","content":"Think, then answer: 17 * 23."}]}
+
+data: {"id":"chatcmpl-synthetic-rc-0001","object":"chat.completion.chunk","created":1786400000,"model":"deepseek-reasoner","system_fingerprint":"fp_synthetic_rc","choices":[{"index":0,"delta":{"role":"assistant","content":null,"reasoning_content":"We"},"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"chatcmpl-synthetic-rc-0001","object":"chat.completion.chunk","created":1786400000,"model":"deepseek-reasoner","system_fingerprint":"fp_synthetic_rc","choices":[{"index":0,"delta":{"role":"assistant","content":null,"reasoning_content":" need"},"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"chatcmpl-synthetic-rc-0001","object":"chat.completion.chunk","created":1786400000,"model":"deepseek-reasoner","system_fingerprint":"fp_synthetic_rc","choices":[{"index":0,"delta":{"role":"assistant","content":null,"reasoning_content":" 17"},"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"chatcmpl-synthetic-rc-0001","object":"chat.completion.chunk","created":1786400000,"model":"deepseek-reasoner","system_fingerprint":"fp_synthetic_rc","choices":[{"index":0,"delta":{"role":"assistant","content":null,"reasoning_content":" x"},"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"chatcmpl-synthetic-rc-0001","object":"chat.completion.chunk","created":1786400000,"model":"deepseek-reasoner","system_fingerprint":"fp_synthetic_rc","choices":[{"index":0,"delta":{"role":"assistant","content":null,"reasoning_content":" 23"},"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"chatcmpl-synthetic-rc-0001","object":"chat.completion.chunk","created":1786400000,"model":"deepseek-reasoner","system_fingerprint":"fp_synthetic_rc","choices":[{"index":0,"delta":{"role":"assistant","content":null,"reasoning_content":"."},"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"chatcmpl-synthetic-rc-0001","object":"chat.completion.chunk","created":1786400000,"model":"deepseek-reasoner","system_fingerprint":"fp_synthetic_rc","choices":[{"index":0,"delta":{"role":"assistant","content":null,"reasoning_content":" That"},"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"chatcmpl-synthetic-rc-0001","object":"chat.completion.chunk","created":1786400000,"model":"deepseek-reasoner","system_fingerprint":"fp_synthetic_rc","choices":[{"index":0,"delta":{"role":"assistant","content":null,"reasoning_content":" is"},"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"chatcmpl-synthetic-rc-0001","object":"chat.completion.chunk","created":1786400000,"model":"deepseek-reasoner","system_fingerprint":"fp_synthetic_rc","choices":[{"index":0,"delta":{"role":"assistant","content":null,"reasoning_content":" 391"},"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"chatcmpl-synthetic-rc-0001","object":"chat.completion.chunk","created":1786400000,"model":"deepseek-reasoner","system_fingerprint":"fp_synthetic_rc","choices":[{"index":0,"delta":{"role":"assistant","content":null,"reasoning_content":"."},"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"chatcmpl-synthetic-rc-0001","object":"chat.completion.chunk","created":1786400000,"model":"deepseek-reasoner","system_fingerprint":"fp_synthetic_rc","choices":[{"index":0,"delta":{"role":"assistant","content":"17","reasoning_content":null},"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"chatcmpl-synthetic-rc-0001","object":"chat.completion.chunk","created":1786400000,"model":"deepseek-reasoner","system_fingerprint":"fp_synthetic_rc","choices":[{"index":0,"delta":{"role":"assistant","content":" x","reasoning_content":null},"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"chatcmpl-synthetic-rc-0001","object":"chat.completion.chunk","created":1786400000,"model":"deepseek-reasoner","system_fingerprint":"fp_synthetic_rc","choices":[{"index":0,"delta":{"role":"assistant","content":" 23","reasoning_content":null},"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"chatcmpl-synthetic-rc-0001","object":"chat.completion.chunk","created":1786400000,"model":"deepseek-reasoner","system_fingerprint":"fp_synthetic_rc","choices":[{"index":0,"delta":{"role":"assistant","content":" =","reasoning_content":null},"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"chatcmpl-synthetic-rc-0001","object":"chat.completion.chunk","created":1786400000,"model":"deepseek-reasoner","system_fingerprint":"fp_synthetic_rc","choices":[{"index":0,"delta":{"role":"assistant","content":" 391","reasoning_content":null},"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"chatcmpl-synthetic-rc-0001","object":"chat.completion.chunk","created":1786400000,"model":"deepseek-reasoner","system_fingerprint":"fp_synthetic_rc","choices":[{"index":0,"delta":{"role":"assistant","content":".","reasoning_content":null},"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"chatcmpl-synthetic-rc-0001","object":"chat.completion.chunk","created":1786400000,"model":"deepseek-reasoner","system_fingerprint":"fp_synthetic_rc","choices":[{"index":0,"delta":{"role":"assistant","content":"","reasoning_content":null},"logprobs":null,"finish_reason":"stop"}],"usage":{"prompt_tokens":19,"completion_tokens":24,"total_tokens":43,"prompt_tokens_details":{"cached_tokens":0},"completion_tokens_details":{"reasoning_tokens":13}}}
+
+data: [DONE]
