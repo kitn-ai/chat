@@ -7,7 +7,13 @@
   "packages": {
     "packages/ui": {
       "release-type": "node",
-      "package-name": "@kitn.ai/ui"
+      "package-name": "@kitn.ai/ui",
+      "extra-files": [
+        "/apps/docs/src/content/docs/guides/getting-started.mdx",
+        "/apps/docs/src/content/docs/guides/installation.mdx",
+        "/apps/docs/src/content/docs/guides/loading.mdx",
+        "/packages/ui/README.md"
+      ]
     },
     "packages/create-kai": {
       "release-type": "node",
