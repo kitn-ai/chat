@@ -32,7 +32,6 @@ Three elements compose the shell. `<kai-resizable>` splits chat from the canvas 
           id="canvas"
           iframe-title="Project preview"
           open-in-tab
-          sandbox="allow-scripts allow-forms allow-same-origin"
         ></kai-artifact>
       </kai-resizable-item>
     </kai-resizable>
@@ -74,7 +73,9 @@ Three elements compose the shell. `<kai-resizable>` splits chat from the canvas 
 </script>
 ```
 
-`<kai-artifact>` self-navigates its sandboxed iframe. The back/forward/reload/home toolbar and the address field always track navigations the canvas starts — picking a file, editing the path, home, reload. Tracking in-frame relative-link clicks (clicking "About →" inside the preview) also needs `allow-same-origin`, because the default `allow-scripts allow-forms` sandbox gives the framed document an opaque origin the component cannot read. This canvas opts in with `sandbox="allow-scripts allow-forms allow-same-origin"`, so it observes those clicks and keeps the address field and back/forward truthful. Add `allow-same-origin` only for first-party artifacts you trust — it lets the framed document reach its own origin.
+`<kai-artifact>` self-navigates its sandboxed iframe. The back/forward/reload/home toolbar and the address field always track navigations the canvas starts — picking a file, editing the path, home, reload. In-frame relative-link clicks (clicking "About →" inside the preview) are the one thing it cannot see: the default `allow-scripts allow-forms` sandbox gives the framed document an opaque origin, and reading its location across that boundary throws.
+
+Do not reach for `allow-same-origin` to close that gap. It gives the framed document **your page's origin**, which means the framed document gets your cookies, your storage and your DOM. If the `src` can come from a model — and on the `artifact` card `src` and `files[].url` are model-supplied — a hostile URL then executes in your origin with no click at all. "It's an artifact I trust" is not a premise that survives tool output. Losing in-frame click tracking is the right trade; the component filters `javascript:` and `vbscript:` before framing either way, but that is a backstop, not permission.
 
 <Aside type="note">
 `<kai-artifact>` ships its own `<kai-file-tree>` inside the Code tab. The standalone tree here is the *project* explorer that drives which file the canvas frames; both stay in sync because the same handler listens for `kai-select` (tree) and `kai-file-select` (the canvas's own tree).
