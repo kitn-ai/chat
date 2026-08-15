@@ -1,6 +1,7 @@
 import { type JSX, createContext, useContext, Show, splitProps } from 'solid-js';
 import { cn } from '../utils/cn';
 import { HoverCardRoot, HoverCardTrigger, HoverCardContent } from '../ui/hover-card';
+import { isRenderableLink } from '../primitives/link-preview';
 
 // --- Context ---
 
@@ -30,12 +31,43 @@ export interface SourceProps {
 }
 
 function Source(props: SourceProps) {
-  const href = () => props.href ?? '';
+  const raw = () => props.href ?? '';
+
+  /** The url actually put in `href`.
+   *
+   *  A citation url is MODEL-SUPPLIED: `wire/formats/openai.ts` (`sourcesOf`)
+   *  and `wire/formats/anthropic.ts` (`citations_delta`) both take it as an
+   *  arbitrary string. `javascript:`/`data:` in an href is script execution one
+   *  click away, and today the only thing stopping it is `target="_blank"` plus
+   *  current Chrome behaviour -- an accident of the browser, not a guard. Anyone
+   *  dropping `target="_blank"` for styling would silently make it live.
+   *
+   *  Filtered HERE, at render, rather than in `wire/`, for two reasons.
+   *  (1) The wire layer is OPTIONAL: a consumer with their own backend adapter
+   *  can set `messages` containing `source` parts directly and never touch
+   *  `wire/`, so a wire-side filter would leave that path exploitable while
+   *  looking fixed. Every path renders through here.
+   *  (2) `parts` should keep reporting what the model actually said, so a
+   *  consumer logging or auditing citations is not lied to. The kit refuses to
+   *  LINK the url; it does not pretend the url was never there.
+   *
+   *  `isRenderableLink` (absolute http(s) only) is the right guard rather than
+   *  `isSafeUrl` from card-routing: a citation is a reference to a page on the
+   *  web, so unlike a markdown body link it has no business being relative. */
+  const href = () => (isRenderableLink(raw()) ? raw() : '');
+
+  /** Display only, and deliberately derived from the RAW value: a blocked url
+   *  still has to label its chip, and dropping to an empty string here would
+   *  render a blank chip instead of showing the reader what arrived. The value
+   *  lands in a text node, which Solid escapes. */
   const domain = () => {
-    const h = href();
+    const h = raw();
     if (!h) return '';
     try {
-      return new URL(h).hostname;
+      // `new URL('javascript:x')` parses fine and yields an EMPTY hostname, so
+      // a blocked citation would otherwise label an empty chip. Fall back to the
+      // raw string: the reader sees what arrived, just not as a link.
+      return new URL(h).hostname || h;
     } catch {
       return h.split('/').pop() || h;
     }

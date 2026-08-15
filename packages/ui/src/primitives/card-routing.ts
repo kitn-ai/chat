@@ -17,7 +17,23 @@ export function emitCardEvent(element: HTMLElement, event: CardEvent): void {
 }
 
 const SAFE_SCHEMES = ['http:', 'https:', 'mailto:'];
-function isSafeUrl(url: string): boolean {
+
+/** True when `url` is safe to put in an href / hand to `window.open`.
+ *
+ *  Exported so the MARKDOWN renderer reuses this exact guard rather than
+ *  growing a second scheme list that can drift from this one.
+ *
+ *  Resolving against a base is deliberate and is what makes it correct for
+ *  markdown: a relative or fragment link (`/docs`, `#section`, `./rel`) is
+ *  ordinary markdown, and resolving it inherits the base's `http:` so it
+ *  passes, while `javascript:`/`data:`/`vbscript:` keep their own protocol and
+ *  fail. The WHATWG parser also strips embedded tabs/newlines and trims
+ *  surrounding whitespace before reading the scheme, so `java\nscript:` and
+ *  `  javascript:...  ` are both caught -- which a regex over the raw string
+ *  would miss. Contrast `isRenderableLink` in `primitives/link-preview.ts`,
+ *  which takes NO base and so demands an absolute http(s) URL: that is the
+ *  right guard for a model-supplied citation, this one for markdown body links. */
+export function isSafeUrl(url: string): boolean {
   try { return SAFE_SCHEMES.includes(new URL(url, 'http://_invalid_base').protocol); } catch { return false; }
 }
 function warnNoHandler(kind: string): void {
