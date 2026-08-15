@@ -1,0 +1,237 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+#
+# CodeRabbit configuration for @kitn.ai/ui.
+#
+# This file carries only what a GENERIC reviewer gets wrong here: the `kai-`
+# contract, the conventions that have already caused defects, and the noise
+# filters. It deliberately does not restate CLAUDE.md -- CodeRabbit ingests that
+# file directly (knowledge_base.code_guidelines, below), so duplicating it here
+# would just create a second copy to keep in sync.
+
+reviews:
+  # Default. Named explicitly because it is the single biggest noise dial, and
+  # a reviewer that gets ignored is worse than no reviewer.
+  profile: chill
+
+  auto_review:
+    # On by default rather than opt-in. This repo's documented dominant failure
+    # mode is a check or a change that looks fine and covers nothing; those land
+    # in small PRs, which are exactly the ones nobody would opt in.
+    enabled: true
+    drafts: false
+    # release-please PRs are a generated changelog and a version bump. The repo
+    # rule is never to hand-edit a version, so there is nothing actionable in
+    # one and every comment is noise.
+    ignore_title_keywords:
+      - "chore(main): release"
+
+  # Exclusions only, so anything new is reviewed by default.
+  #
+  # Derivation: gitignored build output (`dist/`, `storybook-static/`,
+  # `compiled.css`, `.nx/`, `coverage/`) is deliberately NOT listed -- it cannot
+  # appear in a diff, so a filter for it would be dead config. What follows is
+  # the set that IS committed and would otherwise be reviewed.
+  path_filters:
+    # Generated artifacts written into the source tree. This list is the
+    # GENERATED array in packages/ui/scripts/verify-generated-sync.mjs, plus the
+    # two generated-and-committed files that guard does not cover (see
+    # docs/coupling-map.md section 6). Regenerate with `build:api`; reviewing
+    # the output is reviewing the generator's input twice.
+    - "!packages/ui/src/elements/element-meta.json"
+    - "!packages/ui/src/elements/icon-names.json"
+    - "!packages/ui/src/elements/element-types.d.ts"
+    - "!packages/ui/src/elements/element-manifest.json"
+    - "!packages/ui/frameworks/react/index.tsx"
+    - "!packages/ui/src/primitives/card-validate-cards.ts"
+    - "!packages/ui/llms.txt"
+    - "!packages/ui/llms-full.txt"
+    # docs/web-components.md is deliberately NOT excluded. It is the one hybrid
+    # file: its `<!-- spec:TAG -->` regions are generated and already guarded by
+    # verify-generated-sync.mjs, but the prose between them is hand-written and
+    # guarded by nothing. Excluding the file would silence review on the only
+    # half that needs it. See its path_instructions entry below.
+
+    - "!**/pnpm-lock.yaml"
+    - "!**/package-lock.json"
+
+    # Recorded provider SSE captures and the artifact component's HTML/CSS/PDF
+    # fixtures. NOT `**/fixtures/**`: packages/ui/src/wire/fixtures/ also holds
+    # real TypeScript (replay.ts, provenance.test.ts) that must stay reviewed.
+    - "!**/*.sse"
+    - "!examples/internal/artifact-fixtures/**"
+
+    # Session records: handoffs, plans, running logs. Append-only, long, and
+    # usually superseded by the time a PR lands.
+    - "!docs/superpowers/**"
+    - "!docs/handoff/**"
+
+  path_instructions:
+    - path: "packages/ui/src/elements/**"
+      instructions: |
+        These are the `kai-*` web-component facades -- the surface consumers
+        actually hit. Flag as a defect:
+        - Any `kitn-` prefix. Elements are `kai-` (`<kai-chat>`); `kitn-` is a
+          forbidden legacy prefix.
+        - An array or object value (`messages`, `suggestions`, `models`, ...)
+          set or documented as an HTML attribute. Those must be JS properties.
+          Only scalars (`placeholder`, `loading`, `theme`) work as attributes.
+        - An event that bubbles, or a listener attached to an ancestor. Events
+          are non-bubbling `kai-*` CustomEvents, listened for on the element
+          itself. Submit is `kai-submit`, read from `event.detail.value`.
+        - Streaming code that mutates an array or object in place. Re-render
+          requires a new reference per chunk.
+        - Behavior driven by CSS or by piercing the shadow root. Behavior is
+          prop/JSON-driven.
+
+    - path: "packages/ui/src/components/**"
+      instructions: |
+        These components render MODEL-SUPPLIED content, which is untrusted
+        input. Two Critical XSS vectors were fixed here; markdown-xss.test.tsx
+        and artifact-url-xss.test.tsx under packages/ui/tests/components/ are
+        the reference for what a fix looks like.
+
+        Flag any path where text from a `MessagePart`, a card envelope or a tool
+        call reaches `innerHTML`, an `href`, a `src`, `window.open`, an iframe,
+        or a CSS `url()` without scheme filtering or escaping. `javascript:`,
+        `data:` and `vbscript:` are the schemes that matter. An allowlist of
+        permitted schemes is correct; a denylist of known-bad ones is not.
+
+        Also flag a decision that belongs to the consumer: a limit, count, quota
+        or retention rule. The kit decides HOW something renders; the app
+        decides WHETHER it is allowed.
+
+    - path: "packages/ui/src/primitives/card-routing.ts"
+      instructions: |
+        Routes generative-UI card envelopes, whose contents come from a model
+        and are untrusted. Flag any envelope field reaching the DOM, a URL or a
+        component lookup without validation, and any unrecognised card type that
+        is dropped rather than surfaced.
+
+    - path: "packages/ui/src/wire/**"
+      instructions: |
+        The model-stream adapter. Two rules dominate here:
+
+        1. Decide loudly. This layer turns `parts` into a provider request, so a
+           variant it does not encode is gone once the request leaves. A
+           function that discriminates a `MessagePart` must account for EVERY
+           variant of the union in src/elements/chat-types.ts, or carry a
+           `// lint-silent-drops: drops <variants> -- <reason>` directive at the
+           site. A prose comment explaining a drop is NOT a waiver -- that
+           exact form already shipped a defect. Flag any silent drop, silent
+           truncation, swallowed error or silent fallback.
+        2. The kit parses, the consumer fetches. Flag any HTTP client, API key
+           handling or provider SDK added below this layer.
+
+        Provider SSE is untrusted input: flag a parser that trusts a field's
+        type or presence without checking it.
+
+    - path: "packages/ui/src/agent-tooling/**"
+      instructions: |
+        The `kai` MCP scaffolder. Its output is emitted as string literals, so
+        the compiler is not watching it -- review the emitted text as if it were
+        source. The `kai-` contract applies in full to emitted markup: `kai-`
+        prefix, properties not attributes for arrays and objects, non-bubbling
+        `kai-submit` read from `event.detail.value`.
+
+        Flag a hand-rolled SSE reader in any emitted route, doc or example. The
+        kit ships one in `@kitn.ai/ui/wire`; emitted code imports it.
+
+        Flag a hand-written list that duplicates something derivable -- the
+        framework, integration, surface and media-type axes all derive from
+        their registries on purpose. A literal copy is the bug, not a shortcut.
+
+    - path: "packages/ui/scripts/**"
+      instructions: |
+        Guards and generators. A check that cannot discriminate is this repo's
+        documented dominant failure mode: several guards have shipped green
+        while covering nothing.
+
+        For any new or modified check, ask whether it can actually fail, and say
+        so if it cannot. Flag: an assertion that is true by construction (a
+        range check against a caret range, a generated artifact compared to its
+        own generator's list); a zero-match scan that passes; a guard with no
+        anti-vacuity or self-test path; and a guard that is not invoked from any
+        workflow. Prefer deriving the expected set from the source of truth
+        (`readdirSync`, a parsed type union, a registry) over a hand-written
+        list, and treat an unrecognised key as a hard failure rather than a skip.
+
+    - path: "apps/docs/**"
+      instructions: |
+        Public documentation. Voice is set by apps/docs/STYLE.md: a sharp human
+        engineer, terse, no emoji, web-components-first framing. Flag copy that
+        reads as AI-generated boilerplate.
+
+        Docs are the one consumer surface with no compiler behind them, so check
+        every `kai-*` snippet against the contract: `kai-` prefix, arrays and
+        objects as properties rather than attributes, non-bubbling `kai-*`
+        events listened for on the element.
+
+    - path: "docs/web-components.md"
+      instructions: |
+        A hybrid file, and the two halves need opposite treatment.
+
+        Content BETWEEN `<!-- spec:TAG -->` and `<!-- /spec:TAG -->` is
+        generated by scripts/gen-element-api.mjs and already guarded by
+        verify:generated. Do not comment on it: not on wording, formatting,
+        table layout or ordering. If a generated block looks wrong, the defect
+        is in the generator or in the element it read, not here. The only thing
+        worth raising is a block edited BY HAND, which the next `build:api` will
+        silently revert.
+
+        Everything OUTSIDE those markers is hand-written prose, and nothing
+        checks it -- no compiler, no test, no generator. This is where review
+        pays. Look for claims that the code has moved past: a prop, event,
+        slot or `::part()` described in prose but absent from the neighbouring
+        generated block; a described behaviour that contradicts the element;
+        markup samples violating the `kai-` contract (arrays and objects must
+        be properties, not attributes; `kai-*` events do not bubble); and any
+        hand-typed count or version, which belongs in a generated block or as
+        the command that prints it.
+
+    - path: "**/*.md"
+      instructions: |
+        Flag any hand-typed number that a script could produce -- element,
+        cell, route or test counts, timings, and version literals. They rot, and
+        they have: stale CDN version pins in README files kept serving versions
+        inside a Critical advisory range. Name the command or artifact that
+        prints the number instead. Paths, ports, event names and contract
+        details are not measurements and are fine.
+
+        No emoji.
+
+  pre_merge_checks:
+    # PRs are squash-merged, so the PR title becomes the commit message
+    # release-please parses. A malformed title silently mis-cuts or skips a
+    # release. Warning rather than error: the maintainer merges by hand and
+    # should not be blocked by a check that cannot see intent.
+    title:
+      mode: warning
+      requirements: |
+        Conventional Commits: `type(scope): summary`, lowercase type. Use feat,
+        fix, docs, chore, ci, refactor, test, perf, build or revert. The kit is
+        pre-1.0, so a breaking change is `feat!` or `fix!` and produces a MINOR
+        bump. The title must describe the change, not the branch.
+    # A component library with terse, self-describing code and no docstring
+    # convention. A coverage warning on every PR is noise.
+    docstrings:
+      mode: "off"
+
+  tools:
+    # The repo has no markdownlint config, and the default rules (line length,
+    # inline HTML, table formatting) contradict apps/docs/STYLE.md. Prose is
+    # reviewed against that guide instead.
+    markdownlint:
+      enabled: false
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    # `**/CLAUDE.md` is already in CodeRabbit's defaults; it is repeated here
+    # because setting this key may replace the default list rather than extend
+    # it, and losing CLAUDE.md would quietly gut this whole configuration.
+    filePatterns:
+      - "**/CLAUDE.md"
+      - "docs/coupling-map.md"
+      - "docs/package-consumer-issues.md"
+      - files: "apps/docs/STYLE.md"
+        applyTo: "**/*.md,**/*.mdx"
