@@ -1,10 +1,10 @@
 # AI/UI
 
-**AI chat UI components that work anywhere you can put HTML.** React, Vue, Svelte, Angular, Solid, or no framework at all. One implementation, not one port per framework.
+**The UI layer for AI apps. Works anywhere you can put HTML.**
 
-Message threads, prompt input, streaming, markdown and code, reasoning and tool panels, attachments, generative-UI cards, artifacts.
+Threads, workspaces, artifacts, tool and reasoning panels, generative UI, voice. React, Vue, Svelte, Angular, Solid, no framework at all, or a CMS or storefront where a script tag is the only way in. One implementation, not one port per framework.
 
-They're web components, style-isolated in Shadow DOM, which is what makes the same tags work in a bundled app and on a static page with no build step. The usual objections to that are [answered below](#the-web-component-objections). Authored in SolidJS; you never have to know that to use one.
+They're web components, style-isolated in Shadow DOM. That's what lets the same tags run through a bundler in an app and load straight from a CDN in a plain `<script>` tag on a page with no build step to hook into. The usual objections to web components are [answered below](#the-web-component-objections). Authored in SolidJS; you never have to know that to use one.
 
 [Docs](https://ui.kitn.ai) · [Storybook](https://ui.kitn.ai/storybook/) · [npm](https://www.npmjs.com/package/@kitn.ai/ui) · [Security policy](SECURITY.md)
 
@@ -32,7 +32,7 @@ One tag gets you a working chat:
 <kai-chat></kai-chat>
 ```
 
-You are not stuck with its layout. `<kai-chat>` is a preset over pieces you can use directly, so build your own arrangement out of the same parts:
+You are not stuck with its layout. `<kai-chat>` is one preset over pieces you can use directly, `<kai-workspace>` is another, and the pieces go well past chat. Arrange your own:
 
 ```html
 <kai-resizable>
