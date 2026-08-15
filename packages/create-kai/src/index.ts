@@ -36,8 +36,21 @@ import type { Layout, ProjectPlan } from './types';
  * Derived from the workspace kit's own version at build time rather than
  * written here, so the pin cannot drift from the kit the templates were copied
  * from — the templates and the range come out of the same build.
+ *
+ * That derivation is correct at the moment of the build and DECAYS afterwards:
+ * a caret cannot cross a minor pre-1.0, so once the kit publishes a new minor,
+ * whatever `create-kai` is on the registry pins a range that can no longer
+ * reach it. `create-kai@0.1.2` sat on `^0.24.0` after `0.24.0` was deprecated
+ * for a critical XSS. Nothing here can fix that — the fix is to re-cut a
+ * release — so the check lives where the registry is visible:
+ * `scripts/verify-pin.mjs`, whose rules are in `src/pin-guards.ts`.
+ *
+ * The whole RANGE arrives substituted, not the bare version with a caret added
+ * here: `scripts/build.mjs` derives it through `src/kit-pin.ts`, which is also
+ * what the guard imports. That keeps one definition of the shape, and it leaves
+ * the pin in the published bundle as a plain string the guard can read back.
  */
-const DEFAULT_KIT_RANGE = `^${__KIT_VERSION__}`;
+const DEFAULT_KIT_RANGE = __KIT_RANGE__;
 
 const HELP = `
 ${pc.bold('create-kai')} — scaffold a runnable @kitn.ai/ui chat app
@@ -198,6 +211,11 @@ async function main(): Promise<number> {
     featureIds,
     gatewayId,
     kit: args.kit ?? DEFAULT_KIT_RANGE,
+    // NOT `args.kit`, deliberately, and not derived from it either. This records
+    // which kit the CLI was built against, which stays true when `--kit` sends
+    // the dependency somewhere else — the emitted files are this version's shape
+    // whatever the project ends up installing.
+    kitBuiltAgainst: __KIT_VERSION__,
   };
 
   // ── generate ───────────────────────────────────────────────────────────────
@@ -297,6 +315,10 @@ function printMatrix(asJson: boolean): void {
   const matrix = {
     cli: __CLI_VERSION__,
     kit: DEFAULT_KIT_RANGE,
+    // The same pair `kai.json` carries. An agent reading this to decide what to
+    // install gets the range; one reasoning about which kit the templates match
+    // gets the exact version, without having to parse the range for a floor.
+    kitBuiltAgainst: __KIT_VERSION__,
     frameworks: FRAMEWORKS.map((f) => ({
       id: f.id,
       label: f.label,

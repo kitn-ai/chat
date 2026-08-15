@@ -82,6 +82,30 @@ jobs:
       # under `bash -e`, so if the kit fails to publish the step aborts and
       # create-kai is never reached, which is what keeps that ordering true rather
       # than merely intended.
+      #
+      # THAT ORDERING ONLY MATTERS IF create-kai IS IN THE RELEASE AT ALL, and for
+      # a long time it usually was not. The two packages release independently, so
+      # a kit-only release left the PUBLISHED create-kai pinning `^<previous kit>`
+      # — and a caret cannot cross a minor pre-1.0, so that pin could never reach
+      # the new kit. create-kai@0.1.2 sat on `^0.24.0` after 0.24.0 was deprecated
+      # for a critical XSS: `npm create kai@latest` scaffolded a vulnerable project
+      # with no upgrade path inside its own range. Nothing was broken in the tree;
+      # the artefact on the registry had simply decayed.
+      #
+      # `"plugins": ["node-workspace"]` in release-please-config.json is what
+      # closes it. The plugin walks the workspace graph and patch-bumps any
+      # configured package that DEPENDS on one being released — create-kai's
+      # `"@kitn.ai/ui": "workspace:*"` devDependency is that edge. It counts
+      # devDependencies unconditionally (only peerDependencies are opt-in), and it
+      # bumps on the graph edge rather than on having a range to rewrite, so the
+      # unrewritable `workspace:*` still triggers the release. So every kit release
+      # now drags a create-kai release behind it, and this loop rebuilds the pin.
+      #
+      # The plugin guarantees a release HAPPENS; it does not guarantee the pin in
+      # the artefact is right. That is a separate property with its own guard:
+      # `verify:pack` (offline, in create-kai's prepublishOnly) refuses to publish
+      # a bundle whose pin disagrees with the kit beside it, and `verify:pin`
+      # (network, run manually) checks the published pin against the registry.
       - name: Publish to npm (OIDC trusted publishing)
         # Idempotent publish, PER PACKAGE. release-please re-emits releases_created
         # for the LAST release on a plain push to main (the first non-release push

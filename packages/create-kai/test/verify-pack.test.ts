@@ -31,11 +31,28 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import { derivePin } from '../src/kit-pin';
 import { gatewayPatchesFor, patchesFor } from '../src/patches';
 import { STRIPPED_DOTFILES, travellingName } from '../src/template-dotfiles';
 
 const PKG_ROOT = path.resolve(__dirname, '..');
 const SCRIPT = path.join(PKG_ROOT, 'scripts/verify-pack.mjs');
+
+/**
+ * The kit this tree is on, and the pin a correct bundle therefore carries.
+ *
+ * READ, not written down. The script compares the fixture bundle's pin against
+ * this same file, so a literal here would make the "clean tree" control go red
+ * on the next kit release for a reason that is not a defect — and a control that
+ * goes red for no reason is a control somebody deletes.
+ */
+const KIT_VERSION: string = JSON.parse(
+  readFileSync(path.resolve(PKG_ROOT, '../ui/package.json'), 'utf8'),
+).version;
+
+/** A bundle line carrying `pin`, in the shape `scripts/build.mjs` emits. */
+const bundleWithPin = (pin: string): string =>
+  `#!/usr/bin/env node\nvar DEFAULT_KIT_RANGE = ${JSON.stringify(pin)};\nconsole.log("kai");\n`;
 
 /** The shape of a built tree, as `dist/` relative paths. `null` omits a file. */
 type Tree = Record<string, string | null>;
@@ -62,7 +79,9 @@ const patchedFixtureFiles = (templateDir: string): Tree =>
 
 /** A believable built package: a bundled CLI plus two templates. */
 const tree = (over: Tree = {}): Tree => ({
-  'index.js': '#!/usr/bin/env node\nconsole.log("kai");\n',
+  // Carries a pin, because the script now grades one. A bundle with no
+  // DEFAULT_KIT_RANGE is itself a rejected state — see the pin cases below.
+  'index.js': bundleWithPin(derivePin(KIT_VERSION)),
   'templates/react/package.json': '{"name":"react-app","private":true}\n',
   'templates/react/_gitignore': 'node_modules/\n.env.local\n',
   'templates/react/src/App.tsx': 'export default function App() { return null; }\n',
@@ -237,7 +256,9 @@ describe('verify:pack still detects', () => {
     // Without it the assertion above is satisfied by a rule that rejects every
     // standalone template, `.npmrc` or not.
     const root = fixtureRoot({
-      'index.js': '#!/usr/bin/env node\n',
+      // A real pin, because this fixture has to reach exit 0 and the script now
+      // grades the bundle's pin as well as the packed listing.
+      'index.js': bundleWithPin(derivePin(KIT_VERSION)),
       'templates/nextjs/package.json': '{"name":"next-app","private":true}\n',
       'templates/nextjs/_gitignore': 'node_modules/\n',
       ...patchedFixtureFiles('nextjs'),
@@ -270,6 +291,46 @@ describe('verify:pack still detects', () => {
     const { code, output } = runVerifier(fixtureRoot(tree({ 'index.js': null })));
     expect(code).toBe(1);
     expect(output).toContain('dist/index.js is missing');
+  });
+
+  /**
+   * THE PIN `create-kai@0.1.2` SHIPPED. That release went to npm bundling
+   * `^0.24.0` after `@kitn.ai/ui@0.24.0` had been deprecated for a critical XSS,
+   * and a pre-1.0 caret cannot cross a minor, so the emitted project could never
+   * reach the fixed `0.25.0`. Every check in this file passed over that tarball,
+   * because none of them read what the bundle SAYS.
+   *
+   * Offline on purpose: this is "does the bundle match the kit beside it", not
+   * "is that version still healthy on the registry" — the latter needs the
+   * network and lives in `scripts/verify-pin.mjs`.
+   */
+  it('fires when the bundle pins a kit older than the one in this tree', () => {
+    const stale = derivePin('0.0.1');
+    const { code, output } = runVerifier(fixtureRoot(tree({ 'index.js': bundleWithPin(stale) })));
+
+    expect(code).toBe(1);
+    expect(output).toContain(stale);
+    expect(output).toContain(KIT_VERSION);
+    expect(output).toContain('build cache');
+  });
+
+  /**
+   * The unreadable case, which must be a FAILURE and not a pass.
+   *
+   * The pin is found by matching the bundler's output, so a rename or a
+   * different minifier can stop it matching. If that silently counted as "no
+   * problem found", the rule above would switch itself off at exactly the moment
+   * the artefact changed shape — the guard-that-proves-nothing failure this repo
+   * keeps paying for.
+   */
+  it('fires when it cannot find a pin in the bundle at all, rather than passing', () => {
+    const { code, output } = runVerifier(
+      fixtureRoot(tree({ 'index.js': '#!/usr/bin/env node\nvar RENAMED = "^0.25.0";\n' })),
+    );
+
+    expect(code).toBe(1);
+    expect(output).toContain('could not find DEFAULT_KIT_RANGE');
+    expect(output).toContain('checking');
   });
 
   it('fires when a template packs nothing at all', () => {

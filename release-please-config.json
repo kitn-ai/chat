@@ -3,6 +3,7 @@
   "bump-minor-pre-major": true,
   "bump-patch-for-minor-pre-major": false,
   "bootstrap-sha": "30214c3a981253fff2f3f9a2749e9ab638adba6c",
+  "plugins": ["node-workspace"],
   "packages": {
     "packages/ui": {
       "release-type": "node",

@@ -28,6 +28,7 @@ const plan = (dir: string, over: Partial<ProjectPlan> = {}): ProjectPlan => ({
   featureIds: ['conversations'],
   gatewayId: 'mock',
   kit: '^9.9.9',
+  kitBuiltAgainst: '9.9.9',
   ...over,
 });
 
@@ -111,6 +112,50 @@ describe('generate (zero-config: react + full-screen + conversations + mock)', (
       registration: 'elements',
     });
     expect(kai.paths.app).toBe('src/App.tsx');
+  });
+
+  /**
+   * BOTH KIT FACTS, because they are different facts and `package.json` can only
+   * ever carry one of them.
+   *
+   * `kit` is the constraint the project was given. `kitBuiltAgainst` is the exact
+   * kit version the CLI that wrote these files was built against — which is what
+   * a later `add`/`upgrade` needs in order to know which migration applies.
+   * `package.json` tells you what the project depends on NOW, never what it
+   * started from, and after one `npm update` those are different.
+   */
+  it('records both the kit range and the exact kit the CLI was built against', async () => {
+    const kai = JSON.parse(await readFile(path.join(dir, 'kai.json'), 'utf8'));
+    expect(kai.kit).toBe('^9.9.9');
+    expect(kai.kitBuiltAgainst).toBe('9.9.9');
+  });
+
+  /**
+   * THE `--kit` OVERRIDE, which is the case where the two fields genuinely
+   * disagree and the one a reader is most likely to get wrong.
+   *
+   * `kit` follows the override, because that is what the project depends on.
+   * `kitBuiltAgainst` does NOT, because the files on disk came out of this CLI
+   * and are its kit's shape no matter what the dependency was pointed at. A
+   * `kitBuiltAgainst` that tracked the override would be re-stating `kit` and
+   * would tell a future migration nothing it did not already know.
+   */
+  it('keeps kitBuiltAgainst fixed when --kit points the dependency elsewhere', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'create-kai-kitflag-'));
+    try {
+      const out = path.join(root, 'overridden');
+      await generate(plan(out, { kit: 'file:/tmp/kit.tgz' }), { templateRoot: TEMPLATE_ROOT });
+
+      const kai = JSON.parse(await readFile(path.join(out, 'kai.json'), 'utf8'));
+      expect(kai.kit).toBe('file:/tmp/kit.tgz');
+      expect(kai.kitBuiltAgainst).toBe('9.9.9');
+
+      // And the emitted package.json follows the override, not the build.
+      const pkg = JSON.parse(await readFile(path.join(out, 'package.json'), 'utf8'));
+      expect(pkg.dependencies['@kitn.ai/ui']).toBe('file:/tmp/kit.tgz');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it('applies the template patches', async () => {

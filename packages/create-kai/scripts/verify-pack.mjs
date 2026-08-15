@@ -50,7 +50,7 @@
  * measurement and is graded against captured fixtures of both shapes.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -78,6 +78,11 @@ const pkgRoot = flagIndex === -1 ? selfRoot : path.resolve(process.argv[flagInde
 /** The dotfile list both ends of the rename read; see src/template-dotfiles.ts. */
 const { STRIPPED_DOTFILES, travellingName } = await loadTs(selfRoot, 'src/template-dotfiles.ts');
 const { PATCHES, GATEWAY_PATCHES } = await loadTs(selfRoot, 'src/patches.ts');
+/** The kit-pin rules; see the block near the end of this file. */
+const { extractPinnedRange, stalePinProblem, unreadablePinProblem } = await loadTs(
+  selfRoot,
+  'src/pin-guards.ts',
+);
 
 /**
  * The npm this runs under, which is NOT always the one on PATH.
@@ -256,6 +261,44 @@ for (const dir of templateDirs) {
 for (const dir of templateDirs) {
   if (!files.includes(`dist/templates/${dir}/package.json`)) {
     problems.push(`template '${dir}' has no package.json in the tarball`);
+  }
+}
+
+/**
+ * THE @kitn.ai/ui PIN IN THE BUNDLE ABOUT TO BE PUBLISHED.
+ *
+ * `create-kai@0.1.2` went to the registry pinning `^0.24.0` after `0.24.0` had
+ * been deprecated for a critical XSS, and a caret cannot cross a minor pre-1.0,
+ * so that pin could never reach the fixed `0.25.0`. Every project scaffolded
+ * from it installed the vulnerable kit.
+ *
+ * THIS RULE IS OFFLINE AND ANSWERS ONLY THE HALF THAT CAN BE ANSWERED OFFLINE:
+ * does the bundle's pin match the kit sitting beside it in this tree? That is
+ * not the same question as the source-level one, which is a tautology — the
+ * range is DERIVED from the kit version, so comparing them at the point of
+ * derivation is true by construction and could never fail. What can be false is
+ * the artefact: `dist/index.js` freezes the pin at build time and the kit keeps
+ * moving, so a stale or cache-restored bundle carries a pin that was correct
+ * when it was made and is not any more.
+ *
+ * The other half — "is the version that pin resolves to still published, and has
+ * it been deprecated since?" — is not knowable without the registry, so it is
+ * not here. It lives in `scripts/verify-pin.mjs`, which is a separate step
+ * precisely so a registry outage cannot break a release that is otherwise fine.
+ *
+ * Reads the built bundle rather than the packed listing: the listing proves the
+ * file is IN the tarball, and this is about what the file SAYS.
+ */
+const bundlePath = path.join(pkgRoot, 'dist/index.js');
+if (existsSync(bundlePath)) {
+  const kitVersion = JSON.parse(
+    readFileSync(path.resolve(selfRoot, '../ui/package.json'), 'utf8'),
+  ).version;
+  const pinned = extractPinnedRange(readFileSync(bundlePath, 'utf8'));
+  if (pinned === null) problems.push(unreadablePinProblem('the built dist/index.js'));
+  else {
+    const problem = stalePinProblem(pinned, kitVersion);
+    if (problem !== null) problems.push(problem);
   }
 }
 

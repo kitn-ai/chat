@@ -23,7 +23,39 @@ export interface KaiJson {
   $schema: string;
   version: number;
   framework: string;
+  /** The `@kitn.ai/ui` range written into the emitted `package.json`. */
   kit: string;
+  /**
+   * The exact `@kitn.ai/ui` version the CLI that wrote this file was built
+   * against — the templates in this project are that version's shape.
+   *
+   * WHY BOTH THIS AND `kit`. They answer different questions, and `package.json`
+   * can only ever answer the first: `kit` is the constraint the project was
+   * given, this is the point it started from. After one `npm update` the
+   * installed version has moved and nothing in the project remembers what it was
+   * scaffolded against — which is exactly the question a later `add` or
+   * `upgrade` has to answer to know which migration applies.
+   *
+   * WHAT IT IS NOT, stated here because the name is one letter of context away
+   * from implying it: this is NOT the version npm installed. Three ways they
+   * separate, all ordinary:
+   *
+   *   · `--kit` was passed, so `kit` points somewhere else entirely — another
+   *     range, a dist-tag, or a `file:` tarball. This field still truthfully
+   *     reports which CLI generation emitted the files, which is the fact a
+   *     migration needs; it is deliberately NOT rewritten to match the override.
+   *   · The range resolved higher within its own minor (`^0.25.0` picking up a
+   *     later `0.25.x`).
+   *   · The user upgraded afterwards.
+   *
+   * Reading the truly-installed version would mean reading
+   * `node_modules/@kitn.ai/ui/package.json` after the install step — cheap, but
+   * only meaningful when `--no-install` was not passed, so it would be present
+   * on some projects and absent on others. A field that is sometimes there is
+   * worse than one that is always there and means one thing. Recorded at build
+   * time, this is always present and always exact.
+   */
+  kitBuiltAgainst: string;
   layout: string;
   widgetStyle: string | null;
   features: string[];
@@ -51,6 +83,7 @@ export function buildKaiJson(plan: ProjectPlan, framework: FrameworkDef): KaiJso
     version: KAI_JSON_VERSION,
     framework: plan.frameworkId,
     kit: plan.kit,
+    kitBuiltAgainst: plan.kitBuiltAgainst,
     layout: plan.layout,
     widgetStyle: plan.widgetStyle,
     features: [...plan.featureIds],
