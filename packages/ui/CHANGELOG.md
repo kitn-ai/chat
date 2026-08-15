@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.25.1](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.25.0...@kitn.ai/ui-v0.25.1) (2026-08-15)
+
+
+### Bug Fixes
+
+* **docs:** stop serving CDN URLs pinned to advisory-covered versions ([#252](https://github.com/kitn-ai/ui/issues/252)) ([8baffe4](https://github.com/kitn-ai/ui/commit/8baffe4d9568344128512ef5674652b1f83cc236))
+
 ## [0.25.0](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.24.0...@kitn.ai/ui-v0.25.0) (2026-08-15)
 
 
