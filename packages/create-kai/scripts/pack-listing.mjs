@@ -3,7 +3,9 @@
  * repo runs.
  *
  * THE DEFECT THIS EXISTS FOR, because it took down a release that was already
- * half-published. Merging the release PR published `@kitn.ai/ui@0.24.0`, then
+ * half-published.
+ * lint-cdn-pins: historical -- an incident report; the version IS the record
+ * Merging the release PR published `@kitn.ai/ui@0.24.0`, then
  * ran `create-kai`'s `prepublishOnly` -> `npm run verify:pack` and died:
  *
  *     verify-pack.mjs:80

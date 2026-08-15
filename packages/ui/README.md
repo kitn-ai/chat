@@ -9,7 +9,7 @@ It can be consumed two ways:
 
 ## Highlights
 
-- **~50 composable components** across three layers: headless primitives → accessible UI primitives (built in-house, WCAG 2.1 AA — no third-party UI dependency) → AI feature components.
+- **Composable components** across three layers: headless primitives → accessible UI primitives (built in-house, WCAG 2.1 AA — no third-party UI dependency) → AI feature components. `npm run verify:solid-coverage` prints the current element and component counts.
 - **Shadow-DOM web components** — zero CSS conflicts in any host. The host's styles can't leak in; the kit's Tailwind can't leak out.
 - **Load it your way** — register every element in one import, cherry-pick per-element with a bundler, or drop in a CDN autoloader that loads each on demand. Syntax highlighting loads lazily, per language, only when you render code.
 - **Tailwind v4** design tokens — rebrand by overriding `--color-*` custom properties.
@@ -63,7 +63,7 @@ npm run build   # emits dist/kai.es.js
 </body>
 ```
 
-The element bundle is **ES-module only** and loads via `<script type="module">` in every modern browser. See **[docs/web-components.md](docs/web-components.md)** for the full element API (every property, event, and the `ChatMessage` schema).
+The element bundle is **ES-module only** and loads via `<script type="module">` in every modern browser. See **[docs/web-components.md](https://github.com/kitn-ai/ui/blob/main/docs/web-components.md)** for the full element API (every property, event, and the `ChatMessage` schema).
 
 #### Or load from a CDN (no build, no npm)
 
@@ -78,7 +78,11 @@ The element bundle is a self-contained ES module — load it directly from [jsDe
 <kai-chat></kai-chat>
 ```
 
-The URLs above track the **latest** release — handy for trying things out. **For production, pin an exact version** (e.g. `@kitn.ai/ui@0.16.0/dist/kai.es.js`): pinned URLs are immutable and cached far more aggressively, and — since this package is pre-1.0 — pinning shields you from breaking changes in a future minor release. SolidJS and the kit's CSS are bundled in, and the lazy code-highlighting chunks load from the same CDN on demand. To override design tokens, also include `theme.css`:
+The URLs above track the **latest** release — handy for trying things out. **For production, pin an exact version** (e.g. `@kitn.ai/ui@0.25.0/dist/kai.es.js`): pinned URLs are immutable and cached far more aggressively, and — since this package is pre-1.0 — pinning shields you from breaking changes in a future minor release.
+
+> **Pin `0.25.0` or newer.** Every version from `0.14.1` through `0.24.0` is covered by a [critical security advisory](https://github.com/kitn-ai/ui/security/advisories) and is deprecated on npm. `npm install` warns you about a deprecated version; **a CDN fetch does not**, so an old pinned URL in a page keeps serving the vulnerable bundle silently.
+
+SolidJS and the kit's CSS are bundled in, and the lazy code-highlighting chunks load from the same CDN on demand. To override design tokens, also include `theme.css`:
 
 ```html
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@kitn.ai/ui/theme.css">
@@ -328,7 +332,7 @@ For SolidJS usage, import `@kitn.ai/ui/theme.css` once. For web components the k
 The package ships [llmstxt.org](https://llmstxt.org)-style files so coding agents (Claude Code, Copilot, Cursor, Codex) can wire up the components correctly:
 
 - **[`llms.txt`](./llms.txt)** — dense orientation: install, the property-vs-attribute rule, the two-layer architecture, theming, and framework wiring.
-- **[`llms-full.txt`](./llms-full.txt)** — the above plus a generated props/events reference for every `kitn-*` element, a streaming recipe, and a build runbook.
+- **[`llms-full.txt`](./llms-full.txt)** — the above plus a generated props/events reference for every `kai-*` element, a streaming recipe, and a build runbook.
 
 Both are auto-generated from `dist/custom-elements.json` during `npm run build` (so they never drift) and are published in the npm package — find them at `node_modules/@kitn.ai/ui/llms.txt` after install.
 
@@ -362,7 +366,7 @@ src/
   primitives/    Headless logic hooks + ChatConfig + on-demand highlighter
   ui/            Accessible UI primitives (Button, Dropdown, Tooltip, HoverCard, … built in-house, no third-party UI deps)
   components/    AI feature components (Message, PromptInput, Markdown, Tool, …)
-  elements/      Web-component facades + defineKitnElement wrapper + Vite lib entry
+  elements/      Web-component facades + defineWebComponent wrapper + Vite lib entry
   stories/       Composed example stories (full chat app, layouts)
 theme.css        Design tokens (--color-*), animations, markdown styles
 docs/
@@ -414,11 +418,11 @@ cd examples/vue && npm install && npm run dev
 - `examples/react` — uses the generated React wrappers from `@kitn.ai/ui/react`
 - `examples/solid` — uses the raw SolidJS component API
 - `examples/angular` — uses the web components natively via Angular's `[prop]` / `(event)` bindings with `CUSTOM_ELEMENTS_SCHEMA` (no wrappers needed)
-- `examples/vue` — uses the web components natively via Vue's `:prop.prop` modifier and `@event` bindings; `isCustomElement` in `vite.config.ts` prevents Vue treating `kitn-*` tags as Vue components
+- `examples/vue` — uses the web components natively via Vue's `:prop.prop` modifier and `@event` bindings; `isCustomElement` in `vite.config.ts` prevents Vue treating `kai-*` tags as Vue components
 
 ### Docs and reference
 
-- **[docs/web-components.md](docs/web-components.md)** — full element API: every property, event, and the `ChatMessage` schema.
+- **[docs/web-components.md](https://github.com/kitn-ai/ui/blob/main/docs/web-components.md)** — full element API: every property, event, and the `ChatMessage` schema.
 - **[llms.txt](llms.txt)** / **[llms-full.txt](llms-full.txt)** — dense machine-readable references for AI coding agents.
 
 ## Loading

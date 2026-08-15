@@ -163,6 +163,38 @@ jobs:
       - name: Attachment object-URL guard (docs, stories, kit)
         run: pnpm --filter @kitn.ai/ui run lint:attachment-object-urls
 
+      # Staleness guard for hand-typed CDN version pins. The docs correctly tell
+      # people to pin an exact version for CDN use, but every pin was a literal
+      # somebody typed once while the kit kept releasing. When a Critical
+      # advisory landed against 0.14.1-0.24.0, four copy-pasteable URLs across
+      # the docs and the npm README were still serving 0.20.1 and 0.16.0.
+      #
+      # The npm README is the one that matters most: npm prints a deprecation
+      # warning on `npm install`, and all 17 affected versions are deprecated,
+      # but A CDN FETCH PRINTS NOTHING. The channel with no safety net carried
+      # the stalest pin, on the page a prospective user sees first.
+      #
+      # It asserts EQUALITY with packages/ui/package.json, not range membership.
+      # A range check would be a check that cannot fail -- `^0.25.0` always
+      # contains 0.25.0 -- so it would go green forever while the docs rotted.
+      # These two sides are independent (prose a human typed vs. the manifest
+      # release-please rewrites) and drift apart on every single release.
+      #
+      # Like lint-silent-drops and UNLIKE the object-URL guard above, a
+      # ZERO-MATCH RUN IS A FAILURE: this scans for pins the docs deliberately
+      # recommend and therefore knows exist, so finding none means the walk broke
+      # -- which would pass every stale pin in the tree forever.
+      #
+      # Lines narrating real past releases carry `lint-cdn-pins: historical --
+      # <reason>`, a parsed directive rather than prose, so a record is waived
+      # instead of being rewritten into a falsehood.
+      #
+      # Reads source and package.json only, no dist/, so it is a seam anyone can
+      # grab to watch it fail (`node packages/ui/scripts/lint-cdn-pins.mjs`).
+      # `--fix` rewrites every stale pin when the version bumps.
+      - name: CDN version-pin staleness guard (docs, README, examples)
+        run: pnpm --filter @kitn.ai/ui run lint:cdn-pins
+
       - name: Build (element bundle + provider subpath)
         run: pnpm exec nx build ui
 
