@@ -2,9 +2,13 @@
 
 **The web UI layer for AI apps. Works anywhere you can put HTML.**
 
-Threads, workspaces, artifacts, tool and reasoning panels, generative UI, voice. React, Vue, Svelte, Angular, Solid, no framework at all, or a CMS or storefront where a script tag is the only way in. One implementation, not one port per framework.
+Threads, workspaces, artifacts, tool and reasoning panels, generative UI, voice.
 
-Your CSS can't break them and theirs can't leak into your app: they're web components, each rendering in its own Shadow DOM. The trade is that you can't reach in and restyle arbitrary internals, so theming runs on `--kai-*` custom properties, which cross the boundary by design. It's also what lets the same tags run through a bundler in an app and load straight from a CDN in a plain `<script>` tag on a page with no build step to hook into. The usual objections to web components are [answered below](#the-web-component-objections). Authored in SolidJS; you never have to know that to use one.
+**In your framework:** React, Next.js, Vue, Svelte, Angular, SolidJS, TanStack Start, or plain HTML.
+
+**Or on a platform you don't control:** Shopify, WordPress, Webflow, Salesforce, HubSpot, or anywhere a `<script>` tag is the only way in.
+
+One implementation, not one port per framework, because they're web components. [The usual objections to that](#the-web-component-objections) are answered below.
 
 [Docs](https://ui.kitn.ai) · [Storybook](https://ui.kitn.ai/storybook/) · [npm](https://www.npmjs.com/package/@kitn.ai/ui) · [Security policy](SECURITY.md)
 
@@ -96,7 +100,8 @@ They're fair, and mostly historic. Where they still bite, this kit answers them:
 - **React interop.** `@kitn.ai/ui/react` is generated from the same build that generates the elements, so props are typed and events are React props. No `ref` plumbing to set an array.
 - **SSR.** Registration is client-only by construction, and the React wrappers register in an effect. CI renders every server entry in a DOM-free Node process on each run (`verify:ssr`), and the Next.js and TanStack Start starters are server-rendered.
 - **Types.** The React wrappers are generated, not hand-maintained, and a custom-elements manifest ships for editor tag completion.
-- **Styling.** Shadow DOM keeps your CSS out, so theming runs through custom properties rather than selectors, and elements expose CSS `part`s for the pieces worth reaching.
+- **Styling.** Shadow DOM keeps your CSS out, which is also why you can't override a selector. Theming runs on `--kai-color-*` custom properties, which cross the boundary by design, and elements expose CSS `part`s for the pieces worth reaching.
+- **No build step.** The elements load from a CDN in a plain `<script>` tag, so they work on a host with no bundler to hook into. `@kitn.ai/ui/autoloader` fetches each one on demand as its tag appears.
 
 ## Three things every consumer hits
 
