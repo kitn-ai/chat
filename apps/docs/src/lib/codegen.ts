@@ -222,9 +222,10 @@ export type ControlKind =
 const CONTROLLED_BINDING_PROPS = new Set(['open', 'sidebarCollapsed']);
 
 // Per-element controls to hide. kai-artifact: `tab` is redundant with its own
-// in-component Preview|Code toggle; `sandbox` is set by the sample (the demo opts
-// into allow-same-origin so its iframe can load its own styles) and a freeform
-// string control would both clutter the bar and override that.
+// in-component Preview|Code toggle; `sandbox` is set by the sample (which sets
+// allow-same-origin for a docs-demo-only reason it documents in full -- do not
+// read that as a recommendation) and a freeform string control would both
+// clutter the bar and override it.
 const CONTROL_EXCLUDE: Record<string, Set<string>> = {
   'kai-artifact': new Set(['tab', 'sandbox']),
 };

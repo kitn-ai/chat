@@ -57,10 +57,17 @@ const FILES = [
   { path: 'styles.css', type: 'other', language: 'css', code: STYLES_CSS, url: url('styles.css') },
 ];
 
-// The demo files are first-party + trusted, so opt into `allow-same-origin`: the
-// default `allow-scripts allow-forms` sandbox gives the framed document an opaque
-// origin, which can't load its own relative stylesheet (the preview renders
-// unstyled). allow-same-origin lets it reach its own origin for styles/nav.
+// DOCS-DEMO ONLY, and NOT the recommended configuration. `allow-same-origin`
+// gives the framed document the HOST page's origin -- its cookies, storage and
+// DOM. Where `src` can carry model or tool output (the `artifact` card's `src`
+// and `files[].url` both can), that is a zero-click XSS, which is why the
+// component no longer suggests it and filters script schemes before framing.
+//
+// It is set here for one narrow, non-transferable reason: every url below is a
+// static fixture file this site ships, so nothing model-supplied reaches `src`,
+// and without it the framed page cannot load its own relative stylesheet (the
+// opaque origin makes the CSS a cross-site request that Astro's dev server
+// answers with 403, so the preview renders unstyled).
 const SANDBOX = 'allow-scripts allow-forms allow-same-origin';
 
 // NOTE: `sandbox` is listed BEFORE `src` on purpose. The docs apply sample props
