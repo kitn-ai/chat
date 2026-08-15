@@ -45,16 +45,21 @@ it is named instead. Run the command.
 > and have not been edited except for pointers like this one. Read §9 for what landed after, and for
 > which claims below are now retired.
 >
-> **§10 (`67365c8`), §11 (`12a51da`) and §12 (`6afe8a0`) were appended the same way.** Read §11
-> before §4 or §6: `create-kai` now runs every framework in its table, so §4's ready/planned split,
-> and the scope decision built on it, are history rather than current state.
+> **§10 (`67365c8`), §11 (`12a51da`), §12 (`6afe8a0`) and §13 (`1454d02d`) were appended the same
+> way.** Read §11 before §4 or §6: `create-kai` now runs every framework in its table, so §4's
+> ready/planned split, and the scope decision built on it, are history rather than current state.
 >
-> **§12 IS THE NEWEST ANCHOR. Start there, and derive your range from `6afe8a0`, not from any
-> SHA a summary hands you.** The brief that commissioned §12 named §9's anchor as the newest and
-> was ten commits out of date; §12's opening paragraph is that correction. §12 also carries the
-> one factual retraction in this file that has a live consumer consequence: #227's claim that a
-> `vercel-ai-sdk` defect broke "every turn of every scaffolded app" is FALSE, and §12.5 refutes it
-> from the types. Do not repeat it.
+> **§12 carries the one factual retraction in this file with a live consumer consequence:** #227's
+> claim that a `vercel-ai-sdk` defect broke "every turn of every scaffolded app" is FALSE, and
+> §12.5 refutes it from the types. Do not repeat it. The brief that commissioned §12 named §9's
+> anchor as the newest and was ten commits out of date; §12's opening paragraph is that correction.
+>
+> **§13 IS THE NEWEST ANCHOR. Start there, and derive your range from `1454d02d`, not from any
+> SHA a summary hands you.** §13 is a **security round**: two Critical XSS vectors reachable from
+> model output, a published advisory covering every version of `@kitn.ai/ui` up to 0.24.0, and 17
+> deprecated versions on npm. If you are on anything below **0.25.0**, stop and upgrade. It also
+> records that the publish job had never been gated on any status, and it carries the round's
+> failure taxonomy in §13.10, which is the most reusable thing in this file.
 
 1. **`git log --oneline --first-parent bce481e..origin/main`** and **`gh pr list --state open`**.
    Nothing from this session was left open. Main moved twice while this was being written.
@@ -1167,6 +1172,9 @@ is a new variant worth watching.
 > cannot be scaffolded against a real provider at all. `create-kai` is also still at version `0.0.0`,
 > is absent from `release-please-config.json`, and 404s on npm. "Complete" needs both qualifiers.
 > §12.4 and §12.2.
+>
+> **At `1454d02d` that second qualifier is RETIRED and the first is not.** `create-kai` is published
+> and on the release path; the (gateway, framework) cell grid has not moved at all. §13.5, §13.13.
 
 **Every row in `packages/create-kai/src/frameworks.ts` now carries `status: 'ready'` and
 `composedWorkspace: true`.** #216 rewrote `tanstack-start`, #217 rewrote `solid`, #220 rewrote
@@ -1642,6 +1650,12 @@ property.**
 
 ### 12.2 The release, and the package that has no release at all
 
+> **CLOSED in both halves at `1454d02d`.** #228 merged, so 0.23.0 shipped #227's fix and the
+> `vercel-ai-sdk` consequence below is history. And the heading is now wrong: `create-kai` IS
+> published, IS in `release-please-config.json`, and its manifest version matches the registry. The
+> three derivations below all answer differently now, which is the point of writing them as
+> commands. §13.5. Left as written, per this file's rule; only the reader's route forward is added.
+
 **0.22.2 is merged and published.** `.release-please-manifest.json` on main and
 `npm view @kitn.ai/ui dist-tags` agree at this SHA, which is not something to restate here; run both,
 and §2 explains why they are kept apart and why the merge needs `--admin`.
@@ -2007,6 +2021,11 @@ carry.
 
 ### 12.8 What is next, in priority order
 
+> **Items 1 and 2 are DONE at `1454d02d`; items 3, 4 and 5 are untouched.** #235 and #238 took eight
+> guard scripts between them and #233 drove the four delegation rows, which then produced #236. The
+> current next list is §13.11, and item 4 here (the harness-layer discussion) is the only entry that
+> survives onto it unchanged. §13.8, §13.13.
+
 1. **The unguarded CI guard scripts.** Highest value because they protect the rest of the gate, and
    cheap because the pattern is already written five times in this repo: a `--self-test` mode that
    plants a defect and requires the guard to fire, plus a `tests/scripts/*-wiring.test.ts` asserting
@@ -2025,6 +2044,10 @@ carry.
    most likely and cheapest to disprove.
 
 ### 12.9 Still open, and smaller
+
+> **At `1454d02d` exactly one item on this list is closed: the first one.** Every other bullet was
+> re-run rather than assumed and is unchanged, including both negative greps. That is now three
+> anchors in a row for the two a11y probes. §13.12.
 
 - **`create-kai` is unpublishable as configured.** §12.2. Version `0.0.0`, absent from
   `release-please-config.json`, 404 on npm, while its own description advertises
@@ -2145,6 +2168,866 @@ command, the one its own report names:
 `nx build ui && npm run build:css && npx vitest run --project=unit --project=emitted --coverage`,
 from `packages/ui`. The narrative was right when it was written, and the situation it undersold
 resolved in the other direction inside three minutes. §12.7, §12.10.)*
+
+---
+
+## 13. What landed after `6afe8a0`: a Critical advisory, `create-kai` on npm, and a publish nothing was gating
+
+**Verified against `origin/main` at `1454d02dfbfd34751fcc4bce56ee1d973c23ad3f`**
+(`Merge pull request #259 from kitn-ai/release-please--branches--main`).
+
+Same rule as §9 through §12. Nothing above this section is rewritten; where a claim above is now
+wrong it carries a marker pointing here.
+
+> **This section went stale while it was being written, for the fourth time in this file's history,
+> and the anchor stays where it is.** `92cbef8` (`docs: split the README opening into framework and
+> platform audiences (#260)`) merged during the write. It touches `README.md` and nothing else, so
+> it is a third pass over the file §13.9 discusses and changes no finding here. In the same window
+> **#261 opened**, and it is the fix in flight for issue #224 that §13.12 says does not exist. Both
+> are recorded where they land rather than patched over: §13.9 and §13.12. The anchor is not moved,
+> because `1454d02d` is the tree every claim below was read off, and a handoff whose anchor drifts
+> to keep up is exactly the unfalsifiable kind this file's intro argues against.
+
+**The anchor was derived from this file, and for once the brief asked for that rather than getting
+it wrong.** §12 is the newest anchor above, at `6afe8a0`, so:
+
+```
+git log --oneline --first-parent 6afe8a0..origin/main
+```
+
+Thirty commits, two of which are already written up: `addfe2d` (#231) is the coverage diagnostic
+§12.7's marker was rewritten to cover, and `77d74a1` (#232) IS §12. §12's opening records what
+skipping this step cost the one round it was skipped.
+
+**The PR numbering is contiguous, which retires an expectation this file had promoted to a rule.**
+§10, §11 and §12 each explained a gap in the numbering as a held release, and §12 called the
+pattern "safe to expect" after four occurrences. Every number from #228 to #259 is accounted for:
+#229 and #230 in §12's range, #228 and #231 through #259 in this one. Nothing was held. #228, the
+0.23.0 release §12 recorded as open, merged as `30214c3a`; #231 merged as `addfe2d`. **A pattern
+that held four times running did not hold a fifth**, and it was always a fact about how one person
+merges release PRs rather than a property of the repo. Read it that way instead of expecting it a
+sixth time.
+
+Six of the thirty are release merges. The rest group into six pieces of work:
+
+- **#246, #247, #248, #252, #257, #258** are the security round: two vectors, one published
+  advisory, a deprecation sweep, a policy, and the rules it reduced to. §13.1 through §13.4.
+- **#234, #239, #241, #249** are `create-kai` reaching npm and the four packaging defects that
+  followed it there. §13.5.
+- **#254** is the publish gate. Before it, nothing consulted any status before `npm publish` ran.
+  §13.6.
+- **#252 and #258** are also this round's worked example of a check that was correct about its
+  branch and wrong about the merge result. §13.7.
+- **#233, #235, #238** pay §12.8's first two items, and **#236, #243** are the kit's own bugs.
+  §13.8.
+- **#240, #244, #250, #251, #255, #256** are what got written down. §13.9.
+
+This section was commissioned from a narrative, like §9, §11 and §12. Every claim was re-derived
+against this tree, and §13.14 lists what did not survive. The ratio held for the fifth time, and
+the failure shape moved again: §8 and §9.8 were mostly status claims, §11.10 was mostly
+attribution, and these are mostly **counts and quoted strings**, which is the failure mode two of
+the round's own three new rules exist to catch.
+
+### 13.1 It began as a research question, and the answer named the risk the round then went and found
+
+**#244 preserves the campaign**, at `docs/research/browser-side-provider-parsing.md`, with five raw
+reports under `docs/research/evidence/browser-side-provider-parsing/` plus a `README.md` and a
+`MANIFEST.sha256` of their digests. The synthesis says of itself that the compression drops most
+per-claim citations, which is why the raw reports are kept rather than summarised away.
+
+**The question is not the one a summary of this round would hand you.** Read line 3 of the file
+rather than any paraphrase:
+
+> **Question:** the kit ships `readOpenAIStream` / `readAnthropicStream` in a browser package. Is
+> that a differentiator or a mistake?
+
+That asks **where the parsing runs**, not why there are two formats. The two-format question is
+answered as well, in §6, and the answer is that collapsing them would be the mistake: the strongest
+maintainer statement found is from someone maintaining 85 providers saying a single
+OpenAI-compatible runtime no longer meets application-layer needs, and underneath the quote sits a
+structural asymmetry that does not depend on it, since parallel content blocks, block boundaries and
+signatures have no representation in an OpenAI frame at all.
+
+The verdict is worth quoting, because its shape is unusual and any compression flattens it:
+
+> **Nobody else does this, and no evidence says it is wrong.** [...] every maintained *library*
+> draws a line and puts provider-native parsing on the server side of it, but the reason is
+> credential exposure, every time, and that reason does not reach a stream the consumer's own
+> server already proxied. [...] The position is unusual. This research can say it is a road not
+> taken by well-funded peers; it cannot say whether that makes it a differentiator or a mistake,
+> and it does not pretend to.
+
+**Two results invert the intuition, and those are the ones to carry.** Of ten conditions that would
+make browser-side parsing a mistake, two are live and neither is architectural. Every documented
+instance of the silent-incompleteness failure the campaign went looking for happened in a
+**server-side or desktop** parser rather than a browser one, and the two worst outcomes came from
+strict schema validation, the safer-looking design. And the breaking-change scoreboard over roughly
+two years is zero for OpenAI chat-completions SSE, zero for Anthropic Messages SSE, and one
+confirmed plus one in flight for a normalising protocol in between. The file's own reframing is the
+sentence to keep: the instability is not in the two formats parsed here, it is in the unbounded long
+tail of servers claiming to speak them.
+
+**§7 is where this round turns.** The one genuinely new risk surfaced is untrusted stream content,
+and its mitigation is stated as the ordinary one: *"never let stream content reach an execution
+sink, treat every field as data, and audit anything a part model renders as HTML or hands to a
+component."* The audit that sentence asks for is #246 and #247. **The research did not find the
+vulnerability. It named the class, and then somebody looked.**
+
+Two other things in that file earn their place here. §8 is a peer's cross-provider driver that
+iterates 78 providers, asserts only a 200, and `continue`s past every provider whose key is absent,
+so in a keyless CI it asserts nothing at all: the entire file-tree shape of a conformance suite, and
+a no-op in the pipeline, which is this document's §5 found in someone else's repo. And §1 records
+the campaign correcting itself, when an assertion that `api.openai.com` sends no
+`Access-Control-Allow-Origin`, supporting the tidy argument that everyone has to proxy anyway, was
+disproved by a live preflight that came back 200 with the header set.
+
+### 13.2 Vector one: raw HTML in assistant markdown reaching `innerHTML` (#246)
+
+**The pre-fix file is short enough to read whole**, and the vector is four lines of it
+(`git show 18afa290^:packages/ui/src/components/markdown.tsx`): `marked.setOptions({ gfm: true,
+breaks: true })` with HTML passthrough left at its default, `marked.parse(...)` returning that
+string, a `catch` returning `props.content` **unparsed**, and `<div innerHTML={html()} />`. There
+was no sanitizer anywhere in the package, and there is none now.
+
+**The fix escapes rather than sanitizes, and the reasoning lives in the source rather than only in a
+PR body**, which is the right place for it. `markdown.tsx` carries a block headed `WHY ESCAPE
+RATHER THAN SANITIZE (no DOMPurify)`:
+
+> In Node this package's ESM build has no `sanitize` at all (`isSupported === false`), so the SSR
+> path either throws or gets "guarded" into returning the payload UNCHANGED, a silent passthrough
+> of exactly the string we were trying to neutralise.
+
+Two further reasons are given there: a sanitizer is a dependency a footprint-gated package does not
+want, and escaping is the better **rendering** for a chat UI, because a model that emits
+`<img onerror=...>` was talking about HTML and the reader should see it.
+
+**Three renderer overrides on a private `Marked` instance.** `html()` escapes; `link()` and
+`image()` filter through `isSafeUrl`; a blocked link keeps its label and a blocked image falls back
+to its alt text. The private instance is not incidental and it is tested: `markdown-xss.test.tsx`
+carries a suite asserting the global `marked` singleton still passes `<img src=x>` through, because
+the alternative, mutating a shared singleton, is a library reaching into a consumer's other code.
+
+**Each suite asserts two properties per vector, and the second is the interesting one.** Nothing
+live in the DOM, **and the source text still visible**. A filter that deleted the payload would pass
+the security assertion and be a worse UI, so the tests refuse that fix as well as the bug. Three
+files: `markdown-xss.test.tsx` (raw-HTML vectors including the same payload inside GFM table cells,
+blockquotes and list items, plus dangerous-scheme links), `artifact-url-xss.test.tsx` (§13.3), and
+`hostile-model-output.test.tsx`, which drives a hostile SSE stream through `src/wire` into
+`src/state` into `MessageBody` with nothing stubbed, including the payload **split across three SSE
+frames**. That third file is what pins the sink as the path every real message takes.
+
+**They are tests and only tests.** `packages/ui/scripts/lint-*.mjs` is three files and none is about
+sinks. The suites run in the required `test` job, so the vectors that were found cannot come back;
+nothing structural stops a **new** sink landing unguarded, and `docs/coupling-map.md`'s unenforced
+list has no entry for the class either.
+
+### 13.3 Vector two: the artifact's three URL sinks, and the sandbox its own docs recommended (#247)
+
+Three sinks in one component, every one of them fed by an `artifact` card envelope, which is tool
+output:
+
+- **The PDF fallback anchors.** `href={props.url}` with no filter, twice (Open in new tab,
+  Download). The fix computes an `href` memo returning `undefined` rather than `''`, because an
+  empty `href` navigates to the current page, and renders a fallback that says the address was
+  blocked.
+- **`window.open`.** The old reachability test was `!!u && u !== 'about:blank'`. `isSafeUrl` is now
+  folded into it so the button renders disabled, plus a console warning in the handler, because the
+  `openExternal()` element method reaches the same code with no button in front of it.
+- **The preview iframe.** `src={currentUrl}` and `iframeEl.src = url || 'about:blank'`. This one
+  uses a **narrower** new predicate, `isScriptUrl` (javascript: and vbscript: only), so `data:` and
+  `blob:` artifacts still frame, in an opaque origin. `currentUrl()`, the address field and
+  `onNavigate` all still report the URL that arrived: the kit refuses to link it, it does not
+  pretend it never came.
+
+**The iframe case executed with zero clicks, and the configuration that made it worst was
+recommended in three places, not one.** Correct the string before quoting it: the two-token
+`sandbox="allow-scripts allow-same-origin"` is the **proof of concept**, and what shipped in the
+documentation was three tokens, `allow-scripts allow-forms allow-same-origin`. The three places were
+the component's own source comment (*"opt into `allow-same-origin` if the consumer trusts the
+artifact"*, which #247 calls the worst advice in the file), the public docs page
+`apps/docs/src/content/docs/examples/artifacts-canvas.mdx` in **both** its prose and its copyable
+snippet, and the element-page sample in `apps/docs/src/data/samples/kai-artifact.ts`. Derive the
+current state with `git grep -n 'allow-same-origin' origin/main`: none of the three recommends it
+now, the docs snippet's `sandbox` attribute was deleted so it inherits the secure default, and the
+three demos that still set it are each labelled DOCS-DEMO ONLY with a reason. The replacement
+sentence on the docs page is the one to keep: *"'It's an artifact I trust' is not a premise that
+survives tool output."*
+
+**Two residues, both derived rather than assumed.** `docs/proposals/storybook-redesign/index.html`
+still says to widen the sandbox if you trust the artifact; it is an archived proposal rather than
+published docs, which is why it was out of scope, but it is in the tree. And the `sandbox` prop doc
+in `artifact.tsx` still reads only "Default `allow-scripts allow-forms`" while the React wrapper's
+copy of the same prop carries the stronger "(NOT `allow-same-origin`)". The Solid source has the
+weaker text, and the Solid source is the generator.
+
+**The insight this round is named for is #257's, and it is a claim about paths rather than about
+guards.** From root `CLAUDE.md`:
+
+> **The defect is never a missing guard, it is which path got it** [...] every one of them sat on a
+> path the CONSUMER controls while the model-controlled path beside it had none.
+
+Check it and it holds structurally. Before #246, the only caller of `isSafeUrl` in the entire
+package was `routeCardEvent`'s `open` case in `src/primitives/card-routing.ts`, which is the path
+where a card asks the **host application** to navigate. The guard was written, reviewed and put on
+the event the consumer handles. The same URL reaching an `href`, a `window.open` and an iframe `src`
+a few files over had nothing. The actionable half of the rule follows from that: **do not author a
+third policy, put an existing one on the sink.**
+
+### 13.4 The advisory, the deprecations, and the two numbers to be careful with
+
+**GHSA-xj9v-mg99-f8mc is published**, `critical`, CWE-79, no CVE, affecting `>= 0.14.1, <= 0.24.0`
+and patched in 0.25.0. Derive it rather than trusting this paragraph:
+`gh api /repos/kitn-ai/ui/security-advisories`.
+
+**"Every published version was affected" is exactly true, and the reason is not obvious.** 0.14.1 is
+the first version ever published under the name `@kitn.ai/ui` (`npm view @kitn.ai/ui time --json`
+gives the whole history), so the advisory's range is the package's entire published life up to the
+fix. That is worth saying out loud, because as a bare claim it reads like hyperbole.
+
+**Seventeen versions are deprecated, and that is the strongest verifiable number here.**
+`npm view @kitn.ai/ui deprecated` is the wrong command, because it drops versions lacking the field;
+read the registry document instead. One uniform message on all of them:
+`Security fix — please upgrade to @kitn.ai/ui@0.25.0 or later.`
+
+**Now the two numbers to be careful with, because both get quoted about this round and both
+mislead.**
+
+**"CVSS 9.3" is the published score and its vector contradicts the advisory's own prose.** The
+published vector is `CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:H/I:H/A:N`, carrying `UI:R`, user
+interaction required, while the advisory body argues the opposite in words: the markdown payload
+executes on render and the iframe case executes with no interaction. `UI:N` on that vector scores
+10.0. The number is not wrong; it is the lower of two the same document supports, so do not put
+"9.3" and "zero-click" in one breath without saying which.
+
+**"Five sinks" is not derivable from anything.** It occurs once, in #257's commit body, and
+`git grep -niE 'five sinks' origin/main` finds no enumeration anywhere. The arithmetic behind it is
+#246's two headline sinks plus #247's self-described three, which silently drops the citation
+`href`, the markdown image `src`, and the `catch` branch that returned unparsed source. Counted off
+the diffs it is seven, or eight if both PDF anchors count separately, which
+`artifact-url-xss.test.tsx` does in its own prose. **State it the way the fixes do** rather than as a
+number: markdown's `innerHTML` plus its link, image and citation URLs, and the artifact's three URL
+sinks.
+
+**The deprecation sweep exposed a channel with no safety net, which is #252.** Four copy-pasteable
+CDN URLs across the docs and `packages/ui/README.md` still pinned 0.20.1 and 0.16.0, both inside the
+advisory range. The framing in `lint-cdn-pins.mjs`'s own header is the durable part: npm prints a
+deprecation warning on install and all the affected versions are deprecated, but **a CDN fetch
+prints nothing**, so the one distribution channel with no warning carried the stalest pin, on the
+page the npm registry renders first.
+
+**`SECURITY.md` (#248) is at the repo root and covers both published packages.** A GitHub draft
+advisory is the only reporting channel, with a documented escape hatch if nothing happens in two
+weeks. In scope: in-kit sinks, shadow-DOM escape into the host origin, `wire/` parsing a hostile
+stream, and flaws in emitted `create-kai` or MCP code. Out: the consumer's backend, decisions the
+app owns, and bad model output that reaches no sink. The sentence that earns the policy:
+
+> This library renders content it did not author. Anything arriving from a model or a tool call
+> [...] is untrusted input, and a component that lets it reach a script-capable sink is a
+> vulnerability here.
+
+### 13.5 `create-kai` reached npm, and four packaging defects followed it there
+
+**§12.2 is closed.** The package is published, is in `release-please-config.json`, and its manifest
+version matches the registry. Re-run the three commands §12.2 named; all three answer differently
+now.
+
+**The first publish was by hand and every one since was not, and the registry proves it without
+anybody's say-so.** `npm view create-kai@0.1.0 --json` shows `_npmUser: roboncode` and no
+attestation; every later version shows `GitHub Actions` with a `trustedPublisher` OIDC config and a
+SLSA provenance attestation.
+
+**But the reason recorded in the tree is not the OIDC one**, which matters because the OIDC story is
+the more repeatable-sounding one. `git grep -in "first publish" origin/main` returns a single hit,
+in a June handoff about the `@kitn.ai/chat` scope migration, noting that a new package's first
+publish cannot be OIDC (npm/cli#8544). For `create-kai` the only record is #234's commit message,
+and it gives a different reason:
+
+> Rob's call: hand-publish the real 0.1.0 once, then CI takes over. This is the one sanctioned
+> hand-edit of a version in this repo.
+
+justified by tracing release-please's **source** rather than its docs: a `0.0.0` entry in
+`.release-please-manifest.json` is skipped by the backfill, so the path reads as never released, and
+the first automated release would have been **1.0.0**. Seeding the real 0.1.0 takes the backfill
+path instead. Both facts are true, the npm bootstrap gotcha and the manifest trap, and only the
+second is written down for this package.
+
+**Then four packaging defects, in order.** Three of the four were invisible to every check over the
+tree and visible within a minute of installing the published thing, which is the rule #257 wrote out
+of them.
+
+1. **#234: `files: ["dist"]` and `bin` both pointed into a gitignored directory with no hook to
+   build it.** On a fresh checkout `npm publish` shipped a two-file tarball with no CLI in it and
+   **exited 0**. npm warns four times about the dangling `bin` and publishes anyway; `npm pack` does
+   not warn at all. Caught by `npm publish --dry-run` on the tree, before the package existed on
+   npm, which is why the CLAUDE.md rule it fed names three defects and not four.
+2. **#239: npm strips `.npmrc` at publish.** Exactly two framework rows shipped one, `nextjs` and
+   `tanstack-start`, both carrying `install-links=true` for a real webpack realpath reason, and the
+   bundled CLI still had a patch row that opened and rewrote that file at scaffold
+   time, so `generate()` read a file the tarball had never carried: `ENOENT`, exit 1, on the user's
+   first command. The fix turns the stripped set into a **list** with a derived travelling name, in
+   `packages/create-kai/src/template-dotfiles.ts`, because the `.gitignore` workaround had been two
+   named constants and the second file was therefore a copy nobody wrote. Derive both halves rather
+   than quoting "two of eight": `grep -cE "^    id: '" packages/create-kai/src/frameworks.ts` and
+   `find examples/starters -maxdepth 2 -name '.npmrc'`.
+3. **#241: npm 12 moved the top level of `npm pack --json` from an array to an object keyed by
+   package name**, so `JSON.parse(raw)[0]` became `undefined`, and `verify-pack.mjs` is the second
+   half of create-kai's own `prepublishOnly` hook. **It killed a release halfway through.** The run
+   published `@kitn.ai/ui@0.24.0`, entered create-kai's hook, and died on
+   `TypeError: Cannot read properties of undefined (reading 'files')`. The fingerprint survives in
+   the registry and needs no run log: `npm view @kitn.ai/ui time --json` beside
+   `npm view create-kai time --json` puts every other paired release seconds apart, kit first, and
+   puts this one **half an hour** apart, spanning the commit that fixed it. **The guard written for
+   this defect class is what blocked its own fix.** CI now runs `verify:pack` twice, the second time
+   under the npm the release job pins, and a test asserts the two versions cannot drift apart.
+4. **#249: the kit pin `create-kai` bakes into every project it emits could not cross a kit minor.**
+   The published bundle carried a caret built from the kit version at build time, and pre-1.0 a
+   caret does not cross a minor: `npm view '@kitn.ai/ui@^0.24.0' version` resolves to 0.24.0, and
+   `npm view '@kitn.ai/ui@0.24.0' deprecated` is the advisory notice. So `npm create kai@latest` was
+   scaffolding projects pinned to a deprecated, advisory-covered kit with no upgrade path inside its
+   own range. **The caret was deliberately kept rather than widened**, and `pin-guards.ts` says why:
+   pre-1.0 this kit ships breaking changes in minors, so `>=0.25.0 <1.0.0` would be a promise it
+   does not keep. *"The narrow pin is not the defect. The defect is that nothing re-cuts the pin
+   when the kit moves."*
+
+**The re-cut mechanism is release-please's `node-workspace` plugin, and it works through a
+dependency edge rather than through a version range.** `packages/create-kai` declares
+`"@kitn.ai/ui": "workspace:*"` as a devDependency; the plugin bumps on the graph edge, so an
+unrewritable `workspace:*` still forces a patch bump, so every kit release now drags a create-kai
+release, which rebuilds the pin. Verify with `git show origin/main:release-please-config.json`.
+
+**One of the three advertised guard layers runs nowhere.** `stalePinProblem` inside `verify-pack.mjs`
+is wired (the `prepublishOnly` hook plus two CI steps) and `test/pin-guards.test.ts` runs in the
+suite, but `packages/create-kai/scripts/verify-pin.mjs`, the one that checks the pin against the
+**registry**, is referenced by exactly two things: an npm script, and a comment in
+`release-please.yml` that says "(network, run manually)". That is the shape `docs/coupling-map.md`
+names one row over: *"A check that runs nowhere has the shape of the bug it guards against."*
+
+**And the publish loop's ordering is load-bearing and unguarded.** The release job loops kit first,
+create-kai second, under `bash -e`, because create-kai's build pins the kit version into every
+emitted project and publishing it first would ship a scaffold whose own dependency is not on the
+registry yet. The ordering is enforced by the loop aborting, not by any test; the coupling map lists
+it as `NOTHING`. The npm timestamps are the cheapest way to watch it hold.
+
+### 13.6 The publish was never gated on tests (#254)
+
+**`release-please.yml` and `test.yml` are separate workflows on the same `push: main` trigger, so
+they race, and until #254 the publish won.** The release job had no `needs:` and nothing in it read
+a status. That is not a subtle scheduling risk, and it does not need a narrative: run the command
+`docs/coupling-map.md` §1 records, on any release commit.
+
+```
+gh api repos/kitn-ai/ui/commits/<sha>/check-runs \
+  --jq '.check_runs[] | "\(.name) \(.conclusion) \(.completed_at)"'
+```
+
+**Two commits carry the claim in full, and neither is one #254 cited.** A complete instance needs
+both halves, a tarball on the registry **and** a red required check, and it is worth separating them
+because the weaker version is what got written down:
+
+- **`235f74a8`.** The release job published `@kitn.ai/ui@0.15.0` and concluded `success`; the `test`
+  check concluded **`failure` five minutes later**. Published first, refused afterwards. This is the
+  literal claim, and it is two months old.
+- **`8d56f1d7`, the 0.25.1 release merge.** `test` concluded **`failure` first**, and the publish
+  finished about eighty seconds afterwards. Sharper than the first: not a race lost on timing, but a
+  publish running to completion over a commit that was **already known red**.
+
+**#254's own commit message cites a weaker pair, and that is worth knowing before quoting it.** It
+names `12a51dad` (§11's anchor) and `af6f7717`. Both really do show `release` concluding before
+`test`, so the race is real on both. But `12a51dad`'s release **published nothing**, its log reading
+`@kitn.ai/ui@0.22.1 is already published — skipping publish`, and `af6f7717`'s `test` concluded
+`success`. Each demonstrates half. The gate is correct and its stated evidence understates it.
+
+**Neither obvious fix works, and knowing why is what makes the third one make sense.** A `needs:`
+cannot express a cross-workflow dependency. Gating on the release PR's own checks cannot work
+either, because release-please opens that PR with `GITHUB_TOKEN`, so its runs sit in
+`action_required` and never execute; a release-branch head carries zero check runs. That is also the
+cause of the symptom §2 recorded, that a release PR can only be merged with `--admin`.
+
+**`.github/scripts/require-green-checks.mjs` sits between release-please and the publish steps** and
+queries the checks API for `github.sha`, the exact commit being published, refusing unless every
+required context is `completed` with conclusion `success`. It **waits** while they run and **denies
+by default** on absence, on timeout, and on an unreadable API. The failure direction is the safe
+one: a context named in the gate that does not exist refuses every release rather than publishing an
+unvetted one.
+
+Its `--self-test` is the part worth reading, because it names the trap that makes gate tests easy to
+fake: **a gate that refuses everything passes every negative test ever written for it** and breaks
+the release path the first time it runs, so the accept cases are as load-bearing as the refuse
+cases. It drives the same poll loop production uses, with a stubbed transport and a clock made of
+integers.
+
+**You can watch it working on this section's own anchor.** Re-run the same command on
+`1454d02dfbfd34751fcc4bce56ee1d973c23ad3f`: `test` concludes `success` and `release` concludes
+**after** it, the opposite ordering from both readings above. The release run's own log shows the
+gate reporting `test: PENDING` repeatedly for about ten minutes and then publishing.
+
+**Two couplings it introduces are themselves unenforced, and both matter before anyone touches the
+workflow.** The `permissions:` block is an allowlist, so the gate needs `checks: read` and
+`statuses: read` alongside the existing writes; drop either and the gate fails closed, blocking every
+release until somebody reads a log. And the `--require` context list is a **literal** in
+`release-please.yml`, because `GITHUB_TOKEN` cannot read rulesets (that needs `Administration: read`,
+which the `permissions:` block has no key for), so a context added to the branch ruleset is simply
+not gated on. The two happen to agree today, and nothing makes them:
+`gh api /repos/kitn-ai/ui/rulesets/18328421` returns exactly one required context.
+`packages/ui/tests/scripts/publish-gate-wiring.test.ts` asserts the list is non-empty, not that it
+matches.
+
+**The wiring test is the part to copy.** It fails if the gate is removed, if it is reordered after
+the publish, if it is given `continue-on-error`, or if its `if:` drifts from the publish step's.
+That last condition is the interesting one: **a gate running under a narrower condition than the
+thing it gates is a gate with a hole, and no green run would ever show it.**
+
+### 13.7 A guard shipped red, a release shipped from a red commit, and the diagnosis was half of one
+
+**Two separate causes on two consecutive commits, and only one of them is the one people reach
+for.** #258's commit message states both, in the order they happened:
+
+> 1. The release. release-please-config.json had no `extra-files`, so the 0.25.1 bump left four
+>    copy-pasteable pins at 0.25.0. Every future release commit would be red the same way.
+> 2. Pre-existing. The guard was ALREADY red one commit earlier, on 8baffe4d, the commit that added
+>    it, because three create-kai incident narratives name past versions with no `historical`
+>    waiver.
+
+**Cause 2 is this document's class 3, in the cleanest form it has taken, and the mechanism is not
+the one that suggests itself.** `lint:cdn-pins` requires every pin literal to **equal**
+`packages/ui/package.json`. The tempting explanation is that a release moved the manifest side under
+the branch, and it is wrong: `packages/ui/package.json` reads `0.25.0` at #252's branch point, at
+its head, and at the merge result. **Nothing bumped.** What changed was the other side. #249 merged
+**ten seconds before** #252 and brought three create-kai incident narratives naming `@0.24.0`, files
+that did not exist on #252's branch at all, so the guard found three stale pins the moment it first
+ran on `main`. The commit that introduced the check is the commit it first failed on.
+
+**And the reason a stale green counted is one repository setting.** The branch ruleset carries
+`strict_required_status_checks_policy: false`, so "require branches to be up to date before merging"
+is **off**, and there is no merge queue. #252's `test` run was computed against a merge base from
+before #249 landed; it was a real green about a tree that no longer existed by the time it was used.
+Read `gh api /repos/kitn-ai/ui/rulesets/18328421`. **That setting is the single lever under this
+whole class**, and it is worth weighing deliberately rather than leaving at its default, because the
+same class recurs later in this very section (§13.10 item 3) in prose that no CI setting could have
+caught.
+
+**Cause 1 is real too, which is why the correction is worth stating carefully.** A release bump
+invalidates every live pin by construction, so "the release did it" is a completely reasonable
+reading and it explains the *second* red. What it does not explain is the first, and reaching for it
+alone would have shipped a fix for half the problem. The correction came from checking the premise
+rather than accepting it, and it is recorded in the tree rather than only in a review thread: the
+coupling map's own row carries *"Note the guard had already been red one commit earlier."*
+
+**#258 fixes the structural half, and the mechanism is not a script.**
+`release-please-config.json` gained `packages["packages/ui"].extra-files`, and each live pin line is
+wrapped in `x-release-please-start-version` / `x-release-please-end`, so **the release commit
+rewrites the pins it invalidates**. `lint:cdn-pins` gained `--check-release-wiring`, which fails if
+a live pin's file is unlisted, if its line carries no annotation, if a frozen version sits ahead of
+it on the same line (release-please rewrites only the first semver per line, so an advisory floor
+ordered first would be corrupted instead), or if a waived line **is** annotated, which would let a
+release rewrite a historical record into a falsehood.
+
+**The rejected alternative is the better lesson.** Running `--fix` from the release job was
+considered and is more dangerous, because it rewrites whatever the scan matched, so a new historical
+narrative written without a waiver would be silently turned into a falsehood by an unattended job.
+release-please only ever touches a line a human annotated, so an un-annotated line, which is exactly
+the shape a historical record has, cannot be rewritten by a release. **The safe mechanism is the one
+whose default is to do nothing.**
+
+**Two method notes from the same PR.** It was verified by driving the **real** release-please
+`Generic` updater through a simulated bump rather than a reimplementation of it, which is §5.10's
+rule applied without being told; and each new guard was watched failing under five mutations.
+
+**And it closed a vacuity hole in its own guard before the hole existed.** `lint-cdn-pins.mjs` had
+one tripwire, a zero-match hard failure, deliberately the opposite call from
+`lint-attachment-object-urls`, because this guard scans for pins the docs deliberately recommend.
+But that count included **waived** pins, so a tree in which every remaining pin was `historical`
+would satisfy it while the guard compared nothing at all against the manifest. #258 adds waivers,
+which moves the repo toward that state, so it added a second tripwire requiring at least one **live**
+pin. Read the comment in place; it names the scenario rather than the invariant. **A waiver says
+"this line is exempt", never "there is nothing left to check."**
+
+### 13.8 §12.8's first two items are paid, and two kit bugs shipped alongside
+
+**Item 2 first, because it is the cleanest.** #233 drove the four `onStreamSettled` rows §12.7 named
+by name (`appendReasoning`, `upsertTool`, `addSource`, `addFile`) **through the wrapper**, asserting
+both the part the inner method built and wrapper identity with `toBe`. The commit says why identity
+is asserted that way, and it is worth copying: `return inner` still chains, and vitest reports the
+difference as "compared values have no visual difference", which is precisely why nothing else
+catches it. It is test-only; `src/state/stream.ts` is untouched by that commit.
+
+**The gap verification is what found the real bug, and it became #236 the same day.** Of nine probed
+defects, **seven compile clean under tsc**, including `addFile(a) { inner.addSource(a) }`, because
+the payload types are **weak**: `Source`, `Partial<ToolPart>` and `ReasoningOpts` have not one
+required field between them, and TypeScript only runs excess-property checking on object *literals*,
+so passing a variable of a sibling bag typechecks in silence. #236 moved the exclusivity onto the
+**parameter** rather than tightening the payload types, as a denylist of keys owned exclusively by a
+sibling bag, **derived from the `MessagePart` union** so a seventh variant re-fires it with no edit.
+Tightening the types was rejected for a good reason: a citation with no url and no title is a
+rendered, tested state that ships in a story. It is pinned by `src/state/stream-types.test.ts`,
+which runs the compiler over a probe module and asserts the diagnostics, because the whole defect is
+that tsc says yes; against the pre-fix types it fails with nine unused `@ts-expect-error`
+directives. It is breaking because three published signatures narrow, and pre-1.0 that is a minor.
+
+**#236 also documents where it deliberately stops**, which is what a later reader will need: a key
+no sibling bag owns still passes; `addCard` and `addFile` stay unwrapped, measured both ways; and a
+hand-built `parts.push({ type: 'source', source: attachmentVariable })` bypasses the mutators
+entirely and **stays open on purpose**, because closing it would put `type?: undefined` rows in
+dozens of consumer-facing doc tables. The first two are pinned by tests. The third is not, and that
+is the intended state rather than an oversight.
+
+**Item 1, the unguarded guard scripts, is largely paid and not finished.** #235 took the three
+build-gating guards and #238 took five more, each getting a `--self-test` plus a
+`tests/scripts/*-guard-wiring.test.ts`. Derive the current picture rather than trusting a list:
+
+```
+grep -l "self-test\|selfTest" packages/ui/scripts/*.mjs packages/create-kai/scripts/*.mjs .github/scripts/*.mjs
+ls packages/ui/tests/scripts/*-guard-wiring.test.ts
+```
+
+Three of the covered scripts use an **always-on** self-test rather than a flag, which is a different
+mechanism worth keeping straight. What is still uncovered is a shorter list than §12.7 item 4's, and
+it now includes the whole of `packages/create-kai/scripts/`, which has no self-test at all, with
+`verify:pin` among them (§13.5).
+
+**Two findings from that work are worth more than the coverage.** #238's `verify-quarantine` cases
+turned up two real defects while being written: an entry with no `expect` dereferenced
+`meta.expect.codes` and **threw**, killing the run before it printed four failures it had already
+collected; and one message could not fire at all, because the glob check sat in the `else` of the
+existence check. And #238's `verify-schemas-exported` records the method catching the *test* being
+weak: disabling the whole tsc half left the wiring test green, because an independent Node probe
+still failed the fixture. **The script's own self-test caught it; the wiring test did not.** A wiring
+test proves a guard is invoked, never that what is invoked still discriminates.
+
+**#243 is the kit's other bug, and its lesson is about capture bias.** `readOpenAIStream` read
+`delta.reasoning` and not `delta.reasoning_content`, so a DeepSeek stream taken **direct** dropped
+its reasoning silently. The reason no fixture ever showed it is stated at the site: everything
+captured in this repo has gone through OpenRouter, which normalises the field name. The two
+spellings **coalesce and never sum**, first non-empty wins, because summing would double every
+token; the fixture is labelled synthetic against the published DeepSeek chunk schema, since nobody
+here holds a DeepSeek key. The scope statement is the durable part, because it refuses the
+generalisation: this closes the **naming** axis only, and reasoning is fragmented three ways
+structurally. *"A fourth spelling is one entry in `REASONING_KEYS`; a fourth SHAPE is not."*
+
+### 13.9 What got written down
+
+**`docs/coupling-map.md` (#250) is the round's largest artifact and the one most likely to be used.**
+Nine sections plus a consolidated list of everything unenforced, every row naming a file, a symbol or
+a command, and an `Enforced by` column whose most common value is `NOTHING`. Do not carry a count for
+it out of here: the table rows and the doc's own numbered list disagree by a small margin, for
+structural reasons (§8 is prose rather than a table, and one row's wording avoids the word), so name
+which one you counted. `grep -c '^[0-9]\+\.' docs/coupling-map.md` prints the list; the row count
+needs a pipeline reading the last populated cell, and `$NF` returns zero because the rows end with a
+pipe. The sentence that makes the file worth keeping:
+
+> An unenforced coupling is a future incident; an enforced one is just a fact.
+
+**#240 is two design specs and nothing implemented**, both headed `Status: DESIGN, decisions ruled.
+Nothing implemented`. `2026-08-14-endpoint-choice-design.md` replaces create-kai's gateway question
+with one question about the chat endpoint plus a third answer, point the UI at a backend you already
+have, which emits no route and therefore works on every framework rather than only the two with a
+route host. `2026-08-14-kai-devtools-design.md` is `<kai-devtools>` as its own npm package loaded
+from a CDN, deliberately not in the consumer's bundle and not versioned with the kit, showing what a
+browser devtool structurally cannot: frames in against parts out.
+
+**The endpoint spec also names a live defect nothing else in the tree records.** `wirableGateway`
+refuses every keyed gateway on a `route: null` framework, and most of the ready table is
+`route: null` (`grep -n "route:" packages/create-kai/src/frameworks.ts`, and quote the grep rather
+than a fraction, per §12.4). On those rows only `mock` survives the filter, so the gateway prompt is
+**skipped entirely** and the user is never asked where their chat comes from. They get the mock and
+are not told, which is the "decide loudly" rule failing in the scaffolder rather than in `wire/`.
+
+**#251 and #256 are two passes over the root README, and the second fixed a real defect in the
+first.** #251 turned a monorepo layout note into a consumer-first page. #256 then fixed three
+positioning problems in it and one factual one: #251's entry-point table said to rebrand by
+overriding `--color-*`, which does not work, because the adopted sheet declares every `--color-X` on
+`:host` as `var(--kai-color-X, <default>)` and a host declaration beats an inherited page value. **A
+reader following #251 to rebrand would have got nothing.** `--kai-color-*` on `:root` is the knob.
+That is §11.2's mechanism arriving from the other direction, in the round's own README, one PR after
+the rule about it was written.
+**(A third pass, #260, landed as `92cbef8` after this section's anchor, splitting the opening into
+framework and platform audiences. Eight added lines in `README.md` and nothing else. Three passes
+over one file in one round is worth noticing about the file rather than about the passes: a README
+is the one artifact here with no compiler, no test and no generator behind it, which is the same
+reason #255 aims review at exactly the prose outside a generated block. Section opening.)**
+
+**#255 tunes CodeRabbit**, which now reviews every PR, on the argument that a default configuration
+against this many specific conventions produces noise and noisy review gets ignored. It encodes only
+what a generic reviewer gets wrong here, each rule **path-scoped**: the `kai-` contract in
+`src/elements/` and the scaffolder, untrusted model content in `components/`, `wire/` and
+`card-routing.ts`, decide-loudly in `src/wire/`, a guard must be able to fail in
+`packages/ui/scripts/`, no hand-typed derivable number in markdown. `CLAUDE.md` is deliberately not
+restated, because the knowledge base ingests it directly along with the coupling map and
+`apps/docs/STYLE.md`.
+
+**One rule in it is worth reading whoever you are**, because it splits a single file in opposite
+directions: in `docs/web-components.md` the content between `<!-- spec:TAG -->` markers is generated
+and the reviewer is told not to comment on it at all, *"If a generated block looks wrong, the defect
+is in the generator"*, while the prose outside those markers is where review is told to concentrate
+precisely because nothing else checks it, no compiler, no test, no generator. Runner-up, on
+`packages/ui/scripts/**`: *"A check that cannot discriminate is this repo's documented dominant
+failure mode [...] For any new or modified check, ask whether it can actually fail, and say so if it
+cannot."*
+
+**#257 reduces the whole thing to three rules**, and its subject is the argument: *"three rules not
+nine incidents"*. The three are `Everything the model produced is untrusted input` (§13.3),
+`Derive it, don't type it`, which absorbs the older no-derivable-numbers rule as a sub-bullet rather
+than sitting beside it, and `Drive the published artifact, not the build`, placed next to
+`/consumer-regression`, which is the mechanism for it. Two more `CLAUDE.md` rules landed in this
+round from other PRs: the coupling-map pointer (#250) and `A version literal nobody updates is a
+liability` (#252). Five bullets in all, three of them #257's.
+
+**One honest note about `Derive it, don't type it`:** it names its own worst violation in the same
+breath, `verify-scaffold-compiles.mjs`'s hand-written `FRAMEWORKS` inside the gate that derives every
+other axis from the registry. A rule that ships with its own counter-example is a better rule than
+one that does not.
+
+### 13.10 The failure taxonomy, and the class already reproducing inside the map written to catch it
+
+Four classes, sharper than any individual bug in the round, and each is now either in the tree or
+demonstrably not.
+
+**1. A check that cannot fail.** Written into the tree under a banner, at
+`packages/create-kai/src/pin-guards.ts`:
+
+> WHY THE OBVIOUS GUARD IS NOT HERE: IT CANNOT FAIL. The tempting check is "fail the build if the
+> derived range cannot resolve to the kit version in the same tree". It is worthless, it is a
+> tautology. The range IS `^${kitVersion}` [...] There is no state of this repository, past or
+> future, in which that check fires.
+
+and, crucially, **pinned as a test so nobody rebuilds it**: `pin-guards.test.ts` carries
+*"The tautology, stated as a test so nobody re-derives it as a 'guard'."* The same reasoning is what
+made `lint:cdn-pins` assert equality rather than range membership, in three places
+(`lint-cdn-pins.mjs`, the `test.yml` step comment, and root `CLAUDE.md`), and #258 states it flatly:
+*"Not considered: weakening the guard. A range check (`^X` always contains `X`) is a check that
+cannot fail."* One correction to how this gets told: nothing in the tree or in any PR body records
+that a brief **specified** the tautological check and an agent refused it. What is recorded is the
+refusal and the reason, written down *"rather than quietly not doing"* it, because the check reads
+like coverage of exactly this bug.
+
+**2. A check that passes vacuously.** Two live instances, one closed and one open. Closed: the `all`
+count in `lint-cdn-pins.mjs` including waived pins (§13.7). Open:
+`packages/ui/src/agent-tooling/mcp/matrix.test.ts`, where the mechanism is worse than skipping. The
+loop **is** derived from the registry and does reach `openai` and `anthropic`; the hand-written
+`SIGNATURE` table it indexes has no key for either, so the line evaluates `toMatch(undefined)`, and
+vitest guards the actual rather than the expected, so `actual.match(undefined)` coerces to
+`new RegExp(undefined)`, the empty regex, and **passes against any string whatsoever**. It does not
+throw and it does not skip. Write it precisely, because a fixer needs the precise version: three
+other assertions in that loop still bite for those two ids, so they are covered for "scaffold did
+not throw and emitted a wired `kai-chat`" and covered by nothing for "emitted the correct route".
+**The signature assertion is what is vacuous, not the test.** Nothing asserts the table covers the
+registry, and `scaffold.test.ts` makes exactly that completeness assertion one file over for
+`COMPONENT_ENTRY` over `Framework.options`, so the pattern to copy is already here.
+
+**3. A check that is correct about the wrong tree.** §13.7 is the incident. The class is stated in
+this file at §5.7 and nowhere else: not in `CLAUDE.md`, not in `docs/coupling-map.md`, not in any
+script comment. **And it is reproducing right now, inside the map written to prevent this kind of
+thing.** `docs/coupling-map.md` carries **two contradictory rows for the release-to-pin coupling**:
+one added by #258 listing it as enforced by `extra-files` plus `--check-release-wiring`, and one
+added by #254 saying *"`release-please-config.json` carries no `extra-files`, so nothing rewrites
+them"* and grading it `NOTHING`, plus a matching entry in the unenforced list. #254 merged **after**
+#258 and is the wrong one, so it did not merely go stale: it re-asserted a diagnosis that had
+already been corrected on `main` half an hour earlier. #258's author had **predicted the collision
+in writing** and asked for the `NOTHING` row to be dropped when #254 landed. It landed; the row was
+not dropped.
+
+**Same mechanism as §13.7, one layer up, and this instance no setting can reach.** #252 was a stale
+green over code, which `strict_required_status_checks_policy` would have caught. This is a stale
+paragraph over prose, and **nothing in CI reads prose**. That makes it a concrete job for whoever
+picks this up, and the strongest available argument that this class needs to live somewhere a person
+reads before merging rather than only in §5.7 of a handoff.
+
+**4. A coupling nobody tracked.** Release bumps against pin literals. It is now in the map twice
+with opposite verdicts, which is item 3 again: the general fix landed (#258), and the record of it
+did not converge.
+
+**The two habits that found all of this are both rules now**, both in root `CLAUDE.md` at
+`origin/main`: `Derive it, don't type it` and `Drive the published artifact, not the build`. If you
+go looking for who added them, note `git log -S` is case-sensitive; both came from #257.
+
+### 13.11 What is next, in priority order
+
+1. **Reconcile `docs/coupling-map.md` with itself**, starting with the two contradictory
+   release-to-pin rows and the stale `verify-pin.mjs` row (§13.10, §13.12). It is the newest and
+   most-recommended navigation aid in the repo and it is already wrong in three places, one of them
+   about the very coupling it was written for. Cheapest high-value item here.
+2. **Decide `strict_required_status_checks_policy` deliberately.** It is `false`, so every PR's
+   green is computed against whatever base it had when the run started, which is the mechanism
+   behind §13.7's first red. Turning it on costs re-runs on a busy branch and closes the code half
+   of failure class 3 outright. It is one API call either way; what it needs is a decision recorded
+   rather than a default inherited.
+3. **`matrix.test.ts`'s `SIGNATURE` table.** Add the two missing keys **and** a completeness
+   assertion over the registry, copying `scaffold.test.ts`'s. Without the second half the same hole
+   reopens on the next integration. §13.10 item 2.
+4. **Finish the guard-script self-tests**, from a freshly derived list (§13.8). Start with
+   `packages/create-kai/scripts/`, which has none, and with `verify:pin`, which additionally runs
+   nowhere.
+5. **`element-manifest.json` into `verify:generated`**, which is not the one-line fix it looks like:
+   that guard only ever runs `build:api`, and the manifest comes from `build:elements`. §13.12.
+6. **The endpoint question ahead of route hosts.** #240's spec argues these swapped priority: with
+   an endpoint answer shipped, a missing route host stops meaning "this framework cannot answer the
+   question". The live defect is the gateway prompt silently skipping itself on every `route: null`
+   framework, which is most of the table. §13.9.
+7. **The harness-layer discussion the repo owner asked to be reminded about.** It is recorded in
+   exactly one place, a bullet in §12.8 of this file, with no issue, no spec and no options. If it
+   matters, it needs an issue.
+8. **Mutation testing, scoped to `wire/` plus `state/parts.ts` plus `state/messages.ts`**, unchanged
+   and untouched from §12.8 item 5. Nothing in the tree does mutation testing today.
+
+### 13.12 Still open, and smaller
+
+- **Four issues are open and all four were triaged by label only**, in one four-second burst: #224
+  (`documentation`, `priority: high`), #99 (`enhancement`, `priority: medium`), #106
+  (`priority: low`), #100 (`priority: nice-to-have`). None was closed and **no decision is recorded
+  in prose anywhere**. If a later summary says triage "concluded" something, the only defensible
+  reading is the priority label itself.
+- **#224 is a real reactivity gap, and the issue text does not say what the gap is.** The report is
+  that a conversation title edited in devtools does not re-render. The substance holds and the
+  evidence is elsewhere: every prominent statement of the new-reference rule is scoped to
+  **streaming** (root `README.md`, `packages/ui/README.md`, the `kai-` contract in `CLAUDE.md`), and
+  the general form appears in only two docs pages. A title is neither streaming nor per-chunk, so a
+  reader following the headline rule has no reason to think it applies. The Vue starter compounds
+  it: `useConversations.ts` uses `shallowRef`, so a deep mutation is invisible to **Vue itself**
+  before it ever reaches the element, and the starter has no rename path at all. No fix is in
+  flight; the one open PR does not reference it.
+  **(TRUE at `1454d02d` and FALSE within the hour. #261 opened during this write and is exactly that
+  fix, so read it before touching any of this. Its finding is stronger than the paragraph above:
+  the documented rule is not merely under-scoped, it is HALF a rule. Driven against the built
+  `dist/kai.es.js` in Chromium on both `kai-conversations` and `kai-chat`, a NEW array carrying the
+  same item objects still renders stale. The new array is what NOTIFIES; a new ITEM object is what
+  makes the change VISIBLE, because the rows come off a reference-keyed `<For>` that captures the
+  item by value. Streaming only ever satisfied both halves by accident, since
+  `createAssistantStream` rebuilds the message object per delta, which is why the weaker wording
+  survived. And it is explicitly NOT "clone every item on every change": adds, removes and reorders
+  land on a fresh array alone, and cloning untouched rows would tear down rows the message list
+  deliberately keeps mounted. Section opening.)**
+- **`element-manifest.json` is the one derived artifact missing from `verify:generated`.** It is
+  committed, generated by `gen-elements-manifest.mjs`, and imported **at runtime** by
+  `src/elements/autoloader.ts`. Register an element and commit without rebuilding, and the
+  autoloader hits `if (!file) return` and returns **silently**: the tag never upgrades, and the
+  `warnOnce` path below only fires when a dynamic import throws, which a missing key never reaches.
+  CI misses it because `build:elements` regenerates the manifest before anything reads it. Three
+  places in the tree already know about the gap, which is the tell that it is real:
+  `docs/coupling-map.md` §4 and its unenforced list, and `.coderabbit.yaml`, which excludes the file
+  as one of "the two generated-and-committed files that guard does not cover".
+- **Three `npm pack --json` parsers in `packages/ui/scripts/` are still on the pre-npm-12 array
+  shape**, listed in the coupling map as unenforced. That is §13.5 item 3 unfixed in its other three
+  instances, in the package that publishes first.
+- **`docs/coupling-map.md` contradicts itself on the release-to-pin coupling, and is wrong about
+  `verify-pin.mjs`**, which it says does not exist. It does, added by #249, which merged before the
+  map did. §13.10.
+- **`listGateways()`'s docblock in `packages/create-kai/src/catalog.ts` still says `WIRED_GATEWAYS`
+  is `{ mock }` in this slice**, with the constant twelve lines above it reading
+  `{ mock, openrouter, anthropic }` since #225. The argument built on that premise, that grouping a
+  menu with one live item is pointless, is now weaker rather than false, which is exactly why nobody
+  noticed.
+- **The `vercel-ai-sdk` docs page still teaches the replaced shape.** §12.9 said so and it is
+  unchanged: `textStream` and `gpt-4o` are both still there, and the file's last commit predates
+  #227.
+- **Everything else on §12.9 is unchanged, re-derived rather than assumed.**
+  `elements/autoloader.ts` still has no test; the composed-path a11y probe is still wired into
+  nothing (a repo-wide grep returns its own file, one doc comment and this document); the SSR proof
+  is still asserted only in PR bodies, with `grep -rn "messagesAttr\|SSR emitted\|messages= attribute"`
+  still empty; both hand-written `.d.mts` files are still there; and
+  `spike-conformance-control.yml` is untouched.
+
+### 13.13 Corrections to earlier sections
+
+**§12.2 is CLOSED in both halves.** #228 merged as `30214c3a` and 0.23.0 shipped #227's fix, so the
+`vercel-ai-sdk` route on npm no longer fails for an app that sends a system message. `create-kai` is
+published, is in `release-please-config.json`, and its manifest version matches the registry. §13.5.
+
+**§11.1's forward marker is superseded in its second half.** "Still at version `0.0.0`, absent from
+`release-please-config.json`, and 404s on npm" was true at `6afe8a0` and is false now. The gateway
+half of that marker is unchanged: `WIRED_GATEWAYS` is still `{ mock, openrouter, anthropic }` and
+only `react` and `nextjs` declare a route host, so the cell grid has not moved.
+
+**§12.7 item 2 is CLOSED** by #233, and the closure is what produced #236. §13.8.
+
+**§12.7 item 4 is largely closed and its list is now shorter.** #235 and #238 took eight guards
+between them. Derive the remainder rather than carrying a figure; the boundary moved, and it now
+includes `packages/create-kai/scripts/`, which the earlier scoping may not have covered at all.
+
+**§12.8 items 1 and 2 are done; items 3, 4 and 5 are untouched.** `WIRED_GATEWAYS` is unchanged, no
+mutation-testing tooling exists, and the harness-layer question is still a single bullet.
+
+**§12.9's `create-kai` item is closed. Every other item on that list is unchanged**, and each was
+re-run rather than assumed. §13.12.
+
+**§12's "a missing PR number is a held release" is retired as an expectation.** It held four times
+and did not hold a fifth. Section opening.
+
+**§11.7 and §11.8's greps are unchanged in both directions.** The SSR greps still return nothing;
+the a11y probe is still referenced from no `package.json` and no workflow.
+
+**§2's "a release PR can only be merged with `--admin`" now has its cause recorded rather than only
+its symptom.** release-please opens the PR with `GITHUB_TOKEN`, so its checks sit in
+`action_required` and never execute, and a release-branch head carries zero check runs. §13.6.
+
+**§5.7 is the only statement of failure class 3 anywhere in this repo**, and this round produced a
+second instance of it plus a live third sitting unfixed in `docs/coupling-map.md`. That is an
+argument for moving it somewhere a person reads before merging. §13.10.
+
+### 13.14 What this section's commissioning narrative got wrong
+
+Same discipline as §8, §9.8, §11.10 and §12.11. The narrative was substantially right about
+structure for the fifth time, and it was right about the thing that matters most: the four-class
+taxonomy in §13.10 is its own contribution, and it holds up against the tree better than any of the
+individual incidents do. What failed is almost entirely **counts and quoted strings**, which is the
+failure mode two of the round's own three new rules exist to catch.
+
+1. **"Five sinks."** Not derivable from anything in the tree; it appears once, in #257's commit
+   body, and the arithmetic behind it drops the citation `href`, the markdown image `src`, and the
+   `catch` branch. Seven off the diffs, eight if both PDF anchors count separately, which the test
+   file's own prose does. State it the way the fixes do rather than as a number. §13.4.
+2. **`sandbox="allow-scripts allow-same-origin"`.** That is the proof-of-concept string. The
+   documentation shipped three tokens, `allow-scripts allow-forms allow-same-origin`, and
+   recommended it in **three** places rather than one: the component's own source comment, the
+   artifacts-canvas docs page in prose **and** in its copyable snippet, and the element-page sample.
+   Security-equivalent, wrong quotation. §13.3.
+3. **"CVSS 9.3" beside "zero-click."** Both are published and they disagree. The published vector
+   carries `UI:R`, while the advisory's own body argues the payload executes on render and the
+   iframe case needs no interaction; `UI:N` scores 10.0. The number is the lower of two the same
+   document supports. §13.4.
+4. **"OIDC cannot bootstrap a package that does not exist, so the first publish was manual."** The
+   behaviour is confirmed, and from the registry rather than from anybody's prose. The **reason** is
+   not what the tree records: `git grep -in "first publish"` returns one hit, in a June handoff about
+   a different package. #234's message gives Rob's call plus release-please's `0.0.0` trap, where a
+   `0.0.0` manifest entry is skipped by the backfill and would have made the first automated release
+   1.0.0. §13.5.
+5. **"Closed with release-please's `node-workspace` plugin plus guards."** The plugin is confirmed
+   and one of the advertised guards runs nowhere: `verify-pin.mjs` is referenced by an npm script and
+   by a comment saying "(network, run manually)". Two of three layers are enforced. §13.5.
+6. **"Each found only by driving the published artifact."** True of three of the four. #234 was
+   caught by `npm publish --dry-run` on the tree, before `create-kai` existed on npm at all, which is
+   exactly why the `CLAUDE.md` rule it fed names three defects and not four. §13.5.
+7. **"I misdiagnosed the cause as the release bump when it was the guard's own merge."** Half a
+   correction. There were **two** causes on two consecutive commits and both are real: the guard's
+   own merge made `main` red first, and the release bump would have made every future release commit
+   red the same way. #258 fixes both and names both. Saying it was "the guard's own merge, not the
+   release bump" over-corrects in the other direction. §13.7.
+8. **"35 unenforced couplings."** The doc's numbered list and its `NOTHING` rows disagree by a small
+   margin, for structural reasons, so neither figure can be quoted without saying which was counted.
+   Name the command. §13.9.
+9. **"`matrix.test.ts` vacuous for openai and anthropic."** Right about the outcome, imprecise in a
+   way that would mislead a fixer: the loop reaches both, nothing skips, and three of its four
+   assertions still bite. It is the `SIGNATURE` assertion that is vacuous, by `toMatch(undefined)`
+   coercing to the empty regex. §13.10.
+10. **"A check that cannot fail: I specified one; an agent refused it."** The refusal is real, is
+    written into `pin-guards.ts` under its own banner, and is pinned as a test. Nothing in the tree
+    or in any PR body records that it was **specified**; the wording is *"rather than quietly not
+    doing"* it, which implies obvious rather than handed down. §13.10.
+11. **"Issues #99, #106, #100 triaged."** All three are open, none has a comment, and the only
+    triage artifact is a priority label applied in the same four-second burst as #224's. §13.12.
+12. **"Route hosts for six frameworks, specced but not built."** Six is right. There is no dedicated
+    spec; there is a closing section of #240's endpoint spec that sketches the shapes, and it argues
+    route hosts are now the **lower** priority, which inverts the implication. §13.9, §13.11.
+13. **"A research question about why the kit distinguishes Anthropic from OpenAI wire formats."**
+    That question is answered, in §6 of the research, but it is not the campaign's question. The
+    file's own is whether shipping those parsers **in a browser package** is a differentiator or a
+    mistake, and its most valuable results are the ones that came back inverted. §13.1.
+
+Two smaller ones, recorded because the wording would mislead rather than because the substance is
+wrong. **"Every published version was affected"** is exactly true and reads like hyperbole, so say
+why: 0.14.1 is the first version ever published under this name. And **"a release published from
+that red commit"** is true and undersells it: the publish was never gated on any commit, and the
+release from the red commit is one observation of a race that had been running since the workflow
+was written. §13.6.
 
 ---
 
