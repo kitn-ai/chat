@@ -47,6 +47,7 @@ const plan = (dir: string, over: Partial<ProjectPlan> = {}): ProjectPlan => ({
   featureIds: ['conversations'],
   gatewayId: 'openrouter',
   kit: '^9.9.9',
+  kitBuiltAgainst: '9.9.9',
   ...over,
 });
 

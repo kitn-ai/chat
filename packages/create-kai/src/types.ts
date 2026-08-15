@@ -31,4 +31,12 @@ export interface ProjectPlan {
    * rather than around it.
    */
   kit: string;
+  /**
+   * The exact `@kitn.ai/ui` version this CLI was BUILT against.
+   *
+   * A different fact from `kit`, not a resolved form of it, and the two can
+   * disagree — see the field docblock in `src/kai-json.ts`, which is where this
+   * ends up and where the reasoning lives.
+   */
+  kitBuiltAgainst: string;
 }

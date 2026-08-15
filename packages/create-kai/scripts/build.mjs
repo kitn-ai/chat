@@ -256,6 +256,22 @@ async function main() {
   ).version;
   const cliVersion = JSON.parse(await readFile(path.join(pkgRoot, 'package.json'), 'utf8')).version;
 
+  // The RANGE is derived here and substituted as a finished string, rather than
+  // the bare version being substituted for the CLI to build a range out of.
+  // Two reasons, and the second is the load-bearing one:
+  //
+  //   · One derivation site. `src/kit-pin.ts` is also what `src/pin-guards.ts`
+  //     imports, so the rule that grades a published pin and the code that
+  //     produces it cannot disagree about the shape.
+  //   · The pin lands in `dist/index.js` as a plain string literal. That is the
+  //     only form of it that exists inside a published tarball, and
+  //     `verify-pin.mjs` has to read it back out of one. Substituting the
+  //     version instead left the bundle carrying a CALL — first
+  //     `` `^${"0.24.0"}` ``, then `derivePin("0.25.0")` — so the guard's reader
+  //     had to track whatever expression esbuild happened to leave behind.
+  const { derivePin } = await loadTs('src/kit-pin.ts');
+  const kitRange = derivePin(kitVersion);
+
   // `metafile` is asked for so the bundle's real module graph can be graded —
   // see `bundleGraphProblem`. Reading the output text instead would grade a
   // grep, which is not the same question.
@@ -270,6 +286,10 @@ async function main() {
     metafile: true,
     banner: { js: '#!/usr/bin/env node' },
     define: {
+      __KIT_RANGE__: JSON.stringify(kitRange),
+      // The exact version the range was derived from, recorded into every
+      // emitted kai.json. Both are substituted rather than one being computed
+      // from the other in the CLI, so the pair cannot disagree.
       __KIT_VERSION__: JSON.stringify(kitVersion),
       __CLI_VERSION__: JSON.stringify(cliVersion),
     },
@@ -284,7 +304,7 @@ async function main() {
 
   console.log(`  patches   ${patchCount} verified against their templates`);
   console.log(`  gateway   ${gatewayPatchCount} go-live patches verified, ${[...WIRED_GATEWAYS].filter((g) => g !== 'mock').length} gateway(s) wired`);
-  console.log(`  kit pin   ^${kitVersion}`);
+  console.log(`  kit pin   ${kitRange}`);
 }
 
 main().catch((error) => {
