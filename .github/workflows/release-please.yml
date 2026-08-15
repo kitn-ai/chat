@@ -7,11 +7,26 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      # The emergency hatch, and it is OFF by default on purpose. This trigger
+      # exists to publish when release-please's own bookkeeping misses (see the
+      # comment on the checkout step) -- that is a bug in the RELEASE plumbing,
+      # not a reason to stop caring whether the code is green, so the manual path
+      # is gated exactly like the automatic one. A human ticking this box for one
+      # run is a decision somebody made; a gate that is off whenever a human is
+      # involved is not a gate. `require-green-checks.mjs` re-checks the event
+      # name itself before honouring it, so no push-triggered run can set it.
+      skip_required_checks:
+        description: 'EMERGENCY ONLY: publish without confirming the required checks passed on this commit'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
   pull-requests: write
   id-token: write # npm trusted publishing (OIDC) + provenance
+  checks: read # publish gate: read the required check's conclusion on the SHA being published
+  statuses: read # publish gate: the same question, for contexts reported via the statuses API
 
 jobs:
   release:
@@ -30,8 +45,17 @@ jobs:
       # even though the tag and GitHub release were created. Release PRs should
       # be merge-committed (not squashed) so release-please can read its own
       # commit back and set the output correctly.
+      # `ref` is pinned to the SHA rather than left to default. On a push the two
+      # are already the same, but on workflow_dispatch the default resolves the
+      # BRANCH at checkout time while the publish gate below asks about
+      # `github.sha` -- the head when the run was dispatched. Anything pushed in
+      # between would mean vetting one tree and shipping another. Pinning makes
+      # "the commit that was checked" and "the commit that is published" the same
+      # object by construction.
       - uses: actions/checkout@v4
         if: ${{ steps.release.outputs.release_created || steps.release.outputs.releases_created || github.event_name == 'workflow_dispatch' }}
+        with:
+          ref: ${{ github.sha }}
 
       - uses: pnpm/action-setup@v4
         if: ${{ steps.release.outputs.release_created || steps.release.outputs.releases_created || github.event_name == 'workflow_dispatch' }}
@@ -58,6 +82,70 @@ jobs:
           # and test.yml together as their own change.
           node-version: 22
           registry-url: https://registry.npmjs.org
+
+      # THE PUBLISH GATE. Nothing below this line may run unless the commit being
+      # published passed the checks this repository requires.
+      #
+      # Until this step existed, the publish was UNGATED. This workflow and
+      # test.yml are separate workflows on the same `push: main` trigger, so they
+      # race, and the publish wins: on af6f7717 the `release` workflow finished at
+      # 01:30:57 and `test` did not conclude until 01:39:48. On 12a51dad the same
+      # race resolved the other way -- `release` completed at 01:56:58 and `test`
+      # FAILED at 02:04:17. Four releases shipped on that basis.
+      #
+      # Why this and not the obvious alternatives:
+      #   - `needs:` relates jobs within ONE workflow. `test` lives in test.yml,
+      #     so there is no job here to depend on.
+      #   - "was the release PR green" does not exist. release-please opens its PR
+      #     with GITHUB_TOKEN, so the PR's workflow runs sit in `action_required`
+      #     and never execute; commit 4b276894 (a release-branch head) carries
+      #     ZERO check runs.
+      #   - `workflow_run` off test.yml would cover the push path only, leaving
+      #     workflow_dispatch to grow a second mechanism, and it splits one linear
+      #     release run into two -- in a pipeline whose recent failures were a
+      #     failed publish and an orphaned release PR, that is the wrong trade.
+      #
+      # So the question is asked about the COMMIT, at publish time, against the
+      # API, scoped to `github.sha` and nothing else. "A recent green run" would be
+      # the same illusion as no gate.
+      #
+      # It WAITS rather than demanding an immediate answer, because at this moment
+      # `test` is normally still running -- refusing on `in_progress` would block
+      # every legitimate release. It refuses immediately on a terminal failure,
+      # and it refuses on the timeout, on an absent context, and on an API it
+      # cannot read. Deny by default: only an observed `success` on this SHA opens
+      # the gate.
+      #
+      # The `if:` is byte-identical to the publish step's, deliberately -- that is
+      # what makes the gate applicable in exactly the cases a publish is, and
+      # tests/scripts/publish-gate-wiring.test.ts fails if the two ever drift.
+      # Runs before `pnpm install` so a refusal costs seconds, not a full build.
+      #
+      # `--require` must name the contexts branch protection requires. That list
+      # is ruleset config, not workflow config, so this file cannot be
+      # authoritative about it; print the live list with:
+      #
+      #   gh api repos/kitn-ai/ui/rulesets/18328421 \
+      #     --jq '.rules[] | select(.type == "required_status_checks")
+      #           | .parameters.required_status_checks[].context'
+      #
+      # (GITHUB_TOKEN cannot read rulesets -- that needs Administration:read,
+      # which the workflow `permissions:` block has no key for -- so this cannot
+      # be derived at runtime. If the ruleset gains a context, add it here. Naming
+      # a context that does not exist makes the gate refuse everything, which is
+      # loud and safe; the reverse would be silent.)
+      - name: Publish gate — require green checks on the commit being published
+        if: ${{ steps.release.outputs.release_created || steps.release.outputs.releases_created || github.event_name == 'workflow_dispatch' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node .github/scripts/require-green-checks.mjs \
+            --repo "${{ github.repository }}" \
+            --sha "${{ github.sha }}" \
+            --require test \
+            --timeout-minutes 45 \
+            --event-name "${{ github.event_name }}" \
+            --override "${{ inputs.skip_required_checks }}"
 
       - run: pnpm install --frozen-lockfile
         if: ${{ steps.release.outputs.release_created || steps.release.outputs.releases_created || github.event_name == 'workflow_dispatch' }}
