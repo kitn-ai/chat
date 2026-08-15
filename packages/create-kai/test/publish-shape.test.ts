@@ -334,7 +334,9 @@ describe('the CI wiring for the tarball verifier', () => {
  * top level of `npm pack --json` from an array to an object keyed by package
  * name, so the guard threw `TypeError: Cannot read properties of undefined
  * (reading 'files')` the first time it ever ran under npm 12 — which was at
- * publish time, on a cut tag, after @kitn.ai/ui@0.24.0 had already gone out.
+ * publish time, on a cut tag.
+ * lint-cdn-pins: historical -- an incident report; the version IS the record
+ * It fired after @kitn.ai/ui@0.24.0 had already gone out.
  *
  * The fix has three parts, and this is the third: the parser handles both shapes
  * (scripts/pack-listing.mjs), the test job now runs `verify:pack` a second time
