@@ -18,7 +18,7 @@ Guidance for working **in this repo** with Claude Code. Consumer-facing usage li
 - Elements are prefixed **`kai-`** (`<kai-chat>`). NEVER `kitn-` (a legacy prefix; the register-all bundle is `dist/kai.es.js`).
 - **Array/object props** (`messages`, `suggestions`, `models`, …) are set as **JS properties**, never HTML attributes; only scalars (`placeholder`, `loading`, `theme`) work as attributes.
 - Events are **non-bubbling `kai-*` CustomEvents** — listen on the element itself. Submit = **`kai-submit`**, read `event.detail.value`.
-- Streaming needs a **new array/object reference per chunk** — mutating in place does not re-render.
+- Re-rendering needs a **new array reference AND a new object for each item that changed** — both, and not only while streaming. The array reference is what NOTIFIES (setting the same array back is a no-op even if you swapped an item inside it); the item's object identity is what makes the change VISIBLE, because the lists are reference-keyed `<For>`s. Adds, removes and reorders need only the fresh array; editing an existing item needs both. "New array per chunk" is the weaker rule and it is the one that shipped — it is what #224 followed before filing a bug. Pinned by `packages/ui/src/components/reactivity-contract.test.tsx`, whose stale-case assertions are each paired with an update case over the same harness so "nothing rendered" cannot pass vacuously.
 
 ## Build / test / dev
 

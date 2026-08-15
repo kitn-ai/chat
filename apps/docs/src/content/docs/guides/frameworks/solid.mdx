@@ -233,6 +233,10 @@ function Workspace() {
 
 `ResizablePanel` accepts `defaultSize` (px or `%`) plus optional `minSize` / `maxSize`. `onChange` receives an array of percent sizes; persist it to restore the layout on reload. `ConversationList` requires both `groups` (the buckets: Today, Yesterday, …) and `conversations`. Pass `groups={[]}` and everything lands in one "Ungrouped" section, or bare rows with `compact`.
 
+<Aside type="caution" title="Renaming a conversation needs a new item object">
+`ConversationList` keys its rows with a reference-keyed `<For>`, the same as the message list above. So renaming a conversation means **a new array and a new object for the row that changed** — set the signal to `list.map((c) => (c.id === id ? { ...c, title } : c))`. Mutating `c.title` in place is invisible even if you then set a fresh array, because the row's identity never changed. Adds, removes and reorders need only the fresh array.
+</Aside>
+
 Drop `Resizable` when you want the handles placed by hand: `ResizablePanelGroup` + `ResizablePanel` + an explicit `ResizableHandle` between them gives you the same layout with control over each divider (`handle="grip" | "line" | "none"`).
 
 ## Standalone feature components

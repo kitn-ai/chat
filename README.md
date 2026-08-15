@@ -102,7 +102,7 @@ They're fair, and mostly historic. Where they still bite, this kit answers them:
 
 - **Arrays and objects are set in JavaScript, not as HTML attributes.** `messages`, `suggestions`, `models` and the rest are assigned as properties. Only scalars (`placeholder`, `loading`, `theme`) work as attributes.
 - **Events are non-bubbling `kai-*` CustomEvents.** Listen on the element itself, never a parent. Submit is `kai-submit` and the text is `event.detail.value`.
-- **Streaming needs a new array reference per chunk.** Mutating the existing one in place renders nothing.
+- **Updating needs a new array *and* a new object for each item you changed.** The new array reference is what tells the element something changed; the new item object is what makes the change visible. Adds, removes and reorders need only the fresh array — editing an existing item needs both, and mutating it in place renders nothing even inside a fresh array.
 
 Every property, event and method for every element: [`docs/web-components.md`](docs/web-components.md).
 

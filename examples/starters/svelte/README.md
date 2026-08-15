@@ -37,9 +37,22 @@ Consuming Shadow-DOM custom elements from Svelte comes down to four things:
   `bind:this` + `$effect` (`el.messages = value`), which guarantees they land on the
   upgraded element as properties. A bare `voice` attribute reads as off; the facade
   wants `el.voice === true`. Scalars (`theme`, `placeholder`, `size`, `active-id`)
-  are plain attributes. Streaming needs a **new array reference per chunk** —
-  `createChat` keeps `messages` in a `$state` rune and assigns a fresh array on every
-  update.
+  are plain attributes.
+- **Updating a list needs a new array AND a new object for each item you changed.**
+  The new array reference is what tells the element something changed — assigning the
+  same array back is a no-op even if you swapped an item inside it. The new item object
+  is what makes the change visible, because the lists key their rows by item identity.
+  Adds, removes and reorders need only the fresh array; editing an existing item needs
+  both. `createChat` keeps `messages` in a `$state` rune and assigns a fresh array on
+  every update rather than mutating it. To rename a conversation:
+  ```ts
+  // Stale: the title changed, but the item object did not, so the row never updates.
+  conversations.find((c) => c.id === id)!.title = 'Renamed';
+  conversations = [...conversations];
+
+  // Renders: a new array, and the one item that changed is a new object.
+  conversations = conversations.map((c) => (c.id === id ? { ...c, title: 'Renamed' } : c));
+  ```
 - **Events are non-bubbling `kai-*` CustomEvents.** Listen on the element with the
   Svelte 5 event attributes `onkai-submit`, `onkai-message-action`,
   `onkai-conversation-select`, … and read `(e as CustomEvent).detail`. (`kai-button`

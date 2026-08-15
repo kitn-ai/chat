@@ -70,6 +70,30 @@ The rule for every element: **rich data (arrays, objects) goes in as DOM propert
 
 The `.prop` modifier forces Vue to set the value as a live DOM property rather than serialising it to an HTML attribute string. Always use it for arrays and objects.
 
+### Updating an array
+
+**Assign a new array, and replace any item you changed with a new object.** Both halves matter, and each does a different job:
+
+- The **new array reference** is what tells the element something changed. Setting the same array back is a no-op, even if you replaced an item inside it.
+- The **new item object** is what makes the change visible. These lists key their rows by item identity, so an item you mutated in place renders stale even inside a brand-new array.
+
+Adding, removing and reordering need only the fresh array — each of those changes the list of item references, which is what the element diffs. Editing a field inside an item changes nothing about that list, which is why it needs the new object as well.
+
+```js
+// Stale: `title` really did change, but the item object did not, so the row never updates.
+conversations.value.find((c) => c.id === id)!.title = 'Renamed';
+conversations.value = [...conversations.value];
+
+// Renders: a new array, and the one item that changed is a new object.
+conversations.value = conversations.value.map((c) => (c.id === id ? { ...c, title: 'Renamed' } : c));
+```
+
+<Aside type="caution" title="Deep reactivity hides this bug">
+With a plain `ref`, an in-place mutation re-renders **your** template while the element keeps showing the old value — the state is visibly correct in Vue DevTools and visibly wrong on screen. Nothing looks broken at the point you made the change, which is what makes it hard to spot.
+
+Prefer `shallowRef` for data you hand to an element. It won't fix an in-place mutation, but it stops the rest of your app from papering over one.
+</Aside>
+
 ## A working chat
 
 `<kai-chat>` is transport-agnostic: give it a `messages` array, handle `@kai-submit`, and stream your model's reply back into state. The element owns the UI; you own the request.

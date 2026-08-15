@@ -49,7 +49,16 @@ el.setAttribute('theme', 'dark');
 el.addEventListener('kai-submit', (e) => console.log(e.detail.value));
 ```
 
-**Reactivity:** always assign a **new array** (and a new object for any message you change). Mutating an existing array or object in place will not trigger a re-render.
+**Reactivity:** assign a **new array**, and replace any item you changed with a **new object**. The new array reference is what tells the element something changed — setting the same array back is a no-op, even if you replaced an item inside it. The new item object is what makes the change visible, because these lists key their rows by item identity. Adding, removing and reordering need only the fresh array; editing an existing item needs both.
+
+```js
+// Stale: `title` really did change, but the item object did not, so the row never updates.
+list.find((c) => c.id === id).title = 'Renamed';
+el.conversations = [...list];
+
+// Renders: a new array, and the one item that changed is a new object.
+el.conversations = list.map((c) => (c.id === id ? { ...c, title: 'Renamed' } : c));
+```
 
 ## Complete example — `<kai-chat>`
 
