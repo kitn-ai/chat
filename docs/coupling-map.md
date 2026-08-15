@@ -40,6 +40,7 @@ moment to learn anything.
 | `prepublishOnly` in either `package.json` | the tarball. Both packages ship a gitignored `dist/` | `npm pack` on a fresh checkout emits a tarball with no code and **exits 0** — npm never checks that a `bin` target exists | `packages/create-kai/test/publish-shape.test.ts`, which derives the rule rather than asserting a string, follows `npm run` chains through intermediate scripts, rejects the `prepublish`/`postpublish` near-misses, and carries over-breadth, over-narrowness and vacuity controls. It covers **create-kai only**; `packages/ui`'s hook is unasserted |
 | Whether a `verify:*` script is invoked from a workflow | the guard stops guarding, silently. `verify:pack` existed for some time invoked from nowhere automatic | A check that runs nowhere has the shape of the bug it guards against | `publish-shape.test.ts` ("the CI wiring for the tarball verifier", with a would-notice-if-deleted control), `packages/ui/tests/agent-tooling/emitted-project-wiring.test.ts`, and the `packages/ui/tests/scripts/*-guard-wiring.test.ts` set. Guards outside that set: **NOTHING** |
 | Anything at all on `main` | the publish gate, which must pass before `npm publish` runs. `release-please.yml` and `test.yml` are separate workflows on the same `push: main` trigger, so they race — and until the gate existed the publish won, because the release job has no `needs:` and nothing else consulted a status | A red `test` on main did not stop `npm publish`. `gh api repos/kitn-ai/ui/commits/<sha>/check-runs --jq '.check_runs[] \| "\(.name) \(.conclusion) \(.completed_at)"'` on `af6f7717` and `12a51dad` prints the race: `release` completed before `test` did, and on `12a51dad` `test` concluded `failure`. A `needs:` cannot fix it (cross-workflow), and neither can gating on the release PR — release-please opens it with `GITHUB_TOKEN`, so its runs sit in `action_required` and never execute (`4b276894`, a release-branch head, carries zero check runs), which is why release PRs merge with `--admin` | `.github/scripts/require-green-checks.mjs`, between release-please and the publish steps: it queries the checks API for `github.sha` — the exact commit being published — and refuses unless every required context is `completed` with conclusion `success`, waiting while they run and denying by default on absence, timeout or an unreadable API. `packages/ui/tests/scripts/publish-gate-wiring.test.ts` fails if it is removed, reordered after the publish, given `continue-on-error`, or if its `if:` drifts from the publish step's |
+| A release — any version bump release-please makes | the CDN pin literals under `packages/`, `apps/`, `examples/` and the root README. `release-please-config.json` carries no `extra-files`, so nothing rewrites them, and `lint:cdn-pins` asserts they **equal** `packages/ui/package.json` | The release commit bumps the version and leaves every pin one release behind, so the required `test` job fails on **every** release commit. Observed on `8d56f1d7` (`@kitn.ai/ui@0.25.1`): `test` concluded `failure` at 14:46:16 and the publish completed at 14:47:36 regardless. Ungated that was a red `main` nobody blocked on. **With the publish gate above it blocks the release instead** — correctly, since the commit really is red, but every release now needs `node packages/ui/scripts/lint-cdn-pins.mjs --fix` landed before it can ship | `lint:cdn-pins` (required CI) catches the mismatch, but only once the release commit already exists. That the pins are rewritten *as part of* the release: **NOTHING** |
 | The `permissions:` block in `release-please.yml` | the publish gate's API reads. `permissions:` is an allowlist, so an unlisted scope is `none` — the gate needs `checks: read` and `statuses: read` alongside the existing `contents` / `pull-requests` / `id-token` writes | Drop either and the gate cannot read the commit's checks. It fails **closed**, so nothing unvetted ships — but every release is blocked until somebody reads the log, which is the other way this ships broken | `publish-gate-wiring.test.ts` asserts both scopes are granted |
 | The required contexts in the branch ruleset | the `--require` list in the publish gate step. `GITHUB_TOKEN` cannot read rulesets — that needs `Administration: read`, which the workflow `permissions:` block has no key for — so the list cannot be derived at runtime and is a literal | A context added to the ruleset is not gated on: the release ships having satisfied only the contexts the literal names. The reverse is safe and loud — naming a context that does not exist makes the gate refuse every release rather than publish one. Print the live list with `gh api repos/kitn-ai/ui/rulesets/18328421 --jq '.rules[] \| select(.type == "required_status_checks") \| .parameters.required_status_checks[].context'` | **NOTHING**. `publish-gate-wiring.test.ts` asserts the list is non-empty, not that it matches the ruleset |
 | Root `.npmrc` | `enable-pre-post-scripts=true` is what makes pnpm fire `prepublishOnly`, `prebuild` and `postbuild`; `build:css`, `build:theme` and `build:api` are only reachable through those hooks | Delete the line and `nx build ui` prints success while generating nothing, while `npm publish` still runs them — CI and the shipped artifact diverge | **NOTHING**. Recorded as the guarantee in `docs/superpowers/plans/2026-06-29-monorepo-migration-pr1.md` |
@@ -215,53 +216,54 @@ coupling is a future incident; an enforced one is just a fact.
 7. The publish gate's `--require` context list vs the ruleset's required contexts — `GITHUB_TOKEN` cannot read rulesets, so it cannot be derived. Safe direction only: a wrong name refuses every release rather than publishing an unvetted one.
 8. Root `.npmrc`: `enable-pre-post-scripts=true` gating every `pre`/`post` hook.
 9. Starter dependency ranges under `node-linker=hoisted`.
+10. The CDN pin literals being rewritten as part of a release — release-please bumps the version, nothing updates the pins, and `lint:cdn-pins` requires equality, so the required `test` job fails on every release commit.
 
 **Packaging**
 
-10. `packages/ui`'s `files` negations vs the four `exports` subpaths resolving outside `dist/`.
+11. `packages/ui`'s `files` negations vs the four `exports` subpaths resolving outside `dist/`.
 
 **Build-time constants**
 
-11. `define` keys in `create-kai/scripts/build.mjs` vs the `declare const`s in `types/globals.d.ts`.
-12. Whether create-kai's pinned range is publishable — `verify-pin.mjs` is referenced and does not exist, and `npm run smoke` is in no workflow.
-13. The hand-typed MCP `serverInfo` version (already wrong).
-14. `PDFJS_VERSION`.
+12. `define` keys in `create-kai/scripts/build.mjs` vs the `declare const`s in `types/globals.d.ts`.
+13. Whether create-kai's pinned range is publishable — `verify-pin.mjs` is referenced and does not exist, and `npm run smoke` is in no workflow.
+14. The hand-typed MCP `serverInfo` version (already wrong).
+15. `PDFJS_VERSION`.
 
 **Derived lists**
 
-15. `src/elements/element-manifest.json` — committed, generated, imported at runtime by the autoloader, and the one derived artifact missing from `verify:generated`.
-16. `matrix.test.ts`'s `SIGNATURE` table vs the integration registry it loops over.
-17. `verify-scaffold-compiles.mjs`'s hand-written `FRAMEWORKS`/`EXT`/`PROJECT` vs the `Framework` enum.
-18. `CARD_TYPES` in `gen-card-validation-schemas.mjs` vs `cardSchemas` — the only check over it is circular. Same for `BUILTIN_CARD_TAGS` and `BUILTIN_CARD_COMPONENTS`.
-19. The `kai` MCP `theme` tool's hardcoded token names vs `theme.css`.
-20. A facade in `src/elements/` that `register-impl.ts` does not import.
+16. `src/elements/element-manifest.json` — committed, generated, imported at runtime by the autoloader, and the one derived artifact missing from `verify:generated`.
+17. `matrix.test.ts`'s `SIGNATURE` table vs the integration registry it loops over.
+18. `verify-scaffold-compiles.mjs`'s hand-written `FRAMEWORKS`/`EXT`/`PROJECT` vs the `Framework` enum.
+19. `CARD_TYPES` in `gen-card-validation-schemas.mjs` vs `cardSchemas` — the only check over it is circular. Same for `BUILTIN_CARD_TAGS` and `BUILTIN_CARD_COMPONENTS`.
+20. The `kai` MCP `theme` tool's hardcoded token names vs `theme.css`.
+21. A facade in `src/elements/` that `register-impl.ts` does not import.
 
 **Tool versions**
 
-21. Three `npm pack --json` parsers in `packages/ui/scripts/` still on the pre-npm-12 array shape.
-22. `node-version` agreement across workflows (a comment, not a check).
-23. The `VITE` pin, and its deliberate divergence from the kit's own Vite major.
-24. The `typescript@5` pin.
-25. Harness tsconfig flags vs the real starter tsconfigs.
-26. `nx.json`'s `build.outputs` completeness.
+22. Three `npm pack --json` parsers in `packages/ui/scripts/` still on the pre-npm-12 array shape.
+23. `node-version` agreement across workflows (a comment, not a check).
+24. The `VITE` pin, and its deliberate divergence from the kit's own Vite major.
+25. The `typescript@5` pin.
+26. Harness tsconfig flags vs the real starter tsconfigs.
+27. `nx.json`'s `build.outputs` completeness.
 
 **Generated artifacts**
 
-27. `src/elements/compiled.css` staleness.
+28. `src/elements/compiled.css` staleness.
 
 **Scaffolder**
 
-28. The preamble's content-part encoding vs `toOpenAIMessages`.
-29. Element **event** names and `detail` keys vs the emitted front ends — the live test synthesizes the event.
-30. Element **attribute** names vs emitted markup.
+29. The preamble's content-part encoding vs `toOpenAIMessages`.
+30. Element **event** names and `detail` keys vs the emitted front ends — the live test synthesizes the event.
+31. Element **attribute** names vs emitted markup.
 
 **Module graph**
 
-31. Layering. No lint rule, no dep-cruiser, no test.
+32. Layering. No lint rule, no dep-cruiser, no test.
 
 **Docs**
 
-32. Version literals and counts in prose.
-33. `README.md`, `packages/ui/README.md` and `context7.json`.
-34. Integration pages vs the integration catalog.
-35. Links.
+33. Version literals and counts in prose.
+34. `README.md`, `packages/ui/README.md` and `context7.json`.
+35. Integration pages vs the integration catalog.
+36. Links.
