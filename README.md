@@ -4,7 +4,7 @@
 
 Threads, workspaces, artifacts, tool and reasoning panels, generative UI, voice. React, Vue, Svelte, Angular, Solid, no framework at all, or a CMS or storefront where a script tag is the only way in. One implementation, not one port per framework.
 
-They're web components, style-isolated in Shadow DOM. That's what lets the same tags run through a bundler in an app and load straight from a CDN in a plain `<script>` tag on a page with no build step to hook into. The usual objections to web components are [answered below](#the-web-component-objections). Authored in SolidJS; you never have to know that to use one.
+Your CSS can't break them and theirs can't leak into your app: they're web components, each rendering in its own Shadow DOM. The trade is that you can't reach in and restyle arbitrary internals, so theming runs on `--kai-*` custom properties, which cross the boundary by design. It's also what lets the same tags run through a bundler in an app and load straight from a CDN in a plain `<script>` tag on a page with no build step to hook into. The usual objections to web components are [answered below](#the-web-component-objections). Authored in SolidJS; you never have to know that to use one.
 
 [Docs](https://ui.kitn.ai) · [Storybook](https://ui.kitn.ai/storybook/) · [npm](https://www.npmjs.com/package/@kitn.ai/ui) · [Security policy](SECURITY.md)
 
@@ -83,7 +83,7 @@ The same thing per framework: [Getting started](https://ui.kitn.ai/guides/gettin
 | --- | --- |
 | `@kitn.ai/ui/state` | Pure folds over `ChatMessage[]`: `createAssistantStream`, `appendTextPart`, `upsertToolPart`. No I/O. |
 | `@kitn.ai/ui/wire` | Provider SSE in, message parts out: `readOpenAIStream`, `readAnthropicStream`, `toOpenAIMessages`. |
-| `@kitn.ai/ui/theme.css` | Design tokens. Rebrand by overriding `--color-*`. |
+| `@kitn.ai/ui/theme.css` | Tailwind v4 token source for your own markup (`theme.tokens.css` is the plain-CSS build). Retheming the elements needs no import: set `--kai-color-*` on `:root`. |
 
 Also shipped: `@kitn.ai/ui/elements/<name>` for one element at a time, `@kitn.ai/ui/autoloader` to load each on demand on a static or CDN-served page with no bundler, `@kitn.ai/ui/schemas` for the generative-UI card schemas, and `@kitn.ai/ui/provider` for cards served from another origin. The authoritative list is the `exports` map in [`packages/ui/package.json`](packages/ui/package.json).
 
