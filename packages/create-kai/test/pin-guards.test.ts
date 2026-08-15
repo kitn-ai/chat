@@ -7,6 +7,7 @@
  *
  *     npm view '@kitn.ai/ui@^0.24.0' version   -> 0.24.0
  *     npm view '@kitn.ai/ui' version           -> 0.25.0
+ * lint-cdn-pins: historical -- a transcript of what npm returned that day
  *     npm view '@kitn.ai/ui@0.24.0' deprecated -> Security fix — please upgrade …
  *
  * So the central case below is the incident replayed against the rule, and the
@@ -35,6 +36,7 @@ const SUBJECT = { label: 'the PUBLISHED create-kai@0.1.2', pin: '^0.24.0' };
 /** The registry as it stood when the stranded pin was found. */
 const STRANDED: RegistryFacts = {
   resolved: '0.24.0',
+  // lint-cdn-pins: historical -- the real npm deprecation string, verbatim
   deprecation: 'Security fix — please upgrade to @kitn.ai/ui@0.25.0 or later.',
   latest: '0.25.0',
 };
