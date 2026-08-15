@@ -2,8 +2,10 @@
  * Is the `@kitn.ai/ui` range this CLI bakes still one a user can install?
  *
  * THE INCIDENT. `create-kai@0.1.2` shipped `DEFAULT_KIT_RANGE = '^0.24.0'`,
- * derived from the workspace kit at build time. `@kitn.ai/ui@0.24.0` was later
- * deprecated for a critical XSS, fixed in `0.25.0`. A caret on a `0.x` version
+ * derived from the workspace kit at build time.
+ * lint-cdn-pins: historical -- the incident IS this version; bumping it lies
+ * `@kitn.ai/ui@0.24.0` was later deprecated for a critical XSS, fixed in
+ * `0.25.0`. A caret on a `0.x` version
  * cannot cross a minor, so `^0.24.0` resolves to `0.24.0` and can NEVER reach
  * `0.25.0`: for as long as `0.1.2` was `latest`, `npm create kai@latest`
  * scaffolded a project pinned to a vulnerable kit with no upgrade path inside
