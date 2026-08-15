@@ -1,6 +1,6 @@
 # AI/UI
 
-**The UI layer for AI apps. Works anywhere you can put HTML.**
+**The web UI layer for AI apps. Works anywhere you can put HTML.**
 
 Threads, workspaces, artifacts, tool and reasoning panels, generative UI, voice. React, Vue, Svelte, Angular, Solid, no framework at all, or a CMS or storefront where a script tag is the only way in. One implementation, not one port per framework.
 
