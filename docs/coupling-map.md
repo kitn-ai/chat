@@ -27,9 +27,18 @@ against what had landed meanwhile. #249 (`b892497b`) merged four seconds before
 this file first did, so two rows shipped describing a create-kai release path
 that had already changed under them, one of them asserting a script "does not
 exist" while naming the `ls` that finds it. #254 merged twenty-eight minutes
-after #258 fixed the CDN pins and re-asserted that nothing rewrote them, next to
-the row #258 had just added saying what does. **Re-read the rows you touch
-against the merge result, not against the tree you branched from.**
+after #258 and re-asserted that `release-please-config.json` "carries no
+`extra-files`", directly below the row #258 had just added naming the four it
+does carry — so it did not go stale, it re-asserted a diagnosis already
+corrected on `main`.
+
+That second one was **predicted in writing and happened anyway**. #258's PR body
+says: *"When #254 lands, item 10 and its `NOTHING` row should be dropped in
+favour of the enforced row. Expect a small textual conflict there."* #254
+landed; nothing was dropped. A stale green over code is reachable by a branch
+setting; this was a stale paragraph over prose, and **nothing in CI reads
+prose**. **Re-read the rows you touch against the merge result, not against the
+tree you branched from** — that sentence is the only mechanism this file has.
 
 Related: [`docs/package-consumer-issues.md`](package-consumer-issues.md) for
 consumer-facing packaging defects, and `packages/create-kai/README.md`, which
@@ -81,7 +90,7 @@ and the gaps between them are silent by construction.
 | If you change | What else moves | How it fails | Enforced by |
 |---|---|---|---|
 | The `define` keys in `packages/create-kai/scripts/build.mjs` | the matching `declare const` in `packages/create-kai/types/globals.d.ts` | Rename one side only: tsc still passes (the `declare` is still there), esbuild emits the bare identifier, and `npx create-kai` throws `ReferenceError` on first run | **NOTHING** |
-| `packages/ui/package.json`'s `version` | `derivePin()` (`packages/create-kai/src/kit-pin.ts`) → the `__KIT_RANGE__` define → `DEFAULT_KIT_RANGE` (`src/index.ts`) → the pin in every emitted project's `package.json` and the `kit` range in its `kai.json`, which separately records `kitBuiltAgainst` from `__KIT_VERSION__` — the range is the constraint the project was given, that is the point it started from. The `^` shape is written **once**, in `kit-pin.ts`, because `scripts/build.mjs` emits it and `src/pin-guards.ts` grades it — two copies of `` `^${version}` `` is exactly how the emitted pin and its own guard drift apart | Pre-1.0 a caret cannot cross a minor, so a kit minor strands a published create-kai on a range that cannot resolve forward. What stops that recurring is the `node-workspace` row above, not this one | Two halves, and only one is automatic. **The bundle's pin vs the kit beside it in the tree:** `verify:pack` (offline, in create-kai's `prepublishOnly` *and* run twice in the required `test` job, the second time under the npm the release job pins). The artefact-level question can genuinely fail, because `dist/index.js` freezes the pin at build time and an NX cache restore is the live route to a stale one. **Whether that range still resolves to something published and undeprecated:** **NOTHING** automatic. `packages/create-kai/scripts/verify-pin.mjs` is that check and it does exist (#249, `b892497b`) — it reads the pin back out of the PUBLISHED tarball, which is the only place the shipped value lives — but it needs the registry, so it runs by hand: `.github/workflows/release-please.yml` names it in a comment ("network, run manually") and in no step. `npm run smoke` is in no workflow either |
+| `packages/ui/package.json`'s `version` | `derivePin()` (`packages/create-kai/src/kit-pin.ts`) → the `__KIT_RANGE__` define → `DEFAULT_KIT_RANGE` (`src/index.ts`) → the pin in every emitted project's `package.json` and the `kit` range in its `kai.json`, which separately records `kitBuiltAgainst` from `__KIT_VERSION__` — the range is the constraint the project was given, that is the point it started from. The `^` shape is written **once**, in `kit-pin.ts`, because `scripts/build.mjs` emits it and `src/pin-guards.ts` grades it — two copies of `` `^${version}` `` is exactly how the emitted pin and its own guard drift apart | Pre-1.0 a caret cannot cross a minor, so a kit minor strands a published create-kai on a range that cannot resolve forward. What stops that recurring is the `node-workspace` row above, not this one | Two halves, and only one is automatic. **The bundle's pin vs the kit beside it in the tree:** `verify:pack` (offline, in create-kai's `prepublishOnly` *and* run twice in the required `test` job, the second time under the npm the release job pins). The artefact-level question can genuinely fail, because `dist/index.js` freezes the pin at build time and an NX cache restore is the live route to a stale one. **Whether that range still resolves to something published and undeprecated:** **NOTHING**. `packages/create-kai/scripts/verify-pin.mjs` is that check and it does exist — added by #249, which merged before this map did. It reads the pin back out of the PUBLISHED tarball, the only place the shipped value lives, and it is referenced by exactly two things: an npm script, and a comment in `release-please.yml` that says "(network, run manually)". `npm run smoke` runs nowhere either |
 | The React wrapper build (`packages/ui/vite.config.react.ts`) | the `'use client';` banner Rollup would otherwise strip from the source | `dist/react.js` stops being a client module in an RSC app | `verify:react-wrappers`, which self-tests both directions |
 | `packages/ui/package.json`'s `version` | `serverInfo` in `packages/ui/src/agent-tooling/mcp/server.ts` is a **hand-typed** version string, and it is what every MCP harness reads on initialize | Already wrong — it names a version several minors behind. `server.test.ts` never asserts it | **NOTHING** |
 | The `pdfjs-dist` CDN pin | `PDFJS_VERSION` in `packages/ui/src/primitives/pdf-preview.ts`, which ships in the browser bundle as a live CDN URL | Not cross-checked against any dependency entry. Exact-pinned by design; overridable via `configurePdfPreview` | **NOTHING** |
@@ -219,9 +228,20 @@ no automated check at all.
 Everything above whose last column says `NOTHING`, in one place. An unenforced
 coupling is a future incident; an enforced one is just a fact.
 
-These numbers are cited from outside this file, so an item that gets **closed
-keeps its number** and says so in place rather than being removed, and an item
-that narrows is rewritten under its own number.
+These numbers are cited from outside this file, so an item that is **retracted
+or closed keeps its number** and says so in place rather than being removed, and
+an item that narrows is rewritten under its own number.
+
+This list and the `NOTHING` rows above it do **not** count the same, and neither
+figure means anything unless you say which you counted:
+`grep -c '^[0-9]\+\.' docs/coupling-map.md` for the list,
+`grep -c '^|.*NOTHING' docs/coupling-map.md` for the rows. The gap is structural
+and permanent, so reconcile against these four before reading a difference as
+drift: one coupling can hold **two rows in two sections** and still be one item;
+§8 is prose rather than a table, so its item has no row; a row may **name the
+gap without the word** (`packages/ui`'s `prepublishOnly` is "unasserted"); and a
+retracted item keeps its number with no row. Do not quote either figure without
+naming which command produced it.
 
 **Release**
 
@@ -234,7 +254,7 @@ that narrows is rewritten under its own number.
 7. The publish gate's `--require` context list vs the ruleset's required contexts — `GITHUB_TOKEN` cannot read rulesets, so it cannot be derived. Safe direction only: a wrong name refuses every release rather than publishing an unvetted one.
 8. Root `.npmrc`: `enable-pre-post-scripts=true` gating every `pre`/`post` hook.
 9. Starter dependency ranges under `node-linker=hoisted`.
-10. **Closed** by #258 (`b688ae74`) — the CDN pin literals are rewritten by the bump itself (`packages["packages/ui"].extra-files`), and `lint:cdn-pins --check-release-wiring` (required CI) refuses a live pin that has escaped that list or lost its annotation. Number kept so nothing after it renumbers.
+10. **Retracted** — it was never true on `main`. #258 (`b688ae74`) had already made the bump rewrite the pins (`packages["packages/ui"].extra-files`, with `lint:cdn-pins --check-release-wiring` in required CI) twenty-eight minutes before #254 added this entry claiming nothing did, and #258's PR body asked for it to be dropped when #254 landed. The number is held rather than deleted only because items 16 and 17 are under edit on other branches; delete this line and renumber in one pass once those land.
 
 **Packaging**
 
