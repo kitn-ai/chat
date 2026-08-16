@@ -127,10 +127,19 @@ export default defineConfig({
       // covered only by the storybook project is visibly attributed to it.
       reportOnFailure: true,
     },
-    // Allow ?raw / ?inline imports of compiled.css to pass through vitest's CSS interception.
+    // Allow ?raw / ?inline imports to pass through vitest's CSS interception:
     // vitest:css-disable and vitest:css-empty-post skip files matched by css.include.
+    // This is the half of the bypass that cannot live in cssRawPlugin above — a
+    // file absent from this list gets `export default ""` and the plugin loses
+    // the tie, since both are enforce:post. Every entry is a CSS file some module
+    // imports for its TEXT, not for its styling:
+    //   • compiled.css — injected into shadow roots (src/elements/css.ts)
+    //   • theme.css    — the `--kai-*` token names the theme MCP tool emits
+    //                    (src/agent-tooling/mcp/tools/theme.ts)
+    // Silently empty is the dangerous failure here: it turns a derived list into
+    // an empty one, so theme.test.ts asserts the parse is non-empty.
     css: {
-      include: [/compiled\.css/],
+      include: [/compiled\.css/, /theme\.css/],
     },
     projects: [{
       extends: true,
