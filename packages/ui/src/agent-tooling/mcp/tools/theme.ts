@@ -1,17 +1,112 @@
 import { z } from 'zod';
+import themeCss from '../../../../theme.css?raw';
 import type { Tool } from './types';
 
 /**
  * theme — produce a `--kai-*` CSS token override block from a brand color or
- * description. Tokens are sourced exclusively from the real names in theme.css.
+ * description.
  *
- * Real --kai-color-* names (verified against repo-root theme.css):
- *   --kai-color-primary            → brand color
- *   --kai-color-primary-foreground → AA-contrast fg (white or black)
- *   --kai-color-ring               → focus ring (brand color)
- *   --kai-color-accent             → tinted accent surface
- *   --kai-color-accent-foreground  → text on accent surface
+ * WHICH tokens get branded is a curated product call (see BRAND_TOKENS below).
+ * Their NAMES are not: every one is resolved against theme.css, whose text is
+ * inlined above, so a name this tool emits is a name theme.css declares.
+ *
+ * That import is the whole fix and the reason it is an import rather than a
+ * `readFile`. This module ships inside dist/mcp.es.js, an SSR bundle a consumer
+ * runs from bin/mcp.js in their node_modules — a runtime read of a repo-root
+ * path resolves to nothing there, and the src/ and dist/ depths differ anyway.
+ * `?raw` bakes the bytes in at build time from the SAME theme.css that
+ * package.json `files` ships (and `exports` publishes as "./theme.css"), so the
+ * tarball's tool and the tarball's stylesheet cannot disagree by construction,
+ * and there is no runtime I/O at all.
+ *
+ * Before this, the names were five string literals and a docblock claiming they
+ * had been "verified against repo-root theme.css" — nothing read that file, so
+ * renaming a token left the tool emitting the dead name, its test green, and an
+ * agent pasting CSS that themes nothing.
  */
+
+// ─── token names, read out of theme.css ──────────────────────────────────────
+
+/**
+ * Every `--kai-*` knob theme.css declares. Anchored on `var(` because that is
+ * the only place a knob is really wired up — each kit token is written
+ * `--color-x: var(--kai-color-x, <default>)`. Prose in the file mentions
+ * wildcards like `--kai-color-*`, which a bare `--kai-` scan would pick up as
+ * fictional token names.
+ */
+function declaredKaiTokens(css: string): ReadonlySet<string> {
+  const names = new Set<string>();
+  for (const m of css.matchAll(/var\(\s*(--kai-[a-zA-Z0-9-]+)\s*[,)]/g)) names.add(m[1]);
+  return names;
+}
+
+const DECLARED_TOKENS = declaredKaiTokens(themeCss);
+
+/**
+ * Resolve one `--kai-color-<suffix>` against theme.css, or fail naming it.
+ *
+ * Throwing at module load is deliberate: it means the `theme` tool cannot exist
+ * in a state where it emits a token nothing reads. The only way to reach it is
+ * to build from a theme.css that dropped the token, which theme.test.ts turns
+ * red first — a consumer can never hit it, because the CSS is inlined at build
+ * time from the file that ships beside the bundle.
+ */
+function colorToken(suffix: string): string {
+  const name = `--kai-color-${suffix}`;
+  if (!DECLARED_TOKENS.has(name)) {
+    throw new Error(
+      `[kai mcp: theme] theme.css declares no \`${name}\`. The tool brands that token, ` +
+        `so emitting it would hand the caller CSS that themes nothing. Either the token was ` +
+        `renamed in packages/ui/theme.css (update the BRAND_TOKENS suffix in ` +
+        `src/agent-tooling/mcp/tools/theme.ts to match) or it was removed (drop the entry). ` +
+        `Known --kai-color-* names: ${[...DECLARED_TOKENS].filter((n) => n.startsWith('--kai-color-')).sort().join(', ')}`,
+    );
+  }
+  return name;
+}
+
+interface TokenSet {
+  primary: string;
+  primaryFg: string;
+  ring: string;
+  accent: string;
+  accentFg: string;
+}
+
+interface BrandToken {
+  /** Which computed value from a TokenSet fills this token. */
+  key: keyof TokenSet;
+  /** `--kai-color-<suffix>`, checked against theme.css. */
+  suffix: string;
+  /** One-line explanation, rendered in the "Tokens emitted" list. */
+  purpose: string;
+}
+
+/**
+ * The tokens a brand override needs, in emit order. This LIST is the curated
+ * part — it is a judgement about what rebranding means, not a fact theme.css can
+ * be asked for. It declares far more knobs than this (the error in colorToken
+ * prints the current set); dumping all of them would be a worse answer than
+ * picking the ones that carry a brand. The `suffix` of each is what gets checked.
+ */
+const BRAND_TOKENS: readonly BrandToken[] = [
+  { key: 'primary', suffix: 'primary', purpose: 'primary brand color' },
+  {
+    key: 'primaryFg',
+    suffix: 'primary-foreground',
+    purpose: 'AA-contrast foreground on primary (auto-selected black/white)',
+  },
+  { key: 'ring', suffix: 'ring', purpose: 'keyboard focus ring' },
+  { key: 'accent', suffix: 'accent', purpose: 'tinted accent surface' },
+  { key: 'accentFg', suffix: 'accent-foreground', purpose: 'text on accent surface' },
+];
+
+/** BRAND_TOKENS with each name resolved against theme.css. */
+const EMITTED_TOKENS: readonly { key: keyof TokenSet; name: string; purpose: string }[] =
+  BRAND_TOKENS.map((t) => ({ key: t.key, name: colorToken(t.suffix), purpose: t.purpose }));
+
+/** Value-column offset, derived so the block stays aligned when a name changes length. */
+const VALUE_COLUMN = Math.max(...EMITTED_TOKENS.map((t) => t.name.length + 1)) + 2;
 
 // ─── hex color utilities (no deps) ──────────────────────────────────────────
 
@@ -185,14 +280,6 @@ function resolveBrand(
 
 // ─── CSS block builders ───────────────────────────────────────────────────────
 
-interface TokenSet {
-  primary: string;
-  primaryFg: string;
-  ring: string;
-  accent: string;
-  accentFg: string;
-}
-
 function buildTokenSet(r: number, g: number, b: number): TokenSet {
   const primary = toHex(r, g, b);
   const primaryFg = foreground(r, g, b);
@@ -231,11 +318,9 @@ function buildDarkTokenSet(r: number, g: number, b: number): TokenSet {
 function cssBlock(selector: string, tokens: TokenSet): string {
   return [
     `${selector} {`,
-    `  --kai-color-primary:             ${tokens.primary};`,
-    `  --kai-color-primary-foreground:  ${tokens.primaryFg};`,
-    `  --kai-color-ring:                ${tokens.ring};`,
-    `  --kai-color-accent:              ${tokens.accent};`,
-    `  --kai-color-accent-foreground:   ${tokens.accentFg};`,
+    ...EMITTED_TOKENS.map(
+      (t) => `  ${`${t.name}:`.padEnd(VALUE_COLUMN)}${tokens[t.key]};`,
+    ),
     `}`,
   ].join('\n');
 }
@@ -293,6 +378,11 @@ export const theme: Tool = {
     const noteLabel = note.startsWith('Could not parse') ? 'Note' : 'Assumption';
     const noteSection = note ? `\n> **${noteLabel}:** ${note}\n` : '';
 
+    // Same list, same source, so the prose can't describe a different set of
+    // tokens than the CSS block above it.
+    const tokenList = EMITTED_TOKENS.map((t) => `- \`${t.name}\` — ${t.purpose}`).join('\n');
+    const firstToken = EMITTED_TOKENS[0].name;
+
     const text = `\
 ## AI/UI theme override — \`${hex}\`
 ${noteSection}
@@ -304,14 +394,10 @@ ${cssOutput}
 
 ### How it works
 
-The \`--kai-color-*\` tokens pierce the Shadow DOM via CSS custom-property inheritance. Every \`kai-*\` element reads them through a \`var(--kai-color-primary, <default>)\` fallback chain defined in \`theme.css\`. Setting them on \`:root\` (or a wrapper element) is enough to rebrand everything globally.
+The \`--kai-color-*\` tokens pierce the Shadow DOM via CSS custom-property inheritance. Every \`kai-*\` element reads them through a \`var(${firstToken}, <default>)\` fallback chain defined in \`theme.css\`. Setting them on \`:root\` (or a wrapper element) is enough to rebrand everything globally.
 
-**Tokens emitted** (verified names from \`theme.css\`):
-- \`--kai-color-primary\` — primary brand color
-- \`--kai-color-primary-foreground\` — AA-contrast foreground on primary (auto-selected black/white)
-- \`--kai-color-ring\` — keyboard focus ring
-- \`--kai-color-accent\` — tinted accent surface
-- \`--kai-color-accent-foreground\` — text on accent surface
+**Tokens emitted** (names read from \`theme.css\`):
+${tokenList}
 
 ### Apply to a subtree only
 
