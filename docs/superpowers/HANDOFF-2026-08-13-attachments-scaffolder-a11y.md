@@ -3031,6 +3031,133 @@ was written. §13.6.
 
 ---
 
+## 14. What landed after `1454d02d`: seven merges, and what verification caught that CI could not
+
+Written at `e3253548`, at the end of a session stopped by budget rather than by finishing. Derive the
+range from this anchor, not from any SHA above.
+
+### 14.1 The seven
+
+`#263` reconciled `docs/coupling-map.md` with itself · `#264` pinned the scaffold `SIGNATURE` table to
+the integration registry · `#265` put `element-manifest.json` into `verify:generated` · `#266` derived
+the MCP `serverInfo` version · `#268` corrected three stale documented facts · `#269` derived the theme
+tool's token names from `theme.css` · `#270` derived `CARD_TYPES` from `cardSchemas`. `#271`, the npm-12
+pack-listing fix, was open and green at the stop.
+
+Every one closes an item the map or §13 already named. None was discovered by CI.
+
+### 14.2 Verification found three defects, and none of them was in the change
+
+Seven branches went implementer → independent verifier. Five returned MERGE. The three FIX-FIRSTs are
+the finding worth keeping, because of what they had in common: **not one was a bug in the fix.**
+
+- **A docs sample that contradicted its own prose.** `vercel-ai-sdk.mdx` gained a "Two traps in the
+  tool-call mapping" section instructing the reader to track streamed argument counts — above a code
+  block with no `case 'tool-call':` and no `streamedArgs`. Copying it drops tool-call arguments for any
+  provider that does not stream tool input incrementally. **Nothing could catch it**: the docs snippet
+  compiler symlinks only react/solid, so `ai` is unresolvable, `part` is `any`, and an incomplete switch
+  over `any` typechecks. A whole-block re-read then found two more of the same class, and the author
+  named the mechanism: it had once resolved a prose/code conflict by *trimming the prose to match code
+  it had trimmed earlier*. That is the habit, not the missing case.
+- **A guard believed stronger than it was.** `lint:pack-parse` round 1 keyed on spellings; verification
+  wrote its own probe and walked through with array destructuring.
+- **A guard that then fired on correct code.** Round 2 added a dataflow trace that fused two inferences,
+  the second invalid: *"the value was never observed reaching the parser, therefore this file is bad."*
+  That cannot distinguish a defect from an unresolved alias, so a variable rename or an extracted helper
+  — routine edits — flagged **correct** code that round 1 had passed. Round 3 reports only on positive
+  evidence; an unresolved trace is silent and the import check carries it. Both false-positive probes
+  are now CLEAN self-test controls.
+
+The pattern: everything a test suite could catch, the implementers caught. What survived to verification
+was the class no test can see — **a check that is wrong about its own strength**, in both directions.
+
+**Two operating rules earned this session.** Verifiers must write their own adversarial probe rather than
+re-run the implementer's; every FIX-FIRST here came from a probe the implementer had not imagined. And
+`WHAT IT DOES NOT CATCH` blocks must be written from **measurement**: `lint:pack-parse`'s first one
+credited the dataflow trace for catches the spelling rules were making, so it was wrong about its own
+mechanism while looking like diligence.
+
+### 14.3 The fake-green trap, six instances, all self-caught
+
+Bare `nx` is **not on PATH in non-interactive shells**. `nx build ui || echo "BUILD FAILED"` piped to
+`tail` reports success for a build that never ran. A wrapper doing `cmd > log 2>&1; echo "EXIT=$?"` as
+two statements reports the `echo`'s code. One verifier caught a real `UNIT_EXIT=1` only by grepping the
+literal string it had written into its own log.
+
+Use `pnpm exec nx`. Never mask an exit code behind a pipe or a second statement. This is not in
+`CLAUDE.md` and should be.
+
+A related trap cost one verifier a false red: its drift experiment dirtied the **gitignored**
+`dist/elements.d.ts`, which `git checkout` does not clean, so the next suite run failed on
+contamination. It marked the item UNVERIFIED rather than PASS, rebuilt, and reran. That is the right
+move and worth imitating.
+
+### 14.4 Claims that did not survive checking
+
+Same discipline as §8, §13.14. Mostly mine.
+
+1. **"§13 does not exist."** I searched the file and all thirty worktrees and reported it missing. Local
+   `main` was three commits stale; §13 had merged as #262. Failure class 3, reproduced while diagnosing
+   failure class 3 in the coupling map. **Fetch before asserting absence.**
+2. **`strict_required_status_checks_policy` is `false`** (§13.11 item 2). The live ruleset reads
+   `{"contexts":["test"],"strict":true}`. That item is done; the decision it asks for was taken.
+3. **"`packages/ui` publishes first, so the pack parsers are release-breaking."** Mine, and wrong.
+   `prepublishOnly` is only `npm run build`; none of the three is on the publish path. Real defect,
+   CI-only. create-kai's `verify:pack` *is* on its release path, which is why #241 was the louder one.
+4. **"Model-controlled data reaches the card unvalidated, silently."** Overstated. `card-renderer.tsx`
+   calls `validateCardData` only for an unmodified built-in renderer with no consumer schema, and adding
+   a card type trips **11 failures across 5 files** first. Accurate framing: one blind spot in an
+   otherwise noisy checklist. The evidence tempering the headline was in the same report as the headline.
+5. **"`BUILTIN_CARD_TAGS` is unguarded."** Mine. `reference.test.ts` walks `cardSchemaNames` through
+   `cardTagForType` and fires. `BUILTIN_CARD_COMPONENTS` was the unguarded one — and #270 closed it in
+   the same commit, refuting my second guess too.
+6. **"Follow `theme-tokens.tsx` as the in-repo precedent."** Mine. It reads `document.styleSheets` —
+   browser-only, unusable in a Node SSR bundle. Its intent transferred; its mechanism could not.
+7. **The theme failure exits 13.** It exits **1**, from `bin/mcp.js`'s `fatal()`. The 13 was a probe
+   script's own exit.
+8. **The regex shape that defeats the comment stripper.** Mine, and not reproducible as stated: string
+   contents are preserved, so a mis-tracked quote deletes nothing. The real shapes are `/\/\//g` (eats to
+   end of line) and `/[/*]/g` — which eats **across lines** and blinds everything after it.
+9. **"`npx @kitn.ai/ui mcp`"** (root `CLAUDE.md`, docs site). There is no `mcp` subcommand. The sole bin
+   is `kai-mcp` and `bin/mcp.js` never reads `argv`; npx runs the package's only bin and discards the
+   token. Proven by running the documented form and `npx @kitn.ai/ui totally-bogus-subcommand-xyz` side
+   by side for identical output.
+10. **"12 prose claims resolve"** in the rewritten docs page. Not reproducible — 11 at coarse grain, 17 at
+    fine. Zero false under every granularity, which is the part that matters. A count whose atomization
+    rule is not stated is not a measurement.
+
+### 14.5 Where to start next week
+
+1. **`docs/coupling-map.md`, again, and this is the debt this session created.** Items 14, 16, 17, 19, 20
+   and 22 are now enforced and the rows still say `NOTHING`. #271 rewrote its own row only. Item 10's
+   tombstone comes out and 11–37 renumber **in one pass** — that condition is recorded in the map and is
+   now met. Doing this first also stops the map repeating the exact failure it documents.
+2. **#271**, if it did not merge: green and verified at the stop, needing only a branch update.
+3. **Wave 2 unstarted**: items 18 and 21; the scaffolder event/attribute gap (30, 31) where *the live test
+   synthesizes the event itself*, so the emitted listener hears the name the test chose; the six
+   prose-satisfiable signatures (`vercel-ai-sdk`, `langgraph`, `cloudflare`, `ollama`, `mastra`,
+   `pydantic-ai`); and `GENERATED` completeness — nothing asserts that array is complete, which is why
+   `element-manifest.json` sat uncovered, and the self-test synthesizes its own list so it cannot catch
+   the class.
+4. **The doc-sample-vs-source guard**, costed by the verifier that found the defect: pair each
+   integration page to its `webRoute` by slug, parse both with the TS compiler API, assert per-case
+   structural equality. About a day, landing as a medium-confidence finding first, with an opt-out for
+   pages that legitimately elide. It would have caught the defect **and** validated the fix, on a page
+   class that recurs with every new integration.
+5. **Four issues, still triaged by label only.** #99's gap is measured: the `kai` MCP scaffolder uses
+   `elementsReady` in **zero** files and hand-rolls `whenDefined` in two, four starters hand-roll it, and
+   the docs *guides* teach it correctly while the docs site's own components do not. Option B
+   (upgrade-property preservation in `defineWebComponent`) makes the race impossible instead of teaching
+   the gate in more places.
+6. **The harness-layer discussion stays deferred** — the owner's call, to harden what exists first.
+
+Smaller, all recorded as tasks: `gpt-4o` and `textStream` still on four docs pages; asserting the
+installed MCP's `serverInfo` inside `verify-consumer-sideeffects.mjs`; registering the docs page's
+`MODEL` and `FINISH_REASONS` copies; documenting `lint:pack-parse` in `CLAUDE.md`; and moving
+`src/schemas/index.ts`'s two hand-typed counts, which sit directly above the literals they count.
+
+---
+
 ## Appendix: style note
 
 `docs/superpowers/` is not consistent on em dashes. `HANDOFF-audio-visualizers.md` uses none;
