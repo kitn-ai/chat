@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { theme } from './tools/theme';
 
 /**
@@ -172,6 +172,19 @@ describe('theme token names agree with theme.css', () => {
         `${dead.join(', ')}. Pasting that CSS themes nothing. Read the name from theme.css ` +
         `instead of restating it.`,
     ).toEqual([]);
+  });
+
+  it('resolves on the handler path, not at import, so a bad token cannot take the server down', async () => {
+    // server.ts imports all four tools statically at top level. A module-scope
+    // throw in this one killed `reference`, `scaffold` and `debug` with it —
+    // measured against an installed tarball, `initialize` never returned. That
+    // the module IMPORTS cleanly is the property; the refusal still happens, it
+    // just happens per call. Re-evaluating the module first, so a memo left by
+    // an earlier test cannot make this pass for the wrong reason.
+    vi.resetModules();
+    const fresh = await import('./tools/theme');
+    expect(typeof fresh.theme.handler).toBe('function');
+    expect(fresh.theme.name).toBe('theme');
   });
 
   it('the CSS block and the prose list name the same tokens', async () => {

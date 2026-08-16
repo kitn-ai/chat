@@ -45,11 +45,16 @@ const DECLARED_TOKENS = declaredKaiTokens(themeCss);
 /**
  * Resolve one `--kai-color-<suffix>` against theme.css, or fail naming it.
  *
- * Throwing at module load is deliberate: it means the `theme` tool cannot exist
- * in a state where it emits a token nothing reads. The only way to reach it is
- * to build from a theme.css that dropped the token, which theme.test.ts turns
- * red first — a consumer can never hit it, because the CSS is inlined at build
- * time from the file that ships beside the bundle.
+ * Refusing is deliberate — emitting a token nothing reads is the whole defect
+ * this file exists to prevent — but it happens on the HANDLER path, not at
+ * module load. `server.ts` imports all four tools statically at top level, so a
+ * module-scope throw here took `reference`, `scaffold` and `debug` down with it;
+ * measured against an installed tarball, `initialize` never returned and the
+ * server exited before answering anything. Nothing was bought for that: the
+ * guard in theme.test.ts calls `theme.handler(...)` directly, so it goes red on
+ * exactly the same rename with exactly the same message either way. Handler
+ * scope is pure isolation — `theme` alone reports the error, its three
+ * neighbours keep working.
  */
 function colorToken(suffix: string): string {
   const name = `--kai-color-${suffix}`;
@@ -101,12 +106,33 @@ const BRAND_TOKENS: readonly BrandToken[] = [
   { key: 'accentFg', suffix: 'accent-foreground', purpose: 'text on accent surface' },
 ];
 
-/** BRAND_TOKENS with each name resolved against theme.css. */
-const EMITTED_TOKENS: readonly { key: keyof TokenSet; name: string; purpose: string }[] =
-  BRAND_TOKENS.map((t) => ({ key: t.key, name: colorToken(t.suffix), purpose: t.purpose }));
+interface EmittedTokens {
+  readonly tokens: readonly { key: keyof TokenSet; name: string; purpose: string }[];
+  /** Value-column offset, derived so the block stays aligned when a name changes length. */
+  readonly valueColumn: number;
+}
 
-/** Value-column offset, derived so the block stays aligned when a name changes length. */
-const VALUE_COLUMN = Math.max(...EMITTED_TOKENS.map((t) => t.name.length + 1)) + 2;
+let memo: EmittedTokens | undefined;
+
+/**
+ * BRAND_TOKENS with each name resolved against theme.css, memoized.
+ *
+ * Called from the handler, so the resolution failure lands on the one tool that
+ * cannot do its job (see colorToken). Only a SUCCESSFUL resolution is cached —
+ * a failing one re-throws per call, which is what keeps the error the same on
+ * the second request as on the first.
+ */
+function emittedTokens(): EmittedTokens {
+  if (!memo) {
+    const tokens = BRAND_TOKENS.map((t) => ({
+      key: t.key,
+      name: colorToken(t.suffix),
+      purpose: t.purpose,
+    }));
+    memo = { tokens, valueColumn: Math.max(...tokens.map((t) => t.name.length + 1)) + 2 };
+  }
+  return memo;
+}
 
 // ─── hex color utilities (no deps) ──────────────────────────────────────────
 
@@ -315,11 +341,11 @@ function buildDarkTokenSet(r: number, g: number, b: number): TokenSet {
   };
 }
 
-function cssBlock(selector: string, tokens: TokenSet): string {
+function cssBlock(selector: string, values: TokenSet, emitted: EmittedTokens): string {
   return [
     `${selector} {`,
-    ...EMITTED_TOKENS.map(
-      (t) => `  ${`${t.name}:`.padEnd(VALUE_COLUMN)}${tokens[t.key]};`,
+    ...emitted.tokens.map(
+      (t) => `  ${`${t.name}:`.padEnd(emitted.valueColumn)}${values[t.key]};`,
     ),
     `}`,
   ].join('\n');
@@ -359,6 +385,10 @@ export const theme: Tool = {
       mode = 'light',
     } = args as { brand?: string; description?: string; mode?: 'light' | 'dark' | 'both' };
 
+    // Resolve the token names against theme.css FIRST, so a name it no longer
+    // declares fails this call and nothing else (see emittedTokens/colorToken).
+    const emitted = emittedTokens();
+
     const { hex, r, g, b, note } = resolveBrand(brand, description);
 
     const lightTokens = buildTokenSet(r, g, b);
@@ -367,10 +397,10 @@ export const theme: Tool = {
     // Which blocks to emit
     const blocks: string[] = [];
     if (mode === 'light' || mode === 'both') {
-      blocks.push(cssBlock(':root', lightTokens));
+      blocks.push(cssBlock(':root', lightTokens, emitted));
     }
     if (mode === 'dark' || mode === 'both') {
-      blocks.push(cssBlock('.dark', darkTokens));
+      blocks.push(cssBlock('.dark', darkTokens, emitted));
     }
 
     const cssOutput = blocks.join('\n\n');
@@ -380,8 +410,8 @@ export const theme: Tool = {
 
     // Same list, same source, so the prose can't describe a different set of
     // tokens than the CSS block above it.
-    const tokenList = EMITTED_TOKENS.map((t) => `- \`${t.name}\` — ${t.purpose}`).join('\n');
-    const firstToken = EMITTED_TOKENS[0].name;
+    const tokenList = emitted.tokens.map((t) => `- \`${t.name}\` — ${t.purpose}`).join('\n');
+    const firstToken = emitted.tokens[0].name;
 
     const text = `\
 ## AI/UI theme override — \`${hex}\`
