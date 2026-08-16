@@ -36,6 +36,35 @@
 // examples/ are out of scope and the failure message prints what was scanned, so
 // a reader can see the boundary rather than assume it covers everything.
 //
+// WHAT IT DOES NOT CATCH -- read this before trusting it.
+//
+// This is a SYNTACTIC scanner over source text, not a type-checker and not a
+// real dataflow analysis, so it cannot be complete and should not be described
+// as if it were. The class it reliably catches is the one every instance of this
+// defect has actually belonged to: a script that spawns `npm pack --json` and
+// then reads the container itself, in one of the shapes below.
+//
+//   caught  the pack output bound to a name that reaches `JSON.parse`, no matter
+//           how the entry is then extracted -- `[0]`, destructuring,
+//           `Object.values`, a spelling nobody has written yet
+//   caught  the pack output bound to a name that never reaches the parser
+//   caught  the three specific hand-parse spellings, even where the binding
+//           cannot be resolved
+//   caught  a pack reader that does not import the parser at all
+//
+//   MISSED  aliasing: `const b = raw; JSON.parse(b)` -- the trace follows one
+//           binding, not a chain
+//   MISSED  the pack output crossing a function boundary or a module
+//   MISSED  a regex literal containing `//` or `/*`, which can confuse the
+//           comment stripper
+//   MISSED  anything under apps/ or examples/, which are not scanned
+//
+// An earlier version of this file enumerated extraction spellings only, and a
+// probe using array destructuring walked straight through it. That is why the
+// primary rule now follows the VALUE and the spelling list is only a backstop --
+// and why the misses above are listed rather than left to be discovered. Each
+// caught row has a case in `--self-test`, including the probe that got through.
+//
 // A zero-match run is a HARD FAILURE. A scan that finds no pack readers looks
 // identical to a clean tree from outside, and this repo has shipped that.
 //
@@ -183,6 +212,78 @@ const HAND_PARSE = [
   },
 ];
 
+/**
+ * FOLLOW THE VALUE, not the spelling.
+ *
+ * The rules above enumerate ways of picking the first entry out, and an
+ * enumeration is never finished: `const [entry] = JSON.parse(raw)` destructures
+ * instead of indexing and matches none of them. It got past an earlier version
+ * of this file, and chasing it with a fourth regex would just move the boundary
+ * one spelling further out.
+ *
+ * So the primary rule ignores how the entry is extracted and asks what happens
+ * to the pack OUTPUT: the variable it is bound to must reach the shared parser,
+ * and must not reach `JSON.parse`. Every extraction spelling — indexing,
+ * destructuring, `Object.values`, one this file has never seen — needs a parse
+ * first, so all of them fail the second half.
+ *
+ * @returns {{ routed: boolean, problems: string[] }}
+ */
+function tracePackOutput(source) {
+  const problems = [];
+  let routed = 0;
+
+  for (const match of source.matchAll(/\[[^[\]]*\]/g)) {
+    const literal = match[0];
+    if (!/['"]pack['"]/.test(literal) || !/['"]--json['"]/.test(literal)) continue;
+
+    // The statement the invocation sits in, back to the previous `;`. That is
+    // enough to see both `readPackX(run(...))` and `const raw = execFileSync(...)`.
+    const stmt = source.slice(source.lastIndexOf(';', match.index) + 1, match.index);
+
+    // Consumed inline: `readPackedFilename(run('npm', ['pack', ...]), ...)`.
+    if (/readPack\w*\s*\(/.test(stmt)) {
+      routed += 1;
+      continue;
+    }
+
+    // Otherwise it is bound to a name and read later. First assignment in the
+    // statement, so `const raw = ...` and a bare `raw = ...` both land.
+    const bound = /([A-Za-z_$][\w$]*)\s*=[^=]/.exec(stmt);
+    if (!bound) {
+      problems.push(
+        'the result of `npm pack --json` is neither passed straight to the shared ' +
+          'parser nor bound to a variable, so this guard cannot see what reads it',
+      );
+      continue;
+    }
+
+    const name = bound[1];
+    // `$` is legal in a JS identifier and is a regex metacharacter, so a binding
+    // called `$raw` would compile to a pattern that can never match and quietly
+    // flag a clean file.
+    const escaped = name.replace(/[$]/g, '\\$');
+    const reaches = (fn) => new RegExp(`${fn}\\s*\\(\\s*${escaped}\\b`).test(source);
+
+    if (reaches('JSON\\.parse')) {
+      problems.push(
+        `hand-parses the pack listing: \`JSON.parse(${name})\` on the output of ` +
+          '`npm pack --json`, whatever is done with the result afterwards',
+      );
+    }
+    if (!/readPack\w*\s*\(/.test(source) || !reaches('readPack\\w*')) {
+      problems.push(
+        `the output of \`npm pack --json\` is bound to \`${name}\`, which is never ` +
+          'passed to the shared parser',
+      );
+    } else {
+      routed += 1;
+    }
+  }
+
+  return { routed: routed > 0, problems };
+}
+
 /** @returns {string[]} one message per problem; empty means clean. */
 function analyze(raw) {
   const source = stripComments(raw);
@@ -193,10 +294,14 @@ function analyze(raw) {
       `reads \`npm pack --json\` but does not import the shared parser (${PARSER})`,
     );
   }
+  problems.push(...tracePackOutput(source).problems);
+  // Secondary net. Subsumed by the trace above in every case seen so far, but
+  // kept because it needs no dataflow at all: it still fires in a file where the
+  // binding could not be resolved, and it names the exact spelling.
   for (const { name, re } of HAND_PARSE) {
     if (re.test(source)) problems.push(`hand-parses the pack listing by ${name}`);
   }
-  return problems;
+  return [...new Set(problems)];
 }
 
 // --- self-test ---------------------------------------------------------------
@@ -263,6 +368,47 @@ const SELF_TEST_CASES = [
     name: 'a // inside a string does not blind the rest of the file',
     source: `${PACKS}\nconst u = 'https://registry.npmjs.org';\nconst t = packed[0].filename;`,
     expect: 'flagged',
+  },
+  {
+    // THE BYPASS THAT GOT THROUGH. Verbatim from the probe that beat the earlier
+    // spelling-list version of this file: the parser is imported but unused, and
+    // the entry is DESTRUCTURED rather than indexed, so none of the three
+    // spelling regexes fire. Pinned here so the boundary is a test and not a
+    // paragraph.
+    name: 'destructuring the first entry instead of indexing it',
+    source:
+      `${IMPORT}\nconst raw = ${PACKS};\n` +
+      `const [entry] = JSON.parse(raw);\nconsole.log(entry.filename);`,
+    expect: 'flagged',
+  },
+  {
+    // The same evasion one step further out: no destructuring either, just a
+    // parse and a property read. The trace does not care what comes after.
+    name: 'Object.values off the parsed output',
+    source:
+      `${IMPORT}\nconst raw = ${PACKS};\n` +
+      `const e = Object.values(JSON.parse(raw))[0] ?? JSON.parse(raw);\nconsole.log(e.filename);`,
+    expect: 'flagged',
+  },
+  {
+    // The idiom verify-pack-weight.mjs uses: bind, then hand to the parser in a
+    // later statement. Must stay clean, or the trace is just a stricter way of
+    // rejecting everything.
+    name: 'bound to a variable and parsed later, which is the real idiom',
+    source:
+      `${IMPORT}\nconst raw = ${PACKS};\n` +
+      `const { entry } = readPackEntry(raw, { npmVersion });\nconsole.log(entry.filename);`,
+    expect: 'clean',
+  },
+  {
+    // `$` is a legal identifier character and a regex metacharacter. Unescaped,
+    // the reachability probe compiles to a pattern matching nothing and reports
+    // a correct file as broken.
+    name: 'a $-prefixed binding name does not break the reachability probe',
+    source:
+      `${IMPORT}\nconst $raw = ${PACKS};\n` +
+      `const { entry } = readPackEntry($raw, { npmVersion });\nconsole.log(entry.filename);`,
+    expect: 'clean',
   },
 ];
 
