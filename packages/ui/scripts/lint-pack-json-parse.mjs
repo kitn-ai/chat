@@ -36,34 +36,45 @@
 // examples/ are out of scope and the failure message prints what was scanned, so
 // a reader can see the boundary rather than assume it covers everything.
 //
-// WHAT IT DOES NOT CATCH -- read this before trusting it.
+// WHAT IT DOES AND DOES NOT CATCH -- read this before trusting it.
 //
-// This is a SYNTACTIC scanner over source text, not a type-checker and not a
-// real dataflow analysis, so it cannot be complete and should not be described
-// as if it were. The class it reliably catches is the one every instance of this
-// defect has actually belonged to: a script that spawns `npm pack --json` and
-// then reads the container itself, in one of the shapes below.
+// A SYNTACTIC scanner over source text: not a type-checker, not real dataflow.
+// It cannot be complete, so the point of this block is to say which class it
+// covers rather than let the next reader assume semantic coverage. The rows
+// below are MEASURED, by running the analyzer over each shape, not reasoned
+// about -- an earlier revision of this comment credited the dataflow trace with
+// catching aliasing and cross-function flow when the spelling regexes were in
+// fact doing that work, and a boundary statement that is wrong about its own
+// mechanism is worse than none.
 //
-//   caught  the pack output bound to a name that reaches `JSON.parse`, no matter
-//           how the entry is then extracted -- `[0]`, destructuring,
-//           `Object.values`, a spelling nobody has written yet
-//   caught  the pack output bound to a name that never reaches the parser
-//   caught  the three specific hand-parse spellings, even where the binding
-//           cannot be resolved
-//   caught  a pack reader that does not import the parser at all
+// Two independent rules do the catching, and which one fires matters because
+// they fail differently:
 //
-//   MISSED  aliasing: `const b = raw; JSON.parse(b)` -- the trace follows one
-//           binding, not a chain
-//   MISSED  the pack output crossing a function boundary or a module
-//   MISSED  a regex literal containing `//` or `/*`, which can confuse the
-//           comment stripper
+//   TRACE      `JSON.parse(<the variable the pack output was bound to>)`, in
+//              any extraction spelling. Scope-aware, one binding deep.
+//   SPELLINGS  three literal constructs (`[0]` off a parse, `[0].<packfield>`,
+//              slicing to the first `[`). Scope-BLIND, which is exactly why
+//              they still reach through aliases and helpers.
+//
+//   caught  the plain defect, indexed or destructured        TRACE
+//   caught  aliased, then indexed / Object.values'd          SPELLINGS
+//   caught  parsed inside a helper, then indexed             SPELLINGS
+//   caught  sliced to the first literal `[`                  SPELLINGS
+//   caught  a pack reader not importing the parser at all    IMPORT CHECK
+//
+//   MISSED  aliased AND destructured together
+//              const b = raw; const [e] = JSON.parse(b);
+//   MISSED  parsed inside a helper AND destructured there
+//              function f(p) { const [e] = JSON.parse(p); ... }
 //   MISSED  anything under apps/ or examples/, which are not scanned
 //
-// An earlier version of this file enumerated extraction spellings only, and a
-// probe using array destructuring walked straight through it. That is why the
-// primary rule now follows the VALUE and the spelling list is only a backstop --
-// and why the misses above are listed rather than left to be discovered. Each
-// caught row has a case in `--self-test`, including the probe that got through.
+// Both misses need an alias or a helper AND a non-indexing extraction at the
+// same time; either alone is still caught. Closing them needs real dataflow,
+// which is not worth it here -- see the note on tracePackOutput for why the
+// obvious cheap approximation was tried, produced false positives on correct
+// code, and was removed. Every `caught` row has a case in `--self-test`,
+// including the destructuring probe that once got through and the two regex
+// shapes that once blinded the comment stripper.
 //
 // A zero-match run is a HARD FAILURE. A scan that finds no pack readers looks
 // identical to a clean tree from outside, and this repo has shipped that.
@@ -111,26 +122,61 @@ const EXEMPT = new Set([PARSER, 'packages/ui/scripts/lint-pack-json-parse.mjs'])
 // --- the analyzer, pure over source text so the self-test can drive it -------
 
 /**
- * Strip comments, keeping string literals intact.
+ * Punctuation after which a `/` opens a REGEX rather than being division.
+ * Anything that cannot end an expression.
+ */
+const REGEX_MAY_FOLLOW = new Set([...'(,=:[!&|?{};+-*%~^<>']);
+
+/** Keywords after which a `/` opens a regex, e.g. `return /x/.test(s)`. */
+const REGEX_MAY_FOLLOW_WORD = new Set([
+  'return', 'typeof', 'instanceof', 'in', 'of', 'new', 'delete', 'void',
+  'case', 'do', 'else', 'yield', 'await',
+]);
+
+/**
+ * Strip comments, leaving string and regex literals intact.
  *
- * NOT cosmetic. The three sites this guard was written for now carry comments
+ * WHY COMMENTS GO. The three sites this guard was written for carry comments
  * QUOTING the code they replaced -- `JSON.parse(raw)[0]`, `raw.indexOf('[')` --
  * because a fix whose comment cannot name what it fixed is a worse fix. Scanning
- * raw text flagged all three the moment they were correct, which is the most
- * annoying possible failure mode: a guard that goes red on the explanation of
- * why it is green, and whose obvious workaround is to delete the explanation.
+ * raw text flagged all three the moment they became correct: a guard going red
+ * on the explanation of why it is green, whose obvious workaround is to delete
+ * the explanation.
  *
- * Tracks quotes and escapes so a `//` inside a string is not read as a comment.
- * It does NOT understand regex literals, so a regex containing `//` or `/*`
- * could confuse it; no pack reader has one, and the self-test pins that a defect
- * sharing a line with a comment is still caught, which is the direction that
- * would hurt.
+ * WHY REGEX LITERALS ARE TRACKED, which an earlier version did not do. Without
+ * it a `/` inside a regex can be misread as the start of a comment, and the
+ * stripper then DELETES real code. Two shapes were confirmed to hide a live
+ * hand-parse and exit 0, both now self-test cases:
+ *
+ *   s.replace(/\/\//g, '')   the misread `//` eats to end of line, hiding
+ *                            anything after it on that line
+ *   s.replace(/[/*]/g, '')   the misread `/*` opens a BLOCK comment and eats
+ *                            ACROSS LINES to the next `*​/` or EOF -- the worse
+ *                            of the two, and a plausible thing to write near
+ *                            path handling
+ *
+ * Distinguishing a regex from division needs the preceding token, which is what
+ * the two tables above are. This is the standard heuristic and it is not a
+ * parser: it is right on everything in this repo and on the shapes above, and a
+ * pathological case would mis-strip rather than mis-report, because every rule
+ * downstream reports only on what it can SEE.
  */
 function stripComments(source) {
   let out = '';
   let i = 0;
   /** @type {null | '"' | "'" | '`'} */
   let quote = null;
+
+  /** Can a `/` here open a regex? Decided by the last significant char emitted. */
+  const regexCanStart = () => {
+    const trimmed = out.replace(/\s+$/, '');
+    if (trimmed === '') return true;
+    const last = trimmed[trimmed.length - 1];
+    if (REGEX_MAY_FOLLOW.has(last)) return true;
+    const word = /([A-Za-z_$][\w$]*)$/.exec(trimmed);
+    return word ? REGEX_MAY_FOLLOW_WORD.has(word[1]) : false;
+  };
+
   while (i < source.length) {
     const ch = source[i];
     const next = source[i + 1];
@@ -159,6 +205,28 @@ function stripComments(source) {
       i += 2;
       while (i < source.length && !(source[i] === '*' && source[i + 1] === '/')) i += 1;
       i += 2;
+      continue;
+    }
+    if (ch === '/' && regexCanStart()) {
+      // Copy the literal verbatim: `\` escapes anything, and `/` inside a
+      // `[...]` class does not close it.
+      out += ch;
+      i += 1;
+      let inClass = false;
+      while (i < source.length) {
+        const c = source[i];
+        if (c === '\\') {
+          out += c + (source[i + 1] ?? '');
+          i += 2;
+          continue;
+        }
+        if (c === '\n') break; // unterminated; bail rather than eat the file
+        out += c;
+        i += 1;
+        if (c === '[') inClass = true;
+        else if (c === ']') inClass = false;
+        else if (c === '/' && !inClass) break;
+      }
       continue;
     }
     out += ch;
@@ -213,75 +281,65 @@ const HAND_PARSE = [
 ];
 
 /**
- * FOLLOW THE VALUE, not the spelling.
+ * FOLLOW THE VALUE, not the spelling — but report only on POSITIVE evidence.
  *
- * The rules above enumerate ways of picking the first entry out, and an
+ * The spelling list enumerates ways of picking the first entry out, and an
  * enumeration is never finished: `const [entry] = JSON.parse(raw)` destructures
- * instead of indexing and matches none of them. It got past an earlier version
- * of this file, and chasing it with a fourth regex would just move the boundary
- * one spelling further out.
+ * instead of indexing and matches none of them. Chasing that with a fourth
+ * regex would move the boundary one spelling out and no further. So this asks
+ * what happens to the pack OUTPUT instead: every extraction spelling needs a
+ * parse first, so `JSON.parse(<the pack variable>)` catches all of them at once.
  *
- * So the primary rule ignores how the entry is extracted and asks what happens
- * to the pack OUTPUT: the variable it is bound to must reach the shared parser,
- * and must not reach `JSON.parse`. Every extraction spelling — indexing,
- * destructuring, `Object.values`, one this file has never seen — needs a parse
- * first, so all of them fail the second half.
+ * WHAT THIS DELIBERATELY DOES NOT DO, having done it once and been wrong: it
+ * does not report the ABSENCE of a call to the parser. An earlier version also
+ * flagged "bound to `raw`, which is never passed to the shared parser", which
+ * requires the same identifier to appear textually at both the pack site and the
+ * parser call. Two routine, entirely correct shapes fail that:
  *
- * @returns {{ routed: boolean, problems: string[] }}
+ *     const aliased = raw;  readPackEntry(aliased, { npmVersion });
+ *     const raw = pack();   handOff(raw);   // helper calls the parser inside
+ *
+ * Both were reported broken. Failing to resolve a value is INDISTINGUISHABLE
+ * from a defect, so an unresolved trace must stay silent and let the weaker
+ * import check carry it. A guard that fires on correct code gets switched off,
+ * and then it guards nothing — which is a worse outcome than the narrower
+ * detection this leaves behind.
+ *
+ * @returns {string[]}
  */
 function tracePackOutput(source) {
   const problems = [];
-  let routed = 0;
 
   for (const match of source.matchAll(/\[[^[\]]*\]/g)) {
     const literal = match[0];
     if (!/['"]pack['"]/.test(literal) || !/['"]--json['"]/.test(literal)) continue;
 
-    // The statement the invocation sits in, back to the previous `;`. That is
-    // enough to see both `readPackX(run(...))` and `const raw = execFileSync(...)`.
+    // The statement the invocation sits in, back to the previous `;`. Enough to
+    // see both `readPackX(run(...))` and `const raw = execFileSync(...)`.
     const stmt = source.slice(source.lastIndexOf(';', match.index) + 1, match.index);
 
-    // Consumed inline: `readPackedFilename(run('npm', ['pack', ...]), ...)`.
-    if (/readPack\w*\s*\(/.test(stmt)) {
-      routed += 1;
-      continue;
-    }
+    // Consumed inline by the parser: nothing to trace.
+    if (/readPack\w*\s*\(/.test(stmt)) continue;
 
-    // Otherwise it is bound to a name and read later. First assignment in the
-    // statement, so `const raw = ...` and a bare `raw = ...` both land.
+    // Bound to a name and read later. First assignment in the statement, so
+    // `const raw = ...` and a bare `raw = ...` both land.
     const bound = /([A-Za-z_$][\w$]*)\s*=[^=]/.exec(stmt);
-    if (!bound) {
-      problems.push(
-        'the result of `npm pack --json` is neither passed straight to the shared ' +
-          'parser nor bound to a variable, so this guard cannot see what reads it',
-      );
-      continue;
-    }
+    if (!bound) continue;
 
     const name = bound[1];
     // `$` is legal in a JS identifier and is a regex metacharacter, so a binding
-    // called `$raw` would compile to a pattern that can never match and quietly
-    // flag a clean file.
+    // called `$raw` would compile to a pattern that can never match.
     const escaped = name.replace(/[$]/g, '\\$');
-    const reaches = (fn) => new RegExp(`${fn}\\s*\\(\\s*${escaped}\\b`).test(source);
 
-    if (reaches('JSON\\.parse')) {
+    if (new RegExp(`JSON\\.parse\\s*\\(\\s*${escaped}\\b`).test(source)) {
       problems.push(
         `hand-parses the pack listing: \`JSON.parse(${name})\` on the output of ` +
           '`npm pack --json`, whatever is done with the result afterwards',
       );
     }
-    if (!/readPack\w*\s*\(/.test(source) || !reaches('readPack\\w*')) {
-      problems.push(
-        `the output of \`npm pack --json\` is bound to \`${name}\`, which is never ` +
-          'passed to the shared parser',
-      );
-    } else {
-      routed += 1;
-    }
   }
 
-  return { routed: routed > 0, problems };
+  return problems;
 }
 
 /** @returns {string[]} one message per problem; empty means clean. */
@@ -294,7 +352,7 @@ function analyze(raw) {
       `reads \`npm pack --json\` but does not import the shared parser (${PARSER})`,
     );
   }
-  problems.push(...tracePackOutput(source).problems);
+  problems.push(...tracePackOutput(source));
   // Secondary net. Subsumed by the trace above in every case seen so far, but
   // kept because it needs no dataflow at all: it still fires in a file where the
   // binding could not be resolved, and it names the exact spelling.
@@ -402,12 +460,67 @@ const SELF_TEST_CASES = [
   },
   {
     // `$` is a legal identifier character and a regex metacharacter. Unescaped,
-    // the reachability probe compiles to a pattern matching nothing and reports
-    // a correct file as broken.
-    name: 'a $-prefixed binding name does not break the reachability probe',
+    // the probe compiles to a pattern matching nothing.
+    name: 'a $-prefixed binding name does not break the trace',
     source:
       `${IMPORT}\nconst $raw = ${PACKS};\n` +
       `const { entry } = readPackEntry($raw, { npmVersion });\nconsole.log(entry.filename);`,
+    expect: 'clean',
+  },
+  {
+    // FALSE POSITIVE, REGRESSION CONTROL. Correct code. An earlier revision
+    // reported the absence of a textual `readPack*(raw)` as a defect, so
+    // renaming the value through an alias -- a routine edit -- reported this
+    // broken. Absence of evidence is not evidence.
+    name: 'aliasing the bound value before parsing it is correct code',
+    source:
+      `${IMPORT}\nconst raw = ${PACKS};\n` +
+      `const aliased = raw;\nreadPackEntry(aliased, { npmVersion });`,
+    expect: 'clean',
+  },
+  {
+    // FALSE POSITIVE, REGRESSION CONTROL. Also correct code: extracting a helper
+    // moves the parser call away from the pack site and out of the trace's view.
+    name: 'handing the pack output to a helper that parses it is correct code',
+    source:
+      `${IMPORT}\nfunction extractFilename(payload, npmVersion) {\n` +
+      `  return readPackedFilename(payload, { npmVersion }).filename;\n}\n` +
+      `const raw = ${PACKS};\nconsole.log(extractFilename(raw, npmVersion));`,
+    expect: 'clean',
+  },
+  {
+    // STRIPPER HOLE 1. `/\/\//g` was misread as a line comment, deleting the
+    // rest of the line -- including a live hand-parse sitting on it.
+    name: 'a regex containing // does not hide a hand-parse on the same line',
+    source:
+      `${IMPORT}\nconst raw = ${PACKS};\n` +
+      `const { entry } = readPackEntry(raw, { npmVersion });\n` +
+      `const slug = s.replace(/\\/\\//g, '/'), legacy = JSON.parse(raw)[0].filename;\n` +
+      `console.log(entry, slug, legacy);`,
+    expect: 'flagged',
+  },
+  {
+    // STRIPPER HOLE 2, the worse one. A `[/*]` class was misread as a BLOCK
+    // comment and ate across lines to the next `*​/` or EOF, hiding everything
+    // after it. A slash-or-star class near path handling is ordinary code.
+    name: 'a regex class containing /* does not blind the rest of the file',
+    source:
+      `${IMPORT}\nconst raw = ${PACKS};\n` +
+      `const { entry } = readPackEntry(raw, { npmVersion });\n` +
+      `const clean = s.replace(/[/*]/g, '');\n` +
+      `const legacy = JSON.parse(raw)[0].filename;\nconsole.log(entry, clean, legacy);`,
+    expect: 'flagged',
+  },
+  {
+    // The control for both hole cases: the same regexes with NO defect must stay
+    // clean, or "flagged" above would be satisfied by a stripper that panics on
+    // any regex at all.
+    name: 'those same regexes with no hand-parse are still clean',
+    source:
+      `${IMPORT}\nconst raw = ${PACKS};\n` +
+      `const { entry } = readPackEntry(raw, { npmVersion });\n` +
+      `const a = s.replace(/\\/\\//g, '/');\nconst b = s.replace(/[/*]/g, '');\n` +
+      `console.log(entry, a, b);`,
     expect: 'clean',
   },
 ];
