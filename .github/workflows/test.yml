@@ -195,6 +195,20 @@ jobs:
       - name: CDN version-pin staleness guard (docs, README, examples)
         run: pnpm --filter @kitn.ai/ui run lint:cdn-pins
 
+      # Every script reading `npm pack --json` must go through the one parser
+      # that knows both container shapes. npm 12 made the top level an object
+      # keyed by package name; `JSON.parse(raw)[0]` is `undefined` under it, and
+      # that took down a release mid-publish. #241 fixed create-kai's site and
+      # wrote the shared parser -- and left three more hand-rolled copies in
+      # packages/ui/scripts, because nothing related the four sites to each other.
+      #
+      # This is the half that fires when the defect is WRITTEN. The end-to-end
+      # half (running the guards under the npm the release pins) is further down
+      # in this job and only covers the two `verify:pack` scripts; a fifth reader
+      # added next month is caught here or nowhere. Source-only, no build, ~1s.
+      - name: pack --json parse guard (one parser, both npm shapes)
+        run: pnpm --filter @kitn.ai/ui run lint:pack-parse
+
       - name: Build (element bundle + provider subpath)
         run: pnpm exec nx build ui
 
@@ -648,10 +662,17 @@ jobs:
       # pin by packages/create-kai/test/publish-shape.test.ts, so the two cannot
       # drift apart silently -- which is the only way this step goes back to
       # testing an npm nothing publishes with.
-      - name: create-kai packed-tarball shape (under the npm the release job pins)
+      #
+      # BOTH packages, in ONE step. packages/ui had the identical defect in its
+      # own verify:pack (it sliced from the first literal `[`, which under the
+      # keyed shape lands inside the `files` array and throws a SyntaxError), and
+      # it was never exercised under npm 12 either. Same install, same PATH, so
+      # the pin stays a single literal that publish-shape.test.ts can compare.
+      - name: packed-tarball shape, both packages (under the npm the release job pins)
         run: |
           npm install --prefix "$RUNNER_TEMP/npm-release-pin" npm@12.0.2 --no-audit --no-fund
           VERIFY_PACK_NPM="$RUNNER_TEMP/npm-release-pin/node_modules/.bin/npm" pnpm --filter create-kai run verify:pack
+          VERIFY_PACK_NPM="$RUNNER_TEMP/npm-release-pin/node_modules/.bin/npm" pnpm --filter @kitn.ai/ui run verify:pack
 
       - name: React adapter tests
         run: pnpm --filter @kitn.ai/ui test:react

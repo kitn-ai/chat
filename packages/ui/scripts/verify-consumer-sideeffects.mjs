@@ -30,9 +30,14 @@ import { tmpdir } from 'node:os';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { readPackedFilename } from '../../../scripts/pack-listing.mjs';
+
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const KEEP = process.argv.includes('--keep');
 const VITE = 'vite@^8';
+
+/** Named in every pack-shape failure; it is the fact that explains them. */
+const npmVersion = execFileSync('npm', ['--version'], { encoding: 'utf8' }).trim();
 
 const fail = (msg) => {
   console.error(`\n✗ verify-consumer-sideeffects: ${msg}\n`);
@@ -61,8 +66,14 @@ try {
   console.log(`\nverify-consumer-sideeffects — ${tmp}`);
 
   step('npm pack');
-  const packed = JSON.parse(run('npm', ['pack', '--json', '--pack-destination', tmp], ROOT));
-  const tarball = join(tmp, packed[0].filename);
+  // Shape-normalised: npm 12 made the top level an object keyed by package name,
+  // so `JSON.parse(raw)[0]` — what stood here — is `undefined` under it. See
+  // <repo>/scripts/pack-listing.mjs.
+  const { filename } = readPackedFilename(
+    run('npm', ['pack', '--json', '--pack-destination', tmp], ROOT),
+    { npmVersion },
+  );
+  const tarball = join(tmp, filename);
 
   mkdirSync(join(app, 'src'), { recursive: true });
   writeFileSync(

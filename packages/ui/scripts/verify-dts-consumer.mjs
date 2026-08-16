@@ -41,8 +41,13 @@ import { tmpdir } from 'node:os';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { readPackedFilename } from '../../../scripts/pack-listing.mjs';
+
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const KEEP = process.argv.includes('--keep');
+
+/** Named in every pack-shape failure; it is the fact that explains them. */
+const npmVersion = execFileSync('npm', ['--version'], { encoding: 'utf8' }).trim();
 
 const step = (msg) => console.log(`  · ${msg}`);
 const run = (cmd, args, cwd) =>
@@ -121,12 +126,18 @@ try {
   console.log(`\nverify-dts-consumer — ${tmp}`);
 
   step('npm pack');
-  const packed = JSON.parse(run('npm', ['pack', '--json', '--pack-destination', tmp], ROOT));
+  // Shape-normalised: npm 12 made the top level an object keyed by package name,
+  // so `JSON.parse(raw)[0]` — what stood here — is `undefined` under it. See
+  // <repo>/scripts/pack-listing.mjs.
+  const { filename } = readPackedFilename(
+    run('npm', ['pack', '--json', '--pack-destination', tmp], ROOT),
+    { npmVersion },
+  );
 
   // UNIQUE tarball filename. npm serves a CACHED tarball when the name repeats, so
   // reusing `kitn.ai-ui-<version>.tgz` can silently install a PREVIOUS build and
   // verify code that is not the code under test.
-  const original = join(tmp, packed[0].filename);
+  const original = join(tmp, filename);
   const tarball = join(tmp, `kai-dts-${Date.now()}-${process.pid}.tgz`);
   run('mv', [original, tarball], tmp);
 

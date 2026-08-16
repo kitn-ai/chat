@@ -125,11 +125,23 @@ const RELEASE_CONFIG = 'release-please-config.json';
 // is a docs bug, a pin in here is a live vulnerability being handed to readers.
 const ADVISORY = { firstAffected: '0.14.1', lastAffected: '0.24.0', patched: '0.25.0' };
 
-// Scanned: everything first-party a reader could copy a URL out of.
+// Scanned: everything first-party a reader could copy a URL out of, plus the
+// repo-root `scripts/` shared build tooling.
+//
+// `scripts` is here because leaving it out was a silent SIDE EFFECT, not a
+// decision. `scripts/pack-listing.mjs` moved up from packages/create-kai when
+// packages/ui's guards started sharing it, and its `lint-cdn-pins: historical`
+// waiver -- on the line narrating the 0.24.0 publish that the module exists
+// because of -- went from governing to governing nothing, because the scan could
+// no longer reach the file. An orphaned waiver is worse than no waiver: it reads
+// like the line is accounted for.
+//
 // NOT scanned: `docs/` at the repo root, which is the handoff/spec/research
 // archive. Those files date-stamp what was true when they were written, and
-// rewriting them would corrupt a record rather than fix a link.
-const SCAN_ROOTS = ['apps', 'packages', 'examples'];
+// rewriting them would corrupt a record rather than fix a link. That exclusion
+// is deliberate and about ARCHIVAL content; root `scripts/` is live maintained
+// source and is not the same case.
+const SCAN_ROOTS = ['apps', 'packages', 'examples', 'scripts'];
 const SCAN_FILES = ['README.md'];
 const SKIP_DIRS = new Set([
   'node_modules', 'dist', 'build', '.git', '.astro', '.nx', '.cache',

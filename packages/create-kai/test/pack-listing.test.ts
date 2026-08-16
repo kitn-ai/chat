@@ -28,7 +28,9 @@ import { describe, expect, it } from 'vitest';
 
 // @ts-expect-error -- a .mjs build script with no type declarations, imported
 // here on purpose: the thing under test must be the file the release runs.
-import { readPackListing } from '../scripts/pack-listing.mjs';
+// Repo root, not this package: packages/ui's guards read the same listing, and
+// the module's own docblock says why it lives up there.
+import { readPackEntry, readPackListing, readPackedFilename } from '../../../scripts/pack-listing.mjs';
 
 const FIXTURES = path.join(__dirname, 'fixtures');
 const raw = (file: string) => readFileSync(path.join(FIXTURES, file), 'utf8');
@@ -65,6 +67,36 @@ describe('reading the packed listing across npm majors', () => {
     expect(readPackListing(NPM_12, { npmVersion: '12.0.2' }).paths).toEqual(
       readPackListing(NPM_10, { npmVersion: '10.9.8' }).paths,
     );
+  });
+
+  it('gets the same tarball FILENAME out of both shapes', () => {
+    // packages/ui's two tarball guards read `filename`, not paths, and both were
+    // spelling it `packed[0].filename` — the same defect one field over. Graded
+    // on the same fixtures so the accessor cannot regress independently.
+    const a = readPackedFilename(NPM_10, { npmVersion: '10.9.8' });
+    const b = readPackedFilename(NPM_12, { npmVersion: '12.0.2' });
+    expect(a.shape).toBe('array');
+    expect(b.shape).toBe('keyed');
+    expect(b.filename).toBe(a.filename);
+    expect(a.filename).toMatch(/\.tgz$/);
+  });
+
+  it('gets the same weight fields out of both shapes', () => {
+    // verify-pack-weight.mjs reads the whole entry, not just paths: `files` with
+    // sizes, `unpackedSize` and `entryCount`. Its rules are only as trustworthy
+    // as these surviving the container change.
+    const a = readPackEntry(NPM_10, { npmVersion: '10.9.8' }).entry;
+    const b = readPackEntry(NPM_12, { npmVersion: '12.0.2' }).entry;
+    expect(b.unpackedSize).toBe(a.unpackedSize);
+    expect(b.entryCount).toBe(a.entryCount);
+    expect(b.files).toEqual(a.files);
+    expect(a.files[0]).toHaveProperty('size');
+  });
+
+  it('reproduces the original TypeError on the npm 12 fixture, for filename too', () => {
+    // The packages/ui spelling of the same defect, pinned the same way.
+    const old = () => (JSON.parse(NPM_12) as { filename: string }[])[0]!.filename;
+    expect(old).toThrow(/Cannot read properties of undefined \(reading 'filename'\)/);
   });
 
   it('reproduces the original TypeError on the npm 12 fixture', () => {
