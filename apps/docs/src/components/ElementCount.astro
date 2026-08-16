@@ -1,0 +1,11 @@
+---
+// How many kai-* elements the kit registers, read at build time from the same
+// generated element-meta.json that PropTable and SolidComponentIndex read.
+//
+// It is a component rather than a number typed into the prose because the typed
+// version already rotted: the introduction said "around 50" while the kit grew
+// past 80, and nothing could catch it — a count in a sentence is invisible to
+// every guard in the repo. Rendered inline, so it drops into a sentence.
+import meta from '@kitn.ai/ui/element-meta.json';
+---
+{(meta as unknown[]).length}

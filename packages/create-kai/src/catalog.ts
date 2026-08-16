@@ -231,10 +231,24 @@ export interface GatewayChoice {
  * (`createReactAgent` over a `new ChatOpenAI(...)`) and its `runNote` asks for a
  * key and nothing else, so `listGatewayGroups()` files it under "Bring a key".
  *
- * This function stays flat because `WIRED_GATEWAYS` is `{ mock }` in this slice:
- * grouping a list where ten of eleven entries are not selectable would add
- * headings to a menu with one live item. Switching to `listGatewayGroups()` is
- * the natural companion to widening `WIRED_GATEWAYS`, not a separate task.
+ * SO WHY IS IT STILL FLAT. This paragraph used to answer "because
+ * `WIRED_GATEWAYS` is `{ mock }` in this slice", and called switching to
+ * `listGatewayGroups()` the natural companion to widening that set. #225 widened
+ * it and the switch did not follow, so read the reason below and not that
+ * prediction: the premise expired, and what replaces it is weaker.
+ *
+ * The menu is never the whole catalog. `index.ts` offers only the gateways that
+ * pass `wirableGateway` for the CHOSEN framework, so it shows the wired set
+ * intersected with the frameworks that declare a route host — and where that
+ * leaves `mock` alone the CLI answers without prompting at all. Every gateway
+ * that does reach the menu today falls under two of the three headings:
+ * "No backend" for `mock`, "Bring a key" for the rest, nothing wired needing a
+ * server or a runtime. Two headings over a list that fits on one screen is not
+ * worth the vertical space.
+ *
+ * That is a judgement about a short menu, not a blocker, and it expires the
+ * first time a `bring-a-server` gateway is wired — reach for
+ * `listGatewayGroups()` then rather than growing a third heading by hand.
  */
 export function listGateways(): GatewayChoice[] {
   const all = listIntegrations();

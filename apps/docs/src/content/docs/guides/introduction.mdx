@@ -4,8 +4,9 @@ description: AI/UI is a set of Shadow-DOM web components for building AI chat an
 ---
 
 import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+import ElementCount from '../../../components/ElementCount.astro';
 
-**AI/UI** (`@kitn.ai/ui`) is a set of web components for AI chat and agent UIs — message threads, prompt input, streaming responses, markdown and code rendering, reasoning and tool-call panels, attachments, a conversation sidebar, and more. Around 50 elements, all named `kai-*`, all droppable into the app you already have.
+**AI/UI** (`@kitn.ai/ui`) is a set of web components for AI chat and agent UIs — message threads, prompt input, streaming responses, markdown and code rendering, reasoning and tool-call panels, attachments, a conversation sidebar, and more. <ElementCount /> elements, all named `kai-*`, all droppable into the app you already have.
 
 ## What you're working with
 
@@ -111,7 +112,7 @@ React is the one framework that gets a thin extra layer: `@kitn.ai/ui/react` shi
 
 ## What's in the box
 
-About 50 elements, from a full `<kai-chat>` down to single building blocks like a markdown renderer or a tool-call panel. Reach for the high-level ones to ship fast, the small ones to compose your own layout.
+The kit ships <ElementCount /> elements, from a full `<kai-chat>` down to single building blocks like a markdown renderer or a tool-call panel. Reach for the high-level ones to ship fast, the small ones to compose your own layout.
 
 | Component | What it does |
 |---|---|
