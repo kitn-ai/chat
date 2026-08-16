@@ -20,14 +20,18 @@ export interface UnclassifiedKeyword {
 }
 
 export interface CardValidationGenerator {
-  CARD_TYPES: string[];
   STRIPPED: Readonly<Record<string, string>>;
   NOT_ENFORCED: Readonly<Record<string, string>>;
   OUT_FILE: string;
+  SCHEMAS_ENTRY: string;
+  /** The card-data types, parsed out of the `cardSchemas` object literal. Memoized. */
+  cardTypes(): string[];
+  /** The same parse, over a source the caller supplies — the negative cases. */
+  readCardTypes(source?: string, where?: string): string[];
   enforcedKeywords(source?: string): Set<string>;
   scanUnclassified(doc: unknown, enforced: Set<string>): UnclassifiedKeyword[];
   projectSchema(doc: unknown, enforced: Set<string>): Record<string, unknown> | undefined;
-  build(): { enforced: Set<string>; projections: Record<string, unknown>; source: string };
+  build(): { enforced: Set<string>; types: string[]; projections: Record<string, unknown>; source: string };
 }
 
 const PKG_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
