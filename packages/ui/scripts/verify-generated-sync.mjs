@@ -100,9 +100,21 @@ const FIXTURE_CONFIG = argOf('--fixture-config');
 // literal fix printed on failure — the guard runs it, so it cannot drift.
 const FIX = 'pnpm --filter @kitn.ai/ui run build:api';
 
-// Every tracked file written by scripts/gen-element-api.mjs and the sibling
-// generators it invokes. Paths are repo-relative so failure output matches what
-// you would `git add`.
+// Every tracked file written by the generators `build:api` runs — that is
+// scripts/gen-elements-manifest.mjs, plus scripts/gen-element-api.mjs and the
+// sibling generators it invokes. Paths are repo-relative so failure output
+// matches what you would `git add`.
+//
+// element-manifest.json is in `build:api` for THIS guard's sake and it is worth
+// knowing why, because it looks redundant: `build:elements` already runs the
+// same generator, ahead of the elements vite build that needs the entry points.
+// But this guard only ever runs `build:api`, so while the manifest was reachable
+// only through `build:elements` it could not be covered here at all — the
+// sentinel would survive the run and the guard would fail on every clean tree.
+// Adding it to the list without adding it to `build:api` produces a check that
+// is red always, which is the same as no check. The generator is a pure scan of
+// register-impl.ts and src/elements/*.ts[x] — no build, no network, idempotent —
+// so running it in both places costs milliseconds and cannot diverge.
 //
 // `probe` says how to plant the sentinel:
 //   'overwrite' — the generator rewrites the whole file, so clobber it.
@@ -114,6 +126,7 @@ const FIX = 'pnpm --filter @kitn.ai/ui run build:api';
 //                 that must be rewritten.
 const GENERATED = [
   { file: 'packages/ui/src/elements/element-meta.json', probe: 'overwrite' },
+  { file: 'packages/ui/src/elements/element-manifest.json', probe: 'overwrite' },
   { file: 'packages/ui/src/elements/icon-names.json', probe: 'overwrite' },
   { file: 'packages/ui/src/elements/element-types.d.ts', probe: 'overwrite' },
   { file: 'packages/ui/frameworks/react/index.tsx', probe: 'overwrite' },
@@ -320,10 +333,15 @@ function runGuard(cfg, { log = () => {} } = {}) {
       return p(
         `${drifted.length} generated artifact(s) are STALE — they do not match what the generator produces from the current source:\n` +
           drifted.map((x) => `    ${x}`).join('\n') +
-          '\n\n  These are derived from src/elements/ by scripts/gen-element-api.mjs. The `kai`\n' +
-          "  MCP's component_reference and the docs site's PartTable.astro read them, so a\n" +
-          '  prop, event or ::part you added to the source is invisible to every tool a\n' +
+          '\n\n  These are derived from src/elements/ by the generators `build:api` runs. The\n' +
+          "  `kai` MCP's component_reference and the docs site's PartTable.astro read them,\n" +
+          '  so a prop, event or ::part you added to the source is invisible to every tool a\n' +
           '  developer would use to discover it until these are regenerated.\n\n' +
+          '  element-manifest.json is worse than invisible: src/elements/autoloader.ts\n' +
+          '  imports it AT RUNTIME to map a tag to the chunk that registers it. A tag\n' +
+          '  missing from the committed manifest hits `if (!file) return` and the element\n' +
+          '  never upgrades — silently, since the warnOnce path below it only fires when a\n' +
+          '  dynamic import throws, which a missing key never reaches.\n\n' +
           '  Fix — run, then commit the files listed above:\n' +
           `    ${cfg.fix}\n\n` +
           '  Do not reach for `nx build ui` instead. It regenerates these only when it\n' +
