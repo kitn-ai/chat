@@ -21,7 +21,8 @@ Reach for `fullStream`. AI/UI reads OpenAI-format SSE (`data: {choices:[{delta:{
 | `text-delta.text` | `delta.content` |
 | `reasoning-delta.text` | `delta.reasoning` |
 | `tool-input-start` + its `tool-input-delta` fragments | `delta.tool_calls` |
-| `finish` | `finish_reason` |
+| `tool-call` | `delta.tool_calls`, but only when nothing streamed — see below |
+| `finish` | `finish_reason` plus a `usage` frame |
 | `error` | an in-band `{ error: { message } }` |
 
 Parts with no OpenAI spelling — `text-start`/`end`, `tool-input-end`, step boundaries, raw provider frames — are dropped.
@@ -57,9 +58,22 @@ export async function POST(request: Request) {
   });
 
   const encoder = new TextEncoder();
+
+  // OpenAI correlates tool-call fragments by their position in the tool_calls
+  // array; the SDK only ever gives an id. Derive one from the other, in
+  // first-seen order.
   const toolIndex = new Map<string, number>();
-  const indexOf = (id: string) =>
-    toolIndex.get(id) ?? (toolIndex.set(id, toolIndex.size), toolIndex.size - 1);
+  const indexOf = (id: string): number => {
+    const known = toolIndex.get(id);
+    if (known !== undefined) return known;
+    const next = toolIndex.size;
+    toolIndex.set(id, next);
+    return next;
+  };
+
+  // How many argument characters each call streamed, so the `tool-call` part
+  // below knows whether emitting it would duplicate them.
+  const streamedArgs = new Map<string, number>();
 
   const sse = new ReadableStream({
     async start(controller) {
@@ -75,7 +89,11 @@ export async function POST(request: Request) {
             case 'reasoning-delta':
               send({ choices: [{ delta: { reasoning: part.text } }] });
               break;
+            // The call is announced here, before its arguments exist, which is
+            // what lets <kai-tool> open a panel with the tool's name in it while
+            // the arguments are still being written.
             case 'tool-input-start':
+              streamedArgs.set(part.id, 0);
               send({
                 choices: [{
                   delta: {
@@ -90,6 +108,7 @@ export async function POST(request: Request) {
               });
               break;
             case 'tool-input-delta':
+              streamedArgs.set(part.id, (streamedArgs.get(part.id) ?? 0) + part.delta.length);
               send({
                 choices: [{
                   delta: {
@@ -101,12 +120,44 @@ export async function POST(request: Request) {
                 }],
               });
               break;
+            // Note `toolCallId`, not `id` — this part spells it differently.
+            // Emitted only when nothing streamed, or the arguments double.
+            case 'tool-call':
+              if ((streamedArgs.get(part.toolCallId) ?? 0) === 0) {
+                send({
+                  choices: [{
+                    delta: {
+                      tool_calls: [{
+                        index: indexOf(part.toolCallId),
+                        id: part.toolCallId,
+                        type: 'function',
+                        function: {
+                          name: part.toolName,
+                          arguments: JSON.stringify(part.input ?? {}),
+                        },
+                      }],
+                    },
+                  }],
+                });
+              }
+              break;
+            // One frame carries both, the way chat-completions sends them.
+            // `reasoning_tokens` proves thinking happened even when the provider
+            // streamed no reasoning text.
             case 'finish':
               send({
                 choices: [{
                   delta: {},
                   finish_reason: FINISH_REASONS[part.finishReason] ?? part.finishReason,
                 }],
+                usage: {
+                  prompt_tokens: part.totalUsage.inputTokens,
+                  completion_tokens: part.totalUsage.outputTokens,
+                  total_tokens: part.totalUsage.totalTokens,
+                  completion_tokens_details: {
+                    reasoning_tokens: part.totalUsage.outputTokenDetails.reasoningTokens,
+                  },
+                },
               });
               break;
             case 'error':
@@ -115,6 +166,10 @@ export async function POST(request: Request) {
                   message: part.error instanceof Error ? part.error.message : String(part.error),
                 },
               });
+              break;
+            // text-start/end, tool-input-end, sources, files, step boundaries
+            // and raw provider frames have no OpenAI spelling. Dropped.
+            default:
               break;
           }
         }
@@ -149,7 +204,7 @@ export async function POST(request: Request) {
 
 **Correlate by index, not id.** OpenAI identifies a tool-call fragment by its *position* in the `tool_calls` array; the SDK only ever gives you an id. Derive one from the other in first-seen order, as `indexOf` does above. Get it wrong and nothing throws — fragments land on the wrong call and the arguments come out as spliced JSON.
 
-**Don't emit `tool-call` after streaming.** `fullStream` re-sends a call's complete input on its `tool-call` part *after* the `tool-input-delta` fragments. Emitting both doubles the arguments of every call that streamed; skipping it always empties the arguments of a provider that streamed none. Track how much each call streamed and emit `tool-call` only when that count is zero.
+**Don't emit `tool-call` after streaming.** `fullStream` re-sends a call's complete input on its `tool-call` part *after* the `tool-input-delta` fragments. Emitting both doubles the arguments of every call that streamed; skipping it always empties the arguments of a provider that streamed none. Neither is safe to assume, so decide per call from what actually arrived — that's the `streamedArgs` map above. Note the spelling too: `tool-call` carries `toolCallId` where the input parts carry `id`.
 
 ## Hoist the system turn
 
