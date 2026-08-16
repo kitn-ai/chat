@@ -34,7 +34,21 @@ import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { readPackEntry } from '../../../scripts/pack-listing.mjs';
+
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+/**
+ * The npm this runs under, which is NOT always the one on PATH.
+ *
+ * Same seam, same name, as create-kai's verify-pack.mjs: it points at a specific
+ * npm binary so CI can exercise this guard under the npm the release job pins,
+ * without `npm install -g` perturbing every step after it in the job.
+ */
+const NPM = process.env.VERIFY_PACK_NPM || 'npm';
+
+/** Reported on success and named in every parse failure. */
+const npmVersion = execFileSync(NPM, ['--version'], { encoding: 'utf8' }).trim();
 
 /** Anything bigger than this, outside dist/, needs an explicit entry below. */
 const MAX_FILE_BYTES = 64 * 1024;
@@ -77,15 +91,27 @@ if (!existsSync(resolve(ROOT, 'dist'))) {
 
 // --ignore-scripts: `npm pack` would otherwise run prepublishOnly (a full
 // rebuild) just to list files.
-const raw = execFileSync('npm', ['pack', '--dry-run', '--ignore-scripts', '--json'], {
+const raw = execFileSync(NPM, ['pack', '--dry-run', '--ignore-scripts', '--json'], {
   cwd: ROOT,
   encoding: 'utf8',
   maxBuffer: 64 * 1024 * 1024,
   stdio: ['ignore', 'pipe', 'ignore'],
 });
 
-const report = JSON.parse(raw.slice(raw.indexOf('[')))[0];
-const files = report.files ?? [];
+// Shape-normalised. What stood here was `JSON.parse(raw.slice(raw.indexOf('[')))[0]`,
+// which is the worst of the three variants of this defect that were in this
+// directory: under npm 12's keyed container the first literal `[` is the start of
+// the `files` array, so the slice produces a valid array followed by trailing
+// bytes and the parse dies with a SyntaxError pointing at a line of npm's output
+// rather than anything actionable. See <repo>/scripts/pack-listing.mjs.
+let report;
+try {
+  ({ entry: report } = readPackEntry(raw, { npmVersion }));
+} catch (err) {
+  console.error(`\n✗ pack weight: ${err.message}\n`);
+  process.exit(1);
+}
+const files = report.files;
 
 if (files.length === 0) {
   console.error('\n✗ pack weight: `npm pack --dry-run` reported no files. Cannot verify.\n');
@@ -137,7 +163,8 @@ const stale = [...ALLOWED_LARGE_FILES.keys()].filter(
 );
 
 console.log(
-  `✓ pack weight: ${report.entryCount} files, ${mib(report.unpackedSize)} unpacked ` +
+  `✓ pack weight (npm ${npmVersion}): ${report.entryCount} files, ` +
+    `${mib(report.unpackedSize)} unpacked ` +
     `(ceiling ${mib(MAX_UNPACKED_BYTES)}); every non-dist file over ${kib(MAX_FILE_BYTES)} ` +
     `is one of the ${ALLOWED_LARGE_FILES.size} allowlisted.`,
 );

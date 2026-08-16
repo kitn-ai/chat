@@ -46,8 +46,9 @@
  * READING THE PACKED LISTING IS ITS OWN PROBLEM, and it broke a release: npm 12
  * moved the top level of `npm pack --json` from an array to an object keyed by
  * package name, so the one-liner that used to live here threw a TypeError at
- * publish time. That parse now lives in ./pack-listing.mjs, which carries the
- * measurement and is graded against captured fixtures of both shapes.
+ * publish time. That parse now lives in <repo>/scripts/pack-listing.mjs — at the
+ * root because packages/ui's guards hit the same defect and share it — and it
+ * carries the measurement and is graded against captured fixtures of both shapes.
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
@@ -55,7 +56,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { loadTs } from './load-ts.mjs';
-import { readPackListing } from './pack-listing.mjs';
+import { readPackListing } from '../../../scripts/pack-listing.mjs';
 
 /** This package, wherever `--package-root` points the packed tree. */
 const selfRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -89,7 +90,7 @@ const { extractPinnedRange, stalePinProblem, unreadablePinProblem } = await load
  *
  * `VERIFY_PACK_NPM` points at a specific npm binary so CI can exercise this
  * guard under the npm the release job pins, without `npm install -g` perturbing
- * every step after it in the job. See the docblock in ./pack-listing.mjs: the
+ * every step after it in the job. See the docblock in the shared parser: the
  * publish that this file broke was the first time it had ever run under npm 12,
  * because the test job runs node 22's bundled npm 10 and nothing else did.
  */

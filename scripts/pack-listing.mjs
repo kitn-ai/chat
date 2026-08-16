@@ -1,6 +1,23 @@
 /**
- * Read the file listing out of `npm pack --dry-run --json`, on every npm this
+ * Read the packed-package report out of `npm pack --json`, on every npm this
  * repo runs.
+ *
+ * WHY THIS SITS AT THE REPO ROOT AND NOT IN A PACKAGE. It started in
+ * packages/create-kai/scripts/ because that is where the release broke, but the
+ * same parse is needed by three guards in packages/ui, and the kit importing
+ * from the scaffolder's private scripts/ directory would invert the real
+ * dependency (create-kai pins the kit, never the reverse). Neither package
+ * PUBLISHES its scripts/ directory — `files` is ["dist"] for create-kai and
+ * omits scripts entirely for packages/ui — so nothing here is shipped code and
+ * the exports map is not in play. The only requirement is that the file exists
+ * in the checkout when a guard runs, and the repo root always does, including
+ * under `prepublishOnly` (npm runs that hook in the source tree, before packing,
+ * never from an extracted tarball).
+ *
+ * ONE COPY, DELIBERATELY. Two copies with nothing relating them is the failure
+ * class this repo keeps paying for; the whole value of the module is that
+ * packages/create-kai/test/pack-listing.test.ts grades it once and every caller
+ * inherits that. `lint:pack-parse` is what keeps the callers routed through it.
  *
  * THE DEFECT THIS EXISTS FOR, because it took down a release that was already
  * half-published.
@@ -42,13 +59,23 @@
  * installs it for OIDC trusted publishing. So the one npm the guard had to work
  * under was the one npm it was never run under, and publish time was the first
  * execution. That skew is closed at both ends: the parser is graded against
- * committed captures of both shapes in test/pack-listing.test.ts, so no npm
- * version is load-bearing for correctness, and the test job now runs
+ * committed captures of both shapes in packages/create-kai/test/pack-listing.test.ts,
+ * so no npm version is load-bearing for correctness, and the test job now runs
  * `verify:pack` a second time under the release-pinned npm, so the end-to-end
  * path is exercised under the npm that publishes.
  *
- * THIS MODULE IS PURE. The spawning lives in verify-pack.mjs, so the fixtures
- * can grade the parse without an npm on the box at all.
+ * THE SAME DEFECT WAS SITTING IN packages/ui, unfixed, in all three guards that
+ * read a pack listing. Measured the same way, against real npm 12.0.2 packing
+ * packages/ui rather than create-kai: the container is `{"@kitn.ai/ui": {...}}`,
+ * the entry inside is unchanged (839 files either way), and each guard died —
+ * two on `Cannot read properties of undefined (reading 'filename')` and
+ * verify-pack-weight.mjs on a `SyntaxError`, because it sliced from the first
+ * literal `[` and under the keyed shape that lands inside the `files` array.
+ * They were never reached by the release, only by CI and by anyone whose local
+ * npm had moved on; the fix is the same parser either way.
+ *
+ * THIS MODULE IS PURE. The spawning lives in each caller, so the fixtures can
+ * grade the parse without an npm on the box at all.
  */
 
 /** The two container shapes observed, as they appear in the failure messages. */
@@ -90,17 +117,25 @@ function unrecognised(npmVersion, detail) {
       `  known:       ${SHAPES.array}\n` +
       `               ${SHAPES.keyed}\n` +
       `  npm 12 moved the top level from an array to an object keyed by package name.\n` +
-      `  If a later npm has moved it again, teach scripts/pack-listing.mjs the new\n` +
-      `  shape and add a captured fixture for it under test/fixtures/.`,
+      `  If a later npm has moved it again, teach <repo>/scripts/pack-listing.mjs the\n` +
+      `  new shape and add a captured fixture for it under\n` +
+      `  packages/create-kai/test/fixtures/.`,
   );
 }
 
 /**
- * @param {string} raw   stdout of `npm pack --dry-run --json`
+ * The one packed-package report, with the container difference normalised away.
+ *
+ * This is the whole npm entry — `filename`, `files`, `unpackedSize`,
+ * `entryCount` — because the four callers need different fields off it and
+ * every one of them was previously reaching for `[0]` itself. Normalising the
+ * CONTAINER is the shared part; which field you then read is your business.
+ *
+ * @param {string} raw   stdout of `npm pack --json` (with or without --dry-run)
  * @param {{ npmVersion: string }} options
- * @returns {{ paths: string[], shape: keyof typeof SHAPES }}
+ * @returns {{ entry: Record<string, any>, shape: keyof typeof SHAPES }}
  */
-export function readPackListing(raw, { npmVersion }) {
+export function readPackEntry(raw, { npmVersion }) {
   let parsed;
   try {
     parsed = JSON.parse(raw);
@@ -128,9 +163,9 @@ export function readPackListing(raw, { npmVersion }) {
     throw unrecognised(npmVersion, `the top level is ${describe(parsed)}, not an array or object`);
   }
 
-  // Exactly one, because this script packs exactly one package. More than one
-  // would mean a workspace flag leaked into the invocation and the rules below
-  // would silently be grading whichever package sorted first.
+  // Exactly one, because every caller packs exactly one package. More than one
+  // would mean a workspace flag leaked into the invocation and the rules
+  // downstream would silently be grading whichever package sorted first.
   if (entries.length !== 1) {
     throw unrecognised(
       npmVersion,
@@ -147,6 +182,19 @@ export function readPackListing(raw, { npmVersion }) {
     );
   }
 
+  return { entry, shape };
+}
+
+/**
+ * The packed file PATHS, validated to be strings.
+ *
+ * @param {string} raw   stdout of `npm pack --json` (with or without --dry-run)
+ * @param {{ npmVersion: string }} options
+ * @returns {{ paths: string[], shape: keyof typeof SHAPES }}
+ */
+export function readPackListing(raw, { npmVersion }) {
+  const { entry, shape } = readPackEntry(raw, { npmVersion });
+
   const paths = entry.files.map((file) => file?.path);
   const bad = paths.findIndex((p) => typeof p !== 'string');
   if (bad !== -1) {
@@ -157,6 +205,31 @@ export function readPackListing(raw, { npmVersion }) {
   }
 
   return { paths, shape };
+}
+
+/**
+ * The tarball FILENAME npm wrote (or would write), validated to be a string.
+ *
+ * For `npm pack --pack-destination <dir>`, this is the basename to join onto
+ * that dir. Validated here rather than at the call sites so an unrecognised
+ * shape produces the same actionable error as every other field, instead of
+ * `join(tmp, undefined)` throwing somewhere further down.
+ *
+ * @param {string} raw   stdout of `npm pack --json`
+ * @param {{ npmVersion: string }} options
+ * @returns {{ filename: string, shape: keyof typeof SHAPES }}
+ */
+export function readPackedFilename(raw, { npmVersion }) {
+  const { entry, shape } = readPackEntry(raw, { npmVersion });
+
+  if (typeof entry.filename !== 'string' || entry.filename === '') {
+    throw unrecognised(
+      npmVersion,
+      `the packed package has no string \`filename\` (got ${describe(entry.filename)})`,
+    );
+  }
+
+  return { filename: entry.filename, shape };
 }
 
 export { SHAPES };
