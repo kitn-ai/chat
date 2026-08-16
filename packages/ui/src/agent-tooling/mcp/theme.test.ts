@@ -1,4 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { describe, it, expect, vi } from 'vitest';
 import { theme } from './tools/theme';
 
 /**
@@ -109,5 +112,90 @@ describe('theme', () => {
     const text = (out.content as { type: string; text: string }[])[0].text;
     expect(text).toMatch(/Note.*could not parse|could not parse/i);
     expect(text).toMatch(/default/i);
+  });
+});
+
+/**
+ * THE GUARD. Everything above asserts the tool's SHAPE against literals; none of
+ * it can see the tool naming a token theme.css does not declare, which is what
+ * shipped: five `--kai-color-*` literals under a docblock claiming they were
+ * "verified against repo-root theme.css", with nothing in the file reading it.
+ *
+ * This reads theme.css off disk — independently of the `?raw` import the tool
+ * uses — and cross-checks every token the tool's OUTPUT mentions, CSS block and
+ * prose alike. It goes red on a rename in either direction: theme.css moving out
+ * from under a hardcoded literal, or a literal creeping back in.
+ */
+describe('theme token names agree with theme.css', () => {
+  // src/agent-tooling/mcp/ -> packages/ui/ (same walk as manifest.test.ts).
+  const THEME_CSS_PATH = resolve(
+    dirname(fileURLToPath(import.meta.url)),
+    '..',
+    '..',
+    '..',
+    'theme.css',
+  );
+  const themeCss = readFileSync(THEME_CSS_PATH, 'utf8');
+
+  /** Knobs theme.css really declares — anchored on `var(`, the only place one is wired up. */
+  const declared = new Set(
+    [...themeCss.matchAll(/var\(\s*(--kai-[a-zA-Z0-9-]+)\s*[,)]/g)].map((m) => m[1]),
+  );
+
+  /** Every concrete `--kai-*` name the tool's output mentions. */
+  function tokensIn(text: string): string[] {
+    // Drop wildcard forms first (`--kai-*`, `--kai-color-*`): they are prose about
+    // the family, not names, and a plain scan would read them as fictional tokens.
+    const concrete = text.replace(/--kai-[a-zA-Z0-9-]*\*/g, '');
+    return [...new Set([...concrete.matchAll(/--kai-[a-zA-Z0-9]+(?:-[a-zA-Z0-9]+)*/g)].map((m) => m[0]))];
+  }
+
+  it('theme.css parses to a non-empty set of --kai-* knobs', () => {
+    // A zero-match parse would make every assertion below vacuously true.
+    expect(declared.size).toBeGreaterThan(0);
+    expect([...declared].filter((n) => n.startsWith('--kai-color-')).length).toBeGreaterThan(0);
+  });
+
+  it('every --kai-* token the tool emits is declared in theme.css', async () => {
+    const out = await theme.handler({ brand: '#7c3aed', mode: 'both' });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+
+    const emitted = tokensIn(text);
+    // Zero emitted tokens is a hard failure, not a pass: this tool's whole job is
+    // to name tokens, so an empty scan means the check stopped checking.
+    expect(emitted.length).toBeGreaterThan(0);
+
+    const dead = emitted.filter((t) => !declared.has(t));
+    expect(
+      dead,
+      `the theme tool emits ${dead.length} token name(s) that ${THEME_CSS_PATH} does not declare: ` +
+        `${dead.join(', ')}. Pasting that CSS themes nothing. Read the name from theme.css ` +
+        `instead of restating it.`,
+    ).toEqual([]);
+  });
+
+  it('resolves on the handler path, not at import, so a bad token cannot take the server down', async () => {
+    // server.ts imports all four tools statically at top level. A module-scope
+    // throw in this one killed `reference`, `scaffold` and `debug` with it —
+    // measured against an installed tarball, `initialize` never returned. That
+    // the module IMPORTS cleanly is the property; the refusal still happens, it
+    // just happens per call. Re-evaluating the module first, so a memo left by
+    // an earlier test cannot make this pass for the wrong reason.
+    vi.resetModules();
+    const fresh = await import('./tools/theme');
+    expect(typeof fresh.theme.handler).toBe('function');
+    expect(fresh.theme.name).toBe('theme');
+  });
+
+  it('the CSS block and the prose list name the same tokens', async () => {
+    const out = await theme.handler({ brand: '#10b981' });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+
+    const css = text.match(/```css\n([\s\S]*?)\n```/)?.[1] ?? '';
+    const prose = text.split('**Tokens emitted**')[1]?.split('###')[0] ?? '';
+    expect(css).not.toBe('');
+    expect(prose).not.toBe('');
+
+    expect(tokensIn(prose).sort()).toEqual(tokensIn(css).sort());
   });
 });

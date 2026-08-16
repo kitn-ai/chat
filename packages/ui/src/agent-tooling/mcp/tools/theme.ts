@@ -1,17 +1,138 @@
 import { z } from 'zod';
+import themeCss from '../../../../theme.css?raw';
 import type { Tool } from './types';
 
 /**
  * theme — produce a `--kai-*` CSS token override block from a brand color or
- * description. Tokens are sourced exclusively from the real names in theme.css.
+ * description.
  *
- * Real --kai-color-* names (verified against repo-root theme.css):
- *   --kai-color-primary            → brand color
- *   --kai-color-primary-foreground → AA-contrast fg (white or black)
- *   --kai-color-ring               → focus ring (brand color)
- *   --kai-color-accent             → tinted accent surface
- *   --kai-color-accent-foreground  → text on accent surface
+ * WHICH tokens get branded is a curated product call (see BRAND_TOKENS below).
+ * Their NAMES are not: every one is resolved against theme.css, whose text is
+ * inlined above, so a name this tool emits is a name theme.css declares.
+ *
+ * That import is the whole fix and the reason it is an import rather than a
+ * `readFile`. This module ships inside dist/mcp.es.js, an SSR bundle a consumer
+ * runs from bin/mcp.js in their node_modules — a runtime read of a repo-root
+ * path resolves to nothing there, and the src/ and dist/ depths differ anyway.
+ * `?raw` bakes the bytes in at build time from the SAME theme.css that
+ * package.json `files` ships (and `exports` publishes as "./theme.css"), so the
+ * tarball's tool and the tarball's stylesheet cannot disagree by construction,
+ * and there is no runtime I/O at all.
+ *
+ * Before this, the names were five string literals and a docblock claiming they
+ * had been "verified against repo-root theme.css" — nothing read that file, so
+ * renaming a token left the tool emitting the dead name, its test green, and an
+ * agent pasting CSS that themes nothing.
  */
+
+// ─── token names, read out of theme.css ──────────────────────────────────────
+
+/**
+ * Every `--kai-*` knob theme.css declares. Anchored on `var(` because that is
+ * the only place a knob is really wired up — each kit token is written
+ * `--color-x: var(--kai-color-x, <default>)`. Prose in the file mentions
+ * wildcards like `--kai-color-*`, which a bare `--kai-` scan would pick up as
+ * fictional token names.
+ */
+function declaredKaiTokens(css: string): ReadonlySet<string> {
+  const names = new Set<string>();
+  for (const m of css.matchAll(/var\(\s*(--kai-[a-zA-Z0-9-]+)\s*[,)]/g)) names.add(m[1]);
+  return names;
+}
+
+const DECLARED_TOKENS = declaredKaiTokens(themeCss);
+
+/**
+ * Resolve one `--kai-color-<suffix>` against theme.css, or fail naming it.
+ *
+ * Refusing is deliberate — emitting a token nothing reads is the whole defect
+ * this file exists to prevent — but it happens on the HANDLER path, not at
+ * module load. `server.ts` imports all four tools statically at top level, so a
+ * module-scope throw here took `reference`, `scaffold` and `debug` down with it;
+ * measured against an installed tarball, `initialize` never returned and the
+ * server exited before answering anything. Nothing was bought for that: the
+ * guard in theme.test.ts calls `theme.handler(...)` directly, so it goes red on
+ * exactly the same rename with exactly the same message either way. Handler
+ * scope is pure isolation — `theme` alone reports the error, its three
+ * neighbours keep working.
+ */
+function colorToken(suffix: string): string {
+  const name = `--kai-color-${suffix}`;
+  if (!DECLARED_TOKENS.has(name)) {
+    throw new Error(
+      `[kai mcp: theme] theme.css declares no \`${name}\`. The tool brands that token, ` +
+        `so emitting it would hand the caller CSS that themes nothing. Either the token was ` +
+        `renamed in packages/ui/theme.css (update the BRAND_TOKENS suffix in ` +
+        `src/agent-tooling/mcp/tools/theme.ts to match) or it was removed (drop the entry). ` +
+        `Known --kai-color-* names: ${[...DECLARED_TOKENS].filter((n) => n.startsWith('--kai-color-')).sort().join(', ')}`,
+    );
+  }
+  return name;
+}
+
+interface TokenSet {
+  primary: string;
+  primaryFg: string;
+  ring: string;
+  accent: string;
+  accentFg: string;
+}
+
+interface BrandToken {
+  /** Which computed value from a TokenSet fills this token. */
+  key: keyof TokenSet;
+  /** `--kai-color-<suffix>`, checked against theme.css. */
+  suffix: string;
+  /** One-line explanation, rendered in the "Tokens emitted" list. */
+  purpose: string;
+}
+
+/**
+ * The tokens a brand override needs, in emit order. This LIST is the curated
+ * part — it is a judgement about what rebranding means, not a fact theme.css can
+ * be asked for. It declares far more knobs than this (the error in colorToken
+ * prints the current set); dumping all of them would be a worse answer than
+ * picking the ones that carry a brand. The `suffix` of each is what gets checked.
+ */
+const BRAND_TOKENS: readonly BrandToken[] = [
+  { key: 'primary', suffix: 'primary', purpose: 'primary brand color' },
+  {
+    key: 'primaryFg',
+    suffix: 'primary-foreground',
+    purpose: 'AA-contrast foreground on primary (auto-selected black/white)',
+  },
+  { key: 'ring', suffix: 'ring', purpose: 'keyboard focus ring' },
+  { key: 'accent', suffix: 'accent', purpose: 'tinted accent surface' },
+  { key: 'accentFg', suffix: 'accent-foreground', purpose: 'text on accent surface' },
+];
+
+interface EmittedTokens {
+  readonly tokens: readonly { key: keyof TokenSet; name: string; purpose: string }[];
+  /** Value-column offset, derived so the block stays aligned when a name changes length. */
+  readonly valueColumn: number;
+}
+
+let memo: EmittedTokens | undefined;
+
+/**
+ * BRAND_TOKENS with each name resolved against theme.css, memoized.
+ *
+ * Called from the handler, so the resolution failure lands on the one tool that
+ * cannot do its job (see colorToken). Only a SUCCESSFUL resolution is cached —
+ * a failing one re-throws per call, which is what keeps the error the same on
+ * the second request as on the first.
+ */
+function emittedTokens(): EmittedTokens {
+  if (!memo) {
+    const tokens = BRAND_TOKENS.map((t) => ({
+      key: t.key,
+      name: colorToken(t.suffix),
+      purpose: t.purpose,
+    }));
+    memo = { tokens, valueColumn: Math.max(...tokens.map((t) => t.name.length + 1)) + 2 };
+  }
+  return memo;
+}
 
 // ─── hex color utilities (no deps) ──────────────────────────────────────────
 
@@ -185,14 +306,6 @@ function resolveBrand(
 
 // ─── CSS block builders ───────────────────────────────────────────────────────
 
-interface TokenSet {
-  primary: string;
-  primaryFg: string;
-  ring: string;
-  accent: string;
-  accentFg: string;
-}
-
 function buildTokenSet(r: number, g: number, b: number): TokenSet {
   const primary = toHex(r, g, b);
   const primaryFg = foreground(r, g, b);
@@ -228,14 +341,12 @@ function buildDarkTokenSet(r: number, g: number, b: number): TokenSet {
   };
 }
 
-function cssBlock(selector: string, tokens: TokenSet): string {
+function cssBlock(selector: string, values: TokenSet, emitted: EmittedTokens): string {
   return [
     `${selector} {`,
-    `  --kai-color-primary:             ${tokens.primary};`,
-    `  --kai-color-primary-foreground:  ${tokens.primaryFg};`,
-    `  --kai-color-ring:                ${tokens.ring};`,
-    `  --kai-color-accent:              ${tokens.accent};`,
-    `  --kai-color-accent-foreground:   ${tokens.accentFg};`,
+    ...emitted.tokens.map(
+      (t) => `  ${`${t.name}:`.padEnd(emitted.valueColumn)}${values[t.key]};`,
+    ),
     `}`,
   ].join('\n');
 }
@@ -274,6 +385,10 @@ export const theme: Tool = {
       mode = 'light',
     } = args as { brand?: string; description?: string; mode?: 'light' | 'dark' | 'both' };
 
+    // Resolve the token names against theme.css FIRST, so a name it no longer
+    // declares fails this call and nothing else (see emittedTokens/colorToken).
+    const emitted = emittedTokens();
+
     const { hex, r, g, b, note } = resolveBrand(brand, description);
 
     const lightTokens = buildTokenSet(r, g, b);
@@ -282,16 +397,21 @@ export const theme: Tool = {
     // Which blocks to emit
     const blocks: string[] = [];
     if (mode === 'light' || mode === 'both') {
-      blocks.push(cssBlock(':root', lightTokens));
+      blocks.push(cssBlock(':root', lightTokens, emitted));
     }
     if (mode === 'dark' || mode === 'both') {
-      blocks.push(cssBlock('.dark', darkTokens));
+      blocks.push(cssBlock('.dark', darkTokens, emitted));
     }
 
     const cssOutput = blocks.join('\n\n');
 
     const noteLabel = note.startsWith('Could not parse') ? 'Note' : 'Assumption';
     const noteSection = note ? `\n> **${noteLabel}:** ${note}\n` : '';
+
+    // Same list, same source, so the prose can't describe a different set of
+    // tokens than the CSS block above it.
+    const tokenList = emitted.tokens.map((t) => `- \`${t.name}\` — ${t.purpose}`).join('\n');
+    const firstToken = emitted.tokens[0].name;
 
     const text = `\
 ## AI/UI theme override — \`${hex}\`
@@ -304,14 +424,10 @@ ${cssOutput}
 
 ### How it works
 
-The \`--kai-color-*\` tokens pierce the Shadow DOM via CSS custom-property inheritance. Every \`kai-*\` element reads them through a \`var(--kai-color-primary, <default>)\` fallback chain defined in \`theme.css\`. Setting them on \`:root\` (or a wrapper element) is enough to rebrand everything globally.
+The \`--kai-color-*\` tokens pierce the Shadow DOM via CSS custom-property inheritance. Every \`kai-*\` element reads them through a \`var(${firstToken}, <default>)\` fallback chain defined in \`theme.css\`. Setting them on \`:root\` (or a wrapper element) is enough to rebrand everything globally.
 
-**Tokens emitted** (verified names from \`theme.css\`):
-- \`--kai-color-primary\` — primary brand color
-- \`--kai-color-primary-foreground\` — AA-contrast foreground on primary (auto-selected black/white)
-- \`--kai-color-ring\` — keyboard focus ring
-- \`--kai-color-accent\` — tinted accent surface
-- \`--kai-color-accent-foreground\` — text on accent surface
+**Tokens emitted** (names read from \`theme.css\`):
+${tokenList}
 
 ### Apply to a subtree only
 

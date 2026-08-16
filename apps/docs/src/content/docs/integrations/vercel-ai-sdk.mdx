@@ -1,82 +1,280 @@
 ---
 title: Vercel AI SDK
-description: Run streamText on your server, re-frame its text deltas as OpenAI-style SSE, and let AI/UI render the stream — one route, any model.
+description: Run streamText on your server, re-frame its fullStream as OpenAI-style SSE, and let AI/UI render text, reasoning and tool calls — one route, any model.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
-<p class="kai-lede">The Vercel AI SDK gives you `streamText` and a provider for any model; AI/UI renders the stream. Write one `/api/chat` route, bridge its text deltas to the OpenAI-style SSE that `<kai-chat>` reads, and you're done.</p>
+<p class="kai-lede">The Vercel AI SDK gives you `streamText` and a provider for any model; AI/UI renders the stream. Write one `/api/chat` route, re-frame the SDK's stream parts as the OpenAI-style SSE that `<kai-chat>` reads, and you're done.</p>
 
-## The route
+## Read `fullStream`, not `textStream`
 
-`streamText({ model, messages })` runs the model and returns a result that streams lazily. `<kai-chat>` messages carry ordered `parts`, not a `content` string, so encode the thread with `toOpenAIMessages(history)` (from `@kitn.ai/ui/wire`) before posting — the result is `{ role, content }` pairs, which `streamText` takes directly. The result exposes `textStream`, an async iterable of string deltas, and that's the primitive you re-frame into SSE.
+`streamText({ model, messages })` runs the model and returns a result that streams lazily. It exposes two streams, and the choice decides how much of the UI you get:
 
-AI/UI reads OpenAI-format SSE: lines of `data: {choices:[{delta:{content}}]}` ending with `data: [DONE]`. The SDK's own `toUIMessageStreamResponse()` emits a different protocol, so wrap `textStream` into OpenAI frames yourself:
+- `textStream` yields text deltas only. A tool call or a reasoning block goes past it silently, so a route built on it emits a plain answer however the model replied.
+- `fullStream` yields typed parts — `text-delta`, `reasoning-delta`, `tool-input-start`, `tool-input-delta`, `tool-call`, `finish`, `error` — which covers everything `<kai-chat>` draws.
+
+Reach for `fullStream`. AI/UI reads OpenAI-format SSE (`data: {choices:[{delta:{…}}]}` lines, closed by `data: [DONE]`), and each part has a spelling on that wire:
+
+| `fullStream` part | OpenAI SSE field |
+|---|---|
+| `text-delta.text` | `delta.content` |
+| `reasoning-delta.text` | `delta.reasoning` |
+| `tool-input-start` + its `tool-input-delta` fragments | `delta.tool_calls` |
+| `tool-call` | `delta.tool_calls`, but only when nothing streamed — see below |
+| `finish` | `finish_reason` plus a `usage` frame |
+| `error` | an in-band `{ error: { message } }` |
+
+Parts with no OpenAI spelling — `text-start`/`end`, `tool-input-end`, step boundaries, raw provider frames — are dropped.
 
 ```ts
 // app/api/chat/route.ts
 import { streamText } from 'ai';
+import type { ModelMessage, SystemModelMessage } from 'ai';
 
-export const maxDuration = 30; // allow long streaming responses
+export const maxDuration = 30; // Next route-segment config, not part of the handler
 
-export async function POST(req: Request) {
-  const { messages } = await req.json();
+// The model, pinned. The AI Gateway takes a `creator/model-name` string, so any
+// id it routes works here without touching an import.
+const MODEL = 'openai/gpt-oss-120b';
+
+// The SDK and OpenAI agree on 'stop', 'length' and 'error' and disagree on the
+// rest. An unmapped 'tool-calls' normalises to 'other' and the turn stops
+// saying why it ended.
+const FINISH_REASONS: Record<string, string> = {
+  'tool-calls': 'tool_calls',
+  'content-filter': 'content_filter',
+};
+
+export async function POST(request: Request) {
+  const { messages } = await readChatRequest(request);
+  const prompt: ModelMessage[] = toModelMessages(messages);
 
   const result = streamText({
-    model: 'openai/gpt-4o', // AI Gateway id; needs AI_GATEWAY_API_KEY
-    messages,
+    model: MODEL,
+    // Hoisted, not left in `messages` — see below.
+    instructions: prompt.filter((m): m is SystemModelMessage => m.role === 'system'),
+    messages: prompt.filter((m) => m.role !== 'system'),
   });
 
   const encoder = new TextEncoder();
+
+  // OpenAI correlates tool-call fragments by their position in the tool_calls
+  // array; the SDK only ever gives an id. Derive one from the other, in
+  // first-seen order.
+  const toolIndex = new Map<string, number>();
+  const indexOf = (id: string): number => {
+    const known = toolIndex.get(id);
+    if (known !== undefined) return known;
+    const next = toolIndex.size;
+    toolIndex.set(id, next);
+    return next;
+  };
+
+  // How many argument characters each call streamed, so the `tool-call` part
+  // below knows whether emitting it would duplicate them.
+  const streamedArgs = new Map<string, number>();
+
   const sse = new ReadableStream({
     async start(controller) {
-      for await (const delta of result.textStream) {
-        const chunk = { choices: [{ delta: { content: delta } }] };
+      const send = (chunk: unknown) =>
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+
+      try {
+        for await (const part of result.fullStream) {
+          switch (part.type) {
+            case 'text-delta':
+              send({ choices: [{ delta: { content: part.text } }] });
+              break;
+            case 'reasoning-delta':
+              send({ choices: [{ delta: { reasoning: part.text } }] });
+              break;
+            // The call is announced here, before its arguments exist, which is
+            // what lets <kai-tool> open a panel with the tool's name in it while
+            // the arguments are still being written.
+            case 'tool-input-start':
+              streamedArgs.set(part.id, 0);
+              send({
+                choices: [{
+                  delta: {
+                    tool_calls: [{
+                      index: indexOf(part.id),
+                      id: part.id,
+                      type: 'function',
+                      function: { name: part.toolName, arguments: '' },
+                    }],
+                  },
+                }],
+              });
+              break;
+            case 'tool-input-delta':
+              streamedArgs.set(part.id, (streamedArgs.get(part.id) ?? 0) + part.delta.length);
+              send({
+                choices: [{
+                  delta: {
+                    tool_calls: [{
+                      index: indexOf(part.id),
+                      function: { arguments: part.delta },
+                    }],
+                  },
+                }],
+              });
+              break;
+            // Note `toolCallId`, not `id` — this part spells it differently.
+            // Emitted only when nothing streamed, or the arguments double.
+            case 'tool-call':
+              if ((streamedArgs.get(part.toolCallId) ?? 0) === 0) {
+                send({
+                  choices: [{
+                    delta: {
+                      tool_calls: [{
+                        index: indexOf(part.toolCallId),
+                        id: part.toolCallId,
+                        type: 'function',
+                        function: {
+                          name: part.toolName,
+                          arguments: JSON.stringify(part.input ?? {}),
+                        },
+                      }],
+                    },
+                  }],
+                });
+              }
+              break;
+            // One frame carries both, the way chat-completions sends them.
+            // `reasoning_tokens` proves thinking happened even when the provider
+            // streamed no reasoning text.
+            case 'finish':
+              send({
+                choices: [{
+                  delta: {},
+                  finish_reason: FINISH_REASONS[part.finishReason] ?? part.finishReason,
+                }],
+                usage: {
+                  prompt_tokens: part.totalUsage.inputTokens,
+                  completion_tokens: part.totalUsage.outputTokens,
+                  total_tokens: part.totalUsage.totalTokens,
+                  completion_tokens_details: {
+                    reasoning_tokens: part.totalUsage.outputTokenDetails.reasoningTokens,
+                  },
+                },
+              });
+              break;
+            case 'error':
+              send({
+                error: {
+                  message: part.error instanceof Error ? part.error.message : String(part.error),
+                },
+              });
+              break;
+            // text-start/end, tool-input-end, sources, files, step boundaries
+            // and raw provider frames have no OpenAI spelling. Dropped.
+            default:
+              break;
+          }
+        }
+      } catch (err) {
+        // The headers went out with the first byte, so the status is spent —
+        // report the failure in band or it lands as an empty bubble.
+        send({ error: { message: err instanceof Error ? err.message : 'Model stream failed' } });
       }
+
       controller.enqueue(encoder.encode('data: [DONE]\n\n'));
       controller.close();
     },
   });
 
-  return new Response(sse, { headers: { 'Content-Type': 'text/event-stream' } });
+  return new Response(sse, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      // no-transform stops a proxy buffering the stream into one blob.
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+    },
+  });
 }
 ```
 
-`streamText` isn't awaited — it returns synchronously and streams as you iterate `textStream`.
+`streamText` isn't awaited — it returns synchronously and does its work as you iterate. Prompt validation is part of that work, so a rejected prompt surfaces from the `for await`, not from the `streamText()` call. That's why the `try` wraps the loop.
 
-<Aside type="caution">`toUIMessageStreamResponse()` and `toTextStreamResponse()` don't emit OpenAI's chat-completions SSE. The first uses the SDK's own data-stream protocol; the second is raw text with no framing. Re-frame `textStream` as above so AI/UI's parser can read it.</Aside>
+<Aside type="caution">`toUIMessageStreamResponse()` and `toTextStreamResponse()` don't emit OpenAI's chat-completions SSE. The first uses the SDK's own data-stream protocol; the second is raw text with no framing. Map `fullStream` as above so AI/UI's parser can read it.</Aside>
 
-## The browser side
+## Two traps in the tool-call mapping
 
-The front end is the same as every other backend: `<kai-chat>` posts to `/api/chat` and reads the SSE into `messages`. That reader loop is the [Streaming recipe](/guides/recipes/streaming/) — reference it rather than rewriting it here.
+**Correlate by index, not id.** OpenAI identifies a tool-call fragment by its *position* in the `tool_calls` array; the SDK only ever gives you an id. Derive one from the other in first-seen order, as `indexOf` does above. Get it wrong and nothing throws — fragments land on the wrong call and the arguments come out as spliced JSON.
+
+**Don't emit `tool-call` after streaming.** `fullStream` re-sends a call's complete input on its `tool-call` part *after* the `tool-input-delta` fragments. Emitting both doubles the arguments of every call that streamed; skipping it always empties the arguments of a provider that streamed none. Neither is safe to assume, so decide per call from what actually arrived — that's the `streamedArgs` map above. Note the spelling too: `tool-call` carries `toolCallId` where the input parts carry `id`.
+
+## Hoist the system turn
+
+AI SDK 7 rejects a system message inside `messages` — `InvalidPromptError: System messages are not allowed in the prompt or messages fields. Use the instructions option instead.` It still *typechecks*, because `SystemModelMessage` is part of the `ModelMessage` union, so only a live run finds it. AI/UI's encoder puts the system prompt at `messages[0]`, which makes this every turn rather than an edge case.
+
+Split the two, as the route above does. `instructions` takes an array, so several system turns keep their order.
+
+<Aside type="note">On AI SDK 5 and 6 there's no `instructions` option and a system message in `messages` is correct. Drop the split if you pin an older SDK.</Aside>
+
+## Convert the messages, don't cast them
+
+`<kai-chat>` messages carry ordered `parts`, so encode the thread with `toOpenAIMessages(history)` (from `@kitn.ai/ui/wire`) before posting. That gives you the OpenAI wire shape, which the AI SDK's `ModelMessage` is not: a tool call is a content *part* on the assistant message, and a tool result is a tagged output union rather than a bare string. A cast compiles and then hands the SDK the wrong shape at runtime, so `toModelMessages` converts, per role.
+
+Attachments make the same point on the user turn: `toOpenAIMessages` emits a plain string until a turn carries a file, at which point it emits the array form, and each part maps to an SDK `FilePart`.
+
+## Tools stay in your app
+
+The tools your front end posts become `dynamicTool`s — the helper for a schema known only at runtime, since a list arriving in the request body can't have a Zod schema written in the route:
+
+```ts
+import { dynamicTool, jsonSchema } from 'ai';
+import type { JSONSchema7, ToolSet } from 'ai';
+
+/** The OpenAI function-calling envelope the front end posts. */
+type PostedTool = {
+  function?: { name?: string; description?: string; parameters?: JSONSchema7 };
+};
+
+function toToolSet(posted: PostedTool[]): ToolSet {
+  const tools: ToolSet = {};
+  for (const { function: fn } of posted) {
+    if (!fn?.name) continue;
+    tools[fn.name] = dynamicTool({
+      description: fn.description ?? '',
+      inputSchema: jsonSchema(fn.parameters ?? { type: 'object' }),
+    });
+  }
+  return tools;
+}
+```
+
+No `execute`, deliberately. A tool the SDK can run makes the route the loop owner: `streamText` would call it, feed the result back and answer in one response, so the call never reaches the browser and `<kai-tool>` has nothing to render. Without `execute` the SDK emits the call and stops — which is the contract AI/UI's front end already implements: run the tool, `applyToolOutput`, post the thread again.
 
 ## One route, any model
 
-A string id in `creator/model-name` form (like `openai/gpt-4o`) routes through Vercel AI Gateway with no provider package — authenticate with `AI_GATEWAY_API_KEY`, or keylessly with OIDC on Vercel. Change the id and the same route reaches a different model.
+A bare `creator/model-name` string routes through Vercel AI Gateway with no provider package — authenticate with `AI_GATEWAY_API_KEY`, or keylessly with OIDC on Vercel. Change the id and the same route reaches a different model.
 
-To pin one vendor, import its provider instead:
+To pin one vendor, import its provider and pass the vendor's own id — the same name without the `creator/` prefix. Check the provider's model list for the current one:
 
 ```ts
 import { openai } from '@ai-sdk/openai';
 import { streamText } from 'ai';
 
-const result = streamText({
-  model: openai('gpt-4o'), // needs OPENAI_API_KEY
-  messages,
-});
+const MODEL = openai('<a model id from platform.openai.com/docs/models>');
+
+const result = streamText({ model: MODEL, messages }); // needs OPENAI_API_KEY
 ```
 
 | Path | Model value | Env var |
 |---|---|---|
-| AI Gateway (string id) | `'openai/gpt-4o'` | `AI_GATEWAY_API_KEY` |
-| Direct provider | `openai('gpt-4o')` | `OPENAI_API_KEY` |
+| AI Gateway (string id) | `'openai/gpt-oss-120b'` | `AI_GATEWAY_API_KEY` |
+| Direct provider | `openai('<vendor id>')` | `OPENAI_API_KEY` |
 
-<Aside type="note">A bare `'gpt-4o'` won't route through the gateway — the slash form is what triggers it. Use `'creator/model-name'` for the gateway, or an explicit provider instance otherwise.</Aside>
+<Aside type="note">A bare `'gpt-oss-120b'` won't route through the gateway — the slash form is what triggers it. Most Gateway ids also need paid credits: a free account answers `Free tier users do not have access to this model`, which reads like a broken route. `openai/gpt-oss-120b` answers on a free account, which is why the scaffolder pins it.</Aside>
 
-## Tool calls and reasoning
+## The browser side
 
-`streamText` also surfaces tool calls (`result.fullStream`) and reasoning. They map onto the message contract: a tool call becomes a `{ type: 'tool' }` part in the message's `parts` array whose `tool.state` advances `input-streaming` → `input-available` → `output-available` (or `output-error`), and reasoning becomes a `{ type: 'reasoning' }` part with its `text` set. The text-only SSE bridge above doesn't carry them — to render them, emit extra frames from `fullStream` and read them on the browser. See the [tool](/components/tool/) and [reasoning](/components/reasoning/) components for what AI/UI draws.
+The front end is the same as every other backend: `<kai-chat>` posts to `/api/chat` and reads the SSE into `messages`. That reader loop is the [Streaming recipe](/guides/recipes/streaming/) — reference it rather than rewriting it here. Reasoning deltas land in a `{ type: 'reasoning' }` part; tool calls land in a `{ type: 'tool' }` part whose `tool.state` advances `input-streaming` → `input-available` → `output-available` (or `output-error`). See the [tool](/components/tool/) and [reasoning](/components/reasoning/) components for what AI/UI draws.
+
+<Aside type="tip">`npx @kitn.ai/ui mcp` scaffolds this route and its front end together, including the `readChatRequest` and `toModelMessages` helpers elided above. See [For AI Agents](/guides/for-ai-agents/).</Aside>
 
 ## Next steps
 

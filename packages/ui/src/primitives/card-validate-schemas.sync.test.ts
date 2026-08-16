@@ -1,7 +1,14 @@
 /**
  * Drift + coverage guard for the generated lean projection.
  *
- * Three separate properties:
+ * Four separate properties:
+ *
+ *  0. SET COMPLETENESS. The projection covers exactly the types in `cardSchemas`,
+ *     compared against the runtime map rather than against the generator. Until the
+ *     generator started deriving its list, every assertion here was circular: it
+ *     compared the generated module back against a literal array in the generator,
+ *     so both sides moved together and an eighth card type shipped a validator that
+ *     silently did not know about it.
  *
  *  1. SYNC. The committed src/primitives/card-validate-schemas.ts is exactly what
  *     scripts/gen-card-validation-schemas.mjs produces from the authored schemas
@@ -26,6 +33,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { CARD_VALIDATION_SCHEMAS, VALIDATED_CARD_TYPES } from './card-validate-schemas';
 import { loadGenerator } from './card-validate-generator.testlib';
+import { cardSchemas } from '../schemas/index';
 
 const gen = await loadGenerator();
 const enforced = gen.enforcedKeywords();
@@ -43,9 +51,47 @@ describe('card-validate-schemas.ts is in sync with the authored schemas', () => 
     expect(committed).toBe(source);
   });
 
+  it('covers every card type in `cardSchemas` — the RUNTIME map, not the generator', () => {
+    // THE ONE ASSERTION IN THIS FILE THAT IS NOT CIRCULAR, AND IT IS WHY IT EXISTS.
+    // `gen.cardTypes()` is now read out of the `cardSchemas` object literal, so the
+    // assertion below it compares the shipped projection against the generator's
+    // reading of a fact it does not own. This one compares it against the map as the
+    // RUNTIME actually holds it — `Object.keys(cardSchemas)`, the same value
+    // `cardSchemaNames` publishes and `cardTools()` offers a model.
+    //
+    // Both are needed, and they fail for different reasons. This one goes red if a
+    // card type is added and the projection is not regenerated (which is what used to
+    // pass in silence: an eighth type in `cardSchemas` left `verify:card-validation`
+    // printing "in sync (7 card schemas)" while `validateCardData` returned `null` —
+    // "nothing to check" — for every envelope of that type). The next one goes red if
+    // the generator's PARSE of that map degrades, e.g. reads a shorter list.
+    expect([...VALIDATED_CARD_TYPES]).toEqual(Object.keys(cardSchemas));
+  });
+
+  it('the generator parses that map rather than restating it', () => {
+    // The parse and the runtime must agree. They are read two different ways — the
+    // TypeScript AST of src/schemas/index.ts here, the evaluated module above — so a
+    // parse that degraded (a spread it skipped, a truncated walk) shows up as a
+    // disagreement rather than as a quietly shorter validator.
+    expect(gen.cardTypes()).toEqual(Object.keys(cardSchemas));
+  });
+
+  it('refuses a `cardSchemas` it cannot enumerate exactly, rather than under-counting', () => {
+    // A SHORT list is the dangerous outcome: it drops a card type from the browser
+    // validator while every keyword assertion in this file still passes. Watched here
+    // as well as in the script's `--self-test`, because this is the file someone reads
+    // when they change that map.
+    expect(() => gen.readCardTypes('export const cardSchemas = { ...builtIns, a: x };', '<test>')).toThrow(/contains a spread/);
+    expect(() => gen.readCardTypes('export const cardSchemas = someOtherMap;', '<test>')).toThrow(/not a plain object literal/);
+    expect(() => gen.readCardTypes('export const nope = { a: x };', '<test>')).toThrow(/no `cardSchemas` declaration/);
+    expect(() => gen.readCardTypes('export const cardSchemas = Object.freeze({});', '<test>')).toThrow(/is empty/);
+    // ...and the positive case, so a parse that threw at everything would not pass the four above.
+    expect(gen.readCardTypes('export const cardSchemas = Object.freeze({ a: x, "b.c": y });', '<test>')).toEqual(['a', 'b.c']);
+  });
+
   it('exports one projection per card-data schema, and no contract shapes', () => {
-    expect([...VALIDATED_CARD_TYPES]).toEqual(gen.CARD_TYPES);
-    expect(Object.keys(CARD_VALIDATION_SCHEMAS).sort()).toEqual([...gen.CARD_TYPES].sort());
+    expect([...VALIDATED_CARD_TYPES]).toEqual(gen.cardTypes());
+    expect(Object.keys(CARD_VALIDATION_SCHEMAS).sort()).toEqual([...gen.cardTypes()].sort());
     // The four contract documents are NOT card data: nothing dispatches on them, so
     // shipping them to the browser would be bytes the dispatcher can never use.
     for (const contract of ['card-envelope', 'card-event', 'form.result', 'tasks.result']) {
