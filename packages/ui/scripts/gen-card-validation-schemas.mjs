@@ -1,8 +1,9 @@
-// Generate the LEAN client projection of the 7 card-data schemas, and refuse to
+// Generate the LEAN client projection of the card-data schemas, and refuse to
 // generate anything whose keywords nobody can account for.
 //
-//   node scripts/gen-card-validation-schemas.mjs           # write the module
-//   node scripts/gen-card-validation-schemas.mjs --check   # fail on drift, write nothing
+//   node scripts/gen-card-validation-schemas.mjs             # write the module
+//   node scripts/gen-card-validation-schemas.mjs --check     # fail on drift, write nothing
+//   node scripts/gen-card-validation-schemas.mjs --self-test # prove the derivation detects
 //
 // WHY A PROJECTION AND NOT THE AUTHORED SCHEMAS
 // --------------------------------------------
@@ -55,22 +56,170 @@
 // make a hand-list-based guard call `multipleOf` enforced while nothing enforces it.
 // Reading `schema.<keyword>` accesses out of the function body means the guard's
 // notion of "enforced" IS the code that enforces it.
+//
+// THE CARD-TYPE LIST IS READ OUT OF `cardSchemas`, FOR THE SAME REASON
+// --------------------------------------------------------------------
+// It used to be a literal array here, and the only check over it compared the
+// GENERATED module back against this file's own array — both sides moved together,
+// so it could not fail. Measured on this tree before the fix: adding an eighth type
+// to `cardSchemas` in src/schemas/index.ts left `verify:card-validation` printing
+// "in sync (7 card schemas)" and card-validate-schemas.sync.test.ts green, while
+// `CARD_VALIDATION_SCHEMAS` had no entry for it — so `validateCardData` returned
+// `null` ("nothing to check") for every envelope of that type and the model's
+// untrusted `data` reached the card unvalidated. Silently.
 import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import ts from 'typescript';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..'); // packages/ui
 export const SCHEMA_DIR = join(ROOT, 'src/primitives/card-schemas');
 export const VALIDATOR_FILE = join(ROOT, 'src/primitives/card-validate.ts');
 export const OUT_FILE = join(ROOT, 'src/primitives/card-validate-schemas.ts');
+export const SCHEMAS_ENTRY = join(ROOT, 'src/schemas/index.ts');
+
+/** The object literal that IS the card-data set. */
+const CARD_MAP = 'cardSchemas';
+
+/** `Object.freeze(x)` / `x as T` / `(x)` -> `x`. Anything else is returned as-is so
+ *  the caller can reject it by name rather than guess at it. */
+function unwrapInitializer(expr) {
+  if (!expr) return expr;
+  if (ts.isParenthesizedExpression(expr)) return unwrapInitializer(expr.expression);
+  if (ts.isAsExpression(expr) || ts.isSatisfiesExpression(expr)) return unwrapInitializer(expr.expression);
+  // ONLY `Object.freeze(...)`. Unwrapping any single-argument call would make
+  // `asSchema(someOtherMap)` look like the map itself and quietly project the wrong
+  // set — the failure this whole derivation exists to remove.
+  if (
+    ts.isCallExpression(expr) &&
+    expr.arguments.length === 1 &&
+    ts.isPropertyAccessExpression(expr.expression) &&
+    ts.isIdentifier(expr.expression.expression) &&
+    expr.expression.expression.text === 'Object' &&
+    expr.expression.name.text === 'freeze'
+  ) {
+    return unwrapInitializer(expr.arguments[0]);
+  }
+  return expr;
+}
 
 /**
- * The card-DATA schemas, by `CardEnvelope.type`. The other four documents in that
- * directory (`card-envelope`, `card-event`, `form.result`, `tasks.result`) are
- * contract shapes, not card data: nothing dispatches on them, so projecting them
- * would ship bytes the dispatcher can never use.
+ * The card-DATA types, in declaration order, read from the `cardSchemas` object
+ * literal in src/schemas/index.ts.
+ *
+ * That map is the source of truth: it is what `cardTools()` offers a model, what
+ * `createCardRegistry()` defaults `use` to, and what `cardSchemaNames` publishes.
+ * The other four documents in the schema directory (`card-envelope`, `card-event`,
+ * `form.result`, `tasks.result`) live in `contractSchemas` instead — contract
+ * shapes, not card data, so nothing dispatches on them and projecting them would
+ * ship bytes the dispatcher can never use.
+ *
+ * WHY A PARSE AND NOT AN IMPORT. This runs in `prebuild`, so `dist/schemas/index.js`
+ * either does not exist yet or is the previous build's — the same stale-artifact trap
+ * `dist/custom-elements.json` set for the MCP tests. Bundling the `.ts` (the
+ * packages/create-kai `scripts/load-ts.mjs` precedent) would need `esbuild`, which is
+ * not a dependency of this package and resolves only by walking up into the
+ * workspace root, and would execute `registry.ts`, `tool-defs.ts`, `from-tool-call.ts`
+ * and every schema document in the directory to learn a list of keys. `typescript` IS a devDependency
+ * here and scripts/lint-silent-drops.mjs already reads the `MessagePart` union out of
+ * src/elements/chat-types.ts exactly this way.
+ *
+ * WHY IT CANNOT SILENTLY UNDER-COUNT. A short list is the dangerous outcome: it drops
+ * a card type from the browser validator while every keyword check still passes. So
+ * this refuses anything it cannot enumerate exactly — no second declaration of the
+ * name, no initializer that is not a plain (optionally frozen) object literal, no
+ * spread, no computed key, no duplicate, no empty map. Each throws naming what it
+ * found. There is deliberately NO floor count: a fully enumerated literal IS the
+ * answer, and a hand-typed minimum would be one more number to rot.
+ *
+ * WHAT THIS DOES NOT CHECK, ON PURPOSE. Whether the two maps between them account for
+ * every file in src/primitives/card-schemas/ and for nothing else. `verify:schemas`
+ * already asserts exactly that, against the BUILT entry, with a self-test. A second
+ * copy of that policy here is how the two would drift.
  */
-export const CARD_TYPES = ['artifact', 'choice', 'confirm', 'embed', 'form', 'link', 'tasks'];
+export function readCardTypes(source = readFileSync(SCHEMAS_ENTRY, 'utf8'), where = SCHEMAS_ENTRY) {
+  const at = `${CARD_MAP} in ${where}`;
+  const sf = ts.createSourceFile(where, source, ts.ScriptTarget.Latest, /* setParentNodes */ true, ts.ScriptKind.TS);
+
+  const decls = [];
+  const visit = (node) => {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === CARD_MAP) decls.push(node);
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+
+  if (decls.length === 0) {
+    throw new Error(
+      `gen-card-validation-schemas: no \`${CARD_MAP}\` declaration found in ${where}. ` +
+        'The card-data set is read from that object literal; it was renamed, moved, or this parse has broken. ' +
+        'Follow it — do not restore a hand-written list here, which is the defect this replaced.',
+    );
+  }
+  if (decls.length > 1) {
+    throw new Error(
+      `gen-card-validation-schemas: ${decls.length} declarations named \`${CARD_MAP}\` in ${where}. ` +
+        'This parse cannot tell which one is the card-data map, and picking the wrong one would project the wrong set.',
+    );
+  }
+
+  const init = unwrapInitializer(decls[0].initializer);
+  if (!init || !ts.isObjectLiteralExpression(init)) {
+    throw new Error(
+      `gen-card-validation-schemas: \`${at}\` is not a plain object literal ` +
+        `(found ${init ? ts.SyntaxKind[init.kind] : 'no initializer'}). ` +
+        'The keys must be readable from the source without executing it.',
+    );
+  }
+
+  const keys = [];
+  for (const prop of init.properties) {
+    if (ts.isSpreadAssignment(prop)) {
+      throw new Error(
+        `gen-card-validation-schemas: \`${at}\` contains a spread (\`...${prop.expression.getText(sf)}\`). ` +
+          'A spread hides members from this parse, so the projection would silently cover fewer card types than exist.',
+      );
+    }
+    const name = prop.name;
+    if (!name || (!ts.isIdentifier(name) && !ts.isStringLiteral(name))) {
+      throw new Error(
+        `gen-card-validation-schemas: \`${at}\` has a member whose key this parse cannot read ` +
+          `(${name ? ts.SyntaxKind[name.kind] : ts.SyntaxKind[prop.kind]}). ` +
+          'A computed key is not statically knowable, and guessing would drop a card type from the validator.',
+      );
+    }
+    if (keys.includes(name.text)) {
+      throw new Error(`gen-card-validation-schemas: \`${at}\` declares \`${name.text}\` twice.`);
+    }
+    keys.push(name.text);
+  }
+
+  if (keys.length === 0) {
+    throw new Error(
+      `gen-card-validation-schemas: \`${at}\` is empty. ` +
+        'That would generate a validator that checks no card at all, which reads as a pass everywhere downstream.',
+    );
+  }
+  return keys;
+}
+
+let _cardTypes;
+
+/**
+ * The card-DATA schemas, by `CardEnvelope.type`. Derived, never typed.
+ *
+ * A memoized FUNCTION rather than a module-scope const, for one reason: `readCardTypes`
+ * throws, and a throw during module evaluation escapes `main()`'s handler and comes out
+ * of `prebuild` as a bare stack trace that reads as "the build crashed" rather than
+ * "the card map moved". Called from inside `main()`, it gets the same `✗ <message>`
+ * line as every other failure here.
+ *
+ * Do NOT inline the read at a call site to "avoid the memo". One parse per process is
+ * the point; a second call site is a second chance for the two to be given different
+ * sources.
+ */
+export function cardTypes() {
+  return (_cardTypes ??= readCardTypes());
+}
 
 // ---------------------------------------------------------------------------
 // Table 1: ENFORCED, derived from the validator's body
@@ -271,10 +420,10 @@ export function projectSchema(doc, enforced) {
 // Rendering
 // ---------------------------------------------------------------------------
 
-function renderModule(projections, enforced) {
+function renderModule(projections, enforced, types) {
   const enforcedList = [...enforced].sort().join(', ');
   const notEnforcedLines = Object.entries(NOT_ENFORCED).map(([k, why]) => `//   \`${k}\`: ${why}`);
-  const body = CARD_TYPES.map((t) => `  ${JSON.stringify(t)}: ${JSON.stringify(projections[t])},`).join('\n');
+  const body = types.map((t) => `  ${JSON.stringify(t)}: ${JSON.stringify(projections[t])},`).join('\n');
 
   return `// GENERATED by scripts/gen-card-validation-schemas.mjs. Do not edit by hand.
 //
@@ -284,7 +433,7 @@ function renderModule(projections, enforced) {
 //
 // WHAT THIS IS
 // ------------
-// The 7 card-data schemas with everything the browser cannot act on removed:
+// The ${types.length} card-data schemas with everything the browser cannot act on removed:
 // \`$schema\`, \`$id\`, \`title\`, \`description\`, \`default\`, every \`x-*\` hint, and every
 // keyword \`validateAgainstSchema\` does not implement. The authored documents remain
 // the source of truth and ship unchanged at \`@kitn.ai/ui/schemas\` for the server.
@@ -298,7 +447,7 @@ ${notEnforcedLines.join('\n')}
 import type { JsonSchema } from './card-validate';
 
 /** The built-in \`CardEnvelope.type\` values that have a schema to validate against. */
-export type ValidatedCardType = ${CARD_TYPES.map((t) => JSON.stringify(t)).join(' | ')};
+export type ValidatedCardType = ${types.map((t) => JSON.stringify(t)).join(' | ')};
 
 /**
  * One widening cast, at the module boundary, for the same reason
@@ -316,7 +465,7 @@ ${body}
 } as unknown as Readonly<Record<ValidatedCardType, JsonSchema>>;
 
 /** The card types this projection covers, in a stable order. */
-export const VALIDATED_CARD_TYPES: readonly ValidatedCardType[] = ${JSON.stringify(CARD_TYPES)};
+export const VALIDATED_CARD_TYPES: readonly ValidatedCardType[] = ${JSON.stringify(types)};
 `;
 }
 
@@ -327,13 +476,19 @@ export const VALIDATED_CARD_TYPES: readonly ValidatedCardType[] = ${JSON.stringi
 /** Read, scan and project. Throws with every unclassified keyword named. */
 export function build() {
   const enforced = enforcedKeywords();
+  const types = cardTypes();
   const present = new Set(readdirSync(SCHEMA_DIR).filter((f) => f.endsWith('.schema.json')));
   const projections = {};
   const failures = [];
 
-  for (const type of CARD_TYPES) {
+  for (const type of types) {
     const file = `${type}.schema.json`;
-    if (!present.has(file)) throw new Error(`gen-card-validation-schemas: ${file} is missing from ${SCHEMA_DIR}`);
+    if (!present.has(file)) {
+      throw new Error(
+        `gen-card-validation-schemas: \`${type}\` is declared in \`${CARD_MAP}\` (${SCHEMAS_ENTRY}) but ` +
+          `${file} is missing from ${SCHEMA_DIR}. A card type with no schema has nothing to validate against.`,
+      );
+    }
     const doc = JSON.parse(readFileSync(join(SCHEMA_DIR, file), 'utf8'));
     for (const { path, keyword } of scanUnclassified(doc, enforced)) failures.push({ file, path, keyword });
     const projected = projectSchema(doc, enforced);
@@ -353,14 +508,107 @@ export function build() {
         'the exact failure this guard exists to prevent.',
     );
   }
-  return { enforced, projections, source: renderModule(projections, enforced) };
+  return { enforced, types, projections, source: renderModule(projections, enforced, types) };
+}
+
+// ---------------------------------------------------------------------------
+// self-test: prove the derivation DETECTS, over synthesized sources
+// ---------------------------------------------------------------------------
+//
+// The real tree is the one case that proves nothing about detection: `readCardTypes`
+// returns seven names there whether or not any of the refusals below still work. So
+// each is driven with a source crafted to trip exactly it, and the clean case is
+// asserted to return the exact keys — a parse that always threw would otherwise
+// "pass" every negative case.
+//
+// This is the half the old arrangement never had. `verify:card-validation --check`
+// compared the generated module against the generator's OWN array, so both sides
+// moved together and no state of the tree could make it red.
+
+const CLEAN_SOURCE = `
+import a from './a.schema.json';
+import b from './b.schema.json';
+export const contractSchemas = Object.freeze({ 'card-envelope': asSchema(x) });
+export const cardSchemas: Readonly<Record<CardSchemaName, CardSchema>> = Object.freeze({
+  alpha: asSchema(a),
+  'beta.two': asSchema(b),
+});
+`;
+
+const SELF_TEST_CASES = [
+  {
+    name: 'reads the keys of a frozen object literal, quoted keys included',
+    source: CLEAN_SOURCE,
+    expect: ['alpha', 'beta.two'],
+  },
+  {
+    name: 'a plain (unfrozen) object literal reads too',
+    source: 'export const cardSchemas = { alpha: a, beta: b };',
+    expect: ['alpha', 'beta'],
+  },
+  { name: 'the map is gone or renamed', source: 'export const cardSchemaz = { alpha: a };', throws: 'no `cardSchemas` declaration' },
+  {
+    name: 'two declarations of the name — cannot tell which is the map',
+    source: 'export const cardSchemas = { alpha: a };\nfunction f() { const cardSchemas = { beta: b }; return cardSchemas; }',
+    throws: '2 declarations named',
+  },
+  { name: 'the initializer is another identifier, not a literal', source: 'export const cardSchemas = someOtherMap;', throws: 'not a plain object literal' },
+  { name: 'the initializer is a non-freeze call', source: 'export const cardSchemas = asSchema(theRealMap);', throws: 'not a plain object literal' },
+  { name: 'a spread hides members from the parse', source: 'export const cardSchemas = { ...builtIns, alpha: a };', throws: 'contains a spread' },
+  { name: 'a computed key is not statically knowable', source: 'export const cardSchemas = { [NAME]: a, beta: b };', throws: 'cannot read' },
+  { name: 'a duplicate key', source: 'export const cardSchemas = { alpha: a, alpha: b };', throws: 'declares `alpha` twice' },
+  { name: 'an empty map would validate no card at all', source: 'export const cardSchemas = Object.freeze({});', throws: 'is empty' },
+];
+
+function selfTest() {
+  let failed = 0;
+  for (const c of SELF_TEST_CASES) {
+    let got, err;
+    try {
+      got = readCardTypes(c.source, '<self-test>');
+    } catch (e) {
+      err = e;
+    }
+    let ok;
+    let detail = '';
+    if (c.throws) {
+      ok = !!err && err.message.includes(c.throws);
+      detail = err ? `threw "${err.message.split('\n')[0]}"` : `returned ${JSON.stringify(got)} — NO throw`;
+    } else {
+      ok = !err && JSON.stringify(got) === JSON.stringify(c.expect);
+      detail = err ? `threw "${err.message.split('\n')[0]}"` : `returned ${JSON.stringify(got)}`;
+    }
+    if (!ok) failed++;
+    console.log(`${ok ? '✓' : '✗'} ${c.name}`);
+    if (!ok) console.log(`    expected ${c.throws ? `a throw naming "${c.throws}"` : JSON.stringify(c.expect)}, ${detail}`);
+  }
+  if (failed > 0) {
+    console.error(`\n✗ gen-card-validation-schemas self-test: ${failed}/${SELF_TEST_CASES.length} case(s) failed.`);
+    process.exit(1);
+  }
+  // The real tree, so a green self-test cannot come from an analyzer pointed at
+  // nothing but its own fixtures. This is the read `--check` is about to make.
+  const real = cardTypes();
+  console.log(
+    `\n✓ gen-card-validation-schemas self-test: ${SELF_TEST_CASES.length}/${SELF_TEST_CASES.length} cases behave as specified ` +
+      `(the real tree reads ${real.length} card types from \`${CARD_MAP}\`: ${real.join(', ')}).`,
+  );
 }
 
 function main() {
+  // ONE handler over everything, because the card-type derivation throws too and its
+  // message is the whole value of the failure. Left uncaught it would surface as a
+  // stack trace mid-`prebuild` and read as "the build crashed".
   const check = process.argv.includes('--check');
   let built;
+  let types;
   try {
+    if (process.argv.includes('--self-test')) {
+      selfTest();
+      return;
+    }
     built = build();
+    types = built.types;
   } catch (err) {
     console.error(`✗ ${err.message}`);
     process.exit(1);
@@ -375,23 +623,24 @@ function main() {
 
   if (check) {
     if (current === built.source) {
-      console.log(`✓ card-validate-schemas.ts is in sync (${CARD_TYPES.length} card schemas)`);
+      console.log(`✓ card-validate-schemas.ts is in sync (${types.length} card schemas)`);
       return;
     }
     console.error(
       `✗ src/primitives/card-validate-schemas.ts is stale.\n` +
-        `  The authored schemas in src/primitives/card-schemas/ have changed and the projection was not regenerated.\n` +
+        `  The authored schemas in src/primitives/card-schemas/, or the \`${CARD_MAP}\` map in src/schemas/index.ts\n` +
+        `  this list of ${types.length} card types is read from, have changed and the projection was not regenerated.\n` +
         `  Fix: node scripts/gen-card-validation-schemas.mjs`,
     );
     process.exit(1);
   }
 
   if (current === built.source) {
-    console.log(`✓ card-validate-schemas.ts unchanged (${CARD_TYPES.length} card schemas)`);
+    console.log(`✓ card-validate-schemas.ts unchanged (${types.length} card schemas)`);
     return;
   }
   writeFileSync(OUT_FILE, built.source);
-  console.log(`✓ card-validate-schemas.ts: ${CARD_TYPES.length} card schemas projected`);
+  console.log(`✓ card-validate-schemas.ts: ${types.length} card schemas projected`);
 }
 
 // pathToFileURL, NOT `file://${process.argv[1]}`: import.meta.url percent-encodes and
