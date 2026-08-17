@@ -126,6 +126,104 @@ describe('installKaiDevtoolsHook — the capture model', () => {
   });
 });
 
+describe('attach — one synchronous handover', () => {
+  it('loses nothing and duplicates nothing across the handover', async () => {
+    // drain-then-subscribe drops an event landing between the two calls;
+    // subscribe-then-drain delivers it twice. `attach` is one synchronous step,
+    // so neither window exists.
+    window.localStorage.setItem('kai-devtools', '1');
+    const { installKaiDevtoolsHook, emitWireDiagnostic } = await fresh();
+    const hook = installKaiDevtoolsHook()!;
+
+    const e1 = ev({ t: 1 });
+    emitWireDiagnostic(e1); // buffered before anyone attached
+
+    const seen: WireDiagnosticEvent[] = [];
+    const e2 = ev({ t: 2 });
+    const off = hook.attach((e) => {
+      seen.push(e);
+      // Emitted from inside the handover itself: the tightest interleaving the
+      // verifier could construct.
+      if (e === e1) emitWireDiagnostic(e2);
+    });
+    const e3 = ev({ t: 3 });
+    emitWireDiagnostic(e3);
+
+    expect(seen).toEqual([e1, e2, e3]);
+    expect(seen.filter((e) => e === e2)).toHaveLength(1);
+    off();
+  });
+
+  it('attaching on the dormant branch delivers no history but streams live', async () => {
+    const { installKaiDevtoolsHook, emitWireDiagnostic } = await fresh();
+    const hook = installKaiDevtoolsHook()!;
+    emitWireDiagnostic(ev({ t: 1 })); // nothing is retained while dormant
+
+    const seen: WireDiagnosticEvent[] = [];
+    const off = hook.attach((e) => seen.push(e));
+    expect(seen).toEqual([]);
+    const live = ev({ t: 2 });
+    emitWireDiagnostic(live);
+    expect(seen).toEqual([live]);
+    off();
+  });
+});
+
+describe('retention handover — the panel owns retention once attached', () => {
+  it('stops retaining while attached and resumes when the last one leaves', async () => {
+    window.localStorage.setItem('kai-devtools', '1');
+    const { installKaiDevtoolsHook, emitWireDiagnostic } = await fresh();
+    const hook = installKaiDevtoolsHook()!;
+
+    const seen: WireDiagnosticEvent[] = [];
+    const off = hook.attach((e) => seen.push(e));
+
+    for (let i = 0; i < 100; i++) emitWireDiagnostic(ev({ t: i }));
+    expect(seen).toHaveLength(100);
+    // The kit holds nothing: the panel has the data and caps it as it likes.
+    expect(hook.drain()).toEqual([]);
+
+    off();
+    // Detached: retention resumes so a re-attach gets the gap.
+    for (let i = 0; i < 5; i++) emitWireDiagnostic(ev({ t: 1000 + i }));
+
+    const second: WireDiagnosticEvent[] = [];
+    const off2 = hook.attach((e) => second.push(e));
+    expect(second).toHaveLength(5);
+    expect(second.map((e) => e.t)).toEqual([1000, 1001, 1002, 1003, 1004]);
+    off2();
+  });
+
+  it('a plain subscribe also suspends retention', async () => {
+    window.localStorage.setItem('kai-devtools', '1');
+    const { installKaiDevtoolsHook, emitWireDiagnostic } = await fresh();
+    const hook = installKaiDevtoolsHook()!;
+
+    const off = hook.subscribe(() => {});
+    emitWireDiagnostic(ev({ t: 1 }));
+    expect(hook.drain()).toEqual([]);
+
+    off();
+    emitWireDiagnostic(ev({ t: 2 }));
+    expect(hook.drain()).toHaveLength(1);
+  });
+
+  it('retention only resumes once the LAST subscriber leaves', async () => {
+    window.localStorage.setItem('kai-devtools', '1');
+    const { installKaiDevtoolsHook, emitWireDiagnostic } = await fresh();
+    const hook = installKaiDevtoolsHook()!;
+
+    const offA = hook.attach(() => {});
+    const offB = hook.subscribe(() => {});
+    offA();
+    emitWireDiagnostic(ev({ t: 1 })); // B is still listening
+    expect(hook.drain()).toEqual([]);
+    offB();
+    emitWireDiagnostic(ev({ t: 2 }));
+    expect(hook.drain()).toHaveLength(1);
+  });
+});
+
 describe('installKaiDevtoolsHook — installation rules', () => {
   it('importing the module installs nothing by itself', async () => {
     vi.resetModules();

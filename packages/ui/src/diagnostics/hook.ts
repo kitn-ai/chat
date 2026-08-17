@@ -39,9 +39,6 @@ import {
   type WireDiagnosticEvent,
 } from '../wire/diagnostics';
 
-/** The global the panel looks for. */
-const HOOK_KEY = '__KAI_DEVTOOLS_HOOK__';
-
 /** The localStorage key and query parameter. Same spelling in both, so the two
  *  ways in read the same in a bug report. */
 const SIGNAL_KEY = 'kai-devtools';
@@ -54,12 +51,33 @@ export interface KaiDevtoolsHook {
    *  turns on one branch or the other exactly once, and a panel reading `false`
    *  here is reading "this session has no history", which stays true. */
   recording: boolean;
-  /** The buffered history, and CLEARS it. `[]` on the dormant branch, always. */
+  /** The buffered history, and CLEARS it. `[]` on the dormant branch, always.
+   *
+   *  Kept for contract compatibility, but `attach` is what a panel should use:
+   *  pairing this with `subscribe` cannot be done without a race (see there). */
   drain(): WireDiagnosticEvent[];
   /** Live events from now on. Works on both branches -- subscribing is what
    *  re-arms emission, so a panel can attach mid-session and see events from
    *  that moment forward, with no history. */
   subscribe(fn: (e: WireDiagnosticEvent) => void): () => void;
+  /**
+   * History and live delivery in ONE synchronous step. Returns the unsubscribe.
+   *
+   * THIS IS THE ONE A PANEL WANTS, and the reason is that the obvious pairing
+   * of the two calls above is racy in BOTH orders: `drain()` then `subscribe()`
+   * silently loses an event that lands between them, while `subscribe()` then
+   * `drain()` delivers that event twice. Neither order is fixable from outside,
+   * because the gap is between two calls the caller does not control.
+   *
+   * Here the buffered events are handed over, the buffer cleared and the
+   * subscription installed without an await or a task boundary anywhere
+   * between, so there is no instant at which an event can arrive and find
+   * itself either unowned or owned twice.
+   *
+   * Additive, so `version` stays 1: the forward-compat rules allow new members,
+   * and an older panel that never calls this keeps working unchanged.
+   */
+  attach(fn: (e: WireDiagnosticEvent) => void): () => void;
   /** Set the signal and reload, so the next load records from the first event.
    *  Reload is the primary path because it is the only one that yields HISTORY,
    *  and the answer is usually near the beginning of a session. */
@@ -109,13 +127,39 @@ function createHook(recording: boolean): KaiDevtoolsHook {
   // buffer to size and nothing is retained for the whole session.
   let buffer: WireDiagnosticEvent[] | undefined;
 
+  // How many consumers of THIS hook are listening, via `subscribe` or `attach`.
+  //
+  // It is the retention switch. The buffer exists to cover the window before a
+  // panel arrives; once one is listening, the panel owns retention and can cap
+  // or window as its own UI decides, so continuing to retain here would hold a
+  // second unbounded copy of data the panel has already decided to bound. When
+  // the last consumer leaves, retention resumes, so a panel that detaches and
+  // re-attaches still gets the events from the gap rather than a hole.
+  let consumers = 0;
+
   if (recording) {
     buffer = [];
     // Subscribing here is what arms emission, from before the panel exists.
     subscribeWireDiagnostics((e) => {
+      if (consumers > 0) return; // a panel is listening; it owns retention now
       buffer!.push(e);
     });
   }
+
+  /** Track a consumer so retention can follow the last one out. Idempotent on
+   *  the returned unsubscribe: calling it twice must not decrement twice and
+   *  leave the count below the number actually listening. */
+  const track = (fn: (e: WireDiagnosticEvent) => void): (() => void) => {
+    consumers++;
+    const off = subscribeWireDiagnostics(fn);
+    let live = true;
+    return () => {
+      if (!live) return;
+      live = false;
+      consumers--;
+      off();
+    };
+  };
 
   return {
     version: 1,
@@ -127,7 +171,33 @@ function createHook(recording: boolean): KaiDevtoolsHook {
       return history;
     },
     subscribe(fn) {
-      return subscribeWireDiagnostics(fn);
+      return track(fn);
+    },
+    attach(fn) {
+      // ONE synchronous step, and that is the whole point: nothing can run
+      // between the parts, so no event can land in a gap or be counted twice.
+      const history = buffer;
+      if (buffer) buffer = [];
+
+      // Subscribe BEFORE replaying, so an event arriving mid-replay is captured
+      // rather than dropped -- and REENTRANCY IS REAL HERE, because `fn` is a
+      // panel's own code and a panel that renders on its first event can cause
+      // one. Live arrivals queue while the history plays, then drain in arrival
+      // order, so `fn` sees one strictly ordered sequence with no duplicates.
+      let direct = false;
+      const queue: WireDiagnosticEvent[] = [];
+      const off = track((e) => {
+        if (direct) fn(e);
+        else queue.push(e);
+      });
+
+      if (history) for (const e of history) fn(e);
+      // Index loop, not for-of: an event `fn` provokes while draining is
+      // appended here and picked up by this same loop, keeping order intact.
+      for (let i = 0; i < queue.length; i++) fn(queue[i]);
+      direct = true;
+
+      return off;
     },
     activate() {
       try {
