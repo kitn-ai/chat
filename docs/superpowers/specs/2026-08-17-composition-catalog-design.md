@@ -5,10 +5,15 @@ Status: **DESIGN, decisions ruled. Nothing implemented.**
 Provenance: the brainstorm that `2026-08-16-composition-catalog-brief.md` asked for,
 run with the repo owner on 2026-08-17. Every fork the brief flagged was put to the
 owner and the answers below are his. Verified against `origin/main` at `28ebc061`.
-Fifteen of the brief's seventeen §12 checks were re-run before this brainstorm and
-all fifteen came back exactly as written. The two skipped need the network: the
-advisory (`gh api`) and the live create-kai reproduction, whose throw sites were
-checked in source instead.
+The brief's §12 check table was re-run before this brainstorm (19 data rows; count
+them with `awk '/^## 12/,/^## 13/' docs/superpowers/specs/2026-08-16-composition-catalog-brief.md | grep -c '^| '`,
+minus one for the header). Everything checked held **in substance**, with two
+corrections worth recording rather than rounding away: the MCP-tools row's `ls`
+prints five entries because `types.ts` sits beside the four tools, so the derived
+fact is the four-entry tools array in `mcp/server.ts`; and the brief's paths for
+`lint-silent-drops.mjs` and `markdown-xss.test.tsx` resolve only under
+`packages/ui/`. The network-dependent rows (the advisory, the live create-kai
+reproduction) were checked in source instead of against the registry.
 
 Every factual claim about the tree has a check in the table at the end. The brief is
 about a failure class that begins with believing a written statement about this tree;
@@ -22,8 +27,9 @@ this spec does not ask to be believed either.
 harness (Claude Code, Codex, OpenCode) composing a chat surface into an existing
 application, or modifying one already there, in whatever framework the app already
 uses. They get code they own. This is the owner's call, and it re-orders the brief's
-three front doors: the MCP is first, the CLI consumes the same catalog offline at
-scaffold time, and the builder and hosted service are out of scope for this effort.
+three front doors: the MCP is first in this effort; the CLI consuming the same
+catalog offline at scaffold time is a later effort (decision 7, §7); the builder
+and hosted service are out of scope entirely.
 
 **Out of scope is not foreclosed.** The catalog is declarative data: parts, what each
 requires, what is valid together, what must hold. Data of that shape can be
@@ -46,9 +52,13 @@ boundary: brokering would make us the application that decides quotas and spend.
 **One prerequisite, flagged and not built here: issue #99 option B**, upgrade-property
 preservation inside `defineWebComponent`. The script-tag target cannot be honest
 without it: a property set before the element upgrades is lost, load order on a
-platform embed is not ours, and the gate alternative (option A, `elementsReady`) is
-measured at zero adoption even inside this repo (the MCP scaffolder uses it in no
-files and hand-rolls `whenDefined` instead). The catalog carries the race as an open
+platform embed is not ours, and the gate alternative (option A, a `whenReady`-style
+helper consumers must remember to call; the shipped `elementsReady` is the same gate
+shape) has the adoption record the brief measured: the MCP scaffolder uses
+`elementsReady` in zero files and hand-rolls `whenDefined` in two, four starters
+hand-roll it, and the docs guides teach it correctly while the docs site's own
+components do not. A gate that even this repo forgets is not a fix for a target
+where load order belongs to someone else. The catalog carries the race as an open
 invariant (§5) until option B lands, and option B is scheduled as its own work.
 
 **Non-goals, restated from brief §11 and unchanged:** no builder, no hosted service,
@@ -65,8 +75,11 @@ is not re-litigated.
 
 1. **The net starts narrow.** Inputs the catalog is derived from: the machine
    artifacts (§3) plus the roster's two still-true sections re-authored as invariants
-   (its §1 mapping rules and §2 host-coordination model, which still match the shipped
-   contract). The story and docs corpus (counts in brief §8, commands in its §12) is
+   (its §1 mapping rules and §2 host-coordination model). Re-authored means the
+   RULES survive and the roster's stale identifiers do not: the shipped contract is
+   `kai-`-prefixed event names (every event in `element-meta.json` carries the
+   prefix; the roster's bare `select`/`remove` predate it), `defineWebComponent`
+   (not `defineKitnElement`), and `@kitn.ai/ui` (not `@kitnai/chat`). The story and docs corpus (counts in brief §8, commands in its §12) is
    the TEST suite, not an input. Widening is evidence-driven: a corpus item is
    promoted to input only when the acceptance test (§6) fails for the lack of it. A
    catalog built from "everything" encodes accidents as rules; a catalog measured
@@ -139,7 +152,9 @@ to named variants, re-firing on a new variant. Never unmarked prose.
 ## 4. The authored surface layer
 
 Typed TS records in `agent-tooling`, following the pattern `registry.ts` already
-uses for integrations: schema-validated, one module the MCP and the guards both read.
+uses for integrations: one typed module the MCP and the guards both read.
+`registry.ts` is typed, not schema-validated; the catalog's authored layer keeps the
+one-module-two-readers shape and ADDS runtime schema validation on top of it.
 
 A surface recipe carries:
 
@@ -148,6 +163,9 @@ A surface recipe carries:
   embed) crossed with delivery target (bundler, script-tag). Two axes, not one:
   target changes delivery, surface changes appearance (brief §4.5)
 - `ingredients`: the element tags it composes
+- `backend`: the one swappable field (§1): the endpoint the consumer owns, plus
+  which wire reader parses it (`readOpenAIStream`, `readAnthropicStream`,
+  `readModelStream`). Minimal on purpose; this is what S2 and S5 consume
 - `wiring`: host-coordinates edges, each one "this event on A sets this property on
   B", using real event and property names
 - `invariants`: IDs from §5 that must hold for this recipe
@@ -177,7 +195,7 @@ in this PR:
 | Labs title | Sort | Note |
 |---|---|---|
 | Apps (the nine: claude-code, chatgpt, codex, t3code, perplexity, perplexity-pro, v0, lovable, split-workspace) | surface | end-to-end compositions, recognisably product-shaped |
-| Workspace Home, Workspace Slots | surface | the workspace preset and its seams |
+| Workspace Home | surface | the workspace preset |
 | Message Thread | ingredient | the keystone of the composition-first direction (`kai-thread`) |
 | Composer | ingredient | rich input, lives inside a surface |
 | Command | ingredient | palette, summoned inside something |
@@ -188,7 +206,7 @@ in this PR:
 | Audio Visualizers | ingredient | |
 | Card | ingredient | generative-UI cards arrive as tool calls (settled) |
 | Foundations/* (Input, Search, Kbd, Nav, Tabs, Status, Screen, Progress Bar, Coachmark, EditableLabel, Voice output) | ingredient | atoms |
-| Chat Slots, Prompt Input Slots | corpus | fixtures proving a part's configuration space |
+| Chat Slots, Prompt Input Slots, Workspace Slots | corpus | fixtures proving a part's injection/configuration seams |
 | Proofs | corpus | tests by construction |
 
 ---
@@ -196,21 +214,27 @@ in this PR:
 ## 5. Invariants
 
 One record each: `id`, `statement` (prose an agent can apply, not just recite),
-`appliesTo` (tags, part variants, delivery targets), `enforcedBy` (a pointer to the
-real test or lint that pins it, which the drift lint requires to exist), and
-`diagnosis` (symptom to cause, for the debugging scenario).
+`appliesTo` (tags, part variants, delivery targets), `enforcedBy`, and `diagnosis`
+(symptom to cause, for the debugging scenario).
+
+`enforcedBy` is a tagged field, because a bare path cannot honestly describe all
+seven seed rows: `kind: test | lint | structural | none`. `test` and `lint` carry a
+path the drift lint must resolve; `structural` carries the code site that makes the
+invariant hold by construction (a path, also resolved); `none` is an honest open
+status, which the drift lint REPORTS as a coverage gap rather than failing on. A
+`none` that pretended to be a path would be the roster's failure wearing a schema.
 
 The seed set, every one already known to break real consumers:
 
 | id | statement (short form) | enforcedBy |
 |---|---|---|
-| `reactivity-two-halves` | a new array reference NOTIFIES; a new object per changed item makes the change VISIBLE; edits need both, adds/removes/reorders need only the array | `src/components/reactivity-contract.test.tsx` |
-| `props-not-attributes` | arrays and objects are JS properties, never attributes; scalars may be attributes | the `scalar` flag per prop in `element-meta.json` |
-| `events-non-bubbling` | events are non-bubbling `kai-*` CustomEvents; listen on the element itself | structural: every facade dispatches through the one helper in `src/elements/define.tsx` that hard-codes `bubbles: false, composed: false` |
-| `host-coordinates` | no store; data in via properties, out via events, the host wires A to B; Solid context does not cross element boundaries | roster §2 re-authored; the wiring topology in every recipe assumes it |
-| `untrusted-model-output` | anything a model produced that reaches `innerHTML`, `href`/`src`, `window.open` or an iframe is a vulnerability; put an existing policy on the sink (`isSafeUrl`/`SAFE_SCHEMES`, `isRenderableLink`), never author a third | `tests/components/markdown-xss.test.tsx`, `artifact-url-xss.test.tsx`, `hostile-model-output.test.tsx` |
-| `kit-parses-consumer-fetches` | never hand-roll an SSE reader; import `@kitn.ai/ui/wire`; no client, no key handling below `wire/` | `lint:silent-drops` guards the encode side |
-| `upgrade-race` | **status: open.** a property set before the element upgrades is lost; on script-tag targets load order is not ours; until #99 option B lands, recipes for that target must say so loudly | none yet; this row flips to `enforcedBy: defineWebComponent` when option B lands |
+| `reactivity-two-halves` | a new array reference NOTIFIES; a new object per changed item makes the change VISIBLE; edits need both, adds/removes/reorders need only the array | test: `src/components/reactivity-contract.test.tsx` |
+| `props-not-attributes` | arrays and objects are JS properties, never attributes; scalars may be attributes | structural: the `scalar` flag per prop in `element-meta.json` |
+| `events-non-bubbling` | non-bubbling is the DEFAULT: public `kai-*` events dispatch through the one helper in `src/elements/define.tsx` that hard-codes `bubbles: false, composed: false`; listen on the element itself. The named protocol exceptions bubble or compose **deliberately** (`kai-maximize-intent` in `artifact.tsx`, `kai-maximize-state` in `resizable.tsx`, each commented at the site), and the catalog carries the exception list DERIVED by grepping for `bubbles: true\|composed: true` on `kai-*` CustomEvents outside `define.tsx`, never restated by hand | structural: `dispatch()` in `src/elements/define.tsx`, plus the derived exception list |
+| `host-coordinates` | no store; data in via properties, out via events, the host wires A to B; Solid context does not cross element boundaries | none: an architectural absence with no single enforcing site; the wiring topology in every recipe assumes it, and the acceptance test is what exercises it |
+| `untrusted-model-output` | anything a model produced that reaches `innerHTML`, `href`/`src`, `window.open` or an iframe is a vulnerability; put an existing policy on the sink (`isSafeUrl`/`SAFE_SCHEMES`, `isRenderableLink`), never author a third | test: `packages/ui/tests/components/markdown-xss.test.tsx`, `artifact-url-xss.test.tsx`, `hostile-model-output.test.tsx` |
+| `kit-parses-consumer-fetches` | never hand-roll an SSE reader; import `@kitn.ai/ui/wire`; no client, no key handling below `wire/` | lint: `lint:silent-drops` guards the encode side |
+| `upgrade-race` | **status: open.** a property set before the element upgrades is lost; on script-tag targets load order is not ours; until #99 option B lands, recipes for that target must say so loudly | none; this row flips to structural (`defineWebComponent`) when option B lands |
 
 The `status: open` row is the catalog telling the truth about the script-tag target
 instead of assuming the fix. A catalog that carried the invariant as solved would be
@@ -272,7 +296,8 @@ scheduled separately.
 
 | Claim | Check |
 |---|---|
-| The brief's checks were re-run and held | `docs/superpowers/specs/2026-08-16-composition-catalog-brief.md` §12; run them |
+| The brief's checks held in substance, with the two path corrections stated | `docs/superpowers/specs/2026-08-16-composition-catalog-brief.md` §12; run them; the tools array is in `packages/ui/src/agent-tooling/mcp/server.ts` |
+| The row count of the brief's §12 table | the `awk … \| grep -c` command in the provenance, minus one for the header |
 | `element-meta.json` carries `scalar`, `composedFrom`, tokens, parts | `node -p "Object.keys(require('./packages/ui/src/elements/element-meta.json')[0])"` |
 | The union is already read by two guards | `grep -n chat-types packages/ui/scripts/lint-silent-drops.mjs packages/ui/scripts/verify-scaffold-compiles.mjs` |
 | `listIntegrations()` and `listCapabilityGroups()` exist as named | `packages/ui/src/agent-tooling/registry.ts:52`, `packages/ui/src/agent-tooling/archetypes.ts:121` |
@@ -280,8 +305,9 @@ scheduled separately.
 | `verify:generated` regenerates and diffs, and covers `element-manifest.json` for the reason stated | `packages/ui/scripts/verify-generated-sync.mjs`, `GENERATED` list and the comment at its `element-manifest.json` entry |
 | The `element-manifest.json` gap and its fix | `HANDOFF-2026-08-13-attachments-scaffolder-a11y.md` §13.12, §14.1 (#265) |
 | The forward-compat rule quoted in decision 4 | "Forward compatibility, both directions" in `docs/superpowers/specs/2026-08-14-endpoint-choice-design.md` |
-| The roster's §1 and §2 still match the shipped contract | `docs/composable-web-components-roster.md` §1 §2 against the `kai-` contract in root `CLAUDE.md` |
-| `elementsReady` unadopted, `whenDefined` hand-rolled | `grep -rl elementsReady packages/ui/src/agent-tooling` (none); `grep -rln whenDefined packages/ui/src/agent-tooling` |
+| The roster's §1/§2 RULES survive; its identifiers do not | `docs/composable-web-components-roster.md` §1 §2 against root `CLAUDE.md`; every shipped event is `kai-`-prefixed: `node -e "const m=require('./packages/ui/src/elements/element-meta.json');const e=m.flatMap(x=>x.events\|\|[]);console.log(e.length, e.filter(v=>v.name.startsWith('kai-')).length)"` |
+| The gate's adoption record, both halves | scaffolder: `grep -rl elementsReady packages/ui/src/agent-tooling` (none) and `grep -rln whenDefined packages/ui/src/agent-tooling` (two); elsewhere it IS used and taught: `grep -rln elementsReady packages/ui/.storybook apps/docs/src/content/docs` |
+| The default is non-bubbling; the protocol exceptions are these and only these | `dispatch()` in `packages/ui/src/elements/define.tsx`; `grep -rn "bubbles: true\|composed: true" packages/ui/src/elements/*.tsx \| grep -v define` (the `editable-label` hit re-dispatches a KeyboardEvent, not a `kai-*` CustomEvent) |
 | The Labs titles the sort table sorts | `grep -rh "title: 'Labs" packages/ui/src --include="*.tsx" \| sort -u` |
 | The nine Labs/Apps files | `grep -rl "Labs/Apps" packages/ui/src --include="*.tsx"` |
 | `reactivity-contract.test.tsx` pins the two-halves rule | `packages/ui/src/components/reactivity-contract.test.tsx` |
