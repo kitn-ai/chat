@@ -21,6 +21,28 @@ const meta = (): { tag: string; [k: string]: unknown }[] =>
  */
 const FUNCTION_VALUED = new Set(['kai-voice-input.transcribe', 'kai-voice-output.synthesize']);
 
+/**
+ * The `MessagePart` variants, read here by a DELIBERATELY DIFFERENT method from
+ * the generator's: slice the union's source text and match the `type` literals,
+ * where the generator walks the TypeScript AST via the shared `readVariants`.
+ *
+ * Calling `readVariants` here instead would be the cheaper-looking option and
+ * would prove almost nothing — a check that runs the same function as the thing
+ * it checks can only tell you the generator didn't post-process the result. This
+ * is not a third production consumer of the variant list, so it does not compete
+ * with Task 2's one-shared-derivation rule; it is the cross-check on it, the
+ * same way the element assertions re-map element-meta.json rather than calling
+ * the generator's mapper.
+ */
+function unionVariants(): string[] {
+  const src = readFileSync(join(PKG, 'src/elements/chat-types.ts'), 'utf8');
+  const start = src.indexOf('export type MessagePart =');
+  expect(start).toBeGreaterThan(-1);
+  const end = src.indexOf('\n\n', start);
+  expect(end).toBeGreaterThan(start);
+  return [...src.slice(start, end).matchAll(/\btype: '([a-z-]+)'/g)].map((m) => m[1]);
+}
+
 describe('derived catalog artifact', () => {
   it('exists, parses against DerivedCatalog, and derives from the tree', () => {
     const derived = read();
@@ -29,6 +51,40 @@ describe('derived catalog artifact', () => {
     // Elements carry the spec §3 fields.
     expect(derived.elements.some((e) => e.composedFrom.length > 0)).toBe(true);
     expect(derived.elements.some((e) => e.tokens.length > 0)).toBe(true);
+  });
+
+  /**
+   * Trust the source's SHAPE before re-deriving from it. Both the generator and
+   * the re-derivation below read `m.props ?? []`, `m.events ?? []` and so on, so
+   * a renamed or dropped key in element-meta.json degrades BOTH sides to `[]`
+   * identically and every comparison still passes — demonstrated: renaming
+   * `events`→`eventz` and `parts`→`partz` left the suite green with those fields
+   * empty on all 80 elements. element-meta.json is itself build:api-generated,
+   * so this is the same printer-drift class the `fn` comment below worries
+   * about, and the `?? []` that makes the generator robust is exactly what makes
+   * the check blind. Assert the keys carry data somewhere.
+   */
+  it('element-meta.json still carries the keys the generator reads', () => {
+    const m = meta() as Record<string, unknown[]>[];
+    for (const key of ['props', 'events', 'methods', 'parts', 'composedFrom', 'tokens']) {
+      expect(m.some((e) => Array.isArray(e[key]) && e[key].length > 0), `element-meta.json has no non-empty "${key}"`).toBe(
+        true,
+      );
+    }
+  });
+
+  /**
+   * `partVariants` had no content assertion at all — only length floors
+   * (MIN_VARIANTS in the generator, `.min(4)` in the schema), and setting
+   * `partVariants[0] = 'BOGUS'` passed the suite. It is load-bearing beyond this
+   * artifact: Task 6's part-consumption test and Task 7's drift lint both read
+   * this list to decide what full coverage IS, so a wrong list does not make
+   * them fail, it makes them confidently right about the wrong data.
+   */
+  it('re-derives partVariants from the MessagePart union', () => {
+    const variants = unionVariants();
+    expect(variants.length).toBeGreaterThanOrEqual(4);
+    expect(read().partVariants).toEqual(variants);
   });
 
   /**

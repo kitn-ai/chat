@@ -1,7 +1,11 @@
 // Emits src/agent-tooling/catalog/derived.json: the catalog's derived
-// ingredient layer. Runs inside build:api so verify:generated regenerates and
-// diffs it (the element-manifest lesson: the guard must invoke the script that
-// writes the artifact).
+// ingredient layer.
+//
+// INTENDED to run inside build:api, so verify:generated regenerates and diffs it
+// — the element-manifest lesson is that a guard must invoke the script that
+// writes the artifact, or it only ever checks a file nobody rewrote. Task 4 does
+// that wiring; until it lands, build:api does NOT call this and the committed
+// artifact's freshness rests on tests/scripts/catalog-derived.test.ts alone.
 import { readFileSync, writeFileSync, readdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join, resolve, dirname, relative, sep } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -20,17 +24,31 @@ const DEFAULT_OUT = join(ROOT, 'src/agent-tooling/catalog/derived.json');
 // passes on its second run, so a re-run of a flaked CI job would turn a genuine
 // staleness failure green and leave no evidence. Writing elsewhere also stops
 // the test racing the other suites that read the committed path in parallel.
-const outFlag = process.argv.indexOf('--out');
-if (outFlag !== -1 && !process.argv[outFlag + 1]) {
-  console.error('✗ gen-catalog: --out needs a path.');
-  process.exit(1);
+//
+// Scanned pairwise rather than with `indexOf`, which cannot tell a flag POSITION
+// from a value position: it would find `--out` wherever it sat, including inside
+// its own argument. Consuming the value in the same step makes a path literally
+// equal to `--out` just a path. Unknown arguments are a hard error for the same
+// reason the rest of this script fails loudly — `--outfile x` under the old
+// parse silently wrote the committed artifact while looking like it redirected,
+// which in a test is the difference between checking a copy and healing the
+// original.
+function parseOut(argv) {
+  let out;
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] !== '--out') fail(`unknown argument ${JSON.stringify(argv[i])}. Usage: gen-catalog.mjs [--out <path>]`);
+    if (i + 1 >= argv.length) fail('--out needs a path.');
+    out = argv[++i];
+  }
+  return out === undefined ? DEFAULT_OUT : resolve(out);
 }
-const OUT = outFlag === -1 ? DEFAULT_OUT : resolve(process.argv[outFlag + 1]);
 
 function fail(msg) {
   console.error(`✗ gen-catalog: ${msg}`);
   process.exit(1);
 }
+
+const OUT = parseOut(process.argv.slice(2));
 
 async function importTs(entry) {
   const tmp = mkdtempSync(join(tmpdir(), 'gen-catalog-'));
