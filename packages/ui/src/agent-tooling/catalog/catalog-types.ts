@@ -79,7 +79,23 @@ export const Scenario = z.object({
 /** The derived layer's committed artifact. Task 3's generator writes it; Task 3's test parses it. */
 export const DerivedElement = z.object({
   tag: z.string(),
-  props: z.array(z.object({ name: z.string(), scalar: z.boolean(), optional: z.boolean() })),
+  props: z.array(
+    z.object({
+      name: z.string(),
+      scalar: z.boolean(),
+      optional: z.boolean(),
+      /**
+       * The function-valued-property contract, which `scalar` does NOT encode:
+       * `scalar: false` says "not an attribute", never "this is a callback you
+       * must supply". Derived by the generator from element-meta.json's prop
+       * type: strip a leading `undefined | `, then true iff the remainder
+       * starts with `(` and contains `=>`. Deliberately not a bare
+       * `includes('=>')`, which over-matches objects and arrays that merely
+       * CONTAIN callbacks (kai-cards.policy, kai-toast-region.toasts).
+       */
+      fn: z.boolean(),
+    }),
+  ),
   events: z.array(z.string()),
   methods: z.array(z.string()),
   parts: z.array(z.string()),
