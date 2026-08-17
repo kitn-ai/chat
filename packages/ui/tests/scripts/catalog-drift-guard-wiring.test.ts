@@ -42,8 +42,8 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { check, stripComments as stripInLint } from '../../scripts/lint-catalog-drift.mjs';
-import { stripComments as stripInSrc } from '../../src/agent-tooling/catalog/strip-comments';
+import { check, readLabsTitles as titlesInLint } from '../../scripts/lint-catalog-drift.mjs';
+import { readLabsTitles as titlesInSrc } from '../../src/agent-tooling/catalog/labs-titles';
 
 const pkgRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const repoRoot = resolve(pkgRoot, '../..');
@@ -174,18 +174,27 @@ describe('the catalog drift guard detects, and CI runs it', () => {
 });
 
 /**
- * THE REGISTERED COPY, GUARDED. `stripComments` exists twice — once in
+ * THE REGISTERED COPY, GUARDED. `readLabsTitles` exists twice — once in
  * scripts/lint-catalog-drift.mjs and once in src/agent-tooling/catalog/
- * strip-comments.ts — because a Node .mjs cannot import a .ts at runtime and
- * `src/`'s typecheck pass has no `allowJs`, so the .ts side cannot import the
- * .mjs either (measured: TS7016). Both decide whether a `title: 'Labs/…'` is a
- * real registration or just prose, from opposite sides of the same question, so
- * silent divergence would put the two checks back into the state where one
- * DEMANDS a phantom row and the other REFUSES it.
+ * labs-titles.ts — because a Node .mjs cannot import a .ts at runtime, and
+ * `surfaces.test.ts` lives under `src/`, whose typecheck pass has no `allowJs`,
+ * so the .ts side cannot import the .mjs either (measured: TS7016). Both decide
+ * whether a `title: 'Labs/…'` is a real registration or just prose, from
+ * opposite sides of the same question, so silent divergence would put the two
+ * checks back into the state where one DEMANDS a phantom row and the other
+ * REFUSES it.
+ *
+ * ★ WHAT THIS GUARD IS WORTH, stated honestly because the previous round got it
+ * wrong. It catches DIVERGENCE. It did NOT catch the bug that mattered: both
+ * copies of the earlier hand-rolled comment stripper carried the identical
+ * apostrophe defect, so they agreed perfectly while both were wrong. Two
+ * implementations of the same mistake agree. What makes agreement meaningful
+ * now is that both delegate to the TypeScript parser; this guard is the
+ * backstop against drift, never the reason to trust either.
  *
  * This is the only file in the repo that can import both. It is the guard.
  */
-describe('the two stripComments implementations cannot diverge', () => {
+describe('the two readLabsTitles implementations cannot diverge', () => {
   const storyFiles = (): string[] => {
     const out: string[] = [];
     const walk = (dir: string) => {
@@ -199,41 +208,62 @@ describe('the two stripComments implementations cannot diverge', () => {
     return out;
   };
 
-  it('agree character-for-character on every story file in the tree', () => {
+  it('agree on every story file in the tree, and the corpus is not inert', () => {
     const files = storyFiles();
     // Non-vacuity: an empty corpus would make the loop below prove nothing.
     expect(files.length, 'no story files found — the walk is broken').toBeGreaterThan(0);
-    const differing = files.filter((f) => {
+
+    const results = files.map((f) => {
       const text = readFileSync(f, 'utf-8');
-      return stripInLint(text) !== stripInSrc(text);
+      const name = f.slice(f.lastIndexOf('/') + 1);
+      return { f, lint: titlesInLint(text, name), src: titlesInSrc(text, name) };
     });
+
+    // POSITIVE CONTROL, which this test previously lacked entirely: if the
+    // readers returned [] for every file, "they agree" would be trivially true
+    // and this whole corpus would prove nothing. Require real titles found.
     expect(
-      differing.map((f) => f.replace(pkgRoot, '')),
-      'the lint and src copies of stripComments disagree. They decide the same question ' +
+      results.filter((r) => r.src.length > 0).length,
+      'no story file yielded a Labs title — the readers are inert and agreement is meaningless',
+    ).toBeGreaterThan(0);
+
+    const differing = results.filter((r) => JSON.stringify(r.lint) !== JSON.stringify(r.src));
+    expect(
+      differing.map((r) => r.f.replace(pkgRoot, '')),
+      'the lint and src copies of readLabsTitles disagree. They decide the same question ' +
         'from opposite sides; if they drift, one check demands an inventory row the other refuses.',
     ).toEqual([]);
   });
 
-  it('agree on the adversarial inputs the scanner exists for', () => {
+  it('agree on the adversarial inputs the parser exists for', () => {
     const cases = [
-      `// title: 'Labs/Apps' in a line comment\nconst meta = { title: 'Labs/Real' };`,
-      `/* title: 'Labs/Apps'\n   still inside a block */\nconst m = { title: 'Labs/Real' };`,
-      `const url = 'https://example.com//not-a-comment';`,
-      "const s = 'it\\'s escaped // still a string';",
-      'const t = `a template ${x} with // inside`;',
-      `const jsx = <p>Don't panic</p>;`,
+      `// title: 'Labs/GHOST'\nconst meta = { title: 'Labs/Real' };`,
+      `/* title: 'Labs/GHOST' */\nconst m = { title: 'Labs/Real' };`,
+      // ★ THE APOSTROPHE CLASS, which defeated the hand-rolled stripper in three
+      // real story files while both copies of it agreed perfectly.
+      `const a = <p>Don't have an account?</p>;\n// title: 'Labs/GHOST'\nconst m = { title: 'Labs/Real' };`,
+      `const a = <p>Don't panic</p>;\nconst m = { title: 'Labs/Real' };`,
+      `const m = { title: "Labs/Real" };`,
+      'const m = { title: `Labs/Real` };',
+      `const url = 'https://example.com//x';\nconst m = { title: 'Labs/Real' };`,
+      "const s = 'it\\'s escaped // still a string';\nconst m = { title: 'Labs/Real' };",
+      `const s = 'Labs/NotATitle';`,
       '',
-      '//',
       '/* unterminated block comment',
-      "const q = \"double // quoted\";",
     ];
-    // POSITIVE CONTROL: at least one case must actually CHANGE under stripping,
-    // or "the two agree" would be satisfied by two functions that both do nothing.
+    // POSITIVE CONTROL: at least one case must actually yield a title, or "the
+    // two agree" is satisfied by two functions that both return nothing.
     expect(
-      cases.some((c) => stripInSrc(c) !== c),
-      'no adversarial case was altered by stripping — the corpus proves nothing',
+      cases.some((c) => titlesInSrc(c, 'probe.tsx').length > 0),
+      'no adversarial case yielded a title — the corpus proves nothing',
     ).toBe(true);
-    for (const c of cases) expect(stripInLint(c), `disagreement on: ${JSON.stringify(c)}`).toBe(stripInSrc(c));
+    // And the apostrophe case must specifically NOT leak the commented title.
+    const apostrophe = cases[2];
+    expect(titlesInSrc(apostrophe, 'probe.tsx'), 'a commented title leaked past an apostrophe').toEqual(['Labs/Real']);
+
+    for (const c of cases) {
+      expect(titlesInLint(c, 'probe.tsx'), `disagreement on: ${JSON.stringify(c)}`).toEqual(titlesInSrc(c, 'probe.tsx'));
+    }
   });
 });
 
@@ -281,7 +311,7 @@ describe('check() observes both presence and absence', () => {
     labsTitles: ['Command'],
     isFile: (p: string) => p === 'README.md' || p === 'packages/ui/src/wire/read.ts',
     npmScripts: ['lint:silent-drops'],
-    wireSource: readFileSync(resolve(repoRoot, 'packages/ui/src/wire/read.ts'), 'utf-8'),
+    wireExports: ['readModelStream'],
   };
 
   it('POSITIVE CONTROL: a coherent catalog produces no errors', () => {

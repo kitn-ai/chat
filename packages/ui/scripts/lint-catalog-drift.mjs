@@ -81,14 +81,40 @@
 //     were truly written, and indistinguishable from someone deleting the
 //     honest record of what is unenforced. The `status`/`kind` agreement that
 //     would catch the dishonest version lives in invariants.test.ts.
-// 12. RESIDUAL AFTER THE COMMENT FIX: `stripComments` is a scanner, not a
-//     parser. It knows string, template and comment state, which is enough for
-//     every story file in the tree today, but a title inside a construct it
-//     misreads is out of scope. Its errors blank MORE than intended, which
-//     fails loudly; it cannot invent a title.
+// 12. RESIDUAL AFTER THE PARSER FIX: an INTERPOLATED title is invisible.
+//     `title: 'Labs/X'`, `"Labs/X"` and `` `Labs/X` `` are all read; a
+//     substituted template `` title: `Labs/${name}` `` yields nothing —
+//     measured, returns []. A story titled that way would look unregistered and
+//     its inventory row would fail, which is the loud direction, but the row
+//     could not be made to pass without rewriting the story.
+//
+//     ⚠ THIS ITEM PREVIOUSLY SAID SOMETHING FALSE, and how it was false is the
+//     more useful record. It claimed the hand-rolled comment stripper's errors
+//     "blank MORE than intended, which fails loudly" and that it "cannot invent
+//     a title". Both halves were wrong. JSX text containing an unbalanced
+//     apostrophe (`Don't have an account?`) put the scanner into single-quote
+//     state and it never left, so every later comment SURVIVED stripping: it
+//     blanked LESS than intended, and it DID invent a title. Live in three
+//     files at the time. The caveat was reasoned, not measured — which is the
+//     same defect as an overstated `enforcedBy` (item 1), committed in the
+//     block that exists to prevent it.
 // 13. RESIDUAL AFTER THE PATH FIX: `isFile` proves a cited path is a file, not
 //     that the file contains a test, still less a test of THIS invariant — see
 //     item 1, which is the same limit in its most consequential form.
+// 14. A CI STEP NEUTERED INSIDE THE `run:` LINE. The guard-wiring test rejects
+//     `continue-on-error` and a false `if:`, but appending `|| true` to the
+//     shell command leaves it GREEN — measured, 13 passed. The step still runs
+//     and its failure is still discarded. This is a class the repo's other
+//     wiring guards share, not specific to this one, and it wants a single
+//     workflow-wide check rather than a fourth copy of the same assertion here.
+// 15. A BUG BOTH COPIES SHARE. The equivalence guard on `readLabsTitles`
+//     catches DIVERGENCE between the .mjs and .ts implementations; it is
+//     structurally blind to a mistake they agree on. Measured the hard way:
+//     both copies of the previous hand-rolled stripper carried the identical
+//     apostrophe defect and therefore agreed perfectly on all 115 story files
+//     while both were wrong. That is why the fix was to delegate to the
+//     TypeScript parser rather than to write a better scanner twice — the guard
+//     is the backstop against drift, never the reason to trust either side.
 //
 // DELIBERATELY NOT ASSERTED HERE: whether a wiring pair means anything (item 2).
 // This lint resolves names and genuinely cannot judge semantics; the executed
@@ -116,6 +142,7 @@ import { existsSync, readFileSync, readdirSync, mkdtempSync, statSync, writeFile
 import { join, resolve, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import ts from 'typescript';
 // esbuild is imported LAZILY, inside loadAuthored(). It refuses to initialize
 // under jsdom ("new TextEncoder().encode('') instanceof Uint8Array is
 // incorrectly false") and tests/scripts/catalog-drift-guard-wiring.test.ts
@@ -162,65 +189,75 @@ async function loadAuthored(catalogDir) {
 }
 
 /**
- * Blank out `//` and block comments, preserving offsets and newlines.
+ * Every `title:` value beginning with `Labs/` that a story file actually
+ * REGISTERS — parsed, never matched.
  *
- * ★ THIS IS THE FIX FOR THE DEFECT THAT REOPENED THE HOLE THIS LINT EXISTS TO
- * CLOSE. `deriveLabsTitles()` used to regex raw file text, so a story title
- * mentioned in PROSE counted as a real registration. Measured on this tree,
- * all exit 0 before this existed:
+ * ★ WHY A PARSER. Two text-based versions of this shipped and both were
+ * defeated. A raw regex counted PROSE as a registration. A hand-rolled comment
+ * stripper fixed that and introduced a worse bug: JSX text like `Don't have an
+ * account?` put the scanner into single-quote state, which it never left, so
+ * every `//` after it survived stripping — live in `proof-auth.stories.tsx` and
+ * `ui/pane-grid.stories.tsx`, where appending ONE comment made an invented
+ * `GHOSTPROBE` row resolve at exit 0. The equivalence guard between the two
+ * copies could not see it: both carried the identical bug, so they agreed.
  *
- *   - renaming every real `Labs/Proofs` meta title across all six
- *     proof-*.stories.tsx left the `Proofs` inventory row green, kept alive by
- *     one comment at proof-about.stories.tsx:9;
- *   - an invented inventory row plus a single `//` line mentioning it passed,
- *     reporting 27 rows "resolved clean";
- *   - a comment reading `title: 'Labs/Apps'` added to command.stories.tsx
- *     conjured a PHANTOM app, and an invented `surface` row named after it
- *     satisfied this lint AND surfaces.test.ts test 2 simultaneously — both
- *     sides green together, which is the exact failure shape the catalog is
- *     supposed to make impossible.
+ * Comments are TRIVIA and never nodes, so prose is excluded by construction;
+ * apostrophes and escapes are the real lexer's problem. Same reason
+ * lint-silent-drops.mjs reads the MessagePart union this way.
  *
- * It survived the original watched-reds because each of those mutations
- * happened to rewrite the comment as well, so the class was never exercised.
- *
- * The scanner tracks string and template states so a `//` inside a literal (a
- * URL) is not mistaken for a comment. Where it does get confused, it can only
- * ever blank out MORE than it should, which makes a real title stop resolving
- * and fails the lint loudly — the safe direction. It cannot invent a title.
+ * REGISTERED COPY of src/agent-tooling/catalog/labs-titles.ts — a .mjs cannot
+ * import a .ts at runtime. The guard-wiring test asserts the two agree.
  */
-export function stripComments(text) {
-  let out = '';
-  let state = 'code'; // code | line | block | single | double | template
-  for (let i = 0; i < text.length; i += 1) {
-    const c = text[i];
-    const next = text[i + 1];
-    if (state === 'code') {
-      if (c === '/' && next === '/') { state = 'line'; out += '  '; i += 1; continue; }
-      if (c === '/' && next === '*') { state = 'block'; out += '  '; i += 1; continue; }
-      if (c === "'") state = 'single';
-      else if (c === '"') state = 'double';
-      else if (c === '`') state = 'template';
-      out += c;
-      continue;
+export function readLabsTitles(text, fileName = 'story.tsx') {
+  const source = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, false, ts.ScriptKind.TSX);
+  const titles = [];
+  const visit = (node) => {
+    if (ts.isPropertyAssignment(node)) {
+      const name = node.name;
+      const key = ts.isIdentifier(name) || ts.isStringLiteral(name) ? name.text : undefined;
+      if (key === 'title') {
+        const init = node.initializer;
+        if (ts.isStringLiteral(init) || ts.isNoSubstitutionTemplateLiteral(init)) {
+          if (init.text.startsWith('Labs/')) titles.push(init.text);
+        }
+      }
     }
-    if (state === 'line') {
-      if (c === '\n') { state = 'code'; out += '\n'; } else out += ' ';
-      continue;
+    ts.forEachChild(node, visit);
+  };
+  ts.forEachChild(source, visit);
+  return titles;
+}
+
+/**
+ * The names `src/wire/read.ts` actually EXPORTS as something callable.
+ *
+ * Parsed rather than regexed, which closes two holes at once: a reader named
+ * only in a comment is trivia and never appears, and `export const NAME = async
+ * (…) => {}` is recognised as an export — the previous
+ * `export [async] function NAME(` regex called that a MISSING reader, a false
+ * RED that would have fired the day anyone converted a declaration to a const.
+ */
+export function readWireExports(text, fileName = 'read.ts') {
+  const source = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, false, ts.ScriptKind.TS);
+  const names = new Set();
+  const isExported = (node) => node.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword) ?? false;
+  const visit = (node) => {
+    if (ts.isFunctionDeclaration(node) && isExported(node) && node.name) names.add(node.name.text);
+    if (ts.isVariableStatement(node) && isExported(node)) {
+      for (const d of node.declarationList.declarations) {
+        if (!ts.isIdentifier(d.name)) continue;
+        const init = d.initializer;
+        if (init && (ts.isArrowFunction(init) || ts.isFunctionExpression(init))) names.add(d.name.text);
+      }
     }
-    if (state === 'block') {
-      if (c === '*' && next === '/') { state = 'code'; out += '  '; i += 1; continue; }
-      out += c === '\n' ? '\n' : ' ';
-      continue;
+    // `export { readModelStream }` — a re-export is still an export.
+    if (ts.isExportDeclaration(node) && node.exportClause && ts.isNamedExports(node.exportClause)) {
+      for (const el of node.exportClause.elements) names.add(el.name.text);
     }
-    // Inside a string literal: copy through, honouring backslash escapes so an
-    // escaped quote does not close it early.
-    out += c;
-    if (c === '\\') { out += text[i + 1] ?? ''; i += 1; continue; }
-    if ((state === 'single' && c === "'") || (state === 'double' && c === '"') || (state === 'template' && c === '`')) {
-      state = 'code';
-    }
-  }
-  return out;
+    ts.forEachChild(node, visit);
+  };
+  ts.forEachChild(source, visit);
+  return [...names];
 }
 
 /**
@@ -243,7 +280,10 @@ export function check({
   // recipe's "corpus". Cited evidence has to be a file you can open.
   isFile,
   npmScripts,
-  wireSource,
+  // PARSED export names, not raw source. Parsing happens in the caller so this
+  // stays pure and free of the compiler API — the guard-wiring test imports it
+  // and drives it under jsdom. readWireExports() has its own self-test cases.
+  wireExports,
 }) {
   const errors = [];
   const gaps = [];
@@ -306,9 +346,6 @@ export function check({
 
   const wireModulePresent = isFile(WIRE_READ);
   if (!wireModulePresent) errors.push(`wire module ${WIRE_READ} is missing; no recipe's reader can be resolved.`);
-  // Comments stripped for the same reason the deriver strips them: a reader
-  // NAMED in a comment is not a reader a consumer can import.
-  const wireCode = wireModulePresent ? stripComments(wireSource) : '';
 
   for (const r of surfaceRecipes) {
     const ingredients = new Set(r.ingredients);
@@ -346,11 +383,9 @@ export function check({
     for (const path of r.corpus) {
       if (!isFile(path)) errors.push(`recipe ${r.id}: corpus path ${path} is not a file in the tree.`);
     }
-    // EXPORTED, and not merely mentioned. A substring match resolved a reader
-    // that had lost its `export` (private to the module, unimportable by the
-    // consumer the recipe is written for) and one that appeared only in a
-    // comment. The recipe's whole backend claim rests on this name.
-    if (wireModulePresent && !new RegExp(`^export\\s+(?:async\\s+)?function\\s+${r.backend.reader}\\s*\\(`, 'm').test(wireCode)) {
+    // EXPORTED, and not merely mentioned. The recipe's whole backend claim
+    // rests on this name being importable by the consumer it is written for.
+    if (wireModulePresent && !wireExports.includes(r.backend.reader)) {
       errors.push(`recipe ${r.id}: wire reader ${r.backend.reader} is not an exported function in ${WIRE_READ}.`);
     }
   }
@@ -394,30 +429,54 @@ export function check({
   // The acceptance deck names invariants by id in its `needs`. Those are
   // authored cross-references like any other and rot the same way.
   //
-  // `needs` is mostly free prose, so this cannot demand a known form of every
-  // entry — 'the honesty bound: refuse what is not composable from these parts'
-  // is a legitimate need that happens to contain a colon. What it CAN refuse to
-  // do is skip silently. The prefix was a bare magic string behind a `continue`,
-  // so `invariants:` — one character — switched the cross-reference off for
-  // every scenario at once and nothing anywhere noticed. Two backstops:
-  //   1. a NEAR MISS of the prefix is a hard error, not a skip;
-  //   2. a run that resolves ZERO invariant refs is a hard error, because the
-  //      deck is authored to carry them (same rule as lint:cdn-pins, where a
-  //      zero-match scan means the scanner broke, not that the tree is clean).
+  // EVERY `needs` entry must match a KNOWN form. The previous version only
+  // recognised `invariant:` and near-misses of it (`/^invariants?\s*[:=]/`),
+  // which left a hole exactly the shape of the one it was written to close: an
+  // abbreviated `'inv:reactivity-two-halves'` matched neither branch and was
+  // skipped in silence, so N-1 of N refs could go dark with the run still at
+  // exit 0. Recognising a closed set and failing on anything else is the only
+  // version that cannot be walked around by inventing a new spelling.
+  //
+  // FREE PROSE IS A FORM, and a legitimate one — 'composition validity',
+  // 'wiring topology'. It is admitted by having NO structured prefix at all,
+  // which is why `the honesty bound: refuse what is not composable…` still
+  // passes: `the honesty bound` is not a known prefix and the entry is read as
+  // prose. What is refused is an entry whose leading word looks like it is
+  // TRYING to be structured — a known prefix misspelled, or a prefix nobody has
+  // registered. The zero-refs floor stays as the second backstop (the
+  // lint:cdn-pins rule: a scan matching nothing means the scanner broke).
   const INVARIANT_REF = 'invariant:';
+  // Registered structured prefixes. Adding one here is deliberate; that is the point.
+  const KNOWN_PREFIXES = ['invariant:', 'backend:', 'delivery target:'];
+  // Leading words that mean the entry is REACHING for a structured form. Two
+  // discriminators, because either alone gets it wrong:
+  //   - a SEPARATOR after the stem (`inv:`, `invariants =`) is structured;
+  //   - a stem followed by an exact invariant ID (`invariant reactivity-two-halves`)
+  //     is structured even with no separator.
+  // A bare stem followed by prose is PROSE. That distinction is load-bearing:
+  // requiring only the stem flagged S7's legitimate `'invariant diagnosis
+  // fields'`, and requiring only the separator would miss the space-spelled form.
+  const STRUCTURED_STEM = /^(inv|invariant|invariants|backend|backends|delivery target|deliverytarget|target|targets)(\s*[:=]\s*|\s+)(.*)$/i;
   let invariantRefs = 0;
   for (const s of scenarios) {
     for (const need of s.needs ?? []) {
-      if (need.startsWith(INVARIANT_REF)) {
+      const known = KNOWN_PREFIXES.find((p) => need.startsWith(p));
+      if (known === INVARIANT_REF) {
         invariantRefs += 1;
         const id = need.slice(INVARIANT_REF.length);
         if (!invariantIds.has(id)) errors.push(`scenario ${s.id}: needs invariant '${id}', which does not exist.`);
         continue;
       }
-      if (/^invariants?\s*[:=]/i.test(need)) {
-        errors.push(
-          `scenario ${s.id}: need '${need}' looks like an invariant reference but does not use the '${INVARIANT_REF}' prefix, so it would be skipped silently.`,
-        );
+      if (known) continue;
+      const stem = STRUCTURED_STEM.exec(need);
+      if (stem) {
+        const separated = /[:=]/.test(stem[2]);
+        const remainderIsId = invariantIds.has(stem[3].trim());
+        if (separated || remainderIsId) {
+          errors.push(
+            `scenario ${s.id}: need '${need}' begins like a structured reference but matches no known prefix (${KNOWN_PREFIXES.join(', ')}), so it would be skipped silently. Use an exact prefix or reword it as prose.`,
+          );
+        }
       }
     }
   }
@@ -451,15 +510,15 @@ function deriveLabsTitles() {
       }
       const ext = exts.find((e) => entry.name.endsWith(`.stories.${e}`));
       if (!ext) continue;
-      // COMMENTS STRIPPED FIRST. Prose about a title is not a registration.
-      const text = stripComments(readFileSync(full, 'utf8'));
-      for (const m of text.matchAll(/title:\s*'Labs\/([^']+)'/g)) {
-        const suffix = m[1];
+      // PARSED. Prose about a title is not a registration; comments are trivia.
+      const titles = readLabsTitles(readFileSync(full, 'utf8'), entry.name);
+      for (const title of titles) {
+        const suffix = title.slice('Labs/'.length);
         names.add(suffix);
         // 'Foundations/Input' also registers the group 'Foundations'.
         if (suffix.includes('/')) names.add(suffix.split('/')[0]);
       }
-      if (text.includes("title: 'Labs/Apps'")) names.add(entry.name.replace(`.stories.${ext}`, ''));
+      if (titles.includes('Labs/Apps')) names.add(entry.name.replace(`.stories.${ext}`, ''));
     }
   };
   walk(join(ROOT, 'src'));
@@ -477,15 +536,32 @@ function deriveLabsTitles() {
  * inventory is checked against, which is the whole defect class.
  */
 function storyExtensions() {
-  const main = readFileSync(join(ROOT, '.storybook/main.ts'), 'utf8');
-  const block = /stories:\s*\[([^\]]*)\]/.exec(stripComments(main));
-  if (!block) throw new Error('lint-catalog-drift: no `stories:` array found in .storybook/main.ts');
+  const text = readFileSync(join(ROOT, '.storybook/main.ts'), 'utf8');
+  const source = ts.createSourceFile('main.ts', text, ts.ScriptTarget.Latest, false, ts.ScriptKind.TS);
+  const globs = [];
+  const visit = (node) => {
+    if (
+      ts.isPropertyAssignment(node) &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === 'stories' &&
+      ts.isArrayLiteralExpression(node.initializer)
+    ) {
+      for (const el of node.initializer.elements) {
+        if (ts.isStringLiteral(el) || ts.isNoSubstitutionTemplateLiteral(el)) globs.push(el.text);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  ts.forEachChild(source, visit);
+  if (globs.length === 0) throw new Error('lint-catalog-drift: no `stories:` array found in .storybook/main.ts');
   const exts = new Set();
-  for (const m of block[1].matchAll(/\*\.stories\.(?:@\(([^)]*)\)|(\w+))/g)) {
-    for (const e of (m[1] ?? m[2]).split('|')) exts.add(e.trim());
+  for (const g of globs) {
+    for (const m of g.matchAll(/\*\.stories\.(?:@\(([^)]*)\)|(\w+))/g)) {
+      for (const e of (m[1] ?? m[2]).split('|')) exts.add(e.trim());
+    }
   }
   if (exts.size === 0) {
-    throw new Error(`lint-catalog-drift: could not read story extensions from .storybook/main.ts: ${block[1]}`);
+    throw new Error(`lint-catalog-drift: could not read story extensions from .storybook/main.ts: ${globs.join(', ')}`);
   }
   return [...exts];
 }
@@ -511,7 +587,9 @@ async function main() {
       return existsSync(full) && statSync(full).isFile();
     },
     npmScripts: Object.keys(pkg.scripts),
-    wireSource: existsSync(join(REPO, WIRE_READ)) ? readFileSync(join(REPO, WIRE_READ), 'utf8') : '',
+    wireExports: existsSync(join(REPO, WIRE_READ))
+      ? readWireExports(readFileSync(join(REPO, WIRE_READ), 'utf8'), 'read.ts')
+      : [],
   });
   for (const g of gaps) console.log(`⚠ coverage gap: ${g}`);
   if (errors.length) {
@@ -538,6 +616,7 @@ function selfTest() {
   // The REAL wire source, so the clean control resolves `readModelStream`
   // against the file a recipe actually depends on rather than a stub.
   const wireSource = readFileSync(join(REPO, WIRE_READ), 'utf8');
+  const wireExports = readWireExports(wireSource, 'read.ts');
   const okInvariant = { id: 'inv-ok', statement: 's', appliesTo: {}, enforcedBy: { kind: 'none' }, status: 'open', diagnosis: [], examples: [] };
   const okRecipe = {
     id: 'ok',
@@ -562,7 +641,7 @@ function selfTest() {
     // so the directory cases below can be driven.
     isFile: (p) => p === 'README.md' || p === WIRE_READ,
     npmScripts: ['lint:silent-drops', 'verify:scaffold', 'dev'],
-    wireSource,
+    wireExports,
   };
   const partsInvariant = (parts) => ({ ...okInvariant, id: 'inv-p', appliesTo: { parts }, enforcedBy: { kind: 'none' } });
   // Each case states the EXACT message it expects, not just "some error". A
@@ -590,8 +669,11 @@ function selfTest() {
     // a reader that IS there; this proves it can see one that is not. Without
     // the pair, a wireSource that failed to load would pass both silently.
     ['a wire reader absent from src/wire/read.ts fails', { ...base, surfaceRecipes: [{ ...okRecipe, backend: { endpoint: 'consumer-owned', reader: 'readGhostStream' } }] }, 'wire reader readGhostStream is not an exported function'],
-    ['a wire reader that lost its `export` fails', { ...base, wireSource: wireSource.replace('export async function readModelStream(', 'async function readModelStream(') }, 'wire reader readModelStream is not an exported function'],
-    ['a wire reader named only in a COMMENT fails', { ...base, wireSource: '// export function readModelStream(stream) {}\n' }, 'wire reader readModelStream is not an exported function'],
+    ['a wire reader that lost its `export` fails', { ...base, wireExports: readWireExports(wireSource.replace('export async function readModelStream(', 'async function readModelStream(')) }, 'wire reader readModelStream is not an exported function'],
+    ['a wire reader named only in a COMMENT fails', { ...base, wireExports: readWireExports('// export function readModelStream(stream) {}\n') }, 'wire reader readModelStream is not an exported function'],
+    // The false-RED the old regex would have produced: an arrow-function export
+    // is a perfectly importable reader and must RESOLVE, not fail.
+    ['a wire reader exported as an arrow const RESOLVES', { ...base, wireExports: readWireExports('export const readModelStream = async (s) => s;\n') }, null],
     ['a missing wire module fails', { ...base, isFile: (p) => p === 'README.md' }, 'wire module packages/ui/src/wire/read.ts is missing'],
     ['zero recipes fails (anti-vacuity)', { ...base, surfaceRecipes: [] }, 'zero surface recipes'],
     ['zero part-consumption records fails (anti-vacuity)', { ...base, partConsumption: [] }, 'zero part-consumption records'],
@@ -704,7 +786,18 @@ function selfTest() {
     // The prefix was a magic string behind a silent `continue`, so a
     // one-character typo switched the whole cross-reference off. Both backstops
     // are driven, and the free-prose control below proves neither over-fires.
-    ['a NEAR-MISS of the invariant: prefix fails instead of being skipped', { ...base, scenarios: [{ id: 'S1', needs: ['invariants:inv-ok'] }] }, "looks like an invariant reference but does not use the 'invariant:' prefix"],
+    ['a NEAR-MISS of the invariant: prefix fails instead of being skipped', { ...base, scenarios: [{ id: 'S1', needs: ['invariants:inv-ok'] }] }, 'begins like a structured reference but matches no known prefix'],
+    // The hole the near-miss REGEX left: an abbreviation matched neither branch
+    // and was skipped in silence. A closed set of known forms is what closes it.
+    ['an ABBREVIATED inv: prefix fails instead of being skipped', { ...base, scenarios: [{ id: 'S1', needs: ['invariant:inv-ok', 'inv:reactivity-two-halves'] }] }, "need 'inv:reactivity-two-halves' begins like a structured reference"],
+    ['N-1 of N refs going dark is caught, not silently tolerated', { ...base, scenarios: [{ id: 'S1', needs: ['invariant:inv-ok'] }, { id: 'S2', needs: ['inv:inv-ok'] }] }, "scenario S2: need 'inv:inv-ok'"],
+    ['a registered non-invariant prefix passes', { ...base, scenarios: [{ id: 'S1', needs: ['invariant:inv-ok', 'backend: consumer-owned endpoint', 'delivery target: script-tag'] }] }, null],
+    // The space-spelled near-miss: no separator, but the remainder IS an id.
+    ['a stem followed by an exact invariant id, with no separator, fails', { ...base, scenarios: [{ id: 'S1', needs: ['invariant:inv-ok', 'invariant inv-ok'] }] }, "need 'invariant inv-ok' begins like a structured reference"],
+    // COUNTER-CONTROL for the two cases above, and the real catalog's S7: a
+    // stem followed by PROSE is prose. Over-firing here is how this check
+    // becomes something people route around.
+    ['a stem followed by prose is prose, not a near-miss', { ...base, scenarios: [{ id: 'S1', needs: ['invariant:inv-ok', 'invariant diagnosis fields', 'target audience notes'] }] }, null],
     ['a deck that resolves ZERO invariant refs fails', { ...base, scenarios: [{ id: 'S1', needs: ['composition validity'] }] }, "no scenario carries an 'invariant:<id>' need"],
     ['free prose needs, including one containing a colon, do NOT fire', { ...base, scenarios: [{ id: 'S1', needs: ['invariant:inv-ok', 'the honesty bound: refuse what is not composable', 'backend: consumer-owned endpoint', 'wiring topology'] }] }, null],
     ['zero Labs titles fails (deriver broken)', { ...base, labsTitles: [] }, 'zero Labs titles derived from the tree'],
@@ -729,6 +822,43 @@ function selfTest() {
     console.log(`${ok ? '✓' : '✗'} self-test: ${name}${ok ? '' : ` (${why})`}`);
     if (!ok) failed++;
   }
+  // ── The PARSER, driven directly. check() takes titles and exports as data,
+  // so nothing above can observe a broken reader. These are the cases that
+  // defeated the two text-based versions.
+  const parserCases = [
+    ['a title in a LINE comment is not a registration', "// title: 'Labs/GHOST'\nconst m = { title: 'Labs/Real' };", ['Labs/Real']],
+    ['a title in a BLOCK comment is not a registration', "/* title: 'Labs/GHOST' */\nconst m = { title: 'Labs/Real' };", ['Labs/Real']],
+    // ★ THE APOSTROPHE CLASS. JSX text containing an unbalanced `'` defeated the
+    // hand-rolled stripper: it entered string state and never left, so every
+    // later comment survived and its titles counted. Live in three story files.
+    ['an unbalanced apostrophe in JSX does not leak a commented title', "const a = <p>Don't have an account?</p>;\n// title: 'Labs/GHOST'\nconst m = { title: 'Labs/Real' };", ['Labs/Real']],
+    ['a title AFTER an apostrophe is still found', "const a = <p>Don't panic</p>;\nconst m = { title: 'Labs/Real' };", ['Labs/Real']],
+    ['a DOUBLE-quoted title is read (the regex saw only single quotes)', 'const m = { title: "Labs/Real" };', ['Labs/Real']],
+    ['a BACKTICK title is read', 'const m = { title: `Labs/Real` };', ['Labs/Real']],
+    ['a non-title string starting with Labs/ is not a registration', "const s = 'Labs/NotATitle';\nconst m = { title: 'Labs/Real' };", ['Labs/Real']],
+    ['a file with no Labs title yields nothing', "const m = { title: 'Components/Thing' };", []],
+  ];
+  for (const [name, src, want] of parserCases) {
+    const got = readLabsTitles(src, 'probe.tsx');
+    const ok = JSON.stringify(got) === JSON.stringify(want);
+    console.log(`${ok ? '✓' : '✗'} self-test: ${name}${ok ? '' : ` (wanted ${JSON.stringify(want)}, got ${JSON.stringify(got)})`}`);
+    if (!ok) failed++;
+  }
+  const exportCases = [
+    ['an exported function declaration is an export', 'export function readModelStream(s) {}', true],
+    ['an exported async function is an export', 'export async function readModelStream(s) {}', true],
+    ['an exported arrow const is an export', 'export const readModelStream = async (s) => s;', true],
+    ['a NON-exported function is not', 'async function readModelStream(s) {}', false],
+    ['a reader named only in a comment is not', '// export function readModelStream(s) {}', false],
+    ['an export specifier counts', 'function readModelStream(s) {}\nexport { readModelStream };', true],
+  ];
+  for (const [name, src, want] of exportCases) {
+    const got = readWireExports(src, 'probe.ts').includes('readModelStream');
+    const ok = got === want;
+    console.log(`${ok ? '✓' : '✗'} self-test: ${name}${ok ? '' : ` (wanted ${want}, got ${got})`}`);
+    if (!ok) failed++;
+  }
+
   // The deriver is the one input the fixtures cannot stand in for: every
   // inventory case above uses a hand-written labsTitles array, so a broken
   // deriveLabsTitles() would never show up. Drive the real one.
@@ -740,7 +870,11 @@ function selfTest() {
   if (!derivedOk) failed++;
 
   if (failed) process.exit(1);
-  console.log(`lint-catalog-drift --self-test: all ${cases.length + 1} cases behaved.`);
+  // The count must cover EVERY block that prints a `✓ self-test:` line, or the
+  // guard-wiring test's claimed-vs-observed check goes red -- which is exactly
+  // what it is for: a summary that undercounts is a summary nobody can trust.
+  const total = cases.length + parserCases.length + exportCases.length + 1;
+  console.log(`lint-catalog-drift --self-test: all ${total} cases behaved.`);
 }
 
 // Only run when invoked as a script. `check()` is exported so the guard-wiring

@@ -8,7 +8,7 @@ import '../../elements/conversation-list';
 import '../../elements/resizable';
 import type { ConversationGroup, ConversationSummary } from '../../types';
 import { InventoryEntry, SurfaceRecipe } from './catalog-types';
-import { stripComments } from './strip-comments';
+import { readLabsTitles } from './labs-titles';
 import {
   inventory,
   listInventory,
@@ -27,18 +27,20 @@ describe('authored surface layer', () => {
     // Derived, not listed: the nine app names come from the story files
     // themselves, so adding an app makes this fail until it is sorted.
     //
-    // COMMENTS STRIPPED FIRST, and this is not cosmetic. Matching raw text made
-    // a story that merely MENTIONS `title: 'Labs/Apps'` in prose count as an
-    // app, so this test would DEMAND an inventory row for a phantom app —
-    // while lint:catalog-drift correctly REFUSES that row, because no such
-    // story exists. Measured: adding one comment line to command.stories.tsx
-    // put the tree in a state where the two checks could not both be satisfied.
-    // Same helper the lint uses, and a test asserts the two stay identical.
+    // PARSED, and this is not cosmetic. Matching raw text made a story that
+    // merely MENTIONS `title: 'Labs/Apps'` in prose count as an app, so this
+    // test would DEMAND an inventory row for a phantom app — while
+    // lint:catalog-drift correctly REFUSES that row, because no such story
+    // exists. One comment line in command.stories.tsx put the tree in a state
+    // where the two checks could not both be satisfied. A hand-rolled comment
+    // stripper then replaced that bug with a worse one (an unbalanced
+    // apostrophe in JSX text left it stuck in string state), so this reads the
+    // real parser: comments are trivia and are never nodes.
     const elDir = join(__dirname, '..', '..', 'elements');
     const appFiles = readdirSync(elDir).filter(
       (f) =>
         f.endsWith('.stories.tsx') &&
-        stripComments(readFileSync(join(elDir, f), 'utf8')).includes("title: 'Labs/Apps'"),
+        readLabsTitles(readFileSync(join(elDir, f), 'utf8'), f).includes('Labs/Apps'),
     );
     expect(appFiles.length).toBeGreaterThan(0);
     const surfaces = new Set(inventory.filter((e) => e.sort === 'surface').map((e) => e.title));
