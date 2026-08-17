@@ -170,6 +170,15 @@ export interface ModelTurn {
 export interface ConsumeOptions {
   /** Label for the reasoning disclosure. Defaults to 'Thinking'. */
   reasoningLabel?: string;
+  /**
+   * Correlates diagnostics and namespaces reasoning parts for this consume call;
+   * assigned automatically when absent.
+   *
+   * Supply one only to tie a read to an id you already hold. Two reads into the
+   * SAME sink must not share a value: the id is what keeps a second round's
+   * block 0 from merging into the first round's reasoning part.
+   */
+  streamId?: string;
   /** Fires once per tool call the moment its arguments parse cleanly. This is
    *  the hook a host's tool loop waits on. There is deliberately no
    *  per-fragment callback: `ToolPart.rawInput` is written on every fragment,

@@ -21,6 +21,7 @@ import type {
 } from './chunk';
 import { openaiChatFormat } from './formats/openai';
 import { anthropicMessagesFormat } from './formats/anthropic';
+import { nextStreamId } from './diagnostics';
 
 export type StreamSource =
   | Response
@@ -120,6 +121,9 @@ export async function readModelStream(
   sink: AssistantStreamSink,
   opts: ReadOptions,
 ): Promise<ModelTurn> {
+  // FIRST, before the source is even resolved: a failure inside `toByteSource`
+  // still needs an id to report itself under.
+  const streamId = opts.streamId ?? nextStreamId();
   const bytes = await toByteSource(source);
   // Opened ONCE per stream, which is the whole point of the open()/push() shape:
   // a stateful format (Anthropic) gets a fresh block map per call.
@@ -129,7 +133,7 @@ export async function readModelStream(
       for (const chunk of reader.push(frame)) yield chunk;
     }
   }
-  return consumeModelStream(chunks(), sink, opts);
+  return consumeModelStream(chunks(), sink, { ...opts, streamId });
 }
 
 /** OpenAI chat-completions SSE. Also what all nine catalog integrations except

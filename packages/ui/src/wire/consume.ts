@@ -18,6 +18,7 @@ import {
   type StopReason,
 } from './chunk';
 import type { RawOrigin } from '../components/tool-types';
+import { nextStreamId } from './diagnostics';
 
 // ── Tool-call accumulator ────────────────────────────────────────────────────
 
@@ -296,19 +297,6 @@ function teeSink(a: AssistantStreamSink, b: AssistantStreamSink): AssistantStrea
 
 // ── The main loop ────────────────────────────────────────────────────────────
 
-/** One id per `consumeModelStream` call, i.e. per provider response stream.
- *
- *  It namespaces reasoning block indices. Anthropic restarts content-block
- *  indices at 0 on every message, and a tool loop reads several messages into ONE
- *  assistant turn, so without this round 2's block 0 merges into round 1's part
- *  and overwrites its verbatim `raw`. See `appendReasoningPart`.
- *
- *  A monotonic counter, not a UUID: this never leaves the process, is compared
- *  only for equality against parts built in the same process, and a counter keeps
- *  the value short and reproducible in test output. */
-let streamSeq = 0;
-const nextStreamId = (): string => `wire-${++streamSeq}`;
-
 /**
  * Read one turn's worth of `ModelStreamChunk`s and drive `sink` with them.
  *
@@ -326,7 +314,10 @@ export async function consumeModelStream(
   opts: ConsumeOptions = {},
 ): Promise<ModelTurn> {
   const label = opts.reasoningLabel ?? 'Thinking';
-  const streamId = nextStreamId();
+  // `readModelStream` assigns the id one level up, because it opens the format
+  // and counts frames before this function runs and every event from one read
+  // has to carry the same id. A direct caller still gets a fresh one per call.
+  const streamId = opts.streamId ?? nextStreamId();
   const recorder = createPartsRecorder();
   const out = teeSink(sink, recorder);
   const tools = createToolCallAccumulator(out, opts);
