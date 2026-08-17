@@ -141,7 +141,7 @@ jobs:
       # surface layer becoming prose about a tree that moved underneath it.
       # Self-test first: a checker that cannot detect is a green lie. Needs no
       # build -- it reads derived.json and bundles the catalog with esbuild.
-      - name: catalog drift
+      - name: Catalog drift guard (authored claims resolve)
         run: pnpm --filter @kitn.ai/ui run lint:catalog-drift
 
       # Reintroduction guard for `url: URL.createObjectURL(file)` -- an object

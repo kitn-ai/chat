@@ -116,6 +116,38 @@ describe('the catalog drift guard detects, and CI runs it', () => {
     ).toContain(NPM_SCRIPT);
   });
 
+  it('cannot be neutered by `continue-on-error` or a false `if:`', () => {
+    // PRESENT-BUT-INERT is the failure this closes, and the assertion above
+    // cannot see it: `continue-on-error: true` turns the guard's refusal into a
+    // warning, and `if: false` skips it outright, while the step text stays
+    // exactly where the `toContain` is looking. Same idiom as
+    // tests/scripts/publish-gate-wiring.test.ts.
+    const block = jobBlock(readFileSync(WORKFLOW, 'utf-8'), 'test');
+    expect(block, `no \`test:\` job found in ${WORKFLOW}`).not.toBe('');
+
+    const lines = block.split('\n');
+    const start = lines.findIndex((l) => l.includes(NPM_SCRIPT));
+    expect(start, `no step running \`${NPM_SCRIPT}\``).toBeGreaterThan(-1);
+
+    // The step is the `- name:` block containing that run line: walk back to the
+    // `-` that opens it and forward to the next one.
+    const open = lines.slice(0, start + 1).map((l) => /^\s*- /.test(l)).lastIndexOf(true);
+    const after = lines.slice(start + 1).findIndex((l) => /^\s*- /.test(l));
+    const step = lines.slice(open, after === -1 ? lines.length : start + 1 + after).join('\n');
+
+    expect(step, 'the step extraction returned nothing — everything below would pass vacuously').toContain(NPM_SCRIPT);
+    expect(
+      step,
+      '`continue-on-error` on the catalog drift step turns a hard refusal into a warning, ' +
+        'and the job goes green over a catalog whose claims no longer resolve.',
+    ).not.toContain('continue-on-error');
+    expect(
+      step,
+      'an `if:` on the catalog drift step can skip it entirely while the step text stays ' +
+        'in the workflow for a `toContain` to find.',
+    ).not.toMatch(/^\s*if:/m);
+  });
+
   it('its own self-test passes, so the analyzer still detects every seeded defect', () => {
     const { code, output } = runLinter(['--self-test']);
     expect(code, `the self-test exited ${code}:\n${output}`).toBe(0);
@@ -182,8 +214,8 @@ describe('check() observes both presence and absence', () => {
     scenarios: [{ id: 'S1', needs: ['invariant:inv'] }],
     partConsumption: [{ tag: 'kai-a', consumes: ['text', 'reasoning', 'tool', 'source'] }],
     labsTitles: ['Command'],
-    fileExists: (p: string) => p === 'README.md' || p === 'packages/ui/src/wire/read.ts',
-    lintScripts: ['lint:silent-drops'],
+    isFile: (p: string) => p === 'README.md' || p === 'packages/ui/src/wire/read.ts',
+    npmScripts: ['lint:silent-drops'],
     wireSource: readFileSync(resolve(repoRoot, 'packages/ui/src/wire/read.ts'), 'utf-8'),
   };
 

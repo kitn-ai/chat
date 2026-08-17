@@ -86,7 +86,13 @@ export const SurfaceRecipe = z.object({
   targets: z.array(DeliveryTarget).min(1),
   ingredients: z.array(z.string()).min(1),
   backend: Backend,
-  wiring: z.array(WiringEdge),
+  // `.min(1)` like its siblings, and for a sharper reason than symmetry: an
+  // empty `wiring` is what a recipe looks like when it makes NO host-coordinates
+  // claim at all. Every wiring check in the drift lint is a loop over this
+  // array, so emptying it deleted the topology from both recipes while the lint
+  // went on printing "2 recipes ... resolved clean". The lint carries a readable
+  // duplicate of this check so the failure is a message rather than a ZodError.
+  wiring: z.array(WiringEdge).min(1),
   invariants: z.array(z.string()).min(1),
   corpus: z.array(z.string()).min(1),
 });

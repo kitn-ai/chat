@@ -63,7 +63,7 @@
 // parses fails the esbuild step loudly rather than being skipped, because the
 // authored records are loaded through their VALIDATED accessors — so a record
 // violating its own zod schema is a hard failure here too, not a silent pass.
-import { existsSync, readFileSync, readdirSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, mkdtempSync, statSync, writeFileSync, rmSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -89,21 +89,89 @@ async function loadAuthored(catalogDir) {
     `export { listSurfaceRecipes, listInventory, listPartConsumption } from '${join(catalogDir, 'surfaces.ts')}';`,
     `export { listScenarios } from '${join(catalogDir, 'scenarios.ts')}';`,
   ].join('\n');
-  const entry = join(tmp, 'entry.ts');
-  writeFileSync(entry, entrySrc);
-  const bundle = join(tmp, 'bundle.mjs');
-  await esbuild.build({
-    entryPoints: [entry],
-    bundle: true,
-    platform: 'node',
-    format: 'esm',
-    outfile: bundle,
-    logLevel: 'error',
-    absWorkingDir: REPO,
-  });
-  const mod = await import(pathToFileURL(bundle).href);
-  rmSync(tmp, { recursive: true, force: true });
-  return mod;
+  // try/finally so the temp dir is removed on the esbuild-FAILURE path too. A
+  // catalog file that stops parsing is a normal outcome for this lint (it is
+  // how a schema-invalid record surfaces), so the throwing path is not exotic
+  // and was leaking a directory per failed run.
+  try {
+    const entry = join(tmp, 'entry.ts');
+    writeFileSync(entry, entrySrc);
+    const bundle = join(tmp, 'bundle.mjs');
+    await esbuild.build({
+      entryPoints: [entry],
+      bundle: true,
+      platform: 'node',
+      format: 'esm',
+      outfile: bundle,
+      logLevel: 'error',
+      absWorkingDir: REPO,
+    });
+    return await import(pathToFileURL(bundle).href);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Blank out `//` and block comments, preserving offsets and newlines.
+ *
+ * ★ THIS IS THE FIX FOR THE DEFECT THAT REOPENED THE HOLE THIS LINT EXISTS TO
+ * CLOSE. `deriveLabsTitles()` used to regex raw file text, so a story title
+ * mentioned in PROSE counted as a real registration. Measured on this tree,
+ * all exit 0 before this existed:
+ *
+ *   - renaming every real `Labs/Proofs` meta title across all six
+ *     proof-*.stories.tsx left the `Proofs` inventory row green, kept alive by
+ *     one comment at proof-about.stories.tsx:9;
+ *   - an invented inventory row plus a single `//` line mentioning it passed,
+ *     reporting 27 rows "resolved clean";
+ *   - a comment reading `title: 'Labs/Apps'` added to command.stories.tsx
+ *     conjured a PHANTOM app, and an invented `surface` row named after it
+ *     satisfied this lint AND surfaces.test.ts test 2 simultaneously — both
+ *     sides green together, which is the exact failure shape the catalog is
+ *     supposed to make impossible.
+ *
+ * It survived the original watched-reds because each of those mutations
+ * happened to rewrite the comment as well, so the class was never exercised.
+ *
+ * The scanner tracks string and template states so a `//` inside a literal (a
+ * URL) is not mistaken for a comment. Where it does get confused, it can only
+ * ever blank out MORE than it should, which makes a real title stop resolving
+ * and fails the lint loudly — the safe direction. It cannot invent a title.
+ */
+export function stripComments(text) {
+  let out = '';
+  let state = 'code'; // code | line | block | single | double | template
+  for (let i = 0; i < text.length; i += 1) {
+    const c = text[i];
+    const next = text[i + 1];
+    if (state === 'code') {
+      if (c === '/' && next === '/') { state = 'line'; out += '  '; i += 1; continue; }
+      if (c === '/' && next === '*') { state = 'block'; out += '  '; i += 1; continue; }
+      if (c === "'") state = 'single';
+      else if (c === '"') state = 'double';
+      else if (c === '`') state = 'template';
+      out += c;
+      continue;
+    }
+    if (state === 'line') {
+      if (c === '\n') { state = 'code'; out += '\n'; } else out += ' ';
+      continue;
+    }
+    if (state === 'block') {
+      if (c === '*' && next === '/') { state = 'code'; out += '  '; i += 1; continue; }
+      out += c === '\n' ? '\n' : ' ';
+      continue;
+    }
+    // Inside a string literal: copy through, honouring backslash escapes so an
+    // escaped quote does not close it early.
+    out += c;
+    if (c === '\\') { out += text[i + 1] ?? ''; i += 1; continue; }
+    if ((state === 'single' && c === "'") || (state === 'double' && c === '"') || (state === 'template' && c === '`')) {
+      state = 'code';
+    }
+  }
+  return out;
 }
 
 /**
@@ -121,8 +189,11 @@ export function check({
   scenarios,
   partConsumption,
   labsTitles,
-  fileExists,
-  lintScripts,
+  // `isFile`, NOT `existsSync`. A bare existence test accepts a DIRECTORY, so
+  // `packages/ui/src` resolved happily as an invariant's "test path" and a
+  // recipe's "corpus". Cited evidence has to be a file you can open.
+  isFile,
+  npmScripts,
   wireSource,
 }) {
   const errors = [];
@@ -172,8 +243,11 @@ export function check({
     }
   }
 
-  const wireModulePresent = fileExists(WIRE_READ);
+  const wireModulePresent = isFile(WIRE_READ);
   if (!wireModulePresent) errors.push(`wire module ${WIRE_READ} is missing; no recipe's reader can be resolved.`);
+  // Comments stripped for the same reason the deriver strips them: a reader
+  // NAMED in a comment is not a reader a consumer can import.
+  const wireCode = wireModulePresent ? stripComments(wireSource) : '';
 
   for (const r of surfaceRecipes) {
     const ingredients = new Set(r.ingredients);
@@ -202,11 +276,21 @@ export function check({
     for (const id of r.invariants) {
       if (!invariantIds.has(id)) errors.push(`recipe ${r.id}: invariant ${id} does not exist.`);
     }
-    for (const path of r.corpus) {
-      if (!fileExists(path)) errors.push(`recipe ${r.id}: corpus path ${path} does not exist.`);
+    // `wiring` carries the whole host-coordinates claim, so an empty array is a
+    // recipe that says nothing about how its parts connect. The schema now also
+    // requires .min(1); this is the readable failure rather than a ZodError.
+    if (r.wiring.length === 0) {
+      errors.push(`recipe ${r.id}: zero wiring edges. A recipe with no wiring makes no host-coordinates claim at all.`);
     }
-    if (wireModulePresent && !wireSource.includes(`function ${r.backend.reader}(`)) {
-      errors.push(`recipe ${r.id}: wire reader ${r.backend.reader} not found in ${WIRE_READ}.`);
+    for (const path of r.corpus) {
+      if (!isFile(path)) errors.push(`recipe ${r.id}: corpus path ${path} is not a file in the tree.`);
+    }
+    // EXPORTED, and not merely mentioned. A substring match resolved a reader
+    // that had lost its `export` (private to the module, unimportable by the
+    // consumer the recipe is written for) and one that appeared only in a
+    // comment. The recipe's whole backend claim rests on this name.
+    if (wireModulePresent && !new RegExp(`^export\\s+(?:async\\s+)?function\\s+${r.backend.reader}\\s*\\(`, 'm').test(wireCode)) {
+      errors.push(`recipe ${r.id}: wire reader ${r.backend.reader} is not an exported function in ${WIRE_READ}.`);
     }
   }
 
@@ -214,12 +298,21 @@ export function check({
     const e = inv.enforcedBy;
     if (e.kind === 'test')
       for (const p of e.paths) {
-        if (!fileExists(p)) errors.push(`invariant ${inv.id}: test ${p} does not exist.`);
+        if (!isFile(p)) errors.push(`invariant ${inv.id}: test ${p} is not a file in the tree.`);
       }
-    if (e.kind === 'structural' && !fileExists(e.path))
-      errors.push(`invariant ${inv.id}: structural site ${e.path} does not exist.`);
-    if (e.kind === 'lint' && !lintScripts.includes(e.script))
-      errors.push(`invariant ${inv.id}: no npm script ${e.script}.`);
+    if (e.kind === 'structural' && !isFile(e.path))
+      errors.push(`invariant ${inv.id}: structural site ${e.path} is not a file in the tree.`);
+    if (e.kind === 'lint') {
+      // Existence is not enough. `Object.keys(pkg.scripts)` is every script in
+      // the package, so `dev`, `build` and `test` all resolved as "the lint that
+      // enforces this invariant". A guard-shaped script is one in the `lint:` or
+      // `verify:` namespace — the two this repo uses for checks.
+      if (!npmScripts.includes(e.script)) errors.push(`invariant ${inv.id}: no npm script ${e.script}.`);
+      else if (!/^(lint|verify):/.test(e.script))
+        errors.push(
+          `invariant ${inv.id}: npm script '${e.script}' is not a guard (expected a lint: or verify: script).`,
+        );
+    }
     // A GAP, never an error: `kind: 'none'` is the honest record of something
     // nothing enforces, and failing on it would push authors to invent a path.
     if (e.kind === 'none') gaps.push(`invariant ${inv.id}: enforced by nothing${e.until ? ` (until ${e.until})` : ''}.`);
@@ -239,12 +332,38 @@ export function check({
 
   // The acceptance deck names invariants by id in its `needs`. Those are
   // authored cross-references like any other and rot the same way.
+  //
+  // `needs` is mostly free prose, so this cannot demand a known form of every
+  // entry — 'the honesty bound: refuse what is not composable from these parts'
+  // is a legitimate need that happens to contain a colon. What it CAN refuse to
+  // do is skip silently. The prefix was a bare magic string behind a `continue`,
+  // so `invariants:` — one character — switched the cross-reference off for
+  // every scenario at once and nothing anywhere noticed. Two backstops:
+  //   1. a NEAR MISS of the prefix is a hard error, not a skip;
+  //   2. a run that resolves ZERO invariant refs is a hard error, because the
+  //      deck is authored to carry them (same rule as lint:cdn-pins, where a
+  //      zero-match scan means the scanner broke, not that the tree is clean).
+  const INVARIANT_REF = 'invariant:';
+  let invariantRefs = 0;
   for (const s of scenarios) {
     for (const need of s.needs ?? []) {
-      if (!need.startsWith('invariant:')) continue;
-      const id = need.slice('invariant:'.length);
-      if (!invariantIds.has(id)) errors.push(`scenario ${s.id}: needs invariant '${id}', which does not exist.`);
+      if (need.startsWith(INVARIANT_REF)) {
+        invariantRefs += 1;
+        const id = need.slice(INVARIANT_REF.length);
+        if (!invariantIds.has(id)) errors.push(`scenario ${s.id}: needs invariant '${id}', which does not exist.`);
+        continue;
+      }
+      if (/^invariants?\s*[:=]/i.test(need)) {
+        errors.push(
+          `scenario ${s.id}: need '${need}' looks like an invariant reference but does not use the '${INVARIANT_REF}' prefix, so it would be skipped silently.`,
+        );
+      }
     }
+  }
+  if (scenarios.length > 0 && invariantRefs === 0) {
+    errors.push(
+      `no scenario carries an '${INVARIANT_REF}<id>' need. Either the deck stopped cross-referencing invariants, or this prefix no longer matches it — both mean the check is resolving nothing.`,
+    );
   }
 
   return { errors, gaps };
@@ -260,6 +379,7 @@ export function check({
  * src/elements/ false-fails on both. Measured, not assumed.
  */
 function deriveLabsTitles() {
+  const exts = storyExtensions();
   const names = new Set();
   const walk = (dir) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -268,19 +388,45 @@ function deriveLabsTitles() {
         walk(full);
         continue;
       }
-      if (!entry.name.endsWith('.stories.tsx')) continue;
-      const text = readFileSync(full, 'utf8');
+      const ext = exts.find((e) => entry.name.endsWith(`.stories.${e}`));
+      if (!ext) continue;
+      // COMMENTS STRIPPED FIRST. Prose about a title is not a registration.
+      const text = stripComments(readFileSync(full, 'utf8'));
       for (const m of text.matchAll(/title:\s*'Labs\/([^']+)'/g)) {
         const suffix = m[1];
         names.add(suffix);
         // 'Foundations/Input' also registers the group 'Foundations'.
         if (suffix.includes('/')) names.add(suffix.split('/')[0]);
       }
-      if (text.includes("title: 'Labs/Apps'")) names.add(entry.name.replace('.stories.tsx', ''));
+      if (text.includes("title: 'Labs/Apps'")) names.add(entry.name.replace(`.stories.${ext}`, ''));
     }
   };
   walk(join(ROOT, 'src'));
   return [...names];
+}
+
+/**
+ * The story file extensions Storybook itself indexes, READ FROM `.storybook/main.ts`
+ * rather than hand-typed here. The deriver used to glob `.stories.tsx` while
+ * Storybook globs `*.stories.@(ts|tsx)`; nothing has a `.stories.ts` today so it
+ * was harmless, which is exactly how a copy survives long enough to matter.
+ *
+ * A `stories:` array this cannot parse is a HARD FAILURE, not a fallback to a
+ * guessed default: a silent fallback here would quietly re-narrow what the
+ * inventory is checked against, which is the whole defect class.
+ */
+function storyExtensions() {
+  const main = readFileSync(join(ROOT, '.storybook/main.ts'), 'utf8');
+  const block = /stories:\s*\[([^\]]*)\]/.exec(stripComments(main));
+  if (!block) throw new Error('lint-catalog-drift: no `stories:` array found in .storybook/main.ts');
+  const exts = new Set();
+  for (const m of block[1].matchAll(/\*\.stories\.(?:@\(([^)]*)\)|(\w+))/g)) {
+    for (const e of (m[1] ?? m[2]).split('|')) exts.add(e.trim());
+  }
+  if (exts.size === 0) {
+    throw new Error(`lint-catalog-drift: could not read story extensions from .storybook/main.ts: ${block[1]}`);
+  }
+  return [...exts];
 }
 
 async function main() {
@@ -299,8 +445,11 @@ async function main() {
     scenarios: authored.listScenarios(),
     partConsumption: authored.listPartConsumption(),
     labsTitles: deriveLabsTitles(),
-    fileExists: (p) => existsSync(join(REPO, p)),
-    lintScripts: Object.keys(pkg.scripts),
+    isFile: (p) => {
+      const full = join(REPO, p);
+      return existsSync(full) && statSync(full).isFile();
+    },
+    npmScripts: Object.keys(pkg.scripts),
     wireSource: existsSync(join(REPO, WIRE_READ)) ? readFileSync(join(REPO, WIRE_READ), 'utf8') : '',
   });
   for (const g of gaps) console.log(`⚠ coverage gap: ${g}`);
@@ -348,8 +497,10 @@ function selfTest() {
     scenarios: [{ id: 'S1', needs: ['invariant:inv-ok'] }],
     partConsumption: [{ tag: 'kai-a', consumes: ['text', 'reasoning', 'tool', 'source'] }],
     labsTitles: ['Command', 'Proofs'],
-    fileExists: (p) => p === 'README.md' || p === WIRE_READ,
-    lintScripts: ['lint:silent-drops'],
+    // Files, not just paths: 'packages/ui/src' is deliberately NOT in this set,
+    // so the directory cases below can be driven.
+    isFile: (p) => p === 'README.md' || p === WIRE_READ,
+    npmScripts: ['lint:silent-drops', 'verify:scaffold', 'dev'],
     wireSource,
   };
   const partsInvariant = (parts) => ({ ...okInvariant, id: 'inv-p', appliesTo: { parts }, enforcedBy: { kind: 'none' } });
@@ -358,6 +509,12 @@ function selfTest() {
   // fixture usually trips more than one check, so `errors.length > 0` stays
   // true after the check the case was written for is deleted. `null` means the
   // case must come back completely clean.
+  //
+  // A fourth element, where present, is a substring the GAPS must contain (or a
+  // number the gap COUNT must equal). A case that only asserts "no error"
+  // cannot pin gap behaviour: the `kind:'none'` case below passed unchanged
+  // when `gaps.push` was deleted entirely, because absence of an error was all
+  // it was checking.
   const cases = [
     ['CLEAN control passes', base, null],
     ['unknown ingredient fails', { ...base, surfaceRecipes: [{ ...okRecipe, ingredients: ['kai-datagrid', 'kai-a', 'kai-b'] }] }, 'ingredient kai-datagrid is not a derived element'],
@@ -365,12 +522,16 @@ function selfTest() {
     ['unknown wiring property fails', { ...base, surfaceRecipes: [{ ...okRecipe, wiring: [{ from: 'kai-a', event: 'kai-pick', to: 'kai-b', property: 'nope' }] }] }, 'kai-b has no property nope'],
     ['wiring onto a tag the recipe does not list fails', { ...base, surfaceRecipes: [{ ...okRecipe, ingredients: ['kai-a'] }] }, "wiring 'to' kai-b is not in the recipe's own ingredients"],
     ['bogus invariant ref fails', { ...base, surfaceRecipes: [{ ...okRecipe, invariants: ['ghost'] }] }, 'invariant ghost does not exist'],
-    ['missing corpus path fails', { ...base, surfaceRecipes: [{ ...okRecipe, corpus: ['docs/does-not-exist.md'] }] }, 'corpus path docs/does-not-exist.md does not exist'],
+    ['missing corpus path fails', { ...base, surfaceRecipes: [{ ...okRecipe, corpus: ['docs/does-not-exist.md'] }] }, 'corpus path docs/does-not-exist.md is not a file'],
+    ['a corpus path that is a DIRECTORY fails', { ...base, surfaceRecipes: [{ ...okRecipe, corpus: ['packages/ui/src'] }] }, 'corpus path packages/ui/src is not a file'],
+    ['a recipe with zero wiring edges fails', { ...base, surfaceRecipes: [{ ...okRecipe, wiring: [] }] }, 'zero wiring edges'],
     // POSITIVE CONTROL for the reader check: the clean control proves it can see
     // a reader that IS there; this proves it can see one that is not. Without
     // the pair, a wireSource that failed to load would pass both silently.
-    ['a wire reader absent from src/wire/read.ts fails', { ...base, surfaceRecipes: [{ ...okRecipe, backend: { endpoint: 'consumer-owned', reader: 'readGhostStream' } }] }, 'wire reader readGhostStream not found'],
-    ['a missing wire module fails', { ...base, fileExists: (p) => p === 'README.md' }, 'wire module packages/ui/src/wire/read.ts is missing'],
+    ['a wire reader absent from src/wire/read.ts fails', { ...base, surfaceRecipes: [{ ...okRecipe, backend: { endpoint: 'consumer-owned', reader: 'readGhostStream' } }] }, 'wire reader readGhostStream is not an exported function'],
+    ['a wire reader that lost its `export` fails', { ...base, wireSource: wireSource.replace('export async function readModelStream(', 'async function readModelStream(') }, 'wire reader readModelStream is not an exported function'],
+    ['a wire reader named only in a COMMENT fails', { ...base, wireSource: '// export function readModelStream(stream) {}\n' }, 'wire reader readModelStream is not an exported function'],
+    ['a missing wire module fails', { ...base, isFile: (p) => p === 'README.md' }, 'wire module packages/ui/src/wire/read.ts is missing'],
     ['zero recipes fails (anti-vacuity)', { ...base, surfaceRecipes: [] }, 'zero surface recipes'],
     ['zero part-consumption records fails (anti-vacuity)', { ...base, partConsumption: [] }, 'zero part-consumption records'],
     // ISOLATED: the recipe references the RENAMED invariant, or the bogus-ref
@@ -383,7 +544,17 @@ function selfTest() {
         surfaceRecipes: [{ ...okRecipe, invariants: ['inv-t'] }],
         scenarios: [{ id: 'S1', needs: ['invariant:inv-t'] }],
       },
-      'invariant inv-t: test nope.test.ts does not exist',
+      'invariant inv-t: test nope.test.ts is not a file',
+    ],
+    [
+      'an enforcedBy test path that is a DIRECTORY fails',
+      {
+        ...base,
+        invariants: [{ ...okInvariant, id: 'inv-d', enforcedBy: { kind: 'test', paths: ['packages/ui/src'] }, status: 'enforced' }],
+        surfaceRecipes: [{ ...okRecipe, invariants: ['inv-d'] }],
+        scenarios: [{ id: 'S1', needs: ['invariant:inv-d'] }],
+      },
+      'invariant inv-d: test packages/ui/src is not a file',
     ],
     [
       'missing enforcedBy structural path fails',
@@ -393,7 +564,7 @@ function selfTest() {
         surfaceRecipes: [{ ...okRecipe, invariants: ['inv-s'] }],
         scenarios: [{ id: 'S1', needs: ['invariant:inv-s'] }],
       },
-      'invariant inv-s: structural site nope.tsx does not exist',
+      'invariant inv-s: structural site nope.tsx is not a file',
     ],
     [
       'enforcedBy lint naming no npm script fails',
@@ -415,7 +586,49 @@ function selfTest() {
       },
       null,
     ],
-    ['kind none is a gap, not an error', { ...base }, null],
+    [
+      'enforcedBy lint naming a real but NON-GUARD script fails',
+      {
+        ...base,
+        invariants: [{ ...okInvariant, id: 'inv-l', enforcedBy: { kind: 'lint', script: 'dev' }, status: 'enforced' }],
+        surfaceRecipes: [{ ...okRecipe, invariants: ['inv-l'] }],
+        scenarios: [{ id: 'S1', needs: ['invariant:inv-l'] }],
+      },
+      "npm script 'dev' is not a guard",
+    ],
+    [
+      'enforcedBy lint naming a verify: script passes',
+      {
+        ...base,
+        invariants: [{ ...okInvariant, id: 'inv-l', enforcedBy: { kind: 'lint', script: 'verify:scaffold' }, status: 'enforced' }],
+        surfaceRecipes: [{ ...okRecipe, invariants: ['inv-l'] }],
+        scenarios: [{ id: 'S1', needs: ['invariant:inv-l'] }],
+      },
+      null,
+    ],
+    // The gap expectation (4th element) is the point of these. Asserting only
+    // "no error" left the kind:'none' case green when `gaps.push` was deleted.
+    ['kind none is a REPORTED GAP, not an error', { ...base }, null, 'invariant inv-ok: enforced by nothing'],
+    [
+      'kind none with an `until` reports it in the gap',
+      { ...base, invariants: [{ ...okInvariant, enforcedBy: { kind: 'none', until: 'issue #99' } }] },
+      null,
+      '(until issue #99)',
+    ],
+    // POSITIVE CONTROL for the gap channel: an ENFORCED invariant must produce
+    // NO gap, or "gaps is non-empty" would be true for reasons unrelated to
+    // kind:'none' and the two cases above would prove nothing.
+    [
+      'an enforced invariant produces no gap at all',
+      {
+        ...base,
+        invariants: [{ ...okInvariant, id: 'inv-e', enforcedBy: { kind: 'lint', script: 'lint:silent-drops' }, status: 'enforced' }],
+        surfaceRecipes: [{ ...okRecipe, invariants: ['inv-e'] }],
+        scenarios: [{ id: 'S1', needs: ['invariant:inv-e'] }],
+      },
+      null,
+      0,
+    ],
     ['appliesTo tag that is not a derived element fails', { ...base, invariants: [{ ...okInvariant, appliesTo: { tags: ['kai-ghost'] } }] }, 'appliesTo tag kai-ghost is not a derived element'],
     // The appliesTo.parts branch is DEAD against the real seed set (no invariant
     // sets the field), so it gets both directions by fixture here or it is a
@@ -427,18 +640,32 @@ function selfTest() {
     ['a part-consumption record claiming a variant outside the union fails', { ...base, partConsumption: [{ tag: 'kai-a', consumes: ['text', 'reasoning', 'tool', 'source', 'telepathy'] }] }, "kai-a claims variant 'telepathy'"],
     ['a part-consumption record on an unknown tag fails', { ...base, partConsumption: [{ tag: 'kai-ghost', consumes: ['text', 'reasoning', 'tool', 'source'] }] }, 'part-consumption: kai-ghost is not a derived element'],
     ['a scenario needing an invariant that does not exist fails', { ...base, scenarios: [{ id: 'S1', needs: ['invariant:ghost'] }] }, "scenario S1: needs invariant 'ghost'"],
+    // The prefix was a magic string behind a silent `continue`, so a
+    // one-character typo switched the whole cross-reference off. Both backstops
+    // are driven, and the free-prose control below proves neither over-fires.
+    ['a NEAR-MISS of the invariant: prefix fails instead of being skipped', { ...base, scenarios: [{ id: 'S1', needs: ['invariants:inv-ok'] }] }, "looks like an invariant reference but does not use the 'invariant:' prefix"],
+    ['a deck that resolves ZERO invariant refs fails', { ...base, scenarios: [{ id: 'S1', needs: ['composition validity'] }] }, "no scenario carries an 'invariant:<id>' need"],
+    ['free prose needs, including one containing a colon, do NOT fire', { ...base, scenarios: [{ id: 'S1', needs: ['invariant:inv-ok', 'the honesty bound: refuse what is not composable', 'backend: consumer-owned endpoint', 'wiring topology'] }] }, null],
     ['zero Labs titles fails (deriver broken)', { ...base, labsTitles: [] }, 'zero Labs titles derived from the tree'],
     ['zero scenarios fails (anti-vacuity)', { ...base, scenarios: [] }, 'zero scenarios'],
     ['zero invariants fails (anti-vacuity)', { ...base, invariants: [], surfaceRecipes: [{ ...okRecipe, invariants: ['inv-ok'] }] }, 'zero invariants'],
     ['zero inventory rows fails (anti-vacuity)', { ...base, inventory: [] }, 'zero inventory entries'],
   ];
   let failed = 0;
-  for (const [name, input, want] of cases) {
-    const { errors } = check(input);
-    const ok = want === null ? errors.length === 0 : errors.some((e) => e.includes(want));
-    console.log(
-      `${ok ? '✓' : '✗'} self-test: ${name}${ok ? '' : ` (wanted ${want === null ? 'no errors' : `an error containing "${want}"`}, got: ${errors.join(' | ') || 'clean'})`}`,
-    );
+  for (const [name, input, want, wantGap] of cases) {
+    const { errors, gaps } = check(input);
+    const errorsOk = want === null ? errors.length === 0 : errors.some((e) => e.includes(want));
+    const gapsOk =
+      wantGap === undefined
+        ? true
+        : typeof wantGap === 'number'
+          ? gaps.length === wantGap
+          : gaps.some((g) => g.includes(wantGap));
+    const ok = errorsOk && gapsOk;
+    const why = !errorsOk
+      ? `wanted ${want === null ? 'no errors' : `an error containing "${want}"`}, got: ${errors.join(' | ') || 'clean'}`
+      : `wanted gaps ${typeof wantGap === 'number' ? `to number ${wantGap}` : `containing "${wantGap}"`}, got: ${gaps.join(' | ') || 'none'}`;
+    console.log(`${ok ? '✓' : '✗'} self-test: ${name}${ok ? '' : ` (${why})`}`);
     if (!ok) failed++;
   }
   // The deriver is the one input the fixtures cannot stand in for: every
