@@ -119,6 +119,43 @@ describe('foldStreams', () => {
     expect(streams[0].open).toBe(false);
   });
 
+  it('counts DISTINCT parts live, not write events', () => {
+    // Three text deltas merge into ONE part. Counting wire.part events made the
+    // live figure climb to 3 and then FALL to 1 when wire.close's authoritative
+    // map arrived -- a number that visibly dropped at the end of every healthy
+    // stream. Each event carries its `index`, so unique (variant, index) pairs
+    // are a measured distinct count that converges smoothly instead.
+    const { streams } = foldStreams([
+      ev({ type: 'wire.open', t: 0, streamId: 'wire-10', format: 'openai.chat-completions', source: 'response' }),
+      ev({ type: 'wire.part', t: 1, streamId: 'wire-10', variant: 'text', index: 0, chars: 3 }),
+      ev({ type: 'wire.part', t: 2, streamId: 'wire-10', variant: 'text', index: 0, chars: 4 }),
+      ev({ type: 'wire.part', t: 3, streamId: 'wire-10', variant: 'text', index: 0, chars: 2 }),
+    ]);
+    expect(streams[0].parts).toEqual({ text: 1 });
+    expect(streams[0].open).toBe(true);
+  });
+
+  it('separates distinct indices and variants', () => {
+    const { streams } = foldStreams([
+      ev({ type: 'wire.open', t: 0, streamId: 'wire-11', format: 'openai.chat-completions', source: 'response' }),
+      ev({ type: 'wire.part', t: 1, streamId: 'wire-11', variant: 'text', index: 0, chars: 3 }),
+      ev({ type: 'wire.part', t: 2, streamId: 'wire-11', variant: 'tool', index: 1 }),
+      ev({ type: 'wire.part', t: 3, streamId: 'wire-11', variant: 'text', index: 0, chars: 5 }),
+      ev({ type: 'wire.part', t: 4, streamId: 'wire-11', variant: 'text', index: 2, chars: 1 }),
+    ]);
+    expect(streams[0].parts).toEqual({ text: 2, tool: 1 });
+  });
+
+  it('the close map is adopted verbatim over the live count', () => {
+    const { streams } = foldStreams([
+      ev({ type: 'wire.open', t: 0, streamId: 'wire-12', format: 'openai.chat-completions', source: 'response' }),
+      ev({ type: 'wire.part', t: 1, streamId: 'wire-12', variant: 'text', index: 0, chars: 3 }),
+      ev({ type: 'wire.part', t: 2, streamId: 'wire-12', variant: 'text', index: 1, chars: 3 }),
+      ev({ type: 'wire.close', t: 3, streamId: 'wire-12', frames: 2, chunks: 2, parts: { text: 1 }, finishReason: 'stop', ms: 3 }),
+    ]);
+    expect(streams[0].parts).toEqual({ text: 1 });
+  });
+
   it('a close with no frames reports frames as undefined, not zero', () => {
     // `consumeModelStream` called directly has no frames to report. "Not
     // reported" and "none arrived" are different facts and must render
