@@ -14,12 +14,27 @@ import {
  * an ingredient exists only inside something else; fixtures and proofs are
  * corpus (tests), not catalog entries.
  *
- * Every `title` is a real Storybook title segment under `Labs/` — the nine app
- * names are the `Labs/Apps` story FILENAMES (surfaces.test.ts reads them off
- * disk, so adding an app fails the suite until it is sorted), the rest are the
- * `title: 'Labs/<x>'` values in src/elements/*.stories.tsx. Task 7's drift lint
- * resolves them the same way. Do not invent a row: a title naming nothing real
- * fails CI.
+ * TWO SENSES OF "CORPUS", and they are not the same thing. Here it is a `sort`:
+ * this entry is a fixture or a proof, so it is test material rather than a
+ * catalog entry. On a SurfaceRecipe, `corpus:` is a list of repo PATHS that
+ * demonstrate the recipe. A story can be both — `split-workspace` is sorted
+ * `surface` in this inventory and also appears in a recipe's `corpus:` array,
+ * which is coherent (a product-shaped surface is exactly what demonstrates a
+ * recipe) but reads as a contradiction if you join the two on the word. A
+ * packer must key on `sort === 'corpus'` and on `recipe.corpus` separately.
+ *
+ * Every `title` is a real Storybook title segment under `Labs/` — the app names
+ * are the `Labs/Apps` story FILENAMES, the rest are `title: 'Labs/<x>'` values
+ * under src/ (note: NOT all under src/elements/ — Settings lives in src/ui/ and
+ * Audio Visualizers under src/components/, so a check scoped to src/elements/
+ * alone would wrongly flag them).
+ *
+ * WHAT IS ENFORCED TODAY, in the present tense: only the `Labs/Apps` rows.
+ * surfaces.test.ts reads those filenames off disk, so adding an app fails the
+ * suite until it is sorted here. **Every other row is currently unchecked** —
+ * misspell one, or delete it, and nothing in CI notices. Task 7's drift lint is
+ * what will resolve the remaining titles against the tree; until it ships,
+ * treat this list as reviewed prose, not as verified data.
  */
 export const inventory: TInventoryEntry[] = [
   { title: 'claude-code', sort: 'surface', note: 'Labs/App, end-to-end composition' },
@@ -162,6 +177,16 @@ export const surfaceRecipes: TSurfaceRecipe[] = [
  * not derivable from any type today, so it is recorded here as an explicit copy.
  * Task 7's drift lint fails when the union gains a variant no record accounts
  * for, which is what stops this going stale silently.
+ *
+ * WHAT THE CHECKS CAN AND CANNOT SEE. surfaces.test.ts asserts both directions
+ * of NAME agreement with `derived.partVariants`: no variant in the union is
+ * unaccounted for by any record, and no record claims a variant the union does
+ * not have. Neither can check the claim that actually matters — whether
+ * `kai-chat` really renders a `source` part is an EDITORIAL judgement, and
+ * nothing in the tree derives it, which is exactly why this is a registered
+ * copy rather than generated data. A machine cannot tell a correct record from
+ * a confident wrong one here. That claim is measured by the acceptance deck,
+ * not by CI, so do not add an assertion that looks like it covers it.
  */
 export const partConsumption: TPartConsumption[] = [
   { tag: 'kai-chat', consumes: ['text', 'reasoning', 'tool', 'card', 'source', 'file'] },

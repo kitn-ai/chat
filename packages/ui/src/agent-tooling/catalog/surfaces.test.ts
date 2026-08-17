@@ -8,7 +8,13 @@ import '../../elements/conversation-list';
 import '../../elements/resizable';
 import type { ConversationGroup, ConversationSummary } from '../../types';
 import { InventoryEntry, SurfaceRecipe } from './catalog-types';
-import { inventory, listInventory, listSurfaceRecipes, partConsumption, surfaceRecipes } from './surfaces';
+import {
+  inventory,
+  listInventory,
+  listPartConsumption,
+  listSurfaceRecipes,
+  surfaceRecipes,
+} from './surfaces';
 
 describe('authored surface layer', () => {
   it('inventory parses and sorts every entry into surface / ingredient / corpus', () => {
@@ -42,11 +48,41 @@ describe('authored surface layer', () => {
     // chat-types.ts: this plan argues the extraction must be parsed, not matched,
     // and a test that re-derives it by hand would be exactly the copy the
     // catalog exists to eliminate.
+    //
+    // Read through the ACCESSOR, not the raw literal. listPartConsumption()
+    // parses, so a schema-invalid record (an empty `consumes`, a missing tag)
+    // fails here instead of sailing through — the accessor exists for exactly
+    // that, and reading the literal quietly opted the one registered copy out
+    // of the validation every other authored record gets.
     const derived = JSON.parse(readFileSync(join(__dirname, 'derived.json'), 'utf8'));
     expect(derived.partVariants.length).toBeGreaterThan(0);
-    const covered = new Set(partConsumption.flatMap((p) => p.consumes));
+    const covered = new Set(listPartConsumption().flatMap((p) => p.consumes));
     for (const variant of derived.partVariants) {
       expect(covered.has(variant), `no part-consumption record covers '${variant}'`).toBe(true);
+    }
+  });
+
+  it('no part-consumption record claims a variant the union does not have', () => {
+    // The union assertion above is a flatMap across every record, so it is
+    // per-CATALOG: dropping `file` from kai-chat alone still passes, because
+    // kai-message keeps listing it. This is the other direction — per RECORD,
+    // every variant a record claims must still exist in the union — and it
+    // catches the drift the union check structurally cannot see: a record left
+    // pointing at a variant the union dropped or renamed.
+    //
+    // What NEITHER check sees, and no assertion here should pretend to: whether
+    // a given element genuinely consumes a given variant. That is an editorial
+    // claim, not derivable from anything in the tree (which is why this is a
+    // registered copy at all), and it is measured by the acceptance deck.
+    const derived = JSON.parse(readFileSync(join(__dirname, 'derived.json'), 'utf8'));
+    const union = new Set<string>(derived.partVariants);
+    const records = listPartConsumption();
+    expect(records.length).toBeGreaterThan(0);
+    for (const record of records) {
+      expect(record.consumes.length).toBeGreaterThan(0);
+      for (const variant of record.consumes) {
+        expect(union.has(variant), `${record.tag} claims '${variant}', which is not a MessagePart variant`).toBe(true);
+      }
     }
   });
 
@@ -99,7 +135,18 @@ if (!Element.prototype.scrollTo) Element.prototype.scrollTo = () => {};
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
-/** Every edge this file has actually driven, keyed the same way the recipes are. */
+/**
+ * Every edge this file has actually driven, keyed the same way the recipes are.
+ *
+ * ORDER-DEPENDENT BY CONSTRUCTION: `probed` is module-level mutable state, and
+ * the completeness test at the bottom only means anything if every probe above
+ * it has already run. That holds under how this suite runs — vitest executes a
+ * file's tests sequentially in declaration order — and it does NOT hold if you
+ * reach for `.only`, `--shard`, `describe.concurrent`, or move the completeness
+ * test above a probe. In those cases it reports a false failure (an edge that
+ * was never reached), never a false pass, which is the safe direction; but if
+ * you see it fail alone, check how you invoked the run before believing it.
+ */
 const edgeKey = (e: { from: string; event: string; to: string; property: string }) =>
   `${e.from} --${e.event}--> ${e.to}.${e.property}`;
 const probed = new Set<string>();
