@@ -52,6 +52,23 @@ export { anthropicMessagesFormat } from './formats/anthropic';
 export { sseDataFrames, sseJson, readableToAsyncIterable } from './sse';
 export type { ByteSource } from './sse';
 
+// The diagnostic event stream: metadata about what the pipeline SAW.
+//
+// Only the subscription and the types are public. `emitWireDiagnostic`,
+// `wireDiagnosticsActive` and `nextStreamId` stay internal on purpose -- they
+// are the producer side, and a consumer that can forge events or reset the
+// stream counter can make a panel lie about a stream that never happened.
+export { subscribeWireDiagnostics } from './diagnostics';
+export type {
+  WireCloseEvent,
+  WireDiagnosticBase,
+  WireDiagnosticEvent,
+  WireFailedEvent,
+  WireFrameEvent,
+  WireOpenEvent,
+  WirePartEvent,
+} from './diagnostics';
+
 export { normalizeStopReason } from './chunk';
 export type {
   AssistantStreamSink,

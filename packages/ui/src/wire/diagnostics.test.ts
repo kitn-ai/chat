@@ -55,3 +55,22 @@ describe('wire diagnostics emitter', () => {
     expect(a).not.toBe(b);
   });
 });
+
+describe('the public surface of @kitn.ai/ui/wire', () => {
+  it('publishes subscribeWireDiagnostics', async () => {
+    const wire = await import('./index');
+    expect(typeof wire.subscribeWireDiagnostics).toBe('function');
+    const off = wire.subscribeWireDiagnostics(() => {});
+    expect(typeof off).toBe('function');
+    off();
+  });
+
+  it('keeps the producer side internal', async () => {
+    // Forging events or resetting the stream counter would let a consumer make
+    // a panel report a stream that never happened.
+    const wire: Record<string, unknown> = await import('./index');
+    expect(wire.emitWireDiagnostic).toBeUndefined();
+    expect(wire.wireDiagnosticsActive).toBeUndefined();
+    expect(wire.nextStreamId).toBeUndefined();
+  });
+});
