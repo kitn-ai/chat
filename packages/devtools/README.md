@@ -98,6 +98,10 @@ test is the presence of the method and never the version number.
 kit it attaches to has to be able to say so. Unknown event types are counted and shown,
 never thrown on.
 
+**Per realm.** A Worker, an iframe or an SSR isolate has its own registry and therefore
+its own emitter — a panel in the parent document does not see a stream read inside a
+Worker.
+
 ## Running the demo
 
 ```bash

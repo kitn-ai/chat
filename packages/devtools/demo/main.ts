@@ -6,8 +6,8 @@
 // own.
 import '@kitn.ai/ui/elements';
 import { createMockResponder } from '@kitn.ai/ui/state';
-import { readOpenAIStream, subscribeWireDiagnostics } from '@kitn.ai/ui/wire';
-import type { AssistantStreamSink, WireDiagnosticEvent } from '@kitn.ai/ui/wire';
+import { readOpenAIStream } from '@kitn.ai/ui/wire';
+import type { AssistantStreamSink } from '@kitn.ai/ui/wire';
 
 // ORDERING, AND IT IS NOT INCIDENTAL. `@kitn.ai/ui/elements` is SSR-import-safe,
 // which it achieves by gating registration behind a browser check and a DYNAMIC
@@ -21,89 +21,14 @@ import type { AssistantStreamSink, WireDiagnosticEvent } from '@kitn.ai/ui/wire'
 // which register-impl has finished.
 await customElements.whenDefined('kai-chat');
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DEMO SHIM, and it exists because of a REAL DEFECT in the published kit, not
-// because the panel needs help.
-//
-// `@kitn.ai/ui/diagnostics` and `@kitn.ai/ui/wire` are built as separate rollup
-// bundles, and each inlines its own copy of `src/wire/diagnostics.ts`. Two
-// consequences, both verified against dist/:
-//
-//   1. The two copies do not share module state, so a subscriber registered
-//      through one never sees an event emitted by the other.
-//   2. WORSE: nothing in the diagnostics bundle CALLS the emitter, so rollup
-//      dead-code-eliminated the subscriber array and reduced that bundle's
-//      `subscribeWireDiagnostics` to a stub that returns a no-op. The hook the
-//      kit installs is therefore inert -- drain() is always [], attach() never
-//      delivers.
-//
-// So the demo builds the hook itself, over the copy of the emitter that IS live:
-// the one in `@kitn.ai/ui/wire`, which is where the emit sites are. This is a
-// faithful implementation of the same contract, so what the panel is exercised
-// against here is exactly what it will meet once the kit is fixed.
-//
-// DELETE THIS BLOCK once the kit ships one shared emitter instance.
-// ─────────────────────────────────────────────────────────────────────────────
-function installDemoHook(): void {
-  const recording = new URLSearchParams(location.search).get('kai-devtools') === '1';
-  let buffer: WireDiagnosticEvent[] | undefined;
-  let consumers = 0;
-
-  if (recording) {
-    buffer = [];
-    subscribeWireDiagnostics((e) => {
-      if (consumers > 0) return; // a panel is attached; it owns retention
-      buffer!.push(e);
-    });
-  }
-
-  const track = (fn: (e: WireDiagnosticEvent) => void) => {
-    consumers++;
-    const off = subscribeWireDiagnostics(fn);
-    let live = true;
-    return () => {
-      if (!live) return;
-      live = false;
-      consumers--;
-      off();
-    };
-  };
-
-  (window as unknown as { __KAI_DEVTOOLS_HOOK__: unknown }).__KAI_DEVTOOLS_HOOK__ = {
-    version: 1,
-    recording,
-    drain() {
-      if (!buffer) return [];
-      const h = buffer;
-      buffer = [];
-      return h;
-    },
-    subscribe: track,
-    attach(fn: (e: WireDiagnosticEvent) => void) {
-      const history = buffer;
-      if (buffer) buffer = [];
-      let direct = false;
-      const queue: WireDiagnosticEvent[] = [];
-      const off = track((e) => (direct ? fn(e) : queue.push(e)));
-      const deliver = (e: WireDiagnosticEvent) => {
-        try {
-          fn(e);
-        } catch {
-          /* a broken observer is the observer's problem */
-        }
-      };
-      if (history) for (const e of history) deliver(e);
-      for (let i = 0; i < queue.length; i++) deliver(queue[i]);
-      direct = true;
-      return off;
-    },
-  };
-}
-
-installDemoHook();
-
 // The built panel entry, i.e. what a CDN would serve. Importing it registers
 // <kai-devtools> and, when the hook says it is recording, self-mounts one.
+//
+// NO SHIM. The hook this attaches to is the one the kit installed, and the
+// events it shows come from `@kitn.ai/ui/wire` -- a different bundle, with its
+// own copy of the emitter module. They reach each other because that emitter's
+// state lives on a realm-global rather than in module scope. This page is the
+// end-to-end proof of that chain.
 await import('../dist/kai-devtools.es.js');
 
 const out = document.getElementById('out') as HTMLPreElement;
