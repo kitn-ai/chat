@@ -8,7 +8,9 @@
 // because the fold never retained one.
 import {
   CONTENT_KEYS,
+  findingsFor,
   streamStatus,
+  type Finding,
   type FrameRow,
   type StreamStatus,
   type StreamSummary,
@@ -135,10 +137,35 @@ function usageBlock(s: StreamSummary): string {
   return tags ? `<div class="sec-b"><div class="tags">${tags}</div></div>` : '';
 }
 
-export function inspector(s: StreamSummary | undefined, events: readonly WireDiagnosticEvent[], maxRaw: number): string {
+const finding = (f: Finding): string => `
+  <div class="finding ${f.verdict}">
+    <span class="mark" aria-hidden="true"></span>
+    <div class="body">
+      <div class="lbl">${esc(f.label)}<span class="verdict">${esc(f.verdict === 'na' ? 'n/a' : f.verdict)}</span></div>
+      <div class="say">${esc(f.statement)}</div>
+      ${f.detail ? `<div class="det">${esc(f.detail)}</div>` : ''}
+    </div>
+  </div>`;
+
+/** A collapsed evidence section. The numbers stay one click away rather than
+ *  filling the pane -- findings first, evidence on demand. */
+const disclosure = (id: string, title: string, count: number, open: boolean, body: string): string => `
+  <div class="sec">
+    <button class="disc" type="button" data-section="${id}" aria-expanded="${open ? 'true' : 'false'}">
+      <span class="caret">${open ? '&#9662;' : '&#9656;'}</span>${esc(title)} (${count})
+    </button>
+    ${open ? body : ''}
+  </div>`;
+
+export function inspector(
+  s: StreamSummary | undefined,
+  events: readonly WireDiagnosticEvent[],
+  maxRaw: number,
+  sections: Record<string, boolean> = {},
+): string {
   if (!s) {
     return `<div class="empty"><div class="lead">Select a stream</div>
-      <div>Its frames, parts and timings appear here.</div></div>`;
+      <div>Its report card, frames and timings appear here.</div></div>`;
   }
 
   const status = streamStatus(s);
@@ -146,7 +173,14 @@ export function inspector(s: StreamSummary | undefined, events: readonly WireDia
   const scoped = events.filter((e) => e.streamId === s.streamId);
   const t0 = scoped.length > 0 ? scoped[0].t : 0;
 
+  const found = findingsFor(s);
+
   return `
+    <div class="sec card">
+      <div class="sec-h">Report</div>
+      <div class="findings">${found.map(finding).join('')}</div>
+    </div>
+
     <div class="sec">
       <div class="sec-h">Summary</div>
       <div class="sec-b">
@@ -167,12 +201,14 @@ export function inspector(s: StreamSummary | undefined, events: readonly WireDia
       ${usageBlock(s)}
     </div>
 
-    <div class="sec">
-      <div class="sec-h">Frames (${s.frameRows.length})</div>
-      ${
-        s.frameRows.length === 0
-          ? '<div class="empty">No frames decoded.</div>'
-          : `${
+    ${disclosure(
+      'frames',
+      'Frames',
+      s.frameRows.length,
+      sections.frames === true,
+      s.frameRows.length === 0
+        ? '<div class="empty">No frames decoded.</div>'
+        : `${
               // A DOM cap, like the raw log. A long stream produces hundreds of
               // frames and rendering all of them turns the inspector back into
               // the wall this redesign exists to replace -- and rebuilds them on
@@ -186,13 +222,15 @@ export function inspector(s: StreamSummary | undefined, events: readonly WireDia
                 <th>seq</th><th>at</th><th>bytes</th><th>chunks</th><th>fields</th>
               </tr></thead>
               <tbody>${s.frameRows.slice(-MAX_FRAME_ROWS).map(frameRow).join('')}</tbody>
-            </table>`
-      }
-    </div>
+            </table>`,
+    )}
 
-    <div class="sec">
-      <div class="sec-h">Parts (${partEntries.reduce((a, [, n]) => a + n, 0)})</div>
-      <div class="sec-b">
+    ${disclosure(
+      'parts',
+      'Parts',
+      partEntries.reduce((a, [, n]) => a + n, 0),
+      sections.parts === true,
+      `<div class="sec-b">
         ${
           partEntries.length === 0
             ? '<div class="tags"><span class="tag">no parts produced</span></div>'
@@ -218,14 +256,17 @@ export function inspector(s: StreamSummary | undefined, events: readonly WireDia
                 )
                 .join('')}</tbody>
             </table>`
-      }
-    </div>
+      }`,
+    )}
 
-    <div class="sec">
-      <div class="sec-h">Raw events (${scoped.length})</div>
-      <div class="raw">${scoped
+    ${disclosure(
+      'raw',
+      'Raw events',
+      scoped.length,
+      sections.raw === true,
+      `<div class="raw">${scoped
         .slice(-maxRaw)
         .map((e) => `<div>${esc(`+${(e.t ?? 0) - t0}ms  ${e.type}`)}</div>`)
-        .join('')}</div>
-    </div>`;
+        .join('')}</div>`,
+    )}`;
 }

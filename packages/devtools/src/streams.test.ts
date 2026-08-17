@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CONTENT_KEYS, foldStreams, streamStatus } from './streams';
+import { CONTENT_KEYS, findingsFor, foldStreams, streamStatus } from './streams';
 import type { WireDiagnosticEvent } from './contract';
 
 const ev = (o: Record<string, unknown>) => o as unknown as WireDiagnosticEvent;
@@ -251,5 +251,165 @@ describe('foldStreams', () => {
     const { streams } = foldStreams([ev({ type: 'wire.open', t: 0, format: 'f', source: 'iterable' })]);
     expect(streams).toHaveLength(1);
     expect(streams[0].streamId).toBeUndefined();
+  });
+});
+
+// ── The verdict layer ────────────────────────────────────────────────────────
+//
+// The copy IS the deliverable here, so these assertions pin wording, not just
+// shape. Every statement leads with the OBSERVATION and only then names a
+// suspicion, and no finding may assert a cause the panel cannot know.
+
+const fold = (events: Record<string, unknown>[]) => foldStreams(events.map(ev)).streams[0];
+const find = (events: Record<string, unknown>[], id: string) =>
+  findingsFor(fold(events)).find((f) => f.id === id);
+
+const HEALTHY_EVENTS = [
+  { type: 'wire.open', t: 0, streamId: 'h', format: 'openai.chat-completions', source: 'response' },
+  { type: 'wire.frame', t: 100, streamId: 'h', seq: 1, bytes: 90, chunks: 1, fields: ['model', 'text'], model: 'openai/gpt-4o-mini' },
+  { type: 'wire.part', t: 101, streamId: 'h', variant: 'text', index: 0, chars: 5 },
+  { type: 'wire.frame', t: 600, streamId: 'h', seq: 2, bytes: 60, chunks: 1, fields: ['text'] },
+  { type: 'wire.part', t: 601, streamId: 'h', variant: 'text', index: 0, chars: 4 },
+  { type: 'wire.frame', t: 1200, streamId: 'h', seq: 3, bytes: 40, chunks: 1, fields: ['finishReason'] },
+  { type: 'wire.close', t: 1210, streamId: 'h', frames: 3, chunks: 3, parts: { text: 1 }, finishReason: 'stop', ms: 1210 },
+];
+
+describe('findingsFor', () => {
+  it('a healthy stream reads as a short list with no failures', () => {
+    const found = findingsFor(fold(HEALTHY_EVENTS));
+    expect(found.filter((f) => f.verdict === 'fail')).toHaveLength(0);
+    expect(find(HEALTHY_EVENTS, 'content')!.verdict).toBe('ok');
+    expect(find(HEALTHY_EVENTS, 'content')!.statement).toBe('1 text part from 3 frames.');
+    expect(find(HEALTHY_EVENTS, 'model')!.statement).toBe('The response reported openai/gpt-4o-mini.');
+    expect(find(HEALTHY_EVENTS, 'dialect')!.verdict).toBe('ok');
+  });
+
+  it('orders failures first and not-applicable last', () => {
+    const found = findingsFor(fold(HEALTHY_EVENTS));
+    const rank = { fail: 0, warn: 1, ok: 2, na: 3 } as const;
+    const ranks = found.map((f) => rank[f.verdict]);
+    expect([...ranks].sort((a, b) => a - b)).toEqual(ranks);
+  });
+
+  it('frames that yield no chunks read as a dialect signature, observation first', () => {
+    const events = [
+      { type: 'wire.open', t: 0, streamId: 'd', format: 'openai.chat-completions', source: 'response' },
+      ...[1, 2, 3, 4, 5].map((n) => ({ type: 'wire.frame', t: n * 10, streamId: 'd', seq: n, bytes: 100, chunks: 0, fields: [] })),
+      { type: 'wire.close', t: 60, streamId: 'd', frames: 5, chunks: 0, parts: {}, finishReason: null, errorCode: 'empty-stream', ms: 60 },
+    ];
+    expect(find(events, 'content')!.verdict).toBe('fail');
+    expect(find(events, 'content')!.statement).toBe('5 frames arrived and no message part was produced.');
+
+    const dialect = find(events, 'dialect')!;
+    expect(dialect.verdict).toBe('fail');
+    expect(dialect.statement).toBe(
+      '5 frames arrived and none yielded a chunk. That is the signature of a reader pointed at a different dialect than the endpoint is sending — this reader is openai.chat-completions.',
+    );
+    // It must never claim to know what the endpoint actually is.
+    expect(dialect.statement).not.toMatch(/anthropic/i);
+  });
+
+  it('chunks with no content key ever get their own wording', () => {
+    const events = [
+      { type: 'wire.open', t: 0, streamId: 'm', format: 'openai.chat-completions', source: 'response' },
+      { type: 'wire.frame', t: 10, streamId: 'm', seq: 1, bytes: 80, chunks: 1, fields: ['model'] },
+      { type: 'wire.frame', t: 20, streamId: 'm', seq: 2, bytes: 40, chunks: 1, fields: ['usage', 'finishReason'] },
+      { type: 'wire.close', t: 30, streamId: 'm', frames: 2, chunks: 2, parts: {}, finishReason: 'stop', errorCode: 'empty-turn', ms: 30 },
+    ];
+    expect(find(events, 'dialect')!.statement).toBe(
+      'Frames parsed, but no frame carried a content key (text, reasoning, toolCalls, sources). The payload may be in a field this format does not read.',
+    );
+  });
+
+  it('flags a buffered arrival pattern, quoting the counts it judged on', () => {
+    // 10 frames over ~1000ms with 9 of them crammed into the last stretch.
+    const events = [
+      { type: 'wire.open', t: 0, streamId: 'b', format: 'f', source: 'response' },
+      { type: 'wire.frame', t: 0, streamId: 'b', seq: 1, bytes: 10, chunks: 1, fields: ['text'] },
+      ...Array.from({ length: 9 }, (_, i) => ({
+        type: 'wire.frame', t: 905 + i * 10, streamId: 'b', seq: i + 2, bytes: 10, chunks: 1, fields: ['text'],
+      })),
+      { type: 'wire.part', t: 1, streamId: 'b', variant: 'text', index: 0, chars: 3 },
+    ];
+    const buffering = find(events, 'buffering')!;
+    expect(buffering.verdict).toBe('warn');
+    expect(buffering.statement).toContain('9 of 10 frames arrived in the final');
+    expect(buffering.statement).toContain('buffering');
+    // A heuristic has to say so.
+    expect(`${buffering.statement} ${buffering.detail ?? ''}`).toMatch(/heuristic/i);
+  });
+
+  it('a spread arrival pattern passes', () => {
+    expect(find(HEALTHY_EVENTS, 'buffering')!.verdict).toBe('ok');
+    expect(find(HEALTHY_EVENTS, 'buffering')!.statement).toContain('spread');
+  });
+
+  it('is not applicable with fewer than three frames', () => {
+    const events = [
+      { type: 'wire.open', t: 0, streamId: 's', format: 'f', source: 'response' },
+      { type: 'wire.frame', t: 5, streamId: 's', seq: 1, bytes: 10, chunks: 1, fields: ['text'] },
+    ];
+    expect(find(events, 'buffering')!.verdict).toBe('na');
+  });
+
+  it('surfaces an outlier gap and stays quiet about a smooth one', () => {
+    const spiky = [
+      { type: 'wire.open', t: 0, streamId: 'g', format: 'f', source: 'response' },
+      ...[0, 10, 20, 1260, 1270].map((t, i) => ({
+        type: 'wire.frame', t, streamId: 'g', seq: i + 1, bytes: 10, chunks: 1, fields: ['text'],
+      })),
+    ];
+    const gap = find(spiky, 'gap')!;
+    expect(gap.verdict).toBe('warn');
+    expect(gap.statement).toContain('1,240ms');
+    expect(gap.statement).toContain('frame 4');
+
+    const smooth = [
+      { type: 'wire.open', t: 0, streamId: 'g2', format: 'f', source: 'response' },
+      ...[0, 10, 20, 30, 40].map((t, i) => ({
+        type: 'wire.frame', t, streamId: 'g2', seq: i + 1, bytes: 10, chunks: 1, fields: ['text'],
+      })),
+    ];
+    expect(find(smooth, 'gap')).toBeUndefined();
+  });
+
+  it('reports a failed request with status and provider code, never body text', () => {
+    const events = [
+      { type: 'wire.failed', t: 0, streamId: 'x', status: 401, statusText: 'Unauthorized', bodyBytes: 90, bodyIsJson: true, providerCode: 'invalid_api_key' },
+    ];
+    const req = find(events, 'request')!;
+    expect(req.verdict).toBe('fail');
+    expect(req.statement).toBe(
+      'The request failed before any stream began: HTTP 401, provider code invalid_api_key.',
+    );
+  });
+
+  it('explains an error code in the panel own words, keyed by code', () => {
+    const events = [
+      { type: 'wire.open', t: 0, streamId: 'e', format: 'f', source: 'response' },
+      { type: 'wire.frame', t: 1, streamId: 'e', seq: 1, bytes: 10, chunks: 1, fields: ['finishReason'] },
+      { type: 'wire.close', t: 2, streamId: 'e', frames: 1, chunks: 1, parts: {}, finishReason: 'stop', errorCode: 'empty-turn', ms: 2 },
+    ];
+    const code = find(events, 'errorCode')!;
+    expect(code.verdict).toBe('fail');
+    expect(code.statement).toContain('empty-turn');
+    expect(code.statement).toContain('no message part was produced');
+  });
+
+  it('says a model was not reported rather than inventing one', () => {
+    const events = [
+      { type: 'wire.open', t: 0, streamId: 'n', format: 'f', source: 'response' },
+      { type: 'wire.frame', t: 1, streamId: 'n', seq: 1, bytes: 10, chunks: 1, fields: ['text'] },
+    ];
+    const model = find(events, 'model')!;
+    expect(model.verdict).toBe('na');
+    expect(model.statement).toBe('The stream did not report a model.');
+    expect(model.statement).not.toMatch(/unknown/i);
+  });
+
+  it('explains an absent reasoning panel', () => {
+    const r = find(HEALTHY_EVENTS, 'reasoning')!;
+    expect(r.verdict).toBe('na');
+    expect(r.statement).toBe('No reasoning parts (this model may not emit any).');
   });
 });

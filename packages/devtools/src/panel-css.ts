@@ -169,6 +169,43 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 }
 .sec-b { padding: 10px 12px; }
 
+/* ── Report card ──────────────────────────────────────────────────────── */
+/* The verdict layer, and the first thing in the pane. Measurements are
+   evidence; these are the findings, so they lead. */
+.card { background: var(--bg); }
+.findings { padding: 4px 0; }
+.finding { display: flex; gap: 9px; padding: 8px 12px; align-items: flex-start; }
+.finding + .finding { border-top: 1px solid var(--bg-3); }
+.finding .mark {
+  width: 7px; height: 7px; border-radius: 50%; margin-top: 5px; flex: none;
+  background: var(--faint);
+}
+.finding.ok .mark { background: var(--ok); }
+.finding.warn .mark { background: var(--open); }
+.finding.fail .mark { background: var(--err); }
+.finding .body { min-width: 0; }
+.finding .lbl {
+  display: flex; align-items: baseline; gap: 7px;
+  font-size: 10px; letter-spacing: .07em; text-transform: uppercase; color: var(--dim);
+}
+.finding .verdict { font-family: var(--mono); letter-spacing: .02em; color: var(--faint); }
+.finding.ok .verdict { color: var(--ok); }
+.finding.warn .verdict { color: var(--open); }
+.finding.fail .verdict { color: var(--err); }
+.finding .say { color: var(--fg); margin-top: 1px; }
+.finding.na .say { color: var(--dim); }
+.finding .det { color: var(--faint); font-size: 11px; margin-top: 2px; }
+
+/* ── Disclosures ──────────────────────────────────────────────────────── */
+.disc {
+  display: flex; align-items: center; gap: 7px; width: 100%;
+  padding: 8px 12px; background: var(--bg-2);
+  font-size: 10px; letter-spacing: .09em; text-transform: uppercase; color: var(--dim);
+  border-bottom: 1px solid var(--line);
+}
+.disc:hover { color: var(--fg); }
+.disc .caret { color: var(--faint); font-size: 9px; }
+
 .grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 8px 16px;

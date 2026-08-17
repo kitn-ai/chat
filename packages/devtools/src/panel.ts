@@ -47,13 +47,16 @@ const maxHeight = () => Math.round((typeof window === 'undefined' ? 800 : window
 interface UiState {
   open: boolean;
   height: number;
+  /** Which evidence disclosures are expanded. Absent means collapsed, which is
+   *  the default: findings first, evidence on demand. */
+  sections: Record<string, boolean>;
 }
 
 function loadUi(): UiState {
   // Default OPEN on first activation. Somebody who just set the signal and
   // reloaded is looking for the panel; showing them a dot to find would read
   // as broken.
-  const fallback: UiState = { open: true, height: DEFAULT_HEIGHT() };
+  const fallback: UiState = { open: true, height: DEFAULT_HEIGHT(), sections: {} };
   try {
     const raw = window.localStorage.getItem(UI_KEY);
     if (!raw) return fallback;
@@ -61,6 +64,8 @@ function loadUi(): UiState {
     return {
       open: typeof parsed.open === 'boolean' ? parsed.open : fallback.open,
       height: typeof parsed.height === 'number' ? parsed.height : fallback.height,
+      sections:
+        parsed.sections && typeof parsed.sections === 'object' ? { ...parsed.sections } : {},
     };
   } catch {
     return fallback; // storage can throw, and a devtool must not take a page down
@@ -125,6 +130,14 @@ export class KaiDevtoolsElement extends HTMLElement {
     if (target.closest('[data-act="clear"]')) {
       this.#events = [];
       this.#selected = undefined;
+      return this.render();
+    }
+
+    const disc = target.closest('[data-section]') as HTMLElement | null;
+    if (disc) {
+      const id = disc.dataset.section!;
+      this.#ui.sections[id] = !this.#ui.sections[id];
+      saveUi(this.#ui);
       return this.render();
     }
 
@@ -315,7 +328,7 @@ export class KaiDevtoolsElement extends HTMLElement {
             }
           </div>
           <div class="inspector">
-            ${inspector(selected, this.#events, MAX_RAW_LINES)}
+            ${inspector(selected, this.#events, MAX_RAW_LINES, this.#ui.sections)}
             ${
               unknown.length > 0
                 ? `<div class="unknown">${unknown

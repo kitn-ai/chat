@@ -40,6 +40,9 @@ const text = (el: KaiDevtoolsElement) => sr(el).textContent ?? '';
 const rows = (el: KaiDevtoolsElement) => [...sr(el).querySelectorAll('.row')];
 const click = (el: KaiDevtoolsElement, sel: string) =>
   (sr(el).querySelector(sel) as HTMLElement).click();
+/** Evidence sections are collapsed by default; open one to inspect it. */
+const open = (el: KaiDevtoolsElement, section: string) =>
+  (sr(el).querySelector(`[data-section="${section}"]`) as HTMLElement).click();
 
 describe('launcher and drawer', () => {
   it('opens by default on first activation, so nobody thinks it is broken', () => {
@@ -173,6 +176,7 @@ describe('filters', () => {
 describe('the inspector', () => {
   it('renders one frames row per wire.frame, with its fields as chips', () => {
     const el = mount(HEALTHY);
+    open(el, 'frames');
     const chips = [...sr(el).querySelectorAll('.chip')].map((c) => c.textContent);
     expect(chips).toEqual(['model', 'text']);
     // Content keys are emphasised; metadata keys are not. An all-hollow row is
@@ -183,6 +187,7 @@ describe('the inspector', () => {
 
   it('a metadata-only frame has no emphasised chip', () => {
     const el = mount(DIALECT);
+    open(el, 'frames');
     expect([...sr(el).querySelectorAll('.chip')].map((c) => c.textContent)).toEqual(['usage']);
     expect(sr(el).querySelectorAll('.chip.content')).toHaveLength(0);
   });
@@ -195,6 +200,7 @@ describe('the inspector', () => {
 
   it('scopes the raw event log to the selected stream', () => {
     const el = mount([...HEALTHY, ...DIALECT]);
+    open(el, 'raw');
     const lines = () => [...sr(el).querySelectorAll('.raw div')].length;
     expect(lines()).toBe(HEALTHY.length);
     (rows(el)[1] as HTMLElement).click();
@@ -220,5 +226,60 @@ describe('the metadata boundary', () => {
     expect(text(el)).toContain(String(SECRET.length));
     expect(text(el)).not.toContain(SECRET);
     expect(sr(el).innerHTML).not.toContain(SECRET);
+  });
+});
+
+describe('the report card', () => {
+  it('leads the inspector, above the summary grid', () => {
+    const el = mount(HEALTHY);
+    const secs = [...sr(el).querySelectorAll('.inspector .sec-h, .inspector .disc')].map(
+      (n) => n.textContent!.trim().split(' ')[0],
+    );
+    expect(secs[0]).toBe('Report');
+    expect(secs[1]).toBe('Summary');
+  });
+
+  it('a healthy stream shows no failing check', () => {
+    const el = mount(HEALTHY);
+    expect(sr(el).querySelectorAll('.finding.fail')).toHaveLength(0);
+    expect(text(el)).toContain('1 text part from 1 frame.');
+  });
+
+  it('a wrong-dialect stream states the observation before the suspicion', () => {
+    const el = mount(DIALECT);
+    const fails = [...sr(el).querySelectorAll('.finding.fail .say')].map((n) => n.textContent);
+    expect(fails.join(' ')).toContain('1 frame arrived and no message part was produced.');
+    expect(fails.join(' ')).toContain('no frame carried a content key');
+  });
+});
+
+describe('evidence disclosures', () => {
+  it('are collapsed by default and toggle open, remembering the choice', () => {
+    const el = mount(HEALTHY);
+    const frames = () => sr(el).querySelector('[data-section="frames"]') as HTMLElement;
+    expect(frames().getAttribute('aria-expanded')).toBe('false');
+    // Collapsed means the table is not in the DOM at all.
+    expect(sr(el).querySelector('.inspector table')).toBeNull();
+
+    frames().click();
+    expect(frames().getAttribute('aria-expanded')).toBe('true');
+    expect(sr(el).querySelector('.inspector table')).not.toBeNull();
+    expect(window.localStorage.getItem('kai-devtools:ui')).toContain('"frames":true');
+
+    // A fresh element honours it.
+    const again = mount(HEALTHY);
+    expect(
+      (again.shadowRoot!.querySelector('[data-section="frames"]') as HTMLElement).getAttribute(
+        'aria-expanded',
+      ),
+    ).toBe('true');
+  });
+
+  it('shows all three sections with their counts', () => {
+    const el = mount(HEALTHY);
+    const labels = [...sr(el).querySelectorAll('[data-section]')].map((n) =>
+      n.textContent!.replace(/\s+/g, ' ').trim(),
+    );
+    expect(labels).toEqual(['▸Frames (1)', '▸Parts (1)', '▸Raw events (4)']);
   });
 });

@@ -277,3 +277,292 @@ export function foldStreams(events: readonly WireDiagnosticEvent[]): FoldResult 
 
   return { streams: [...byId.values()], unknownTypes };
 }
+
+// ── The verdict layer ────────────────────────────────────────────────────────
+//
+// Measurements are not findings. Byte counts and timestamps are evidence; a
+// developer opening a devtool wants to know what is WRONG, and only then what
+// the numbers were. So the panel interprets each stream here -- in the fold,
+// where it is pure and unit-testable -- and the view only renders the verdicts.
+//
+// THREE HONESTY RULES, and they are what make this safe to state in plain
+// language rather than hedged into uselessness:
+//
+//   1. OBSERVATION BEFORE SUSPICION. Every statement opens with what was
+//      measured ("5 frames arrived and none yielded a chunk") and only then
+//      names what that resembles. The reader can always check the claim.
+//   2. NEVER ASSERT A CAUSE THE PANEL CANNOT KNOW. We see one side of the
+//      conversation. "That is the signature of a reader pointed at a different
+//      dialect" is honest; "your endpoint is Anthropic" is a guess wearing a
+//      verdict's clothes. Signatures and suggestions, never diagnoses.
+//   3. HEURISTICS SAY SO, AND SHOW THEIR WORKING. The buffering check is a
+//      threshold on an arrival distribution, so it names the counts it judged
+//      and labels itself.
+//
+// Absent stays absent throughout: a model the stream never reported is "not
+// reported", never "unknown" and never filled in from the request.
+
+export type Verdict = 'ok' | 'warn' | 'fail' | 'na';
+
+export interface Finding {
+  id: string;
+  label: string;
+  verdict: Verdict;
+  /** One line of plain language, observation first. */
+  statement: string;
+  /** Optional second line: the method, the caveat, the numbers behind it. */
+  detail?: string;
+}
+
+/** Deterministic thousands separators -- `toLocaleString` varies by host. */
+function group(n: number): string {
+  const [whole, ...rest] = String(n).split('.');
+  return [whole.replace(/\B(?=(\d{3})+(?!\d))/g, ','), ...rest].join('.');
+}
+
+const plural = (n: number, one: string) => `${group(n)} ${one}${n === 1 ? '' : 's'}`;
+
+/** `1,100ms` under a second, `1.1s` above it: the unit people actually compare in. */
+function duration(msValue: number): string {
+  return msValue >= 1000 ? `${(msValue / 1000).toFixed(1)}s` : `${group(msValue)}ms`;
+}
+
+function partsSummary(parts: Record<string, number>): string {
+  const entries = Object.entries(parts).filter(([, n]) => n > 0);
+  if (entries.length === 0) return 'no parts';
+  return entries.map(([variant, n]) => plural(n, `${variant} part`)).join(', ');
+}
+
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+}
+
+/** The panel's OWN explanation of each code. Deliberately not the kit's message
+ *  string: the kit writes for a console, and a code is a closed vocabulary a
+ *  consumer is supposed to key its own copy off. */
+const CODE_COPY: Record<string, string> = {
+  'empty-stream':
+    'empty-stream — the response was 200 but nothing in its body parsed as a stream frame.',
+  'empty-turn':
+    'empty-turn — frames parsed, but none carried content this reader reads, so no message part was produced.',
+};
+
+const RANK: Record<Verdict, number> = { fail: 0, warn: 1, ok: 2, na: 3 };
+
+/**
+ * Interpret one stream. Findings are ordered failures first and
+ * not-applicable last, so the top of the card is always the part worth reading.
+ */
+export function findingsFor(s: StreamSummary): Finding[] {
+  const out: Finding[] = [];
+  const partsTotal = Object.values(s.parts).reduce((a, b) => a + b, 0);
+  const frames = s.frames ?? s.frameRows.length;
+  const failedBeforeStream = s.status !== undefined;
+
+  // ── The request itself ───────────────────────────────────────────────
+  if (failedBeforeStream) {
+    out.push({
+      id: 'request',
+      label: 'Request',
+      verdict: 'fail',
+      statement:
+        `The request failed before any stream began: HTTP ${s.status}` +
+        `${s.errorCode !== undefined ? `, provider code ${s.errorCode}` : ''}.`,
+      detail: 'Nothing was parsed, so the checks below have nothing to judge.',
+    });
+  }
+
+  // ── Did anything come out? ───────────────────────────────────────────
+  if (partsTotal > 0) {
+    out.push({
+      id: 'content',
+      label: 'Content produced',
+      verdict: 'ok',
+      statement: `${partsSummary(s.parts)} from ${plural(frames, 'frame')}.`,
+    });
+  } else if (failedBeforeStream) {
+    out.push({
+      id: 'content',
+      label: 'Content produced',
+      verdict: 'na',
+      statement: 'No stream was read, so no message part could be produced.',
+    });
+  } else if (frames > 0) {
+    out.push({
+      id: 'content',
+      label: 'Content produced',
+      verdict: 'fail',
+      statement: `${plural(frames, 'frame')} arrived and no message part was produced.`,
+    });
+  } else {
+    out.push({
+      id: 'content',
+      label: 'Content produced',
+      verdict: 'na',
+      statement: 'Nothing has arrived on this stream yet.',
+    });
+  }
+
+  // ── Is the reader reading the right dialect? ─────────────────────────
+  const sawContentKey = s.frameRows.some((f) => f.fields.some((k) => CONTENT_KEYS.has(k)));
+  const reader = s.format ?? 'this format';
+  if (failedBeforeStream || frames === 0) {
+    out.push({
+      id: 'dialect',
+      label: 'Dialect match',
+      verdict: 'na',
+      statement: 'No frames were decoded, so there is nothing to compare.',
+    });
+  } else if (s.chunks === 0) {
+    out.push({
+      id: 'dialect',
+      label: 'Dialect match',
+      verdict: 'fail',
+      statement:
+        `${plural(frames, 'frame')} arrived and none yielded a chunk. That is the signature of a ` +
+        `reader pointed at a different dialect than the endpoint is sending — this reader is ${reader}.`,
+      detail: 'The bytes are arriving; this format simply recognises nothing in them.',
+    });
+  } else if (!sawContentKey) {
+    out.push({
+      id: 'dialect',
+      label: 'Dialect match',
+      verdict: 'fail',
+      statement:
+        'Frames parsed, but no frame carried a content key (text, reasoning, toolCalls, sources). ' +
+        'The payload may be in a field this format does not read.',
+      detail: 'Open Frames below to see which keys each frame did carry.',
+    });
+  } else {
+    out.push({
+      id: 'dialect',
+      label: 'Dialect match',
+      verdict: 'ok',
+      statement: `Frames parsed into chunks carrying content keys ${reader} reads.`,
+    });
+  }
+
+  // ── Streaming, or buffered and dumped at the end? ────────────────────
+  //
+  // The check a browser network panel structurally cannot do: it sees one
+  // response, not the arrival times of the frames inside it.
+  const times = s.frameRows.map((f) => f.atMs).filter((t): t is number => t !== undefined);
+  if (times.length < 3) {
+    out.push({
+      id: 'buffering',
+      label: 'Streaming, not buffered',
+      verdict: 'na',
+      statement: 'Too few frames to judge (three needed).',
+    });
+  } else {
+    const span = times[times.length - 1] - times[0];
+    const tailStart = times[0] + span * 0.8;
+    const tail = times.filter((t) => t >= tailStart).length;
+    const share = tail / times.length;
+    if (span > 200 && share >= 0.8) {
+      out.push({
+        id: 'buffering',
+        label: 'Streaming, not buffered',
+        verdict: 'warn',
+        statement:
+          `${group(tail)} of ${group(times.length)} frames arrived in the final ` +
+          `${group(Math.round(span * 0.2))}ms of a ${group(span)}ms span. Something upstream is ` +
+          'buffering the stream rather than the model being slow.',
+        detail:
+          'Heuristic: at least 80% of frames landing inside the last 20% of the span. ' +
+          'A proxy, a serverless response buffer or a compression layer will each do this.',
+      });
+    } else {
+      out.push({
+        id: 'buffering',
+        label: 'Streaming, not buffered',
+        verdict: 'ok',
+        statement: `Frames spread across ${duration(span)}.`,
+      });
+    }
+  }
+
+  // ── One long stall, as opposed to a slow stream ──────────────────────
+  if (times.length >= 3) {
+    const gaps = times.slice(1).map((t, i) => t - times[i]);
+    const worst = Math.max(...gaps);
+    const mid = median(gaps);
+    if (worst > 250 && worst > mid * 3) {
+      const at = gaps.indexOf(worst) + 1;
+      out.push({
+        id: 'gap',
+        label: 'Longest gap',
+        verdict: 'warn',
+        statement:
+          `Longest gap ${group(worst)}ms before frame ${s.frameRows[at]?.seq ?? at + 1}, ` +
+          `against a ${group(mid)}ms median.`,
+        detail: 'One stall rather than a uniformly slow stream.',
+      });
+    }
+    // Otherwise it is not a finding, and a row saying "nothing unusual" is
+    // exactly the noise this redesign is removing.
+  }
+
+  // ── What actually served the response? ───────────────────────────────
+  out.push(
+    s.model
+      ? {
+          id: 'model',
+          label: 'Model served',
+          verdict: 'ok',
+          statement: `The response reported ${s.model}.`,
+          detail: 'Read from the response, so it is what served the turn, not what was asked for.',
+        }
+      : {
+          id: 'model',
+          label: 'Model served',
+          verdict: 'na',
+          statement: 'The stream did not report a model.',
+          detail: 'Not every endpoint sends one, and the panel will not fill it in from elsewhere.',
+        },
+  );
+
+  // ── Reasoning, so an empty thinking panel is explainable ─────────────
+  const reasoning = s.parts.reasoning ?? 0;
+  out.push(
+    reasoning > 0
+      ? {
+          id: 'reasoning',
+          label: 'Reasoning',
+          verdict: 'ok',
+          statement: `${plural(reasoning, 'reasoning part')}.`,
+        }
+      : {
+          id: 'reasoning',
+          label: 'Reasoning',
+          verdict: 'na',
+          statement: 'No reasoning parts (this model may not emit any).',
+        },
+  );
+
+  // ── Tool calls ───────────────────────────────────────────────────────
+  const tools = s.parts.tool ?? 0;
+  if (tools > 0) {
+    out.push({
+      id: 'tools',
+      label: 'Tool calls',
+      verdict: 'ok',
+      statement: `${plural(tools, 'tool part')}.`,
+    });
+  }
+
+  // ── The kit's own error vocabulary ───────────────────────────────────
+  if (!failedBeforeStream && s.errorCode !== undefined) {
+    const code = String(s.errorCode);
+    out.push({
+      id: 'errorCode',
+      label: 'Error code',
+      verdict: 'fail',
+      statement: CODE_COPY[code] ?? `${code} — reported by the stream.`,
+    });
+  }
+
+  return out.sort((a, b) => RANK[a.verdict] - RANK[b.verdict]);
+}
