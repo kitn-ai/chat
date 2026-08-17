@@ -186,6 +186,7 @@
     "lint:pack-parse": "node scripts/lint-pack-json-parse.mjs --self-test && node scripts/lint-pack-json-parse.mjs",
     "fix:cdn-pins": "node scripts/lint-cdn-pins.mjs --fix",
     "lint:silent-drops": "node scripts/lint-silent-drops.mjs --self-test && node scripts/lint-silent-drops.mjs",
+    "lint:catalog-drift": "node scripts/lint-catalog-drift.mjs --self-test && node scripts/lint-catalog-drift.mjs",
     "test": "vitest run",
     "test:react": "vitest run --config vitest.react.config.ts",
     "test:storybook": "vitest run --project=storybook",
