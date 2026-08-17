@@ -47,6 +47,53 @@ function sourceKind(source: StreamSource): 'response' | 'stream' | 'iterable' {
     : 'iterable';
 }
 
+/**
+ * The connection identity fields of `wire.open`, for a `Response` source.
+ *
+ * ORIGIN AND PATHNAME ONLY. The query string is dropped here and is reported
+ * nowhere, under no switch: `?api_key=sk-...` is a credential rather than
+ * conversation content, so it is not the payload key's business either. What a
+ * reader actually needs from it is one bit -- was there one -- and that is
+ * `hasQuery`.
+ *
+ * EVERY FIELD IS OMITTED RATHER THAN GUESSED. A `Response` constructed in a test
+ * or handed back by a service worker carries `url: ''`, and an empty string
+ * would read as "served from the origin root". Same for a missing content-type:
+ * absent means "the response did not say", which is a different fact from
+ * "it said nothing", and only one of them is true.
+ *
+ * Only ever called from inside an active-diagnostics branch.
+ */
+function connectionOf(res: Response): {
+  url?: string;
+  hasQuery?: boolean;
+  status?: number;
+  contentType?: string;
+} {
+  const out: { url?: string; hasQuery?: boolean; status?: number; contentType?: string } = {};
+
+  if (typeof res.status === 'number') out.status = res.status;
+
+  // `headers` is duck-typed like the rest of this file: a Response-shaped object
+  // from a runtime we have not met may not carry a full Headers implementation.
+  const contentType = res.headers?.get?.('content-type');
+  if (typeof contentType === 'string' && contentType !== '') out.contentType = contentType;
+
+  const raw = typeof res.url === 'string' ? res.url : '';
+  if (raw !== '') {
+    try {
+      const parsed = new URL(raw);
+      out.url = `${parsed.origin}${parsed.pathname}`;
+      out.hasQuery = parsed.search !== '';
+    } catch {
+      // A relative or malformed URL. Reporting the raw string would leak the
+      // very query string this function exists to strip, so it is dropped whole.
+    }
+  }
+
+  return out;
+}
+
 export type StreamSource =
   | Response
   | ReadableStream<Uint8Array>
@@ -194,6 +241,7 @@ export async function readModelStream(
       streamId,
       format: opts.format.id,
       source: sourceKind(source),
+      ...(isResponse(source) ? connectionOf(source) : {}),
     });
   }
   // Opened ONCE per stream, which is the whole point of the open()/push() shape:

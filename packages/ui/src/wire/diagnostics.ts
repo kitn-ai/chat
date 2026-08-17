@@ -30,12 +30,44 @@ export interface WireDiagnosticBase {
   streamId?: string;
 }
 
-/** The stream opened: the source resolved and the format is about to be opened. */
+/** The stream opened: the source resolved and the format is about to be opened.
+ *
+ *  CONNECTION IDENTITY (`url`, `hasQuery`, `status`, `contentType`) is reported
+ *  only when the source was a `Response`, and each field is ABSENT rather than
+ *  empty when the response did not state it. A `Response` built in a test or by
+ *  a service worker has `url: ''`, and an empty string there would read as "it
+ *  was served from the origin root", which is a confident wrong answer. */
 export interface WireOpenEvent extends WireDiagnosticBase {
   type: 'wire.open';
   /** `opts.format.id`, e.g. `openai.chat-completions`. */
   format: string;
   source: 'response' | 'stream' | 'iterable';
+  /**
+   * ORIGIN AND PATHNAME ONLY. The query string is never reported, on any
+   * switch, and it is not payload either: `?api_key=sk-...` is a CREDENTIAL, a
+   * different class from the conversation content the payload key exists for,
+   * and a credential does not get a switch that turns it on. `hasQuery` carries
+   * the one bit a reader needs from it.
+   *
+   * Absent when the response did not state a URL, or stated one that does not
+   * parse.
+   */
+  url?: string;
+  /** Whether the response URL carried a query string at all. Absent exactly
+   *  when `url` is. */
+  hasQuery?: boolean;
+  /** The HTTP status. Always 2xx here -- a non-ok response throws and reports
+   *  `wire.failed` instead -- but reported verbatim rather than assumed. */
+  status?: number;
+  /**
+   * The response's `content-type` header, VERBATIM.
+   *
+   * THE FIELD THAT PAYS FOR THIS EVENT. `text/html` or `application/json` where
+   * `text/event-stream` was expected is the classic proxy or misconfiguration
+   * tell, and from inside the parse it is invisible: the frames simply never
+   * arrive and the turn resolves empty. The response knew all along.
+   */
+  contentType?: string;
 }
 
 /** One decoded SSE frame, and what the format made of it. */
