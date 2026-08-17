@@ -413,3 +413,134 @@ describe('findingsFor', () => {
     expect(r.statement).toBe('No reasoning parts (this model may not emit any).');
   });
 });
+
+// ── The write path ───────────────────────────────────────────────────────────
+//
+// The kit instruments what it SENDS as well as what it reads: an `encode.request`
+// inventory (including attachments) and an `encode.dropped` for every part the
+// encoder could not represent on this wire. A part that rendered in the thread
+// and never reached the model is the highest-value finding this tool can carry,
+// so it gets its own checks.
+//
+// These events are landing on a sibling branch. The fold is written tolerant by
+// the forward-compat rule anyway, so these tests also pin that the CURRENT kit
+// (which emits none of them) still folds cleanly.
+
+const REQUEST = {
+  type: 'encode.request',
+  t: 0,
+  streamId: 'w-1',
+  format: 'openai.chat-completions',
+  messages: 4,
+  byRole: { user: 2, assistant: 2 },
+  parts: { text: 5, file: 1 },
+  bodyBytes: 5120,
+  attachments: [
+    { mediaType: 'image/png', bytes: 245760, encoded: true, disposition: 'encoded' },
+  ],
+};
+
+describe('the write path', () => {
+  it('retains the request inventory on the stream', () => {
+    const s = fold([
+      REQUEST,
+      { type: 'wire.open', t: 1, streamId: 'w-1', format: 'openai.chat-completions', source: 'response' },
+    ]);
+    expect(s.request).toMatchObject({
+      format: 'openai.chat-completions',
+      messages: 4,
+      bodyBytes: 5120,
+    });
+    expect(s.request!.byRole).toEqual({ user: 2, assistant: 2 });
+    expect(s.request!.attachments).toHaveLength(1);
+    expect(s.request!.attachments[0]).toMatchObject({ mediaType: 'image/png', bytes: 245760, disposition: 'encoded' });
+  });
+
+  it('retains every dropped part', () => {
+    const s = fold([
+      REQUEST,
+      { type: 'encode.dropped', t: 2, streamId: 'w-1', variant: 'card', count: 2, reason: 'no representation on this wire' },
+      { type: 'encode.dropped', t: 3, streamId: 'w-1', variant: 'file', count: 1, messageIndex: 1, partIndex: 0, reason: 'onUnencodableFile: skip' },
+    ]);
+    expect(s.dropped).toHaveLength(2);
+    expect(s.dropped[1]).toMatchObject({ variant: 'file', count: 1, reason: 'onUnencodableFile: skip' });
+  });
+
+  it('keeps the connection identity wire.open now carries', () => {
+    const s = fold([
+      { type: 'wire.open', t: 0, streamId: 'c-1', format: 'openai.chat-completions', source: 'response', url: 'https://api.example.com/v1/chat', hasQuery: false, status: 200, contentType: 'text/event-stream' },
+    ]);
+    expect(s.url).toBe('https://api.example.com/v1/chat');
+    expect(s.contentType).toBe('text/event-stream');
+    expect(s.httpStatus).toBe(200);
+  });
+
+  it('a skipped attachment is a failure that says the model never saw it', () => {
+    const events = [
+      { ...REQUEST, attachments: [
+        { mediaType: 'image/png', bytes: 245760, encoded: false, disposition: 'skipped', reason: 'this provider does not accept image parts' },
+      ] },
+      { type: 'wire.open', t: 1, streamId: 'w-1', format: 'openai.chat-completions', source: 'response' },
+    ];
+    const f = find(events, 'attachments')!;
+    expect(f.verdict).toBe('fail');
+    expect(f.statement).toContain('image/png');
+    expect(f.statement).toContain('was not encoded');
+    expect(f.statement).toContain('the model never saw it');
+    expect(f.statement).toContain('this provider does not accept image parts');
+  });
+
+  it('an as-text attachment warns rather than fails', () => {
+    const events = [
+      { ...REQUEST, attachments: [
+        { mediaType: 'text/csv', bytes: 900, encoded: true, disposition: 'as-text', reason: 'inlined as text' },
+      ] },
+    ];
+    expect(find(events, 'attachments')!.verdict).toBe('warn');
+  });
+
+  it('all-encoded attachments pass', () => {
+    expect(find([REQUEST], 'attachments')!.verdict).toBe('ok');
+  });
+
+  it('a dropped part is a failure naming the variant and the reason', () => {
+    const events = [
+      REQUEST,
+      { type: 'encode.dropped', t: 2, streamId: 'w-1', variant: 'card', count: 2, reason: 'no representation on this wire' },
+    ];
+    const f = find(events, 'dropped')!;
+    expect(f.verdict).toBe('fail');
+    expect(f.statement).toContain('2 card parts');
+    expect(f.statement).toContain('were not encoded');
+    expect(f.statement).toContain('no representation on this wire');
+  });
+
+  it('warns about a content type that is not an SSE stream', () => {
+    const events = [
+      { type: 'wire.open', t: 0, streamId: 'h-1', format: 'openai.chat-completions', source: 'response', contentType: 'text/html; charset=utf-8' },
+    ];
+    const f = find(events, 'contentType')!;
+    expect(f.verdict).toBe('warn');
+    expect(f.statement).toContain('text/html; charset=utf-8');
+    // Observation first, and no assertion about what the endpoint is.
+    expect(f.statement).toContain('text/event-stream');
+  });
+
+  it('says nothing about a request that was never reported', () => {
+    // The app may encode elsewhere, so absence is not a finding.
+    const events = [
+      { type: 'wire.open', t: 0, streamId: 'q-1', format: 'f', source: 'response' },
+    ];
+    expect(find(events, 'attachments')).toBeUndefined();
+    expect(find(events, 'dropped')).toBeUndefined();
+    expect(find(events, 'request')).toBeUndefined();
+  });
+
+  it('folds cleanly when the kit emits none of these', () => {
+    const s = fold(HEALTHY_EVENTS);
+    expect(s.request).toBeUndefined();
+    expect(s.dropped).toEqual([]);
+    expect(s.url).toBeUndefined();
+    expect(s.contentType).toBeUndefined();
+  });
+});

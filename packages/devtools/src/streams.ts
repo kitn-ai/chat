@@ -77,6 +77,40 @@ export const CONTENT_KEYS: ReadonlySet<string> = new Set([
   'sources',
 ]);
 
+
+/** How the encoder represented one attachment on this wire. `skipped` is the
+ *  one that matters: the part rendered in the thread and never reached the
+ *  model. */
+export type AttachmentDisposition = 'encoded' | 'skipped' | 'as-text';
+
+export interface AttachmentRow {
+  mediaType?: string;
+  bytes?: number;
+  encoded?: boolean;
+  disposition?: AttachmentDisposition;
+  reason?: string;
+}
+
+/** What the kit ENCODED and sent. The read path alone cannot answer "did the
+ *  model actually receive my attachment", which is why this side exists. */
+export interface RequestSummary {
+  format?: string;
+  messages?: number;
+  byRole: Record<string, number>;
+  parts: Record<string, number>;
+  bodyBytes?: number;
+  attachments: AttachmentRow[];
+}
+
+/** One part the encoder could not represent on this wire. */
+export interface DroppedRow {
+  variant: string;
+  count: number;
+  messageIndex?: number;
+  partIndex?: number;
+  reason?: string;
+}
+
 export interface StreamSummary {
   streamId?: string;
   format?: string;
@@ -113,6 +147,20 @@ export interface StreamSummary {
   frameRows: FrameRow[];
   /** Retained per part write, in arrival order. */
   partRows: PartRow[];
+
+  // ── The write path, and the connection it opened ──────────────────────
+  /** Origin + pathname only; never a query string, which can carry a key. */
+  url?: string;
+  hasQuery?: boolean;
+  /** The response's HTTP status, distinct from `status` (which is set only by
+   *  wire.failed and therefore always an error). */
+  httpStatus?: number;
+  /** A `text/html` here where SSE was expected is the classic misconfiguration. */
+  contentType?: string;
+  /** Absent when the app encoded elsewhere -- which is not a finding. */
+  request?: RequestSummary;
+  /** Parts the encoder did not put on the wire. */
+  dropped: DroppedRow[];
 }
 
 export interface FoldResult {
@@ -123,7 +171,11 @@ export interface FoldResult {
   unknownTypes: Record<string, number>;
 }
 
-const KNOWN = new Set(['wire.open', 'wire.frame', 'wire.part', 'wire.close', 'wire.failed']);
+const KNOWN = new Set([
+  'wire.open', 'wire.frame', 'wire.part', 'wire.close', 'wire.failed',
+  // The write path. A kit that does not emit these folds exactly as before.
+  'encode.request', 'encode.dropped',
+]);
 
 const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
 const num = (v: unknown): number | undefined => (typeof v === 'number' ? v : undefined);
@@ -148,7 +200,10 @@ export function foldStreams(events: readonly WireDiagnosticEvent[]): FoldResult 
     const key = keyOf(e);
     let s = byId.get(key);
     if (!s) {
-      s = { streamId: e.streamId, chunks: 0, parts: {}, open: false, frameRows: [], partRows: [] };
+      s = {
+        streamId: e.streamId, chunks: 0, parts: {}, open: false,
+        frameRows: [], partRows: [], dropped: [],
+      };
       byId.set(key, s);
     }
     return s;
@@ -166,6 +221,12 @@ export function foldStreams(events: readonly WireDiagnosticEvent[]): FoldResult 
       case 'wire.open': {
         s.format = str(field(e, 'format'));
         s.source = str(field(e, 'source'));
+        // Present only on a kit new enough to report them; absent stays absent.
+        s.url = str(field(e, 'url'));
+        const hasQuery = field(e, 'hasQuery');
+        if (typeof hasQuery === 'boolean') s.hasQuery = hasQuery;
+        s.httpStatus = num(field(e, 'status'));
+        s.contentType = str(field(e, 'contentType'));
         // Opened and not yet terminated. A later close/failed clears this.
         s.open = true;
         const t = num(e.t);
@@ -264,6 +325,28 @@ export function foldStreams(events: readonly WireDiagnosticEvent[]): FoldResult 
         s.open = false;
         break;
       }
+      case 'encode.request': {
+        const attachments = field(e, 'attachments');
+        s.request = {
+          format: str(field(e, 'format')),
+          messages: num(field(e, 'messages')),
+          byRole: { ...((field(e, 'byRole') as Record<string, number>) ?? {}) },
+          parts: { ...((field(e, 'parts') as Record<string, number>) ?? {}) },
+          bodyBytes: num(field(e, 'bodyBytes')),
+          attachments: Array.isArray(attachments) ? (attachments as AttachmentRow[]) : [],
+        };
+        break;
+      }
+      case 'encode.dropped': {
+        s.dropped.push({
+          variant: str(field(e, 'variant')) ?? 'unknown',
+          count: num(field(e, 'count')) ?? 1,
+          messageIndex: num(field(e, 'messageIndex')),
+          partIndex: num(field(e, 'partIndex')),
+          reason: str(field(e, 'reason')),
+        });
+        break;
+      }
       case 'wire.failed': {
         s.status = num(field(e, 'status'));
         const provider = field(e, 'providerCode');
@@ -321,6 +404,13 @@ function group(n: number): string {
 }
 
 const plural = (n: number, one: string) => `${group(n)} ${one}${n === 1 ? '' : 's'}`;
+
+/** Human bytes, because 245760 is not a size anyone reads at a glance. */
+function bytes(n: number): string {
+  if (n < 1024) return `${group(n)} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} kB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 /** `1,100ms` under a second, `1.1s` above it: the unit people actually compare in. */
 function duration(msValue: number): string {
@@ -550,6 +640,80 @@ export function findingsFor(s: StreamSummary): Finding[] {
       label: 'Tool calls',
       verdict: 'ok',
       statement: `${plural(tools, 'tool part')}.`,
+    });
+  }
+
+
+  // ── The write path: what we SENT, and what never made it ─────────────
+  //
+  // The read path cannot answer "did the model actually receive my
+  // attachment". These checks are the reason the encoder is instrumented at
+  // all, and a silent drop is the highest-value thing this tool can surface.
+  const attachments = s.request?.attachments ?? [];
+  if (attachments.length > 0) {
+    const skipped = attachments.filter((a) => a.disposition === 'skipped');
+    const asText = attachments.filter((a) => a.disposition === 'as-text');
+    if (skipped.length > 0) {
+      out.push({
+        id: 'attachments',
+        label: 'Attachments',
+        verdict: 'fail',
+        statement: skipped
+          .map(
+            (a) =>
+              `${plural(1, `${a.mediaType ?? 'unknown'} attachment`)}` +
+              `${a.bytes !== undefined ? ` (${bytes(a.bytes)})` : ''} was not encoded for this ` +
+              `provider, so the model never saw it${a.reason ? ` — ${a.reason}` : ''}.`,
+          )
+          .join(' '),
+        detail: 'It still rendered in the thread, which is what makes this easy to miss.',
+      });
+    } else if (asText.length > 0) {
+      out.push({
+        id: 'attachments',
+        label: 'Attachments',
+        verdict: 'warn',
+        statement:
+          `${plural(asText.length, 'attachment')} reached the model as TEXT rather than as a ` +
+          `native part${asText[0].reason ? ` — ${asText[0].reason}` : ''}.`,
+        detail: 'Fidelity depends on the encoder; the model did receive something.',
+      });
+    } else {
+      out.push({
+        id: 'attachments',
+        label: 'Attachments',
+        verdict: 'ok',
+        statement: `${plural(attachments.length, 'attachment')} encoded for this provider.`,
+      });
+    }
+  }
+
+  if (s.dropped.length > 0) {
+    out.push({
+      id: 'dropped',
+      label: 'Dropped parts',
+      verdict: 'fail',
+      statement: s.dropped
+        .map(
+          (d) =>
+            `${plural(d.count, `${d.variant} part`)} were not encoded onto this wire` +
+            `${d.reason ? ` — ${d.reason}` : ''}.`,
+        )
+        .join(' '),
+      detail:
+        'These exist in the thread and were never sent, so the model answered without them.',
+    });
+  }
+
+  // A content type that is not an SSE stream, on a source that should be one.
+  if (s.contentType && !/event-stream/i.test(s.contentType)) {
+    out.push({
+      id: 'contentType',
+      label: 'Content type',
+      verdict: 'warn',
+      statement:
+        `The response declared ${s.contentType} where text/event-stream was expected. ` +
+        'An endpoint returning a page or a plain JSON body instead of a stream looks like this.',
     });
   }
 
