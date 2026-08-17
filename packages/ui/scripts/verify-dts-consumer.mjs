@@ -82,21 +82,92 @@ const MODES = [
  * detector: if that specifier stops resolving, the type becomes `any` and the
  * wrong assignment stops erroring.
  */
-const NEGATIVE = `// Every line here MUST error. A clean compile means the types degraded to \`any\`.
-import type { ModelOption } from '@kitn.ai/ui';
-import type { KaiChatController } from '@kitn.ai/ui/react';
-import type { InputProps } from '@kitn.ai/ui/solid';
-import type { ChatMessage } from '@kitn.ai/ui/state';
-import type { OpenAIWireMessage } from '@kitn.ai/ui/wire';
-import type { CardBridge } from '@kitn.ai/ui/provider';
+/**
+ * The probe type for each entry, and the entries that deliberately have none.
+ *
+ * THE LIST OF ENTRIES IS DERIVED from the package's own `exports` map, the same
+ * walk `verify-ssr-imports.mjs` does, because a hand-typed list is a gate that
+ * silently skips whatever was added after it was written -- which is exactly what
+ * happened: `./diagnostics` shipped and this check kept reporting six clean
+ * entries without ever looking at it.
+ *
+ * A probe TYPE cannot be derived (nothing in package.json names one), so it stays
+ * declared here -- but an entry that is neither probed nor explicitly excluded is
+ * a HARD FAILURE rather than a skip. That is what turns "someone forgot" from an
+ * invisible gap into a red build naming the missing entry.
+ */
+const PROBE_TYPES = {
+  '.': 'ModelOption',
+  './react': 'KaiChatController',
+  './solid': 'InputProps',
+  './state': 'ChatMessage',
+  './wire': 'OpenAIWireMessage',
+  './provider': 'CardBridge',
+  './diagnostics': 'KaiDevtoolsHook',
+};
 
-export const a: ModelOption = 12345;
-export const b: KaiChatController = 12345;
-export const c: InputProps = 12345;
-export const d: ChatMessage = 12345;
-export const e: OpenAIWireMessage = 12345;
-export const f: CardBridge = 12345;
-`;
+/** Entries whose declarations reach nothing through a RELATIVE specifier, so
+ *  there is no degradation for this bug class to cause. Each needs its reason. */
+const NO_RELATIVE_SPECIFIERS = {
+  './elements': 'generated self-contained',
+  './elements/*': 'generated self-contained',
+  './autoloader': 'generated self-contained',
+  './schemas': 'generated self-contained',
+  './schemas/*': 'generated self-contained',
+};
+
+/** A subpath is testable if SOME condition resolves to a .js file; `types`, .css
+ *  and .json targets are not importable code. Mirrors verify-ssr-imports.mjs. */
+const isJs = (t) => typeof t === 'string' && t.endsWith('.js');
+const jsTargets = (node) => {
+  if (typeof node === 'string') return isJs(node) ? [node] : [];
+  if (Array.isArray(node)) return node.flatMap(jsTargets);
+  if (node && typeof node === 'object') {
+    return Object.entries(node)
+      .filter(([cond]) => cond !== 'types')
+      .flatMap(([, v]) => jsTargets(v));
+  }
+  return [];
+};
+
+const consumerPkg = JSON.parse(readFileSync(resolve(ROOT, 'package.json'), 'utf8'));
+const probed = [];
+const unregistered = [];
+for (const [subpath, node] of Object.entries(consumerPkg.exports ?? {})) {
+  if (jsTargets(node).length === 0) continue;
+  if (NO_RELATIVE_SPECIFIERS[subpath]) continue;
+  if (PROBE_TYPES[subpath]) {
+    probed.push([subpath, PROBE_TYPES[subpath]]);
+    continue;
+  }
+  unregistered.push(subpath);
+}
+
+if (unregistered.length > 0) {
+  console.error(
+    `\n✗ verify-dts-consumer: ${unregistered.length} exported entry point(s) have no declaration probe:\n` +
+      unregistered.map((s) => `    ${s}`).join('\n') +
+      '\n\n  Add a type to PROBE_TYPES (a type this entry re-exports across a RELATIVE\n' +
+      '  specifier, so it degrades to `any` when resolution breaks), or add the entry to\n' +
+      '  NO_RELATIVE_SPECIFIERS with the reason it cannot degrade.\n',
+  );
+  process.exit(1);
+}
+if (probed.length === 0) {
+  console.error('\n✗ verify-dts-consumer: no probed entries — the guard would assert nothing.\n');
+  process.exit(1);
+}
+
+const PKG_NAME = consumerPkg.name;
+const specifierOf = (subpath) => (subpath === '.' ? PKG_NAME : `${PKG_NAME}/${subpath.slice(2)}`);
+
+const NEGATIVE = [
+  '// Every line here MUST error. A clean compile means the types degraded to `any`.',
+  ...probed.map(([subpath, type]) => `import type { ${type} } from '${specifierOf(subpath)}';`),
+  '',
+  ...probed.map(([, type], i) => `export const probe${i}: ${type} = 12345;`),
+  '',
+].join('\n');
 
 const POSITIVE = `// Correct usage. MUST compile clean, or the fix broke real consumers.
 import type { OpenAIWireMessage, AnthropicWireMessage, ModelTurn } from '@kitn.ai/ui/wire';

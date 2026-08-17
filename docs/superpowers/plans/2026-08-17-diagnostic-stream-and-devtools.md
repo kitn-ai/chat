@@ -492,11 +492,15 @@ Signal, in spec order, first hit wins: (1) `localStorage['kai-devtools']` truthy
 - Modify: `packages/ui/src/elements/register-impl.ts` — call `installKaiDevtoolsHook()` once (it is client-only code already; import statically from `../diagnostics/hook`)
 - Modify: `packages/ui/package.json` — add the `./diagnostics` export mapping to `dist/diagnostics/index` (COPY the exact shape of an existing subpath entry like `./state`, types + import conditions and all; also add the matching `typesVersions`/`files` entries if the existing subpaths carry them)
 - Modify: `packages/ui/vite.config.*` build entries if subpaths are enumerated there (copy the `./state` pattern)
-- Test: extend `hook.test.ts` with an integration case; rely on `verify:consumer` for the packaging half
+- Test: extend `hook.test.ts` with an integration case; rely on `verify:ssr` and `verify:dts:consumer` for the packaging half (NOT `verify:consumer` — see the gate note in Step 5)
 
 - [ ] **Step 1:** Failing test: import `register-impl` (the way existing elements tests do), assert `window.__KAI_DEVTOOLS_HOOK__` exists afterwards with `recording: false` when no signal is set.
 - [ ] **Step 2:** Run → FAIL. **Step 3:** Implement. **Step 4:** PASS.
-- [ ] **Step 5:** Gates as in Task 7 Step 2 (all of them — `verify:consumer` is the one that proves the new subpath survives packaging; SSR safety is covered by the existing register/SSR tests staying green).
+- [ ] **Step 5:** Gates as in Task 7 Step 2, **plus `verify:ssr` and `verify:dts:consumer`**, which are the two that actually cover a new subpath.
+
+  **CORRECTED (PR 2, verified against the scripts).** An earlier draft of this step said `verify:consumer` proves the new subpath survives packaging. **It does not.** `scripts/verify-consumer-sideeffects.mjs` packs the build and asserts every `kai-*` REGISTRATION survives a real consumer bundler; it never imports a subpath and would pass unchanged if `./diagnostics` were missing entirely. Run it — it covers `./elements` — but do not read it as subpath coverage. The two that do:
+  - `verify:ssr` walks the `exports` map and imports every entry under `node`, so a new subpath is covered the day it is added. It is simultaneously the packaging proof (the specifier resolves through the real map) and the SSR-safety proof.
+  - `verify:dts:consumer` compiles a real app against the tarball. Its entry list is now DERIVED from the same `exports` map; an exported entry with no declaration probe is a hard failure naming the entry, rather than the silent skip that let `./diagnostics` ship unchecked.
 - [ ] **Step 6:** Open PR 2. Body: the hook contract is now a published coupling between `@kitn.ai/ui` and the future `@kitn.ai/devtools` (version field is the seam); note the solid-direct caveat (apps importing Solid components directly never run `register-impl` and must call `installKaiDevtoolsHook()` themselves — documented in the `./diagnostics` module docblock).
 
 ---

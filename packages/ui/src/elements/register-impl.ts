@@ -3,6 +3,7 @@
 // from ./register.ts so the elements entry is SSR-import-safe — see the comment
 // there. This file is hand-maintained (the generator gen-element-api.mjs SKIPs
 // register.ts AND this file); keep the component import list here in sync.
+import { installKaiDevtoolsHook } from '../diagnostics/hook';
 import './conversation-list';
 import './prompt-input';
 import './chat';
@@ -94,3 +95,20 @@ import './input';
 import './search';
 import './kbd';
 import './editable-label';
+
+// The devtools recorder hook, installed HERE because this file is already the
+// browser-only half of the elements entry (register.ts gates it behind a window
+// check and a dynamic import). So an app that registers the kai-* elements gets
+// the hook with no work, while an SSR import of the entry still touches no
+// global.
+//
+// At the BOTTOM, and it makes no difference: `import` declarations are hoisted,
+// so every element module above has already evaluated by the time any statement
+// in this file runs. Written here anyway so the order you read is the order that
+// happens. Nothing above emits a diagnostic event, so there is nothing to miss.
+//
+// Idempotent and near-free: with no activation signal it allocates no buffer,
+// makes no subscription, and leaves emission a guarded no-op. An app importing
+// the SolidJS components directly never runs this file and must call
+// `installKaiDevtoolsHook()` itself -- see the docblock in ../diagnostics/index.
+installKaiDevtoolsHook();
