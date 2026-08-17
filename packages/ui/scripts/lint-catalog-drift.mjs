@@ -58,11 +58,60 @@
 //  7. A RECIPE THAT NOBODY CAN BUILD FROM. Every field can resolve while the
 //     recipe as a whole is unbuildable; that is what the acceptance deck (S1-S7)
 //     measures, and it is why the deck was written before the catalog.
+//  8. THE TREE -> ROW DIRECTION, for everything except the nine Labs/Apps files.
+//     By design, but know the shape of it. Measured, all green: adding a new
+//     `Labs/Brand New Thing` story with no inventory row passes; DELETING a
+//     tier-3 row passes; and the inventory can shrink from 26 rows to one and
+//     still pass, because the anti-vacuity floors are `length === 0` and a
+//     single survivor satisfies them. Only `surfaces.test.ts` test 2 requires a
+//     row to exist, and only for the Apps files.
+//  9. A GROUP ROW OUTLIVING ALMOST ALL OF ITS STORIES. `Foundations` resolves
+//     through a SYNTHESIZED group name: any `Labs/Foundations/<x>` title
+//     registers the bare `Foundations`. Measured: deleting all twelve
+//     Foundations stories does fire, but deleting ELEVEN of the twelve is
+//     green. The row proves the group exists, never that it still holds what
+//     its `note` lists.
+// 10. DUPLICATE INVENTORY TITLES, including contradictory ones. Measured: a
+//     second `Menu` row sorted `corpus` beside the real one sorted `ingredient`
+//     passes, reporting 27 rows clean. Titles are resolved as set membership,
+//     so a duplicate resolves exactly as well as the original.
+// 11. THE GAP COUNT SILENTLY GOING TO ZERO. Gaps are reported, never asserted.
+//     Measured: giving all three `kind:'none'` invariants a real `lint:` script
+//     takes the run from 3 gaps to 0 and stays green — correct if the guards
+//     were truly written, and indistinguishable from someone deleting the
+//     honest record of what is unenforced. The `status`/`kind` agreement that
+//     would catch the dishonest version lives in invariants.test.ts.
+// 12. RESIDUAL AFTER THE COMMENT FIX: `stripComments` is a scanner, not a
+//     parser. It knows string, template and comment state, which is enough for
+//     every story file in the tree today, but a title inside a construct it
+//     misreads is out of scope. Its errors blank MORE than intended, which
+//     fails loudly; it cannot invent a title.
+// 13. RESIDUAL AFTER THE PATH FIX: `isFile` proves a cited path is a file, not
+//     that the file contains a test, still less a test of THIS invariant — see
+//     item 1, which is the same limit in its most consequential form.
+//
+// DELIBERATELY NOT ASSERTED HERE: whether a wiring pair means anything (item 2).
+// This lint resolves names and genuinely cannot judge semantics; the executed
+// probes in surfaces.test.ts drive every edge against the real elements, and
+// its `every wiring edge in every recipe has been driven above` completeness
+// test is what stops an edge being added without one. An assertion here would
+// look like coverage and add none.
+//
+// ★ THE ONE TO STATE PLAINLY: THIS LINT'S GROUND TRUTH IS `derived.json`. It
+// resolves authored claims against that file, not against the tree the file
+// describes. A wrong derived layer therefore yields a confidently green lint
+// (item 6). What actually covers the authored layer is the COMPOSITION of
+// `verify:generated` — which keeps derived.json faithful to the tree — and this
+// lint, which keeps the prose faithful to derived.json. NEITHER ALONE IS
+// SUFFICIENT, and a green from this script has never meant more than one half.
 //
 // What it DOES catch incidentally, worth knowing: a catalog file that no longer
 // parses fails the esbuild step loudly rather than being skipped, because the
 // authored records are loaded through their VALIDATED accessors — so a record
 // violating its own zod schema is a hard failure here too, not a silent pass.
+// That is also why the schema's own `.min(1)` on `wiring` fires BEFORE this
+// script's readable "zero wiring edges" message on the real catalog; the
+// message is reachable when check() is driven directly, as the self-test does.
 import { existsSync, readFileSync, readdirSync, mkdtempSync, statSync, writeFileSync, rmSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -221,6 +270,18 @@ export function check({
   // renaming a story out from under its row passed, and renaming a tier-3 row
   // passed. The opposite direction (every `Labs/Apps` story FILE has a row) is
   // surfaces.test.ts test 2 and is deliberately not rebuilt here.
+  //
+  // WHAT IS GENUINELY NEW HERE vs what already existed, because overstating it
+  // would be the same defect this lint is built to catch. ALREADY COVERED
+  // before this script: invariants.test.ts already resolved every `enforcedBy`
+  // path and lint script and already pinned `status:'open'` <-> `kind:'none'`
+  // in both directions; surfaces.test.ts already covered BOTH directions of
+  // part-consumption name agreement with the union. This script adds: the
+  // inventory ROW -> TREE resolution (all tiers), recipe corpus paths, wiring
+  // event/property/ingredient resolution, recipe -> invariant ids, scenario
+  // `invariant:` refs, wire-reader resolution, the part-consumption unknown-TAG
+  // check, and — after review — file-vs-directory and guard-vs-any-script
+  // tightening on the pointers invariants.test.ts merely proved to exist.
   for (const entry of inventory) {
     if (!labsTitles.includes(entry.title)) {
       errors.push(`inventory: "${entry.title}" matches no Labs story title or Labs/Apps story file in the tree.`);
