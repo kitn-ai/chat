@@ -43,6 +43,21 @@ export interface ModelUsage {
 export interface ModelStreamChunk {
   text?: string;
   /**
+   * The model id the RESPONSE stated, verbatim; REPORT, NEVER INFER.
+   *
+   * Read from the response rather than the request, which is what makes it work
+   * at all when the app builds its own fetch and the kit never sees what was
+   * asked for. Providers commonly resolve an alias (ask for `gpt-4o`, get
+   * `gpt-4o-2024-08-06`); through a gateway the value is the gateway's own id.
+   * Both are reasons to pass the string through untouched.
+   *
+   * It is NOT guaranteed. A proxy can strip or rewrite it and a custom endpoint
+   * may omit it, so a consumer renders it as ABSENT when it is absent. Filling
+   * the gap with the requested id would lie in exactly the requested-vs-served
+   * mismatch this field exists to catch.
+   */
+  model?: string;
+  /**
    * Reasoning delta. `''` is MEANINGFUL, not a no-op: a redacted block has no
    * readable text but still carries a payload that must round-trip, and a format
    * uses an empty delta to OPEN a reasoning part at the right position in the
