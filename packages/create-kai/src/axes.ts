@@ -138,3 +138,66 @@ export function gatewayAxis(framework: FrameworkDef): Axis {
 export function cliAxes(framework: FrameworkDef): Axis[] {
   return [layoutAxis(), gatewayAxis(framework)];
 }
+
+/**
+ * The two things `answerAxis` can do to a terminal, injected rather than
+ * imported.
+ *
+ * WHY INJECTED — this is the whole reason `answerAxis` lives here and not in
+ * `index.ts`. It was in `index.ts`, which nothing can import (it calls `main()`
+ * at module scope), so the guard could only reach as far as `decideAxis` and
+ * assert that the axis DATA carried a statement. That is a guard wrong about its
+ * own strength, and mutation testing said so: deleting the one line
+ * `if (decision.statement) stated(...)` restored the silent-skip defect on BOTH
+ * axes and left the whole suite green. Carrying a statement nobody prints is
+ * exactly as silent as having none.
+ *
+ * With the calls injected, the test drives `answerAxis` with two spies and
+ * asserts what it CALLED — one `state` and no `ask` for a decided axis, one
+ * `ask` and no `state` for a real choice. Deleting the same line now fails.
+ */
+export interface AxisIo {
+  /** render the select for a real choice and resolve to the chosen option id */
+  ask(axis: Axis, initialValue: string): Promise<string>;
+  /** print an answer that was decided rather than asked */
+  state(label: string, statement: string): void;
+}
+
+export interface AnswerAxisOptions {
+  /** the flag the user passed for this axis, which skips the prompt entirely */
+  override?: string;
+  nonInteractive: boolean;
+  /** the zero-config answer, used only when the axis has a real choice to default through */
+  fallback: string;
+  /** the select's pre-highlighted row; defaults to `fallback` */
+  initialValue?: string;
+}
+
+/**
+ * Answer one axis: take the flag if given, ask when there is a real choice, and
+ * otherwise state the answer that was decided for the user.
+ *
+ * THE `nonInteractive` BRANCH TAKES THE SOLE ANSWER, NOT THE ZERO-CONFIG ONE,
+ * with the fallback reached only when the axis has a real choice to default
+ * through. Those coincide today for both axes; keeping them the same expression
+ * means a future axis whose only answer is not the zero-config default cannot
+ * have the two paths disagree — which is a thing `--yes` would report as a
+ * scaffold of something nobody can produce.
+ *
+ * Nothing is stated in non-interactive mode: there is no prompt stream to leave
+ * a gap in, and `--yes` output is read by scripts. The one line that IS printed
+ * in every mode is the `unasked` feature note, because that one reports a
+ * difference between what was requested and what will be written.
+ */
+export async function answerAxis(
+  axis: Axis,
+  opts: AnswerAxisOptions,
+  io: AxisIo,
+): Promise<string> {
+  if (opts.override !== undefined) return opts.override;
+  const decision = decideAxis(axis);
+  if (opts.nonInteractive) return decision.only?.id ?? opts.fallback;
+  if (decision.ask) return io.ask(axis, opts.initialValue ?? opts.fallback);
+  if (decision.statement) io.state(axis.label, decision.statement);
+  return decision.only?.id ?? opts.fallback;
+}

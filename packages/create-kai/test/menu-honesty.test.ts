@@ -27,7 +27,8 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { ZERO_CONFIG } from '../src/args';
-import { cliAxes, decideAxis } from '../src/axes';
+import { answerAxis, cliAxes, decideAxis } from '../src/axes';
+import type { Axis } from '../src/axes';
 import { availableFeatures } from '../src/features';
 import { readyFrameworks } from '../src/frameworks';
 import { generate } from '../src/generate';
@@ -140,44 +141,114 @@ describe('the zero-config answers are inside the offered menu', () => {
 describe('an axis with one possible answer is stated, not taken in silence', () => {
   const seen = { asked: [] as string[], stated: [] as string[] };
 
+  /**
+   * `answerAxis` under two spies — WHAT IT CALLED, not what the axis carries.
+   *
+   * The first version of this block read `decideAxis(axis).statement` and
+   * asserted it was non-null. That is the trap this repo keeps paying for:
+   * mutation testing deleted the single line `if (decision.statement)
+   * state(...)` from the caller and the whole suite stayed green while the
+   * silent-skip defect was back on BOTH axes. A statement nobody prints is
+   * exactly as silent as no statement. So the rule moved into `axes.ts` behind
+   * an injected `AxisIo`, and this drives it.
+   */
+  function run(axis: Axis, opts: Partial<Parameters<typeof answerAxis>[1]> = {}) {
+    const calls = { asked: [] as string[], stated: [] as [string, string][] };
+    const io = {
+      ask: async (a: Axis) => {
+        calls.asked.push(a.id);
+        return a.options[0].id;
+      },
+      state: (label: string, statement: string) => {
+        calls.stated.push([label, statement]);
+      },
+    };
+    return {
+      calls,
+      answer: answerAxis(axis, { nonInteractive: false, fallback: 'FALLBACK', ...opts }, io),
+    };
+  }
+
   for (const framework of readyFrameworks()) {
-    it(`${framework.id}: every one-answer axis carries a line the user can read`, () => {
+    it(`${framework.id}: states what it decides and asks what it does not`, async () => {
       const axes = cliAxes(framework);
       expect(axes.length, `${framework.id} has no axes — this asserted nothing`).toBeGreaterThan(0);
 
       for (const axis of axes) {
-        const decision = decideAxis(axis);
-        if (decision.ask) {
+        const { calls, answer } = run(axis);
+        const chosen = await answer;
+
+        if (decideAxis(axis).ask) {
           seen.asked.push(`${framework.id}/${axis.id}`);
+          expect(calls.asked, `the '${axis.id}' axis has a real choice and did not ask`).toEqual([
+            axis.id,
+          ]);
+          expect(
+            calls.stated,
+            `the '${axis.id}' axis asked AND stated — the user answers a question, then is told ` +
+              'what was decided for them',
+          ).toEqual([]);
           continue;
         }
+
         seen.stated.push(`${framework.id}/${axis.id}`);
         expect(
-          decision.only,
-          `the '${axis.id}' axis has no answer at all for ${framework.id}`,
-        ).not.toBeNull();
+          calls.asked,
+          `the '${axis.id}' axis has one answer for ${framework.id} and still rendered a select — ` +
+            'a question with nothing to choose',
+        ).toEqual([]);
         expect(
-          decision.statement,
-          `the '${axis.id}' axis has exactly one answer for ${framework.id} and states nothing — ` +
-            'it would be decided for the user without telling them, which is the gateway defect',
-        ).not.toBeNull();
+          calls.stated.length,
+          `the '${axis.id}' axis has exactly one answer for ${framework.id} and printed nothing — ` +
+            'it was decided for the user without telling them, which is the gateway defect',
+        ).toBe(1);
+
+        const [label, statement] = calls.stated[0];
+        expect(label).toBe(axis.label);
         // The line has to name the answer and say why it is the only one. A
         // statement that is just the label tells a reader nothing they can act
         // on, which is why `Axis.because` is required.
-        expect(decision.statement).toContain(decision.only!.label);
-        expect(decision.statement!.length).toBeGreaterThan(decision.only!.label.length + 10);
+        expect(statement).toContain(axis.options[0].label);
+        expect(statement.length).toBeGreaterThan(axis.options[0].label.length + 10);
+        // And the answer it returns is the one it stated, not the fallback.
+        expect(chosen).toBe(axis.options[0].id);
       }
     });
   }
 
   /**
    * BOTH BRANCHES MUST OCCUR IN THE SHIPPED TABLE, or the loop above is half a
-   * test: with everything asked it asserts nothing, and with everything stated
-   * nothing proves the select still renders when there IS a choice.
+   * test: with everything asked it asserts nothing about stating, and with
+   * everything stated nothing proves the select still renders when there IS a
+   * choice.
    */
   it('exercised both a real choice and a decided-for-you answer', () => {
     expect(seen.stated, 'no axis was decided for the user — the rule went untested').not.toEqual([]);
     expect(seen.asked, 'no axis had a real choice — the select path went untested').not.toEqual([]);
+  });
+
+  /**
+   * THE TWO PATHS THAT MUST STAY SILENT, so "always state" is not how the tests
+   * above get satisfied. `--yes` output is read by scripts, and a flag is an
+   * answer the user already gave.
+   */
+  it('says nothing in non-interactive mode, on either kind of axis', async () => {
+    for (const framework of readyFrameworks()) {
+      for (const axis of cliAxes(framework)) {
+        const { calls, answer } = run(axis, { nonInteractive: true });
+        await answer;
+        expect(calls.stated, `${framework.id}/${axis.id} printed prompt furniture under --yes`).toEqual([]);
+        expect(calls.asked, `${framework.id}/${axis.id} tried to prompt under --yes`).toEqual([]);
+      }
+    }
+  });
+
+  it('says nothing and asks nothing when a flag already answered the axis', async () => {
+    const axis = cliAxes(readyFrameworks()[0])[0];
+    const { calls, answer } = run(axis, { override: 'from-the-flag' });
+    expect(await answer).toBe('from-the-flag');
+    expect(calls.stated).toEqual([]);
+    expect(calls.asked).toEqual([]);
   });
 
   /**

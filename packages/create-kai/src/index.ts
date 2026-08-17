@@ -22,8 +22,8 @@ import * as p from '@clack/prompts';
 import pc from 'picocolors';
 
 import { ZERO_CONFIG, normalizeGateway, parseArgs, validateProjectName } from './args';
-import { decideAxis, gatewayAxis, layoutAxis } from './axes';
-import type { Axis } from './axes';
+import { answerAxis, gatewayAxis, layoutAxis } from './axes';
+import type { AxisIo } from './axes';
 import { WIRED_GATEWAYS, listGateways, wirableGateway } from './catalog';
 import {
   DEFAULT_FEATURES,
@@ -174,11 +174,11 @@ async function main(): Promise<number> {
   if (layouts.options.length === 0) {
     return fail('no layout in this release can be scaffolded — this build is broken');
   }
-  const layoutId = (await answerAxis(layouts, {
-    override: args.layout,
-    nonInteractive,
-    fallback: ZERO_CONFIG.layout,
-  })) as Layout;
+  const layoutId = (await answerAxis(
+    layouts,
+    { override: args.layout, nonInteractive, fallback: ZERO_CONFIG.layout },
+    clackAxisIo,
+  )) as Layout;
 
   const layout = getLayout(layoutId);
   if (!layout) return fail(`unknown layout '${layoutId}'`);
@@ -268,11 +268,11 @@ async function main(): Promise<number> {
   // question never appeared in any form. Same rule as the layout axis now, from
   // the same function, which is what stops the two drifting again.
   const gateways = listGateways();
-  const gatewayId = normalizeGateway(args.gateway) ?? (await answerAxis(gatewayAxis(framework), {
-    nonInteractive,
-    fallback: ZERO_CONFIG.gateway,
-    initialValue: ZERO_CONFIG.gateway,
-  }));
+  const gatewayId = normalizeGateway(args.gateway) ?? (await answerAxis(
+    gatewayAxis(framework),
+    { nonInteractive, fallback: ZERO_CONFIG.gateway, initialValue: ZERO_CONFIG.gateway },
+    clackAxisIo,
+  ));
 
   if (!gateways.some((g) => g.integration.id === gatewayId)) {
     return fail(`unknown gateway '${gatewayId}'`);
@@ -388,46 +388,26 @@ function stated(label: string, value: string): void {
 }
 
 /**
- * Answer one axis: take the flag if given, ask when there is a real choice, and
- * otherwise state the answer that was decided for the user.
+ * This CLI's half of `answerAxis` — the two things it is allowed to do to a
+ * terminal, handed to the rule rather than reached for by it.
  *
- * THE `nonInteractive` BRANCH TAKES THE SOLE ANSWER, NOT THE ZERO-CONFIG ONE,
- * with the fallback reached only when the axis has a real choice to default
- * through. Those coincide today for both axes; keeping them the same expression
- * means a future axis whose only answer is not the zero-config default cannot
- * have the two paths disagree — which is a thing `--yes` would report as a
- * scaffold of something nobody can produce.
- *
- * Nothing is stated in non-interactive mode: there is no prompt stream to leave
- * a gap in, and `--yes` output is read by scripts. The one line that IS printed
- * in every mode is the `unasked` feature note, because that one reports a
- * difference between what was requested and what will be written.
+ * The rule itself lives in `axes.ts` so a test can drive it with spies and
+ * assert that a decided axis STATES and an open one ASKS. It could not, while
+ * both the rule and these calls lived here: nothing can import this module, so
+ * the guard reached only as far as the axis data and a deleted `state(...)` call
+ * left the suite green.
  */
-async function answerAxis(
-  axis: Axis,
-  opts: {
-    override?: string;
-    nonInteractive: boolean;
-    fallback: string;
-    /** the select's pre-highlighted row; defaults to the zero-config fallback */
-    initialValue?: string;
-  },
-): Promise<string> {
-  if (opts.override !== undefined) return opts.override;
-  const decision = decideAxis(axis);
-  if (opts.nonInteractive) return decision.only?.id ?? opts.fallback;
-  if (decision.ask) {
-    return ask(
+const clackAxisIo: AxisIo = {
+  ask: (axis, initialValue) =>
+    ask(
       p.select({
         message: axis.question,
-        initialValue: opts.initialValue ?? opts.fallback,
+        initialValue,
         options: axis.options.map((o) => ({ value: o.id, label: o.label, hint: o.hint })),
       }),
-    );
-  }
-  if (decision.statement) stated(axis.label, decision.statement);
-  return decision.only?.id ?? opts.fallback;
-}
+    ),
+  state: stated,
+};
 
 /** Feature ids for a refusal message, or an honest `none` rather than an empty gap. */
 function featureList(features: readonly FeatureDef[]): string {
