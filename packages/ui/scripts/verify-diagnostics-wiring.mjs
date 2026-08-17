@@ -34,6 +34,9 @@
 //      mint the same id for different streams, and that id NAMESPACES REASONING
 //      PARTS, so a collision silently merges one stream's reasoning blocks into
 //      another's and overwrites their verbatim `raw`.
+//   4. The chain a real consumer walks, and the one the panel actually failed
+//      on: the elements bundle installs the hook, the app reads through the
+//      separate `./wire` bundle, and the hook must receive those events.
 //
 // Needs a build (like verify:consumer): it reads dist/, deliberately, because
 // the source passing tells you nothing about what was published.
@@ -140,44 +143,120 @@ step('two distinct instances of the same module share subscriber state');
 // ── Check 3: ids stay unique across copies ───────────────────────────────────
 step('stream ids minted by two module instances do not collide');
 {
-  const a = await import(`${wireUrl}?copy=a`);
-  const b = await import(`${wireUrl}?copy=b`);
+  // FRESH copies, and that is the whole point of `c`/`d`.
+  //
+  // This check first reused `?copy=a` and `?copy=b`, and it was UNFIREABLE:
+  // check 2 had already performed a read through `b`, so `b`'s counter was
+  // past 1 by the time this ran. Against a half-broken build -- subscribers
+  // shared, counter still module-scope -- it printed green over ids that
+  // genuinely collided, because it observed `wire-1` and `wire-2` instead of
+  // `wire-1` and `wire-1`. Node caches by specifier, so a NEW specifier is
+  // what gets a pristine counter.
+  const c = await import(`${wireUrl}?copy=c`);
+  const d = await import(`${wireUrl}?copy=d`);
 
-  const idsFrom = async (mod) => {
-    const ids = [];
-    const off = mod.subscribeWireDiagnostics((e) => {
-      if (e.type === 'wire.open' && e.streamId) ids.push(e.streamId);
-    });
-    await mod.readOpenAIStream(new Response(SSE), nullSink());
-    if (typeof off === 'function') off();
-    return ids;
-  };
-
-  // Subscribe through `a` for both, so this check does not depend on check 2's
-  // outcome for its observations.
-  const seenA = [];
-  const offA = a.subscribeWireDiagnostics((e) => {
-    if (e.type === 'wire.open' && e.streamId) seenA.push(e.streamId);
+  const ids = [];
+  const off = c.subscribeWireDiagnostics((e) => {
+    if (e.type === 'wire.open' && e.streamId) ids.push(e.streamId);
   });
-  await a.readOpenAIStream(new Response(SSE), nullSink());
-  await b.readOpenAIStream(new Response(SSE), nullSink());
-  if (typeof offA === 'function') offA();
+  await c.readOpenAIStream(new Response(SSE), nullSink());
+  await d.readOpenAIStream(new Response(SSE), nullSink());
+  if (typeof off === 'function') off();
 
-  if (seenA.length < 2) {
-    // Without shared state we cannot even observe both; check 2 already said so.
-    step(`(only ${seenA.length} stream id(s) observable — see the failure above)`);
+  if (ids.length < 2) {
+    fail(
+      `Could not observe a stream id from BOTH module copies (saw ${ids.length}: ` +
+        `[${ids.join(', ')}]), so the id-collision check could not run at all. That is the ` +
+        'subscriber-sharing failure above, seen from here.',
+    );
+  } else if (new Set(ids).size !== ids.length) {
+    fail(
+      `Stream ids COLLIDED across module copies: [${ids.join(', ')}]. The counter is ` +
+        'per-copy, so two copies mint the same wire-N for different streams. That id ' +
+        'namespaces reasoning parts, so a collision merges one stream’s reasoning blocks ' +
+        'into another’s and overwrites their verbatim provider payload.',
+    );
+  }
+}
+
+// ── Check 4: the chain the panel actually failed on ──────────────────────────
+//
+// LAST, because it installs DOM globals that the checks above should not see.
+//
+// This is the real consumer path and nothing else in CI walks it: the elements
+// bundle (`dist/kai.es.js`) dynamically imports register-impl, which installs
+// the devtools hook, and the app then reads a stream through the SEPARATE
+// `dist/wire.js`. Those are two different files, each carrying its own copy of
+// the emitter, which is exactly where the events used to vanish.
+//
+// It cannot pass vacuously: it asserts a NON-ZERO count of events delivered by a
+// real read, and that count was 0 before this fix.
+step('the elements bundle installs a hook that receives events from a ./wire read');
+{
+  const elementsPath = resolve(ROOT, 'dist/kai.es.js');
+  if (!existsSync(elementsPath)) {
+    console.error(`\n✗ verify-diagnostics-wiring: dist/kai.es.js missing — run \`nx build ui\` first.\n`);
+    process.exit(1);
+  }
+
+  const { JSDOM } = await import('jsdom');
+  // The query signal, so the kit takes its RECORDING branch and buffers.
+  const dom = new JSDOM('<!doctype html><html><body></body></html>', {
+    url: 'http://localhost/?kai-devtools=1',
+    pretendToBeVisual: true,
+  });
+  const shimmed = [
+    'document', 'customElements', 'HTMLElement', 'Element', 'Node', 'navigator',
+    'location', 'localStorage', 'CSSStyleSheet', 'MutationObserver', 'getComputedStyle',
+    'requestAnimationFrame', 'cancelAnimationFrame', 'DocumentFragment', 'ShadowRoot',
+    'Event', 'CustomEvent', 'HTMLTemplateElement',
+  ];
+  for (const key of shimmed) {
+    if (dom.window[key] !== undefined && globalThis[key] === undefined) {
+      globalThis[key] = dom.window[key];
+    }
+  }
+  globalThis.window = dom.window;
+
+  await import(pathToFileURL(elementsPath).href);
+  await customElements.whenDefined('kai-chat');
+
+  const hook = dom.window.__KAI_DEVTOOLS_HOOK__;
+  if (!hook) {
+    fail(
+      'Importing dist/kai.es.js did not install window.__KAI_DEVTOOLS_HOOK__. The elements ' +
+        'bundle is the auto-install site, so without it no consumer of the kit gets a hook.',
+    );
+  } else if (hook.recording !== true) {
+    fail(
+      `The hook installed with recording=${hook.recording} despite ?kai-devtools=1 being set, ` +
+        'so it took the dormant branch and buffered nothing.',
+    );
   } else {
-    const unique = new Set(seenA);
-    if (unique.size !== seenA.length) {
+    const wire = await import(wireUrl);
+    await wire.readOpenAIStream(new Response(SSE), nullSink());
+
+    const buffered = hook.drain();
+    if (buffered.length === 0) {
       fail(
-        `Stream ids COLLIDED across module copies: [${seenA.join(', ')}]. The counter is ` +
-          'per-copy, so two copies mint the same wire-N for different streams. That id ' +
-          'namespaces reasoning parts, so a collision merges one stream’s reasoning blocks ' +
-          'into another’s and overwrites their verbatim provider payload.',
+        'The hook installed by dist/kai.es.js buffered ZERO events from a read performed ' +
+          'through dist/wire.js. This is the exact path the devtools panel failed on: the ' +
+          'hook is live, the read is real, and the two are not connected.',
+      );
+    }
+
+    // And the live path, which is what a panel uses after it attaches.
+    const live = [];
+    const detach = hook.attach((e) => live.push(e.type));
+    await wire.readOpenAIStream(new Response(SSE), nullSink());
+    if (typeof detach === 'function') detach();
+    if (live.length === 0) {
+      fail(
+        'A callback attached to the hook from dist/kai.es.js received ZERO events from a read ' +
+          'through dist/wire.js, so a panel would render an empty session against a live stream.',
       );
     }
   }
-  void idsFrom;
 }
 
 if (failures.length > 0) {

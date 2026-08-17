@@ -132,6 +132,10 @@ type Subscriber = (e: WireDiagnosticEvent) => void;
  *
  * Still no `window`: `globalThis` exists under Node and every SSR runtime, so
  * this stays as import-safe as it was.
+ *
+ * PER REALM: a Worker, an iframe or an SSR isolate has its own registry and
+ * therefore its own emitter -- a panel in the parent document does not see a
+ * stream read inside a Worker.
  */
 const STATE_KEY = Symbol.for('kai.wire.diagnostics.v1');
 
@@ -143,9 +147,13 @@ interface DiagnosticsState {
 /** `globalThis` viewed as the one property we put on it. */
 type StateHolder = { [key: symbol]: DiagnosticsState | undefined };
 
-/** Read WITHOUT allocating. The emit path and the active check both use this, so
- *  a process that never subscribes never creates the object at all -- importing
- *  this module allocates nothing beyond reading a symbol. */
+/** Read WITHOUT allocating, so the emit path and the active check never write to
+ *  the global.
+ *
+ *  The accurate guarantee: IMPORTING this module allocates nothing; the
+ *  singleton is created on the first `subscribeWireDiagnostics()` or the first
+ *  stream read (`nextStreamId`). A read with no subscriber does create it -- it
+ *  has to, because the id counter lives there -- leaving `{ subs: [], seq: 1 }`. */
 function peekState(): DiagnosticsState | undefined {
   return (globalThis as unknown as StateHolder)[STATE_KEY];
 }
