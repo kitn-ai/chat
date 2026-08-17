@@ -45,12 +45,20 @@ describe('invariant records', () => {
     }
   });
 
-  it('open status and enforcedBy none travel together', () => {
+  it('open status and enforcedBy none travel together, and partial is a live member', () => {
     const parsed = listInvariants();
     expect(parsed.length).toBeGreaterThan(0);
     for (const inv of parsed) {
-      expect(inv.status === 'open').toBe(inv.enforcedBy.kind === 'none');
+      // Failure message names the record: without it this reads "expected true
+      // to be false" over seven identical-looking iterations.
+      expect(inv.status === 'open', `${inv.id}: status ${inv.status} vs enforcedBy ${inv.enforcedBy.kind}`).toBe(
+        inv.enforcedBy.kind === 'none',
+      );
     }
+    // `partial` exists because two records were `enforced` while the half of
+    // their statement a consumer acts on had no check. If nothing is partial,
+    // either the enum member is dead or a record has been quietly promoted.
+    expect(parsed.filter((i) => i.status === 'partial').length).toBeGreaterThan(0);
   });
 
   it('upgrade-race stays open until #99 option B, and says so', () => {
@@ -63,19 +71,54 @@ describe('invariant records', () => {
   // builds a self-audit checklist out of them (search the emitted code for the
   // `wrong` form, expect zero hits). An enforced invariant with no pair silently
   // demotes itself to prose, so make that a failure.
-  it('every enforced invariant carries at least one wrong/right pair', () => {
-    const enforced = listInvariants().filter((i) => i.status === 'enforced');
-    expect(enforced.length).toBeGreaterThan(0);
-    for (const inv of enforced) {
+  it('every invariant carries at least one wrong/right pair', () => {
+    // EVERY record, not just the enforced ones. An unenforced invariant needs
+    // the concrete pair MORE, not less: it is the only thing standing between a
+    // weak model and the mistake, since no guard will catch it afterwards.
+    const parsed = listInvariants();
+    expect(parsed.length).toBeGreaterThan(0);
+    for (const inv of parsed) {
       expect(inv.examples.length, `${inv.id}: no wrong/right pair`).toBeGreaterThan(0);
       for (const ex of inv.examples) {
-        // Both halves must be present and DIFFERENT: a pair whose wrong form
-        // equals its right form teaches nothing and would make the Task 9
-        // checklist match correct output.
+        // Both halves present and DIFFERENT: a pair whose wrong form equals its
+        // right form teaches nothing and would make the checklist match correct
+        // output.
         expect(ex.wrong.trim().length, `${inv.id}: empty wrong`).toBeGreaterThan(0);
         expect(ex.right.trim().length, `${inv.id}: empty right`).toBeGreaterThan(0);
         expect(ex.wrong, `${inv.id}: wrong and right are identical`).not.toBe(ex.right);
       }
     }
+  });
+
+  // Greppability was asserted in a doc comment and enforced nowhere, which is the
+  // failure this repo already learned from lint-silent-drops' waivers: prose does
+  // not hold. Task 9's self-audit is line-oriented, so these three properties are
+  // what make "search the output for the wrong form, expect zero hits" sound.
+  it('every wrong form is mechanically searchable', () => {
+    const parsed = listInvariants();
+    expect(parsed.length).toBeGreaterThan(0);
+    let checked = 0;
+    for (const inv of parsed) {
+      for (const ex of inv.examples) {
+        checked++;
+        // 1. Single line: a line-oriented grep cannot match across a newline.
+        expect(ex.wrong.includes('\n'), `${inv.id}: multi-line wrong: ${ex.wrong}`).toBe(false);
+        // 2. No line comment. A `wrong` that only reads as wrong because of an
+        //    explanatory comment can never appear in generated output, so it
+        //    would be unfindable by construction.
+        //    NOT a bare `includes('//')`: `https://api.example.com` contains one
+        //    legitimately, and the naive check false-fires on a real URL in a
+        //    fetch example. Match `//` only where it is NOT scheme punctuation.
+        expect(/(^|[^:])\/\//.test(ex.wrong), `${inv.id}: wrong carries a comment: ${ex.wrong}`).toBe(false);
+        // 3. No line of `wrong` may appear verbatim in `right`, or the audit
+        //    fires on CORRECT output. This is what caught upgrade-race, whose
+        //    wrong form was a line-subset of its own right form.
+        for (const line of ex.wrong.split('\n')) {
+          const needle = line.trim();
+          expect(ex.right.includes(needle), `${inv.id}: wrong line appears verbatim in right: ${needle}`).toBe(false);
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(parsed.length - 1);
   });
 });

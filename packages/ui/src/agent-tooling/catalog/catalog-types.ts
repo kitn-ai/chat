@@ -48,11 +48,25 @@ export const Invariant = z.object({
     targets: z.array(DeliveryTarget).optional(),
   }),
   enforcedBy: EnforcedBy,
-  status: z.enum(['enforced', 'open']),
+  /**
+   * `enforced` — a guard covers what the statement prescribes.
+   * `partial`  — a guard covers PART of it and the rest is uncovered; the
+   *              statement must say which half is which. Added because two
+   *              records were `enforced` while their headline consumer-facing
+   *              prescription had no check at all, and `status` is what a
+   *              downstream tool reads when it does not read the prose.
+   * `open`     — nothing covers it. Travels with `enforcedBy.kind === 'none'`,
+   *              in both directions, asserted in invariants.test.ts.
+   */
+  status: z.enum(['enforced', 'partial', 'open']),
   diagnosis: z.array(Diagnosis).default([]),
-  // Defaulted, not required, so a record authored before the field existed still
-  // parses. `invariants.test.ts` is what makes it non-optional in practice: every
-  // ENFORCED invariant must carry at least one pair.
+  // `.default([])` mirrors `diagnosis` above for consistency, and nothing more:
+  // it is NOT a compatibility affordance. `z.infer` makes `examples` required on
+  // `TInvariant`, and the only caller is `listInvariants()` over an in-repo
+  // literal — no external or serialized input reaches `Invariant.parse`, so
+  // there is no unmigrated record for the default to rescue. What actually makes
+  // the field mandatory is invariants.test.ts, which requires at least one pair
+  // on EVERY record and constrains the shape of each.
   examples: z.array(InvariantExample).default([]),
 });
 
