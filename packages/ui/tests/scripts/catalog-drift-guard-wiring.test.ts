@@ -256,6 +256,9 @@ describe('the two readLabsTitles implementations cannot diverge', () => {
       `const s = 'Labs/NotATitle';\nconst m = { title: 'Labs/Real' };${META}`,
       // A meta nobody default-exports is not a registration.
       `const m = { title: 'Labs/Orphan' };`,
+      // Valid TS, invalid TSX — covers the ScriptKind-by-extension split.
+      `const n = <number>x;\nconst m = { title: 'Labs/Real' };${META}`,
+      `const f = <T>(x: T) => x;\nconst m = { title: 'Labs/Real' };${META}`,
       '',
       '/* unterminated block comment',
     ];
@@ -271,6 +274,14 @@ describe('the two readLabsTitles implementations cannot diverge', () => {
     expect(titlesInSrc(cases[4], 'probe.tsx'), "a story's args title was read as a registration").toEqual(['Labs/Real']);
     expect(titlesInSrc(cases[5], 'probe.tsx'), 'a nested Labs/Apps conjured a phantom app').toEqual(['Labs/Real']);
     expect(titlesInSrc(cases[12], 'probe.tsx'), 'a meta that is not default-exported was read').toEqual([]);
+    // ScriptKind by extension: the same source must yield the title as .ts and
+    // nothing as .tsx, in BOTH copies. A shared regression here is exactly the
+    // class the divergence check cannot see, so it is asserted by name.
+    for (const src of [cases[13], cases[14]]) {
+      expect(titlesInSrc(src, 'x.stories.ts'), 'a .stories.ts lost its title').toEqual(['Labs/Real']);
+      expect(titlesInLint(src, 'x.stories.ts'), 'a .stories.ts lost its title (lint copy)').toEqual(['Labs/Real']);
+      expect(titlesInSrc(src, 'x.stories.tsx'), 'invalid TSX should yield nothing').toEqual([]);
+    }
 
     for (const c of cases) {
       expect(titlesInLint(c, 'probe.tsx'), `disagreement on: ${JSON.stringify(c)}`).toEqual(titlesInSrc(c, 'probe.tsx'));

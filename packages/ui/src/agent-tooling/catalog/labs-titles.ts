@@ -38,7 +38,14 @@ import ts from 'typescript';
  * AND 4 above, both of which were present in both copies at once.
  */
 export function readLabsTitles(text: string, fileName = 'story.tsx'): string[] {
-  const source = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, false, ts.ScriptKind.TSX);
+  // ScriptKind BY EXTENSION. Parsing a `.stories.ts` as TSX loses every title
+  // after a `<number>x` cast or a bare `<T>(x) => x` generic arrow, because
+  // neither is valid TSX. tsc parses that file as TS, accepts it and stays
+  // green, so typecheck does NOT contain this one — the lint would silently
+  // drop the registration on a file CI calls fine. storyExtensions() already
+  // admits `.ts` because the Storybook glob does.
+  const kind = fileName.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+  const source = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, false, kind);
   const meta = metaObject(source);
   if (!meta) return [];
   const titles: string[] = [];
@@ -72,18 +79,19 @@ export function readLabsTitles(text: string, fileName = 'story.tsx'): string[] {
  *
  * Handles the two shapes in the tree and their wrappers:
  * `const meta = {…} satisfies Meta; export default meta;` and
- * `export default {…} as Meta;` — `satisfies`, `as`, angle-bracket assertions
- * and parentheses are all unwrapped.
+ * `export default {…} as Meta;`
+ * `satisfies`, `as` and parentheses are unwrapped. An angle-bracket assertion
+ * (`export default <Meta>{…}`) deliberately is NOT: every story file is parsed
+ * as TSX, where `<Meta>{…}` is JSX and never a type assertion, so a branch for
+ * it would be dead code. Measured: that spelling returns []. It is also not a
+ * spelling any story in the tree uses.
  */
 function metaObject(source: ts.SourceFile): ts.ObjectLiteralExpression | null {
   const unwrap = (expr: ts.Expression | undefined): ts.Expression | undefined => {
     let cur = expr;
     while (
       cur &&
-      (ts.isAsExpression(cur) ||
-        ts.isSatisfiesExpression(cur) ||
-        ts.isParenthesizedExpression(cur) ||
-        ts.isTypeAssertionExpression(cur))
+      (ts.isAsExpression(cur) || ts.isSatisfiesExpression(cur) || ts.isParenthesizedExpression(cur))
     ) {
       cur = cur.expression;
     }

@@ -122,16 +122,26 @@
 //     meta returns the title anyway. A file whose meta stops parsing therefore
 //     looks like a file with no registration — silently. The only backstop is
 //     the `zero Labs titles` floor, which needs EVERY file to go dark before it
-//     fires, so one corrupted story is invisible. Reading the diagnostics would
-//     close this and has not been done.
-// 17. `.stories.ts` IS PARSED AS TSX. `ScriptKind.TSX` is passed for every file
-//     regardless of extension, and in TSX an angle-bracket type assertion is
-//     not valid syntax. Measured on a `.stories.ts` fixture: `const n =
-//     <number>x;` before the meta swallows the title (`[]`), while a
-//     trailing-comma generic arrow `<T,>(x) => x` parses fine — so it is the
-//     CAST that defeats it, not generics generally. No `.stories.ts` exists
-//     today, but `storyExtensions()` reads the Storybook glob and that glob
-//     already admits them, so this becomes live the day someone adds one.
+//     fires, so one corrupted story is invisible HERE. What actually contains it
+//     is `typecheck`: a story file that does not parse fails tsc at exit 2 in
+//     the required CI job, so a corrupted story cannot reach main while this
+//     lint stays quiet about it. Reading `parseDiagnostics` would make the lint
+//     self-sufficient and is deliberately not done — adjudicated as
+//     gold-plating over a backstop that already exists.
+// 17. HISTORICAL, fixed: `.stories.ts` used to be parsed as TSX. `ScriptKind`
+//     is now chosen by extension, so this is recorded rather than live. What it
+//     was: every file was parsed as TSX regardless of extension, and TSX admits
+//     neither an angle-bracket cast nor a bare generic arrow. Measured on a
+//     `.stories.ts` fixture, both `const n = <number>x;` AND `const f =
+//     <T>(x: T) => x;` above the meta swallowed the title (`[]`), while the TSX
+//     workarounds `<T,>` and `<T extends unknown>` parsed fine — which is the
+//     wrong way round for safety, because the workarounds are what people learn
+//     AFTER being bitten and the bare generic is what they write first. It was
+//     fixed rather than documented because `typecheck` does NOT contain it: tsc
+//     reads a `.ts` as TS, accepts both spellings and stays green, so the lint
+//     would have silently dropped a registration from a file CI called fine.
+//     No `.stories.ts` exists today; `storyExtensions()` admits them because the
+//     Storybook glob does, so nothing had to be decided for it to go live.
 // 18. `readWireExports` HAS BOTH FAILURE DIRECTIONS, and it is the one function
 //     here rewritten without being documented until now. Measured:
 //     `export * from './x'` yields `[]` and `export const r = makeReader()`
@@ -235,7 +245,14 @@ async function loadAuthored(catalogDir) {
  * catches drift and is blind to a bug they share.
  */
 export function readLabsTitles(text, fileName = 'story.tsx') {
-  const source = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, false, ts.ScriptKind.TSX);
+  // ScriptKind BY EXTENSION. Parsing a `.stories.ts` as TSX loses every title
+  // after a `<number>x` cast or a bare `<T>(x) => x` generic arrow, because
+  // neither is valid TSX. tsc parses that file as TS, accepts it and stays
+  // green, so typecheck does NOT contain this one — the lint would silently
+  // drop the registration on a file CI calls fine. storyExtensions() already
+  // admits `.ts` because the Storybook glob does.
+  const kind = fileName.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+  const source = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, false, kind);
   const meta = metaObject(source);
   if (!meta) return [];
   const titles = [];
@@ -266,17 +283,18 @@ export function readLabsTitles(text, fileName = 'story.tsx') {
  * Handles the two shapes in the tree and their wrappers:
  *   `const meta = {…} satisfies Meta; export default meta;`  and
  *   `export default {…} as Meta;`
- * `satisfies`, `as`, angle-bracket assertions and parentheses are unwrapped.
+ * `satisfies`, `as` and parentheses are unwrapped. An angle-bracket assertion
+ * (`export default <Meta>{…}`) deliberately is NOT: every story file is parsed
+ * as TSX, where `<Meta>{…}` is JSX and never a type assertion, so a branch for
+ * it would be dead code. Measured: that spelling returns []. It is also not a
+ * spelling any story in the tree uses.
  */
 function metaObject(source) {
   const unwrap = (expr) => {
     let cur = expr;
     while (
       cur &&
-      (ts.isAsExpression(cur) ||
-        ts.isSatisfiesExpression(cur) ||
-        ts.isParenthesizedExpression(cur) ||
-        ts.isTypeAssertionExpression(cur))
+      (ts.isAsExpression(cur) || ts.isSatisfiesExpression(cur) || ts.isParenthesizedExpression(cur))
     ) {
       cur = cur.expression;
     }
@@ -930,9 +948,17 @@ function selfTest() {
     ['`satisfies Meta` on the meta is unwrapped', "const m = { title: 'Labs/Real' } satisfies Meta;\nexport default m;", ['Labs/Real']],
     ['an inline `export default {…} as Meta` is read', "export default { title: 'Labs/Real' } as Meta;", ['Labs/Real']],
     ['a directly default-exported object literal is read', "export default { title: 'Labs/Real' };", ['Labs/Real']],
+    // ScriptKind by extension. Both spellings below are valid TS and INVALID
+    // TSX, so parsing a .stories.ts as TSX silently dropped the title. tsc
+    // reads the file as TS and stays green, so typecheck never covered this.
+    ['a .stories.ts survives an angle-bracket cast above the meta', "const n = <number>x;\nconst m = { title: 'Labs/Real' };\nexport default m;", ['Labs/Real'], 'x.stories.ts'],
+    ['a .stories.ts survives a BARE generic arrow above the meta', "const f = <T>(x: T) => x;\nconst m = { title: 'Labs/Real' };\nexport default m;", ['Labs/Real'], 'x.stories.ts'],
+    // COUNTER-CONTROL: in a REAL .tsx those spellings are genuine syntax errors,
+    // so yielding nothing there is correct, not a regression.
+    ['the same cast in a .tsx yields nothing, which is correct', "const n = <number>x;\nconst m = { title: 'Labs/Real' };\nexport default m;", [], 'x.stories.tsx'],
   ];
-  for (const [name, src, want] of parserCases) {
-    const got = readLabsTitles(src, 'probe.tsx');
+  for (const [name, src, want, fileName] of parserCases) {
+    const got = readLabsTitles(src, fileName ?? 'probe.tsx');
     const ok = JSON.stringify(got) === JSON.stringify(want);
     console.log(`${ok ? '✓' : '✗'} self-test: ${name}${ok ? '' : ` (wanted ${JSON.stringify(want)}, got ${JSON.stringify(got)})`}`);
     if (!ok) failed++;
