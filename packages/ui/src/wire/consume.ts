@@ -474,6 +474,25 @@ export async function consumeModelStream(
   // fixes: zero chunks means nothing parsed as a frame at all, while chunks with
   // no parts means the frames parsed and carried nothing THIS reader reads --
   // the wrong-dialect case, and the one this option makes common.
+  // ORDER IS LOAD-BEARING: settle runs FIRST, because settle PRODUCES PARTS.
+  //
+  // A tool call that never held both an id and a non-empty name is announced
+  // only inside `settle`, so a parts map read before it is not final. Judged
+  // there, a turn whose only content is such a call looked empty, and the
+  // damage went both ways: the guard's own prose was fed back in as
+  // `streamError` and REPLACED the call's accurate "arrived with no function
+  // name" diagnosis, while `wire.close` reported an emptiness code beside a
+  // produced part. Both reads now happen after settle, so the parts map, the
+  // error code and the tool's own error agree by construction.
+  //
+  // `settle` still receives only a GENUINE in-band stream error, exactly as it
+  // did before the guard was widened -- an emptiness diagnosis must never flow
+  // into it. `stopReason` is recomputed below because the guard can set the
+  // error that makes it 'error'; settle only branches on 'length', which the
+  // guard cannot produce, so the pre-guard value is the right one to pass.
+  const settleStopReason = normalizeStopReason(finishReason) ?? (error ? 'error' : undefined);
+  const toolCalls = tools.settle(settleStopReason, error?.message);
+
   const partsTotal = Object.values(recorder.partCounts()).reduce((a, b) => a + b, 0);
   if (!error && partsTotal === 0) {
     error =
@@ -492,14 +511,17 @@ export async function consumeModelStream(
               `The stream completed and ${chunkCount} chunk(s) were parsed, but none carried content ` +
               'this reader reads, so no message part was produced. If the endpoint streams a different ' +
               'dialect (or carries its payload in a field this format does not read), switch to the ' +
-              'matching reader.',
+              'matching reader. A model that returned no content at all also lands here.',
           };
   }
 
   // REWORK 3. `finishReason` is reported verbatim; `stopReason` is what the
   // adapter itself branches on, so no OpenAI literal leaks into adapter logic.
+  //
+  // Recomputed after the guard: an emptiness error is still an error, and a turn
+  // that reports one must report `stopReason: 'error'` beside it as it always
+  // has. Identical to `settleStopReason` whenever the guard stayed silent.
   const stopReason = normalizeStopReason(finishReason) ?? (error ? 'error' : undefined);
-  const toolCalls = tools.settle(stopReason, error?.message);
 
   if (wireDiagnosticsActive()) {
     // `_frames` is supplied by `readModelStream` only. A direct caller had no
