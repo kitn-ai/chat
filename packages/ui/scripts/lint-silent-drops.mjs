@@ -65,6 +65,13 @@ import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { dirname, join, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
+// The variant list is read by ONE shared derivation, so this guard and the
+// catalog generator can never disagree about what `MessagePart` declares.
+import {
+  readVariants,
+  MIN_VARIANTS as SHARED_MIN_VARIANTS,
+  UNION_NAME,
+} from './lib/message-part-variants.mjs';
 
 // Anchored to THIS FILE, not the cwd. CLAUDE.md tells everyone to run from the
 // repo root while `npm run` sets the cwd to the package; verify-react-wrappers
@@ -81,49 +88,12 @@ const SELF_TEST = argv.includes('--self-test');
 
 const UNION_FILE = join(PKG_ROOT, 'src/elements/chat-types.ts');
 const WIRE_DIR = join(PKG_ROOT, 'src/wire');
-const UNION_NAME = 'MessagePart';
 
-// A parse that yields fewer than this many variants means the declaration moved
-// or changed shape and this script is reading something else. Six today; the
-// floor is what catches a parse that silently degraded to a couple of members.
-const MIN_VARIANTS = 4;
+// The degradation floor for the parse; see `scripts/lib/message-part-variants.mjs`.
+const MIN_VARIANTS = SHARED_MIN_VARIANTS;
 
 const parse = (path, text) =>
   ts.createSourceFile(path, text, ts.ScriptTarget.Latest, /* setParentNodes */ true, ts.ScriptKind.TS);
-
-/** The declared variant literals of `MessagePart`, read from the type itself so
- *  a new member is picked up with no edit here. */
-function readVariants(text) {
-  const sf = parse(UNION_FILE, text);
-  const found = [];
-  const visit = (node) => {
-    if (
-      ts.isTypeAliasDeclaration(node) &&
-      node.name.text === UNION_NAME &&
-      ts.isUnionTypeNode(node.type)
-    ) {
-      for (const member of node.type.types) {
-        if (!ts.isTypeLiteralNode(member)) continue;
-        for (const prop of member.members) {
-          if (
-            ts.isPropertySignature(prop) &&
-            prop.name &&
-            ts.isIdentifier(prop.name) &&
-            prop.name.text === 'type' &&
-            prop.type &&
-            ts.isLiteralTypeNode(prop.type) &&
-            ts.isStringLiteral(prop.type.literal)
-          ) {
-            found.push(prop.type.literal.text);
-          }
-        }
-      }
-    }
-    ts.forEachChild(node, visit);
-  };
-  visit(sf);
-  return found;
-}
 
 const isTypeAccess = (node) =>
   ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.name) && node.name.text === 'type';
