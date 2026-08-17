@@ -107,14 +107,38 @@
 //     and its failure is still discarded. This is a class the repo's other
 //     wiring guards share, not specific to this one, and it wants a single
 //     workflow-wide check rather than a fourth copy of the same assertion here.
-// 15. A BUG BOTH COPIES SHARE. The equivalence guard on `readLabsTitles`
-//     catches DIVERGENCE between the .mjs and .ts implementations; it is
-//     structurally blind to a mistake they agree on. Measured the hard way:
-//     both copies of the previous hand-rolled stripper carried the identical
-//     apostrophe defect and therefore agreed perfectly on all 115 story files
-//     while both were wrong. That is why the fix was to delegate to the
-//     TypeScript parser rather than to write a better scanner twice — the guard
-//     is the backstop against drift, never the reason to trust either side.
+// 15. A BUG BOTH COPIES SHARE — CURRENT STATE, not history. The equivalence
+//     guard on `readLabsTitles` catches DIVERGENCE between the .mjs and .ts
+//     implementations and is structurally blind to a mistake they agree on. It
+//     has now been green through TWO real defects that were present in both
+//     copies at once: the hand-rolled stripper's apostrophe bug, and the
+//     any-position `title:` read that let `{ args: { title: 'Labs/Apps' } }`
+//     conjure a phantom app. Every limitation from item 16 down is likewise
+//     shared by both copies and invisible to that guard. It is the backstop
+//     against drift, never the reason to trust either side.
+// 16. A STORY FILE THAT DOES NOT PARSE NEVER THROWS. `ts.createSourceFile`
+//     error-recovers and this lint discards `parseDiagnostics` entirely.
+//     Measured: a badly broken file returns `[]`, and a file broken AFTER the
+//     meta returns the title anyway. A file whose meta stops parsing therefore
+//     looks like a file with no registration — silently. The only backstop is
+//     the `zero Labs titles` floor, which needs EVERY file to go dark before it
+//     fires, so one corrupted story is invisible. Reading the diagnostics would
+//     close this and has not been done.
+// 17. `.stories.ts` IS PARSED AS TSX. `ScriptKind.TSX` is passed for every file
+//     regardless of extension, and in TSX an angle-bracket type assertion is
+//     not valid syntax. Measured on a `.stories.ts` fixture: `const n =
+//     <number>x;` before the meta swallows the title (`[]`), while a
+//     trailing-comma generic arrow `<T,>(x) => x` parses fine — so it is the
+//     CAST that defeats it, not generics generally. No `.stories.ts` exists
+//     today, but `storyExtensions()` reads the Storybook glob and that glob
+//     already admits them, so this becomes live the day someone adds one.
+// 18. `readWireExports` HAS BOTH FAILURE DIRECTIONS, and it is the one function
+//     here rewritten without being documented until now. Measured:
+//     `export * from './x'` yields `[]` and `export const r = makeReader()`
+//     yields `[]` — both FALSE REDs, a real exported reader reported missing
+//     (loud, and wrong). `export namespace N { export function r(){} }` yields
+//     `['r']` — a FALSE ACCEPT, since `r` is not importable at the module's top
+//     level. The wire module uses none of these shapes today.
 //
 // DELIBERATELY NOT ASSERTED HERE: whether a wiring pair means anything (item 2).
 // This lint resolves names and genuinely cannot judge semantics; the executed
@@ -189,43 +213,89 @@ async function loadAuthored(catalogDir) {
 }
 
 /**
- * Every `title:` value beginning with `Labs/` that a story file actually
- * REGISTERS — parsed, never matched.
+ * The `Labs/…` title a story file REGISTERS: the `title` property of its
+ * default-exported meta object, parsed rather than matched.
  *
- * ★ WHY A PARSER. Two text-based versions of this shipped and both were
- * defeated. A raw regex counted PROSE as a registration. A hand-rolled comment
- * stripper fixed that and introduced a worse bug: JSX text like `Don't have an
- * account?` put the scanner into single-quote state, which it never left, so
- * every `//` after it survived stripping — live in `proof-auth.stories.tsx` and
- * `ui/pane-grid.stories.tsx`, where appending ONE comment made an invented
- * `GHOSTPROBE` row resolve at exit 0. The equivalence guard between the two
- * copies could not see it: both carried the identical bug, so they agreed.
+ * ★ Four versions of this were defeated before this spelling. A raw regex
+ * counted PROSE as a registration. A hand-rolled comment stripper replaced that
+ * with a worse bug (JSX `Don't` left it stuck in string state, so later comments
+ * survived) — live in three story files, and the equivalence guard between the
+ * two copies could not see it because both carried it. And parsing every
+ * `title:` in the file was still too broad: a `title` nested in a story's `args`
+ * is not a registration, and `{ args: { title: 'Labs/Apps' } }` in a non-app
+ * story conjured a phantom app that satisfied this lint and surfaces.test.ts
+ * together, with no comment involved.
  *
- * Comments are TRIVIA and never nodes, so prose is excluded by construction;
- * apostrophes and escapes are the real lexer's problem. Same reason
- * lint-silent-drops.mjs reads the MessagePart union this way.
+ * Comments are TRIVIA and never nodes; apostrophes are the real lexer's problem;
+ * a title that is not the meta's is not a registration. Same parser idiom
+ * lint-silent-drops.mjs uses to read the MessagePart union.
  *
  * REGISTERED COPY of src/agent-tooling/catalog/labs-titles.ts — a .mjs cannot
- * import a .ts at runtime. The guard-wiring test asserts the two agree.
+ * import a .ts at runtime. The guard-wiring test asserts the two agree, which
+ * catches drift and is blind to a bug they share.
  */
 export function readLabsTitles(text, fileName = 'story.tsx') {
   const source = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, false, ts.ScriptKind.TSX);
+  const meta = metaObject(source);
+  if (!meta) return [];
   const titles = [];
-  const visit = (node) => {
-    if (ts.isPropertyAssignment(node)) {
-      const name = node.name;
-      const key = ts.isIdentifier(name) || ts.isStringLiteral(name) ? name.text : undefined;
-      if (key === 'title') {
-        const init = node.initializer;
-        if (ts.isStringLiteral(init) || ts.isNoSubstitutionTemplateLiteral(init)) {
-          if (init.text.startsWith('Labs/')) titles.push(init.text);
-        }
-      }
+  for (const prop of meta.properties) {
+    if (!ts.isPropertyAssignment(prop)) continue;
+    const key = ts.isIdentifier(prop.name) || ts.isStringLiteral(prop.name) ? prop.name.text : undefined;
+    if (key !== 'title') continue;
+    const init = prop.initializer;
+    if (ts.isStringLiteral(init) || ts.isNoSubstitutionTemplateLiteral(init)) {
+      if (init.text.startsWith('Labs/')) titles.push(init.text);
     }
-    ts.forEachChild(node, visit);
-  };
-  ts.forEachChild(source, visit);
+  }
   return titles;
+}
+
+/**
+ * The story file's DEFAULT-EXPORTED meta object, or null.
+ *
+ * Walking every `title:` in the file was the narrower defect: a `title` nested
+ * in a story's `args` is not a registration, and Storybook never reads it as
+ * one. Measured before this existed, both exit 0:
+ *   export const GhostProbeStory = { args: { title: 'Labs/GHOSTPROBE' } };
+ * made an invented inventory row resolve, and the `Labs/Apps` spelling of the
+ * same shape produced a PHANTOM app that satisfied the lint and
+ * surfaces.test.ts together — the exact both-sides-green shape this whole guard
+ * exists to prevent, reached without a single comment.
+ *
+ * Handles the two shapes in the tree and their wrappers:
+ *   `const meta = {…} satisfies Meta; export default meta;`  and
+ *   `export default {…} as Meta;`
+ * `satisfies`, `as`, angle-bracket assertions and parentheses are unwrapped.
+ */
+function metaObject(source) {
+  const unwrap = (expr) => {
+    let cur = expr;
+    while (
+      cur &&
+      (ts.isAsExpression(cur) ||
+        ts.isSatisfiesExpression(cur) ||
+        ts.isParenthesizedExpression(cur) ||
+        ts.isTypeAssertionExpression(cur))
+    ) {
+      cur = cur.expression;
+    }
+    return cur;
+  };
+  const topLevel = new Map();
+  let defaultExport;
+  for (const stmt of source.statements) {
+    if (ts.isVariableStatement(stmt)) {
+      for (const d of stmt.declarationList.declarations) {
+        if (ts.isIdentifier(d.name) && d.initializer) topLevel.set(d.name.text, d.initializer);
+      }
+    } else if (ts.isExportAssignment(stmt) && !stmt.isExportEquals) {
+      defaultExport = stmt.expression;
+    }
+  }
+  let expr = unwrap(defaultExport);
+  if (expr && ts.isIdentifier(expr)) expr = unwrap(topLevel.get(expr.text));
+  return expr && ts.isObjectLiteralExpression(expr) ? expr : null;
 }
 
 /**
@@ -437,14 +507,25 @@ export function check({
   // exit 0. Recognising a closed set and failing on anything else is the only
   // version that cannot be walked around by inventing a new spelling.
   //
-  // FREE PROSE IS A FORM, and a legitimate one — 'composition validity',
-  // 'wiring topology'. It is admitted by having NO structured prefix at all,
-  // which is why `the honesty bound: refuse what is not composable…` still
-  // passes: `the honesty bound` is not a known prefix and the entry is read as
-  // prose. What is refused is an entry whose leading word looks like it is
-  // TRYING to be structured — a known prefix misspelled, or a prefix nobody has
-  // registered. The zero-refs floor stays as the second backstop (the
-  // lint:cdn-pins rule: a scan matching nothing means the scanner broke).
+  // WHAT IS ACTUALLY REFUSED, stated precisely because the previous version of
+  // this comment overstated it. It claimed to refuse "a known prefix misspelled,
+  // OR a prefix nobody has registered". The second half is FALSE: an entry is
+  // only ever examined if its leading word appears in STRUCTURED_STEM below, so
+  // an unregistered prefix built from a different word — `recipe:`, `element:`,
+  // `scenario:` — is silently skipped exactly like prose. The real rule is:
+  //
+  //   refused  = leading word IS a known stem, AND (a separator follows, OR the
+  //              remainder is an exact invariant id), AND it is not an exact
+  //              registered prefix
+  //   admitted = everything else, including prose and unrecognised prefixes
+  //              whose first word is not a stem
+  //
+  // FREE PROSE IS A LEGITIMATE FORM — 'composition validity', 'wiring topology'
+  // — which is why `the honesty bound: refuse what is not composable…` passes.
+  // Widening the stem list is how a new structured prefix gets covered; nothing
+  // here detects one nobody thought to add. The zero-refs floor is the second
+  // backstop (the lint:cdn-pins rule: a scan matching nothing means the scanner
+  // broke, not that the tree is clean).
   const INVARIANT_REF = 'invariant:';
   // Registered structured prefixes. Adding one here is deliberate; that is the point.
   const KNOWN_PREFIXES = ['invariant:', 'backend:', 'delivery target:'];
@@ -826,17 +907,29 @@ function selfTest() {
   // so nothing above can observe a broken reader. These are the cases that
   // defeated the two text-based versions.
   const parserCases = [
-    ['a title in a LINE comment is not a registration', "// title: 'Labs/GHOST'\nconst m = { title: 'Labs/Real' };", ['Labs/Real']],
-    ['a title in a BLOCK comment is not a registration', "/* title: 'Labs/GHOST' */\nconst m = { title: 'Labs/Real' };", ['Labs/Real']],
+    ['a title in a LINE comment is not a registration', "// title: 'Labs/GHOST'\nconst m = { title: 'Labs/Real' };\nexport default m;", ['Labs/Real']],
+    ['a title in a BLOCK comment is not a registration', "/* title: 'Labs/GHOST' */\nconst m = { title: 'Labs/Real' };\nexport default m;", ['Labs/Real']],
     // ★ THE APOSTROPHE CLASS. JSX text containing an unbalanced `'` defeated the
     // hand-rolled stripper: it entered string state and never left, so every
     // later comment survived and its titles counted. Live in three story files.
-    ['an unbalanced apostrophe in JSX does not leak a commented title', "const a = <p>Don't have an account?</p>;\n// title: 'Labs/GHOST'\nconst m = { title: 'Labs/Real' };", ['Labs/Real']],
-    ['a title AFTER an apostrophe is still found', "const a = <p>Don't panic</p>;\nconst m = { title: 'Labs/Real' };", ['Labs/Real']],
-    ['a DOUBLE-quoted title is read (the regex saw only single quotes)', 'const m = { title: "Labs/Real" };', ['Labs/Real']],
-    ['a BACKTICK title is read', 'const m = { title: `Labs/Real` };', ['Labs/Real']],
-    ['a non-title string starting with Labs/ is not a registration', "const s = 'Labs/NotATitle';\nconst m = { title: 'Labs/Real' };", ['Labs/Real']],
-    ['a file with no Labs title yields nothing', "const m = { title: 'Components/Thing' };", []],
+    ['an unbalanced apostrophe in JSX does not leak a commented title', "const a = <p>Don't have an account?</p>;\n// title: 'Labs/GHOST'\nconst m = { title: 'Labs/Real' };\nexport default m;", ['Labs/Real']],
+    ['a title AFTER an apostrophe is still found', "const a = <p>Don't panic</p>;\nconst m = { title: 'Labs/Real' };\nexport default m;", ['Labs/Real']],
+    ['a DOUBLE-quoted title is read (the regex saw only single quotes)', 'const m = { title: "Labs/Real" };\nexport default m;', ['Labs/Real']],
+    ['a BACKTICK title is read', 'const m = { title: `Labs/Real` };\nexport default m;', ['Labs/Real']],
+    ['a non-title string starting with Labs/ is not a registration', "const s = 'Labs/NotATitle';\nconst m = { title: 'Labs/Real' };\nexport default m;", ['Labs/Real']],
+    ['a file with no Labs title yields nothing', "const m = { title: 'Components/Thing' };\nexport default m;", []],
+    // ★ THE NESTED-TITLE CLASS. A `title` inside a story's args is not a
+    // registration. Both spellings below were live defeats: the first made an
+    // invented inventory row resolve, the second conjured a phantom app that
+    // satisfied this lint and surfaces.test.ts at once, with no comment involved.
+    ['a title in a story\'s args is NOT a registration', "const m = { title: 'Labs/Real' };\nexport default m;\nexport const S = { args: { title: 'Labs/GHOSTPROBE' } };", ['Labs/Real']],
+    ['a nested Labs/Apps in args does not conjure an app', "const m = { title: 'Labs/Proofs' };\nexport default m;\nexport const S = { args: { title: 'Labs/Apps' } };", ['Labs/Proofs']],
+    ['a meta that is not default-exported is not a registration', "const m = { title: 'Labs/Orphan' };", []],
+    // The wrappers the real tree uses, so the restriction is not accidentally
+    // narrower than the files it has to read.
+    ['`satisfies Meta` on the meta is unwrapped', "const m = { title: 'Labs/Real' } satisfies Meta;\nexport default m;", ['Labs/Real']],
+    ['an inline `export default {…} as Meta` is read', "export default { title: 'Labs/Real' } as Meta;", ['Labs/Real']],
+    ['a directly default-exported object literal is read', "export default { title: 'Labs/Real' };", ['Labs/Real']],
   ];
   for (const [name, src, want] of parserCases) {
     const got = readLabsTitles(src, 'probe.tsx');

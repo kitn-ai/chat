@@ -236,18 +236,26 @@ describe('the two readLabsTitles implementations cannot diverge', () => {
   });
 
   it('agree on the adversarial inputs the parser exists for', () => {
+    const META = '\nexport default m;';
     const cases = [
-      `// title: 'Labs/GHOST'\nconst meta = { title: 'Labs/Real' };`,
-      `/* title: 'Labs/GHOST' */\nconst m = { title: 'Labs/Real' };`,
+      `// title: 'Labs/GHOST'\nconst m = { title: 'Labs/Real' };${META}`,
+      `/* title: 'Labs/GHOST' */\nconst m = { title: 'Labs/Real' };${META}`,
       // ★ THE APOSTROPHE CLASS, which defeated the hand-rolled stripper in three
       // real story files while both copies of it agreed perfectly.
-      `const a = <p>Don't have an account?</p>;\n// title: 'Labs/GHOST'\nconst m = { title: 'Labs/Real' };`,
-      `const a = <p>Don't panic</p>;\nconst m = { title: 'Labs/Real' };`,
-      `const m = { title: "Labs/Real" };`,
-      'const m = { title: `Labs/Real` };',
-      `const url = 'https://example.com//x';\nconst m = { title: 'Labs/Real' };`,
-      "const s = 'it\\'s escaped // still a string';\nconst m = { title: 'Labs/Real' };",
-      `const s = 'Labs/NotATitle';`,
+      `const a = <p>Don't have an account?</p>;\n// title: 'Labs/GHOST'\nconst m = { title: 'Labs/Real' };${META}`,
+      `const a = <p>Don't panic</p>;\nconst m = { title: 'Labs/Real' };${META}`,
+      // ★ THE NESTED-TITLE CLASS, which defeated the any-position parse while
+      // both copies again agreed perfectly. No comment involved in either.
+      `const m = { title: 'Labs/Real' };${META}\nexport const S = { args: { title: 'Labs/GHOST' } };`,
+      `const m = { title: 'Labs/Real' };${META}\nexport const S = { args: { title: 'Labs/Apps' } };`,
+      `const m = { title: "Labs/Real" };${META}`,
+      'const m = { title: `Labs/Real` };\nexport default m;',
+      `const m = { title: 'Labs/Real' } satisfies Meta;${META}`,
+      `export default { title: 'Labs/Real' } as Meta;`,
+      `const url = 'https://example.com//x';\nconst m = { title: 'Labs/Real' };${META}`,
+      `const s = 'Labs/NotATitle';\nconst m = { title: 'Labs/Real' };${META}`,
+      // A meta nobody default-exports is not a registration.
+      `const m = { title: 'Labs/Orphan' };`,
       '',
       '/* unterminated block comment',
     ];
@@ -257,9 +265,12 @@ describe('the two readLabsTitles implementations cannot diverge', () => {
       cases.some((c) => titlesInSrc(c, 'probe.tsx').length > 0),
       'no adversarial case yielded a title — the corpus proves nothing',
     ).toBe(true);
-    // And the apostrophe case must specifically NOT leak the commented title.
-    const apostrophe = cases[2];
-    expect(titlesInSrc(apostrophe, 'probe.tsx'), 'a commented title leaked past an apostrophe').toEqual(['Labs/Real']);
+    // The two classes that defeated earlier versions get named assertions, not
+    // just "the copies agree" — both copies agreed while both were wrong.
+    expect(titlesInSrc(cases[2], 'probe.tsx'), 'a commented title leaked past an apostrophe').toEqual(['Labs/Real']);
+    expect(titlesInSrc(cases[4], 'probe.tsx'), "a story's args title was read as a registration").toEqual(['Labs/Real']);
+    expect(titlesInSrc(cases[5], 'probe.tsx'), 'a nested Labs/Apps conjured a phantom app').toEqual(['Labs/Real']);
+    expect(titlesInSrc(cases[12], 'probe.tsx'), 'a meta that is not default-exported was read').toEqual([]);
 
     for (const c of cases) {
       expect(titlesInLint(c, 'probe.tsx'), `disagreement on: ${JSON.stringify(c)}`).toEqual(titlesInSrc(c, 'probe.tsx'));
