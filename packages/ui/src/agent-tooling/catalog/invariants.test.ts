@@ -58,7 +58,10 @@ describe('invariant records', () => {
     // `partial` exists because two records were `enforced` while the half of
     // their statement a consumer acts on had no check. If nothing is partial,
     // either the enum member is dead or a record has been quietly promoted.
-    expect(parsed.filter((i) => i.status === 'partial').length).toBeGreaterThan(0);
+    expect(
+      parsed.filter((i) => i.status === 'partial').length,
+      'no record is status:partial — either the enum member is dead, or a record whose guard covers only half its statement has been promoted to enforced',
+    ).toBeGreaterThan(0);
   });
 
   it('upgrade-race stays open until #99 option B, and says so', () => {
@@ -110,13 +113,12 @@ describe('invariant records', () => {
         //    legitimately, and the naive check false-fires on a real URL in a
         //    fetch example. Match `//` only where it is NOT scheme punctuation.
         expect(/(^|[^:])\/\//.test(ex.wrong), `${inv.id}: wrong carries a comment: ${ex.wrong}`).toBe(false);
-        // 3. No line of `wrong` may appear verbatim in `right`, or the audit
-        //    fires on CORRECT output. This is what caught upgrade-race, whose
-        //    wrong form was a line-subset of its own right form.
-        for (const line of ex.wrong.split('\n')) {
-          const needle = line.trim();
-          expect(ex.right.includes(needle), `${inv.id}: wrong line appears verbatim in right: ${needle}`).toBe(false);
-        }
+        // 3. `wrong` must not appear verbatim in `right`, or the audit fires on
+        //    CORRECT output. This is what caught upgrade-race, whose wrong form
+        //    was a line-subset of its own right form. No per-line loop: rule 1
+        //    above already guarantees `wrong` is a single line.
+        const needle = ex.wrong.trim();
+        expect(ex.right.includes(needle), `${inv.id}: wrong appears verbatim in right: ${needle}`).toBe(false);
       }
     }
     expect(checked).toBeGreaterThan(parsed.length - 1);

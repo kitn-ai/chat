@@ -46,8 +46,8 @@ export const invariants: TInvariant[] = [
         note: 'Mutating in place never notifies. Neither does assigning the same array reference back — the setter compares references.',
       },
       {
-        wrong: 'messages[i].parts.push(part);',
-        right: 'chat.messages = messages.map((m, i) => (i === idx ? { ...m, parts: [...m.parts, part] } : m));',
+        wrong: 'messages[last].parts.push(part);',
+        right: 'chat.messages = messages.map((m, i) => (i === last ? { ...m, parts: [...m.parts, part] } : m));',
         note: 'This is the half that gets missed. A fresh array alone notifies, but the reference-keyed <For> keeps the old row until the EDITED ITEM is a new object too. createAssistantStream from @kitn.ai/ui/state already does both.',
       },
     ],
@@ -157,7 +157,7 @@ export const invariants: TInvariant[] = [
   {
     id: 'untrusted-model-output',
     statement:
-      "Everything the model produced is untrusted input: a MessagePart, card envelope or tool argument reaching innerHTML, an href or src, window.open or an iframe is a vulnerability. THE DEFECT IS NEVER A MISSING GUARD, IT IS WHICH PATH GOT IT — every one found so far sat on a path the CONSUMER controls while the model-controlled path beside it had none. So put a policy on the sink, and reuse one rather than inventing a variant: allow only http: and https: for anything navigable, and render model text as TEXT. Escaping is the correct rendering: the source text must stay VISIBLE as well as inert, because a filter that deleted it would pass the security check and be a worse UI. COVERAGE, and read this before trusting CI here: the three XSS suites are tests and ONLY tests. They run in the required test job, so the vectors they pin cannot come back — but NOTHING structural stops a NEW sink landing unguarded. No lint script in the package is about sinks, and the coupling map's unenforced list has no entry for the class. A new sink is caught in review or not at all.",
+      "Everything the model produced is untrusted input: a MessagePart, card envelope or tool argument reaching innerHTML, an href or src, window.open or an iframe is a vulnerability. THE DEFECT IS NEVER A MISSING GUARD, IT IS WHICH PATH GOT IT — every one found so far sat on a path the CONSUMER controls while the model-controlled path beside it had none. So put a policy on the sink, and MATCH THE LIST TO THE SINK rather than reaching for one universal list: http:, https: and mailto: for anything navigable the user may click, resolved against the page so ordinary relative links still work; http: and https: ONLY for a model-supplied citation, which is a reference to a page on the public web and has no business being relative. Those are two lists because there are two sinks — it is the same split the kit makes internally between SAFE_SCHEMES and RENDERABLE_SCHEMES, not a variant invented here. Whichever you use, parse inside a try/catch and RETURN FALSE on an unparseable URL: new URL() throws, and a throw at a sink crashes the render. And render model text as TEXT. Escaping is the correct rendering: the source text must stay VISIBLE as well as inert, because a filter that deleted it would pass the security check and be a worse UI. COVERAGE, and read this before trusting CI here: the three XSS suites are tests and ONLY tests. They run in the required test job, so the vectors they pin cannot come back — but NOTHING structural stops a NEW sink landing unguarded. No lint script in the package is about sinks, and the coupling map's unenforced list has no entry for the class. A new sink is caught in review or not at all.",
     appliesTo: {},
     // WHAT THE THREE SUITES DO NOT CATCH: they pin the vectors that were FOUND
     // (#246 markdown innerHTML, #247 the artifact's three URL sinks, and the
@@ -198,14 +198,14 @@ export const invariants: TInvariant[] = [
       {
         wrong: "window.open(card.url, '_blank');",
         right:
-          "if (['http:', 'https:'].includes(new URL(card.url, location.href).protocol)) window.open(card.url, '_blank', 'noopener,noreferrer');",
-        note: 'The allow-list is written inline because the kit does not export its own. REPO-INTERNAL ONLY: contributors working inside this package use isSafeUrl/SAFE_SCHEMES from src/primitives/card-routing.ts — neither is reachable from the published package, so never emit an import for them.',
+          "const isNavigable = (u) => { try { return ['http:', 'https:', 'mailto:'].includes(new URL(u, location.href).protocol); } catch { return false; } };\nif (isNavigable(card.url)) window.open(card.url, '_blank', 'noopener,noreferrer');",
+        note: "THE try/catch IS NOT OPTIONAL: new URL() THROWS on an unparseable input like 'http://[', and an uncaught throw here crashes the render instead of blocking the link — worse than the bug you are fixing. Returning false is the whole contract. Resolving against location.href is deliberate: a relative or fragment href inherits http: and is allowed, which is what makes ordinary links keep working. REPO-INTERNAL ONLY: contributors inside this package use isSafeUrl/SAFE_SCHEMES from src/primitives/card-routing.ts, which has this exact shape — neither is reachable from the published package, so never emit an import for them.",
       },
       {
         wrong: '<a href={source.url}>{source.title}</a>',
         right:
-          '{[\'http:\', \'https:\'].includes(new URL(source.url).protocol) ? <a href={source.url} rel="noopener noreferrer">{source.title}</a> : <span>{source.title}</span>}',
-        note: 'A model-supplied citation must be an absolute http(s) URL; new URL() with no base throws on a relative one, which is the behaviour you want here. The fallback keeps the title VISIBLE. REPO-INTERNAL equivalent: isRenderableLink in src/primitives/link-preview.ts, also not exported.',
+          'const isCitationUrl = (u) => { try { return [\'http:\', \'https:\'].includes(new URL(u).protocol); } catch { return false; } };\n{isCitationUrl(source.url) ? <a href={source.url} rel="noopener noreferrer">{source.title}</a> : <span>{source.title}</span>}',
+        note: "No base here, unlike the navigable case: a model-supplied citation is a reference to a page on the public web, so a relative path is not a citation and returns false. It must RETURN false, not throw — a throw escapes the ternary and the fallback never renders, which is exactly the deleted-text failure this invariant's own statement forbids. The <span> keeps the title VISIBLE. REPO-INTERNAL equivalent: isRenderableLink in src/primitives/link-preview.ts, also not exported.",
       },
     ],
   },
