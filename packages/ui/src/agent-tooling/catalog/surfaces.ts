@@ -29,12 +29,31 @@ import {
  * Audio Visualizers under src/components/, so a check scoped to src/elements/
  * alone would wrongly flag them).
  *
- * WHAT IS ENFORCED TODAY, in the present tense: only the `Labs/Apps` rows.
- * surfaces.test.ts reads those filenames off disk, so adding an app fails the
- * suite until it is sorted here. **Every other row is currently unchecked** —
- * misspell one, or delete it, and nothing in CI notices. Task 7's drift lint is
- * what will resolve the remaining titles against the tree; until it ships,
- * treat this list as reviewed prose, not as verified data.
+ * WHAT IS ENFORCED TODAY, in the present tense. THREE tiers, not two, and the
+ * difference between the first two is the difference between "CI notices" and
+ * "the title is true". Each row's tier is decided by which test in
+ * surfaces.test.ts covers it, so read that file, not this list, if they drift.
+ *
+ *  1. RESOLVED AGAINST THE TREE — the rows whose title is a `Labs/Apps` story
+ *     FILENAME. Test 2 reads those filenames off disk and requires each to be
+ *     sorted `surface`, so renaming or deleting one fails, AND the title is
+ *     genuinely checked against something that exists. Note the direction: it
+ *     asserts every app file has a row, not that every `surface` row has a
+ *     file, so an INVENTED extra `surface` row still passes.
+ *  2. PINNED BY NAME, NOT RESOLVED — `Proofs`, `Chat Slots`, `Prompt Input
+ *     Slots`, `Workspace Slots`. Test 3 asserts each of those exact titles is
+ *     present and sorted `corpus`, so a misspelling or a deletion DOES fail CI.
+ *     But the pin is a literal list inside the test, never a lookup against the
+ *     tree: rename the story these name and both sides stay green, so a row
+ *     here can name something that no longer exists. (That list is a copy of
+ *     these four titles; changing one means changing both.)
+ *  3. GENUINELY UNCHECKED — every remaining row. Misspell one or delete it and
+ *     nothing in CI notices.
+ *
+ * So Task 7's drift lint needs to RESOLVE tier 2 and tier 3 against the tree.
+ * Tier 2 already has existence-and-sort coverage and does not need it rebuilt;
+ * what it lacks is the resolution. Until that ships, treat tiers 2 and 3 as
+ * reviewed prose rather than verified data.
  */
 export const inventory: TInventoryEntry[] = [
   { title: 'claude-code', sort: 'surface', note: 'Labs/App, end-to-end composition' },

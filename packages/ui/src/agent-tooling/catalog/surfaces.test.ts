@@ -135,20 +135,24 @@ if (!Element.prototype.scrollTo) Element.prototype.scrollTo = () => {};
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
-/**
- * Every edge this file has actually driven, keyed the same way the recipes are.
- *
- * ORDER-DEPENDENT BY CONSTRUCTION: `probed` is module-level mutable state, and
- * the completeness test at the bottom only means anything if every probe above
- * it has already run. That holds under how this suite runs — vitest executes a
- * file's tests sequentially in declaration order — and it does NOT hold if you
- * reach for `.only`, `--shard`, `describe.concurrent`, or move the completeness
- * test above a probe. In those cases it reports a false failure (an edge that
- * was never reached), never a false pass, which is the safe direction; but if
- * you see it fail alone, check how you invoked the run before believing it.
- */
+/** One wiring edge as a single comparable string, keyed the same way for recipes and probes. */
 const edgeKey = (e: { from: string; event: string; to: string; property: string }) =>
   `${e.from} --${e.event}--> ${e.to}.${e.property}`;
+
+/**
+ * Every edge this file has actually driven.
+ *
+ * ORDER-DEPENDENT BY CONSTRUCTION: this is module-level mutable state, and the
+ * completeness test at the bottom only means anything if every probe above it
+ * has already run. That holds under how this suite runs — vitest executes a
+ * file's tests sequentially in declaration order — and it does NOT hold if you
+ * reach for `.only`, `describe.concurrent`, or move the completeness test above
+ * a probe. (`--shard` is safe: vitest shards by FILE, so a probe and the
+ * completeness test never land in different shards.) When it does break it
+ * reports a false failure — an edge that was never reached — never a false
+ * pass, which is the safe direction; but if you see it fail alone, check how
+ * you invoked the run before believing it.
+ */
 const probed = new Set<string>();
 
 /** Assert the edge is one the recipes really claim, then mark it driven. */
