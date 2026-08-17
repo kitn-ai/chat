@@ -3,8 +3,9 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { DerivedCatalog } from '../../src/agent-tooling/catalog/catalog-types';
+import { DerivedCatalog, DerivedElement } from '../../src/agent-tooling/catalog/catalog-types';
 import { listCapabilityGroups, listIntegrations } from '../../src/agent-tooling/registry';
+import { ELEMENT_META_KEYS } from '../../scripts/lib/element-meta-keys.mjs';
 
 const PKG = join(__dirname, '..', '..');
 const ARTIFACT = join(PKG, 'src/agent-tooling/catalog/derived.json');
@@ -66,11 +67,33 @@ describe('derived catalog artifact', () => {
    */
   it('element-meta.json still carries the keys the generator reads', () => {
     const m = meta() as Record<string, unknown[]>[];
-    for (const key of ['props', 'events', 'methods', 'parts', 'composedFrom', 'tokens']) {
+    for (const key of ELEMENT_META_KEYS) {
       expect(m.some((e) => Array.isArray(e[key]) && e[key].length > 0), `element-meta.json has no non-empty "${key}"`).toBe(
         true,
       );
     }
+  });
+
+  /**
+   * The key list above is the SAME array `gen-catalog.mjs` runs its own hard
+   * failure over — one list, imported by both, so neither can go on checking a
+   * key the other stopped reading. That sharing has a cost the hoist would
+   * otherwise leave unattended: deleting a key from `ELEMENT_META_KEYS` switches
+   * the check off on BOTH sides at once, which is the degrade-together shape
+   * that hid the original defect (generator and test both fell back to `?? []`,
+   * so `events`→`eventz` left everything green and empty).
+   *
+   * So the list is pinned against a source authored independently of it —
+   * `DerivedElement`'s zod shape, which is the catalog's OUTPUT contract and
+   * names the same six fields beside `tag`. Drop `tokens` from the shared list
+   * and this fails naming it, while the shape guard above quietly stops
+   * checking it. Order is asserted too: `toEqual` on arrays, not set equality,
+   * because the generator reports missing keys in list order and a reordered
+   * list is a diff worth seeing.
+   */
+  it('the shared key list matches the derived element contract, so it cannot be quietly shortened', () => {
+    const contractKeys = Object.keys(DerivedElement.shape).filter((k) => k !== 'tag');
+    expect(ELEMENT_META_KEYS).toEqual(contractKeys);
   });
 
   /**

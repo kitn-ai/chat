@@ -1,11 +1,13 @@
 // Emits src/agent-tooling/catalog/derived.json: the catalog's derived
 // ingredient layer.
 //
-// INTENDED to run inside build:api, so verify:generated regenerates and diffs it
-// — the element-manifest lesson is that a guard must invoke the script that
-// writes the artifact, or it only ever checks a file nobody rewrote. Task 4 does
-// that wiring; until it lands, build:api does NOT call this and the committed
-// artifact's freshness rests on tests/scripts/catalog-derived.test.ts alone.
+// Runs inside build:api, which is what lets verify:generated regenerate and diff
+// it — the element-manifest lesson is that a guard must invoke the script that
+// writes the artifact, or it only ever checks a file nobody rewrote. Listing
+// derived.json in that guard's GENERATED array BEFORE this line was in build:api
+// produced exactly that red, live: the sentinel survived the run.
+// Keep the two together: dropping this from build:api does not quietly weaken
+// the guard, it turns it red on every clean tree.
 import { readFileSync, writeFileSync, readdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join, resolve, dirname, relative, sep } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -13,6 +15,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import ts from 'typescript';
 import * as esbuild from 'esbuild';
 import { readVariants, MIN_VARIANTS } from './lib/message-part-variants.mjs';
+import { ELEMENT_META_KEYS } from './lib/element-meta-keys.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_OUT = join(ROOT, 'src/agent-tooling/catalog/derived.json');
@@ -88,6 +91,37 @@ function isFunctionValued(type) {
 
 // 1. Elements, from the generated meta (build:api runs gen-element-api first).
 const meta = JSON.parse(readFileSync(join(ROOT, 'src/elements/element-meta.json'), 'utf8'));
+// Checked before the per-key floor below, which would otherwise report all six
+// keys missing on an empty model and bury the simpler truth.
+if (!Array.isArray(meta) || meta.length === 0) fail('element-meta.json yielded zero elements.');
+
+// The `?? []` fallbacks below are per-ELEMENT robustness — most elements really
+// do have no methods or no tokens — but they are also the one silent path left
+// in a script that hard-fails on zero elements, zero integrations, zero
+// capability groups, zero theme tokens, zero event exceptions and a degraded
+// union parse. element-meta.json is itself build:api-generated, so renaming a
+// key in gen-element-api.mjs's printer (`events`→`eventz`) would degrade every
+// element to `[]` and this generator would say nothing. Post-Task-4 that
+// surfaces as "derived.json is out of date", which is true but points at the
+// artifact instead of at the printer where the change actually happened.
+//
+// The floor is per KEY, not per element: most elements genuinely have no
+// methods and almost none carry tokens, so a per-element floor would be wrong.
+// The key LIST is shared with tests/scripts/catalog-derived.test.ts's shape
+// guard (see lib/element-meta-keys.mjs for why that one is shared and the
+// predicate below is not); the rule it spells out -- at least one element
+// carries a non-empty array under this key -- is the same one that guard states,
+// so the two cannot disagree about what "present" means.
+const missingKeys = ELEMENT_META_KEYS.filter((key) => !meta.some((e) => Array.isArray(e?.[key]) && e[key].length > 0));
+if (missingKeys.length > 0) {
+  fail(
+    `element-meta.json carries no non-empty ${missingKeys.map((k) => `"${k}"`).join(', ')} on ANY of its ${meta.length} ` +
+      `elements. This generator reads those keys, so the catalog would be built with them empty everywhere. Either the ` +
+      `key was renamed or dropped in scripts/gen-element-api.mjs's printer, or the model genuinely lost that data — fix ` +
+      `it there, not here.`,
+  );
+}
+
 const elements = meta
   .map((e) => ({
     tag: e.tag,
@@ -109,7 +143,9 @@ const elements = meta
     tokens: e.tokens ?? [],
   }))
   .sort((a, b) => a.tag.localeCompare(b.tag));
-if (elements.length === 0) fail('element-meta.json yielded zero elements.');
+// (The zero-element floor moved ABOVE the per-key check — `elements` is 1:1 with
+// `meta`, so a second test here could never fire and would be a check that
+// proves nothing.)
 
 // 2. Part variants, from the union, via the ONE shared derivation.
 const partVariants = readVariants(readFileSync(join(ROOT, 'src/elements/chat-types.ts'), 'utf8'));
