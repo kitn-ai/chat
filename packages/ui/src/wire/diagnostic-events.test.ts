@@ -129,6 +129,49 @@ describe('wire diagnostic events', () => {
     expect(turn.error).toBeUndefined();
   });
 
+  it('a subscriber attaching mid-read still gets real bytes, not a confident zero', async () => {
+    // Deciding whether to capture the raw frame ONCE, at read entry, left every
+    // later frame reporting `bytes: 0` to anyone who subscribed after the read
+    // began -- a confident zero, which is exactly what the forward-compat rule
+    // exists to prevent. The capture is now always installed; only the length
+    // computation is gated.
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    const stream = new ReadableStream<Uint8Array>({
+      start(c) {
+        controller = c;
+      },
+    });
+    const enc = new TextEncoder();
+    const settle = () => new Promise((r) => setTimeout(r, 0));
+
+    const reading = readOpenAIStream(stream, nullSink());
+    controller.enqueue(
+      enc.encode(
+        'data: {"choices":[{"index":0,"delta":{"content":"first"},"finish_reason":null}]}\n\n',
+      ),
+    );
+    await settle();
+
+    // Only now does anyone start listening.
+    const events: WireDiagnosticEvent[] = [];
+    off = subscribeWireDiagnostics((e) => events.push(e));
+
+    controller.enqueue(
+      enc.encode(
+        'data: {"choices":[{"index":0,"delta":{"content":"second"},"finish_reason":"stop"}]}\n\n',
+      ),
+    );
+    await settle();
+    controller.enqueue(enc.encode('data: [DONE]\n\n'));
+    controller.close();
+    await reading;
+
+    const frames = events.filter((e) => e.type === 'wire.frame') as any[];
+    expect(frames).toHaveLength(1); // frame 1 happened before anyone listened
+    expect(frames[0].seq).toBe(2);
+    expect(frames[0].bytes).toBeGreaterThan(0);
+  });
+
   it('wire.failed carries status/bodyBytes/bodyIsJson/providerCode, never the body text', async () => {
     const body = JSON.stringify({
       error: { code: 'invalid_api_key', message: 'sk-live-... is not valid' },

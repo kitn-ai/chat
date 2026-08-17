@@ -201,15 +201,20 @@ export async function readModelStream(
   const reader = opts.format.open();
 
   let frames = 0;
-  // The byte length of the frame currently being handed over. `onRawFrame` fires
+  // The raw payload of the frame currently being handed over. `onRawFrame` fires
   // immediately before `sseJson` yields, so this is always the frame the next
   // loop iteration is about to push.
-  let frameBytes = 0;
-  const onRawFrame = wireDiagnosticsActive()
-    ? (raw: string) => {
-        frameBytes = byteLength(raw);
-      }
-    : undefined;
+  //
+  // ALWAYS INSTALLED, deliberately. Deciding this once at read entry meant a
+  // subscriber attaching mid-stream saw `bytes: 0` on every later frame -- a
+  // confident zero, and the forward-compat rule exists precisely so a consumer
+  // is never handed one. The capture is a reference stash and nothing else; the
+  // UTF-8 length is computed only inside the active-gated branch below, so with
+  // nobody listening the cost is one closure call and one assignment per frame.
+  let rawFrame = '';
+  const onRawFrame = (raw: string) => {
+    rawFrame = raw;
+  };
 
   async function* chunks(): AsyncGenerator<ModelStreamChunk> {
     for await (const frame of sseJson<unknown>(bytes, onRawFrame)) {
@@ -228,7 +233,7 @@ export async function readModelStream(
           t: Date.now(),
           streamId,
           seq: frames,
-          bytes: frameBytes,
+          bytes: byteLength(rawFrame),
           chunks: produced.length,
           fields: [...fields],
           ...(model ? { model } : {}),
