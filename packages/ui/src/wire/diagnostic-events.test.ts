@@ -98,4 +98,39 @@ describe('wire diagnostic events', () => {
     expect(turn.text).toBe(SECRET);
     expect(turn.error).toBeUndefined();
   });
+
+  it('wire.failed carries status/bodyBytes/bodyIsJson/providerCode, never the body text', async () => {
+    const body = JSON.stringify({
+      error: { code: 'invalid_api_key', message: 'sk-live-... is not valid' },
+    });
+    const events: WireDiagnosticEvent[] = [];
+    off = subscribeWireDiagnostics((e) => events.push(e));
+    await expect(
+      readOpenAIStream(new Response(body, { status: 401, statusText: 'Unauthorized' }), nullSink()),
+    ).rejects.toMatchObject({ status: 401 }); // WireError still thrown, unchanged
+    const failed = events.find((e) => e.type === 'wire.failed') as any;
+    expect(failed).toMatchObject({
+      status: 401,
+      statusText: 'Unauthorized',
+      bodyIsJson: true,
+      providerCode: 'invalid_api_key',
+    });
+    expect(failed.bodyBytes).toBe(new TextEncoder().encode(body).length);
+    expect(failed.streamId).toMatch(/^wire-\d+$/);
+    expect(JSON.stringify(failed)).not.toContain('sk-live');
+  });
+
+  it('wire.failed on a non-JSON body reports bodyIsJson false and no providerCode', async () => {
+    const events: WireDiagnosticEvent[] = [];
+    off = subscribeWireDiagnostics((e) => events.push(e));
+    await expect(
+      readOpenAIStream(
+        new Response('<html>502 from the proxy</html>', { status: 502, statusText: 'Bad Gateway' }),
+        nullSink(),
+      ),
+    ).rejects.toMatchObject({ status: 502 });
+    const failed = events.find((e) => e.type === 'wire.failed') as any;
+    expect(failed).toMatchObject({ status: 502, bodyIsJson: false });
+    expect(failed.providerCode).toBeUndefined();
+  });
 });

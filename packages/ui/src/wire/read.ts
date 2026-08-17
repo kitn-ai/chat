@@ -96,6 +96,21 @@ function providerMessage(body: unknown): string | undefined {
   return typeof top === 'string' ? top : undefined;
 }
 
+/** The provider's error CODE, by the same walk `providerMessage` does for the
+ *  message. The code is the half that can travel on a diagnostic event: it is a
+ *  closed vocabulary a panel can key its own explanation off, while the message
+ *  is free text some providers fill with echoed request content. */
+function providerErrorCode(body: unknown): string | number | undefined {
+  if (typeof body !== 'object' || body === null) return undefined;
+  const error = (body as { error?: unknown }).error;
+  if (typeof error === 'object' && error !== null) {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === 'string' || typeof code === 'number') return code;
+  }
+  const top = (body as { code?: unknown }).code;
+  return typeof top === 'string' || typeof top === 'number' ? top : undefined;
+}
+
 function buildMessage(status: number, statusText: string, bodyText: string, body: unknown): string {
   const head = `Model request failed: HTTP ${status}${statusText ? ` ${statusText}` : ''}`;
   const provider = providerMessage(body);
@@ -128,9 +143,32 @@ async function wireErrorFrom(res: Response): Promise<WireError> {
   return new WireError(res.status, res.statusText, bodyText, body);
 }
 
-async function toByteSource(source: StreamSource): Promise<ByteSource> {
+async function toByteSource(
+  source: StreamSource,
+  ctx?: { streamId?: string },
+): Promise<ByteSource> {
   if (!isResponse(source)) return source;
-  if (!source.ok) throw await wireErrorFrom(source);
+  if (!source.ok) {
+    const err = await wireErrorFrom(source);
+    if (wireDiagnosticsActive()) {
+      emitWireDiagnostic({
+        type: 'wire.failed',
+        t: Date.now(),
+        streamId: ctx?.streamId,
+        status: err.status,
+        statusText: err.statusText,
+        bodyBytes: byteLength(err.bodyText),
+        // `wireErrorFrom` leaves `body` undefined when the text was empty or did
+        // not parse, so this is exactly "the body was JSON".
+        bodyIsJson: err.body !== undefined,
+        // The code travels; `bodyText` and the provider's message do NOT.
+        ...(providerErrorCode(err.body) !== undefined
+          ? { providerCode: providerErrorCode(err.body) }
+          : {}),
+      });
+    }
+    throw err;
+  }
   if (!source.body) {
     throw new Error(
       'The model response has no body to stream. Check that the request set stream: true and that nothing between you and the provider buffered it.',
@@ -148,7 +186,7 @@ export async function readModelStream(
   // FIRST, before the source is even resolved: a failure inside `toByteSource`
   // still needs an id to report itself under.
   const streamId = opts.streamId ?? nextStreamId();
-  const bytes = await toByteSource(source);
+  const bytes = await toByteSource(source, { streamId });
   if (wireDiagnosticsActive()) {
     emitWireDiagnostic({
       type: 'wire.open',
