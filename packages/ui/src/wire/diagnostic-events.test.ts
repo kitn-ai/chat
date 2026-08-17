@@ -65,6 +65,36 @@ describe('wire diagnostic events', () => {
     expect(close.ms).toBeGreaterThanOrEqual(0);
   });
 
+  it('close.parts counts DISTINCT parts, while wire.part stays per-delta', async () => {
+    // Three text deltas merge into ONE text part. The panel renders `parts` as
+    // "N parts", so counting writes there would lie; per-delta granularity is
+    // already carried by the individual wire.part events, which must not change.
+    const body = [
+      'data: {"choices":[{"index":0,"delta":{"content":"one "},"finish_reason":null}]}',
+      '',
+      'data: {"choices":[{"index":0,"delta":{"content":"two "},"finish_reason":null}]}',
+      '',
+      'data: {"choices":[{"index":0,"delta":{"content":"three"},"finish_reason":null}]}',
+      '',
+      'data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}',
+      '',
+      'data: [DONE]',
+      '',
+      '',
+    ].join('\n');
+    const events: WireDiagnosticEvent[] = [];
+    off = subscribeWireDiagnostics((e) => events.push(e));
+    const turn = await readOpenAIStream(new Response(body), nullSink());
+
+    expect(turn.parts).toHaveLength(1);
+    const close = events.at(-1) as any;
+    expect(close.parts).toEqual({ text: 1 });
+
+    const textParts = events.filter((e) => e.type === 'wire.part' && (e as any).variant === 'text');
+    expect(textParts).toHaveLength(3);
+    expect((textParts as any[]).map((p) => p.chars)).toEqual([4, 4, 5]);
+  });
+
   it('the metadata boundary holds: no event carries the message text', async () => {
     const events: WireDiagnosticEvent[] = [];
     off = subscribeWireDiagnostics((e) => events.push(e));

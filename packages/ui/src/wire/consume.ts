@@ -248,32 +248,39 @@ export function createToolCallAccumulator(sink: AssistantStreamSink, opts: Consu
  *  what the message actually received. */
 function createPartsRecorder(streamId: string): AssistantStreamSink & {
   parts(): MessagePart[];
-  /** How many times each variant was WRITTEN, keyed by variant name.
+  /** How many DISTINCT parts each variant produced, keyed by variant name.
    *
-   *  Counted from the sink method that was called, NOT by discriminating a
-   *  `MessagePart` -- which is also what keeps this out of scope for
-   *  `lint:silent-drops`: there is no new switch over `MessagePart.type` in
-   *  `wire/` to go stale when a seventh variant lands.
+   *  Counted from the sink method that was called plus the fact that the parts
+   *  array GREW, NOT by discriminating a `MessagePart` -- which is what keeps
+   *  this out of scope for `lint:silent-drops`: there is no new switch over
+   *  `MessagePart.type` in `wire/` to go stale when a seventh variant lands.
    *
-   *  These are WRITE counts, not part counts: five text deltas merge into one
-   *  part but increment `text` five times. What the guard needs is only whether
-   *  the total is zero, and one `wire.part` event is emitted per increment, so
-   *  the map and the event stream agree. */
+   *  Parts, not writes: five text deltas merge into ONE text part and report
+   *  `{ text: 1 }`. A consumer renders these as "N parts", so a write count
+   *  would lie there. Per-delta granularity is not lost -- one `wire.part`
+   *  event is still emitted per write, carrying that delta's own `chars`. */
   partCounts(): Record<string, number>;
 } {
   let parts: MessagePart[] = [];
   const counts: Record<string, number> = {};
 
-  /** Count the write, then report it. `chars` is the delta LENGTH and is passed
-   *  only for the text-bearing variants; the delta itself never travels.
+  /** Count the part if this write created one, then report the write. `chars` is
+   *  the delta LENGTH and is passed only for the text-bearing variants; the
+   *  delta itself never travels.
+   *
+   *  A write either APPENDS a part or MERGES into one that already exists, and
+   *  the array length is what separates them -- uniform across all four methods
+   *  and needing no knowledge of any variant's shape. The growth amount is used
+   *  rather than a flat +1 so a builder that ever appends two stays honest.
    *
    *  `index` is the position in `parts` this write landed on, found by comparing
    *  references before and after. The builders return a new array with a new
    *  object for the item they changed, so the first slot that differs IS the
-   *  part that moved -- which is uniform across all four methods and needs no
-   *  knowledge of any variant's shape. Computed only when someone is listening. */
+   *  part that moved. Computed only when someone is listening. */
   const record = (variant: string, before: MessagePart[], chars?: number) => {
-    counts[variant] = (counts[variant] ?? 0) + 1;
+    if (parts.length > before.length) {
+      counts[variant] = (counts[variant] ?? 0) + (parts.length - before.length);
+    }
     if (!wireDiagnosticsActive()) return;
     let index = parts.length - 1;
     for (let i = 0; i < parts.length; i++) {
