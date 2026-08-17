@@ -21,7 +21,13 @@ import type {
 } from './chunk';
 import { openaiChatFormat } from './formats/openai';
 import { anthropicMessagesFormat } from './formats/anthropic';
-import { emitWireDiagnostic, nextStreamId, wireDiagnosticsActive } from './diagnostics';
+import {
+  emitWireDiagnostic,
+  nextStreamId,
+  wireCorrelation,
+  wireDiagnosticsActive,
+  type WireCorrelation,
+} from './diagnostics';
 
 /** Byte length, not `String.length`: a multibyte frame is bigger than its
  *  character count and the number is meant to be comparable with what the socket
@@ -192,7 +198,7 @@ async function wireErrorFrom(res: Response): Promise<WireError> {
 
 async function toByteSource(
   source: StreamSource,
-  ctx?: { streamId?: string },
+  correlation?: WireCorrelation,
 ): Promise<ByteSource> {
   if (!isResponse(source)) return source;
   if (!source.ok) {
@@ -201,7 +207,7 @@ async function toByteSource(
       emitWireDiagnostic({
         type: 'wire.failed',
         t: Date.now(),
-        streamId: ctx?.streamId,
+        ...correlation,
         status: err.status,
         statusText: err.statusText,
         bodyBytes: byteLength(err.bodyText),
@@ -233,12 +239,16 @@ export async function readModelStream(
   // FIRST, before the source is even resolved: a failure inside `toByteSource`
   // still needs an id to report itself under.
   const streamId = opts.streamId ?? nextStreamId();
-  const bytes = await toByteSource(source, { streamId });
+  // Built once and spread onto every event this read emits, `wire.failed`
+  // included -- a read that dies before its first frame still belongs to the
+  // app's trace, and that is exactly the read someone is looking for.
+  const correlation = wireCorrelation(streamId, opts);
+  const bytes = await toByteSource(source, correlation);
   if (wireDiagnosticsActive()) {
     emitWireDiagnostic({
       type: 'wire.open',
       t: Date.now(),
-      streamId,
+      ...correlation,
       format: opts.format.id,
       source: sourceKind(source),
       ...(isResponse(source) ? connectionOf(source) : {}),
@@ -279,7 +289,7 @@ export async function readModelStream(
         emitWireDiagnostic({
           type: 'wire.frame',
           t: Date.now(),
-          streamId,
+          ...correlation,
           seq: frames,
           bytes: byteLength(rawFrame),
           chunks: produced.length,

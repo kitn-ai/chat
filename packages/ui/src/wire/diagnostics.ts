@@ -28,6 +28,22 @@ export interface WireDiagnosticBase {
   t: number;
   /** Correlates every event from one provider response stream. */
   streamId?: string;
+  /**
+   * The APP'S grouping of several reads into one logical turn. Present only
+   * when the app declared it (`ConsumeOptions.traceId`), absent otherwise.
+   *
+   * THE KIT GROUPS NOTHING ON ITS OWN. A tool loop or a set of sub-agents makes
+   * several model calls that belong together, and the kit sees one Response at
+   * a time with no way to know which ones those are. Inferring it -- by
+   * timing, by sink identity, by anything -- would produce a grouping that is
+   * right often enough to be trusted and wrong exactly when a session is
+   * confusing enough to need a panel.
+   */
+  traceId?: string;
+  /** The app's name for THIS read within the trace (`'planner'`,
+   *  `'executor'`). Present only when declared; never derived from the format,
+   *  the model or the URL. */
+  label?: string;
 }
 
 /** The stream opened: the source resolved and the format is about to be opened.
@@ -136,6 +152,35 @@ export type WireDiagnosticEvent =
   | WirePartEvent
   | WireCloseEvent
   | WireFailedEvent;
+
+/** The three correlating fields, built ONCE per read and spread onto every
+ *  event it emits. One definition so `read.ts` and `consume.ts` cannot drift
+ *  about which events carry a trace. */
+export interface WireCorrelation {
+  streamId: string;
+  traceId?: string;
+  label?: string;
+}
+
+/**
+ * INTERNAL. The correlation for one read.
+ *
+ * ABSENT, NOT UNDEFINED. `traceId` and `label` are omitted entirely when the app
+ * did not declare them, so a consumer's `'traceId' in event` answers "did the
+ * app group this" rather than "did the kit have an opinion". A key present with
+ * an undefined value is the kit claiming it looked, and it is not in a position
+ * to make that claim.
+ */
+export function wireCorrelation(
+  streamId: string,
+  opts: { traceId?: string; label?: string },
+): WireCorrelation {
+  return {
+    streamId,
+    ...(opts.traceId !== undefined ? { traceId: opts.traceId } : {}),
+    ...(opts.label !== undefined ? { label: opts.label } : {}),
+  };
+}
 
 type Subscriber = (e: WireDiagnosticEvent) => void;
 

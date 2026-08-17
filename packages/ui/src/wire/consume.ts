@@ -18,7 +18,13 @@ import {
   type StopReason,
 } from './chunk';
 import type { RawOrigin } from '../components/tool-types';
-import { emitWireDiagnostic, nextStreamId, wireDiagnosticsActive } from './diagnostics';
+import {
+  emitWireDiagnostic,
+  nextStreamId,
+  wireCorrelation,
+  wireDiagnosticsActive,
+  type WireCorrelation,
+} from './diagnostics';
 
 // ── Tool-call accumulator ────────────────────────────────────────────────────
 
@@ -246,7 +252,7 @@ export function createToolCallAccumulator(sink: AssistantStreamSink, opts: Consu
 /** A sink that writes nowhere but into a `MessagePart[]`, using the kit's own
  *  builders. Teed alongside the real sink so `ModelTurn.parts` cannot drift from
  *  what the message actually received. */
-function createPartsRecorder(streamId: string): AssistantStreamSink & {
+function createPartsRecorder(correlation: WireCorrelation): AssistantStreamSink & {
   parts(): MessagePart[];
   /** How many DISTINCT parts each variant produced, keyed by variant name.
    *
@@ -292,7 +298,7 @@ function createPartsRecorder(streamId: string): AssistantStreamSink & {
     emitWireDiagnostic({
       type: 'wire.part',
       t: Date.now(),
-      streamId,
+      ...correlation,
       variant,
       index,
       ...(chars !== undefined ? { chars } : {}),
@@ -378,8 +384,12 @@ export async function consumeModelStream(
   // and counts frames before this function runs and every event from one read
   // has to carry the same id. A direct caller still gets a fresh one per call.
   const streamId = opts.streamId ?? nextStreamId();
+  // `traceId`/`label` ride along unchanged from the caller. `readModelStream`
+  // built the same object one level up and passes the parts of it through
+  // `opts`, so a read and its consume report one identical correlation.
+  const correlation = wireCorrelation(streamId, opts);
   const startedAt = Date.now();
-  const recorder = createPartsRecorder(streamId);
+  const recorder = createPartsRecorder(correlation);
   const out = teeSink(sink, recorder);
   const tools = createToolCallAccumulator(out, opts);
 
@@ -531,7 +541,7 @@ export async function consumeModelStream(
     emitWireDiagnostic({
       type: 'wire.close',
       t: Date.now(),
-      streamId,
+      ...correlation,
       ...(frames !== undefined ? { frames } : {}),
       chunks: chunkCount,
       parts: recorder.partCounts(),

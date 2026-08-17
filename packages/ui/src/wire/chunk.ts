@@ -194,6 +194,29 @@ export interface ConsumeOptions {
    * block 0 from merging into the first round's reasoning part.
    */
   streamId?: string;
+  /**
+   * The app's own grouping of several reads into ONE logical turn, carried onto
+   * every diagnostic event this read emits.
+   *
+   * THE KIT REPORTS WHAT THE APP DECLARES AND GROUPS NOTHING ON ITS OWN. A chat
+   * app running a tool loop, or fanning out to sub-agents, makes several model
+   * calls that belong to one turn; the kit sees one Response at a time and has
+   * no way to know which ones those are. So it does not guess:
+   *
+   *   readOpenAIStream(res, sink, { traceId: 'turn-42', label: 'planner' })
+   *
+   * Absent when not supplied -- the key is not present on the events at all,
+   * rather than present and undefined. Purely diagnostic: nothing in the parse
+   * branches on it and it never reaches a provider.
+   */
+  traceId?: string;
+  /** The app's name for THIS read inside its trace (`'planner'`,
+   *  `'executor'`, `'retry-2'`). Carried onto every diagnostic event, and
+   *  absent when not supplied. Never derived from the format or the model.
+   *
+   *  Not to be confused with `reasoningLabel`, which is UI copy for the
+   *  reasoning disclosure; this one is never rendered to an end user. */
+  label?: string;
   /** Fires once per tool call the moment its arguments parse cleanly. This is
    *  the hook a host's tool loop waits on. There is deliberately no
    *  per-fragment callback: `ToolPart.rawInput` is written on every fragment,
