@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>kai devtools — demo</title>
+    <style>
+      body {
+        font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        background: #0e1013;
+        color: #d6d9de;
+        margin: 0;
+        padding: 32px;
+        line-height: 1.5;
+      }
+      main { max-width: 720px; }
+      h1 { font-size: 20px; margin: 0 0 4px; }
+      p.lede { color: #868d99; margin: 0 0 24px; }
+      .row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+      button {
+        background: #1d2025; color: #d6d9de; border: 1px solid #2b2f36;
+        border-radius: 8px; padding: 9px 14px; font: inherit; cursor: pointer;
+      }
+      button:hover { border-color: #7aa2f7; }
+      pre {
+        background: #101216; border: 1px solid #2b2f36; border-radius: 8px;
+        padding: 12px; min-height: 120px; font-size: 12px; overflow: auto;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      code { color: #7aa2f7; }
+      ul { color: #868d99; font-size: 13px; padding-left: 18px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>kai devtools — demo</h1>
+      <p class="lede">
+        Load with <code>?kai-devtools=1</code> to activate. Without it the page works
+        exactly the same and the panel renders nothing.
+      </p>
+
+      <div class="row">
+        <button id="healthy" type="button">Healthy stream</button>
+        <button id="dialect" type="button">Wrong dialect (Anthropic body → OpenAI reader)</button>
+        <button id="failed" type="button">HTTP 401</button>
+      </div>
+
+      <pre id="out"></pre>
+
+      <ul>
+        <li><strong>Healthy</strong> — frames → chunks → parts all non-zero, finish reason <code>stop</code>.</li>
+        <li>
+          <strong>Wrong dialect</strong> — frames arrive and yield nothing:
+          <code>5 frames → 0 chunks → 0 parts</code> in red, error code
+          <code>empty-stream</code>, model <code>—</code>. (This body carries no usage
+          frame either, so the reader sees zero chunks; a capture that did would land
+          on <code>empty-turn</code> instead. Both are the same class of problem.)
+        </li>
+        <li><strong>HTTP 401</strong> — a <code>wire.failed</code> row with the status and the provider code, never the body text.</li>
+      </ul>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
