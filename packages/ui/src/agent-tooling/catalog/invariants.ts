@@ -166,8 +166,14 @@ export const invariants: TInvariant[] = [
   {
     id: 'kit-parses-consumer-fetches',
     statement:
-      'Never hand-roll an SSE reader: import readOpenAIStream, readAnthropicStream or readModelStream from @kitn.ai/ui/wire. The kit parses; the consumer fetches. There is no client, no key handling and no provider SDK below wire/, and the endpoint is always the consumer\'s own.',
+      "The kit parses; the consumer fetches. Two halves, covered differently. KIT SIDE: every MessagePart variant the wire encodes must be accounted for, or a variant is gone once the request leaves — that half is enforced by lint:silent-drops in CI. CONSUMER SIDE: never hand-roll an SSE reader; import readOpenAIStream, readAnthropicStream or readModelStream from @kitn.ai/ui/wire, and fetch from your own endpoint, because there is no client, no key handling and no provider SDK below wire/. NO CI CHECK COVERS THAT SECOND HALF — no guard reads consumer or scaffolded code for a hand-rolled reader; it is measured by the acceptance deck instead, at scenario S2, whose scoring line is 'imports readOpenAIStream from @kitn.ai/ui/wire; no hand-rolled SSE reader anywhere in the output'.",
     appliesTo: {},
+    // WHAT lint:silent-drops DOES NOT CATCH: it analyzes src/wire, so it covers
+    // the kit-side half only. A consumer or a scaffold that hand-rolls its own
+    // SSE loop never enters its scan, and the lint stays green. That gap is
+    // stated in the statement above so no reader concludes CI catches it, and
+    // scenario S2 is what actually measures it. Recorded rather than closed:
+    // flipping this to kind:'none' would discard a real guard over a real half.
     enforcedBy: { kind: 'lint', script: 'lint:silent-drops' },
     status: 'enforced',
     diagnosis: [

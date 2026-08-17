@@ -152,9 +152,17 @@ export const DerivedCatalog = z.object({
     .min(1),
   capabilityGroups: z.array(z.object({ id: z.string(), components: z.array(z.string()) })).min(1),
   themeTokens: z.array(z.string()).min(1),
-  // .min(1) because the tree HAS protocol exceptions (measured: two). An empty
-  // array means the extractor broke, and a broken extractor that parses clean
-  // would silently gut spec §5's exception list.
+  // .min(1) because the tree HAS deliberate protocol exceptions — events that
+  // set bubbles or composed on purpose — so an empty array cannot be a true
+  // reading of it: it means the extractor broke, and a broken extractor that
+  // parses clean would silently gut spec §5's exception list.
+  //
+  // Deliberately no count here. The number is the extractor's to report, not
+  // this comment's to restate: `npm run build:api` (its gen-catalog.mjs step)
+  // prints the count as it writes, and the current set is the `eventExceptions`
+  // array in src/agent-tooling/catalog/derived.json. A hand-typed figure here
+  // would be stale the first time an element opts in or out, on the schema for
+  // the very field whose exception list was wrong before.
   eventExceptions: z.array(EventException).min(1),
 });
 
