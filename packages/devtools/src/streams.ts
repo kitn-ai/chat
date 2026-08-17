@@ -11,6 +11,72 @@
 // a panel that renders them the same way lies about the one that matters.
 import { field, type WireDiagnosticEvent } from './contract';
 
+/** One decoded frame, retained so the inspector can show the sequence. All
+ *  metadata: sizes, counts and field NAMES, never a field's value. */
+export interface FrameRow {
+  seq: number;
+  /** ms since `wire.open`. Undefined when no open was seen. */
+  atMs?: number;
+  bytes: number;
+  chunks: number;
+  fields: string[];
+  model?: string;
+}
+
+/** One part write. `chars` is a LENGTH; the delta itself never travels. */
+export interface PartRow {
+  variant: string;
+  index?: number;
+  chars?: number;
+  atMs?: number;
+}
+
+export interface StreamUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  reasoningTokens?: number;
+  cachedInputTokens?: number;
+  costUsd?: number;
+}
+
+/**
+ * The four states a stream can be in, which are the filter pills.
+ *
+ * `empty` is deliberately its own state rather than a kind of failure: "the
+ * request worked and produced nothing" is the case this whole product exists
+ * to make visible, and folding it into `failed` would bury it next to 401s.
+ */
+export type StreamStatus = 'open' | 'ok' | 'empty' | 'failed';
+
+/** The kit's emptiness vocabulary. Anything else on `errorCode` is a real
+ *  error the provider or the stream reported. */
+const EMPTY_CODES = new Set(['empty-stream', 'empty-turn']);
+
+export function streamStatus(s: StreamSummary): StreamStatus {
+  if (s.status !== undefined) return 'failed';
+  if (s.errorCode !== undefined) {
+    return EMPTY_CODES.has(String(s.errorCode)) ? 'empty' : 'failed';
+  }
+  return s.open ? 'open' : 'ok';
+}
+
+/**
+ * The chunk keys that carry CONTENT, as opposed to the ones that describe the
+ * response.
+ *
+ * It lives here rather than in the view because it is a fact about the wire,
+ * and the frames table leans on it hard: a stream whose every frame carries
+ * only metadata keys is the wrong-dialect signature, and rendering that as a
+ * visual texture is the fastest way to see it.
+ */
+export const CONTENT_KEYS: ReadonlySet<string> = new Set([
+  'text',
+  'reasoning',
+  'toolCalls',
+  'sources',
+]);
+
 export interface StreamSummary {
   streamId?: string;
   format?: string;
@@ -40,6 +106,13 @@ export interface StreamSummary {
    * rendering it as an error would invent one. It renders as open.
    */
   open: boolean;
+  /** The kit's normalized stop vocabulary, when the close carried one. */
+  stopReason?: string;
+  usage?: StreamUsage;
+  /** Retained per frame so the inspector can show the sequence and its fields. */
+  frameRows: FrameRow[];
+  /** Retained per part write, in arrival order. */
+  partRows: PartRow[];
 }
 
 export interface FoldResult {
@@ -75,7 +148,7 @@ export function foldStreams(events: readonly WireDiagnosticEvent[]): FoldResult 
     const key = keyOf(e);
     let s = byId.get(key);
     if (!s) {
-      s = { streamId: e.streamId, chunks: 0, parts: {}, open: false };
+      s = { streamId: e.streamId, chunks: 0, parts: {}, open: false, frameRows: [], partRows: [] };
       byId.set(key, s);
     }
     return s;
@@ -113,11 +186,23 @@ export function foldStreams(events: readonly WireDiagnosticEvent[]): FoldResult 
         const model = str(field(e, 'model'));
         // Last frame to state one wins; absent stays absent.
         if (model) s.model = model;
-        if (s.firstFrameMs === undefined) {
-          const opened = openedAt.get(keyOf(e));
-          const t = num(e.t);
-          if (opened !== undefined && t !== undefined) s.firstFrameMs = t - opened;
-        }
+        const opened = openedAt.get(keyOf(e));
+        const t = num(e.t);
+        const atMs = opened !== undefined && t !== undefined ? t - opened : undefined;
+        if (s.firstFrameMs === undefined && atMs !== undefined) s.firstFrameMs = atMs;
+
+        // Retained for the inspector. `fields` is the FIELD NAMES the frame's
+        // chunks carried -- never their values -- which is what lets the table
+        // show "frames arriving with no content key" without rendering content.
+        const rawFields = field(e, 'fields');
+        s.frameRows.push({
+          seq: num(field(e, 'seq')) ?? s.frameRows.length + 1,
+          ...(atMs !== undefined ? { atMs } : {}),
+          bytes: num(field(e, 'bytes')) ?? 0,
+          chunks: frameChunks ?? 0,
+          fields: Array.isArray(rawFields) ? rawFields.filter((f): f is string => typeof f === 'string') : [],
+          ...(model ? { model } : {}),
+        });
         break;
       }
       case 'wire.part': {
@@ -142,6 +227,18 @@ export function foldStreams(events: readonly WireDiagnosticEvent[]): FoldResult 
           seen.add(pair);
           s.parts[variant] = (s.parts[variant] ?? 0) + 1;
         }
+
+        const openedForPart = openedAt.get(key);
+        const tPart = num(e.t);
+        const chars = num(field(e, 'chars'));
+        s.partRows.push({
+          variant,
+          ...(index !== undefined ? { index } : {}),
+          ...(chars !== undefined ? { chars } : {}),
+          ...(openedForPart !== undefined && tPart !== undefined
+            ? { atMs: tPart - openedForPart }
+            : {}),
+        });
         break;
       }
       case 'wire.close': {
@@ -159,6 +256,10 @@ export function foldStreams(events: readonly WireDiagnosticEvent[]): FoldResult 
         if (finish !== undefined) s.finishReason = finish as string | null;
         const code = field(e, 'errorCode');
         if (code !== undefined) s.errorCode = code as string | number;
+        const stop = str(field(e, 'stopReason'));
+        if (stop) s.stopReason = stop;
+        const usage = field(e, 'usage');
+        if (usage && typeof usage === 'object') s.usage = { ...(usage as StreamUsage) };
         s.ms = num(field(e, 'ms'));
         s.open = false;
         break;

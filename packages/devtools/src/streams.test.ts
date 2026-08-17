@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { foldStreams } from './streams';
+import { CONTENT_KEYS, foldStreams, streamStatus } from './streams';
 import type { WireDiagnosticEvent } from './contract';
 
 const ev = (o: Record<string, unknown>) => o as unknown as WireDiagnosticEvent;
@@ -165,6 +165,77 @@ describe('foldStreams', () => {
     ]);
     expect(streams[0].frames).toBeUndefined();
     expect(streams[0].chunks).toBe(3);
+  });
+
+  it('retains one row per frame, with its fields, for the inspector', () => {
+    const { streams } = foldStreams([
+      ev({ type: 'wire.open', t: 100, streamId: 'wire-20', format: 'openai.chat-completions', source: 'response' }),
+      ev({ type: 'wire.frame', t: 130, streamId: 'wire-20', seq: 1, bytes: 92, chunks: 1, fields: ['model', 'text'], model: 'openai/gpt-4o-mini' }),
+      ev({ type: 'wire.frame', t: 160, streamId: 'wire-20', seq: 2, bytes: 41, chunks: 1, fields: ['finishReason'] }),
+    ]);
+    const rows = streams[0].frameRows;
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({ seq: 1, bytes: 92, chunks: 1, atMs: 30, model: 'openai/gpt-4o-mini' });
+    expect(rows[0].fields).toEqual(['model', 'text']);
+    expect(rows[1]).toMatchObject({ seq: 2, bytes: 41, chunks: 1, atMs: 60 });
+  });
+
+  it('retains part events in arrival order, metadata only', () => {
+    const { streams } = foldStreams([
+      ev({ type: 'wire.open', t: 0, streamId: 'wire-21', format: 'f', source: 'response' }),
+      ev({ type: 'wire.part', t: 5, streamId: 'wire-21', variant: 'text', index: 0, chars: 12 }),
+      ev({ type: 'wire.part', t: 9, streamId: 'wire-21', variant: 'tool', index: 1 }),
+    ]);
+    expect(streams[0].partRows).toEqual([
+      { variant: 'text', index: 0, chars: 12, atMs: 5 },
+      { variant: 'tool', index: 1, atMs: 9 },
+    ]);
+  });
+
+  it('captures stopReason and usage from the close', () => {
+    const { streams } = foldStreams([
+      ev({ type: 'wire.open', t: 0, streamId: 'wire-22', format: 'f', source: 'response' }),
+      ev({ type: 'wire.close', t: 9, streamId: 'wire-22', frames: 1, chunks: 1, parts: { text: 1 }, finishReason: 'stop', stopReason: 'stop', usage: { inputTokens: 13, outputTokens: 10 }, ms: 9 }),
+    ]);
+    expect(streams[0].stopReason).toBe('stop');
+    expect(streams[0].usage).toEqual({ inputTokens: 13, outputTokens: 10 });
+  });
+
+  it('classifies each stream for the status filter', () => {
+    const base = (id: string, extra: Record<string, unknown>[]) =>
+      foldStreams([
+        ev({ type: 'wire.open', t: 0, streamId: id, format: 'f', source: 'response' }),
+        ...extra.map(ev),
+      ]).streams[0];
+
+    // Opened, nothing terminal ever arrived.
+    expect(streamStatus(base('a', []))).toBe('open');
+    // Closed clean.
+    expect(
+      streamStatus(base('b', [{ type: 'wire.close', t: 1, streamId: 'b', chunks: 1, parts: { text: 1 }, finishReason: 'stop', ms: 1 }])),
+    ).toBe('ok');
+    // Parsed, produced nothing -- the case this whole product exists for.
+    expect(
+      streamStatus(base('c', [{ type: 'wire.close', t: 1, streamId: 'c', frames: 5, chunks: 0, parts: {}, finishReason: null, errorCode: 'empty-stream', ms: 1 }])),
+    ).toBe('empty');
+    expect(
+      streamStatus(base('d', [{ type: 'wire.close', t: 1, streamId: 'd', frames: 2, chunks: 2, parts: {}, finishReason: null, errorCode: 'empty-turn', ms: 1 }])),
+    ).toBe('empty');
+    // HTTP failure.
+    expect(
+      streamStatus(base('e', [{ type: 'wire.failed', t: 1, streamId: 'e', status: 401, statusText: 'Unauthorized', bodyBytes: 20, bodyIsJson: true, providerCode: 'invalid_api_key' }])),
+    ).toBe('failed');
+    // An in-band provider error is a failure, not an emptiness.
+    expect(
+      streamStatus(base('f', [{ type: 'wire.close', t: 1, streamId: 'f', frames: 1, chunks: 1, parts: {}, finishReason: 'error', errorCode: 'rate_limit', ms: 1 }])),
+    ).toBe('failed');
+  });
+
+  it('names the content-bearing field keys', () => {
+    // The chips lean on this: a frame whose fields are ALL metadata is the
+    // wrong-dialect texture, and that distinction has to live beside the fold
+    // rather than being restated in the view.
+    expect([...CONTENT_KEYS].sort()).toEqual(['reasoning', 'sources', 'text', 'toolCalls']);
   });
 
   it('groups by streamId and keeps arrival order', () => {

@@ -124,10 +124,13 @@ describe('the panel entry, with the signal set', () => {
     expect(text()).toContain('openai.chat-completions');
     expect(text()).toContain('openai/gpt-4o-mini');
 
-    // A second stream arriving live must show up without a remount.
+    // A second stream arriving live must show up without a remount. It lands in
+    // the LIST, which carries the short format -- the full id belongs to the
+    // inspector, and wire-1 is still the selected stream.
     hook.emit(ev({ type: 'wire.open', t: 30, streamId: 'wire-2', format: 'anthropic.messages', source: 'stream' }));
     expect(text()).toContain('wire-2');
-    expect(text()).toContain('anthropic.messages');
+    expect(el!.shadowRoot!.querySelectorAll('.row')).toHaveLength(2);
+    expect(text()).toContain('messages');
   });
 
   it('mounts only one panel even if one is already present', async () => {

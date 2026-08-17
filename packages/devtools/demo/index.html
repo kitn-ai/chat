@@ -13,14 +13,11 @@
         padding: 32px;
         line-height: 1.5;
       }
-      /* The panel is fixed bottom-right at min(560px, 100vw - 24px) with a 12px
-         gutter, so at 1280px it starts at x=708. Capping the column at 640px
-         puts its right edge at 672 and leaves the composer fully clear.
-         Below ~1250px the two would meet horizontally, so the column gets
-         bottom padding instead: the panel still overlays, but every control
-         can be scrolled out from under it. */
-      main { max-width: 640px; }
-      @media (max-width: 1250px) { main { padding-bottom: 48vh; } }
+      /* The panel is a full-width bottom drawer, so no column width keeps the
+         page clear of it -- the answer is room to scroll. The padding is
+         generous enough that the composer clears the drawer at its default
+         height, and the drawer is resizable if someone wants more. */
+      main { max-width: 760px; padding-bottom: 52vh; }
       kai-chat {
         display: block;
         height: 360px;
