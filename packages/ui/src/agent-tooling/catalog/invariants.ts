@@ -15,7 +15,7 @@ export const invariants: TInvariant[] = [
   {
     id: 'reactivity-two-halves',
     statement:
-      'A new array reference NOTIFIES; a new object for each changed item makes the change VISIBLE. Editing an existing item needs both. Adds, removes and reorders need only the fresh array. Setting the same array back is a no-op even if an item inside it was swapped.',
+      'A new array reference NOTIFIES; a new object for each changed item makes the change VISIBLE. Editing an existing item needs both. Adds, removes and reorders need only the fresh array. Setting the same array back is a no-op even if an item inside it was swapped. The test pins how the KIT behaves — it will render stale unless both arrive — but nothing checks CONSUMER code, so this is a rule you apply, not a guarantee you will be warned about.',
     appliesTo: { tags: ['kai-chat', 'kai-conversations'] },
     enforcedBy: { kind: 'test', paths: ['packages/ui/src/components/reactivity-contract.test.tsx'] },
     status: 'enforced',
@@ -124,8 +124,18 @@ export const invariants: TInvariant[] = [
   {
     id: 'untrusted-model-output',
     statement:
-      'Everything the model produced is untrusted input. A MessagePart, card envelope or tool argument reaching innerHTML, an href or src, window.open or an iframe is a vulnerability. Put an existing policy on the sink (isSafeUrl/SAFE_SCHEMES for anything navigable, isRenderableLink for a model-supplied citation); never author a third policy. Escaping is the correct rendering — the source text must stay VISIBLE as well as inert.',
+      "Everything the model produced is untrusted input: a MessagePart, card envelope or tool argument reaching innerHTML, an href or src, window.open or an iframe is a vulnerability. THE DEFECT IS NEVER A MISSING GUARD, IT IS WHICH PATH GOT IT — every one found so far sat on a path the CONSUMER controls while the model-controlled path beside it had none. So put an EXISTING policy on the sink (isSafeUrl/SAFE_SCHEMES for anything navigable, isRenderableLink for a model-supplied citation) and never author a third. Escaping is the correct rendering: the source text must stay VISIBLE as well as inert. COVERAGE, and read this before trusting CI here: the three XSS suites are tests and ONLY tests. They run in the required test job, so the vectors they pin cannot come back — but NOTHING structural stops a NEW sink landing unguarded. No lint script in the package is about sinks, and the coupling map's unenforced list has no entry for the class. A new sink is caught in review or not at all.",
     appliesTo: {},
+    // WHAT THE THREE SUITES DO NOT CATCH: they pin the vectors that were FOUND
+    // (#246 markdown innerHTML, #247 the artifact's three URL sinks, and the
+    // hostile-stream path), so they are regression guards, not a guard over the
+    // CLASS. A newly written component that puts model text on a fresh
+    // unguarded sink adds no failing test anywhere. Verified against
+    // HANDOFF-2026-08-13 §13.2 ("They are tests and only tests… nothing
+    // structural stops a NEW sink landing unguarded"), and re-checked against
+    // the tree: none of packages/ui/scripts/lint-*.mjs concerns sinks, and
+    // docs/coupling-map.md has no row for the class. Kept as kind:'test'
+    // because regression coverage is real; the statement carries the gap.
     enforcedBy: {
       kind: 'test',
       paths: [
