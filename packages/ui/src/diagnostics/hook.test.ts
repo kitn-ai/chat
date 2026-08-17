@@ -169,6 +169,66 @@ describe('attach — one synchronous handover', () => {
   });
 });
 
+describe('attach — a throwing callback cannot wedge the hook', () => {
+  it('completes the handover, returns off, and keeps delivering', async () => {
+    window.localStorage.setItem('kai-devtools', '1');
+    const { installKaiDevtoolsHook, emitWireDiagnostic } = await fresh();
+    const hook = installKaiDevtoolsHook()!;
+
+    const e1 = ev({ t: 1 });
+    const e2 = ev({ t: 2 });
+    emitWireDiagnostic(e1);
+    emitWireDiagnostic(e2);
+
+    const seen: WireDiagnosticEvent[] = [];
+    // Throws on the FIRST buffered event, mid-replay -- the worst moment, since
+    // the subscription is already installed but the handover is not finished.
+    const off = hook.attach((e) => {
+      seen.push(e);
+      if (e === e1) throw new Error('panel render blew up');
+    });
+
+    // A broken observer is the observer's problem, never the stream's.
+    expect(typeof off).toBe('function');
+    // The rest of the history still arrived.
+    expect(seen).toEqual([e1, e2]);
+
+    // And the panel is not wedged in queue-only mode: live events still land.
+    const e3 = ev({ t: 3 });
+    emitWireDiagnostic(e3);
+    expect(seen).toEqual([e1, e2, e3]);
+
+    // Retention really is suspended, i.e. the handover completed properly.
+    expect(hook.drain()).toEqual([]);
+
+    // The counter was not left elevated: detaching resumes retention.
+    off();
+    const gap = ev({ t: 4 });
+    emitWireDiagnostic(gap);
+
+    const second: WireDiagnosticEvent[] = [];
+    const off2 = hook.attach((e) => second.push(e));
+    expect(second).toEqual([gap]);
+    off2();
+  });
+
+  it('a callback that throws on one event still receives the later ones', async () => {
+    window.localStorage.setItem('kai-devtools', '1');
+    const { installKaiDevtoolsHook, emitWireDiagnostic } = await fresh();
+    const hook = installKaiDevtoolsHook()!;
+
+    const seen: WireDiagnosticEvent[] = [];
+    const off = hook.attach((e) => {
+      seen.push(e);
+      if (e.t === 1) throw new Error('boom');
+    });
+    emitWireDiagnostic(ev({ t: 1 }));
+    emitWireDiagnostic(ev({ t: 2 }));
+    expect(seen.map((e) => e.t)).toEqual([1, 2]);
+    off();
+  });
+});
+
 describe('retention handover — the panel owns retention once attached', () => {
   it('stops retaining while attached and resumes when the last one leaves', async () => {
     window.localStorage.setItem('kai-devtools', '1');

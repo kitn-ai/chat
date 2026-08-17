@@ -58,7 +58,13 @@ export interface KaiDevtoolsHook {
   drain(): WireDiagnosticEvent[];
   /** Live events from now on. Works on both branches -- subscribing is what
    *  re-arms emission, so a panel can attach mid-session and see events from
-   *  that moment forward, with no history. */
+   *  that moment forward, with no history.
+   *
+   *  SUSPENDS BUFFER RETENTION while it is active, exactly as `attach` does:
+   *  any listener means the kit stops retaining and the listener owns the data.
+   *  Deliberate, and worth knowing before you add a passive logger -- one that
+   *  subscribes and never drains stops history accumulating for a panel that
+   *  attaches later, which will then see only the gap forward. */
   subscribe(fn: (e: WireDiagnosticEvent) => void): () => void;
   /**
    * History and live delivery in ONE synchronous step. Returns the unsubscribe.
@@ -191,10 +197,32 @@ function createHook(recording: boolean): KaiDevtoolsHook {
         else queue.push(e);
       });
 
-      if (history) for (const e of history) fn(e);
+      // The SAME isolation policy `emitWireDiagnostic` applies to every other
+      // delivery, for the same reason: a broken observer is the observer's
+      // problem, never the stream's.
+      //
+      // Without it a panel that threw while rendering its first buffered event
+      // wedged the hook outright -- the throw escaped `attach`, so the caller
+      // never received `off`, the subscription stayed installed in queue-only
+      // mode silently swallowing every later event, and `consumers` stayed
+      // elevated so retention never resumed for anyone. One panel's render bug
+      // took out the next panel's history too.
+      //
+      // So the handover ALWAYS completes and ALWAYS returns a working `off`. A
+      // callback that throws on one event still receives the ones after it.
+      const deliver = (e: WireDiagnosticEvent) => {
+        try {
+          fn(e);
+        } catch {
+          // swallowed here exactly as the emitter swallows it: there is nowhere
+          // to report it to that is not itself a subscriber
+        }
+      };
+
+      if (history) for (const e of history) deliver(e);
       // Index loop, not for-of: an event `fn` provokes while draining is
       // appended here and picked up by this same loop, keeping order intact.
-      for (let i = 0; i < queue.length; i++) fn(queue[i]);
+      for (let i = 0; i < queue.length; i++) deliver(queue[i]);
       direct = true;
 
       return off;
