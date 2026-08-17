@@ -92,13 +92,20 @@ describe('L2 OpenAI captures', () => {
     expect(tool.rawInput).toBe(call.argumentsText);
   });
 
-  it('finish-error-no-message stops on error with nothing to report', async () => {
+  it('finish-error-no-message stops on error and now reports empty-turn', async () => {
     // A real Gemini failure: finish_reason "error" and NOT ONE error object
-    // anywhere in the stream. `stopReason` is the only signal a UI gets.
+    // anywhere in the stream.
+    //
+    // `stopReason` USED TO BE the only signal a UI gets, and this test pinned
+    // that -- `error: undefined` on a turn that parsed a frame and produced
+    // nothing. That is the silent case the widened guard exists to catch, so the
+    // expectation is updated rather than preserved: one frame parsed, zero parts
+    // produced, and the turn now says so.
     const turn = await read('finish-error-no-message');
     expect(turn.finishReason).toBe('error');
     expect(turn.stopReason).toBe('error');
-    expect(turn.error).toBeUndefined();
+    expect(turn.chunks).toBeGreaterThan(0);
+    expect(turn.error?.code).toBe('empty-turn');
     expect(turn.text).toBe('');
     expect(turn.parts).toEqual([]);
   });

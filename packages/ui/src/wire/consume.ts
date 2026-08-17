@@ -246,13 +246,33 @@ export function createToolCallAccumulator(sink: AssistantStreamSink, opts: Consu
 /** A sink that writes nowhere but into a `MessagePart[]`, using the kit's own
  *  builders. Teed alongside the real sink so `ModelTurn.parts` cannot drift from
  *  what the message actually received. */
-function createPartsRecorder(): AssistantStreamSink & { parts(): MessagePart[] } {
+function createPartsRecorder(): AssistantStreamSink & {
+  parts(): MessagePart[];
+  /** How many times each variant was WRITTEN, keyed by variant name.
+   *
+   *  Counted from the sink method that was called, NOT by discriminating a
+   *  `MessagePart` -- which is also what keeps this out of scope for
+   *  `lint:silent-drops`: there is no new switch over `MessagePart.type` in
+   *  `wire/` to go stale when a seventh variant lands.
+   *
+   *  These are WRITE counts, not part counts: five text deltas merge into one
+   *  part but increment `text` five times. What the guard needs is only whether
+   *  the total is zero, and one `wire.part` event is emitted per increment, so
+   *  the map and the event stream agree. */
+  partCounts(): Record<string, number>;
+} {
   let parts: MessagePart[] = [];
+  const counts: Record<string, number> = {};
+  const count = (variant: string) => {
+    counts[variant] = (counts[variant] ?? 0) + 1;
+  };
   return {
     appendText(delta) {
+      count('text');
       parts = appendTextPart(parts, delta);
     },
     appendReasoning(delta, opts) {
+      count('reasoning');
       // `streamId` is DROPPED here on purpose. It namespaces block indices for a
       // sink that outlives one stream; this recorder starts a fresh array per
       // call, so within `ModelTurn.parts` there is nothing to disambiguate. Worse,
@@ -263,12 +283,15 @@ function createPartsRecorder(): AssistantStreamSink & { parts(): MessagePart[] }
       parts = appendReasoningPart(parts, delta, { ...opts, streamId: undefined });
     },
     upsertTool(toolCallId, patch) {
+      count('tool');
       parts = upsertToolPart(parts, toolCallId, patch);
     },
     addSource(source) {
+      count('source');
       parts = [...parts, { type: 'source', source }];
     },
     parts: () => parts,
+    partCounts: () => counts,
   };
 }
 
@@ -399,15 +422,40 @@ export async function consumeModelStream(
   // forward the status now; this is the second, independent guard, and it also
   // covers a truncated body, a non-streaming completion returned by mistake, and
   // an HTML proxy page.
-  if (chunkCount === 0 && !error) {
-    error = {
-      code: 'empty-stream',
-      message:
-        'The model stream produced no chunks. The response was 200 but nothing in its body parsed ' +
-        'as a stream frame — check the endpoint really sent Content-Type: text/event-stream and that ' +
-        'the request set stream: true. A route that forwards a provider error without its status ' +
-        'lands here: the body is a JSON error, not SSE.',
-    };
+  //
+  // AND ITS SIBLING: a turn whose frames PARSED but produced no part.
+  //
+  // The guard judges on parts produced rather than on raw chunk count, which is
+  // what makes it hold once a format reads a field that content-less frames also
+  // carry (`model`, `finishReason`, `usage`). Judged on chunks alone, surfacing
+  // `model` would have taken this whole guard quiet: frames yielding nothing but
+  // an id would push `chunkCount` above zero and the turn would go back to
+  // resolving empty and saying so nowhere.
+  //
+  // The split reports which of the two happened, because they have different
+  // fixes: zero chunks means nothing parsed as a frame at all, while chunks with
+  // no parts means the frames parsed and carried nothing THIS reader reads --
+  // the wrong-dialect case, and the one this option makes common.
+  const partsTotal = Object.values(recorder.partCounts()).reduce((a, b) => a + b, 0);
+  if (!error && partsTotal === 0) {
+    error =
+      chunkCount === 0
+        ? {
+            code: 'empty-stream',
+            message:
+              'The model stream produced no chunks. The response was 200 but nothing in its body parsed ' +
+              'as a stream frame — check the endpoint really sent Content-Type: text/event-stream and that ' +
+              'the request set stream: true. A route that forwards a provider error without its status ' +
+              'lands here: the body is a JSON error, not SSE.',
+          }
+        : {
+            code: 'empty-turn',
+            message:
+              `The stream completed and ${chunkCount} chunk(s) were parsed, but none carried content ` +
+              'this reader reads, so no message part was produced. If the endpoint streams a different ' +
+              'dialect (or carries its payload in a field this format does not read), switch to the ' +
+              'matching reader.',
+          };
   }
 
   // REWORK 3. `finishReason` is reported verbatim; `stopReason` is what the
