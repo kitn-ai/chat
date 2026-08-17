@@ -201,6 +201,7 @@ export type TInvariant = z.infer<typeof Invariant>;
 export type TSurfaceRecipe = z.infer<typeof SurfaceRecipe>;
 export type TScenario = z.infer<typeof Scenario>;
 export type TInventoryEntry = z.infer<typeof InventoryEntry>;
+export type TPartConsumption = z.infer<typeof PartConsumption>;
 export type TDerivedCatalog = z.infer<typeof DerivedCatalog>;
 ```
 
@@ -313,10 +314,10 @@ Expected: exit 0.
 
 This is spec §6's "before development" half, and it is the reason the deck is written first: the owner asked for the deck to check *whether the plan is focusing on the right things before any development*. Create `docs/superpowers/notes/2026-08-17-catalog-cross-check.md` with two tables, filled in by reading this plan's Tasks 5 and 6 against `scenarios.ts`:
 
-- **Scenarios addressed by no catalog data** — for each of S1–S7, name the catalog data this plan actually builds that carries it, or write NOTHING. Expected findings at this point, which are real and must be written down rather than smoothed: **S4 has no recipe** (no research-UI recipe is planned; it is the depth-3 scenario the spec says should fail hardest first), and **S5's recipe is the script-tag widget added in Task 6** (before that recipe existed, S5 had none either).
-- **Catalog data exercised by no scenario** — for each planned schema field and invariant, name the scenario that exercises it, or write NOTHING. Anything with NOTHING here is speculative surface and should be justified or cut.
+- **Scenarios addressed by no catalog data** — for each of S1–S7, name the catalog data this plan actually builds that carries it, or write NOTHING. Do this analysis yourself against the task list; do not transcribe. As a check on your METHOD rather than an answer to copy: if your analysis does not surface at least that **S4 has no recipe** (no research-UI recipe is planned; it is the depth-3 scenario the spec says should fail hardest first), re-check it, because that gap is visible from Task 6's content alone and a method that misses it will miss the ones nobody has spotted.
+- **Catalog data exercised by no scenario** — for each schema field, invariant and record type, name the scenario that exercises it, or write NOTHING. **This table is genuinely open**: nobody has worked it through, and it is where the speculative surface will show up. Anything with NOTHING here is a field that exists because it seemed useful, and it should be justified or cut.
 
-Then write a short "What this changes" paragraph. The point of the artifact is that it is allowed to say the plan is wrong; if it finds a gap that should change Task 6, change Task 6 rather than filing the finding away.
+Then write a short "What this changes" paragraph. The point of the artifact is that it is allowed to say the plan is wrong; if it finds a gap that should change a task, change the task rather than filing the finding away.
 
 - [ ] **Step 8: Commit**
 
@@ -392,7 +393,7 @@ In `packages/ui/scripts/lint-silent-drops.mjs`: add `import { readVariants, MIN_
 
 - [ ] **Step 3: Pin the extraction itself, before and after the move**
 
-**Do not rely on `--self-test` to prove this refactor.** It cannot: the self-test branch drives `analyze()` with hard-coded fixture variants and `process.exit(0)`s at `lint-silent-drops.mjs:476`, which is BEFORE `readVariants` is first called at line 485. A `readVariants` that returned `['1','2','3','4']` still passes the self-test 10/10 with exit 0. The self-test is a real check of the analyzer and no check at all of the extraction.
+**Do not rely on `--self-test` to prove this refactor.** It cannot: the self-test branch drives `analyze()` with hard-coded fixture variants and `process.exit(0)`s at `lint-silent-drops.mjs:475`, which is BEFORE `readVariants` is first called at line 485. A `readVariants` that returned `['1','2','3','4']` still passes the self-test 10/10 with exit 0. The self-test is a real check of the analyzer and no check at all of the extraction.
 
 So pin the extraction directly. **Before** starting Step 1, write this probe to your scratch directory (not the repo) and run it with `node`, from inside `packages/ui` so `typescript` resolves:
 
@@ -443,7 +444,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: `readVariants`, `MIN_VARIANTS` from `scripts/lib/message-part-variants.mjs` (Task 2); `DerivedCatalog` from `catalog-types.ts` (Task 1).
-- Produces: `packages/ui/src/agent-tooling/catalog/derived.json` matching `DerivedCatalog`. **Task 7's lint reads it with `readFileSync` + `JSON.parse` (it is a `.mjs` script); Task 8's packer reads it the same way; Task 9 does not read it at all.** No task imports it as a module.
+- Produces: `packages/ui/src/agent-tooling/catalog/derived.json` matching `DerivedCatalog`. **Task 7's lint reads it with `readFileSync` + `JSON.parse` (it is a `.mjs` script); Task 8's packer and Task 6's part-consumption test read it the same way; Task 9 does not read it at all.** No task imports it as a module.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -905,11 +906,10 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 **Files:**
 - Create: `packages/ui/src/agent-tooling/catalog/surfaces.ts`
-- Modify: `packages/ui/src/agent-tooling/catalog/catalog-types.ts` (add the `TPartConsumption` inferred type beside the others)
 - Test: `packages/ui/src/agent-tooling/catalog/surfaces.test.ts`
 
 **Interfaces:**
-- Consumes: `SurfaceRecipe`, `InventoryEntry`, `PartConsumption`, types from `catalog-types.ts` (Task 1); invariant IDs (Task 5).
+- Consumes: `SurfaceRecipe`, `InventoryEntry`, `PartConsumption` and their inferred types from `catalog-types.ts` (Task 1, unmodified by this task); invariant IDs (Task 5); `derived.json` (Task 3), read by the part-consumption test.
 - Produces: `export const inventory: TInventoryEntry[]`, `export const surfaceRecipes: TSurfaceRecipe[]`, `export const partConsumption: TPartConsumption[]`, and the parse-validated accessors `listSurfaceRecipes()`, `listInventory()`, `listPartConsumption()`. **Task 7's lint and Task 8's packer call the accessors, never the raw literals**, so a schema-invalid record fails CI instead of sailing through. Task 9 serves the recipes.
 
 - [ ] **Step 1: Write the failing test**
@@ -949,9 +949,15 @@ describe('authored surface layer', () => {
   });
 
   it('part-consumption records cover every MessagePart variant in the union', () => {
+    // Variants come from derived.json, which gen-catalog.mjs wrote using the ONE
+    // shared readVariants (Task 2). Deliberately NOT a second regex over
+    // chat-types.ts: this plan argues the extraction must be parsed, not matched,
+    // and a test that re-derives it by hand would be exactly the copy the
+    // catalog exists to eliminate.
+    const derived = JSON.parse(readFileSync(join(__dirname, 'derived.json'), 'utf8'));
+    expect(derived.partVariants.length).toBeGreaterThan(0);
     const covered = new Set(partConsumption.flatMap((p) => p.consumes));
-    const union = readFileSync(join(__dirname, '..', '..', 'elements', 'chat-types.ts'), 'utf8');
-    for (const variant of [...union.matchAll(/type:\s*'([a-z]+)'/g)].map((m) => m[1])) {
+    for (const variant of derived.partVariants) {
       expect(covered.has(variant), `no part-consumption record covers '${variant}'`).toBe(true);
     }
   });
@@ -985,7 +991,7 @@ Expected: FAIL, cannot resolve `./surfaces`.
 
 - [ ] **Step 3: Write `surfaces.ts`**
 
-The inventory rows are spec §4's sort table verbatim (it was reviewed by the owner in PR #276); one entry per row, apps split out so each is checkable. The single exemplar recipe is deliberate: further recipes land through acceptance-run iteration (spec §7 item 6), not through this plan. Full content:
+The inventory rows are spec §4's sort table verbatim (it was reviewed by the owner in PR #276); one entry per row, apps split out so each is checkable. **Write both recipes**: `workspace-chat` (bundler) and `support-widget-script-tag` (script-tag). Two is the minimum that instances both delivery targets and every invariant including `upgrade-race`, and Step 1's test asserts exactly that. Recipes beyond these two land through acceptance-run iteration (spec §7 item 6), each proven against a scenario first, rather than being authored blind here. Full content:
 
 ```ts
 // packages/ui/src/agent-tooling/catalog/surfaces.ts
@@ -1028,9 +1034,10 @@ export const inventory: TInventoryEntry[] = [
 ];
 
 /**
- * One complete recipe as the exemplar the drift lint and the MCP exercise.
- * Further recipes are added through acceptance-run iteration, each proven
- * against a scenario before it lands.
+ * Two recipes: one per delivery target. Between them they instance every
+ * invariant, which is what makes the drift lint's checks non-vacuous. Further
+ * recipes are added through acceptance-run iteration, each proven against a
+ * scenario before it lands.
  */
 export const surfaceRecipes: TSurfaceRecipe[] = [
   {
@@ -1137,7 +1144,7 @@ export function listPartConsumption(): TPartConsumption[] {
 }
 ```
 
-Update the import line at the top of the file to bring in the two extra names:
+Update the import line at the top of the file to bring in the two extra names (both already exist in `catalog-types.ts` from Task 1; this task does not modify that file):
 
 ```ts
 import {
@@ -1150,16 +1157,10 @@ import {
 } from './catalog-types';
 ```
 
-and add to `catalog-types.ts` (Task 1's file) the inferred type beside the others:
-
-```ts
-export type TPartConsumption = z.infer<typeof PartConsumption>;
-```
-
 - [ ] **Step 4: Run the test, verify it passes**
 
 Run: `pnpm --filter @kitn.ai/ui exec vitest run --project=unit src/agent-tooling/catalog/surfaces.test.ts`
-Expected: PASS (4 tests).
+Expected: PASS (7 tests).
 
 - [ ] **Step 5: Typecheck, then commit**
 
@@ -1167,7 +1168,12 @@ Run: `pnpm --filter @kitn.ai/ui run typecheck` (expect exit 0), then:
 
 ```bash
 git add packages/ui/src/agent-tooling/catalog/surfaces.ts packages/ui/src/agent-tooling/catalog/surfaces.test.ts
-git commit -m "feat(catalog): the sorted inventory and the workspace-chat exemplar recipe
+git commit -m "feat(catalog): the sorted inventory, both recipes, and the part-consumption copy
+
+The inventory is spec §4's owner-reviewed sort. Two recipes, one per
+delivery target, so script-tag and the upgrade-race invariant each have
+an instance. partConsumption is a registered copy (spec §3) whose drift
+check fires when the MessagePart union gains a variant.
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ```
@@ -1306,7 +1312,6 @@ export function check({ derived, invariants, surfaceRecipes, inventory, scenario
  * (the nine apps share one title and are distinguished by file).
  */
 function deriveLabsTitles() {
-  const elDir = join(ROOT, 'src/elements');
   const names = new Set();
   const walk = (dir) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
