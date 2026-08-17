@@ -1,0 +1,179 @@
+// The wire diagnostic event stream: what the parse pipeline SAW, as metadata.
+//
+// The kit is the only layer that sees both "frames arrived" and "parts came
+// out", so it is the only layer that can tell a wrong-dialect read from a quiet
+// one. That fact was previously visible nowhere; this is where it gets said.
+//
+// METADATA ONLY, and the rule is checkable rather than a matter of taste: if a
+// value comes from the model, the end user, or the app's data, it is PAYLOAD; if
+// it describes the shape, size, timing or identity of that value, it is
+// METADATA. Every field below is metadata by that rule. `errorCode` yes,
+// `message` no -- some providers echo request content back inside the message,
+// which is why the code is the half that travels. There is no payload switch in
+// this iteration; when one lands it goes under a single optional `payload` key
+// so a reviewer checks one key rather than re-reads every field name.
+//
+// FORWARD COMPATIBILITY, producer side: never repurpose a field name and never
+// change what a value means. New information is a new field or a new type.
+// Consumers are required to ignore both unknown types and unknown fields, which
+// is what lets a CDN-delivered panel float free of the kit's version.
+//
+// SSR: no `window`, no `Date` and no other global touched at module scope, so
+// this imports cleanly anywhere the rest of `wire/` does.
+import type { ModelUsage } from './chunk';
+
+/** The envelope every diagnostic event shares. `t` is `Date.now()` at emission. */
+export interface WireDiagnosticBase {
+  type: string;
+  t: number;
+  /** Correlates every event from one provider response stream. */
+  streamId?: string;
+}
+
+/** The stream opened: the source resolved and the format is about to be opened. */
+export interface WireOpenEvent extends WireDiagnosticBase {
+  type: 'wire.open';
+  /** `opts.format.id`, e.g. `openai.chat-completions`. */
+  format: string;
+  source: 'response' | 'stream' | 'iterable';
+}
+
+/** One decoded SSE frame, and what the format made of it. */
+export interface WireFrameEvent extends WireDiagnosticBase {
+  type: 'wire.frame';
+  /** 1-based. The final `seq` equals `wire.close`'s `frames`. */
+  seq: number;
+  /** UTF-8 byte length of the raw `data:` payload. */
+  bytes: number;
+  /** Neutral chunks this frame yielded. */
+  chunks: number;
+  /**
+   * The union of `Object.keys` over this frame's chunks. THE field that earns
+   * this design: frames arriving whose chunks never once carry a content key
+   * (`text`, `reasoning`, `toolCalls`, `sources`) is the failure a chunk count
+   * alone cannot separate from a healthy stream.
+   */
+  fields: string[];
+  /** Present when this frame stated a model id. */
+  model?: string;
+}
+
+/** A message part the recorder actually produced. */
+export interface WirePartEvent extends WireDiagnosticBase {
+  type: 'wire.part';
+  /** The `MessagePart` type: 'text' | 'reasoning' | 'tool' | 'source'. */
+  variant: string;
+  index: number;
+  /** Delta LENGTH, never the delta. Present for text and reasoning only. */
+  chars?: number;
+}
+
+/** The turn finished. Everything the widened empty-turn guard judges on. */
+export interface WireCloseEvent extends WireDiagnosticBase {
+  type: 'wire.close';
+  /** Absent when `consumeModelStream` was called directly: there were no frames. */
+  frames?: number;
+  chunks: number;
+  /** Count per variant actually produced. Empty beside a non-zero `frames` is
+   *  the wrong-dialect signature. */
+  parts: Record<string, number>;
+  finishReason: string | null;
+  stopReason?: string;
+  /** The kit's own closed vocabulary, so a panel keys its explanation off the
+   *  code and never needs the message. */
+  errorCode?: string | number;
+  usage?: ModelUsage;
+  ms: number;
+}
+
+/** A non-ok HTTP response: the `WireError` path, before a chunk was read. */
+export interface WireFailedEvent extends WireDiagnosticBase {
+  type: 'wire.failed';
+  status: number;
+  statusText: string;
+  bodyBytes: number;
+  bodyIsJson: boolean;
+  /** The parsed body's error CODE. Never the message: a provider's error text
+   *  can echo request content back. */
+  providerCode?: string | number;
+}
+
+export type WireDiagnosticEvent =
+  | WireOpenEvent
+  | WireFrameEvent
+  | WirePartEvent
+  | WireCloseEvent
+  | WireFailedEvent;
+
+type Subscriber = (e: WireDiagnosticEvent) => void;
+
+const subscribers: Subscriber[] = [];
+
+/**
+ * Subscribe to wire diagnostics. Returns an unsubscribe function.
+ *
+ * SSR-safe: this is a module-scope array, not a global, so subscribing has no
+ * environment requirements at all.
+ */
+export function subscribeWireDiagnostics(fn: Subscriber): () => void {
+  subscribers.push(fn);
+  let live = true;
+  return () => {
+    if (!live) return; // a double-unsubscribe must not evict someone else
+    live = false;
+    const at = subscribers.indexOf(fn);
+    if (at !== -1) subscribers.splice(at, 1);
+  };
+}
+
+/**
+ * INTERNAL. Every emission site gates on this BEFORE constructing an event
+ * object, which is what makes the no-subscriber path cost one array-length read
+ * and allocate nothing.
+ */
+export function wireDiagnosticsActive(): boolean {
+  return subscribers.length > 0;
+}
+
+/**
+ * INTERNAL. Deliver to every subscriber.
+ *
+ * Iterates a SNAPSHOT so a subscriber that unsubscribes (or subscribes) during
+ * delivery cannot make the loop skip its neighbour. Each call is wrapped
+ * individually: a panel that throws must not take down the stream it is
+ * watching, nor starve the other subscribers. The throw is swallowed rather
+ * than re-reported because there is nowhere to report it TO that is not itself
+ * a subscriber.
+ */
+export function emitWireDiagnostic(e: WireDiagnosticEvent): void {
+  for (const fn of [...subscribers]) {
+    try {
+      fn(e);
+    } catch {
+      // a broken observer is the observer's problem, not the stream's
+    }
+  }
+}
+
+/**
+ * INTERNAL. One id per provider response stream.
+ *
+ * It correlates diagnostics AND namespaces reasoning block indices. Anthropic
+ * restarts content-block indices at 0 on every message, and a tool loop reads
+ * several messages into ONE assistant turn, so without this round 2's block 0
+ * merges into round 1's part and overwrites its verbatim `raw`. See
+ * `appendReasoningPart`.
+ *
+ * A monotonic counter, not a UUID: this never leaves the process, is compared
+ * only for equality against parts built in the same process, and a counter keeps
+ * the value short and reproducible in test output.
+ *
+ * It lives HERE rather than in `consume.ts` because `readModelStream` opens the
+ * format and counts frames before `consumeModelStream` runs, and every event
+ * from one read has to carry the same id.
+ */
+let streamSeq = 0;
+
+export function nextStreamId(): string {
+  return `wire-${++streamSeq}`;
+}
