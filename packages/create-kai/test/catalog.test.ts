@@ -8,7 +8,15 @@
 import { describe, expect, it } from 'vitest';
 
 import { WIRED_GATEWAYS, listGateways, mockIntegration, rendererComponents } from '../src/catalog';
-import { FEATURES, availableFeatures, featureEmit, resolveSurface } from '../src/features';
+import {
+  FEATURES,
+  GENERATED_SURFACES_WIRED,
+  availableFeatures,
+  featureEmit,
+  featureUnavailableReason,
+  resolveSurface,
+  surfaceComponents,
+} from '../src/features';
 import { FRAMEWORKS, getFramework } from '../src/frameworks';
 
 const react = getFramework('react')!;
@@ -124,31 +132,67 @@ describe('feature availability', () => {
     expect(featureEmit(FEATURES.find((f) => f.id === 'conversations')!, react)).toBe('composed');
   });
 
-  it('routes capability features through the renderer', () => {
-    for (const id of ['sources', 'agentic', 'artifacts', 'voice']) {
-      expect(featureEmit(FEATURES.find((f) => f.id === id)!, react)).toBe('renderer');
+  /**
+   * A CAPABILITY FEATURE TAKES *BOTH* GATES, AND THIS TEST USED TO KNOW ONLY ONE.
+   *
+   * It asserted `featureEmit(...) === 'renderer'` for the five capability
+   * features, and it was green in `0.1.4` while every one of them refused: the
+   * assertion pinned "the archetype catalog composes every component this
+   * feature names", the prompt read the same call as "this feature scaffolds",
+   * and `generate()` — which has no generated-surface path at all — threw after
+   * the last question. A test can only be as strong as the question it asks.
+   *
+   * So both halves are asserted separately, and the expected value is derived
+   * from the declared state of the generator rather than written as a literal.
+   * When `GENERATED_SURFACES_WIRED` flips, this test flips with it and keeps
+   * pinning the catalog half either way.
+   */
+  it('reports a capability feature by the generator AND the catalog, not the catalog alone', () => {
+    const known = rendererComponents();
+    const capability = FEATURES.filter((f) => f.id !== 'conversations');
+    expect(capability.length, 'no capability features — this asserted nothing').toBeGreaterThan(0);
+
+    for (const feature of capability) {
+      // The catalog half: every component is one `renderSurface` branches on.
+      for (const component of feature.components) {
+        expect(
+          known.has(component),
+          `${component} is not in the derived renderer set, so '${feature.id}' names a component ` +
+            'no renderer emits',
+        ).toBe(true);
+      }
+      // The generator half — the one 0.1.4 never asked about.
+      expect(featureEmit(feature, react), feature.id).toBe(
+        GENERATED_SURFACES_WIRED ? 'renderer' : 'unavailable',
+      );
     }
   });
 
   /**
-   * `attachments` USED to be this file's reported gap. It is not one any more,
-   * and the replacement asserts WHY rather than just flipping the expected
-   * string: the feature is emittable exactly because every component it names is
-   * one the archetype catalog reports. Pinning that link means a future edit that
-   * marks it available for some other reason — a special case, a hard-coded id —
-   * still fails here.
+   * THE MENU, ASSERTED AS A MENU. `availableFeatures` is what `index.ts` renders
+   * as options, so what it must never contain is a feature that cannot be
+   * scaffolded — which is the whole of the shipped defect, stated once here and
+   * proved end to end (through `generate()`, against the real templates) in
+   * `menu-honesty.test.ts`.
+   *
+   * The non-empty assertion is not decoration: "offers nothing" and "offers only
+   * what works" are otherwise the same green.
    */
-  it('routes attachments through the renderer, and only because the catalog says so', () => {
-    const attachments = FEATURES.find((f) => f.id === 'attachments')!;
-    const known = rendererComponents();
-    for (const component of attachments.components) {
+  it('offers no feature the generator cannot emit, and offers something', () => {
+    const offered = availableFeatures(react).map((f) => f.id);
+    expect(offered, 'the menu is empty — every assertion about it is vacuous').not.toEqual([]);
+    for (const id of offered) {
       expect(
-        known.has(component),
-        `${component} is not in the derived renderer set, so 'attachments' must not be offered`,
-      ).toBe(true);
+        featureUnavailableReason(FEATURES.find((f) => f.id === id)!, react),
+        `'${id}' is offered by the prompt and cannot be emitted`,
+      ).toBeNull();
     }
-    expect(featureEmit(attachments, react)).toBe('renderer');
-    expect(availableFeatures(react).map((f) => f.id)).toContain('attachments');
+    // And the state of this release, recorded: the capability features are
+    // catalogued and withheld, not offered. This is what changes when the
+    // generated-surface path lands.
+    if (!GENERATED_SURFACES_WIRED) {
+      expect(offered).toEqual(['conversations']);
+    }
   });
 
   /**
@@ -210,11 +254,22 @@ describe('feature availability', () => {
       default: false,
     } as const;
     expect(featureEmit(synthetic, react)).toBe('unavailable');
+    // WHICH RULE CAUGHT IT IS THE POINT, now that two of them return
+    // `unavailable`: this feature must be refused for its components, not for
+    // the unwired generator, or the components branch has stopped being reached
+    // and this test would pass without exercising it.
+    expect(featureUnavailableReason(synthetic, react)).toMatch(
+      /no renderer branches on kai-conversations/,
+    );
 
-    // The state of the real catalog, recorded. If this ever fails, a shipped
-    // feature has become components-unavailable and deserves its own test.
+    // The state of the real catalog, recorded — measured against the renderer
+    // set directly rather than through `featureEmit`, which now also answers
+    // `unavailable` for the generator gap and would make this read as a catalog
+    // problem it is not. If this fails, a shipped feature names a component no
+    // renderer emits and deserves its own test.
+    const known = rendererComponents();
     const componentsUnavailable = FEATURES.filter(
-      (f) => featureEmit(f, react) === 'unavailable',
+      (f) => featureEmit(f, react) !== 'composed' && !f.components.every((c) => known.has(c)),
     ).map((f) => f.id);
     expect(componentsUnavailable).toEqual([]);
   });
@@ -226,28 +281,58 @@ describe('resolveSurface', () => {
     expect(result.ok && result.surface.kind).toBe('composed');
   });
 
-  it('resolves capability features to a components list led by kai-chat', () => {
-    const result = resolveSurface(['agentic'], react);
-    expect(result.ok && result.surface.kind).toBe('generated');
-    if (result.ok && result.surface.kind === 'generated') {
-      expect(result.surface.components).toEqual(['kai-chat', 'kai-tool', 'kai-reasoning']);
-    }
+  /**
+   * THESE TWO MOVED OFF `resolveSurface` ONTO `surfaceComponents`, AND THAT IS
+   * THE HONEST PLACE FOR THEM.
+   *
+   * They used to drive `resolveSurface(['agentic'], react)` and read the
+   * components off the returned surface. That path is closed while
+   * `GENERATED_SURFACES_WIRED` is off — the feature gate refuses first — so as
+   * written they asserted nothing reachable, and the second one asserted nothing
+   * at all: every assertion sat inside `if (result.ok && kind === 'generated')`,
+   * so a refusal ran the block to completion and passed. That is the shape this
+   * repo keeps paying for.
+   *
+   * The list-building rule is still live machinery that the generated-surface
+   * path will need, and de-duplication is exactly the sort of thing that comes
+   * back wrong when it is wired months from now. So it is a named function and
+   * these drive it directly: real coverage, no vacuity, no pretending the
+   * surface can be resolved today.
+   */
+  it('leads a generated components list with kai-chat', () => {
+    const agentic = FEATURES.find((f) => f.id === 'agentic')!;
+    expect(surfaceComponents([agentic])).toEqual(['kai-chat', 'kai-tool', 'kai-reasoning']);
   });
 
   it('de-duplicates components shared by two features', () => {
     // artifacts and conversations both want kai-resizable; a duplicate tag in
     // the components list is a rendered element twice.
-    const result = resolveSurface(['artifacts', 'voice'], react);
-    if (result.ok && result.surface.kind === 'generated') {
-      const unique = new Set(result.surface.components);
-      expect(unique.size).toBe(result.surface.components.length);
-    }
+    const chosen = FEATURES.filter((f) => f.id === 'artifacts' || f.id === 'conversations');
+    expect(chosen.length, 'both subjects must exist or the overlap is not exercised').toBe(2);
+    const components = surfaceComponents(chosen);
+    expect(new Set(components).size).toBe(components.length);
+    expect(components.filter((c) => c === 'kai-resizable').length).toBe(1);
   });
 
-  it('refuses to mix the composed template with generated features', () => {
+  /**
+   * A REQUEST THAT MIXES THE TWO PATHS IS STILL REFUSED, and the reason moved
+   * one gate earlier — which is what the assertion now pins.
+   *
+   * It matched /cannot combine/, the rule that fires when a composed feature and
+   * a generated one are BOTH resolvable. While the generated path is unwired the
+   * generated feature is refused before that rule is reached, and the earlier
+   * refusal is the better one: "pick one or the other" invited the user to
+   * retry with `--features agentic`, which cannot work either.
+   */
+  it('refuses a composed feature mixed with a generated one, naming the deeper cause', () => {
     const result = resolveSurface(['conversations', 'agentic'], react);
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reason).toMatch(/cannot combine/);
+    if (!result.ok) {
+      expect(result.reason).toMatch(/'agentic'/);
+      expect(result.reason).toMatch(
+        GENERATED_SURFACES_WIRED ? /cannot combine/ : /generated feature surfaces are not wired/,
+      );
+    }
   });
 
   /**
@@ -289,12 +374,40 @@ describe('resolveSurface', () => {
     expect(resolveSurface(['conversations'], react).ok).toBe(true);
   });
 
-  it('treats no features as the bare chat rather than an error', () => {
+  /**
+   * THE EMPTY SELECTION IS AN ANSWER AND MUST NOT BE AN ERROR — which is what it
+   * was, all the way to the user's terminal.
+   *
+   * This test said so and passed, because it only asked what `resolveSurface`
+   * returned: a generated bare-`kai-chat` surface, which `generate()` then
+   * refused. Deselecting everything in the prompt, and `--features none`, both
+   * died after the last question. There is no bare-chat template to emit, so the
+   * honest reply is the one surface this release has — with the part the user
+   * did not ask for reported in `unasked` rather than slipped in.
+   *
+   * `menu-honesty.test.ts` drives the same selection through `generate()`, which
+   * is the half this test cannot cover and the half that was broken.
+   */
+  it('answers an empty selection with the surface this release has, and says what it added', () => {
     const result = resolveSurface([], react);
-    expect(result.ok && result.surface.kind).toBe('generated');
-    if (result.ok && result.surface.kind === 'generated') {
-      expect(result.surface.components).toEqual(['kai-chat']);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.surface.kind).toBe('composed');
+      if (result.surface.kind === 'composed') {
+        expect(result.surface.features).toEqual(['conversations']);
+        expect(
+          result.surface.unasked,
+          'the starter brought a feature nobody picked and nothing reports it',
+        ).toEqual(['conversations']);
+      }
     }
+  });
+
+  it('reports nothing unasked when the selection already names what the starter brings', () => {
+    // The control on the assertion above: `unasked` must be a real difference,
+    // not a constant.
+    const result = resolveSurface(['conversations'], react);
+    expect(result.ok && result.surface.kind === 'composed' && result.surface.unasked).toEqual([]);
   });
 });
 

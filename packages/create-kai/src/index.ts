@@ -22,13 +22,37 @@ import * as p from '@clack/prompts';
 import pc from 'picocolors';
 
 import { ZERO_CONFIG, normalizeGateway, parseArgs, validateProjectName } from './args';
+import { answerAxis, gatewayAxis, layoutAxis } from './axes';
+import type { AxisIo } from './axes';
 import { WIRED_GATEWAYS, listGateways, wirableGateway } from './catalog';
-import { DEFAULT_FEATURES, FEATURES, availableFeatures, getFeature } from './features';
+import {
+  DEFAULT_FEATURES,
+  FEATURES,
+  availableFeatures,
+  composedWorkspaceFeatures,
+  featureUnavailableReason,
+  getFeature,
+  resolveSurface,
+} from './features';
+import type { FeatureDef } from './features';
 import { FRAMEWORKS, getFramework, readyFrameworks } from './frameworks';
 import { generate } from './generate';
 import { LAYOUTS, getLayout, readyLayouts } from './layouts';
 import { detectPackageManager } from './pm';
 import type { Layout, ProjectPlan } from './types';
+
+/**
+ * The feature ids `--features` accepts — every id at least one ready framework
+ * can actually scaffold, derived rather than typed.
+ *
+ * `FEATURES.map(f => f.id)` is what the help text used to print, and it listed
+ * six while five of them refused. The union across ready frameworks is the
+ * honest answer for a static help string: per-framework availability is only
+ * knowable once a framework is chosen, and the refusal below names it then.
+ */
+const OFFERABLE_FEATURE_IDS = [
+  ...new Set(readyFrameworks().flatMap((f) => availableFeatures(f).map((feature) => feature.id))),
+];
 
 /**
  * The `@kitn.ai/ui` range an emitted project pins.
@@ -61,7 +85,7 @@ ${pc.bold('create-kai')} — scaffold a runnable @kitn.ai/ui chat app
 Options
   --framework <id>     ${readyFrameworks().map((f) => f.id).join(', ')}
   --layout <id>        ${readyLayouts().map((l) => l.id).join(', ')}
-  --features <a,b>     ${FEATURES.map((f) => f.id).join(', ')}  (or 'none')
+  --features <a,b>     ${OFFERABLE_FEATURE_IDS.join(', ')}  (or 'none')
   --gateway <id>       none${[...WIRED_GATEWAYS].filter((g) => g !== 'mock').map((g) => `, ${g}`).join('')}
   --kit <spec>         @kitn.ai/ui spec to pin (default ${DEFAULT_KIT_RANGE})
   -y, --yes            accept every default (zero-config: React + full-screen + mock)
@@ -138,63 +162,117 @@ async function main(): Promise<number> {
   }
 
   // ── 3. layout ──────────────────────────────────────────────────────────────
-  const layoutId = (args.layout ?? (nonInteractive
-    ? ZERO_CONFIG.layout
-    : await ask(
-        p.select({
-          message: 'Where does the chat live?',
-          initialValue: ZERO_CONFIG.layout,
-          options: readyLayouts().map((l) => ({ value: l.id, label: l.label, hint: l.hint })),
-        }),
-      ))) as Layout;
+  //
+  // A PROMPT WITH ONE POSSIBLE ANSWER IS NOT A QUESTION. `widget` is
+  // `status: 'planned'`, so this select rendered a single option and asked the
+  // user to choose it — which reads as a menu that has lost its other entries,
+  // and takes a keystroke to answer nothing. The rule, and the stated line that
+  // replaces the question, live in `axes.ts` so the gateway axis below cannot
+  // answer the same question differently. It did: it took its single answer in
+  // silence.
+  const layouts = layoutAxis();
+  if (layouts.options.length === 0) {
+    return fail('no layout in this release can be scaffolded — this build is broken');
+  }
+  const layoutId = (await answerAxis(
+    layouts,
+    { override: args.layout, nonInteractive, fallback: ZERO_CONFIG.layout },
+    clackAxisIo,
+  )) as Layout;
 
   const layout = getLayout(layoutId);
   if (!layout) return fail(`unknown layout '${layoutId}'`);
   if (layout.status !== 'ready') {
-    return fail(`layout '${layout.id}' is not scaffoldable yet (${layout.note ?? 'no template'})`);
+    return fail(
+      `layout '${layout.id}' is not scaffoldable yet (${layout.note ?? 'no template'}). ` +
+        `Available: ${layouts.options.map((l) => l.id).join(', ')}`,
+    );
   }
 
   // ── 3a. features ───────────────────────────────────────────────────────────
+  //
+  // THE MENU IS `availableFeatures`, AND ONLY THAT. It used to be all six rows
+  // of `FEATURES`; five of them refused after the last prompt, and so did
+  // deselecting everything. What is left is split by whether the user has a
+  // choice to make: the composed workspace starter is copied whole, so what it
+  // brings is stated, and only what can be added on top is offered.
   const offered = availableFeatures(framework);
-  const featureIds = args.features ?? (nonInteractive
+  const included = composedWorkspaceFeatures(framework);
+  const optional = offered.filter((f) => !included.includes(f));
+  const withheld = FEATURES.filter((f) => !offered.includes(f));
+
+  const featureIds = args.features ?? (nonInteractive || optional.length === 0
     ? DEFAULT_FEATURES.filter((id) => offered.some((f) => f.id === id))
     : await ask(
         p.multiselect({
           message: 'Which features?',
           required: false,
-          initialValues: DEFAULT_FEATURES.filter((id) => offered.some((f) => f.id === id)),
-          options: offered.map((f) => ({ value: f.id, label: f.label, hint: f.hint })),
+          initialValues: DEFAULT_FEATURES.filter((id) => optional.some((f) => f.id === id)),
+          options: optional.map((f) => ({ value: f.id, label: f.label, hint: f.hint })),
         }),
       ));
 
+  // Every refusal a feature can earn, BEFORE a single file is written and with
+  // what is available named in the same breath. `generate` refuses the same
+  // requests, but it is reached after the gateway prompt — a `--features
+  // sources` run should not answer three more questions first.
   for (const id of featureIds) {
-    if (!getFeature(id)) return fail(`unknown feature '${id}'`);
+    const feature = getFeature(id);
+    if (!feature) {
+      return fail(`unknown feature '${id}'. Available: ${featureList(offered)}`);
+    }
+    const unavailable = featureUnavailableReason(feature, framework);
+    if (unavailable) {
+      return fail(`${unavailable}\nAvailable for ${framework.label}: ${featureList(offered)}`);
+    }
+  }
+
+  const surface = resolveSurface(featureIds, framework);
+  if (!surface.ok) return fail(surface.reason);
+
+  // WHAT THIS RELEASE SCAFFOLDS, SAID OUT LOUD — including the part the user did
+  // not pick. The starter is one reviewed tree, so a selection narrower than it
+  // still gets all of it.
+  //
+  // THE `unasked` LINE IS PRINTED IN EVERY MODE, and that is the one that had to
+  // be: `--features none --yes` emits a project WITH conversation history, and a
+  // scaffold that quietly includes what nobody picked is a decision made while
+  // withholding that it happened. The two lines below it are prompt furniture —
+  // restating what the user just saw — so they stay interactive.
+  if (surface.surface.kind === 'composed' && surface.surface.unasked.length > 0) {
+    stated(
+      'Also included',
+      `${surface.surface.unasked.join(', ')} — the ${framework.label} starter is one reviewed ` +
+        'tree, so it comes as a whole',
+    );
+  }
+  if (!nonInteractive) {
+    if (optional.length === 0 && included.length > 0) {
+      stated('Features', included.map((f) => `${f.label} — ${f.hint}`).join('; '));
+    }
+    if (withheld.length > 0) {
+      stated(
+        'Not offered yet',
+        `${withheld.map((f) => f.id).join(', ')} — ${pc.dim('see `--list` for the whole table')}`,
+      );
+    }
   }
 
   // ── 4. gateway ─────────────────────────────────────────────────────────────
+  //
+  // THE AXIS THIS RULE WAS WRITTEN FOR AND THEN NOT APPLIED TO. It offers only
+  // the gateways this FRAMEWORK can host — a wired gateway still needs somewhere
+  // to put its route — and for most of the table that intersection is `mock`
+  // alone. The old `wired.length === 1` branch took that answer WITHOUT ASKING
+  // AND WITHOUT SAYING SO, so on six of the eight ready frameworks the backend
+  // question never appeared in any form. Same rule as the layout axis now, from
+  // the same function, which is what stops the two drifting again.
   const gateways = listGateways();
-  // Only the gateways this FRAMEWORK can host. A wired gateway still needs
-  // somewhere to put its route, and offering one the chosen framework has no
-  // destination for would put a choice in the menu that fails after it is made.
-  const wired = gateways.filter(
-    (g) => g.wired && wirableGateway(g.integration.id, framework) === null,
-  );
-  const gatewayId = normalizeGateway(args.gateway) ?? (nonInteractive || wired.length === 1
-    ? ZERO_CONFIG.gateway
-    : await ask(
-        p.select({
-          message: 'Wire a model gateway?',
-          initialValue: ZERO_CONFIG.gateway,
-          options: wired.map((g) => ({
-            value: g.integration.id,
-            label: g.integration.id === 'mock' ? 'None' : g.integration.title,
-            hint:
-              g.integration.id === 'mock'
-                ? 'local mock, no key, no backend'
-                : `${g.integration.envVars.join(', ')} — a server route is scaffolded for you`,
-          })),
-        }),
-      ));
+  const gatewayId = normalizeGateway(args.gateway) ?? (await answerAxis(
+    gatewayAxis(framework),
+    { nonInteractive, fallback: ZERO_CONFIG.gateway, initialValue: ZERO_CONFIG.gateway },
+    clackAxisIo,
+  ));
 
   if (!gateways.some((g) => g.integration.id === gatewayId)) {
     return fail(`unknown gateway '${gatewayId}'`);
@@ -298,6 +376,44 @@ function fail(message: string): number {
   return 1;
 }
 
+/**
+ * An answer that was decided rather than asked.
+ *
+ * Printed in the prompt stream, in the same place the question would have been,
+ * so the flow reads as a list of decisions with no gap where a choice silently
+ * went away.
+ */
+function stated(label: string, value: string): void {
+  p.log.info(`${pc.dim(`${label}:`)} ${value}`);
+}
+
+/**
+ * This CLI's half of `answerAxis` — the two things it is allowed to do to a
+ * terminal, handed to the rule rather than reached for by it.
+ *
+ * The rule itself lives in `axes.ts` so a test can drive it with spies and
+ * assert that a decided axis STATES and an open one ASKS. It could not, while
+ * both the rule and these calls lived here: nothing can import this module, so
+ * the guard reached only as far as the axis data and a deleted `state(...)` call
+ * left the suite green.
+ */
+const clackAxisIo: AxisIo = {
+  ask: (axis, initialValue) =>
+    ask(
+      p.select({
+        message: axis.question,
+        initialValue,
+        options: axis.options.map((o) => ({ value: o.id, label: o.label, hint: o.hint })),
+      }),
+    ),
+  state: stated,
+};
+
+/** Feature ids for a refusal message, or an honest `none` rather than an empty gap. */
+function featureList(features: readonly FeatureDef[]): string {
+  return features.length > 0 ? features.map((f) => f.id).join(', ') : 'none';
+}
+
 function run(command: readonly string[], cwd: string): Promise<number> {
   return new Promise((resolve) => {
     const child = spawn(command[0], command.slice(1), { cwd, stdio: 'ignore', shell: false });
@@ -332,7 +448,18 @@ function printMatrix(asJson: boolean): void {
       ...(f.note ? { note: f.note } : {}),
     })),
     layouts: LAYOUTS.map((l) => ({ id: l.id, status: l.status, ...(l.note ? { note: l.note } : {}) })),
-    features: FEATURES.map((f) => ({ id: f.id, components: f.components, default: f.default })),
+    features: FEATURES.map((f) => ({
+      id: f.id,
+      components: f.components,
+      default: f.default,
+      // Derived, never restated — and the field the six-item menu needed: the
+      // ready frameworks whose prompt actually offers this feature. An empty
+      // array means the row is catalogued and cannot be scaffolded by anything,
+      // which is what an agent reading this has to be able to see.
+      frameworks: readyFrameworks()
+        .filter((framework) => availableFeatures(framework).includes(f))
+        .map((framework) => framework.id),
+    })),
     gateways: listGateways().map((g) => ({
       id: g.integration.id,
       title: g.integration.title,
@@ -362,6 +489,16 @@ function printMatrix(asJson: boolean): void {
   console.log(pc.bold('\nLayouts'));
   for (const l of matrix.layouts) {
     console.log(`  ${mark(l.status === 'ready')} ${l.id.padEnd(16)}${l.note ?? ''}`);
+  }
+  // Features were in `--json` and missing from the human table entirely, which
+  // is the half a person reads before running the thing.
+  console.log(pc.bold('\nFeatures'));
+  for (const f of matrix.features) {
+    console.log(
+      `  ${mark(f.frameworks.length > 0)} ${f.id.padEnd(16)}${
+        f.frameworks.length > 0 ? '' : 'not scaffoldable in this release'
+      }`,
+    );
   }
   console.log(pc.bold('\nGateways'));
   for (const g of matrix.gateways) {

@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 
 import { getIntegration, mockIntegration } from './catalog';
 import type { Integration } from './catalog';
-import { resolveSurface } from './features';
+import { GENERATED_SURFACE_GAP, resolveSurface } from './features';
 import { getFramework } from './frameworks';
 import type { FrameworkDef } from './frameworks';
 import { buildKaiJson, stringifyKaiJson } from './kai-json';
@@ -78,11 +78,31 @@ export async function generate(
     // Structured for it, not shipping it: the generated-surface path needs the
     // `renderSurface` output patched into each framework's entry file, and no
     // such project has been run. Refusing beats emitting an unrun surface.
-    throw new Error(
-      'create-kai: generated feature surfaces are not wired in this release — ' +
-        'the composed workspace (conversation history) is the path that runs today',
-    );
+    //
+    // DELIBERATELY *NOT* GATED ON `GENERATED_SURFACES_WIRED`, and that is the
+    // point rather than an oversight. This function has no generated path — the
+    // code below copies a starter tree — so the refusal is a fact about the
+    // generator, not about what the menu offers. Gating it on the constant would
+    // mean that flipping the constant alone makes `generate()` emit the composed
+    // starter and CALL it a generated surface: a project that installs, builds,
+    // runs, and does not have the feature in it.
+    //
+    // So this throw is the marker for the work. Flip the constant without
+    // replacing it and `test/menu-honesty.test.ts` goes red immediately, because
+    // the prompt starts offering features it then drives through here.
+    //
+    // Unreachable through the CLI today — `featureEmit` reads the same constant,
+    // so no feature that resolves to a generated surface is offered or accepted.
+    // What it still catches is a caller assembling a `ProjectPlan` by hand: a
+    // test, `smoke.mjs`, a future `add`.
+    throw new Error(`create-kai: ${GENERATED_SURFACE_GAP}`);
   }
+
+  // What the emitted project HAS, which is not always what was asked for: the
+  // composed workspace starter is copied whole, so it brings its own features
+  // with it. `kai.json` is written from this, because a v2 `add` reading that
+  // file needs to know what is in the project, not what was typed at the prompt.
+  const emittedFeatures = surface.surface.features;
 
   const templateRoot = options.templateRoot ?? defaultTemplateRoot();
   const templateDir = path.join(templateRoot, framework.templateDir);
@@ -166,7 +186,7 @@ export async function generate(
 
     await writeFile(
       path.join(out, 'kai.json'),
-      stringifyKaiJson(buildKaiJson(plan, framework)),
+      stringifyKaiJson(buildKaiJson({ ...plan, featureIds: emittedFeatures }, framework)),
       'utf8',
     );
 
