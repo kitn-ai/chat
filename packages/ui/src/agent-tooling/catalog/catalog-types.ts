@@ -26,6 +26,19 @@ export const EnforcedBy = z.discriminatedUnion('kind', [
 
 export const Diagnosis = z.object({ symptom: z.string(), cause: z.string() });
 
+/**
+ * One wrong/right pair, as CODE rather than prose. A weak model applies a
+ * fragment it can pattern-match far more reliably than a sentence it has to
+ * reason from, and the pairs are also mechanically searchable: the self-audit
+ * checklist greps emitted code for the `wrong` form and expects zero hits. So
+ * keep `wrong` a compact, literal, greppable fragment — not a paraphrase.
+ */
+export const InvariantExample = z.object({
+  wrong: z.string().min(1),
+  right: z.string().min(1),
+  note: z.string().optional(),
+});
+
 export const Invariant = z.object({
   id: z.string().regex(/^[a-z0-9-]+$/),
   statement: z.string().min(1),
@@ -37,6 +50,10 @@ export const Invariant = z.object({
   enforcedBy: EnforcedBy,
   status: z.enum(['enforced', 'open']),
   diagnosis: z.array(Diagnosis).default([]),
+  // Defaulted, not required, so a record authored before the field existed still
+  // parses. `invariants.test.ts` is what makes it non-optional in practice: every
+  // ENFORCED invariant must carry at least one pair.
+  examples: z.array(InvariantExample).default([]),
 });
 
 /** One host-coordinates edge: this event on A sets this property on B. */
@@ -142,6 +159,7 @@ export const DerivedCatalog = z.object({
 });
 
 export type TInvariant = z.infer<typeof Invariant>;
+export type TInvariantExample = z.infer<typeof InvariantExample>;
 export type TSurfaceRecipe = z.infer<typeof SurfaceRecipe>;
 export type TScenario = z.infer<typeof Scenario>;
 export type TInventoryEntry = z.infer<typeof InventoryEntry>;
