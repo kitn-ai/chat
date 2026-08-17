@@ -18,9 +18,9 @@ One implementation, not one port per framework, because they're web components. 
 npm create kai@latest
 ```
 
-It asks for a framework, a layout and a backend, then writes a project that runs. Press Enter through every prompt and you get React, full screen, and the kit's own mock: a real streaming turn on the first `npm run dev`, with no API key and nothing to host.
+It asks for a framework, then for a backend where there is more than one to choose from, and writes a project that runs. Every axis with a single possible answer today — the layout, the feature set, and the backend on the frameworks that can host nothing but the local mock — it states rather than asking, so nothing gets decided for you in silence. Press Enter through every prompt and you get React, full screen, and the kit's own mock: a real streaming turn on the first `npm run dev`, with no API key and nothing to host.
 
-`npx create-kai@latest --list` prints the frameworks, layouts and gateways it can scaffold today. Read that rather than a list written here; the roster moves.
+`npx create-kai@latest --list` prints the frameworks, layouts, features and gateways it can scaffold today, and marks the ones it cannot. Read that rather than a list written here; the roster moves.
 
 ## Add it to an app you already have
 

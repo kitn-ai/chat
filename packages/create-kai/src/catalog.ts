@@ -212,6 +212,27 @@ export interface GatewayChoice {
 }
 
 /**
+ * The gateways a given framework can actually be scaffolded onto — the wired set
+ * intersected with the frameworks that declare a route host.
+ *
+ * A one-line filter over `wirableGateway`, given a name because a TEST has to
+ * read the same list the prompt does. It was inline in `index.ts`, which is the
+ * one module in this package nothing can import — it calls `main()` at module
+ * scope — so a guard on "does the gateway axis have a real choice here" could
+ * only ever have been written against a copy of it. `axes.ts` reads this to
+ * build the axis, and `menu-honesty.test.ts` reads the axis.
+ *
+ * The predicate itself is still `wirableGateway`, which `--list --json` also
+ * calls to answer the inverse question (per gateway, which frameworks), so there
+ * is one rule underneath both directions.
+ */
+export function wirableGateways(framework: { id: string; route: unknown | null }): GatewayChoice[] {
+  return listGateways().filter(
+    (g) => g.wired && wirableGateway(g.integration.id, framework) === null,
+  );
+}
+
+/**
  * Gateways in prompt order: "None" (the `mock` integration) first, then the
  * registry's own order, which already leads with the two keys a developer is
  * most likely to already hold.

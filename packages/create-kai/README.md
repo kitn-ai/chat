@@ -15,8 +15,17 @@ history + the kit's local mock: a project that streams a reply on the first
 
 **First slice of v1.** A `ready` framework has been scaffolded, installed from
 the registry, built by its own build script, and driven in a browser — a message
-sent, and a reply streaming into `<kai-thread>`. Remaining frameworks, layouts
-and gateways are declared in the tables but not offered.
+sent, and a reply streaming into `<kai-thread>`. Remaining frameworks, layouts,
+features and gateways are declared in the tables but not offered.
+
+**The prompt offers only what scaffolds, and states the rest.** One surface runs
+today — the hand-composed workspace, with conversation history — so the CLI says
+so rather than showing a menu of six and refusing five of them after the last
+question. Where an axis has one possible answer it is stated, not asked, and
+`--features <id>` for anything unavailable fails immediately with what IS
+available, before a file is written. `test/menu-honesty.test.ts` drives every
+option the prompt offers through `generate()`, so a menu item that cannot be
+scaffolded fails a test rather than a user.
 
 **`create-kai --list` is the roster.** This paragraph used to name which
 frameworks were ready, and it was wrong within a day of each one landing — so
