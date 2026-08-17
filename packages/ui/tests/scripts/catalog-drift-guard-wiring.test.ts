@@ -39,10 +39,11 @@
  */
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { check } from '../../scripts/lint-catalog-drift.mjs';
+import { check, stripComments as stripInLint } from '../../scripts/lint-catalog-drift.mjs';
+import { stripComments as stripInSrc } from '../../src/agent-tooling/catalog/strip-comments';
 
 const pkgRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const repoRoot = resolve(pkgRoot, '../..');
@@ -169,6 +170,70 @@ describe('the catalog drift guard detects, and CI runs it', () => {
     const { code, output } = runLinter([]);
     expect(code, `the real catalog does not resolve:\n${output}`).toBe(0);
     expect(output).toContain('resolved clean');
+  });
+});
+
+/**
+ * THE REGISTERED COPY, GUARDED. `stripComments` exists twice — once in
+ * scripts/lint-catalog-drift.mjs and once in src/agent-tooling/catalog/
+ * strip-comments.ts — because a Node .mjs cannot import a .ts at runtime and
+ * `src/`'s typecheck pass has no `allowJs`, so the .ts side cannot import the
+ * .mjs either (measured: TS7016). Both decide whether a `title: 'Labs/…'` is a
+ * real registration or just prose, from opposite sides of the same question, so
+ * silent divergence would put the two checks back into the state where one
+ * DEMANDS a phantom row and the other REFUSES it.
+ *
+ * This is the only file in the repo that can import both. It is the guard.
+ */
+describe('the two stripComments implementations cannot diverge', () => {
+  const storyFiles = (): string[] => {
+    const out: string[] = [];
+    const walk = (dir: string) => {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        const full = join(dir, e.name);
+        if (e.isDirectory()) walk(full);
+        else if (e.name.endsWith('.stories.tsx')) out.push(full);
+      }
+    };
+    walk(join(pkgRoot, 'src'));
+    return out;
+  };
+
+  it('agree character-for-character on every story file in the tree', () => {
+    const files = storyFiles();
+    // Non-vacuity: an empty corpus would make the loop below prove nothing.
+    expect(files.length, 'no story files found — the walk is broken').toBeGreaterThan(0);
+    const differing = files.filter((f) => {
+      const text = readFileSync(f, 'utf-8');
+      return stripInLint(text) !== stripInSrc(text);
+    });
+    expect(
+      differing.map((f) => f.replace(pkgRoot, '')),
+      'the lint and src copies of stripComments disagree. They decide the same question ' +
+        'from opposite sides; if they drift, one check demands an inventory row the other refuses.',
+    ).toEqual([]);
+  });
+
+  it('agree on the adversarial inputs the scanner exists for', () => {
+    const cases = [
+      `// title: 'Labs/Apps' in a line comment\nconst meta = { title: 'Labs/Real' };`,
+      `/* title: 'Labs/Apps'\n   still inside a block */\nconst m = { title: 'Labs/Real' };`,
+      `const url = 'https://example.com//not-a-comment';`,
+      "const s = 'it\\'s escaped // still a string';",
+      'const t = `a template ${x} with // inside`;',
+      `const jsx = <p>Don't panic</p>;`,
+      '',
+      '//',
+      '/* unterminated block comment',
+      "const q = \"double // quoted\";",
+    ];
+    // POSITIVE CONTROL: at least one case must actually CHANGE under stripping,
+    // or "the two agree" would be satisfied by two functions that both do nothing.
+    expect(
+      cases.some((c) => stripInSrc(c) !== c),
+      'no adversarial case was altered by stripping — the corpus proves nothing',
+    ).toBe(true);
+    for (const c of cases) expect(stripInLint(c), `disagreement on: ${JSON.stringify(c)}`).toBe(stripInSrc(c));
   });
 });
 
