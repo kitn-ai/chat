@@ -182,6 +182,11 @@ function pushOpenAI(frame: unknown): ModelStreamChunk[] {
     }
   }
 
+  // Stated per frame and reported per frame, no dedupe: a stream that changes
+  // its mind mid-turn is a finding, and collapsing it would hide one.
+  const model = str(frame.model);
+  if (model) out.model = model;
+
   const usage = usageOf(frame.usage);
   if (usage) out.usage = usage;
 

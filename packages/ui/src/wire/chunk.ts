@@ -43,6 +43,21 @@ export interface ModelUsage {
 export interface ModelStreamChunk {
   text?: string;
   /**
+   * The model id the RESPONSE stated, verbatim; REPORT, NEVER INFER.
+   *
+   * Read from the response rather than the request, which is what makes it work
+   * at all when the app builds its own fetch and the kit never sees what was
+   * asked for. Providers commonly resolve an alias (ask for `gpt-4o`, get
+   * `gpt-4o-2024-08-06`); through a gateway the value is the gateway's own id.
+   * Both are reasons to pass the string through untouched.
+   *
+   * It is NOT guaranteed. A proxy can strip or rewrite it and a custom endpoint
+   * may omit it, so a consumer renders it as ABSENT when it is absent. Filling
+   * the gap with the requested id would lie in exactly the requested-vs-served
+   * mismatch this field exists to catch.
+   */
+  model?: string;
+  /**
    * Reasoning delta. `''` is MEANINGFUL, not a no-op: a redacted block has no
    * readable text but still carries a payload that must round-trip, and a format
    * uses an empty delta to OPEN a reasoning part at the right position in the
@@ -170,6 +185,15 @@ export interface ModelTurn {
 export interface ConsumeOptions {
   /** Label for the reasoning disclosure. Defaults to 'Thinking'. */
   reasoningLabel?: string;
+  /**
+   * Correlates diagnostics and namespaces reasoning parts for this consume call;
+   * assigned automatically when absent.
+   *
+   * Supply one only to tie a read to an id you already hold. Two reads into the
+   * SAME sink must not share a value: the id is what keeps a second round's
+   * block 0 from merging into the first round's reasoning part.
+   */
+  streamId?: string;
   /** Fires once per tool call the moment its arguments parse cleanly. This is
    *  the hook a host's tool loop waits on. There is deliberately no
    *  per-fragment callback: `ToolPart.rawInput` is written on every fragment,

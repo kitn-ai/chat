@@ -122,8 +122,19 @@ export async function* sseDataFrames(source: ByteSource): AsyncGenerator<string>
  *  iteration, which is the only thing that makes `drained` mean what it says.
  *  In practice that costs exactly one more `read()`: a server that has sent
  *  `[DONE]` has finished the response body. Frames after the sentinel are
- *  dropped, so what a caller sees is unchanged. */
-export async function* sseJson<T>(source: ByteSource): AsyncGenerator<T> {
+ *  dropped, so what a caller sees is unchanged.
+ *
+ *  `onRawFrame` is the diagnostics seam: it receives the raw `data:` payload
+ *  STRING for each frame that parsed, immediately before that frame is yielded,
+ *  because the payload is discarded here and its byte length cannot be recovered
+ *  downstream. It is not called for `[DONE]`, for a keep-alive, or for a payload
+ *  that failed to parse -- so a caller counting calls counts exactly the frames
+ *  it will be handed. Default undefined: with no diagnostics subscriber nothing
+ *  passes one in and this is a dead branch. */
+export async function* sseJson<T>(
+  source: ByteSource,
+  onRawFrame?: (raw: string) => void,
+): AsyncGenerator<T> {
   let done = false;
   for await (const payload of sseDataFrames(source)) {
     if (done) continue; // drain the rest of the body; yield nothing more
@@ -132,7 +143,9 @@ export async function* sseJson<T>(source: ByteSource): AsyncGenerator<T> {
       continue;
     }
     try {
-      yield JSON.parse(payload) as T;
+      const frame = JSON.parse(payload) as T;
+      onRawFrame?.(payload);
+      yield frame;
     } catch {
       // a keep-alive or a provider's stray line: ignore rather than throw
     }

@@ -21,6 +21,31 @@ import type {
 } from './chunk';
 import { openaiChatFormat } from './formats/openai';
 import { anthropicMessagesFormat } from './formats/anthropic';
+import { emitWireDiagnostic, nextStreamId, wireDiagnosticsActive } from './diagnostics';
+
+/** Byte length, not `String.length`: a multibyte frame is bigger than its
+ *  character count and the number is meant to be comparable with what the socket
+ *  carried.
+ *
+ *  Built on first use and cached, never at module scope -- the same rule
+ *  `sseJson` follows for its TextDecoder, so this module keeps importing cleanly
+ *  in a runtime that lacks the global. Only ever reached from inside an
+ *  active-diagnostics branch. */
+let encoder: TextEncoder | undefined;
+
+function byteLength(raw: string): number {
+  encoder ??= new TextEncoder();
+  return encoder.encode(raw).length;
+}
+
+/** What the caller handed over, for `wire.open`. Duck-typed on the same terms as
+ *  `isResponse`, because none of these globals is guaranteed to exist. */
+function sourceKind(source: StreamSource): 'response' | 'stream' | 'iterable' {
+  if (isResponse(source)) return 'response';
+  return typeof (source as ReadableStream<Uint8Array>).getReader === 'function'
+    ? 'stream'
+    : 'iterable';
+}
 
 export type StreamSource =
   | Response
@@ -71,6 +96,21 @@ function providerMessage(body: unknown): string | undefined {
   return typeof top === 'string' ? top : undefined;
 }
 
+/** The provider's error CODE, by the same walk `providerMessage` does for the
+ *  message. The code is the half that can travel on a diagnostic event: it is a
+ *  closed vocabulary a panel can key its own explanation off, while the message
+ *  is free text some providers fill with echoed request content. */
+function providerErrorCode(body: unknown): string | number | undefined {
+  if (typeof body !== 'object' || body === null) return undefined;
+  const error = (body as { error?: unknown }).error;
+  if (typeof error === 'object' && error !== null) {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === 'string' || typeof code === 'number') return code;
+  }
+  const top = (body as { code?: unknown }).code;
+  return typeof top === 'string' || typeof top === 'number' ? top : undefined;
+}
+
 function buildMessage(status: number, statusText: string, bodyText: string, body: unknown): string {
   const head = `Model request failed: HTTP ${status}${statusText ? ` ${statusText}` : ''}`;
   const provider = providerMessage(body);
@@ -103,9 +143,32 @@ async function wireErrorFrom(res: Response): Promise<WireError> {
   return new WireError(res.status, res.statusText, bodyText, body);
 }
 
-async function toByteSource(source: StreamSource): Promise<ByteSource> {
+async function toByteSource(
+  source: StreamSource,
+  ctx?: { streamId?: string },
+): Promise<ByteSource> {
   if (!isResponse(source)) return source;
-  if (!source.ok) throw await wireErrorFrom(source);
+  if (!source.ok) {
+    const err = await wireErrorFrom(source);
+    if (wireDiagnosticsActive()) {
+      emitWireDiagnostic({
+        type: 'wire.failed',
+        t: Date.now(),
+        streamId: ctx?.streamId,
+        status: err.status,
+        statusText: err.statusText,
+        bodyBytes: byteLength(err.bodyText),
+        // `wireErrorFrom` leaves `body` undefined when the text was empty or did
+        // not parse, so this is exactly "the body was JSON".
+        bodyIsJson: err.body !== undefined,
+        // The code travels; `bodyText` and the provider's message do NOT.
+        ...(providerErrorCode(err.body) !== undefined
+          ? { providerCode: providerErrorCode(err.body) }
+          : {}),
+      });
+    }
+    throw err;
+  }
   if (!source.body) {
     throw new Error(
       'The model response has no body to stream. Check that the request set stream: true and that nothing between you and the provider buffered it.',
@@ -120,16 +183,74 @@ export async function readModelStream(
   sink: AssistantStreamSink,
   opts: ReadOptions,
 ): Promise<ModelTurn> {
-  const bytes = await toByteSource(source);
+  // FIRST, before the source is even resolved: a failure inside `toByteSource`
+  // still needs an id to report itself under.
+  const streamId = opts.streamId ?? nextStreamId();
+  const bytes = await toByteSource(source, { streamId });
+  if (wireDiagnosticsActive()) {
+    emitWireDiagnostic({
+      type: 'wire.open',
+      t: Date.now(),
+      streamId,
+      format: opts.format.id,
+      source: sourceKind(source),
+    });
+  }
   // Opened ONCE per stream, which is the whole point of the open()/push() shape:
   // a stateful format (Anthropic) gets a fresh block map per call.
   const reader = opts.format.open();
+
+  let frames = 0;
+  // The raw payload of the frame currently being handed over. `onRawFrame` fires
+  // immediately before `sseJson` yields, so this is always the frame the next
+  // loop iteration is about to push.
+  //
+  // ALWAYS INSTALLED, deliberately. Deciding this once at read entry meant a
+  // subscriber attaching mid-stream saw `bytes: 0` on every later frame -- a
+  // confident zero, and the forward-compat rule exists precisely so a consumer
+  // is never handed one. The capture is a reference stash and nothing else; the
+  // UTF-8 length is computed only inside the active-gated branch below, so with
+  // nobody listening the cost is one closure call and one assignment per frame.
+  let rawFrame = '';
+  const onRawFrame = (raw: string) => {
+    rawFrame = raw;
+  };
+
   async function* chunks(): AsyncGenerator<ModelStreamChunk> {
-    for await (const frame of sseJson<unknown>(bytes)) {
-      for (const chunk of reader.push(frame)) yield chunk;
+    for await (const frame of sseJson<unknown>(bytes, onRawFrame)) {
+      frames++;
+      const produced = reader.push(frame);
+      // Gated BEFORE the event object exists, and before the keys are walked.
+      if (wireDiagnosticsActive()) {
+        const fields = new Set<string>();
+        let model: string | undefined;
+        for (const chunk of produced) {
+          for (const key of Object.keys(chunk)) fields.add(key);
+          if (chunk.model) model = chunk.model;
+        }
+        emitWireDiagnostic({
+          type: 'wire.frame',
+          t: Date.now(),
+          streamId,
+          seq: frames,
+          bytes: byteLength(rawFrame),
+          chunks: produced.length,
+          fields: [...fields],
+          ...(model ? { model } : {}),
+        });
+      }
+      for (const chunk of produced) yield chunk;
     }
   }
-  return consumeModelStream(chunks(), sink, opts);
+  // `_frames` is INTERNAL and deliberately not on `ConsumeOptions`: it is read
+  // once, at the close event, and a public option would invite a caller to
+  // supply one. A direct `consumeModelStream` caller passes nothing and its
+  // `wire.close` correctly omits `frames` -- there were none.
+  return consumeModelStream(chunks(), sink, {
+    ...opts,
+    streamId,
+    _frames: () => frames,
+  } as ConsumeOptions);
 }
 
 /** OpenAI chat-completions SSE. Also what all nine catalog integrations except
