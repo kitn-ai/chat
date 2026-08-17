@@ -172,6 +172,20 @@ function buildMessage(status: number, statusText: string, bodyText: string, body
   return snippet ? `${head}: ${snippet}` : head;
 }
 
+/**
+ * The `name` of whatever was thrown, when there is one to read.
+ *
+ * Duck-typed rather than `instanceof Error`: a `DOMException` from a fetch
+ * abort, an error from another realm, and a host object that merely looks like
+ * an error all carry a usable `name`, and only the first of those is an `Error`
+ * in this realm. A bare string or number carries none, and that is reported as
+ * ABSENT -- filling in `'Error'` would invent a class the throw never claimed.
+ */
+function errorNameOf(err: unknown): string | undefined {
+  const name = (err as { name?: unknown } | null | undefined)?.name;
+  return typeof name === 'string' && name !== '' ? name : undefined;
+}
+
 /** Duck-typed, because `Response` may not be a global in every runtime the kit
  *  is imported into. A ReadableStream has no `ok`, and an async iterable that
  *  happens to have all three of these is not a shape any transport produces. */
@@ -259,6 +273,10 @@ export async function readModelStream(
   const reader = opts.format.open();
 
   let frames = 0;
+  // Chunks YIELDED by this generator, counted here rather than read back off
+  // `consumeModelStream`: when the read dies, that function is mid-throw and
+  // has nothing to hand back.
+  let yielded = 0;
   // The raw payload of the frame currently being handed over. `onRawFrame` fires
   // immediately before `sseJson` yields, so this is always the frame the next
   // loop iteration is about to push.
@@ -297,18 +315,51 @@ export async function readModelStream(
           ...(model ? { model } : {}),
         });
       }
-      for (const chunk of produced) yield chunk;
+      for (const chunk of produced) {
+        yielded++;
+        yield chunk;
+      }
     }
   }
   // `_frames` is INTERNAL and deliberately not on `ConsumeOptions`: it is read
   // once, at the close event, and a public option would invite a caller to
   // supply one. A direct `consumeModelStream` caller passes nothing and its
   // `wire.close` correctly omits `frames` -- there were none.
-  return consumeModelStream(chunks(), sink, {
-    ...opts,
-    streamId,
-    _frames: () => frames,
-  } as ConsumeOptions);
+  //
+  // OBSERVE AND RETHROW. `wire.close` is emitted inside `consumeModelStream`, so
+  // a read that throws before reaching it ended with no terminal event at all --
+  // a stream a panel showed open forever. This is the terminal event for that
+  // case, and it is the ONLY thing this wrapper does: the error is not caught,
+  // not wrapped, not delayed and not swallowed. `return await` rather than a
+  // bare `return` is what puts the rejection inside this try at all.
+  //
+  // It covers a throw from anywhere under the read -- the byte source dying, the
+  // format reader, the host's own sink -- because from the outside all of them
+  // are the same fact: this read stopped and produced no turn.
+  try {
+    return await consumeModelStream(chunks(), sink, {
+      ...opts,
+      streamId,
+      _frames: () => frames,
+    } as ConsumeOptions);
+  } catch (err) {
+    if (wireDiagnosticsActive()) {
+      const name = errorNameOf(err);
+      emitWireDiagnostic({
+        type: 'wire.interrupted',
+        t: Date.now(),
+        ...correlation,
+        frames,
+        chunks: yielded,
+        // Only a self-identifying abort is called one. Guessing would turn "the
+        // provider dropped the connection" into "your user navigated away", and
+        // those two have opposite fixes.
+        reason: name === 'AbortError' ? 'abort' : 'error',
+        ...(name !== undefined ? { errorName: name } : {}),
+      });
+    }
+    throw err;
+  }
 }
 
 /** OpenAI chat-completions SSE. Also what all nine catalog integrations except

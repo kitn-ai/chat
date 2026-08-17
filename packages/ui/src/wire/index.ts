@@ -65,6 +65,7 @@ export type {
   WireDiagnosticEvent,
   WireFailedEvent,
   WireFrameEvent,
+  WireInterruptedEvent,
   WireOpenEvent,
   WirePartEvent,
 } from './diagnostics';

@@ -134,6 +134,44 @@ export interface WireCloseEvent extends WireDiagnosticBase {
   ms: number;
 }
 
+/**
+ * The read DIED. A terminal event for a stream that never reached `wire.close`.
+ *
+ * WHY IT EXISTS: without it, a stream that errored mid-read emitted `wire.open`
+ * and then nothing at all -- no close, no failed -- and a panel showed that
+ * stream open forever. In an observability tool that is a request which
+ * silently vanished, and "the one that never finished" is precisely the request
+ * someone opens the panel to find.
+ *
+ * MUTUALLY EXCLUSIVE with `wire.close`: exactly one of the two ends a read that
+ * got as far as `wire.open`. It is emitted from `readModelStream` only, so a
+ * direct `consumeModelStream` caller (which never emitted `wire.open` either)
+ * does not get one.
+ *
+ * The error itself is UNCHANGED and still thrown: this observes and rethrows.
+ */
+export interface WireInterruptedEvent extends WireDiagnosticBase {
+  type: 'wire.interrupted';
+  /** Frames decoded before it died. */
+  frames: number;
+  /** Neutral chunks yielded before it died. */
+  chunks: number;
+  /**
+   * `'abort'` only when the error IDENTIFIES ITSELF as one (`name` of
+   * `AbortError`), which is what a fetch abort produces. Anything else is
+   * `'error'` -- a guess here would turn "the provider dropped the connection"
+   * into "your user navigated away", and those have opposite fixes.
+   */
+  reason: 'error' | 'abort';
+  /** The caught error's `name` (`'AbortError'`, `'TypeError'`). Metadata: a
+   *  closed-ish vocabulary a panel keys an explanation off. The MESSAGE is
+   *  payload. Absent when the thrown value carries no readable name. */
+  errorName?: string;
+  /** Content-bearing, so opt-in. The error's own message, which can echo
+   *  request content back the way a provider's error text does. */
+  payload?: { message?: string };
+}
+
 /** A non-ok HTTP response: the `WireError` path, before a chunk was read. */
 export interface WireFailedEvent extends WireDiagnosticBase {
   type: 'wire.failed';
@@ -151,7 +189,8 @@ export type WireDiagnosticEvent =
   | WireFrameEvent
   | WirePartEvent
   | WireCloseEvent
-  | WireFailedEvent;
+  | WireFailedEvent
+  | WireInterruptedEvent;
 
 /** The three correlating fields, built ONCE per read and spread onto every
  *  event it emits. One definition so `read.ts` and `consume.ts` cannot drift
