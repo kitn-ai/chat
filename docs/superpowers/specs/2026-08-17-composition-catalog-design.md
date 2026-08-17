@@ -229,7 +229,7 @@ The seed set, every one already known to break real consumers:
 | id | statement (short form) | enforcedBy |
 |---|---|---|
 | `reactivity-two-halves` | a new array reference NOTIFIES; a new object per changed item makes the change VISIBLE; edits need both, adds/removes/reorders need only the array | test: `src/components/reactivity-contract.test.tsx` |
-| `props-not-attributes` | arrays and objects are JS properties, never attributes; scalars may be attributes | structural: the `scalar` flag per prop in `element-meta.json` |
+| `props-not-attributes` | arrays and objects are JS properties, never attributes; scalars may be attributes | structural: the non-reflecting property accessors `defineWebComponent` installs in `src/elements/define.tsx`; the `scalar` flag per prop in `element-meta.json` is the derivable RECORD of the split, not the mechanism |
 | `events-non-bubbling` | non-bubbling is the DEFAULT: public `kai-*` events dispatch through the one helper in `src/elements/define.tsx` that hard-codes `bubbles: false, composed: false`; listen on the element itself. The named protocol exceptions bubble or compose **deliberately** (`kai-maximize-intent` in `artifact.tsx`, `kai-maximize-state` in `resizable.tsx`, each commented at the site), and the catalog carries the exception list DERIVED by grepping for `bubbles: true\|composed: true` on `kai-*` CustomEvents outside `define.tsx`, never restated by hand | structural: `dispatch()` in `src/elements/define.tsx`, plus the derived exception list |
 | `host-coordinates` | no store; data in via properties, out via events, the host wires A to B; Solid context does not cross element boundaries | none: an architectural absence with no single enforcing site; the wiring topology in every recipe assumes it, and the acceptance test is what exercises it |
 | `untrusted-model-output` | anything a model produced that reaches `innerHTML`, `href`/`src`, `window.open` or an iframe is a vulnerability; put an existing policy on the sink (`isSafeUrl`/`SAFE_SCHEMES`, `isRenderableLink`), never author a third | test: `packages/ui/tests/components/markdown-xss.test.tsx`, `artifact-url-xss.test.tsx`, `hostile-model-output.test.tsx` |
@@ -296,7 +296,7 @@ scheduled separately.
 
 | Claim | Check |
 |---|---|
-| The brief's checks held in substance, with the two path corrections stated | `docs/superpowers/specs/2026-08-16-composition-catalog-brief.md` §12; run them; the tools array is in `packages/ui/src/agent-tooling/mcp/server.ts` |
+| The brief's checks held in substance, with the two corrections stated (one on where the tool count derives, one on paths) | `docs/superpowers/specs/2026-08-16-composition-catalog-brief.md` §12; run them; the tools array is in `packages/ui/src/agent-tooling/mcp/server.ts` |
 | The row count of the brief's §12 table | the `awk … \| grep -c` command in the provenance, minus one for the header |
 | `element-meta.json` carries `scalar`, `composedFrom`, tokens, parts | `node -p "Object.keys(require('./packages/ui/src/elements/element-meta.json')[0])"` |
 | The union is already read by two guards | `grep -n chat-types packages/ui/scripts/lint-silent-drops.mjs packages/ui/scripts/verify-scaffold-compiles.mjs` |
@@ -312,6 +312,7 @@ scheduled separately.
 | The nine Labs/Apps files | `grep -rl "Labs/Apps" packages/ui/src --include="*.tsx"` |
 | `reactivity-contract.test.tsx` pins the two-halves rule | `packages/ui/src/components/reactivity-contract.test.tsx` |
 | The URL policies named, and only those | `isSafeUrl`/`SAFE_SCHEMES` in `packages/ui/src/primitives/card-routing.ts`; `isRenderableLink` in `packages/ui/src/primitives/link-preview.ts` |
+| The three wire readers the `backend` field names | `grep -n "readModelStream\|readOpenAIStream\|readAnthropicStream" packages/ui/src/wire/read.ts` |
 | The capability grouping's reasoning is written at the site | the docblock above `listCapabilityGroups()` and the `WHY NOT THE POWER SET` comment above `listSurfaceProbes()` in `archetypes.ts` |
 | create-kai's honest narrowing is separate and in flight | PR #275 |
 | Settled decisions this spec leans on | root `CLAUDE.md` (`kai-` contract, scope boundary, derive-don't-type, decide loudly, untrusted model output); `2026-07-01-composition-first-architecture-proposal.md` |
