@@ -2,8 +2,8 @@
 //
 // Packs one acceptance scenario into a directory carrying the whole catalog --
 // the derived ingredient layer, the invariants, the surface recipes, the
-// scenario prompt -- and NO kit source. Spec §6: whatever the agent then cannot
-// build names exactly what the catalog is missing.
+// delivery story, the scenario prompt -- and NO kit source. Spec §6: whatever
+// the agent then cannot build names exactly what the catalog is missing.
 //
 //   node scripts/acceptance-pack.mjs --list
 //   node scripts/acceptance-pack.mjs --scenario S1 --out <dir>
@@ -31,12 +31,18 @@
 // given, and a scoring checklist in the agent's own directory is an answer key.
 // A sentence asking the agent not to look is not a boundary; a directory it is
 // never handed is. The runner hands over `<out>/agent/` and keeps `<out>/judge/`.
+//
+// EVERYTHING IS RENDERED BEFORE ANYTHING IS WRITTEN, so the cross-checks below
+// -- scoring-line redaction, import specifiers resolving against the exports
+// map, the floor, artifact agreement, needle soundness -- can refuse to produce
+// a pack rather than produce one and then complain about it.
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as esbuild from 'esbuild';
-import { runFloor, formatFloor, selfTest, assertEnrichmentCovers } from './lib/invariant-floor.mjs';
+import { runFloor, formatFloor, selfTest, assertArtifactsAgree } from './lib/invariant-floor.mjs';
+import { NEEDLES, verifyNeedles, selfTestNeedles } from './lib/audit-needles.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CATALOG_DIR = join(ROOT, 'src/agent-tooling/catalog');
@@ -102,6 +108,26 @@ function section(title, body) {
   return body && body.length ? `## ${title}\n\n${body}\n` : '';
 }
 
+/**
+ * SCORING LINES ARE AN ANSWER KEY, and one of them is quoted verbatim inside an
+ * invariant `statement` (kit-parses-consumer-fetches names S2's scoring line to
+ * explain where the uncovered half is measured). The statements are reproduced
+ * verbatim in the pack on purpose -- rewriting authored prose would create an
+ * unpinned copy of the record -- so the leak is closed mechanically instead, at
+ * render time, over EVERY scenario's lines rather than the one that happened to
+ * be noticed. Nothing is lost here: the sentence before the quote already tells
+ * the agent to import the wire reader.
+ */
+function redactScoringLines(text, scenarios) {
+  let out = text;
+  for (const s of scenarios) {
+    for (const line of s.scoring) {
+      out = out.split(line).join('[scoring criterion withheld from this pack]');
+    }
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // The agent-facing pages
 // ---------------------------------------------------------------------------
@@ -116,18 +142,20 @@ everything.
 ## Read in this order
 
 1. **PROMPT.md** — the task.
-2. **ELEMENTS.md** — the index of all ${derived.elements.length} elements, one line each. **Open only the
+2. **DELIVERY.md** — how to install, load and register the kit. Read this before
+   writing any import or script tag; the specifiers are not guessable.
+3. **ELEMENTS.md** — the index of all ${derived.elements.length} elements, one line each. **Open only the
    element pages you actually need** (\`elements/<tag>.md\`). There are
    ${elementPageCount} of them and reading them all is a waste of your context.
-3. **SHARED-PROPS.md** — the props every element has. They are listed once here
+4. **SHARED-PROPS.md** — the props every element has. They are listed once here
    and NOT repeated on the ${elementPageCount} element pages.
-4. **INVARIANTS.md** — the rules that break real consumers. Each carries a
+5. **INVARIANTS.md** — the rules that break real consumers. Each carries a
    wrong/right code pair. Apply these; they are not style advice.
-5. **RECIPES.md** — proven compositions, with the host wiring written out.
-6. **PARTS.md**, **INTEGRATIONS.md**, **THEME.md**, **INVENTORY.md** — reference,
+6. **RECIPES.md** — proven compositions, with the host wiring written out.
+7. **PARTS.md**, **INTEGRATIONS.md**, **THEME.md**, **INVENTORY.md** — reference,
    open as needed.
-7. **SELF-AUDIT.md** — run this over your own output **before you deliver**.
-8. **FABRICATED.md** — components other agents have invented that do not exist.
+8. **SELF-AUDIT.md** — run this over your own output **before you deliver**.
+9. **FABRICATED.md** — components other agents have invented that do not exist.
 
 ## These lists are EXHAUSTIVE
 
@@ -139,14 +167,16 @@ This is the part that matters most, so it is repeated on each list page:
 - **PARTS.md is every \`MessagePart\` variant the wire can represent** —
   ${derived.partVariants.length} of them. A part with any other \`type\` cannot be
   produced, parsed or rendered.
+- **DELIVERY.md is every entry point the package publishes.** An import
+  specifier that is not on that page does not resolve.
 - The props, events, methods, slots and CSS parts on an element page are that
   element's complete API. There are no undocumented ones.
 
 **So if this task needs something that is not here, say so and stop.** Inventing
-a plausible \`<kai-…>\` tag, prop or event is the single worst outcome: it
-compiles in the reader's head, renders nothing in a browser, and costs more to
-diagnose than an honest refusal. Naming what is missing is a correct and useful
-answer.
+a plausible \`<kai-…>\` tag, prop, event or import path is the single worst
+outcome: it compiles in the reader's head, renders nothing in a browser, and
+costs more to diagnose than an honest refusal. Naming what is missing is a
+correct and useful answer.
 
 ## The shape of this kit, in four sentences
 
@@ -158,7 +188,166 @@ event to element B's property.
 `;
 }
 
-function renderElementIndex({ derived, meta, universal }) {
+/**
+ * Every `exports` key gets a line, and a key with no entry here is a HARD
+ * FAILURE rather than a silent omission -- the failure mode this page exists to
+ * fix was an entry point nobody wrote down. `agent: false` keeps a key out of
+ * the agent's page (tooling manifests it has no use for) while still requiring
+ * it to be accounted for.
+ */
+const EXPORT_NOTES = {
+  '.': { agent: true, what: 'The SolidJS components, for a Solid app. Not needed to use the web components.' },
+  './elements': { agent: true, what: 'Registers **every** `kai-*` element as a side effect. The simple default; also the file a CDN serves.' },
+  './elements/*': { agent: true, what: 'One element at a time, e.g. `@kitn.ai/ui/elements/chat` — a bundler then tree-shakes the rest away.' },
+  './autoloader': { agent: true, what: 'Opt-in DOM autoloader: watches the document and imports each element on demand as a `<kai-*>` tag appears.' },
+  './theme.css': { agent: true, what: 'The design-token stylesheet. Import it through a build that runs Tailwind over it, or link it directly on a no-build page.' },
+  './theme.tokens.css': { agent: true, what: 'The pre-built token sheet — plain CSS custom properties, no Tailwind step required.' },
+  './react': { agent: true, what: 'Typed React wrappers (`Chat`, `Message`, …) plus `useKaiChat`. Sets array/object props for you as properties.' },
+  './solid': { agent: true, what: 'The SolidJS entry with the server build wired up.' },
+  './state': { agent: true, what: 'I/O-free helpers over `ChatMessage[]`: `createAssistantStream`, `appendTextPart`, `upsertToolPart`.' },
+  './wire': { agent: true, what: 'The model-stream adapter: `readOpenAIStream` / `readAnthropicStream` / `readModelStream` parse provider SSE; `toOpenAIMessages` / `toAnthropicMessages` encode the thread back.' },
+  './provider': { agent: true, what: 'The remote-provider element bundle.' },
+  './schemas': { agent: true, what: 'The generative-UI card schemas.' },
+  './schemas/*': { agent: true, what: 'One card schema JSON file at a time.' },
+  './element-meta.json': { agent: false, what: 'Tooling manifest of every element API. This pack is rendered from it.' },
+  './icon-names.json': { agent: false, what: 'Tooling manifest of icon names.' },
+  './package.json': { agent: false, what: 'The manifest itself.' },
+};
+
+function renderDelivery({ pkg, kitVersion, derived, solidExports }) {
+  const keys = Object.keys(pkg.exports ?? {});
+  const missing = keys.filter((k) => !EXPORT_NOTES[k]);
+  if (missing.length) {
+    fail(
+      `package.json publishes exports key(s) ${missing.join(', ')} with no entry in EXPORT_NOTES, so DELIVERY.md would not mention them. An entry point the pack does not name is one the agent has to guess.`,
+    );
+  }
+  const dangling = Object.keys(EXPORT_NOTES).filter((k) => !keys.includes(k));
+  if (dangling.length) fail(`EXPORT_NOTES describes ${dangling.join(', ')}, which package.json no longer exports.`);
+
+  const rows = keys
+    .filter((k) => EXPORT_NOTES[k].agent)
+    .map((k) => `| \`@kitn.ai/ui${k === '.' ? '' : k.slice(1)}\` | ${EXPORT_NOTES[k].what} |`)
+    .join('\n');
+
+  // The CDN path is the `./elements` target, read from the exports map rather
+  // than typed: it is `dist/kai.es.js` today and that is not this file's fact to
+  // remember. The version is read from package.json for the same reason, and
+  // because a hand-typed pin is what `lint:cdn-pins` exists to catch.
+  const elementsTarget = (pkg.exports['./elements']?.default ?? '').replace(/^\.\//, '');
+  const themeTarget = (pkg.exports['./theme.css'] ?? '').replace(/^\.\//, '');
+
+  return `# Delivery — installing, loading and registering
+
+Nothing in this kit works until the elements are **registered**. Registration is
+a side effect of importing an entry point; there is no \`init()\` to call.
+
+## Install (bundler / npm)
+
+${fence('npm install @kitn.ai/ui', 'bash')}
+
+SolidJS consumers also need the peer dependency \`solid-js\`. Everyone else needs
+nothing further — the built bundle ships in the package, so there is nothing to
+compile.
+
+## Entry points
+
+**This table is the complete published surface.** An import specifier that is
+not on it does not resolve, whatever it looks like.
+
+| specifier | what it is |
+| --- | --- |
+${rows}
+
+## Registering the elements
+
+Three ways, all client-side:
+
+${fence(
+  [
+    "import '@kitn.ai/ui/elements';        // registers every element — the simple default",
+    "import '@kitn.ai/ui/elements/chat';   // one element; the bundler drops the rest",
+    "import '@kitn.ai/ui/autoloader';      // loads each element on demand as its tag appears",
+  ].join('\n'),
+  'js',
+)}
+
+Registration is **asynchronous** (it is gated behind a browser check so the
+module is inert during SSR), so a property set immediately after the import can
+land before the element upgrades and be lost. Wait for the registry:
+
+${fence("await customElements.whenDefined('kai-chat');\nchat.messages = messages;", 'js')}
+
+\`@kitn.ai/ui/elements\` also exports \`elementsReady\`, a promise that resolves
+once every element is registered — await that instead if you are setting
+properties on several elements at once. See \`upgrade-race\` in INVARIANTS.md.
+
+## No build step: a script tag
+
+The element bundle is a self-contained **ES module**, so it loads over
+\`<script type="module">\` with no bundler and no install:
+
+${fence(
+  `<script type="module">
+  import 'https://cdn.jsdelivr.net/npm/@kitn.ai/ui@${kitVersion}/${elementsTarget}';
+  // …or unpkg: import 'https://unpkg.com/@kitn.ai/ui@${kitVersion}/${elementsTarget}';
+
+  await customElements.whenDefined('kai-chat');
+  const chat = document.querySelector('kai-chat');
+  chat.messages = [{ id: '1', role: 'assistant', parts: [{ type: 'text', text: 'Hi' }] }];
+</script>
+
+<kai-chat></kai-chat>`,
+  'html',
+)}
+
+**Pin the exact version, as above.** An unpinned CDN URL tracks the latest
+release, and a CDN fetch — unlike \`npm install\` — warns you about nothing when
+the version it serves has been deprecated. \`${kitVersion}\` is the version this
+pack was generated from.
+
+To override design tokens on a no-build page, add the stylesheet:
+
+${fence(`<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@kitn.ai/ui@${kitVersion}/${themeTarget}">`, 'html')}
+
+## React
+
+${fence("import { Chat, useKaiChat } from '@kitn.ai/ui/react';", 'tsx')}
+
+The wrappers set array and object props as JS **properties** for you, which is
+the mistake \`props-not-attributes\` describes. Everything else in this pack
+still applies: the events are the same non-bubbling \`kai-*\` events, and the
+reactivity rule is unchanged.
+
+## Vue, Svelte, Angular, plain HTML
+
+Import \`@kitn.ai/ui/elements\` once, then use the tags directly. There are no
+per-framework wrappers beyond React. In a template, remember that only scalars
+can be bound as attributes — arrays, objects and functions must be assigned to
+the element instance in code.
+
+## Styling
+
+${fence("import '@kitn.ai/ui/theme.css';", 'js')}
+
+Import that through a build that runs **Tailwind** over it: the file carries a
+Tailwind \`@theme\` block, and a bundler that ships it raw to a browser discards
+that block. On a page with no build step use the \`<link>\` above, or
+\`@kitn.ai/ui/theme.tokens.css\`, which is the pre-built plain-CSS token sheet.
+The token names are in THEME.md.
+
+## The Solid component names on the element pages
+
+Each element page names the SolidJS component it wraps (\`ChatThread\`,
+\`Conversations\`, …). **Those names are provenance, not import paths.** Of the
+${solidExports.total} names that appear, ${solidExports.exported} are also exported from
+\`@kitn.ai/ui\` for SolidJS consumers and ${solidExports.internal} are internal and
+cannot be imported at all. The element pages mark which is which. If you are not
+writing a Solid app, ignore them entirely and use the \`kai-*\` tag.
+`;
+}
+
+function renderElementIndex({ derived, meta, universal, intents, capabilityOf }) {
   const byTag = new Map(meta.map((m) => [m.tag, m]));
   const rows = derived.elements
     .slice()
@@ -170,7 +359,7 @@ function renderElementIndex({ derived, meta, universal }) {
       // here must exclude them too. A row saying 5 next to a page listing 4 is
       // the kind of small falsehood that makes an agent stop trusting the pack.
       const props = e.props.filter((p) => !universal.includes(p.name)).length;
-      return `| [\`${e.tag}\`](elements/${e.tag}.md) | ${props} | ${e.events.length} | ${e.methods.length} | ${slots} | ${e.parts.length} | ${(e.composedFrom ?? []).join(', ') || '—'} |`;
+      return `| [\`${e.tag}\`](elements/${e.tag}.md) | ${intents.get(e.tag) ?? '—'} | ${capabilityOf.get(e.tag) ?? '—'} | ${props} | ${e.events.length} | ${e.methods.length} | ${slots} | ${e.parts.length} |`;
     });
 
   return `# Elements — the complete index
@@ -183,10 +372,17 @@ that is here. If the task needs one that is missing, say so.
 Counts below exclude the shared props in [SHARED-PROPS.md](SHARED-PROPS.md),
 which every element also has.
 
+**On the "what it is" column, read this before trusting a blank.** Only
+${intents.size} of these ${derived.elements.length} elements carry a curated
+one-line description upstream, so most rows show \`—\`. A blank means *nobody has
+written one*, never *this element is unimportant*. The counts and the capability
+group are the other signals; if you are choosing between two candidates, open
+both pages rather than guessing from the name.
+
 Open a row's page for its full API. Do not open pages you do not need.
 
-| element | props | events | methods | slots | CSS parts | Solid component |
-| --- | --: | --: | --: | --: | --: | --- |
+| element | what it is | capability group | props | events | methods | slots | CSS parts |
+| --- | --- | --- | --: | --: | --: | --: | --: |
 ${rows.join('\n')}
 `;
 }
@@ -230,7 +426,7 @@ function renderProp(p) {
   return bits.join('\n') + '\n';
 }
 
-function renderElementPage({ el, m, universal }) {
+function renderElementPage({ el, m, universal, solidExported, tokenFor }) {
   const props = (m.props ?? [])
     .filter((p) => !universal.includes(p.name))
     .map((p) => {
@@ -256,7 +452,16 @@ function renderElementPage({ el, m, universal }) {
     (p) => `- **\`::part(${p.name})\`**${p.doc ? ` — ${p.doc}` : ''}${p.recipe ? `\n${fence(p.recipe, 'css')}` : ''}`,
   );
 
-  const tokens = (el.tokens ?? []).map((t) => `- \`${t}\``);
+  // The element's own token names are the sheet's INTERNAL aliases
+  // (`--color-sidebar`), which read from the consumer-settable `--kai-` name.
+  // Printing the internal one would contradict THEME.md and make the pack's own
+  // self-audit fire on correct code, so the consumer-settable name is what is
+  // printed and the alias is named as an alias.
+  const tokens = (el.tokens ?? []).map((t) => `- \`${tokenFor(t)}\`  _(the sheet's internal alias for this is \`${t}\`; set the \`--kai-\` name)_`);
+
+  const solid = (el.composedFrom ?? []).map(
+    (n) => `\`${n}\`${solidExported.has(n) ? ' (also exported from `@kitn.ai/ui` for SolidJS)' : ' (internal — not importable)'}`,
+  );
 
   const usage = fence(
     [
@@ -271,10 +476,12 @@ function renderElementPage({ el, m, universal }) {
 
   return `# \`${el.tag}\`
 
-${(el.composedFrom ?? []).length ? `Solid component: \`${el.composedFrom.join('`, `')}\`.\n` : ''}
+${solid.length ? `Solid source: ${solid.join(', ')}. Provenance, not an import path — see [../DELIVERY.md](../DELIVERY.md).\n` : ''}
 This page is this element's **complete** API. Anything not listed does not exist
 on it. Every element also has the props in
 [../SHARED-PROPS.md](../SHARED-PROPS.md), which are not repeated here.
+
+Registering the tag: [../DELIVERY.md](../DELIVERY.md).
 
 ${usage}
 
@@ -319,7 +526,7 @@ produce code that compiles, type-checks and renders nothing.
 
 Each carries a **wrong/right pair as code**. Match your output against the wrong
 form; if it matches, use the right form. [SELF-AUDIT.md](SELF-AUDIT.md) turns
-these pairs into an exact-string checklist you can run mechanically.
+these pairs into a searchable checklist you can run mechanically.
 
 ${blocks.join('\n\n---\n\n')}
 `;
@@ -330,11 +537,15 @@ function renderSelfAudit({ selfAuditItems, derived }) {
     .map(
       (it, n) => `### ${n + 1}. \`${it.invariant}\`
 
-Search your output for this exact string:
+Search your output for:
+
+${fence(it.needle, 'text')}
+
+**Expected hits: 0.** The full mistake it comes from:
 
 ${fence(it.search, 'text')}
 
-**Expected hits: 0.** If you find it, replace that line with:
+If you find it, use this instead:
 
 ${fence(it.replaceWith)}
 `,
@@ -346,12 +557,19 @@ ${fence(it.replaceWith)}
 Two kinds of check. Both are mechanical: do not reason about whether your code
 "feels right", **search it**.
 
-## Part 1 — exact-string searches
+## Part 1 — searches
 
-Each item below is a literal string that must not appear in what you produced.
-These are exact-string checks, so they are a **floor, not a proof**: a near-miss
-(a different variable name, a reordered argument) will not match and is still
-wrong. Zero hits does not mean correct; a hit means definitely wrong.
+Each item is a string that must not appear in what you produced. Every one has
+been machine-checked against this catalog: it appears in the mistake it comes
+from, and in **none** of the recommended forms — so a hit is a real finding, not
+a style opinion.
+
+Recall varies by item, and that is deliberate. Some needles catch the whole class
+however you spelled the variables (\`.messages.push(\`, \`'_blank');\`,
+\`'data: '\`). Others stay close to the original line because the mistake shares
+its API with legitimate uses — \`setTimeout\` and \`DOMContentLoaded\` are fine
+for other things — and a needle that flags correct code is worse than a narrow
+one. **Zero hits does not mean correct; a hit means definitely wrong.**
 
 ${items}
 
@@ -364,19 +582,24 @@ These need no needle. Run each over your finished output.
    index. There are ${derived.elements.length} legal tags. A tag that is not on
    that list does not exist, and shipping it is worse than not answering — go
    back and say what is missing instead.
-2. **Every prop you set must appear on that element's page.** Not on a different
+2. **Every \`@kitn.ai/ui…\` import specifier you wrote must appear in
+   DELIVERY.md.** That table is the complete published surface; anything else
+   fails to resolve at install time, which is the most expensive place to find
+   out.
+3. **Every prop you set must appear on that element's page.** Not on a different
    element's page: props are not shared between elements except the ones in
    SHARED-PROPS.md.
-3. **Every prop you set as an ATTRIBUTE must be marked settable as an attribute
+4. **Every prop you set as an ATTRIBUTE must be marked settable as an attribute
    on that page.** Anything marked "JS property only" must be assigned:
    \`el.prop = value\`.
-4. **Every event you listen for must be listed on the element you attached the
+5. **Every event you listen for must be listed on the element you attached the
    listener to.** Not on a parent, not on \`document\` — except for the protocol
    exceptions listed in INVARIANTS.md under \`events-non-bubbling\`.
-5. **Every \`MessagePart\` you construct must use a \`type\` from PARTS.md.**
+6. **Every \`MessagePart\` you construct must use a \`type\` from PARTS.md.**
    There are ${derived.partVariants.length}: ${derived.partVariants.map((v) => `\`${v}\``).join(', ')}.
-6. **Every CSS custom property you set must appear in THEME.md.**
-7. **You imported no SSE parsing of your own.** If your output reads
+7. **Every CSS custom property you set must appear in THEME.md**, spelled with
+   the \`--kai-\` prefix.
+8. **You imported no SSE parsing of your own.** If your output reads
    \`response.body\` and splits on \`data:\`, delete it and use the wire reader.
 `;
 }
@@ -391,7 +614,7 @@ function renderRecipes({ recipes }) {
 ${r.intent}
 
 - **Archetype:** ${r.archetypes.join(', ')}
-- **Delivery:** ${r.targets.join(', ')}
+- **Delivery:** ${r.targets.join(', ')} — see [DELIVERY.md](DELIVERY.md) for the entry point that target uses.
 - **Ingredients:** ${r.ingredients.map((i) => `\`${i}\``).join(', ')}
 - **Backend:** a **${r.backend.endpoint}** endpoint, read with \`${r.backend.reader}\` from \`@kitn.ai/ui/wire\`. This kit ships no client and no key handling: you fetch, it parses.
 - **Invariants this recipe instances:** ${r.invariants.map((i) => `\`${i}\``).join(', ')} — see INVARIANTS.md.
@@ -455,19 +678,28 @@ ${derived.capabilityGroups.map((g) => `- **${g.id}** — ${g.components.map((c) 
 `;
 }
 
-function renderTheme({ derived }) {
+function renderTheme({ tokens, droppedFragments }) {
   return `# Theme tokens
 
-**This list is EXHAUSTIVE.** These ${derived.themeTokens.length} CSS custom
-properties are every token the kit reads. Setting one that is not on this list
-does nothing.
+**This list is EXHAUSTIVE.** These ${tokens.length} CSS custom properties are
+every token the kit reads. Setting one that is not on this list does nothing.
 
 Set them on a host element or on \`:root\`; they cross the shadow boundary
 because custom properties inherit. Do not reach into a shadow root and do not
 style by internal class name — use the \`::part()\` names on each element page.
 
-${derived.themeTokens.map((t) => `- \`${t}\``).join('\n')}
-`;
+An element page may also name the sheet's **internal alias** for a token (e.g.
+\`--color-sidebar\`). Set the \`--kai-\` name from this list; the alias reads from
+it and is not something you assign.
+
+${tokens.map((t) => `- \`${t}\``).join('\n')}
+${
+  droppedFragments.length
+    ? `\n---\n\n_${droppedFragments.length} entr${droppedFragments.length === 1 ? 'y' : 'ies'} in the upstream token extraction (${droppedFragments
+        .map((t) => `\`${t}\``)
+        .join(', ')}) are prefix fragments rather than token names — a defect in the generator, not tokens you can set. They are omitted here so this list stays true to the word EXHAUSTIVE._`
+    : ''
+}`;
 }
 
 function renderInventory({ inventory }) {
@@ -562,9 +794,11 @@ ${recipes.map((r) => `- **${r.id}** — ${r.corpus.map((c) => `\`${c}\``).join('
 
 ## Floor stage
 
-Every \`examples[].right\` in the catalog was executed before this pack was
-written. Full report in [FLOOR.md](FLOOR.md); ${floor.results.length} examples,
-${floor.results.filter((r) => r.status === 'passed').length} passed.
+Every \`examples[].right\` in the catalog was executed against the stand-ins
+named in [FLOOR.md](FLOOR.md) before this pack was written; ${floor.results.length}
+examples, ${floor.results.filter((r) => r.status === 'passed').length} passed.
+None of them ran against the kit's real registered elements — read FLOOR.md
+before treating a green floor as a statement about the shipped components.
 `;
 }
 
@@ -577,25 +811,95 @@ pack was written, and where the example makes a behavioural claim the claim was
 asserted. If the catalog's own recommended code does not run, nothing measured
 downstream of it is worth anything.
 
+**Read the stand-ins column as part of the result, not as a footnote.** This is a
+Node script: it has no browser and no built element bundle, so **no example ran
+against a real registered \`kai-*\` element.** What ran is the fragment, against
+the stand-ins listed below. Where a stand-in is the SUBJECT of the claim, the row
+carries a corroboration that checks the real thing by another route.
+
 ${floor.results.length} examples, ${floor.results.filter((r) => r.status === 'passed').length} passed, ${floor.results.filter((r) => r.status !== 'passed').length} not.
 
 \`\`\`
 ${formatFloor(floor)}
 \`\`\`
 
-## Examples that could not be executed against the real thing
+## Stand-ins, per example
 
 ${
   stubbed.length
     ? stubbed
         .map(
           (r) =>
-            `- **${r.key}** — stand-ins: ${r.stubs.join('; ')}. The fragment executed and its arguments were asserted, but against a stub rather than the published symbol.${r.corroboration ? ` Corroborated by another route: ${r.corroboration}.` : ''}`,
+            `- **${r.key}** — ${r.stubs.join('; ')}.${r.corroboration ? ` Corroborated by another route: ${r.corroboration}.` : ''}`,
         )
         .join('\n')
-    : '_None: every example ran against real values._'
+    : '_No row declares a stand-in._'
+}
+
+${
+  floor.results.length === stubbed.length
+    ? '_Every row declares at least one stand-in._'
+    : `_${floor.results.length - stubbed.length} row(s) declare none: ${floor.results
+        .filter((r) => !r.stubs.length)
+        .map((r) => r.key)
+        .join(', ')}._`
 }
 `;
+}
+
+// ---------------------------------------------------------------------------
+// Cross-checks over the rendered pack
+// ---------------------------------------------------------------------------
+
+/**
+ * Every `@kitn.ai/ui…` specifier the pack NAMES must resolve through the
+ * published exports map, and every symbol it recommends importing from one must
+ * actually be exported.
+ *
+ * This is the Task-5 class recurring: a `right` form recommending an import that
+ * a consumer cannot reach. The floor's per-harness corroboration covered
+ * `./wire` and nothing else, so `createAssistantStream from '@kitn.ai/ui/state'`
+ * -- named twice in prose that ships in the pack -- was unchecked. Deriving the
+ * subpath from the text rather than listing subpaths means a note naming a new
+ * one is covered the day it is written.
+ */
+function verifySpecifiers(text, pkg, readSource) {
+  const problems = [];
+  const keys = new Set(Object.keys(pkg.exports ?? {}));
+  const resolves = (spec) => {
+    const sub = spec === '@kitn.ai/ui' ? '.' : `.${spec.slice('@kitn.ai/ui'.length)}`;
+    if (keys.has(sub)) return true;
+    // Wildcard keys: `./elements/*`, `./schemas/*`.
+    return [...keys].some((k) => k.endsWith('/*') && sub.startsWith(k.slice(0, -1)));
+  };
+
+  const specifiers = new Set([...text.matchAll(/@kitn\.ai\/ui(?:\/[a-zA-Z0-9._*-]+)*/g)].map((m) => m[0]));
+  if (specifiers.size === 0) problems.push('the pack names no @kitn.ai/ui specifier at all, which cannot be right.');
+  for (const spec of specifiers) {
+    if (!resolves(spec)) problems.push(`the pack names ${spec}, which is not in the package exports map.`);
+  }
+
+  // `import { a, b } from '@kitn.ai/ui/x'` and the prose form `Name from '@kitn.ai/ui/x'`.
+  const named = [
+    ...text.matchAll(/import\s*\{([^}]*)\}\s*from\s*['"]@kitn\.ai\/ui\/([a-z]+)['"]/g),
+  ].flatMap((m) => m[1].split(',').map((n) => [n.trim(), m[2]]));
+  named.push(
+    ...[...text.matchAll(/([A-Za-z_$][\w$]*)\s+from\s+['"]@kitn\.ai\/ui\/([a-z]+)['"]/g)].map((m) => [m[1], m[2]]),
+  );
+
+  const sourceCache = new Map();
+  for (const [name, sub] of named) {
+    if (!name) continue;
+    if (!sourceCache.has(sub)) sourceCache.set(sub, readSource(sub));
+    const src = sourceCache.get(sub);
+    if (src === undefined) continue; // no readable source index for this subpath
+    if (!new RegExp(`export (?:\\{[^}]*\\b${name}\\b[^}]*\\}|(?:const|function|class) ${name}\\b)`).test(src)) {
+      problems.push(
+        `the pack recommends \`${name}\` from '@kitn.ai/ui/${sub}', but src/${sub}/index.ts does not export it.`,
+      );
+    }
+  }
+  return problems;
 }
 
 // ---------------------------------------------------------------------------
@@ -620,14 +924,28 @@ const helpers = {
   derivedProp: (tag, name) => derived.elements.find((e) => e.tag === tag)?.props.find((p) => p.name === name),
   derivedEvents: (tag) => derived.elements.find((e) => e.tag === tag)?.events ?? [],
   wireIndexSource: readFileSync(join(ROOT, 'src/wire/index.ts'), 'utf8'),
+  defineSource: readFileSync(join(ROOT, 'src/elements/define.tsx'), 'utf8'),
   exportsKeys: Object.keys(pkg.exports ?? {}),
+};
+
+const readSubpathSource = (sub) => {
+  try {
+    return readFileSync(join(ROOT, 'src', sub, 'index.ts'), 'utf8');
+  } catch {
+    return undefined;
+  }
 };
 
 if (args.includes('--self-test')) {
   const r = await selfTest(helpers);
   for (const [what, ok] of r.expectations) console.log(`${ok ? '✓' : '✗'} ${what}`);
-  if (!r.ok) fail(`the floor stage failed its own positive control:\n  - ${r.failed.join('\n  - ')}`);
-  console.log('✓ acceptance-pack: the floor stage detects a broken example, a silently-wrong one, a missing harness and a dangling one.');
+  const needleResults = selfTestNeedles();
+  for (const [what, ok] of needleResults) console.log(`${ok ? '✓' : '✗'} needle check: ${what}`);
+  const needleFailed = needleResults.filter(([, ok]) => !ok).map(([what]) => what);
+  if (!r.ok || needleFailed.length) {
+    fail(`the pack's own positive controls failed:\n  - ${[...r.failed, ...needleFailed].join('\n  - ')}`);
+  }
+  console.log('✓ acceptance-pack: every planted fault was detected.');
   process.exit(0);
 }
 
@@ -655,14 +973,20 @@ if (!floor.ok) {
   );
 }
 
-assertEnrichmentCovers(derived.elements, meta);
+assertArtifactsAgree(derived.elements, meta);
+
+const needleProblems = verifyNeedles(invariants);
+if (needleProblems.length) {
+  fail(`the self-audit needles are unsound, so nothing was packed:\n  - ${needleProblems.join('\n  - ')}`);
+}
 
 const metaByTag = new Map(meta.map((m) => [m.tag, m]));
+
 // A prop is universal when element-meta.json flags it so -- the flag is set by
 // the generator, not inferred here. Cross-checked against the derived spine:
 // a "universal" prop missing from any element would make the dedup a lie, and
-// dropping the row from 80 pages while it is absent from one is worse than not
-// deduping at all.
+// dropping the row from every page while it is absent from one is worse than
+// not deduping at all.
 const universal = [
   ...new Set(meta.flatMap((m) => (m.props ?? []).filter((p) => p.universal).map((p) => p.name))),
 ].filter((name) => {
@@ -675,10 +999,63 @@ const universal = [
   return true;
 });
 
+// THEME TOKENS. Three entries in the upstream extraction are PREFIX FRAGMENTS
+// (`--kai-color-`, …) rather than token names: an artifact of the Task 3
+// generator's scan, not something a consumer can set. A page headed EXHAUSTIVE
+// must not list them, so they are filtered here and NAMED on the page as an
+// upstream defect rather than silently dropped.
+const droppedFragments = derived.themeTokens.filter((t) => t.endsWith('-'));
+const themeTokens = derived.themeTokens.filter((t) => !t.endsWith('-'));
+
+// An element's `tokens` are the sheet's internal aliases (`--color-sidebar`),
+// which read from the consumer-settable `--kai-` name. Map each to the name a
+// consumer actually sets, and fail loudly if one has no counterpart rather than
+// printing a token the self-audit would then flag.
+const themeTokenSet = new Set(themeTokens);
+const tokenFor = (alias) => {
+  const prefixed = alias.startsWith('--kai-') ? alias : `--kai-${alias.slice(2)}`;
+  if (!themeTokenSet.has(prefixed)) {
+    fail(
+      `element token ${alias} has no consumer-settable counterpart ${prefixed} in the theme token list, so the element page and THEME.md would contradict each other.`,
+    );
+  }
+  return prefixed;
+};
+
+// Which Solid component names are importable, so the element pages can say.
+const solidBarrel = readFileSync(join(ROOT, 'src/index.ts'), 'utf8');
+const solidExported = new Set(
+  [...solidBarrel.matchAll(/export\s*\{([^}]*)\}/g)].flatMap((m) =>
+    m[1]
+      .split(',')
+      .map((s) => s.trim().split(/\s+as\s+/).pop())
+      .filter(Boolean),
+  ),
+);
+const allSolidNames = [...new Set(derived.elements.flatMap((e) => e.composedFrom ?? []))];
+const solidExports = {
+  total: allSolidNames.length,
+  exported: allSolidNames.filter((n) => solidExported.has(n)).length,
+  internal: allSolidNames.filter((n) => !solidExported.has(n)).length,
+};
+
+// The only curated per-element one-liners in the tree. There are very few; the
+// index says how few rather than implying the blanks mean anything.
+const intents = new Map(
+  [...readFileSync(join(ROOT, 'llms.txt'), 'utf8').matchAll(/^- `<(kai-[a-z0-9-]+)>` — (.+)$/gm)].map((m) => [
+    m[1],
+    m[2].replace(/\.$/, ''),
+  ]),
+);
+const capabilityOf = new Map(
+  derived.capabilityGroups.flatMap((g) => g.components.map((c) => [c, g.id])),
+);
+
 const selfAuditItems = invariants.flatMap((inv) =>
   inv.examples.map((ex, index) => ({
     invariant: inv.id,
     index,
+    needle: NEEDLES[`${inv.id}#${index}`],
     search: ex.wrong,
     replaceWith: ex.right,
     rule: inv.statement,
@@ -689,27 +1066,24 @@ const recipes = catalog.listSurfaceRecipes();
 const inventory = catalog.listInventory();
 const partConsumption = catalog.listPartConsumption();
 
-const agentDir = join(out, 'agent');
-const judgeDir = join(out, 'judge');
-mkdirSync(join(agentDir, 'elements'), { recursive: true });
-mkdirSync(judgeDir, { recursive: true });
+// --- render everything, in memory ------------------------------------------
 
-// Counted, not stated: the "how many guides" line at the end is produced from
-// what was actually written, so adding or dropping a page moves it on its own.
-const written = { agentGuides: 0, elementPages: 0 };
-const write = (dir, name, body) => {
-  if (dir === agentDir) written.agentGuides++;
-  if (dir === join(agentDir, 'elements')) written.elementPages++;
-  writeFileSync(join(dir, name), body.endsWith('\n') ? body : body + '\n');
-};
+const agentPages = [];
+const elementPages = [];
+const judgePages = [];
+const addAgent = (name, body) => agentPages.push({ name, body });
+const addElement = (name, body) => elementPages.push({ name, body });
+const addJudge = (name, body) => judgePages.push({ name, body });
 
 for (const el of derived.elements) {
-  write(join(agentDir, 'elements'), `${el.tag}.md`, renderElementPage({ el, m: metaByTag.get(el.tag), universal }));
+  addElement(
+    `${el.tag}.md`,
+    renderElementPage({ el, m: metaByTag.get(el.tag), universal, solidExported, tokenFor }),
+  );
 }
 
-write(agentDir, 'README.md', renderReadme({ scenario, kitVersion, derived, elementPageCount: derived.elements.length }));
-write(
-  agentDir,
+addAgent('README.md', renderReadme({ scenario, kitVersion, derived, elementPageCount: derived.elements.length }));
+addAgent(
   'PROMPT.md',
   `# Your task
 
@@ -718,27 +1092,68 @@ ${scenario.prompt}
 ---
 
 Everything you need is in this directory; there is no kit source and no other
-documentation. Start from [README.md](README.md), and run
-[SELF-AUDIT.md](SELF-AUDIT.md) over your output before you deliver.
+documentation. Start from [README.md](README.md), read [DELIVERY.md](DELIVERY.md)
+before writing any import, and run [SELF-AUDIT.md](SELF-AUDIT.md) over your
+output before you deliver.
 
 If this task cannot be built from what is here, **say that, name what is
-missing, and stop**. Do not invent an element, a prop or an event to close the
-gap.
+missing, and stop**. Do not invent an element, a prop, an event or an import
+path to close the gap.
 `,
 );
-write(agentDir, 'ELEMENTS.md', renderElementIndex({ derived, meta, universal }));
-write(agentDir, 'SHARED-PROPS.md', renderSharedProps({ universal, meta }));
-write(agentDir, 'INVARIANTS.md', renderInvariants({ invariants, derived }));
-write(agentDir, 'SELF-AUDIT.md', renderSelfAudit({ selfAuditItems, derived }));
-write(agentDir, 'RECIPES.md', renderRecipes({ recipes }));
-write(agentDir, 'PARTS.md', renderParts({ derived, partConsumption }));
-write(agentDir, 'INTEGRATIONS.md', renderIntegrations({ derived }));
-write(agentDir, 'THEME.md', renderTheme({ derived }));
-write(agentDir, 'INVENTORY.md', renderInventory({ inventory }));
-write(agentDir, 'FABRICATED.md', renderFabricated());
+addAgent('DELIVERY.md', renderDelivery({ pkg, kitVersion, derived, solidExports }));
+addAgent('ELEMENTS.md', renderElementIndex({ derived, meta, universal, intents, capabilityOf }));
+addAgent('SHARED-PROPS.md', renderSharedProps({ universal, meta }));
+addAgent('INVARIANTS.md', renderInvariants({ invariants, derived }));
+addAgent('SELF-AUDIT.md', renderSelfAudit({ selfAuditItems, derived }));
+addAgent('RECIPES.md', renderRecipes({ recipes }));
+addAgent('PARTS.md', renderParts({ derived, partConsumption }));
+addAgent('INTEGRATIONS.md', renderIntegrations({ derived }));
+addAgent('THEME.md', renderTheme({ tokens: themeTokens, droppedFragments }));
+addAgent('INVENTORY.md', renderInventory({ inventory }));
+addAgent('FABRICATED.md', renderFabricated());
 
-write(judgeDir, 'JUDGE.md', renderJudge({ scenario, invariants, recipes, kitVersion, floor }));
-write(judgeDir, 'FLOOR.md', renderFloorReport(floor));
+addJudge('JUDGE.md', renderJudge({ scenario, invariants, recipes, kitVersion, floor }));
+addJudge('FLOOR.md', renderFloorReport(floor));
+
+// --- cross-check the rendered text, BEFORE writing --------------------------
+
+// Answer-key redaction, over EVERY scenario's lines rather than this one's:
+// the leak found in review was S2's line inside an invariant statement, in a
+// pack for S1, so a check scoped to the packed scenario could not see it.
+for (const page of [...agentPages, ...elementPages]) {
+  page.body = redactScoringLines(page.body, scenarios);
+}
+
+const agentText = [...agentPages, ...elementPages].map((p) => p.body).join('\n');
+
+const specifierProblems = verifySpecifiers(agentText, pkg, readSubpathSource);
+if (specifierProblems.length) {
+  fail(
+    `the pack names import specifiers that do not resolve, so nothing was written:\n  - ${specifierProblems.join('\n  - ')}`,
+  );
+}
+
+for (const s of scenarios) {
+  for (const line of s.scoring) {
+    if (agentText.includes(line)) {
+      fail(`${s.id}'s scoring line leaked into the agent's surface after redaction: ${line}`);
+    }
+  }
+}
+
+// --- write ------------------------------------------------------------------
+
+const agentDir = join(out, 'agent');
+const judgeDir = join(out, 'judge');
+mkdirSync(join(agentDir, 'elements'), { recursive: true });
+mkdirSync(judgeDir, { recursive: true });
+
+const write = (dir, name, body) => writeFileSync(join(dir, name), body.endsWith('\n') ? body : body + '\n');
+for (const p of agentPages) write(agentDir, p.name, p.body);
+for (const p of elementPages) write(join(agentDir, 'elements'), p.name, p.body);
+for (const p of judgePages) write(judgeDir, p.name, p.body);
+
 write(
   judgeDir,
   'catalog.json',
@@ -785,5 +1200,5 @@ Scenario: ${scenario.id} — ${scenario.depth}.
 );
 
 console.log(
-  `acceptance-pack: packed ${scenario.id} into ${out} (agent/: ${written.elementPages} element pages + ${written.agentGuides} guides; judge/: checklist, floor report, catalog.json)`,
+  `acceptance-pack: packed ${scenario.id} into ${out} (agent/: ${elementPages.length} element pages + ${agentPages.length} guides; judge/: ${judgePages.length} reports + catalog.json)`,
 );

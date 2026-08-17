@@ -6,13 +6,18 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { listInvariants } from '../../src/agent-tooling/catalog/invariants';
 import { listScenarios } from '../../src/agent-tooling/catalog/scenarios';
 import { listSurfaceRecipes } from '../../src/agent-tooling/catalog/surfaces';
+import { NEEDLES } from '../../scripts/lib/audit-needles.mjs';
 
 const PKG = join(__dirname, '..', '..');
 const SCRIPT = join(PKG, 'scripts/acceptance-pack.mjs');
 const derived = JSON.parse(readFileSync(join(PKG, 'src/agent-tooling/catalog/derived.json'), 'utf8')) as {
-  elements: { tag: string; props: { name: string; scalar: boolean }[] }[];
+  elements: { tag: string; props: { name: string; scalar: boolean }[]; tokens: string[]; composedFrom: string[] }[];
   partVariants: string[];
   themeTokens: string[];
+};
+const pkgJson = JSON.parse(readFileSync(join(PKG, 'package.json'), 'utf8')) as {
+  version: string;
+  exports: Record<string, unknown>;
 };
 
 const pack = (id: string): string => {
@@ -66,6 +71,7 @@ describe('acceptance pack', () => {
     for (const f of [
       'README.md',
       'PROMPT.md',
+      'DELIVERY.md',
       'ELEMENTS.md',
       'SHARED-PROPS.md',
       'INVARIANTS.md',
@@ -87,9 +93,8 @@ describe('acceptance pack', () => {
     expect(readFileSync(join(agent, 'PROMPT.md'), 'utf8')).toContain(s1.prompt);
 
     const catalog = JSON.parse(readFileSync(join(judge, 'catalog.json'), 'utf8'));
-    const pkg = JSON.parse(readFileSync(join(PKG, 'package.json'), 'utf8'));
-    expect(catalog.kitVersion).toBe(pkg.version);
-    expect(readFileSync(join(dir, 'PACK.md'), 'utf8')).toContain(pkg.version);
+    expect(catalog.kitVersion).toBe(pkgJson.version);
+    expect(readFileSync(join(dir, 'PACK.md'), 'utf8')).toContain(pkgJson.version);
     expect(catalog.derived.elements.length).toBe(derived.elements.length);
     expect(catalog.invariants.length).toBe(listInvariants().length);
   });
@@ -112,6 +117,56 @@ describe('acceptance pack', () => {
     expect(readdirSync(empty)).toEqual([]);
   });
 
+  // C1 -- without this page the agent has to invent an import, and S5 (a script
+  // tag, no build step) is unanswerable however honest the agent is.
+  it('tells the agent how to load the kit: entry points, registration, CDN, React', () => {
+    const d = readFileSync(join(agent, 'DELIVERY.md'), 'utf8');
+
+    // Every published entry point is named. Derived from the exports map, so a
+    // new key that nobody documents fails here as well as in the script.
+    const shown = Object.keys(pkgJson.exports).filter((k) => !k.endsWith('.json'));
+    expect(shown.length).toBeGreaterThan(0);
+    for (const k of shown) {
+      const spec = k === '.' ? '@kitn.ai/ui' : `@kitn.ai/ui${k.slice(1)}`;
+      expect(d, `DELIVERY.md does not name ${spec}`).toContain(`\`${spec}\``);
+    }
+
+    expect(d).toContain('npm install @kitn.ai/ui');
+    expect(d).toContain("import '@kitn.ai/ui/elements';");
+    expect(d).toContain('<script type="module">');
+    expect(d).toContain("customElements.whenDefined('kai-chat')");
+    expect(d).toContain("from '@kitn.ai/ui/react'");
+
+    // The CDN pin is READ from package.json, never typed: a hand-typed literal
+    // is what lint:cdn-pins exists to catch, and it would rot at the next release.
+    expect(d).toContain(`@kitn.ai/ui@${pkgJson.version}/dist/kai.es.js`);
+    expect(d).toMatch(/cdn\.jsdelivr\.net|unpkg\.com/);
+
+    // F-8a-8: the Solid component names must not read as import paths.
+    expect(d).toContain('provenance, not import paths');
+    const pageText = readAll(join(agent, 'elements'));
+    expect(pageText).toContain('(internal — not importable)');
+    expect(pageText).toContain('(also exported from `@kitn.ai/ui` for SolidJS)');
+  });
+
+  // I3 -- the Task-5 class: recommending an import a consumer cannot reach.
+  it('names no import specifier that is not in the exports map', () => {
+    const agentText = readAll(agent);
+    const keys = new Set(Object.keys(pkgJson.exports));
+    const specifiers = [...new Set([...agentText.matchAll(/@kitn\.ai\/ui(?:\/[a-zA-Z0-9._*-]+)*/g)].map((m) => m[0]))];
+    expect(specifiers.length).toBeGreaterThan(3);
+    for (const spec of specifiers) {
+      const sub = spec === '@kitn.ai/ui' ? '.' : `.${spec.slice('@kitn.ai/ui'.length)}`;
+      const ok = keys.has(sub) || [...keys].some((k) => k.endsWith('/*') && sub.startsWith(k.slice(0, -1)));
+      expect(ok, `${spec} is not in the package exports map`).toBe(true);
+    }
+    // And the symbols the pack recommends really are exported. `createAssistantStream`
+    // is the one review found unchecked; it is asserted by name so a silent
+    // regression in the generic scan cannot take it with it.
+    expect(agentText).toContain('createAssistantStream');
+    expect(readFileSync(join(PKG, 'src/state/index.ts'), 'utf8')).toMatch(/\bcreateAssistantStream\b/);
+  });
+
   // A1 -- the pack is navigable markdown, not one blob.
   it('renders one page per element, and the index links exactly those pages', () => {
     const pages = readdirSync(join(agent, 'elements'));
@@ -125,10 +180,11 @@ describe('acceptance pack', () => {
     expect(linked).toEqual(derived.elements.map((e) => e.tag).sort());
     expect(pages.sort()).toEqual(derived.elements.map((e) => `${e.tag}.md`).sort());
 
-    // The index has to say "read me first and open only what you need", or an
-    // agent reads all 80 pages and the split bought nothing.
     const readme = readFileSync(join(agent, 'README.md'), 'utf8');
     expect(readme).toMatch(/Open only the\s+element pages you actually need/);
+    // A blank "what it is" cell must be labelled as a missing description, not
+    // left to read as a judgement about the element.
+    expect(index).toMatch(/A blank means \*nobody has\s+written one\*/);
   });
 
   // A1 -- the universal props are factored out once.
@@ -150,17 +206,12 @@ describe('acceptance pack', () => {
 
     // POSITIVE CONTROL, and this is the whole point: "the string is absent" is
     // vacuous until the same scan is shown finding a prop that SHOULD be there.
-    // Derived, not typed -- the first non-universal prop of the first element
-    // that has one.
-    const sample = derived.elements
-      .flatMap((e) => e.props.map((p) => p.name))
-      .find((n) => !universal.includes(n));
+    const sample = derived.elements.flatMap((e) => e.props.map((p) => p.name)).find((n) => !universal.includes(n));
     expect(sample).toBeDefined();
     expect(pageText).toContain(`**\`${sample}\`**`);
   });
 
-  // A2 -- the lists must SAY they are complete, or S6's refusal bound has
-  // nothing to stand on.
+  // A2 -- the lists must SAY they are complete.
   it('states that the element list and the part-variant list are exhaustive, with counts that match', () => {
     const index = readFileSync(join(agent, 'ELEMENTS.md'), 'utf8');
     expect(index).toContain('EXHAUSTIVE');
@@ -172,9 +223,6 @@ describe('acceptance pack', () => {
     expect(parts).toContain(`${derived.partVariants.length} variants and no others`);
     for (const v of derived.partVariants) expect(parts).toContain(`type: '${v}'`);
 
-    const theme = readFileSync(join(agent, 'THEME.md'), 'utf8');
-    expect(theme).toContain(`These ${derived.themeTokens.length} CSS custom`);
-
     // The refusal scenario needs the same statement in the pack it actually
     // gets, not only in S1's.
     const s6 = join(pack('S6'), 'agent');
@@ -182,47 +230,90 @@ describe('acceptance pack', () => {
     expect(readFileSync(join(s6, 'PROMPT.md'), 'utf8')).toMatch(/name what is\s+missing, and stop/);
   });
 
-  // A3 -- the self-audit is mechanically searchable, derived from the pairs.
-  it('builds the self-audit out of every wrong/right pair', () => {
+  // I6 -- a page headed EXHAUSTIVE must not list things that are not tokens,
+  // and must not contradict the element pages.
+  it('lists only real theme tokens, names the dropped fragments, and agrees with the element pages', () => {
+    const theme = readFileSync(join(agent, 'THEME.md'), 'utf8');
+    const listed = [...theme.matchAll(/^- `(--[a-z0-9-]+)`$/gm)].map((m) => m[1]);
+    expect(listed.length).toBeGreaterThan(0);
+
+    // A prefix fragment is not a token you can set.
+    const fragments = derived.themeTokens.filter((t) => t.endsWith('-'));
+    expect(fragments.length, 'no fragment in the upstream list; this test would be vacuous').toBeGreaterThan(0);
+    for (const f of fragments) expect(listed, `${f} is listed as a settable token`).not.toContain(f);
+    // Dropped, not hidden.
+    for (const f of fragments) expect(theme, `${f} is dropped without saying so`).toContain(f);
+    expect(listed).toHaveLength(derived.themeTokens.length - fragments.length);
+
+    // Every token an element page names must be spelled the way THEME.md
+    // spells it, or an agent following the page fails its own self-audit.
+    const elementTokens = [...new Set(derived.elements.flatMap((e) => e.tokens))];
+    expect(elementTokens.length, 'no element declares a token; this test would be vacuous').toBeGreaterThan(0);
+    const pageText = readAll(join(agent, 'elements'));
+    for (const t of elementTokens) {
+      const prefixed = `--kai-${t.slice(2)}`;
+      expect(pageText, `${prefixed} is not on any element page`).toContain(`\`${prefixed}\``);
+      expect(listed, `${prefixed} is on an element page but not in THEME.md`).toContain(prefixed);
+    }
+  });
+
+  // A3 + I7 -- searchable, and machine-checked so no needle fires on correct code.
+  it('builds the self-audit out of every pair, with a needle that fires on no right form', () => {
     const audit = readFileSync(join(agent, 'SELF-AUDIT.md'), 'utf8');
-    const examples = listInvariants().flatMap((inv) => inv.examples);
+    const invariants = listInvariants();
+    const examples = invariants.flatMap((inv) => inv.examples);
     expect(examples.length).toBeGreaterThan(0);
     for (const ex of examples) {
       expect(audit.includes(ex.wrong), `self-audit is missing the wrong form: ${ex.wrong}`).toBe(true);
       expect(audit.includes(ex.right), `self-audit is missing the right form: ${ex.wrong}`).toBe(true);
     }
-    // One numbered item per pair, no more and no fewer.
     expect([...audit.matchAll(/^### \d+\. `/gm)]).toHaveLength(examples.length);
-    // The derived checks name the real counts, so a stale figure fails here
-    // rather than misleading an agent.
+
+    // The needles, re-checked here rather than trusted from the script: one per
+    // pair, present in its own wrong form, and firing on NO right form anywhere.
+    const allRights = examples.map((ex) => ex.right);
+    let checked = 0;
+    for (const inv of invariants) {
+      for (let i = 0; i < inv.examples.length; i++) {
+        const needle = (NEEDLES as Record<string, string>)[`${inv.id}#${i}`];
+        expect(needle, `no needle for ${inv.id}#${i}`).toBeDefined();
+        expect(inv.examples[i].wrong, `${inv.id}#${i}: needle absent from its own wrong form`).toContain(needle);
+        for (const right of allRights) {
+          expect(right.includes(needle), `${inv.id}#${i}: needle ${needle} fires on a right form`).toBe(false);
+        }
+        expect(audit, `${inv.id}#${i}: needle not in the page`).toContain(needle);
+        checked++;
+      }
+    }
+    expect(checked).toBe(examples.length);
+
     expect(audit).toContain(`There are ${derived.elements.length} legal tags`);
     expect(audit).toContain(`There are ${derived.partVariants.length}:`);
+    expect(audit).toContain('must appear in\n   DELIVERY.md');
   });
 
   // A4 -- seeded empty, and empty means empty.
   it('seeds the fabricated-components page empty, with an honest explanation and no invented rows', () => {
     const fab = readFileSync(join(agent, 'FABRICATED.md'), 'utf8');
     expect(fab).toContain('No acceptance runs have happened yet');
-    // The table header and separator, and nothing after them: any further row
-    // would be an entry nobody measured.
     const rows = fab.split('\n').filter((l) => l.trim().startsWith('|'));
     expect(rows).toHaveLength(2);
-    // And no `kai-` tag anywhere on the page that is not a real element.
     const tags = [...fab.matchAll(/\bkai-[a-z0-9-]+/g)].map((m) => m[0]);
     const real = new Set(derived.elements.map((e) => e.tag));
     for (const t of tags) expect(real.has(t), `${t} is not a real element`).toBe(true);
   });
 
-  // A5 -- judge-only data stays out of the agent's surface.
-  it('keeps enforcedBy pointers and recipe corpus paths out of agent/, and the scan proves it can see them', () => {
+  // A5 + I5 -- judge-only data stays out, INCLUDING scoring lines from scenarios
+  // other than the one packed. The first version checked S1's lines only, and
+  // S2's line was leaking verbatim through an invariant statement in every pack.
+  it('keeps enforcedBy pointers, corpus paths and EVERY scenario scoring line out of agent/', () => {
     const judgeOnly = [
       ...listInvariants().flatMap((inv) => {
         const e = inv.enforcedBy;
         // `kind: 'lint'` carries a SCRIPT NAME, not a path, and the invariant's
-        // own statement names it verbatim ("enforced by lint:silent-drops in
-        // CI"). Rewriting a statement to hide it would create an unpinned copy
-        // of authored prose, which is worse than the leak; only paths are
-        // checked here, and that limit is deliberate.
+        // own statement names it verbatim. Rewriting a statement to hide it
+        // would create an unpinned copy of authored prose, which is worse than
+        // the leak; only paths are checked here, and that limit is deliberate.
         if (e.kind === 'test') return e.paths;
         if (e.kind === 'structural') return [e.path];
         return [];
@@ -240,43 +331,72 @@ describe('acceptance pack', () => {
       expect(agentText.includes(p), `${p} leaked into the agent's surface`).toBe(false);
     }
 
-    // The scoring checklist is an answer key. Same shape of check.
+    const allScoring = listScenarios().flatMap((s) => s.scoring);
+    expect(allScoring.length).toBeGreaterThan(listScenarios().length);
+    for (const line of allScoring) {
+      expect(agentText.includes(line), `a scoring line leaked into agent/: ${line}`).toBe(false);
+    }
+    // The redaction must be visible where it happened, not silent.
+    expect(agentText).toContain('[scoring criterion withheld from this pack]');
+    // And S1's own lines must still be in judge/, or the checklist is empty.
     for (const line of listScenarios().find((s) => s.id === 'S1')!.scoring) {
       expect(judgeText.includes(line), `scoring line missing from judge/: ${line}`).toBe(true);
-      expect(agentText.includes(line), `scoring line leaked into agent/: ${line}`).toBe(false);
     }
   });
 
   // A6 -- the floor stage.
-  it('executes every invariant right-form before packing, and reports the stand-ins', () => {
+  it('executes every invariant right-form before packing, and declares every stand-in', () => {
     const out = execFileSync('node', [SCRIPT, '--floor'], { encoding: 'utf8' });
     const examples = listInvariants().flatMap((inv) => inv.examples);
     expect(out).toContain(`floor clean — ${examples.length} examples executed`);
     for (const inv of listInvariants()) {
       for (let i = 0; i < inv.examples.length; i++) {
         expect(out, `${inv.id}#${i} was not executed`).toContain(`PASS  ${inv.id}#${i}`);
+        // I2: nothing here runs against a real registered element, so every row
+        // must say what it ran against instead.
+        const row = out.split('\n').find((l) => l.includes(`PASS  ${inv.id}#${i}`))!;
+        expect(row, `${inv.id}#${i} declares no stand-in`).toContain('[stand-ins:');
       }
     }
-    // Honesty about stubs travels into the pack rather than being swallowed.
     const floorReport = readFileSync(join(judge, 'FLOOR.md'), 'utf8');
-    expect(floorReport).toContain('stubbed:');
-    expect(floorReport).toContain('could not be executed against the real thing');
+    expect(floorReport).toMatch(/no example ran\s+against a real registered/);
+    expect(floorReport).toContain('Every row declares at least one stand-in.');
+    // JUDGE.md must not overclaim either.
+    expect(readFileSync(join(judge, 'JUDGE.md'), 'utf8')).toContain('executed against the stand-ins');
   });
 
-  it('the floor stage detects a broken example, a silently-wrong one and a missing harness', () => {
+  it('the floor stage detects every planted fault, including an empty case list and a late throw', () => {
     // The floor asserts an ABSENCE of failures, which is worth nothing until it
-    // has been watched to observe one. `--self-test` plants four faults and one
-    // control; this asserts it reported all five.
+    // has been watched to observe one. `--self-test` plants the faults; this
+    // asserts it reported each.
     const out = execFileSync('node', [SCRIPT, '--self-test'], { encoding: 'utf8' });
     for (const expected of [
       'a right form that throws is reported failed',
       'a right form that executes but violates its claim is reported failed',
+      'a right form that throws LATE, inside a .then, is reported failed',
       'an example with no harness is reported, not skipped',
       'a missing harness raises a structural error',
+      'a harness with an EMPTY case list is reported, not passed',
+      'an empty case list raises a structural error',
       'a dangling harness raises a structural error',
       'a correct right form still passes',
+      'needle check: a needle that fires on a right form is reported',
+      'needle check: a sound needle is accepted',
     ]) {
       expect(out, `self-test did not report: ${expected}`).toContain(`✓ ${expected}`);
+    }
+    // I4: the artifact-agreement guard must be bidirectional and per-field.
+    for (const expected of [
+      'a tag only element-meta.json has',
+      'a prop only derived.json has',
+      'a prop only element-meta.json has',
+      'an event only element-meta.json has',
+      'a prop whose type makes it function-valued on one side only',
+      'a prop whose scalar flag disagrees',
+    ]) {
+      expect(out, `self-test did not report artifact agreement for: ${expected}`).toContain(
+        `✓ artifact agreement detects ${expected}`,
+      );
     }
     expect(out).not.toContain('✗');
   });

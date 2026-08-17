@@ -17,29 +17,65 @@
 // The `right` forms are CONSUMER FRAGMENTS, not programs: they carry free
 // variables (`el`, `chat`, `source`, `card`, `messages`) that a consumer's own
 // code would have bound. A harness supplies those bindings and then asserts what
-// the example claims. Missing harness = HARD FAILURE, never a skip: a skip is
-// how an example quietly stops being measured, and an example nobody runs is
-// exactly the shape of the three defects above.
+// the example claims. Missing harness = HARD FAILURE, never a skip, and so is a
+// harness with an EMPTY `cases` list: an empty list ran the loop zero times and
+// reported PASS, which is the exact shape of vacuity this stage exists to
+// prevent. Both are checked, and both are watched failing in `--self-test`.
 //
 // A dangling harness -- one whose example was deleted or renumbered -- is also a
 // hard failure, in the other direction. Otherwise the table rots into a set of
 // checks over code that no longer exists while reporting a healthy count.
 //
-// HONESTY ABOUT STAND-INS. Some `right` forms call into the published package
-// (`readOpenAIStream`) or the browser (`fetch`, `customElements`). Those are
-// listed in `stubs` and printed in the report, because "it executed" against a
-// stub is a weaker statement than "it executed" against the real thing, and the
-// weaker statement must not be reported as the stronger one. Where a stub is
-// unavoidable the harness carries a `corroborate` step that checks the real
-// claim by another route -- e.g. that `readOpenAIStream` really is exported from
-// src/wire/index.ts through the `./wire` exports key.
+// ASYNC CONTINUATIONS ARE NOT OUTSIDE THE MEASUREMENT. `execute` awaits the
+// fragment's own IIFE, which resolves the moment the fragment RETURNS -- so a
+// throw inside a `.then`, a timer or a listener happens afterwards, in the vm
+// realm, and used to vanish. `withAsyncFaultTrap` spans execution AND the
+// harness check, drains the queues, and turns any late rejection into a
+// failure. `upgrade-race` is entirely about what happens in a `.then`, so
+// without this its whole subject was unmeasured.
+//
+// HONESTY ABOUT STAND-INS. Not one example runs against the real registered
+// element: this is a Node script and the elements need a built bundle and the
+// Solid runtime. Every harness therefore names its stand-ins in `stubs`,
+// including the ones it would be easy to leave unstated -- the jsdom document,
+// the plain object standing in for an element, the JSX factory. The report
+// prints them, and the pack's own wording says "executed against these
+// stand-ins" rather than "executed", because the second sentence is not true.
+// Where a stand-in is the SUBJECT of the claim, the harness carries a
+// `corroborate` step that checks the real thing by another route.
 import vm from 'node:vm';
+import { JSDOM } from 'jsdom';
 import * as esbuild from 'esbuild';
 
 class FloorAssertionError extends Error {}
 
 function assert(cond, msg) {
   if (!cond) throw new FloorAssertionError(msg);
+}
+
+/** One jsdom realm, reused. Elements are created fresh per case. */
+const dom = new JSDOM('<!doctype html><html><body><div id="wrapper"></div></body></html>');
+const W = dom.window;
+
+/**
+ * A stand-in for a registered `kai-*` element: a real custom element in a real
+ * document, dispatching with the SAME `{ bubbles: false, composed: false }` the
+ * kit's own dispatch helper hard-codes. It is not the kit's element -- that
+ * needs a build and the Solid runtime -- but it does put the claim under test on
+ * a real DOM tree, which a bare `EventTarget` cannot: with an EventTarget,
+ * bubbling is unrepresentable, so `document = chat` would satisfy "the listener
+ * on the element fires" and the assertion could not tell the invariant from its
+ * own negation.
+ */
+class StandInElement extends W.HTMLElement {}
+W.customElements.define('kai-standin', StandInElement);
+
+function standInElement() {
+  const wrapper = W.document.createElement('div');
+  const el = W.document.createElement('kai-standin');
+  wrapper.appendChild(el);
+  W.document.body.appendChild(wrapper);
+  return { el, wrapper, doc: W.document };
 }
 
 /** A promise whose resolution the harness controls, for the upgrade-race timing check. */
@@ -52,11 +88,42 @@ function deferred() {
 }
 
 /**
+ * Run `fn`, then drain, and fail if anything went wrong ASYNCHRONOUSLY -- in a
+ * `.then`, a timer or an event listener -- after the awaited work resolved.
+ * Rejections raised inside the vm realm surface on this process (same isolate),
+ * which is measured, not assumed: `--self-test` plants a late throw and requires
+ * it to be reported.
+ */
+async function withAsyncFaultTrap(fn) {
+  const faults = [];
+  const onRejection = (reason) => faults.push(reason);
+  const onUncaught = (err) => faults.push(err);
+  process.on('unhandledRejection', onRejection);
+  process.on('uncaughtException', onUncaught);
+  try {
+    await fn();
+    // Microtasks, 0ms timers, and Node's own unhandled-rejection detection all
+    // need a turn before "nothing went wrong" is a statement about anything.
+    for (let i = 0; i < 4; i++) await new Promise((r) => setTimeout(r, 0));
+  } finally {
+    process.off('unhandledRejection', onRejection);
+    process.off('uncaughtException', onUncaught);
+  }
+  if (faults.length) {
+    throw new FloorAssertionError(
+      `failed AFTER returning, in an async continuation: ${faults
+        .map((f) => (f && f.message ? f.message : String(f)))
+        .join('; ')}`,
+    );
+  }
+}
+
+/**
  * Execute one `right` fragment with the supplied bindings as its globals.
  *
  * Wrapped in an async IIFE so a fragment containing top-level `await` runs at
- * all, and awaited so a rejection surfaces as a failure rather than as an
- * unhandled rejection that leaves the run green.
+ * all, and awaited so a synchronous rejection surfaces as a failure. What
+ * happens after it returns is `withAsyncFaultTrap`'s job.
  */
 async function execute(code, bindings, { jsx = false } = {}) {
   const src = jsx
@@ -71,12 +138,12 @@ async function execute(code, bindings, { jsx = false } = {}) {
     console,
     setTimeout,
     queueMicrotask,
-    EventTarget,
-    CustomEvent,
     ...bindings,
   });
   await vm.runInContext(`(async () => {\n${src}\n})()`, context, { timeout: 2000 });
 }
+
+const JSDOM_STANDIN = 'a jsdom document + a stand-in custom element (not the kit’s registered element)';
 
 /**
  * The harness table. Key is `<invariant-id>#<example-index>`.
@@ -89,7 +156,7 @@ async function execute(code, bindings, { jsx = false } = {}) {
  */
 export const HARNESSES = {
   'reactivity-two-halves#0': {
-    stubs: [],
+    stubs: ['`chat` is a plain object, not a registered element'],
     cases: [
       {
         label: 'appending a turn produces a NEW array reference',
@@ -108,7 +175,7 @@ export const HARNESSES = {
   },
 
   'reactivity-two-halves#1': {
-    stubs: [],
+    stubs: ['`chat` is a plain object, not a registered element'],
     cases: [
       {
         label: 'editing an item produces BOTH a new array and a new object for that item',
@@ -130,32 +197,41 @@ export const HARNESSES = {
   },
 
   'props-not-attributes#0': {
-    stubs: [],
+    stubs: [JSDOM_STANDIN],
     cases: [
       {
-        label: 'the array arrives as an array, by reference',
+        label: 'the array lands as a JS PROPERTY and no attribute is written',
         bindings() {
-          return { el: {}, messages: [{ id: 'm1', role: 'user', parts: [] }] };
+          const { el } = standInElement();
+          return { el, messages: [{ id: 'm1', role: 'user', parts: [] }] };
         },
         check(b) {
           assert(Array.isArray(b.el.messages), 'the property does not hold an array');
           assert(b.el.messages === b.messages, 'the property is a copy, not the array that was assigned');
+          // The half a plain object cannot express, and the half the invariant
+          // is actually about: the right form must NOT take the attribute path.
+          // On a bare `{}` this assertion is a tautology of JS assignment; on a
+          // real element it distinguishes the two mechanisms.
+          assert(b.el.getAttribute('messages') === null, 'an attribute was written; that is the path that stringifies');
+          assert(!b.el.outerHTML.includes('messages='), `the element serialised with an attribute: ${b.el.outerHTML}`);
         },
       },
     ],
   },
 
   'props-not-attributes#1': {
-    stubs: [],
+    stubs: [JSDOM_STANDIN],
     cases: [
       {
-        label: 'a function survives a property assignment (and demonstrably would not survive JSON)',
+        label: 'a function survives a property assignment (and demonstrably would not survive an attribute)',
         bindings() {
-          return { cards: {}, onSubmit: () => 'called' };
+          const { el } = standInElement();
+          return { cards: el, onSubmit: () => 'called' };
         },
         check(b) {
           assert(typeof b.cards.policy.onSubmit === 'function', 'the callback is not a function on the property');
           assert(b.cards.policy.onSubmit() === 'called', 'the callback is not the one that was assigned');
+          assert(b.cards.getAttribute('policy') === null, 'an attribute was written');
           // The contrast the example's note asserts, measured rather than
           // claimed: the attribute route drops the handler before the attribute
           // is even set.
@@ -169,39 +245,55 @@ export const HARNESSES = {
   },
 
   'events-non-bubbling#0': {
-    stubs: [],
+    stubs: [JSDOM_STANDIN],
     cases: [
       {
-        label: 'the listener on the element itself receives detail.value',
+        label: 'the listener on the element fires; the same listener on a parent and on document does NOT',
         bindings() {
+          const { el, wrapper, doc } = standInElement();
           const got = [];
-          return { chat: new EventTarget(), send: (v) => got.push(v), __got: got };
+          const missed = [];
+          wrapper.addEventListener('kai-submit', () => missed.push('wrapper'));
+          doc.addEventListener('kai-submit', () => missed.push('document'));
+          return { chat: el, send: (v) => got.push(v), __got: got, __missed: missed, __el: el };
         },
         check(b) {
-          b.chat.dispatchEvent(new CustomEvent('kai-submit', { detail: { value: 'hello' } }));
-          assert(b.__got.length === 1, `listener fired ${b.__got.length} times, expected 1`);
+          b.__el.dispatchEvent(new W.CustomEvent('kai-submit', { detail: { value: 'hello' }, bubbles: false, composed: false }));
+          assert(b.__got.length === 1, `listener on the element fired ${b.__got.length} times, expected 1`);
           assert(b.__got[0] === 'hello', `handler read ${JSON.stringify(b.__got[0])}, expected "hello"`);
+          // Without this, `document = chat` satisfies the assertion above and
+          // the check cannot tell the invariant from its opposite.
+          assert(b.__missed.length === 0, `a delegated listener fired on: ${b.__missed.join(', ')}`);
         },
       },
     ],
-    corroborate({ derivedEvents }) {
+    corroborate({ derivedEvents, defineSource }) {
       assert(derivedEvents('kai-chat').includes('kai-submit'), 'kai-chat does not dispatch kai-submit in the derived layer');
+      // The stand-in dispatches non-bubbling because the kit's helper does. If
+      // that stops being true, the stand-in is modelling nothing.
+      assert(/bubbles:\s*false/.test(defineSource), 'src/elements/define.tsx no longer hard-codes bubbles: false');
+      assert(/composed:\s*false/.test(defineSource), 'src/elements/define.tsx no longer hard-codes composed: false');
     },
   },
 
   'events-non-bubbling#1': {
-    stubs: [],
+    stubs: [JSDOM_STANDIN],
     cases: [
       {
-        label: 'the same shape for a non-submit event',
+        label: 'the same shape for a non-submit event, with the wrapper proven silent',
         bindings() {
+          const { el, wrapper, doc } = standInElement();
           const calls = [];
-          return { chat: new EventTarget(), handleAction: (e) => calls.push(e.type), __calls: calls };
+          const missed = [];
+          wrapper.addEventListener('kai-message-action', () => missed.push('wrapper'));
+          doc.addEventListener('kai-message-action', () => missed.push('document'));
+          return { chat: el, handleAction: (e) => calls.push(e.type), __calls: calls, __missed: missed, __el: el };
         },
         check(b) {
-          b.chat.dispatchEvent(new CustomEvent('kai-message-action', { detail: {} }));
-          assert(b.__calls.length === 1, 'the listener did not fire');
+          b.__el.dispatchEvent(new W.CustomEvent('kai-message-action', { detail: {}, bubbles: false, composed: false }));
+          assert(b.__calls.length === 1, 'the listener on the element did not fire');
           assert(b.__calls[0] === 'kai-message-action', `fired for ${b.__calls[0]}`);
+          assert(b.__missed.length === 0, `a delegated listener fired on: ${b.__missed.join(', ')}`);
         },
       },
     ],
@@ -214,12 +306,13 @@ export const HARNESSES = {
   },
 
   'host-coordinates#0': {
-    stubs: [],
+    stubs: [JSDOM_STANDIN],
     cases: [
       {
         label: 'the rows land on the element that owns the list',
         bindings() {
-          return { conversations: {}, rows: [{ id: 'c1', title: 'one' }] };
+          const { el } = standInElement();
+          return { conversations: el, rows: [{ id: 'c1', title: 'one' }] };
         },
         check(b) {
           assert(b.conversations.conversations === b.rows, 'the rows did not reach the sidebar element');
@@ -227,9 +320,9 @@ export const HARNESSES = {
       },
     ],
     // The claim in the note -- "kai-chat has no conversations prop" -- is the
-    // half a plain execution cannot see, because assigning to a plain object
-    // succeeds whatever the property is called. Check it against the derived
-    // layer instead, which is where the fact actually lives.
+    // half no execution can see, because assigning to any object succeeds
+    // whatever the property is called. Check it against the derived layer
+    // instead, which is where the fact actually lives.
     corroborate({ derivedProp }) {
       assert(!derivedProp('kai-chat', 'conversations'), 'kai-chat DOES have a conversations prop; the example is stale');
       assert(derivedProp('kai-conversations', 'conversations'), 'kai-conversations has no conversations prop');
@@ -237,20 +330,29 @@ export const HARNESSES = {
   },
 
   'host-coordinates#1': {
-    stubs: [],
+    stubs: [JSDOM_STANDIN],
     cases: [
       {
-        label: 'event out of A, property into B',
+        label: 'event out of A, property into B -- and no parent listener is involved',
         bindings() {
+          const { el, wrapper } = standInElement();
+          const chat = W.document.createElement('kai-standin');
+          const missed = [];
+          wrapper.addEventListener('kai-conversation-select', () => missed.push('wrapper'));
           return {
-            conversations: new EventTarget(),
-            chat: {},
+            conversations: el,
+            chat,
             threadsById: { c1: [{ id: 'm1', role: 'user', parts: [] }] },
+            __el: el,
+            __missed: missed,
           };
         },
         check(b) {
-          b.conversations.dispatchEvent(new CustomEvent('kai-conversation-select', { detail: { id: 'c1' } }));
+          b.__el.dispatchEvent(
+            new W.CustomEvent('kai-conversation-select', { detail: { id: 'c1' }, bubbles: false, composed: false }),
+          );
           assert(b.chat.messages === b.threadsById.c1, 'the selected thread never reached kai-chat.messages');
+          assert(b.__missed.length === 0, 'a parent listener saw the event');
         },
       },
     ],
@@ -264,23 +366,29 @@ export const HARNESSES = {
   },
 
   'untrusted-model-output#0': {
-    stubs: [],
+    stubs: [JSDOM_STANDIN],
     cases: [
       {
-        label: 'markup stays inert AND the source text stays visible',
+        label: 'the markup becomes a TEXT NODE -- inert by parse, not by a name-matched sink check',
         bindings() {
-          return { el: {}, part: { text: '<img src=x onerror=alert(1)>' } };
+          const { el } = standInElement();
+          return { el, part: { text: '<img src=x onerror=alert(1)>' } };
         },
         check(b) {
+          // Asserting `innerHTML === undefined` on a plain object would be blind
+          // to outerHTML, insertAdjacentHTML and every other HTML sink. Asking
+          // the real DOM what it PARSED covers all of them at once.
+          assert(b.el.querySelector('img') === null, 'the markup was parsed into an element');
+          assert(b.el.childNodes.length === 1, `expected one child node, got ${b.el.childNodes.length}`);
+          assert(b.el.childNodes[0].nodeType === 3, 'the child is not a text node');
           assert(b.el.textContent === b.part.text, 'the text was altered; escaping must keep it VISIBLE');
-          assert(b.el.innerHTML === undefined, 'innerHTML was written to');
         },
       },
     ],
   },
 
   'untrusted-model-output#1': {
-    stubs: ['window.open', 'location'],
+    stubs: ['`window.open` and `location` (no browser here)'],
     cases: [
       {
         label: 'an https URL opens',
@@ -316,7 +424,7 @@ export const HARNESSES = {
 
   'untrusted-model-output#2': {
     jsx: true,
-    stubs: [],
+    stubs: ['a recording JSX factory instead of a framework renderer'],
     cases: [
       {
         label: 'an https citation renders as a link with rel',
@@ -356,27 +464,38 @@ export const HARNESSES = {
   'kit-parses-consumer-fetches#0': {
     // readOpenAIStream is the published package's, and this tree is not
     // guaranteed built, so the call is executed against a stand-in. The
-    // corroboration below is what actually checks that the real symbol exists
-    // and is reachable through the documented specifier.
-    stubs: ['readOpenAIStream (stand-in; the real one lives behind the ./wire exports key)'],
+    // corroboration is what checks the real symbol exists and is reachable
+    // through the documented specifier.
+    stubs: ['`readOpenAIStream` (stand-in; the real one lives behind the ./wire exports key)'],
     cases: [
       {
-        label: 'the reader is awaited with (response, stream)',
+        label: 'the reader is called with (response, stream) AND its result is awaited',
         bindings() {
           const calls = [];
+          const marks = [];
           return {
             res: { body: {} },
             stream: { message: {} },
-            readOpenAIStream: async (r, s) => {
+            // A thenable rather than an async function: `then` is called ONLY if
+            // the caller awaits. Without this the label's word "awaited" was
+            // claiming something nothing checked.
+            readOpenAIStream: (r, s) => {
               calls.push([r, s]);
-              return { finished: true };
+              return {
+                then(resolve) {
+                  marks.push('awaited');
+                  resolve({ finished: true });
+                },
+              };
             },
             __calls: calls,
+            __marks: marks,
           };
         },
         check(b) {
           assert(b.__calls.length === 1, 'the reader was never called');
           assert(b.__calls[0][0] === b.res && b.__calls[0][1] === b.stream, 'the reader got the wrong arguments');
+          assert(b.__marks.includes('awaited'), 'the result was never awaited; the turn would be used before it is filled');
         },
       },
     ],
@@ -392,7 +511,7 @@ export const HARNESSES = {
   },
 
   'kit-parses-consumer-fetches#1': {
-    stubs: ['fetch', 'toOpenAIMessages (stand-in; the real one lives behind the ./wire exports key)'],
+    stubs: ['`fetch`', '`toOpenAIMessages` (stand-in; the real one lives behind the ./wire exports key)'],
     cases: [
       {
         label: 'the consumer posts its OWN endpoint, with the thread encoded for the wire',
@@ -432,7 +551,7 @@ export const HARNESSES = {
   },
 
   'upgrade-race#0': {
-    stubs: ['customElements'],
+    stubs: ['`customElements` (a controllable whenDefined, so the BEFORE state is observable)'],
     cases: [
       {
         label: 'the property is NOT set before the element is defined, and IS set after',
@@ -455,7 +574,7 @@ export const HARNESSES = {
     // The same `right` form as #0 -- deliberately, because the record pairs it
     // against a second wrong form (DOMContentLoaded). Executed again rather than
     // aliased: an alias would stop running the day the two diverge.
-    stubs: ['customElements'],
+    stubs: ['`customElements` (a controllable whenDefined, so the BEFORE state is observable)'],
     cases: [
       {
         label: 'the same guarantee, reached from the DOMContentLoaded mistake',
@@ -519,13 +638,18 @@ function whenDefinedBindings() {
   };
 }
 
+/** A stable, human-readable discriminator, so an inserted example does not make every message point at the wrong line. */
+const describeExample = (inv, i) => {
+  const wrong = inv.examples[i]?.wrong ?? '(no such example)';
+  return `${inv.id}#${i} (wrong: ${wrong.slice(0, 48)}${wrong.length > 48 ? '…' : ''})`;
+};
+
 /**
  * Run the floor over a list of invariant records.
  *
  * Returns `{ ok, results, errors }`. `errors` holds the structural failures
- * (missing or dangling harness); `results` holds one row per example. Nothing is
- * skipped and nothing is silently tolerated: a row with no harness is an error,
- * not an absence.
+ * (missing harness, empty harness, dangling harness); `results` holds one row
+ * per example. Nothing is skipped and nothing is silently tolerated.
  */
 export async function runFloor(invariants, helpers, { harnesses = HARNESSES } = {}) {
   const errors = [];
@@ -535,22 +659,38 @@ export async function runFloor(invariants, helpers, { harnesses = HARNESSES } = 
   for (const inv of invariants) {
     for (let i = 0; i < inv.examples.length; i++) {
       const key = `${inv.id}#${i}`;
+      const where = describeExample(inv, i);
       const harness = harnesses[key];
       if (!harness) {
         errors.push(
-          `no harness for ${key}. Every examples[].right must be executed; add a harness in scripts/lib/invariant-floor.mjs binding its free variables, or the example stops being measured.`,
+          `no harness for ${where}. Every examples[].right must be executed; add a harness in scripts/lib/invariant-floor.mjs binding its free variables, or the example stops being measured.`,
         );
-        results.push({ key, invariant: inv.id, index: i, status: 'no-harness', stubs: [], cases: [] });
+        results.push({ key, where, invariant: inv.id, index: i, status: 'no-harness', stubs: [], cases: [] });
         continue;
       }
       seen.add(key);
 
-      const row = { key, invariant: inv.id, index: i, status: 'passed', stubs: harness.stubs ?? [], cases: [] };
+      // An empty case list runs the loop zero times and reports PASS. That is
+      // the vacuity this whole stage exists to prevent, so it is an error in its
+      // own right rather than a quietly green row.
+      if (!harness.cases || harness.cases.length === 0) {
+        errors.push(
+          `the harness for ${where} has NO CASES, so the right form is never executed. An empty case list reports PASS while measuring nothing.`,
+        );
+        results.push({ key, where, invariant: inv.id, index: i, status: 'no-cases', stubs: harness.stubs ?? [], cases: [] });
+        continue;
+      }
+
+      const row = { key, where, invariant: inv.id, index: i, status: 'passed', stubs: harness.stubs ?? [], cases: [] };
       for (const c of harness.cases) {
         const bindings = c.bindings();
         try {
-          await execute(inv.examples[i].right, bindings, { jsx: harness.jsx });
-          await c.check(bindings, helpers);
+          // The trap spans BOTH, because upgrade-race's `.then` only runs
+          // during the check and a throw there would otherwise vanish.
+          await withAsyncFaultTrap(async () => {
+            await execute(inv.examples[i].right, bindings, { jsx: harness.jsx });
+            await c.check(bindings, helpers);
+          });
           row.cases.push({ label: c.label, status: 'passed' });
         } catch (err) {
           row.status = 'failed';
@@ -566,7 +706,18 @@ export async function runFloor(invariants, helpers, { harnesses = HARNESSES } = 
           row.corroboration = `failed: ${err && err.message ? err.message : err}`;
         }
       }
-      if (row.status === 'failed') errors.push(`${key}: ${row.cases.filter((c) => c.status === 'failed').map((c) => c.label).join('; ') || row.corroboration}`);
+      if (row.status === 'failed') {
+        // The case LABEL alone is not the finding -- it names what was being
+        // checked, never what went wrong -- so the error text travels too.
+        errors.push(
+          `${where}: ${
+            row.cases
+              .filter((c) => c.status === 'failed')
+              .map((c) => `${c.label} -- ${c.error}`)
+              .join('; ') || row.corroboration
+          }`,
+        );
+      }
       results.push(row);
     }
   }
@@ -585,7 +736,7 @@ export async function runFloor(invariants, helpers, { harnesses = HARNESSES } = 
 export function formatFloor({ results, errors }) {
   const lines = [];
   for (const r of results) {
-    const stub = r.stubs.length ? `  [stubbed: ${r.stubs.join(', ')}]` : '';
+    const stub = r.stubs.length ? `  [stand-ins: ${r.stubs.join(', ')}]` : '';
     lines.push(`${r.status === 'passed' ? 'PASS' : 'FAIL'}  ${r.key}${stub}`);
     for (const c of r.cases) {
       lines.push(`        ${c.status === 'passed' ? '·' : '✗'} ${c.label}${c.error ? ` -- ${c.error}` : ''}`);
@@ -598,60 +749,74 @@ export function formatFloor({ results, errors }) {
 
 /**
  * POSITIVE CONTROL. A stage that reports "every example ran" is worth nothing
- * until it has been watched to FAIL, so this plants four faults and requires the
+ * until it has been watched to FAIL, so this plants six faults and requires the
  * runner to report each one:
  *
  *   1. a `right` that throws (an undeclared free variable),
  *   2. a `right` that executes cleanly but violates its own claim,
- *   3. an example with no harness at all,
- *   4. a harness whose example does not exist.
+ *   3. a `right` that throws LATE, inside a `.then` after it has returned,
+ *   4. an example with no harness at all,
+ *   5. a harness with an EMPTY case list,
+ *   6. a harness whose example does not exist.
  *
  * Plus one control that must PASS, so "reports everything as failed" cannot
  * masquerade as a working detector.
  */
 export async function selfTest(helpers) {
   const probes = [
-    {
-      id: 'zz-throws',
-      examples: [{ wrong: 'x', right: 'notDeclaredAnywhere.messages = [];' }],
-    },
+    { id: 'zz-throws', examples: [{ wrong: 'x', right: 'notDeclaredAnywhere.messages = [];' }] },
     {
       id: 'zz-silently-wrong',
       // Executes fine. Sets the SAME array back, which is precisely the mistake
       // reactivity-two-halves exists to prevent -- so the check must catch it.
       examples: [{ wrong: 'x', right: 'chat.messages = messages;' }],
     },
+    {
+      id: 'zz-late-throw',
+      examples: [
+        {
+          wrong: 'x',
+          right: "customElements.whenDefined('kai-chat').then(() => { chat.messages = messages; throw new Error('LATE BOOM'); });",
+        },
+      ],
+    },
     { id: 'zz-unharnessed', examples: [{ wrong: 'x', right: 'const ok = 1;' }] },
+    { id: 'zz-no-cases', examples: [{ wrong: 'x', right: 'const ok = 1;' }] },
     { id: 'zz-good', examples: [{ wrong: 'x', right: 'chat.messages = [...messages];' }] },
   ];
 
+  const freshArray = {
+    stubs: [],
+    cases: [
+      {
+        label: 'a fresh array is a fresh array',
+        bindings: () => ({ chat: {}, messages: [1] }),
+        check(b) {
+          assert(b.chat.messages !== b.messages, 'same array reference');
+        },
+      },
+    ],
+  };
+
   const probeHarnesses = {
     'zz-throws#0': { stubs: [], cases: [{ label: 'throws', bindings: () => ({}), check: () => {} }] },
-    'zz-silently-wrong#0': {
+    'zz-silently-wrong#0': freshArray,
+    'zz-late-throw#0': {
       stubs: [],
       cases: [
         {
-          label: 'must notice the same array reference',
-          bindings: () => ({ chat: {}, messages: [1] }),
-          check(b) {
-            assert(b.chat.messages !== b.messages, 'same array reference');
+          label: 'a throw inside the .then must not vanish',
+          bindings: () => whenDefinedBindings(),
+          async check(b) {
+            b.__define();
+            await b.__settled();
           },
         },
       ],
     },
-    'zz-good#0': {
-      stubs: [],
-      cases: [
-        {
-          label: 'a fresh array is a fresh array',
-          bindings: () => ({ chat: {}, messages: [1] }),
-          check(b) {
-            assert(b.chat.messages !== b.messages, 'same array reference');
-          },
-        },
-      ],
-    },
-    'zz-dangling#0': { stubs: [], cases: [] },
+    'zz-no-cases#0': { stubs: [], cases: [] },
+    'zz-good#0': freshArray,
+    'zz-dangling#0': { stubs: [], cases: [{ label: 'never runs', bindings: () => ({}), check: () => {} }] },
   };
 
   const { results, errors } = await runFloor(probes, helpers, { harnesses: probeHarnesses });
@@ -660,46 +825,156 @@ export async function selfTest(helpers) {
   const expectations = [
     ['a right form that throws is reported failed', status('zz-throws#0') === 'failed'],
     ['a right form that executes but violates its claim is reported failed', status('zz-silently-wrong#0') === 'failed'],
+    [
+      'a right form that throws LATE, inside a .then, is reported failed',
+      status('zz-late-throw#0') === 'failed' && errors.some((e) => e.includes('LATE BOOM')),
+    ],
     ['an example with no harness is reported, not skipped', status('zz-unharnessed#0') === 'no-harness'],
     ['a missing harness raises a structural error', errors.some((e) => e.includes('no harness for zz-unharnessed#0'))],
+    ['a harness with an EMPTY case list is reported, not passed', status('zz-no-cases#0') === 'no-cases'],
+    ['an empty case list raises a structural error', errors.some((e) => e.includes('NO CASES'))],
     ['a dangling harness raises a structural error', errors.some((e) => e.includes('dangling harness zz-dangling#0'))],
     ['a correct right form still passes', status('zz-good#0') === 'passed'],
   ];
 
   const failed = expectations.filter(([, ok]) => !ok).map(([what]) => what);
 
-  // The consistency guard the packer relies on, self-tested here for the same
-  // reason: a check that has never been watched to fire is not a check.
-  const enrichmentFailures = [];
-  try {
-    assertEnrichmentCovers([{ tag: 'kai-a' }, { tag: 'kai-b' }], [{ tag: 'kai-a' }]);
-    enrichmentFailures.push('a missing element-meta entry was NOT detected');
-  } catch {
-    /* expected */
+  // The artifact-agreement guard the packer relies on, self-tested here for the
+  // same reason: a check that has never been watched to fire is not a check.
+  // Each probe plants ONE divergence and requires it to be named.
+  const good = [
+    {
+      tag: 'kai-a',
+      props: [{ name: 'p', scalar: true, optional: true, fn: false }],
+      events: ['kai-x'],
+    },
+  ];
+  const goodMeta = [{ tag: 'kai-a', props: [{ name: 'p', scalar: true, type: 'string' }], events: [{ name: 'kai-x' }] }];
+  const agreementProbes = [
+    ['a tag only derived.json has', good, []],
+    ['a tag only element-meta.json has', [], goodMeta],
+    ['a prop only derived.json has', good, [{ ...goodMeta[0], props: [] }]],
+    [
+      'a prop only element-meta.json has',
+      [{ ...good[0], props: [] }],
+      goodMeta,
+    ],
+    ['an event only element-meta.json has', [{ ...good[0], events: [] }], goodMeta],
+    [
+      'a prop whose type makes it function-valued on one side only',
+      good,
+      [{ ...goodMeta[0], props: [{ name: 'p', scalar: true, type: '(x: string) => void' }] }],
+    ],
+    [
+      'a prop whose scalar flag disagrees',
+      good,
+      [{ ...goodMeta[0], props: [{ name: 'p', scalar: false, type: 'string' }] }],
+    ],
+  ];
+  const agreementFailures = [];
+  for (const [what, d, m] of agreementProbes) {
+    try {
+      assertArtifactsAgree(d, m);
+      agreementFailures.push(`NOT detected: ${what}`);
+    } catch {
+      /* expected */
+    }
   }
   try {
-    assertEnrichmentCovers([{ tag: 'kai-a' }], [{ tag: 'kai-a' }]);
+    assertArtifactsAgree(good, goodMeta);
   } catch (err) {
-    enrichmentFailures.push(`a matching pair was wrongly rejected: ${err.message}`);
+    agreementFailures.push(`a matching pair was wrongly rejected: ${err.message}`);
+  }
+  for (const [what] of agreementProbes) {
+    expectations.push([`artifact agreement detects ${what}`, !agreementFailures.includes(`NOT detected: ${what}`)]);
   }
 
-  return { ok: failed.length === 0 && enrichmentFailures.length === 0, failed: [...failed, ...enrichmentFailures], expectations };
+  return {
+    ok: failed.length === 0 && agreementFailures.length === 0,
+    failed: [...failed, ...agreementFailures],
+    expectations,
+  };
 }
+
+/**
+ * The generator's own rule for "is this prop a callback the consumer must
+ * supply", restated here so the two artifacts can be cross-checked rather than
+ * merely compared. Strip a leading `undefined | `, then function-valued iff the
+ * remainder starts with `(` AND contains `=>`.
+ */
+function fnValuedFromType(type) {
+  if (typeof type !== 'string') return false;
+  const t = type.startsWith('undefined | ') ? type.slice('undefined | '.length) : type;
+  return t.startsWith('(') && t.includes('=>');
+}
+
+const setsDiffer = (a, b) => {
+  const A = new Set(a);
+  const B = new Set(b);
+  return [[...A].filter((x) => !B.has(x)), [...B].filter((x) => !A.has(x))];
+};
 
 /**
  * derived.json and element-meta.json are written by the same `build:api` run, so
  * they agree by construction -- until one of them is regenerated alone. The pack
- * reads the element SPINE from derived.json and the prose (types, defaults,
- * slots, docs) from element-meta.json, so a divergence would silently produce
- * element pages with no types on them. Decide loudly: fail instead.
+ * reads the element SPINE from derived.json (the tag list, the scalar/fn flags,
+ * the index's counts) and the prose from element-meta.json (types, defaults,
+ * slots, docs), so a divergence produces element pages that quietly contradict
+ * the index the pack calls complete. Decide loudly: fail instead.
+ *
+ * BOTH DIRECTIONS, per element, over props and events. A one-directional tag
+ * membership check -- what this was before review -- passes on an extra tag in
+ * element-meta, on a prop dropped from either side, and on a `fn`/`scalar` flag
+ * that no longer matches the printed type. The last of those is S3's whole
+ * scoring line, so it is cross-checked against the generator's rule rather than
+ * merely compared.
+ *
+ * WHAT THIS STILL CANNOT SEE, stated rather than implied: nothing here can tell
+ * a correct prop TYPE from a plausible wrong one. `type: 'ThisDoesNotExist'` on
+ * a non-function prop agrees with everything and packs clean. Types are checked
+ * by `verify:generated` regenerating the artifact, not by this.
  */
-export function assertEnrichmentCovers(derivedElements, metaElements) {
-  const metaTags = new Set(metaElements.map((m) => m.tag));
-  const missing = derivedElements.map((e) => e.tag).filter((t) => !metaTags.has(t));
-  if (missing.length) {
+export function assertArtifactsAgree(derivedElements, metaElements) {
+  const problems = [];
+  const metaByTag = new Map(metaElements.map((m) => [m.tag, m]));
+  const [onlyDerived, onlyMeta] = setsDiffer(
+    derivedElements.map((e) => e.tag),
+    metaElements.map((m) => m.tag),
+  );
+  for (const t of onlyDerived) problems.push(`${t}: in derived.json, absent from element-meta.json`);
+  for (const t of onlyMeta) problems.push(`${t}: in element-meta.json, absent from derived.json`);
+
+  for (const el of derivedElements) {
+    const m = metaByTag.get(el.tag);
+    if (!m) continue;
+    const [dp, mp] = setsDiffer(el.props.map((p) => p.name), (m.props ?? []).map((p) => p.name));
+    for (const p of dp) problems.push(`${el.tag}.${p}: prop in derived.json only`);
+    for (const p of mp) problems.push(`${el.tag}.${p}: prop in element-meta.json only`);
+
+    const [de, me] = setsDiffer(el.events ?? [], (m.events ?? []).map((e) => e.name));
+    for (const e of de) problems.push(`${el.tag}: event ${e} in derived.json only`);
+    for (const e of me) problems.push(`${el.tag}: event ${e} in element-meta.json only`);
+
+    for (const p of el.props) {
+      const mprop = (m.props ?? []).find((x) => x.name === p.name);
+      if (!mprop) continue;
+      if (fnValuedFromType(mprop.type) !== p.fn) {
+        problems.push(
+          `${el.tag}.${p.name}: derived.json says fn=${p.fn}, but element-meta.json's type says ${!p.fn} (${mprop.type})`,
+        );
+      }
+      if (mprop.scalar !== undefined && mprop.scalar !== p.scalar) {
+        problems.push(`${el.tag}.${p.name}: scalar disagrees (derived ${p.scalar} vs meta ${mprop.scalar})`);
+      }
+    }
+  }
+
+  if (problems.length) {
     throw new Error(
-      `element-meta.json is missing ${missing.length} element(s) that derived.json has: ${missing.join(', ')}. ` +
-        'The two artifacts have diverged -- regenerate both with `npm run build:api` inside packages/ui.',
+      `derived.json and element-meta.json have diverged in ${problems.length} place(s):\n  - ${problems
+        .slice(0, 20)
+        .join('\n  - ')}${problems.length > 20 ? `\n  … and ${problems.length - 20} more` : ''}\n` +
+        'Regenerate both with `npm run build:api` inside packages/ui.',
     );
   }
 }
