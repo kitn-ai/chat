@@ -4993,6 +4993,12 @@
       "event": "kai-maximize-state",
       "bubbles": false,
       "composed": true
+    },
+    {
+      "file": "src/primitives/card-routing.ts",
+      "event": "kai-card",
+      "bubbles": true,
+      "composed": true
     }
   ]
 }

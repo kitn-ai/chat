@@ -3,7 +3,7 @@
 // diffs it (the element-manifest lesson: the guard must invoke the script that
 // writes the artifact).
 import { readFileSync, writeFileSync, readdirSync, mkdtempSync, rmSync } from 'node:fs';
-import { join, resolve, dirname } from 'node:path';
+import { join, resolve, dirname, relative, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import ts from 'typescript';
@@ -11,7 +11,21 @@ import * as esbuild from 'esbuild';
 import { readVariants, MIN_VARIANTS } from './lib/message-part-variants.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const OUT = join(ROOT, 'src/agent-tooling/catalog/derived.json');
+const DEFAULT_OUT = join(ROOT, 'src/agent-tooling/catalog/derived.json');
+
+// `--out <path>` redirects the write. The DEFAULT is the committed artifact, so
+// build:api and a bare `node scripts/gen-catalog.mjs` behave identically to
+// before. It exists for the staleness test, which must regenerate WITHOUT
+// touching the tracked file: a test that repairs the artifact it is checking
+// passes on its second run, so a re-run of a flaked CI job would turn a genuine
+// staleness failure green and leave no evidence. Writing elsewhere also stops
+// the test racing the other suites that read the committed path in parallel.
+const outFlag = process.argv.indexOf('--out');
+if (outFlag !== -1 && !process.argv[outFlag + 1]) {
+  console.error('✗ gen-catalog: --out needs a path.');
+  process.exit(1);
+}
+const OUT = outFlag === -1 ? DEFAULT_OUT : resolve(process.argv[outFlag + 1]);
 
 function fail(msg) {
   console.error(`✗ gen-catalog: ${msg}`);
@@ -112,6 +126,18 @@ if (themeTokens.length === 0) fail('no --kai-* tokens found in theme.css.');
 //    quietly reports that the kit has no protocol exceptions, which would gut
 //    spec §5's exception list while parsing clean. The compiler API cannot be
 //    defeated by formatting, and lint-silent-drops already sets the precedent.
+//
+//    TWO scoping bugs were found here in review, and both had to be fixed
+//    together before the third exception appeared. `emitCardEvent` in
+//    src/primitives/card-routing.ts dispatches the bubbling, composed `kai-card`
+//    — its own comment calls it "deliberately different from
+//    defineWebComponent's built-in non-bubbling dispatch", cards.tsx depends on
+//    it crossing shadow boundaries and remote.tsx re-emits it — and it was
+//    missed because (a) the scan only read src/elements, and (b) its first
+//    argument is the IDENTIFIER `CARD_EVENT_NAME`, not a string literal. So the
+//    scan now walks the whole source tree, and resolves a same-file `const` name
+//    to its string. A partial loss here is worse than a total one: the floor
+//    below only fires at ZERO, so two-of-three looked exactly like success.
 function boolProp(objLit, key) {
   for (const p of objLit.properties) {
     if (ts.isPropertyAssignment(p) && ts.isIdentifier(p.name) && p.name.text === key) {
@@ -122,30 +148,81 @@ function boolProp(objLit, key) {
   return undefined;
 }
 
-const elDir = join(ROOT, 'src/elements');
+/** `const X = 'literal'` declarations in one file, so a dispatch naming its
+ *  event through a constant resolves to the same record a literal would. */
+function stringConsts(sf) {
+  const consts = new Map();
+  const visit = (node) => {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+      // `const NAME = 'kai-card' as const` parses as an AsExpression; unwrap it.
+      const init = ts.isAsExpression(node.initializer) ? node.initializer.expression : node.initializer;
+      if (ts.isStringLiteral(init)) consts.set(node.name.text, init.text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return consts;
+}
+
+const SRC = join(ROOT, 'src');
 // Test and story files dispatch synthetic events; they are not the contract.
-const NOT_SOURCE = /\.(test|stories)\.tsx$/;
+const NOT_SOURCE = /\.(test|stories)\.[cm]?tsx?$/;
+// define.tsx IS the built-in dispatch (both flags hard-coded false); it is the
+// rule these records are exceptions to, not one of them.
+const NOT_A_SOURCE_OF_EXCEPTIONS = join(SRC, 'elements/define.tsx');
+
+/** Every .ts/.tsx under src/, relative to the package root, POSIX-separated. */
+function sourceFiles(dir) {
+  const out = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const abs = join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...sourceFiles(abs));
+    else if (/\.tsx?$/.test(entry.name) && !NOT_SOURCE.test(entry.name) && abs !== NOT_A_SOURCE_OF_EXCEPTIONS)
+      out.push(abs);
+  }
+  return out;
+}
+
 const exceptionsByKey = new Map();
-for (const f of readdirSync(elDir).filter((n) => n.endsWith('.tsx') && n !== 'define.tsx' && !NOT_SOURCE.test(n))) {
-  const sf = ts.createSourceFile(f, readFileSync(join(elDir, f), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+for (const abs of sourceFiles(SRC)) {
+  const rel = relative(ROOT, abs).split(sep).join('/');
+  const sf = ts.createSourceFile(rel, readFileSync(abs, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  let consts;
   const visit = (node) => {
     if (
       ts.isNewExpression(node) &&
       ts.isIdentifier(node.expression) &&
       node.expression.text === 'CustomEvent' &&
-      node.arguments?.length >= 1 &&
-      ts.isStringLiteral(node.arguments[0]) &&
-      node.arguments[0].text.startsWith('kai-')
+      node.arguments?.length >= 1
     ) {
+      const nameArg = node.arguments[0];
+      consts ??= stringConsts(sf);
+      const event = ts.isStringLiteral(nameArg)
+        ? nameArg.text
+        : ts.isIdentifier(nameArg)
+          ? consts.get(nameArg.text)
+          : undefined;
       const opts = node.arguments[1];
       if (opts && ts.isObjectLiteralExpression(opts)) {
         const bubbles = boolProp(opts, 'bubbles') === true;
         const composed = boolProp(opts, 'composed') === true;
         if (bubbles || composed) {
-          // Deduped: resizable.tsx dispatches kai-maximize-state from three
-          // sites with identical options. One event, one record.
-          const rec = { file: `src/elements/${f}`, event: node.arguments[0].text, bubbles, composed };
-          exceptionsByKey.set(`${rec.file}|${rec.event}|${rec.bubbles}|${rec.composed}`, rec);
+          // Decide loudly: an event name this cannot resolve, dispatched with a
+          // protocol flag set, is precisely the silent partial loss that hid
+          // kai-card. We cannot tell whether it is kai-*, so we refuse to guess.
+          if (event === undefined) {
+            fail(
+              `${rel}:${sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1} dispatches a CustomEvent with ` +
+                `bubbles/composed set under a name this cannot resolve to a string. Resolve it or the exception list ` +
+                `silently loses a protocol event.`,
+            );
+          }
+          if (event.startsWith('kai-')) {
+            // Deduped: resizable.tsx dispatches kai-maximize-state from three
+            // sites with identical options. One event, one record.
+            const rec = { file: rel, event, bubbles, composed };
+            exceptionsByKey.set(`${rec.file}|${rec.event}|${rec.bubbles}|${rec.composed}`, rec);
+          }
         }
       }
     }
