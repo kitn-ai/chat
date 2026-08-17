@@ -21,7 +21,31 @@ import type {
 } from './chunk';
 import { openaiChatFormat } from './formats/openai';
 import { anthropicMessagesFormat } from './formats/anthropic';
-import { nextStreamId } from './diagnostics';
+import { emitWireDiagnostic, nextStreamId, wireDiagnosticsActive } from './diagnostics';
+
+/** Byte length, not `String.length`: a multibyte frame is bigger than its
+ *  character count and the number is meant to be comparable with what the socket
+ *  carried.
+ *
+ *  Built on first use and cached, never at module scope -- the same rule
+ *  `sseJson` follows for its TextDecoder, so this module keeps importing cleanly
+ *  in a runtime that lacks the global. Only ever reached from inside an
+ *  active-diagnostics branch. */
+let encoder: TextEncoder | undefined;
+
+function byteLength(raw: string): number {
+  encoder ??= new TextEncoder();
+  return encoder.encode(raw).length;
+}
+
+/** What the caller handed over, for `wire.open`. Duck-typed on the same terms as
+ *  `isResponse`, because none of these globals is guaranteed to exist. */
+function sourceKind(source: StreamSource): 'response' | 'stream' | 'iterable' {
+  if (isResponse(source)) return 'response';
+  return typeof (source as ReadableStream<Uint8Array>).getReader === 'function'
+    ? 'stream'
+    : 'iterable';
+}
 
 export type StreamSource =
   | Response
@@ -125,15 +149,65 @@ export async function readModelStream(
   // still needs an id to report itself under.
   const streamId = opts.streamId ?? nextStreamId();
   const bytes = await toByteSource(source);
+  if (wireDiagnosticsActive()) {
+    emitWireDiagnostic({
+      type: 'wire.open',
+      t: Date.now(),
+      streamId,
+      format: opts.format.id,
+      source: sourceKind(source),
+    });
+  }
   // Opened ONCE per stream, which is the whole point of the open()/push() shape:
   // a stateful format (Anthropic) gets a fresh block map per call.
   const reader = opts.format.open();
+
+  let frames = 0;
+  // The byte length of the frame currently being handed over. `onRawFrame` fires
+  // immediately before `sseJson` yields, so this is always the frame the next
+  // loop iteration is about to push.
+  let frameBytes = 0;
+  const onRawFrame = wireDiagnosticsActive()
+    ? (raw: string) => {
+        frameBytes = byteLength(raw);
+      }
+    : undefined;
+
   async function* chunks(): AsyncGenerator<ModelStreamChunk> {
-    for await (const frame of sseJson<unknown>(bytes)) {
-      for (const chunk of reader.push(frame)) yield chunk;
+    for await (const frame of sseJson<unknown>(bytes, onRawFrame)) {
+      frames++;
+      const produced = reader.push(frame);
+      // Gated BEFORE the event object exists, and before the keys are walked.
+      if (wireDiagnosticsActive()) {
+        const fields = new Set<string>();
+        let model: string | undefined;
+        for (const chunk of produced) {
+          for (const key of Object.keys(chunk)) fields.add(key);
+          if (chunk.model) model = chunk.model;
+        }
+        emitWireDiagnostic({
+          type: 'wire.frame',
+          t: Date.now(),
+          streamId,
+          seq: frames,
+          bytes: frameBytes,
+          chunks: produced.length,
+          fields: [...fields],
+          ...(model ? { model } : {}),
+        });
+      }
+      for (const chunk of produced) yield chunk;
     }
   }
-  return consumeModelStream(chunks(), sink, { ...opts, streamId });
+  // `_frames` is INTERNAL and deliberately not on `ConsumeOptions`: it is read
+  // once, at the close event, and a public option would invite a caller to
+  // supply one. A direct `consumeModelStream` caller passes nothing and its
+  // `wire.close` correctly omits `frames` -- there were none.
+  return consumeModelStream(chunks(), sink, {
+    ...opts,
+    streamId,
+    _frames: () => frames,
+  } as ConsumeOptions);
 }
 
 /** OpenAI chat-completions SSE. Also what all nine catalog integrations except

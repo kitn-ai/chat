@@ -18,7 +18,7 @@ import {
   type StopReason,
 } from './chunk';
 import type { RawOrigin } from '../components/tool-types';
-import { nextStreamId } from './diagnostics';
+import { emitWireDiagnostic, nextStreamId, wireDiagnosticsActive } from './diagnostics';
 
 // ── Tool-call accumulator ────────────────────────────────────────────────────
 
@@ -246,7 +246,7 @@ export function createToolCallAccumulator(sink: AssistantStreamSink, opts: Consu
 /** A sink that writes nowhere but into a `MessagePart[]`, using the kit's own
  *  builders. Teed alongside the real sink so `ModelTurn.parts` cannot drift from
  *  what the message actually received. */
-function createPartsRecorder(): AssistantStreamSink & {
+function createPartsRecorder(streamId: string): AssistantStreamSink & {
   parts(): MessagePart[];
   /** How many times each variant was WRITTEN, keyed by variant name.
    *
@@ -263,16 +263,43 @@ function createPartsRecorder(): AssistantStreamSink & {
 } {
   let parts: MessagePart[] = [];
   const counts: Record<string, number> = {};
-  const count = (variant: string) => {
+
+  /** Count the write, then report it. `chars` is the delta LENGTH and is passed
+   *  only for the text-bearing variants; the delta itself never travels.
+   *
+   *  `index` is the position in `parts` this write landed on, found by comparing
+   *  references before and after. The builders return a new array with a new
+   *  object for the item they changed, so the first slot that differs IS the
+   *  part that moved -- which is uniform across all four methods and needs no
+   *  knowledge of any variant's shape. Computed only when someone is listening. */
+  const record = (variant: string, before: MessagePart[], chars?: number) => {
     counts[variant] = (counts[variant] ?? 0) + 1;
+    if (!wireDiagnosticsActive()) return;
+    let index = parts.length - 1;
+    for (let i = 0; i < parts.length; i++) {
+      if (before[i] !== parts[i]) {
+        index = i;
+        break;
+      }
+    }
+    emitWireDiagnostic({
+      type: 'wire.part',
+      t: Date.now(),
+      streamId,
+      variant,
+      index,
+      ...(chars !== undefined ? { chars } : {}),
+    });
   };
+
   return {
     appendText(delta) {
-      count('text');
+      const before = parts;
       parts = appendTextPart(parts, delta);
+      record('text', before, delta.length);
     },
     appendReasoning(delta, opts) {
-      count('reasoning');
+      const before = parts;
       // `streamId` is DROPPED here on purpose. It namespaces block indices for a
       // sink that outlives one stream; this recorder starts a fresh array per
       // call, so within `ModelTurn.parts` there is nothing to disambiguate. Worse,
@@ -281,14 +308,17 @@ function createPartsRecorder(): AssistantStreamSink & {
       // adapter guarantees (same chunks in, same parts out, whatever the byte
       // boundaries). The host's own sink still receives it.
       parts = appendReasoningPart(parts, delta, { ...opts, streamId: undefined });
+      record('reasoning', before, delta.length);
     },
     upsertTool(toolCallId, patch) {
-      count('tool');
+      const before = parts;
       parts = upsertToolPart(parts, toolCallId, patch);
+      record('tool', before);
     },
     addSource(source) {
-      count('source');
+      const before = parts;
       parts = [...parts, { type: 'source', source }];
+      record('source', before);
     },
     parts: () => parts,
     partCounts: () => counts,
@@ -341,7 +371,8 @@ export async function consumeModelStream(
   // and counts frames before this function runs and every event from one read
   // has to carry the same id. A direct caller still gets a fresh one per call.
   const streamId = opts.streamId ?? nextStreamId();
-  const recorder = createPartsRecorder();
+  const startedAt = Date.now();
+  const recorder = createPartsRecorder(streamId);
   const out = teeSink(sink, recorder);
   const tools = createToolCallAccumulator(out, opts);
 
@@ -462,6 +493,28 @@ export async function consumeModelStream(
   // adapter itself branches on, so no OpenAI literal leaks into adapter logic.
   const stopReason = normalizeStopReason(finishReason) ?? (error ? 'error' : undefined);
   const toolCalls = tools.settle(stopReason, error?.message);
+
+  if (wireDiagnosticsActive()) {
+    // `_frames` is supplied by `readModelStream` only. A direct caller had no
+    // frames, so the field is absent rather than zero -- a consumer must be able
+    // to tell "not reported" from "none arrived".
+    const frames = (opts as { _frames?: () => number })._frames?.();
+    emitWireDiagnostic({
+      type: 'wire.close',
+      t: Date.now(),
+      streamId,
+      ...(frames !== undefined ? { frames } : {}),
+      chunks: chunkCount,
+      parts: recorder.partCounts(),
+      finishReason,
+      ...(stopReason ? { stopReason } : {}),
+      // The CODE only. A provider's error message can echo request content back,
+      // which is why it stays on `ModelTurn.error` and never on the event.
+      ...(error?.code !== undefined ? { errorCode: error.code } : {}),
+      ...(usage ? { usage } : {}),
+      ms: Date.now() - startedAt,
+    });
+  }
 
   return {
     parts: recorder.parts(),
