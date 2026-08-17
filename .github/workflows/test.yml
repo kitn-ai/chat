@@ -344,6 +344,21 @@ jobs:
       - name: Server guard (every entry imports AND every component renders under `node`)
         run: pnpm --filter @kitn.ai/ui run verify:ssr
 
+      # Does the diagnostic stream actually REACH a subscriber in the built
+      # package? `./diagnostics` shipped completely inert and every gate stayed
+      # green over it: verify:ssr proved the subpath imports, verify:dts:consumer
+      # proved its types resolve, and the unit suite proved the SOURCE module
+      # works. None of them executes a subscription against dist/, which is where
+      # the defect lived -- two bundles each inlining their own copy of the
+      # emitter, one of them dead-code-eliminated down to a no-op because nothing
+      # in it ever called emit. This runs a real read through `./wire` and asserts
+      # the events arrive at a `./diagnostics` subscriber, then does the same
+      # across two instances of one module (the duplication a consumer causes by
+      # bundling the kit AND loading the CDN bundle) and checks the stream-id
+      # counter did not restart. Needs the build above. ~1s, no network.
+      - name: Diagnostics wiring guard (events cross the ./wire ↔ ./diagnostics boundary)
+        run: pnpm --filter @kitn.ai/ui run verify:diagnostics-wiring
+
       # Resolves the card JSON Schemas the way a consumer would, from a temp
       # package OUTSIDE the repo with the built package symlinked in. 11 schemas
       # had been copied into dist/schemas/ on every build and shipped in every

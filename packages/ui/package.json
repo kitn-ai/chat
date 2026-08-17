@@ -181,6 +181,7 @@
     "verify:solid-coverage": "node scripts/verify-solid-coverage.mjs --self-test && node scripts/verify-solid-coverage.mjs",
     "verify:tool-schemas": "node scripts/verify-tool-schemas.mjs",
     "verify:ssr": "node scripts/verify-ssr-imports.mjs && node scripts/verify-ssr-render.mjs",
+    "verify:diagnostics-wiring": "node scripts/verify-diagnostics-wiring.mjs",
     "verify:ssr:imports": "node scripts/verify-ssr-imports.mjs",
     "verify:ssr:render": "node scripts/verify-ssr-render.mjs",
     "verify:pack": "node scripts/verify-pack-weight.mjs",

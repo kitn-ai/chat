@@ -107,32 +107,89 @@ export type WireDiagnosticEvent =
 
 type Subscriber = (e: WireDiagnosticEvent) => void;
 
-const subscribers: Subscriber[] = [];
+/**
+ * THE MUTABLE STATE LIVES ON A GLOBAL, DELIBERATELY.
+ *
+ * Module-scope state means one emitter PER COPY of this module, and copies are
+ * normal rather than exotic. `./wire` and `./diagnostics` are separate rollup
+ * bundles that each inline this file, so a subscriber registered through one saw
+ * nothing emitted by the other -- which shipped, and made the devtools hook
+ * inert for every consumer. Worse, rollup saw a subscriber array that nothing in
+ * the diagnostics bundle ever emitted to, concluded it was write-only, and
+ * deleted it outright.
+ *
+ * A shared chunk would fix OUR build and not the class. The second instance is a
+ * consumer who bundles the kit and also loads the elements bundle from a CDN:
+ * that duplicates the module identically, and nothing we do to our own build
+ * config prevents it. A global keyed by `Symbol.for` is the one thing every copy
+ * agrees on, because the symbol registry is per-realm rather than per-module.
+ *
+ * THE COUNTER HAS TO BE IN HERE TOO. Two copies each starting at `wire-1` mint
+ * the same id for different streams, and that id NAMESPACES REASONING PARTS --
+ * a collision merges one stream's reasoning blocks into another's and overwrites
+ * their verbatim provider payload, which is the exact 400 the namespacing exists
+ * to avoid.
+ *
+ * Still no `window`: `globalThis` exists under Node and every SSR runtime, so
+ * this stays as import-safe as it was.
+ *
+ * PER REALM: a Worker, an iframe or an SSR isolate has its own registry and
+ * therefore its own emitter -- a panel in the parent document does not see a
+ * stream read inside a Worker.
+ */
+const STATE_KEY = Symbol.for('kai.wire.diagnostics.v1');
+
+interface DiagnosticsState {
+  subs: Subscriber[];
+  seq: number;
+}
+
+/** `globalThis` viewed as the one property we put on it. */
+type StateHolder = { [key: symbol]: DiagnosticsState | undefined };
+
+/** Read WITHOUT allocating, so the emit path and the active check never write to
+ *  the global.
+ *
+ *  The accurate guarantee: IMPORTING this module allocates nothing; the
+ *  singleton is created on the first `subscribeWireDiagnostics()` or the first
+ *  stream read (`nextStreamId`). A read with no subscriber does create it -- it
+ *  has to, because the id counter lives there -- leaving `{ subs: [], seq: 1 }`. */
+function peekState(): DiagnosticsState | undefined {
+  return (globalThis as unknown as StateHolder)[STATE_KEY];
+}
+
+/** Read, creating on first use. Only the two paths that must WRITE call this. */
+function state(): DiagnosticsState {
+  const holder = globalThis as unknown as StateHolder;
+  return (holder[STATE_KEY] ??= { subs: [], seq: 0 });
+}
 
 /**
  * Subscribe to wire diagnostics. Returns an unsubscribe function.
  *
- * SSR-safe: this is a module-scope array, not a global, so subscribing has no
- * environment requirements at all.
+ * SSR-safe: `globalThis` is available in every runtime the kit imports into, and
+ * nothing here touches `window`.
  */
 export function subscribeWireDiagnostics(fn: Subscriber): () => void {
-  subscribers.push(fn);
+  const subs = state().subs;
+  subs.push(fn);
   let live = true;
   return () => {
     if (!live) return; // a double-unsubscribe must not evict someone else
     live = false;
-    const at = subscribers.indexOf(fn);
-    if (at !== -1) subscribers.splice(at, 1);
+    const at = subs.indexOf(fn);
+    if (at !== -1) subs.splice(at, 1);
   };
 }
 
 /**
  * INTERNAL. Every emission site gates on this BEFORE constructing an event
- * object, which is what makes the no-subscriber path cost one array-length read
- * and allocate nothing.
+ * object, which is what makes the no-subscriber path cost one symbol read and
+ * allocate nothing -- not even the shared state.
  */
 export function wireDiagnosticsActive(): boolean {
-  return subscribers.length > 0;
+  const s = peekState();
+  return s !== undefined && s.subs.length > 0;
 }
 
 /**
@@ -146,7 +203,9 @@ export function wireDiagnosticsActive(): boolean {
  * a subscriber.
  */
 export function emitWireDiagnostic(e: WireDiagnosticEvent): void {
-  for (const fn of [...subscribers]) {
+  const s = peekState();
+  if (!s) return; // nobody has ever subscribed in this realm
+  for (const fn of [...s.subs]) {
     try {
       fn(e);
     } catch {
@@ -171,9 +230,12 @@ export function emitWireDiagnostic(e: WireDiagnosticEvent): void {
  * It lives HERE rather than in `consume.ts` because `readModelStream` opens the
  * format and counts frames before `consumeModelStream` runs, and every event
  * from one read has to carry the same id.
+ *
+ * The counter sits in the SHARED state, so two copies of this module continue
+ * one sequence instead of both restarting at `wire-1` and minting the same id
+ * for different streams. See the note on `STATE_KEY`.
  */
-let streamSeq = 0;
-
 export function nextStreamId(): string {
-  return `wire-${++streamSeq}`;
+  const s = state();
+  return `wire-${++s.seq}`;
 }

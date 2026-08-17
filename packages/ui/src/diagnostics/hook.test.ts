@@ -3,9 +3,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WireDiagnosticEvent } from '../wire/diagnostics';
 
 /** A fresh module graph per case. The hook is a module-level singleton AND a
- *  window global, and `subscribeWireDiagnostics` keeps its own subscriber list,
- *  so both have to be reset together -- importing them after the SAME
- *  `resetModules` is what guarantees the hook and the test hold one instance. */
+ *  window global, so both have to be reset together -- importing them after the
+ *  SAME `resetModules` is what guarantees the hook and the test hold one
+ *  instance.
+ *
+ *  `resetModules` is NOT enough on its own any more. The emitter's subscriber
+ *  list deliberately lives on a realm-global keyed by `Symbol.for`, precisely so
+ *  that two copies of the module share it -- which means a fresh module graph
+ *  inherits the previous case's subscribers unless the realm is cleared too. See
+ *  `beforeEach`. */
 async function fresh() {
   vi.resetModules();
   const hook = await import('./hook');
@@ -18,6 +24,9 @@ const ev = (over = {}): WireDiagnosticEvent =>
     WireDiagnosticEvent;
 
 beforeEach(() => {
+  // The emitter state is realm-global by design, so isolating a case means
+  // clearing the realm and not merely the module registry.
+  delete (globalThis as Record<symbol, unknown>)[Symbol.for('kai.wire.diagnostics.v1')];
   delete (window as any).__KAI_DEVTOOLS_HOOK__;
   delete (window as any).__KAI_DEVTOOLS__;
   window.localStorage.clear();
