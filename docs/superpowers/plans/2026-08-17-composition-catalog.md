@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript, zod (already a dependency, `^4.4.3`), esbuild (already used by `verify-scaffold-compiles.mjs` to import TS registries from `.mjs` scripts), the TypeScript compiler API (already used by `lint-silent-drops.mjs`), vitest.
 
-**Spec:** `docs/superpowers/specs/2026-08-17-composition-catalog-design.md` (read it first; its §7 build order is this plan's task order). §7 item 6, iterating under acceptance runs, is ongoing work that follows this plan rather than a task inside it.
+**Spec:** `docs/superpowers/specs/2026-08-17-composition-catalog-design.md` (read it first). This plan follows the spec's §7 build order with **one deliberate deviation**: §7 item 1 pairs the scenario deck with the harness skeleton, and this plan splits them (deck in Task 1, harness in Task 8) because the packer has nothing to pack until the derived layer and the authored records exist. The deck still comes first, which is what item 1 is for. §7 item 6, iterating under acceptance runs, is ongoing work that follows this plan rather than a task inside it. All narrowings are collected in "Deviations from the spec" at the end; read it before executing.
 
 ## Global Constraints
 
@@ -33,7 +33,7 @@
 
 **Interfaces:**
 - Consumes: nothing (first task).
-- Produces: the zod schemas `SurfaceArchetype`, `DeliveryTarget`, `WireReader`, `Backend`, `EnforcedBy`, `Invariant`, `WiringEdge`, `SurfaceRecipe`, `InventoryEntry`, `Scenario`, `DerivedCatalog`, `DerivedElement`, `EventException`; the inferred types `TInvariant`, `TSurfaceRecipe`, `TScenario`, `TInventoryEntry`, `TDerivedCatalog`; `export const scenarios: TScenario[]` and `export function listScenarios(): TScenario[]` (parse-validated). Tasks 3–9 import these names exactly.
+- Produces: the zod schemas `SurfaceArchetype`, `DeliveryTarget`, `WireReader`, `Backend`, `EnforcedBy`, `Invariant`, `WiringEdge`, `SurfaceRecipe`, `InventoryEntry`, `PartConsumption`, `Scenario`, `DerivedCatalog`, `DerivedElement`, `EventException`; the inferred types `TInvariant`, `TSurfaceRecipe`, `TScenario`, `TInventoryEntry`, `TPartConsumption`, `TDerivedCatalog`; `export const scenarios: TScenario[]` and `export function listScenarios(): TScenario[]` (parse-validated). Tasks 3–9 import these names exactly.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -157,6 +157,20 @@ export const DerivedElement = z.object({
   events: z.array(z.string()),
   methods: z.array(z.string()),
   parts: z.array(z.string()),
+  /** Spec §3 names both; element-meta.json already carries them. */
+  composedFrom: z.array(z.string()),
+  tokens: z.array(z.string()),
+});
+
+/**
+ * Which MessagePart variants an element consumes. NOT derivable from any type
+ * today, so spec §3's registered-copy rule applies: this is an explicit copy,
+ * and Task 7's drift lint fails when the union gains a variant no record
+ * accounts for. Registered in "Copies this plan creates" at the end of the plan.
+ */
+export const PartConsumption = z.object({
+  tag: z.string(),
+  consumes: z.array(z.string()).min(1),
 });
 
 export const EventException = z.object({
@@ -168,12 +182,19 @@ export const EventException = z.object({
 
 export const DerivedCatalog = z.object({
   elements: z.array(DerivedElement).min(1),
-  // Floor mirrors MIN_VARIANTS in lint-silent-drops: a degraded parse must not pass.
+  // REGISTERED COPY: this floor restates MIN_VARIANTS, which lives in
+  // scripts/lib/message-part-variants.mjs (Task 2) and cannot be imported into a
+  // .ts module that also runs in the browser bundle. The generator asserts the
+  // real MIN_VARIANTS; this is the schema-side backstop. If MIN_VARIANTS moves,
+  // move this too — see "Copies this plan creates".
   partVariants: z.array(z.string()).min(4),
   integrations: z.array(z.object({ id: z.string(), category: z.string(), streamFormat: z.string(), keyExposure: z.string() })).min(1),
   capabilityGroups: z.array(z.object({ id: z.string(), components: z.array(z.string()) })).min(1),
   themeTokens: z.array(z.string()).min(1),
-  eventExceptions: z.array(EventException),
+  // .min(1) because the tree HAS protocol exceptions (measured: two). An empty
+  // array means the extractor broke, and a broken extractor that parses clean
+  // would silently gut spec §5's exception list.
+  eventExceptions: z.array(EventException).min(1),
 });
 
 export type TInvariant = z.infer<typeof Invariant>;
@@ -288,11 +309,20 @@ Expected: PASS (3 tests).
 Run: `pnpm --filter @kitn.ai/ui run typecheck`
 Expected: exit 0.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 7: Write the pre-development cross-check**
+
+This is spec §6's "before development" half, and it is the reason the deck is written first: the owner asked for the deck to check *whether the plan is focusing on the right things before any development*. Create `docs/superpowers/notes/2026-08-17-catalog-cross-check.md` with two tables, filled in by reading this plan's Tasks 5 and 6 against `scenarios.ts`:
+
+- **Scenarios addressed by no catalog data** — for each of S1–S7, name the catalog data this plan actually builds that carries it, or write NOTHING. Expected findings at this point, which are real and must be written down rather than smoothed: **S4 has no recipe** (no research-UI recipe is planned; it is the depth-3 scenario the spec says should fail hardest first), and **S5's recipe is the script-tag widget added in Task 6** (before that recipe existed, S5 had none either).
+- **Catalog data exercised by no scenario** — for each planned schema field and invariant, name the scenario that exercises it, or write NOTHING. Anything with NOTHING here is speculative surface and should be justified or cut.
+
+Then write a short "What this changes" paragraph. The point of the artifact is that it is allowed to say the plan is wrong; if it finds a gap that should change Task 6, change Task 6 rather than filing the finding away.
+
+- [ ] **Step 8: Commit**
 
 ```bash
-git add packages/ui/src/agent-tooling/catalog/
-git commit -m "feat(catalog): schema module and the normative scenario deck
+git add packages/ui/src/agent-tooling/catalog/ docs/superpowers/notes/2026-08-17-catalog-cross-check.md
+git commit -m "feat(catalog): schema module, the scenario deck, and the pre-development cross-check
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ```
@@ -360,14 +390,39 @@ export function readVariants(text) {
 
 In `packages/ui/scripts/lint-silent-drops.mjs`: add `import { readVariants, MIN_VARIANTS as SHARED_MIN_VARIANTS } from './lib/message-part-variants.mjs';`, delete the local `readVariants` function, and replace the local `const MIN_VARIANTS = 4;` with `const MIN_VARIANTS = SHARED_MIN_VARIANTS;`. Do not change any other logic. The local `parse` helper stays (other code in the file uses it).
 
-- [ ] **Step 3: Watch the guard still discriminate after the refactor**
+- [ ] **Step 3: Pin the extraction itself, before and after the move**
+
+**Do not rely on `--self-test` to prove this refactor.** It cannot: the self-test branch drives `analyze()` with hard-coded fixture variants and `process.exit(0)`s at `lint-silent-drops.mjs:476`, which is BEFORE `readVariants` is first called at line 485. A `readVariants` that returned `['1','2','3','4']` still passes the self-test 10/10 with exit 0. The self-test is a real check of the analyzer and no check at all of the extraction.
+
+So pin the extraction directly. **Before** starting Step 1, write this probe to your scratch directory (not the repo) and run it with `node`, from inside `packages/ui` so `typescript` resolves:
+
+```js
+// scratch/probe-variants.mjs — run before AND after the move; outputs must be identical.
+import { readFileSync } from 'node:fs';
+import ts from 'typescript';
+const UNION_FILE = 'src/elements/chat-types.ts';
+// paste the CURRENT readVariants body here before the move; import the shared
+// helper after the move: import { readVariants } from './scripts/lib/message-part-variants.mjs'
+const v = readVariants(readFileSync(UNION_FILE, 'utf8'));
+console.log(`${v.length} variants: ${JSON.stringify(v)}`);
+```
+
+Expected output, identical before and after (measured on this tree at the time of writing):
+
+```
+6 variants: ["text","reasoning","tool","card","source","file"]
+```
+
+If the after-output differs in length or order, the move broke the extraction; fix it before continuing. Record both outputs in your report.
+
+- [ ] **Step 4: Confirm the analyzer still discriminates and the real run is clean**
 
 Run: `node packages/ui/scripts/lint-silent-drops.mjs --self-test`
-Expected: exit 0, self-test output showing its seeded defects still DETECTED (the self-test exists to watch the analyzer detect; a refactor that lobotomized it fails here).
+Expected: exit 0, seeded defects still DETECTED. (This proves the analyzer, not the extraction; Step 3 is what proves the extraction.)
 Then run: `pnpm --filter @kitn.ai/ui run lint:silent-drops`
 Expected: exit 0.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add packages/ui/scripts/lib/message-part-variants.mjs packages/ui/scripts/lint-silent-drops.mjs
@@ -383,11 +438,12 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 **Files:**
 - Create: `packages/ui/scripts/gen-catalog.mjs`
 - Create (generated, committed): `packages/ui/src/agent-tooling/catalog/derived.json`
+- Modify: `packages/ui/package.json` (add `esbuild` to devDependencies)
 - Test: `packages/ui/tests/scripts/catalog-derived.test.ts`
 
 **Interfaces:**
 - Consumes: `readVariants`, `MIN_VARIANTS` from `scripts/lib/message-part-variants.mjs` (Task 2); `DerivedCatalog` from `catalog-types.ts` (Task 1).
-- Produces: `packages/ui/src/agent-tooling/catalog/derived.json` matching `DerivedCatalog`. Tasks 7 and 9 read it via `import derived from './derived.json';`.
+- Produces: `packages/ui/src/agent-tooling/catalog/derived.json` matching `DerivedCatalog`. **Task 7's lint reads it with `readFileSync` + `JSON.parse` (it is a `.mjs` script); Task 8's packer reads it the same way; Task 9 does not read it at all.** No task imports it as a module.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -408,10 +464,17 @@ describe('derived catalog artifact', () => {
     const meta = JSON.parse(readFileSync(join(PKG, 'src/elements/element-meta.json'), 'utf8'));
     // Same element set as element-meta.json, no more, no less.
     expect(derived.elements.map((e) => e.tag).sort()).toEqual(meta.map((m: { tag: string }) => m.tag).sort());
-    // The known protocol exceptions surface in the derived exception list.
-    const names = derived.eventExceptions.map((e) => e.event);
-    expect(names).toContain('kai-maximize-intent');
-    expect(names).toContain('kai-maximize-state');
+    // Elements carry the spec §3 fields.
+    expect(derived.elements.some((e) => e.composedFrom.length > 0)).toBe(true);
+    expect(derived.elements.some((e) => e.tokens.length > 0)).toBe(true);
+  });
+
+  it('the protocol exceptions are extracted exactly, deduped', () => {
+    const derived = DerivedCatalog.parse(JSON.parse(readFileSync(ARTIFACT, 'utf8')));
+    expect(derived.eventExceptions).toEqual([
+      { file: 'src/elements/artifact.tsx', event: 'kai-maximize-intent', bubbles: true, composed: true },
+      { file: 'src/elements/resizable.tsx', event: 'kai-maximize-state', bubbles: false, composed: true },
+    ]);
   });
 
   it('regenerating changes nothing (the committed artifact is current)', () => {
@@ -440,6 +503,7 @@ import { readFileSync, writeFileSync, readdirSync, mkdtempSync, rmSync } from 'n
 import { join, resolve, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import ts from 'typescript';
 import * as esbuild from 'esbuild';
 import { readVariants, MIN_VARIANTS } from './lib/message-part-variants.mjs';
 
@@ -469,6 +533,11 @@ const elements = meta
     events: (e.events ?? []).map((v) => v.name),
     methods: (e.methods ?? []).map((m) => m.name),
     parts: (e.parts ?? []).map((p) => p.name),
+    // composedFrom entries are objects ({ name, group, storyId }); tokens are
+    // plain strings. Verified against element-meta.json; do not add defensive
+    // coercion, a shape change should fail loudly here.
+    composedFrom: (e.composedFrom ?? []).map((c) => c.name),
+    tokens: e.tokens ?? [],
   }))
   .sort((a, b) => a.tag.localeCompare(b.tag));
 if (elements.length === 0) fail('element-meta.json yielded zero elements.');
@@ -494,39 +563,93 @@ if (themeTokens.length === 0) fail('no --kai-* tokens found in theme.css.');
 // 5. Event exceptions: kai-* CustomEvents dispatched with bubbles/composed true
 //    OUTSIDE define.tsx (the deliberate protocol events; everything else goes
 //    through dispatch(), which hard-codes both false).
-const eventExceptions = [];
-const elDir = join(ROOT, 'src/elements');
-for (const f of readdirSync(elDir).filter((n) => n.endsWith('.tsx') && n !== 'define.tsx')) {
-  const text = readFileSync(join(elDir, f), 'utf8');
-  const re = /new CustomEvent\(\s*'(kai-[a-z-]+)'\s*,\s*\{([^}]*)\}/g;
-  for (const m of text.matchAll(re)) {
-    const opts = m[2];
-    const bubbles = /bubbles:\s*true/.test(opts);
-    const composed = /composed:\s*true/.test(opts);
-    if (bubbles || composed) eventExceptions.push({ file: `src/elements/${f}`, event: m[1], bubbles, composed });
+//
+//    PARSED, NOT REGEXED, and the reason is measured rather than stylistic. The
+//    obvious regex `new CustomEvent\(\s*'(kai-[a-z-]+)'\s*,\s*\{([^}]*)\}` emits
+//    ZERO exceptions on this tree: `[^}]*` stops at the closing brace of the
+//    NESTED `detail: { … }`, so the captured options text never contains
+//    `bubbles`/`composed` at all. It does not throw and it does not warn; it
+//    quietly reports that the kit has no protocol exceptions, which would gut
+//    spec §5's exception list while parsing clean. The compiler API cannot be
+//    defeated by formatting, and lint-silent-drops already sets the precedent.
+function boolProp(objLit, key) {
+  for (const p of objLit.properties) {
+    if (ts.isPropertyAssignment(p) && ts.isIdentifier(p.name) && p.name.text === key) {
+      if (p.initializer.kind === ts.SyntaxKind.TrueKeyword) return true;
+      if (p.initializer.kind === ts.SyntaxKind.FalseKeyword) return false;
+    }
   }
+  return undefined;
 }
-eventExceptions.sort((a, b) => (a.file + a.event).localeCompare(b.file + b.event));
+
+const elDir = join(ROOT, 'src/elements');
+// Test and story files dispatch synthetic events; they are not the contract.
+const NOT_SOURCE = /\.(test|stories)\.tsx$/;
+const exceptionsByKey = new Map();
+for (const f of readdirSync(elDir).filter((n) => n.endsWith('.tsx') && n !== 'define.tsx' && !NOT_SOURCE.test(n))) {
+  const sf = ts.createSourceFile(f, readFileSync(join(elDir, f), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const visit = (node) => {
+    if (
+      ts.isNewExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === 'CustomEvent' &&
+      node.arguments?.length >= 1 &&
+      ts.isStringLiteral(node.arguments[0]) &&
+      node.arguments[0].text.startsWith('kai-')
+    ) {
+      const opts = node.arguments[1];
+      if (opts && ts.isObjectLiteralExpression(opts)) {
+        const bubbles = boolProp(opts, 'bubbles') === true;
+        const composed = boolProp(opts, 'composed') === true;
+        if (bubbles || composed) {
+          // Deduped: resizable.tsx dispatches kai-maximize-state from three
+          // sites with identical options. One event, one record.
+          const rec = { file: `src/elements/${f}`, event: node.arguments[0].text, bubbles, composed };
+          exceptionsByKey.set(`${rec.file}|${rec.event}|${rec.bubbles}|${rec.composed}`, rec);
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+}
+const eventExceptions = [...exceptionsByKey.values()].sort((a, b) => (a.file + a.event).localeCompare(b.file + b.event));
+if (eventExceptions.length === 0) fail('zero event exceptions: the tree has protocol exceptions, so the extractor is broken.');
 
 writeFileSync(OUT, JSON.stringify({ elements, partVariants, integrations, capabilityGroups, themeTokens, eventExceptions }, null, 2) + '\n');
 console.log(`gen-catalog: wrote ${OUT} (${elements.length} elements, ${partVariants.length} part variants, ${integrations.length} integrations, ${eventExceptions.length} event exceptions)`);
 ```
 
-- [ ] **Step 4: Run the generator, then the test; verify both pass**
+- [ ] **Step 4: Add esbuild as a declared dependency**
+
+`esbuild` is imported statically here (and in Tasks 7 and 8), and this script joins `build:api`, which `prepublishOnly` runs. It currently resolves only through the root `.npmrc`'s `node-linker=hoisted`, which is an accident of the workspace layout, not a declaration. Add it to `packages/ui`'s **devDependencies** (it is build-time only, never shipped): `pnpm --filter @kitn.ai/ui add -D esbuild`. Do not add it to dependencies.
+
+- [ ] **Step 5: Run the generator, then the test; verify both pass**
 
 Run: `node packages/ui/scripts/gen-catalog.mjs` (expect the summary line, exit 0)
 Then: `pnpm --filter @kitn.ai/ui exec vitest run --project=unit tests/scripts/catalog-derived.test.ts`
-Expected: PASS (2 tests). If `kai-maximize-intent`/`kai-maximize-state` are missing, the regex drifted from the dispatch sites in `src/elements/artifact.tsx` / `src/elements/resizable.tsx`; fix the generator, not the test.
+Expected: PASS (3 tests).
 
-- [ ] **Step 5: Typecheck**
+**The `eventExceptions` array this emits, measured on this tree with exactly the extractor above:**
+
+```json
+[
+  { "file": "src/elements/artifact.tsx", "event": "kai-maximize-intent", "bubbles": true, "composed": true },
+  { "file": "src/elements/resizable.tsx", "event": "kai-maximize-state", "bubbles": false, "composed": true }
+]
+```
+
+Two records, not four: `resizable.tsx` dispatches `kai-maximize-state` from three sites with identical options, deduped to one. If you get `[]`, the extractor regressed to text matching; if you get four, the dedupe is missing. Either way fix the generator, not the test.
+
+- [ ] **Step 6: Typecheck**
 
 Run: `pnpm --filter @kitn.ai/ui run typecheck`
 Expected: exit 0.
 
-- [ ] **Step 6: Commit (generator + committed artifact + test)**
+- [ ] **Step 7: Commit (generator + committed artifact + test + the esbuild declaration)**
 
 ```bash
-git add packages/ui/scripts/gen-catalog.mjs packages/ui/src/agent-tooling/catalog/derived.json packages/ui/tests/scripts/catalog-derived.test.ts
+git add packages/ui/scripts/gen-catalog.mjs packages/ui/src/agent-tooling/catalog/derived.json packages/ui/tests/scripts/catalog-derived.test.ts packages/ui/package.json
 git commit -m "feat(catalog): derive the ingredient layer into a committed artifact
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
@@ -778,23 +901,26 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 ---
 
-### Task 6: The authored inventory and the exemplar surface recipe
+### Task 6: The authored inventory, two recipes, and the part-consumption copy
 
 **Files:**
 - Create: `packages/ui/src/agent-tooling/catalog/surfaces.ts`
+- Modify: `packages/ui/src/agent-tooling/catalog/catalog-types.ts` (add the `TPartConsumption` inferred type beside the others)
 - Test: `packages/ui/src/agent-tooling/catalog/surfaces.test.ts`
 
 **Interfaces:**
-- Consumes: `SurfaceRecipe`, `InventoryEntry`, types from `catalog-types.ts` (Task 1); invariant IDs (Task 5).
-- Produces: `export const inventory: TInventoryEntry[]`, `export const surfaceRecipes: TSurfaceRecipe[]`, `export function listSurfaceRecipes(): TSurfaceRecipe[]`, `export function listInventory(): TInventoryEntry[]`. Task 7 lints them; Task 9 serves them.
+- Consumes: `SurfaceRecipe`, `InventoryEntry`, `PartConsumption`, types from `catalog-types.ts` (Task 1); invariant IDs (Task 5).
+- Produces: `export const inventory: TInventoryEntry[]`, `export const surfaceRecipes: TSurfaceRecipe[]`, `export const partConsumption: TPartConsumption[]`, and the parse-validated accessors `listSurfaceRecipes()`, `listInventory()`, `listPartConsumption()`. **Task 7's lint and Task 8's packer call the accessors, never the raw literals**, so a schema-invalid record fails CI instead of sailing through. Task 9 serves the recipes.
 
 - [ ] **Step 1: Write the failing test**
 
 ```ts
 // packages/ui/src/agent-tooling/catalog/surfaces.test.ts
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { InventoryEntry, SurfaceRecipe } from './catalog-types';
-import { inventory, listInventory, listSurfaceRecipes, surfaceRecipes } from './surfaces';
+import { inventory, listInventory, listSurfaceRecipes, partConsumption, surfaceRecipes } from './surfaces';
 
 describe('authored surface layer', () => {
   it('inventory parses and sorts every entry into surface / ingredient / corpus', () => {
@@ -802,17 +928,45 @@ describe('authored surface layer', () => {
     for (const entry of listInventory()) expect(() => InventoryEntry.parse(entry)).not.toThrow();
   });
 
-  it('the nine Labs/Apps are surfaces; Proofs is corpus', () => {
-    const surfaceTitles = inventory.filter((e) => e.sort === 'surface').map((e) => e.title);
-    for (const app of ['claude-code', 'chatgpt', 'codex', 't3code', 'perplexity', 'perplexity-pro', 'v0', 'lovable', 'split-workspace']) {
-      expect(surfaceTitles.join(' ')).toContain(app);
+  it('every Labs/Apps story file is sorted as a surface, derived from the tree', () => {
+    // Derived, not listed: the nine app names come from the story files
+    // themselves, so adding an app makes this fail until it is sorted.
+    const elDir = join(__dirname, '..', '..', 'elements');
+    const appFiles = readdirSync(elDir).filter(
+      (f) => f.endsWith('.stories.tsx') && readFileSync(join(elDir, f), 'utf8').includes("title: 'Labs/Apps'"),
+    );
+    expect(appFiles.length).toBeGreaterThan(0);
+    const surfaces = new Set(inventory.filter((e) => e.sort === 'surface').map((e) => e.title));
+    for (const f of appFiles) {
+      expect(surfaces.has(f.replace('.stories.tsx', '')), `${f} is not sorted as a surface`).toBe(true);
     }
-    expect(inventory.find((e) => e.title === 'Proofs')?.sort).toBe('corpus');
   });
 
-  it('at least one complete recipe exists and parses', () => {
+  it('Proofs and the slot fixtures are corpus', () => {
+    for (const t of ['Proofs', 'Chat Slots', 'Prompt Input Slots', 'Workspace Slots']) {
+      expect(inventory.find((e) => e.title === t)?.sort).toBe('corpus');
+    }
+  });
+
+  it('part-consumption records cover every MessagePart variant in the union', () => {
+    const covered = new Set(partConsumption.flatMap((p) => p.consumes));
+    const union = readFileSync(join(__dirname, '..', '..', 'elements', 'chat-types.ts'), 'utf8');
+    for (const variant of [...union.matchAll(/type:\s*'([a-z]+)'/g)].map((m) => m[1])) {
+      expect(covered.has(variant), `no part-consumption record covers '${variant}'`).toBe(true);
+    }
+  });
+
+  it('every recipe parses, and both delivery targets have an instance', () => {
     expect(surfaceRecipes.length).toBeGreaterThan(0);
     for (const r of listSurfaceRecipes()) expect(() => SurfaceRecipe.parse(r)).not.toThrow();
+    const targets = new Set(surfaceRecipes.flatMap((r) => r.targets));
+    expect(targets.has('bundler')).toBe(true);
+    expect(targets.has('script-tag')).toBe(true);
+  });
+
+  it('the script-tag recipe carries the upgrade-race invariant', () => {
+    const widget = listSurfaceRecipes().find((r) => r.id === 'support-widget-script-tag');
+    expect(widget?.invariants).toContain('upgrade-race');
   });
 
   it('the exemplar recipe wires conversations into chat per the host-coordinates model', () => {
@@ -927,6 +1081,47 @@ export const surfaceRecipes: TSurfaceRecipe[] = [
     ],
     corpus: ['packages/ui/src/elements/split-workspace.stories.tsx'],
   },
+  {
+    // The script-tag instance. Without it, DeliveryTarget 'script-tag' and the
+    // whole upgrade-race invariant exist in the schema with no recipe using
+    // them, and S5 has nothing to reconstruct from.
+    id: 'support-widget-script-tag',
+    intent:
+      'A docked support chat widget added to a page with a script tag and no build step, talking to an endpoint the site owner already runs. The CMS case.',
+    archetypes: ['widget', 'docked'],
+    targets: ['script-tag'],
+    ingredients: ['kai-chat'],
+    backend: { endpoint: 'consumer-owned', reader: 'readOpenAIStream' },
+    wiring: [
+      {
+        from: 'kai-chat',
+        event: 'kai-submit',
+        to: 'kai-chat',
+        property: 'messages',
+        note: 'host reads event.detail.value, appends the user turn, streams the reply through the wire reader; on this target the host is an inline script, not a framework',
+      },
+    ],
+    invariants: [
+      'upgrade-race',
+      'reactivity-two-halves',
+      'props-not-attributes',
+      'events-non-bubbling',
+      'kit-parses-consumer-fetches',
+      'untrusted-model-output',
+    ],
+    corpus: ['packages/ui/README.md'],
+  },
+];
+
+/**
+ * REGISTERED COPY (spec §3). Which MessagePart variants an element consumes is
+ * not derivable from any type today, so it is recorded here as an explicit copy.
+ * Task 7's drift lint fails when the union gains a variant no record accounts
+ * for, which is what stops this going stale silently.
+ */
+export const partConsumption: TPartConsumption[] = [
+  { tag: 'kai-chat', consumes: ['text', 'reasoning', 'tool', 'card', 'source', 'file'] },
+  { tag: 'kai-message', consumes: ['text', 'reasoning', 'tool', 'card', 'source', 'file'] },
 ];
 
 export function listInventory(): TInventoryEntry[] {
@@ -936,6 +1131,29 @@ export function listInventory(): TInventoryEntry[] {
 export function listSurfaceRecipes(): TSurfaceRecipe[] {
   return z.array(SurfaceRecipe).parse(surfaceRecipes);
 }
+
+export function listPartConsumption(): TPartConsumption[] {
+  return z.array(PartConsumption).parse(partConsumption);
+}
+```
+
+Update the import line at the top of the file to bring in the two extra names:
+
+```ts
+import {
+  InventoryEntry,
+  PartConsumption,
+  SurfaceRecipe,
+  type TInventoryEntry,
+  type TPartConsumption,
+  type TSurfaceRecipe,
+} from './catalog-types';
+```
+
+and add to `catalog-types.ts` (Task 1's file) the inferred type beside the others:
+
+```ts
+export type TPartConsumption = z.infer<typeof PartConsumption>;
 ```
 
 - [ ] **Step 4: Run the test, verify it passes**
@@ -979,7 +1197,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 // WHAT IT DOES NOT CATCH (measured, not guessed): a recipe whose wiring names a
 // real event and a real property that are semantically unrelated still passes;
 // only the acceptance harness catches wrong-but-resolvable wiring.
-import { existsSync, readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -991,10 +1209,12 @@ const SELF_TEST = process.argv.includes('--self-test');
 
 async function loadAuthored(catalogDir) {
   const tmp = mkdtempSync(join(tmpdir(), 'catalog-drift-'));
+  // The VALIDATED accessors, not the raw literals: a record that violates its
+  // own zod schema must fail here rather than sail through on structural checks.
   const entrySrc = [
-    `export { invariants } from '${join(catalogDir, 'invariants.ts')}';`,
-    `export { surfaceRecipes, inventory } from '${join(catalogDir, 'surfaces.ts')}';`,
-    `export { scenarios } from '${join(catalogDir, 'scenarios.ts')}';`,
+    `export { listInvariants } from '${join(catalogDir, 'invariants.ts')}';`,
+    `export { listSurfaceRecipes, listInventory, listPartConsumption } from '${join(catalogDir, 'surfaces.ts')}';`,
+    `export { listScenarios } from '${join(catalogDir, 'scenarios.ts')}';`,
   ].join('\n');
   const entry = join(tmp, 'entry.ts');
   writeFileSync(entry, entrySrc);
@@ -1006,7 +1226,7 @@ async function loadAuthored(catalogDir) {
 }
 
 /** Pure so the self-test can drive it with fixtures. Returns { errors, gaps }. */
-export function check({ derived, invariants, surfaceRecipes, inventory, scenarios, fileExists, lintScripts }) {
+export function check({ derived, invariants, surfaceRecipes, inventory, scenarios, partConsumption, labsTitles, fileExists, lintScripts }) {
   const errors = [];
   const gaps = [];
   const tags = new Map(derived.elements.map((e) => [e.tag, e]));
@@ -1017,6 +1237,27 @@ export function check({ derived, invariants, surfaceRecipes, inventory, scenario
   if (invariants.length === 0) errors.push('zero invariants: nothing to check is a failure, not a pass.');
   if (inventory.length === 0) errors.push('zero inventory entries.');
   if (scenarios.length === 0) errors.push('zero scenarios.');
+  if (labsTitles.length === 0) errors.push('zero Labs titles derived from the tree: the deriver is broken.');
+
+  // The inventory is authored prose about the tree, which is the exact thing
+  // that rotted the roster. Every title must name something that exists.
+  for (const entry of inventory) {
+    if (!labsTitles.includes(entry.title)) {
+      errors.push(`inventory: "${entry.title}" matches no Labs story title or Labs/Apps story file in the tree.`);
+    }
+  }
+
+  // The registered copy (spec §3): every union variant accounted for.
+  const consumed = new Set(partConsumption.flatMap((p) => p.consumes));
+  for (const variant of derived.partVariants) {
+    if (!consumed.has(variant)) errors.push(`part-consumption: MessagePart variant '${variant}' is covered by no record. The union gained a variant; update the records.`);
+  }
+  for (const p of partConsumption) {
+    if (!tags.has(p.tag)) errors.push(`part-consumption: ${p.tag} is not a derived element.`);
+    for (const v of p.consumes) {
+      if (!derived.partVariants.includes(v)) errors.push(`part-consumption: ${p.tag} claims variant '${v}', which is not in the union.`);
+    }
+  }
 
   for (const r of surfaceRecipes) {
     for (const tag of r.ingredients) {
@@ -1059,17 +1300,48 @@ export function check({ derived, invariants, surfaceRecipes, inventory, scenario
   return { errors, gaps };
 }
 
+/**
+ * The names an inventory title is allowed to have, DERIVED: every `title: 'Labs/X'`
+ * suffix in the story files, plus the basename of every Labs/Apps story file
+ * (the nine apps share one title and are distinguished by file).
+ */
+function deriveLabsTitles() {
+  const elDir = join(ROOT, 'src/elements');
+  const names = new Set();
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) { walk(full); continue; }
+      if (!entry.name.endsWith('.stories.tsx')) continue;
+      const text = readFileSync(full, 'utf8');
+      for (const m of text.matchAll(/title:\s*'Labs\/([^']+)'/g)) {
+        const suffix = m[1];
+        names.add(suffix);
+        // 'Foundations/Input' also registers the group 'Foundations'.
+        if (suffix.includes('/')) names.add(suffix.split('/')[0]);
+      }
+      if (text.includes("title: 'Labs/Apps'")) names.add(entry.name.replace('.stories.tsx', ''));
+    }
+  };
+  walk(join(ROOT, 'src'));
+  return [...names];
+}
+
 async function main() {
   const catalogDir = join(ROOT, 'src/agent-tooling/catalog');
   const derived = JSON.parse(readFileSync(join(catalogDir, 'derived.json'), 'utf8'));
   const authored = await loadAuthored(catalogDir);
   const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+  const surfaceRecipes = authored.listSurfaceRecipes();
+  const invariants = authored.listInvariants();
   const { errors, gaps } = check({
     derived,
-    invariants: authored.invariants,
-    surfaceRecipes: authored.surfaceRecipes,
-    inventory: authored.inventory,
-    scenarios: authored.scenarios,
+    invariants,
+    surfaceRecipes,
+    inventory: authored.listInventory(),
+    scenarios: authored.listScenarios(),
+    partConsumption: authored.listPartConsumption(),
+    labsTitles: deriveLabsTitles(),
     fileExists: (p) => existsSync(join(REPO, p)),
     lintScripts: Object.keys(pkg.scripts),
   });
@@ -1078,7 +1350,7 @@ async function main() {
     for (const e of errors) console.error(`✗ lint-catalog-drift: ${e}`);
     process.exit(1);
   }
-  console.log(`lint-catalog-drift: ${authored.surfaceRecipes.length} recipes, ${authored.invariants.length} invariants resolved clean (${gaps.length} reported gaps).`);
+  console.log(`lint-catalog-drift: ${surfaceRecipes.length} recipes, ${invariants.length} invariants resolved clean (${gaps.length} reported gaps).`);
 }
 
 function selfTest() {
@@ -1103,7 +1375,9 @@ function selfTest() {
   };
   const base = {
     derived, invariants: [okInvariant], surfaceRecipes: [okRecipe],
-    inventory: [{ title: 't', sort: 'corpus', note: 'n' }], scenarios: [{ id: 'S1' }],
+    inventory: [{ title: 'Command', sort: 'corpus', note: 'n' }], scenarios: [{ id: 'S1' }],
+    partConsumption: [{ tag: 'kai-a', consumes: ['text', 'reasoning', 'tool', 'source'] }],
+    labsTitles: ['Command', 'Proofs'],
     fileExists: (p) => p === 'README.md' || p === 'packages/ui/src/wire/read.ts',
     lintScripts: ['lint:silent-drops'],
   };
@@ -1115,8 +1389,17 @@ function selfTest() {
     ['bogus invariant ref fails', { ...base, surfaceRecipes: [{ ...okRecipe, invariants: ['ghost'] }] }, 1],
     ['missing corpus path fails', { ...base, surfaceRecipes: [{ ...okRecipe, corpus: ['docs/does-not-exist.md'] }] }, 1],
     ['zero recipes fails (anti-vacuity)', { ...base, surfaceRecipes: [] }, 1],
-    ['missing enforcedBy test path fails', { ...base, invariants: [{ ...okInvariant, id: 'inv-t', enforcedBy: { kind: 'test', paths: ['nope.test.ts'] }, status: 'enforced' }] }, 1],
+    // ISOLATED: the recipe must reference the RENAMED invariant, or the bogus-ref
+    // check fires instead and this case passes even with the path check deleted.
+    ['missing enforcedBy test path fails', {
+      ...base,
+      invariants: [{ ...okInvariant, id: 'inv-t', enforcedBy: { kind: 'test', paths: ['nope.test.ts'] }, status: 'enforced' }],
+      surfaceRecipes: [{ ...okRecipe, invariants: ['inv-t'] }],
+    }, 1],
     ['kind none is a gap, not an error', { ...base }, 0],
+    ['inventory title that names nothing in the tree fails', { ...base, inventory: [{ title: 'Ghost Panel', sort: 'ingredient', note: 'n' }] }, 1],
+    ['an uncovered union variant fails', { ...base, partConsumption: [{ tag: 'kai-a', consumes: ['text'] }] }, 1],
+    ['zero Labs titles fails (deriver broken)', { ...base, labsTitles: [] }, 1],
   ];
   // NOTE: check() reads src/wire/read.ts through fileExists+readWireSource; the
   // ok recipe names readModelStream, which the real file exports, so the CLEAN
@@ -1149,7 +1432,15 @@ Expected: exit 0, a summary naming recipe/invariant counts, plus `⚠ coverage g
 
 - [ ] **Step 4: WATCH IT FAIL on the real catalog**
 
-Temporarily edit `packages/ui/src/agent-tooling/catalog/surfaces.ts`: add `'kai-datagrid'` to the exemplar recipe's `ingredients`. Run `node packages/ui/scripts/lint-catalog-drift.mjs`. Expected: exit 1, `✗ lint-catalog-drift: recipe workspace-chat: ingredient kai-datagrid is not a derived element.` Record the output. Revert the edit (`git checkout -- packages/ui/src/agent-tooling/catalog/surfaces.ts`) and re-run to green.
+Three separate mutations, each reverted before the next. Record all three failing outputs.
+
+**(a) A fabricated element.** Add `'kai-datagrid'` to `workspace-chat`'s `ingredients`. Run `node packages/ui/scripts/lint-catalog-drift.mjs`. Expected: exit 1, `✗ lint-catalog-drift: recipe workspace-chat: ingredient kai-datagrid is not a derived element.`
+
+**(b) A renamed inventory title** — the check that stops the inventory being unguarded prose. Change the `Command` entry's title to `Command Palette` (a plausible rename, and wrong). Expected: exit 1, `✗ lint-catalog-drift: inventory: "Command Palette" matches no Labs story title or Labs/Apps story file in the tree.`
+
+**(c) A dropped part-consumption record.** Remove `'file'` from `kai-chat`'s `consumes`. Expected: exit 1, `✗ lint-catalog-drift: part-consumption: MessagePart variant 'file' is covered by no record.` This is the registered copy's drift check firing, and it is the same shape that fires when the union GAINS a variant.
+
+After each: `git checkout -- packages/ui/src/agent-tooling/catalog/surfaces.ts` and re-run to green.
 
 - [ ] **Step 5: Add the npm script and the CI step**
 
@@ -1226,7 +1517,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ```ts
 // packages/ui/tests/scripts/acceptance-pack.test.ts
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -1240,20 +1531,45 @@ describe('acceptance pack', () => {
     for (const id of ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7']) expect(out).toContain(id);
   });
 
-  it('packs a scenario: catalog.json + PROMPT.md + JUDGE.md, and NO kit source', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'pack-'));
+  it('packs a scenario: catalog.json + PROMPT.md + JUDGE.md, stamped with the kit version', () => {
+    const dir = join(mkdtempSync(join(tmpdir(), 'pack-')), 'nested'); // not pre-created: the script must mkdir it
     execFileSync('node', [SCRIPT, '--scenario', 'S1', '--out', dir], { encoding: 'utf8' });
     expect(existsSync(join(dir, 'catalog.json'))).toBe(true);
     expect(existsSync(join(dir, 'PROMPT.md'))).toBe(true);
     expect(existsSync(join(dir, 'JUDGE.md'))).toBe(true);
     expect(readFileSync(join(dir, 'PROMPT.md'), 'utf8')).toContain('conversations sidebar');
-    const judge = readFileSync(join(dir, 'JUDGE.md'), 'utf8');
-    expect(judge).toContain('new array AND new changed-item objects');
-    // Catalog-only means catalog-only: nothing from src/ travels.
-    expect(readdirSync(dir).filter((f) => f.endsWith('.tsx') || f.endsWith('.ts'))).toEqual([]);
+    expect(readFileSync(join(dir, 'JUDGE.md'), 'utf8')).toContain('new array AND new changed-item objects');
     const catalog = JSON.parse(readFileSync(join(dir, 'catalog.json'), 'utf8'));
     expect(catalog.derived.elements.length).toBeGreaterThan(0);
     expect(catalog.invariants.length).toBeGreaterThan(0);
+    const pkg = JSON.parse(readFileSync(join(PKG, 'package.json'), 'utf8'));
+    expect(catalog.kitVersion).toBe(pkg.version);
+  });
+
+  it('no kit source travels, and the scan that says so can actually detect one', () => {
+    // Recursive, because a flat readdir of a directory the script writes three
+    // fixed filenames into is a check that cannot fail.
+    const sourceFilesUnder = (root: string): string[] => {
+      const out: string[] = [];
+      const walk = (d: string) => {
+        for (const e of readdirSync(d, { withFileTypes: true })) {
+          const full = join(d, e.name);
+          if (e.isDirectory()) walk(full);
+          else if (/\.(ts|tsx|js|jsx|mjs|css)$/.test(e.name)) out.push(full);
+        }
+      };
+      walk(root);
+      return out;
+    };
+
+    const dir = mkdtempSync(join(tmpdir(), 'pack-'));
+    execFileSync('node', [SCRIPT, '--scenario', 'S2', '--out', dir], { encoding: 'utf8' });
+    expect(sourceFilesUnder(dir)).toEqual([]);
+
+    // POSITIVE CONTROL: plant one nested source file and prove the scan sees it.
+    mkdirSync(join(dir, 'deep', 'deeper'), { recursive: true });
+    writeFileSync(join(dir, 'deep', 'deeper', 'chat.tsx'), 'export const x = 1;\n');
+    expect(sourceFilesUnder(dir).length).toBe(1);
   });
 
   it('refuses an unknown scenario id, before writing anything', () => {
@@ -1277,7 +1593,7 @@ Expected: FAIL (script missing).
 // source: the whole catalog (derived + authored, serialized), the scenario
 // prompt, and the judge checklist. Spec §6: whatever the agent then cannot
 // build names exactly what the catalog is missing.
-import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -1300,32 +1616,44 @@ const catalogDir = join(ROOT, 'src/agent-tooling/catalog');
 const tmp = mkdtempSync(join(tmpdir(), 'acceptance-pack-'));
 const entry = join(tmp, 'entry.ts');
 writeFileSync(entry, [
-  `export { scenarios } from '${join(catalogDir, 'scenarios.ts')}';`,
-  `export { invariants } from '${join(catalogDir, 'invariants.ts')}';`,
-  `export { surfaceRecipes, inventory } from '${join(catalogDir, 'surfaces.ts')}';`,
+  `export { listScenarios } from '${join(catalogDir, 'scenarios.ts')}';`,
+  `export { listInvariants } from '${join(catalogDir, 'invariants.ts')}';`,
+  `export { listSurfaceRecipes, listInventory, listPartConsumption } from '${join(catalogDir, 'surfaces.ts')}';`,
 ].join('\n'));
 const bundle = join(tmp, 'bundle.mjs');
 await esbuild.build({ entryPoints: [entry], bundle: true, platform: 'node', format: 'esm', outfile: bundle, logLevel: 'error' });
 const authored = await import(pathToFileURL(bundle).href);
 rmSync(tmp, { recursive: true, force: true });
 
+const scenarios = authored.listScenarios();
+
 if (args.includes('--list')) {
-  for (const s of authored.scenarios) console.log(`${s.id}  ${s.depth}`);
+  for (const s of scenarios) console.log(`${s.id}  ${s.depth}`);
   process.exit(0);
 }
 
 const id = arg('--scenario');
 const out = arg('--out');
 if (!id || !out) fail('usage: acceptance-pack.mjs --scenario <S1..S7> --out <dir> | --list');
-const scenario = authored.scenarios.find((s) => s.id === id);
+const scenario = scenarios.find((s) => s.id === id);
 if (!scenario) fail(`unknown scenario ${id}; run --list.`);
 
+mkdirSync(out, { recursive: true });
+
 const derived = JSON.parse(readFileSync(join(catalogDir, 'derived.json'), 'utf8'));
+// The PACK is stamped, unlike derived.json: this file leaves the repo and is
+// handed to an agent with no kit source and no way to ask what it is looking at.
+// (derived.json stays unstamped on purpose — a version literal inside a
+// committed artifact goes red on every release bump between regenerations.)
+const kitVersion = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version;
 writeFileSync(join(out, 'catalog.json'), JSON.stringify({
+  kitVersion,
+  scenario: scenario.id,
   derived,
-  invariants: authored.invariants,
-  surfaceRecipes: authored.surfaceRecipes,
-  inventory: authored.inventory,
+  invariants: authored.listInvariants(),
+  surfaceRecipes: authored.listSurfaceRecipes(),
+  inventory: authored.listInventory(),
+  partConsumption: authored.listPartConsumption(),
 }, null, 2) + '\n');
 writeFileSync(join(out, 'PROMPT.md'), `# ${scenario.id}\n\n${scenario.prompt}\n`);
 writeFileSync(join(out, 'JUDGE.md'), [
@@ -1342,7 +1670,7 @@ console.log(`acceptance-pack: packed ${scenario.id} into ${out}`);
 - [ ] **Step 4: Run the test, verify it passes**
 
 Run: `pnpm --filter @kitn.ai/ui exec vitest run --project=unit tests/scripts/acceptance-pack.test.ts`
-Expected: PASS (3 tests).
+Expected: PASS (4 tests).
 
 - [ ] **Step 5: Commit**
 
@@ -1363,7 +1691,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: `invariants` (Task 5), `surfaceRecipes` (Task 6), types from `catalog-types.ts` (Task 1).
-- Produces: `component_reference`'s per-element output gains an `## Invariants` section and an `## Appears in surface recipes` section.
+- Produces: `component_reference`'s per-element output gains an `### Invariants` section and an `### Appears in surface recipes` section.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1378,22 +1706,22 @@ describe('component_reference serves the catalog', () => {
 
   it('kai-chat carries the reactivity invariant, statement included', async () => {
     const text = await textFor('kai-chat');
-    expect(text).toContain('## Invariants');
+    expect(text).toContain('### Invariants');
     expect(text).toContain('reactivity-two-halves');
     expect(text).toContain('A new array reference NOTIFIES');
   });
 
   it('kai-conversations names the recipes it appears in', async () => {
     const text = await textFor('kai-conversations');
-    expect(text).toContain('## Appears in surface recipes');
+    expect(text).toContain('### Appears in surface recipes');
     expect(text).toContain('workspace-chat');
   });
 
   it('an element in no recipe still gets universal invariants, and no fabricated membership', async () => {
     const text = await textFor('kai-kbd');
-    expect(text).toContain('## Invariants');
+    expect(text).toContain('### Invariants');
     expect(text).toContain('props-not-attributes'); // universal: applies to every element
-    expect(text).not.toContain('## Appears in surface recipes');
+    expect(text).not.toContain('### Appears in surface recipes');
   });
 });
 ```
@@ -1401,7 +1729,7 @@ describe('component_reference serves the catalog', () => {
 - [ ] **Step 2: Run the test, verify it fails**
 
 Run: `pnpm --filter @kitn.ai/ui exec vitest run --project=unit src/agent-tooling/mcp/reference.test.ts`
-Expected: the three new tests FAIL (`## Invariants` absent); every pre-existing test still PASSES. If a pre-existing test fails, stop: the checkout is broken, not the task.
+Expected: the three new tests FAIL (`### Invariants` absent); every pre-existing test still PASSES. If a pre-existing test fails, stop: the checkout is broken, not the task.
 
 - [ ] **Step 3: Implement**
 
@@ -1425,22 +1753,28 @@ function recipesFor(tag: string): TSurfaceRecipe[] {
   return surfaceRecipes.filter((r) => r.ingredients.includes(tag));
 }
 
-function renderCatalogSections(tag: string): string {
-  const invs = invariantsFor(tag);
-  const recipes = recipesFor(tag);
-  const lines: string[] = ['', '## Invariants', ''];
-  for (const i of invs) {
+/** `###` to match every other section heading in this file (see '### Props'). */
+function catalogSectionLines(tag: string): string[] {
+  const lines: string[] = ['', '### Invariants', ''];
+  for (const i of invariantsFor(tag)) {
     lines.push(`- **${i.id}**${i.status === 'open' ? ' (open)' : ''}: ${i.statement}`);
   }
+  const recipes = recipesFor(tag);
   if (recipes.length > 0) {
-    lines.push('', '## Appears in surface recipes', '');
+    lines.push('', '### Appears in surface recipes', '');
     for (const r of recipes) lines.push(`- **${r.id}**: ${r.intent}`);
   }
-  return lines.join('\n');
+  return lines;
 }
 ```
 
-Append `renderCatalogSections(tag)` to the per-element markdown at the end of the existing element rendering path (the function that assembles the sections for a resolved element; it is the one that renders props/events/methods — grep for where the events section is emitted and append after the last section).
+**The exact site:** `formatReference(tag, provider)` in `packages/ui/src/agent-tooling/mcp/tools/reference.ts` (declared at line 228 at the time of writing) builds a `lines` array and ends with `return lines.join('\n')` (line 375). Insert immediately before that return:
+
+```ts
+  lines.push(...catalogSectionLines(tag));
+```
+
+Do not restructure the function; this is one push before the existing return.
 
 - [ ] **Step 4: Run the whole reference suite, verify green**
 
@@ -1473,8 +1807,29 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 ---
 
+## Deviations from the spec
+
+Honest deviation beats claimed conformance. Each of these narrows or reorders something the spec names; none reverses a ruled decision.
+
+1. **Deck and harness are split across Task 1 and Task 8**, though spec §7 item 1 pairs them. The packer has nothing to pack until the derived layer (Task 3) and the authored records (Tasks 5, 6) exist. The deck itself still comes first, which is the property item 1 exists to guarantee, and Task 1 now also produces the pre-development cross-check that §6 asks for.
+2. **`custom-elements.json` is not read.** Spec §3 lists it as a source; this plan derives everything from `element-meta.json` instead, which already carries props (with the `scalar` split), events, methods, parts, `composedFrom` and tokens. Reading the CEM as well would add a `dist/` dependency to a generator that otherwise needs none, and would give the catalog a second, differently-shaped copy of the same facts. If a consumer-facing fact turns up that only the CEM has, add it then, with the reason recorded. `component_reference` continues to read the CEM directly for its own output; that path is untouched.
+3. **Two recipes, not a catalogue of them.** `workspace-chat` and `support-widget-script-tag` between them instance both delivery targets and every invariant including `upgrade-race`. Further recipes land through acceptance-run iteration (spec §7 item 6), each proven against a scenario before it lands, rather than authored blind here.
+4. **`partConsumption` covers two elements**, not all eighty. It is a registered copy whose drift check fires on a new union variant; extending it to more elements is cheap and additive, and doing it blind now would author eighty untested claims.
+
+## Copies this plan creates (register them; do not let them go unmarked)
+
+Spec §3's rule is that a non-derivable fact is recorded as an explicit copy with something that notices drift.
+
+| Copy | Where | What notices |
+|---|---|---|
+| Per-element `MessagePart` consumption | `partConsumption` in `surfaces.ts` | `lint:catalog-drift` fails when a union variant is covered by no record (self-test case, plus watched-red mutation (c) in Task 7) |
+| The 26 inventory titles | `inventory` in `surfaces.ts` | `lint:catalog-drift` resolves every title against Labs story titles derived from the tree (watched-red mutation (b)) |
+| The `Foundations` note's atom list | the `note` on that inventory row | NOTHING. It is prose inside one note field and the row's own title is resolved; the atom list inside the note is not. Accepted deliberately: it is descriptive text, not a claim the catalog serves. If it starts being served, derive it from the `Labs/Foundations/*` titles. |
+| The `.min(4)` floor on `partVariants` | `DerivedCatalog` in `catalog-types.ts` | NOTHING directly; the generator asserts the real `MIN_VARIANTS` from `scripts/lib/message-part-variants.mjs`, so the schema floor is a backstop that can only be wrong in the safe direction. Move it if `MIN_VARIANTS` moves. |
+
 ## Coupling-map rows affected (name in the PR body; do NOT edit the map)
 
 - New enforced coupling: authored catalog records ↔ the tree, enforced by `lint:catalog-drift` (self-tested, in the required `test` job).
 - New enforced coupling: `derived.json` ↔ its sources, enforced by `verify:generated` (now that `gen-catalog.mjs` is inside `build:api`).
-- New registered copies: none; every derived fact rides the generator. The authored layer's editorial judgments (inventory sort, recipes) are validated by the drift lint and measured by the acceptance deck.
+- New enforced coupling: the `MessagePart` union ↔ the part-consumption records, enforced by the same lint.
+- New registered copies: the four in the table above, two enforced and two accepted with their reasons.
