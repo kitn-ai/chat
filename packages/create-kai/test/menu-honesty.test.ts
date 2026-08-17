@@ -27,6 +27,7 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { ZERO_CONFIG } from '../src/args';
+import { cliAxes, decideAxis } from '../src/axes';
 import { availableFeatures } from '../src/features';
 import { readyFrameworks } from '../src/frameworks';
 import { generate } from '../src/generate';
@@ -118,5 +119,74 @@ describe('the zero-config answers are inside the offered menu', () => {
 
   it('offers the layout `--yes` picks', () => {
     expect(readyLayouts().map((l) => l.id)).toContain(ZERO_CONFIG.layout);
+  });
+});
+
+/**
+ * AN AXIS WITH ONE POSSIBLE ANSWER IS STATED, NOT SILENTLY TAKEN.
+ *
+ * The same rule the features menu obeys, applied to the select axes — and the
+ * gateway axis is why it needed a test rather than a convention. It was written
+ * for the layout axis, which rendered a one-option select; the gateway axis a
+ * hundred lines below did the *opposite* and took its single answer in silence,
+ * and neither site made the other visible. Six of the eight ready frameworks can
+ * host no gateway but the mock, so most interactive runs never saw the backend
+ * question in any form and were never told what had been decided for them.
+ *
+ * The subject is `cliAxes()`, which is what `index.ts` calls — not a list
+ * written here. An axis absent from it is an axis nobody checks, so the ids are
+ * recorded below.
+ */
+describe('an axis with one possible answer is stated, not taken in silence', () => {
+  const seen = { asked: [] as string[], stated: [] as string[] };
+
+  for (const framework of readyFrameworks()) {
+    it(`${framework.id}: every one-answer axis carries a line the user can read`, () => {
+      const axes = cliAxes(framework);
+      expect(axes.length, `${framework.id} has no axes — this asserted nothing`).toBeGreaterThan(0);
+
+      for (const axis of axes) {
+        const decision = decideAxis(axis);
+        if (decision.ask) {
+          seen.asked.push(`${framework.id}/${axis.id}`);
+          continue;
+        }
+        seen.stated.push(`${framework.id}/${axis.id}`);
+        expect(
+          decision.only,
+          `the '${axis.id}' axis has no answer at all for ${framework.id}`,
+        ).not.toBeNull();
+        expect(
+          decision.statement,
+          `the '${axis.id}' axis has exactly one answer for ${framework.id} and states nothing — ` +
+            'it would be decided for the user without telling them, which is the gateway defect',
+        ).not.toBeNull();
+        // The line has to name the answer and say why it is the only one. A
+        // statement that is just the label tells a reader nothing they can act
+        // on, which is why `Axis.because` is required.
+        expect(decision.statement).toContain(decision.only!.label);
+        expect(decision.statement!.length).toBeGreaterThan(decision.only!.label.length + 10);
+      }
+    });
+  }
+
+  /**
+   * BOTH BRANCHES MUST OCCUR IN THE SHIPPED TABLE, or the loop above is half a
+   * test: with everything asked it asserts nothing, and with everything stated
+   * nothing proves the select still renders when there IS a choice.
+   */
+  it('exercised both a real choice and a decided-for-you answer', () => {
+    expect(seen.stated, 'no axis was decided for the user — the rule went untested').not.toEqual([]);
+    expect(seen.asked, 'no axis had a real choice — the select path went untested').not.toEqual([]);
+  });
+
+  /**
+   * The axis roster, recorded rather than derived, because there is nothing to
+   * derive it from: `index.ts` cannot be imported (it calls `main()` at module
+   * scope), so nothing can check that every axis it decides is in `cliAxes()`.
+   * If a new select axis lands, this fails and points at the gap.
+   */
+  it('governs every select axis the CLI has', () => {
+    expect(cliAxes(readyFrameworks()[0]).map((a) => a.id)).toEqual(['layout', 'gateway']);
   });
 });

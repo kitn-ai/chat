@@ -22,6 +22,8 @@ import * as p from '@clack/prompts';
 import pc from 'picocolors';
 
 import { ZERO_CONFIG, normalizeGateway, parseArgs, validateProjectName } from './args';
+import { decideAxis, gatewayAxis, layoutAxis } from './axes';
+import type { Axis } from './axes';
 import { WIRED_GATEWAYS, listGateways, wirableGateway } from './catalog';
 import {
   DEFAULT_FEATURES,
@@ -164,35 +166,27 @@ async function main(): Promise<number> {
   // A PROMPT WITH ONE POSSIBLE ANSWER IS NOT A QUESTION. `widget` is
   // `status: 'planned'`, so this select rendered a single option and asked the
   // user to choose it — which reads as a menu that has lost its other entries,
-  // and takes a keystroke to answer nothing. The choice is stated instead, and
-  // the select comes back on its own the moment a second layout is ready.
-  const layoutChoices = readyLayouts();
-  if (layoutChoices.length === 0) {
+  // and takes a keystroke to answer nothing. The rule, and the stated line that
+  // replaces the question, live in `axes.ts` so the gateway axis below cannot
+  // answer the same question differently. It did: it took its single answer in
+  // silence.
+  const layouts = layoutAxis();
+  if (layouts.options.length === 0) {
     return fail('no layout in this release can be scaffolded — this build is broken');
   }
-  const onlyLayout = layoutChoices.length === 1 ? layoutChoices[0] : null;
-  const layoutId = (args.layout ?? (nonInteractive
-    ? ZERO_CONFIG.layout
-    : onlyLayout
-      ? onlyLayout.id
-      : await ask(
-          p.select({
-            message: 'Where does the chat live?',
-            initialValue: ZERO_CONFIG.layout,
-            options: layoutChoices.map((l) => ({ value: l.id, label: l.label, hint: l.hint })),
-          }),
-        ))) as Layout;
+  const layoutId = (await answerAxis(layouts, {
+    override: args.layout,
+    nonInteractive,
+    fallback: ZERO_CONFIG.layout,
+  })) as Layout;
 
   const layout = getLayout(layoutId);
   if (!layout) return fail(`unknown layout '${layoutId}'`);
   if (layout.status !== 'ready') {
     return fail(
       `layout '${layout.id}' is not scaffoldable yet (${layout.note ?? 'no template'}). ` +
-        `Available: ${layoutChoices.map((l) => l.id).join(', ')}`,
+        `Available: ${layouts.options.map((l) => l.id).join(', ')}`,
     );
-  }
-  if (!nonInteractive && onlyLayout && args.layout === undefined) {
-    stated('Layout', `${layout.label} — ${layout.hint}`);
   }
 
   // ── 3a. features ───────────────────────────────────────────────────────────
@@ -265,29 +259,20 @@ async function main(): Promise<number> {
   }
 
   // ── 4. gateway ─────────────────────────────────────────────────────────────
+  //
+  // THE AXIS THIS RULE WAS WRITTEN FOR AND THEN NOT APPLIED TO. It offers only
+  // the gateways this FRAMEWORK can host — a wired gateway still needs somewhere
+  // to put its route — and for most of the table that intersection is `mock`
+  // alone. The old `wired.length === 1` branch took that answer WITHOUT ASKING
+  // AND WITHOUT SAYING SO, so on six of the eight ready frameworks the backend
+  // question never appeared in any form. Same rule as the layout axis now, from
+  // the same function, which is what stops the two drifting again.
   const gateways = listGateways();
-  // Only the gateways this FRAMEWORK can host. A wired gateway still needs
-  // somewhere to put its route, and offering one the chosen framework has no
-  // destination for would put a choice in the menu that fails after it is made.
-  const wired = gateways.filter(
-    (g) => g.wired && wirableGateway(g.integration.id, framework) === null,
-  );
-  const gatewayId = normalizeGateway(args.gateway) ?? (nonInteractive || wired.length === 1
-    ? ZERO_CONFIG.gateway
-    : await ask(
-        p.select({
-          message: 'Wire a model gateway?',
-          initialValue: ZERO_CONFIG.gateway,
-          options: wired.map((g) => ({
-            value: g.integration.id,
-            label: g.integration.id === 'mock' ? 'None' : g.integration.title,
-            hint:
-              g.integration.id === 'mock'
-                ? 'local mock, no key, no backend'
-                : `${g.integration.envVars.join(', ')} — a server route is scaffolded for you`,
-          })),
-        }),
-      ));
+  const gatewayId = normalizeGateway(args.gateway) ?? (await answerAxis(gatewayAxis(framework), {
+    nonInteractive,
+    fallback: ZERO_CONFIG.gateway,
+    initialValue: ZERO_CONFIG.gateway,
+  }));
 
   if (!gateways.some((g) => g.integration.id === gatewayId)) {
     return fail(`unknown gateway '${gatewayId}'`);
@@ -400,6 +385,48 @@ function fail(message: string): number {
  */
 function stated(label: string, value: string): void {
   p.log.info(`${pc.dim(`${label}:`)} ${value}`);
+}
+
+/**
+ * Answer one axis: take the flag if given, ask when there is a real choice, and
+ * otherwise state the answer that was decided for the user.
+ *
+ * THE `nonInteractive` BRANCH TAKES THE SOLE ANSWER, NOT THE ZERO-CONFIG ONE,
+ * with the fallback reached only when the axis has a real choice to default
+ * through. Those coincide today for both axes; keeping them the same expression
+ * means a future axis whose only answer is not the zero-config default cannot
+ * have the two paths disagree — which is a thing `--yes` would report as a
+ * scaffold of something nobody can produce.
+ *
+ * Nothing is stated in non-interactive mode: there is no prompt stream to leave
+ * a gap in, and `--yes` output is read by scripts. The one line that IS printed
+ * in every mode is the `unasked` feature note, because that one reports a
+ * difference between what was requested and what will be written.
+ */
+async function answerAxis(
+  axis: Axis,
+  opts: {
+    override?: string;
+    nonInteractive: boolean;
+    fallback: string;
+    /** the select's pre-highlighted row; defaults to the zero-config fallback */
+    initialValue?: string;
+  },
+): Promise<string> {
+  if (opts.override !== undefined) return opts.override;
+  const decision = decideAxis(axis);
+  if (opts.nonInteractive) return decision.only?.id ?? opts.fallback;
+  if (decision.ask) {
+    return ask(
+      p.select({
+        message: axis.question,
+        initialValue: opts.initialValue ?? opts.fallback,
+        options: axis.options.map((o) => ({ value: o.id, label: o.label, hint: o.hint })),
+      }),
+    );
+  }
+  if (decision.statement) stated(axis.label, decision.statement);
+  return decision.only?.id ?? opts.fallback;
 }
 
 /** Feature ids for a refusal message, or an honest `none` rather than an empty gap. */
