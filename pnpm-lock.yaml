@@ -418,6 +418,9 @@ importers:
       concurrently:
         specifier: ^10.0.3
         version: 10.0.3
+      esbuild:
+        specifier: ^0.28.1
+        version: 0.28.1
       express:
         specifier: ^5.2.1
         version: 5.2.1

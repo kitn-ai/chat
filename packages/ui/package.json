@@ -251,6 +251,7 @@
     "ai": "^7.0.59",
     "axe-core": "^4.12.1",
     "concurrently": "^10.0.3",
+    "esbuild": "^0.28.1",
     "express": "^5.2.1",
     "http-server": "^14.1.1",
     "jsdom": "^24.0.0",
