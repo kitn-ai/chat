@@ -92,6 +92,33 @@ describe('foldStreams', () => {
     expect(unknownTypes).toEqual({ 'wire.card': 2 });
   });
 
+  it('accumulates chunks live, before any close arrives', () => {
+    // MID-STREAM HONESTY. `chunks` used to be set only from wire.close, so a
+    // healthy stream spent its whole duration rendering
+    // `N frames → 0 chunks → M parts` -- which is the wrong-dialect signature
+    // this panel exists to flag, shown transiently on every healthy stream.
+    // Each frame REPORTS how many chunks it yielded, so summing them is
+    // measurement, not invention.
+    const { streams } = foldStreams([
+      ev({ type: 'wire.open', t: 0, streamId: 'wire-7', format: 'openai.chat-completions', source: 'response' }),
+      ev({ type: 'wire.frame', t: 1, streamId: 'wire-7', seq: 1, bytes: 40, chunks: 2, fields: ['text'] }),
+      ev({ type: 'wire.frame', t: 2, streamId: 'wire-7', seq: 2, bytes: 30, chunks: 1, fields: ['text'] }),
+    ]);
+    expect(streams[0].chunks).toBe(3);
+    expect(streams[0].open).toBe(true);
+  });
+
+  it('the close value is authoritative and overwrites the running sum', () => {
+    const { streams } = foldStreams([
+      ev({ type: 'wire.open', t: 0, streamId: 'wire-8', format: 'openai.chat-completions', source: 'response' }),
+      ev({ type: 'wire.frame', t: 1, streamId: 'wire-8', seq: 1, bytes: 40, chunks: 2, fields: ['text'] }),
+      ev({ type: 'wire.frame', t: 2, streamId: 'wire-8', seq: 2, bytes: 30, chunks: 1, fields: ['text'] }),
+      ev({ type: 'wire.close', t: 3, streamId: 'wire-8', frames: 2, chunks: 3, parts: { text: 1 }, finishReason: 'stop', ms: 3 }),
+    ]);
+    expect(streams[0].chunks).toBe(3);
+    expect(streams[0].open).toBe(false);
+  });
+
   it('a close with no frames reports frames as undefined, not zero', () => {
     // `consumeModelStream` called directly has no frames to report. "Not
     // reported" and "none arrived" are different facts and must render

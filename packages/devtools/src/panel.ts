@@ -140,7 +140,13 @@ export class KaiDevtoolsElement extends HTMLElement {
     this.#root.innerHTML = `<style>${CSS}</style><div class="wrap"></div>`;
     this.#root.addEventListener('click', (e) => {
       const target = e.target as HTMLElement;
-      if (target.closest('header')) this.toggleAttribute('collapsed');
+      if (!target.closest('header')) return;
+      this.toggleAttribute('collapsed');
+      // Re-render immediately. The label is derived from the attribute, so
+      // toggling alone left it one render behind -- and a collapsed panel's
+      // ONLY control read "hide" until unrelated traffic happened to repair it.
+      // A panel showing no events is exactly when nothing repairs it.
+      this.render();
     });
   }
 

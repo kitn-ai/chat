@@ -13,7 +13,22 @@
         padding: 32px;
         line-height: 1.5;
       }
-      main { max-width: 720px; }
+      /* The panel is fixed bottom-right at min(560px, 100vw - 24px) with a 12px
+         gutter, so at 1280px it starts at x=708. Capping the column at 640px
+         puts its right edge at 672 and leaves the composer fully clear.
+         Below ~1250px the two would meet horizontally, so the column gets
+         bottom padding instead: the panel still overlays, but every control
+         can be scrolled out from under it. */
+      main { max-width: 640px; }
+      @media (max-width: 1250px) { main { padding-bottom: 48vh; } }
+      kai-chat {
+        display: block;
+        height: 360px;
+        margin-bottom: 20px;
+        border: 1px solid #2b2f36;
+        border-radius: 8px;
+        overflow: hidden;
+      }
       h1 { font-size: 20px; margin: 0 0 4px; }
       p.lede { color: #868d99; margin: 0 0 24px; }
       .row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
@@ -44,6 +59,8 @@
         <button id="dialect" type="button">Wrong dialect (Anthropic body → OpenAI reader)</button>
         <button id="failed" type="button">HTTP 401</button>
       </div>
+
+      <kai-chat id="chat" placeholder="The healthy button sends for you…"></kai-chat>
 
       <pre id="out"></pre>
 

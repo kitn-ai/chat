@@ -5,9 +5,9 @@
 // faked is the transport, which is the one part the kit deliberately does not
 // own.
 import '@kitn.ai/ui/elements';
-import { createMockResponder } from '@kitn.ai/ui/state';
+import { createAssistantStream, createMockResponder } from '@kitn.ai/ui/state';
 import { readOpenAIStream } from '@kitn.ai/ui/wire';
-import type { AssistantStreamSink } from '@kitn.ai/ui/wire';
+import type { AssistantStreamSink, ChatMessage } from '@kitn.ai/ui/wire';
 
 // ORDERING, AND IT IS NOT INCIDENTAL. `@kitn.ai/ui/elements` is SSR-import-safe,
 // which it achieves by gating registration behind a browser check and a DYNAMIC
@@ -47,10 +47,39 @@ const sink = (): AssistantStreamSink => ({
 
 const mockResponse = createMockResponder();
 
-/** SCENARIO 1 — a healthy stream. Frames arrive, chunks come out, a text part
- *  is produced, the turn closes with a finish reason. */
+// ── The thread ───────────────────────────────────────────────────────────────
+//
+// A real `<kai-chat>`, driven the way the element's contract requires: arrays
+// and objects are set as JS PROPERTIES (never attributes), and every update
+// hands over a NEW array reference plus a NEW object for the item that changed.
+// `createAssistantStream` does exactly that internally, which is why the stream
+// is handed straight to `readOpenAIStream` as its sink.
+const chat = document.getElementById('chat') as HTMLElement & { messages?: ChatMessage[] };
+
+let messages: ChatMessage[] = [];
+const setMessages = (next: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => {
+  messages = typeof next === 'function' ? next(messages) : next;
+  // The array reference is what NOTIFIES the element.
+  chat.messages = messages;
+};
+
+let turnNo = 0;
+
+/** SCENARIO 1 — a healthy stream, rendered into the thread.
+ *
+ *  The same read drives BOTH the visible message and the diagnostic events, so
+ *  the panel row and the assistant reply describe one identical stream. */
 async function healthy(): Promise<void> {
-  const turn = await readOpenAIStream(mockResponse('Tell me about the wire adapter.'), sink());
+  turnNo += 1;
+  const prompt = `Tell me about the wire adapter (turn ${turnNo}).`;
+  setMessages((prev) => [
+    ...prev,
+    { id: `u${turnNo}`, role: 'user', parts: [{ type: 'text', text: prompt }] },
+  ]);
+
+  // The sink IS the assistant stream: parts land on the thread as they parse.
+  const stream = createAssistantStream(setMessages, { id: `a${turnNo}` });
+  const turn = await readOpenAIStream(mockResponse(prompt), stream);
   log(`healthy    → chunks ${turn.chunks}, parts ${turn.parts.length}, finish ${turn.finishReason}`);
 }
 
