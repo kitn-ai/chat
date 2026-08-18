@@ -13,7 +13,11 @@
     "skipLibCheck": true,
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
-    "noEmit": true
+    "noEmit": true,
+    // The view is SolidJS: JSX is left for vite-plugin-solid to compile, and
+    // typed against Solid's own JSX namespace.
+    "jsx": "preserve",
+    "jsxImportSource": "solid-js"
   },
-  "include": ["src/**/*.ts", "demo/**/*.ts", "*.config.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "demo/**/*.ts", "*.config.ts"]
 }

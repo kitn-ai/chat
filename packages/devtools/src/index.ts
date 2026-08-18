@@ -23,6 +23,21 @@ import { attachToHook, findHook } from './hook-client';
 const NOT_ACTIVATED =
   '[kai-devtools] loaded, not activated. Add ?kai-devtools=1 to the URL, or run __KAI_DEVTOOLS_HOOK__.activate(), to record from the next page load.';
 
+/** Is the kit capturing CONTENT, not just metadata? Read the same way the kit
+ *  reads its own signals, and guarded: storage throws in private mode. */
+function payloadArmed(): boolean {
+  try {
+    if (window.localStorage.getItem('kai-devtools:payload')) return true;
+  } catch {
+    // fall through to the query string
+  }
+  try {
+    return new URLSearchParams(window.location.search).get('kai-payload') === '1';
+  } catch {
+    return false;
+  }
+}
+
 function start(): void {
   defineKaiDevtools();
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
@@ -43,6 +58,9 @@ function start(): void {
 
   el.setAttribute('hook-version', String(attachment.hookVersion));
   if (attachment.legacy) el.setAttribute('legacy', '');
+  // Content capture is privacy-relevant, so the panel states it permanently
+  // rather than letting a developer be unaware of it.
+  if (payloadArmed()) el.setAttribute('payload', '');
   document.body.appendChild(el);
 }
 
