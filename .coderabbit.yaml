@@ -17,7 +17,7 @@ reviews:
     # On by default rather than opt-in. This repo's documented dominant failure
     # mode is a check or a change that looks fine and covers nothing; those land
     # in small PRs, which are exactly the ones nobody would opt in.
-    enabled: true
+    enabled: false
     drafts: false
     # release-please PRs are a generated changelog and a version bump. The repo
     # rule is never to hand-edit a version, so there is nothing actionable in

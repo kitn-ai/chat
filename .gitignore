@@ -1,5 +1,6 @@
 node_modules/
 dist/
+tmp/
 storybook-static/
 # One-off coverage diagnostic output (`--coverage`); never produced in CI.
 coverage/

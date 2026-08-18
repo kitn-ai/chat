@@ -183,6 +183,33 @@ export const SKELETON_PARTS: PartDef[] = [
   },
 ];
 
+/**
+ * The parts of ONE attachment item, declared by `components/attachments.tsx`
+ * and therefore surfaced by every element that renders an attachment — the
+ * standalone `<kai-attachments>` AND the thread inside `<kai-message>` /
+ * `<kai-chat>`. Shared rather than duplicated so the two can never document
+ * different names for the same node.
+ *
+ * These are a styling seam and a TESTING seam, and the second is why they exist
+ * at all. `examples/internal/openrouter-spike` proves "a user can see which file
+ * was attached" by locating these; before they existed it pinned the chip by
+ * `span.truncate` and broke the day the thread moved to the grid tile, while the
+ * filename was still plainly on screen. A published part is what lets an
+ * assertion name the thing rather than its current markup.
+ */
+export const ATTACHMENT_ITEM_PARTS: PartDef[] = [
+  {
+    name: 'attachment',
+    doc: 'One attachment item: the chip, row or tile, whichever variant is rendering. Restyle its background, radius or border from outside without caring which layout it is.',
+    recipe: 'kai-chat::part(attachment) { border-radius: 0.25rem }',
+  },
+  {
+    name: 'attachment-name',
+    doc: 'The attachment’s filename label. Present in every variant that shows one (a grid tile omits it for an image, which is its own label). Retune its type or hide it entirely.',
+    recipe: 'kai-chat::part(attachment-name) { font-size: 0.75rem }',
+  },
+];
+
 /** Styleable `::part`s of `<kai-message>`. (The `avatar` part is contributed by
  *  the `avatar` slot's `part: true` flag, so it is not repeated here.) */
 export const MESSAGE_PARTS: PartDef[] = [
@@ -211,6 +238,10 @@ export const MESSAGE_PARTS: PartDef[] = [
     doc: 'The citation row rendered from the message’s `source` parts: a wrapped row of chips below the bubble, never inside it. Restyle its spacing or hide it entirely from outside.',
     recipe: 'kai-message::part(citations) { gap: 0.5rem }',
   },
+  // A message renders its `file` parts through the same Attachment chrome
+  // `<kai-attachments>` uses, so it exposes the same handles. Shared, not
+  // restated — see ATTACHMENT_ITEM_PARTS.
+  ...ATTACHMENT_ITEM_PARTS,
 ];
 
 /** Styleable `::part`s of `<kai-attachments>`. */
@@ -220,6 +251,7 @@ export const ATTACHMENTS_PARTS: PartDef[] = [
     doc: 'The image shown in an attachment’s hover-card preview. Bounded by default (max ~320×256, aspect preserved) so a large image never blows up the card. Raise or lower the cap from outside.',
     recipe: 'kai-attachments::part(preview) { max-width: 32rem; max-height: 24rem }',
   },
+  ...ATTACHMENT_ITEM_PARTS,
 ];
 
 /** Styleable `::part`s of `<kai-status>`. */

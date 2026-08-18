@@ -18,6 +18,14 @@ import {
   type StopReason,
 } from './chunk';
 import type { RawOrigin } from '../components/tool-types';
+import {
+  emitWireDiagnostic,
+  nextStreamId,
+  wireCorrelation,
+  wireDiagnosticsActive,
+  withPayload,
+  type WireCorrelation,
+} from './diagnostics';
 
 // ── Tool-call accumulator ────────────────────────────────────────────────────
 
@@ -245,13 +253,75 @@ export function createToolCallAccumulator(sink: AssistantStreamSink, opts: Consu
 /** A sink that writes nowhere but into a `MessagePart[]`, using the kit's own
  *  builders. Teed alongside the real sink so `ModelTurn.parts` cannot drift from
  *  what the message actually received. */
-function createPartsRecorder(): AssistantStreamSink & { parts(): MessagePart[] } {
+function createPartsRecorder(correlation: WireCorrelation): AssistantStreamSink & {
+  parts(): MessagePart[];
+  /** How many DISTINCT parts each variant produced, keyed by variant name.
+   *
+   *  Counted from the sink method that was called plus the fact that the parts
+   *  array GREW, NOT by discriminating a `MessagePart` -- which is what keeps
+   *  this out of scope for `lint:silent-drops`: there is no new switch over
+   *  `MessagePart.type` in `wire/` to go stale when a seventh variant lands.
+   *
+   *  Parts, not writes: five text deltas merge into ONE text part and report
+   *  `{ text: 1 }`. A consumer renders these as "N parts", so a write count
+   *  would lie there. Per-delta granularity is not lost -- one `wire.part`
+   *  event is still emitted per write, carrying that delta's own `chars`. */
+  partCounts(): Record<string, number>;
+} {
   let parts: MessagePart[] = [];
+  const counts: Record<string, number> = {};
+
+  /** Count the part if this write created one, then report the write. `chars` is
+   *  the delta LENGTH and is passed only for the text-bearing variants; the
+   *  delta itself never travels.
+   *
+   *  A write either APPENDS a part or MERGES into one that already exists, and
+   *  the array length is what separates them -- uniform across all four methods
+   *  and needing no knowledge of any variant's shape. The growth amount is used
+   *  rather than a flat +1 so a builder that ever appends two stays honest.
+   *
+   *  `index` is the position in `parts` this write landed on, found by comparing
+   *  references before and after. The builders return a new array with a new
+   *  object for the item they changed, so the first slot that differs IS the
+   *  part that moved. Computed only when someone is listening. */
+  const record = (
+    variant: string,
+    before: MessagePart[],
+    chars?: number,
+    /** Built ONLY when the payload switch is on -- a thunk, so with it off
+     *  nothing here is read or copied. */
+    payload?: () => { delta?: string; patch?: unknown; source?: unknown },
+  ) => {
+    if (parts.length > before.length) {
+      counts[variant] = (counts[variant] ?? 0) + (parts.length - before.length);
+    }
+    if (!wireDiagnosticsActive()) return;
+    let index = parts.length - 1;
+    for (let i = 0; i < parts.length; i++) {
+      if (before[i] !== parts[i]) {
+        index = i;
+        break;
+      }
+    }
+    emitWireDiagnostic({
+      type: 'wire.part',
+      t: Date.now(),
+      ...correlation,
+      variant,
+      index,
+      ...(chars !== undefined ? { chars } : {}),
+      ...(payload ? withPayload(payload) : {}),
+    });
+  };
+
   return {
     appendText(delta) {
+      const before = parts;
       parts = appendTextPart(parts, delta);
+      record('text', before, delta.length, () => ({ delta }));
     },
     appendReasoning(delta, opts) {
+      const before = parts;
       // `streamId` is DROPPED here on purpose. It namespaces block indices for a
       // sink that outlives one stream; this recorder starts a fresh array per
       // call, so within `ModelTurn.parts` there is nothing to disambiguate. Worse,
@@ -260,14 +330,22 @@ function createPartsRecorder(): AssistantStreamSink & { parts(): MessagePart[] }
       // adapter guarantees (same chunks in, same parts out, whatever the byte
       // boundaries). The host's own sink still receives it.
       parts = appendReasoningPart(parts, delta, { ...opts, streamId: undefined });
+      record('reasoning', before, delta.length, () => ({ delta }));
     },
     upsertTool(toolCallId, patch) {
+      const before = parts;
       parts = upsertToolPart(parts, toolCallId, patch);
+      // The patch is where the tool's arguments and its output live, so the
+      // whole thing is payload and none of it is metadata.
+      record('tool', before, undefined, () => ({ patch }));
     },
     addSource(source) {
+      const before = parts;
       parts = [...parts, { type: 'source', source }];
+      record('source', before, undefined, () => ({ source }));
     },
     parts: () => parts,
+    partCounts: () => counts,
   };
 }
 
@@ -296,19 +374,6 @@ function teeSink(a: AssistantStreamSink, b: AssistantStreamSink): AssistantStrea
 
 // ── The main loop ────────────────────────────────────────────────────────────
 
-/** One id per `consumeModelStream` call, i.e. per provider response stream.
- *
- *  It namespaces reasoning block indices. Anthropic restarts content-block
- *  indices at 0 on every message, and a tool loop reads several messages into ONE
- *  assistant turn, so without this round 2's block 0 merges into round 1's part
- *  and overwrites its verbatim `raw`. See `appendReasoningPart`.
- *
- *  A monotonic counter, not a UUID: this never leaves the process, is compared
- *  only for equality against parts built in the same process, and a counter keeps
- *  the value short and reproducible in test output. */
-let streamSeq = 0;
-const nextStreamId = (): string => `wire-${++streamSeq}`;
-
 /**
  * Read one turn's worth of `ModelStreamChunk`s and drive `sink` with them.
  *
@@ -326,8 +391,16 @@ export async function consumeModelStream(
   opts: ConsumeOptions = {},
 ): Promise<ModelTurn> {
   const label = opts.reasoningLabel ?? 'Thinking';
-  const streamId = nextStreamId();
-  const recorder = createPartsRecorder();
+  // `readModelStream` assigns the id one level up, because it opens the format
+  // and counts frames before this function runs and every event from one read
+  // has to carry the same id. A direct caller still gets a fresh one per call.
+  const streamId = opts.streamId ?? nextStreamId();
+  // `traceId`/`label` ride along unchanged from the caller. `readModelStream`
+  // built the same object one level up and passes the parts of it through
+  // `opts`, so a read and its consume report one identical correlation.
+  const correlation = wireCorrelation(streamId, opts);
+  const startedAt = Date.now();
+  const recorder = createPartsRecorder(correlation);
   const out = teeSink(sink, recorder);
   const tools = createToolCallAccumulator(out, opts);
 
@@ -408,21 +481,107 @@ export async function consumeModelStream(
   // forward the status now; this is the second, independent guard, and it also
   // covers a truncated body, a non-streaming completion returned by mistake, and
   // an HTML proxy page.
-  if (chunkCount === 0 && !error) {
-    error = {
-      code: 'empty-stream',
-      message:
-        'The model stream produced no chunks. The response was 200 but nothing in its body parsed ' +
-        'as a stream frame — check the endpoint really sent Content-Type: text/event-stream and that ' +
-        'the request set stream: true. A route that forwards a provider error without its status ' +
-        'lands here: the body is a JSON error, not SSE.',
-    };
+  //
+  // AND ITS SIBLING: a turn whose frames PARSED but produced no part.
+  //
+  // The guard judges on parts produced rather than on raw chunk count, which is
+  // what makes it hold once a format reads a field that content-less frames also
+  // carry (`model`, `finishReason`, `usage`). Judged on chunks alone, surfacing
+  // `model` would have taken this whole guard quiet: frames yielding nothing but
+  // an id would push `chunkCount` above zero and the turn would go back to
+  // resolving empty and saying so nowhere.
+  //
+  // The split reports which of the two happened, because they have different
+  // fixes: zero chunks means nothing parsed as a frame at all, while chunks with
+  // no parts means the frames parsed and carried nothing THIS reader reads --
+  // the wrong-dialect case, and the one this option makes common.
+  // ORDER IS LOAD-BEARING: settle runs FIRST, because settle PRODUCES PARTS.
+  //
+  // A tool call that never held both an id and a non-empty name is announced
+  // only inside `settle`, so a parts map read before it is not final. Judged
+  // there, a turn whose only content is such a call looked empty, and the
+  // damage went both ways: the guard's own prose was fed back in as
+  // `streamError` and REPLACED the call's accurate "arrived with no function
+  // name" diagnosis, while `wire.close` reported an emptiness code beside a
+  // produced part. Both reads now happen after settle, so the parts map, the
+  // error code and the tool's own error agree by construction.
+  //
+  // `settle` still receives only a GENUINE in-band stream error, exactly as it
+  // did before the guard was widened -- an emptiness diagnosis must never flow
+  // into it. `stopReason` is recomputed below because the guard can set the
+  // error that makes it 'error'; settle only branches on 'length', which the
+  // guard cannot produce, so the pre-guard value is the right one to pass.
+  const settleStopReason = normalizeStopReason(finishReason) ?? (error ? 'error' : undefined);
+  const toolCalls = tools.settle(settleStopReason, error?.message);
+
+  const partsTotal = Object.values(recorder.partCounts()).reduce((a, b) => a + b, 0);
+  if (!error && partsTotal === 0) {
+    error =
+      chunkCount === 0
+        ? {
+            code: 'empty-stream',
+            message:
+              'The model stream produced no chunks. The response was 200 but nothing in its body parsed ' +
+              'as a stream frame — check the endpoint really sent Content-Type: text/event-stream and that ' +
+              'the request set stream: true. A route that forwards a provider error without its status ' +
+              'lands here: the body is a JSON error, not SSE.',
+          }
+        : {
+            code: 'empty-turn',
+            message:
+              `The stream completed and ${chunkCount} chunk(s) were parsed, but none carried content ` +
+              'this reader reads, so no message part was produced. If the endpoint streams a different ' +
+              'dialect (or carries its payload in a field this format does not read), switch to the ' +
+              'matching reader. A model that returned no content at all also lands here.',
+          };
   }
 
   // REWORK 3. `finishReason` is reported verbatim; `stopReason` is what the
   // adapter itself branches on, so no OpenAI literal leaks into adapter logic.
+  //
+  // Recomputed after the guard: an emptiness error is still an error, and a turn
+  // that reports one must report `stopReason: 'error'` beside it as it always
+  // has. Identical to `settleStopReason` whenever the guard stayed silent.
   const stopReason = normalizeStopReason(finishReason) ?? (error ? 'error' : undefined);
-  const toolCalls = tools.settle(stopReason, error?.message);
+
+  if (wireDiagnosticsActive()) {
+    // `_frames` is supplied by `readModelStream` only. A direct caller had no
+    // frames, so the field is absent rather than zero -- a consumer must be able
+    // to tell "not reported" from "none arrived".
+    const frames = (opts as { _frames?: () => number })._frames?.();
+    emitWireDiagnostic({
+      type: 'wire.close',
+      t: Date.now(),
+      ...correlation,
+      ...(frames !== undefined ? { frames } : {}),
+      chunks: chunkCount,
+      parts: recorder.partCounts(),
+      finishReason,
+      ...(stopReason ? { stopReason } : {}),
+      // The CODE only. A provider's error message can echo request content back,
+      // which is why it stays on `ModelTurn.error` and never on the event.
+      ...(error?.code !== undefined ? { errorCode: error.code } : {}),
+      ...(usage ? { usage } : {}),
+      ms: Date.now() - startedAt,
+      // The assembled turn: everything the sink was driven with, in one place,
+      // which is what a panel renders when someone asks "what did it actually
+      // say" -- plus the in-band error's own message.
+      //
+      // ALL THREE TERMINAL EVENTS TREAT PROVIDER MESSAGE TEXT IDENTICALLY:
+      // `wire.close`, `wire.failed` and `wire.interrupted` each keep it out of
+      // the metadata (where only `errorCode` travels, because a message can
+      // echo request content back) and each publish it under `payload`, which
+      // is the switch that accepts exactly that. A developer who armed payload
+      // is most often chasing the in-band error that explains an empty turn.
+      ...withPayload(() => ({
+        text,
+        reasoning,
+        toolCalls,
+        sources,
+        ...(error?.message !== undefined ? { message: error.message } : {}),
+      })),
+    });
+  }
 
   return {
     parts: recorder.parts(),

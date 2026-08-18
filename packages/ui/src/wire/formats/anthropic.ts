@@ -244,8 +244,15 @@ export const anthropicMessagesFormat: WireFormat = {
           case 'message_start': {
             const message = frame.message;
             if (!isRecord(message)) return [];
+            // `message.model` sits right beside the `message.usage` this handler
+            // already destructures. Anthropic states it once, here, and nowhere
+            // else in the stream.
+            const out: ModelStreamChunk = {};
             const usage = usageOf(message.usage);
-            return usage ? [{ usage }] : [];
+            if (usage) out.usage = usage;
+            const model = str(message.model);
+            if (model) out.model = model;
+            return Object.keys(out).length > 0 ? [out] : [];
           }
           case 'content_block_start':
             return blockStart(frame, blocks, toolIndexById);

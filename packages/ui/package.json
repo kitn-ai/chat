@@ -116,6 +116,10 @@
       "types": "./dist/wire/index.d.ts",
       "default": "./dist/wire.js"
     },
+    "./diagnostics": {
+      "types": "./dist/diagnostics/index.d.ts",
+      "default": "./dist/diagnostics.js"
+    },
     "./schemas": {
       "types": "./dist/schemas/index.d.ts",
       "default": "./dist/schemas.js"
@@ -155,7 +159,7 @@
   "scripts": {
     "prepublishOnly": "npm run build",
     "prebuild": "npm run build:css && npm run build:card-validation",
-    "build": "vite build --config vite.config.ts && vite build --config vite.config.provider.ts && vite build --config vite.config.react.ts && vite build --config vite.config.barrel.ts && vite build --config vite.config.barrel.server.ts && vite build --config vite.config.solid.ts && vite build --config vite.config.solid.server.ts && vite build --config vite.config.state.ts && vite build --config vite.config.wire.ts && vite build --config vite.config.schemas.ts && vite build --config vite.config.mcp.ts && npm run build:elements && npm run verify:elements-bundle && npm run verify:react-wrappers && npm run verify:shader-lazy",
+    "build": "vite build --config vite.config.ts && vite build --config vite.config.provider.ts && vite build --config vite.config.react.ts && vite build --config vite.config.barrel.ts && vite build --config vite.config.barrel.server.ts && vite build --config vite.config.solid.ts && vite build --config vite.config.solid.server.ts && vite build --config vite.config.state.ts && vite build --config vite.config.wire.ts && vite build --config vite.config.diagnostics.ts && vite build --config vite.config.schemas.ts && vite build --config vite.config.mcp.ts && npm run build:elements && npm run verify:elements-bundle && npm run verify:react-wrappers && npm run verify:shader-lazy",
     "build:elements": "node scripts/gen-elements-manifest.mjs && vite build --config vite.config.elements.ts && node scripts/gen-element-dts.mjs",
     "postbuild": "npm run build:theme && npm run build:api && npm run build:schemas && npm run build:subpath-dts && npm run verify:dts",
     "build:theme": "node scripts/build-theme-tokens.mjs",
@@ -177,6 +181,7 @@
     "verify:solid-coverage": "node scripts/verify-solid-coverage.mjs --self-test && node scripts/verify-solid-coverage.mjs",
     "verify:tool-schemas": "node scripts/verify-tool-schemas.mjs",
     "verify:ssr": "node scripts/verify-ssr-imports.mjs && node scripts/verify-ssr-render.mjs",
+    "verify:diagnostics-wiring": "node scripts/verify-diagnostics-wiring.mjs",
     "verify:ssr:imports": "node scripts/verify-ssr-imports.mjs",
     "verify:ssr:render": "node scripts/verify-ssr-render.mjs",
     "verify:pack": "node scripts/verify-pack-weight.mjs",
