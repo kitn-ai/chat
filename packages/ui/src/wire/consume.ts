@@ -18,7 +18,14 @@ import {
   type StopReason,
 } from './chunk';
 import type { RawOrigin } from '../components/tool-types';
-import { emitWireDiagnostic, nextStreamId, wireDiagnosticsActive } from './diagnostics';
+import {
+  emitWireDiagnostic,
+  nextStreamId,
+  wireCorrelation,
+  wireDiagnosticsActive,
+  withPayload,
+  type WireCorrelation,
+} from './diagnostics';
 
 // ── Tool-call accumulator ────────────────────────────────────────────────────
 
@@ -246,7 +253,7 @@ export function createToolCallAccumulator(sink: AssistantStreamSink, opts: Consu
 /** A sink that writes nowhere but into a `MessagePart[]`, using the kit's own
  *  builders. Teed alongside the real sink so `ModelTurn.parts` cannot drift from
  *  what the message actually received. */
-function createPartsRecorder(streamId: string): AssistantStreamSink & {
+function createPartsRecorder(correlation: WireCorrelation): AssistantStreamSink & {
   parts(): MessagePart[];
   /** How many DISTINCT parts each variant produced, keyed by variant name.
    *
@@ -277,7 +284,14 @@ function createPartsRecorder(streamId: string): AssistantStreamSink & {
    *  references before and after. The builders return a new array with a new
    *  object for the item they changed, so the first slot that differs IS the
    *  part that moved. Computed only when someone is listening. */
-  const record = (variant: string, before: MessagePart[], chars?: number) => {
+  const record = (
+    variant: string,
+    before: MessagePart[],
+    chars?: number,
+    /** Built ONLY when the payload switch is on -- a thunk, so with it off
+     *  nothing here is read or copied. */
+    payload?: () => { delta?: string; patch?: unknown; source?: unknown },
+  ) => {
     if (parts.length > before.length) {
       counts[variant] = (counts[variant] ?? 0) + (parts.length - before.length);
     }
@@ -292,10 +306,11 @@ function createPartsRecorder(streamId: string): AssistantStreamSink & {
     emitWireDiagnostic({
       type: 'wire.part',
       t: Date.now(),
-      streamId,
+      ...correlation,
       variant,
       index,
       ...(chars !== undefined ? { chars } : {}),
+      ...(payload ? withPayload(payload) : {}),
     });
   };
 
@@ -303,7 +318,7 @@ function createPartsRecorder(streamId: string): AssistantStreamSink & {
     appendText(delta) {
       const before = parts;
       parts = appendTextPart(parts, delta);
-      record('text', before, delta.length);
+      record('text', before, delta.length, () => ({ delta }));
     },
     appendReasoning(delta, opts) {
       const before = parts;
@@ -315,17 +330,19 @@ function createPartsRecorder(streamId: string): AssistantStreamSink & {
       // adapter guarantees (same chunks in, same parts out, whatever the byte
       // boundaries). The host's own sink still receives it.
       parts = appendReasoningPart(parts, delta, { ...opts, streamId: undefined });
-      record('reasoning', before, delta.length);
+      record('reasoning', before, delta.length, () => ({ delta }));
     },
     upsertTool(toolCallId, patch) {
       const before = parts;
       parts = upsertToolPart(parts, toolCallId, patch);
-      record('tool', before);
+      // The patch is where the tool's arguments and its output live, so the
+      // whole thing is payload and none of it is metadata.
+      record('tool', before, undefined, () => ({ patch }));
     },
     addSource(source) {
       const before = parts;
       parts = [...parts, { type: 'source', source }];
-      record('source', before);
+      record('source', before, undefined, () => ({ source }));
     },
     parts: () => parts,
     partCounts: () => counts,
@@ -378,8 +395,12 @@ export async function consumeModelStream(
   // and counts frames before this function runs and every event from one read
   // has to carry the same id. A direct caller still gets a fresh one per call.
   const streamId = opts.streamId ?? nextStreamId();
+  // `traceId`/`label` ride along unchanged from the caller. `readModelStream`
+  // built the same object one level up and passes the parts of it through
+  // `opts`, so a read and its consume report one identical correlation.
+  const correlation = wireCorrelation(streamId, opts);
   const startedAt = Date.now();
-  const recorder = createPartsRecorder(streamId);
+  const recorder = createPartsRecorder(correlation);
   const out = teeSink(sink, recorder);
   const tools = createToolCallAccumulator(out, opts);
 
@@ -531,7 +552,7 @@ export async function consumeModelStream(
     emitWireDiagnostic({
       type: 'wire.close',
       t: Date.now(),
-      streamId,
+      ...correlation,
       ...(frames !== undefined ? { frames } : {}),
       chunks: chunkCount,
       parts: recorder.partCounts(),
@@ -542,6 +563,23 @@ export async function consumeModelStream(
       ...(error?.code !== undefined ? { errorCode: error.code } : {}),
       ...(usage ? { usage } : {}),
       ms: Date.now() - startedAt,
+      // The assembled turn: everything the sink was driven with, in one place,
+      // which is what a panel renders when someone asks "what did it actually
+      // say" -- plus the in-band error's own message.
+      //
+      // ALL THREE TERMINAL EVENTS TREAT PROVIDER MESSAGE TEXT IDENTICALLY:
+      // `wire.close`, `wire.failed` and `wire.interrupted` each keep it out of
+      // the metadata (where only `errorCode` travels, because a message can
+      // echo request content back) and each publish it under `payload`, which
+      // is the switch that accepts exactly that. A developer who armed payload
+      // is most often chasing the in-band error that explains an empty turn.
+      ...withPayload(() => ({
+        text,
+        reasoning,
+        toolCalls,
+        sources,
+        ...(error?.message !== undefined ? { message: error.message } : {}),
+      })),
     });
   }
 

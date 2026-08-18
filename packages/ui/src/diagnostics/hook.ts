@@ -35,6 +35,7 @@
 // and installing is a no-op without a window. Server-side there is no signal to
 // read, so the answer is no and the recorder never starts.
 import {
+  setWirePayloadCapture,
   subscribeWireDiagnostics,
   type WireDiagnosticEvent,
 } from '../wire/diagnostics';
@@ -42,6 +43,21 @@ import {
 /** The localStorage key and query parameter. Same spelling in both, so the two
  *  ways in read the same in a bug report. */
 const SIGNAL_KEY = 'kai-devtools';
+
+/**
+ * The PAYLOAD signal. Its own key, and deliberately NOT a query parameter.
+ *
+ * The panel is a pasted script tag on a live site and `?kai-devtools=1` is
+ * guessable, so activation has to be cheap to reach. Content is not: a stranger
+ * who guesses the URL gets the SHAPE of a conversation -- counts, sizes,
+ * timings, variant names -- and not one word of it. Making that content takes
+ * localStorage or a global the app itself set, both of which need someone
+ * already standing at that browser or already inside the app's code.
+ *
+ * A query form would hand the whole difference away for the convenience of the
+ * one person who could set localStorage from the console anyway.
+ */
+const PAYLOAD_KEY = 'kai-devtools-payload';
 
 export interface KaiDevtoolsHook {
   /** The seam. A panel newer than the kit it attached to has to be able to say
@@ -51,6 +67,13 @@ export interface KaiDevtoolsHook {
    *  turns on one branch or the other exactly once, and a panel reading `false`
    *  here is reading "this session has no history", which stays true. */
   recording: boolean;
+  /** True iff the PAYLOAD signal was set at install -- a separate switch from
+   *  `recording`, read at the same moment and just as un-reactive.
+   *
+   *  `recording` without this is the default and the safe one: the shape of a
+   *  conversation, and none of its content. A panel renders the difference so a
+   *  developer knows which one they are looking at. */
+  payload: boolean;
   /** The buffered history, and CLEARS it. `[]` on the dormant branch, always.
    *
    *  Kept for contract compatibility, but `attach` is what a panel should use:
@@ -92,9 +115,14 @@ export interface KaiDevtoolsHook {
 
 declare global {
   interface Window {
-    /** The app's own opt-in, set before the kit loads. A plain boolean, and a
-     *  DIFFERENT name from the hook: this is the app talking to us. */
-    __KAI_DEVTOOLS__?: boolean;
+    /** The app's own opt-in, set before the kit loads. A DIFFERENT name from
+     *  the hook: this is the app talking to us.
+     *
+     *  `true` activates with metadata only. `'payload'` and `{ payload: true }`
+     *  activate AND capture content -- an app that reaches for the object form
+     *  is explicitly asking for both, and having it activate nothing would be a
+     *  footgun with no upside. `{ payload: false }` activates only. */
+    __KAI_DEVTOOLS__?: boolean | 'payload' | { payload?: boolean };
     __KAI_DEVTOOLS_HOOK__?: KaiDevtoolsHook;
   }
 }
@@ -102,12 +130,33 @@ declare global {
 /** Storage access itself can throw -- Safari private mode, a hostile CSP -- so
  *  every read is guarded and a failure means "no signal here", never a crash on
  *  a path the app did not ask for. */
-function storedSignal(): boolean {
+function storedSignal(key: string): boolean {
   try {
-    return Boolean(window.localStorage.getItem(SIGNAL_KEY));
+    return Boolean(window.localStorage.getItem(key));
   } catch {
     return false;
   }
+}
+
+/** The app's global, read for what it says about payload. `'payload'` and
+ *  `{ payload: true }` mean yes; a bare `true` means no, which is the whole
+ *  point of the separation. */
+function globalPayloadSignal(): boolean {
+  const flag = window.__KAI_DEVTOOLS__;
+  if (flag === 'payload') return true;
+  return typeof flag === 'object' && flag !== null && flag.payload === true;
+}
+
+/**
+ * Whether to capture payload, read once, synchronously, beside the activation
+ * signal.
+ *
+ * NO QUERY-STRING FORM, deliberately -- see `PAYLOAD_KEY`. Two sources only:
+ * localStorage, which needs someone at that browser, and the app's own global,
+ * which needs someone inside the app's code.
+ */
+function payloadWanted(): boolean {
+  return storedSignal(PAYLOAD_KEY) || globalPayloadSignal();
 }
 
 /** Three sources, first hit wins, in the spec's order:
@@ -118,9 +167,14 @@ function storedSignal(): boolean {
  *  Never inferred from NODE_ENV: the whole point is that the bug you cannot
  *  reproduce locally is in staging. */
 function wanted(): boolean {
-  if (storedSignal()) return true;
-  // `=== true`, not truthy: this is the app's own explicit boolean.
+  if (storedSignal(SIGNAL_KEY)) return true;
+  // `=== true`, not truthy: this is the app's own explicit boolean. The two
+  // payload forms activate as well, because an app that reaches for
+  // `'payload'` is asking for the panel AND its content, and having the string
+  // silently activate nothing would be a footgun with no upside.
   if (window.__KAI_DEVTOOLS__ === true) return true;
+  if (window.__KAI_DEVTOOLS__ === 'payload') return true;
+  if (typeof window.__KAI_DEVTOOLS__ === 'object' && window.__KAI_DEVTOOLS__ !== null) return true;
   try {
     return new URLSearchParams(window.location.search).get(SIGNAL_KEY) === '1';
   } catch {
@@ -128,7 +182,7 @@ function wanted(): boolean {
   }
 }
 
-function createHook(recording: boolean): KaiDevtoolsHook {
+function createHook(recording: boolean, payload: boolean): KaiDevtoolsHook {
   // Allocated ONLY on the wanted branch. On the dormant branch there is no
   // buffer to size and nothing is retained for the whole session.
   let buffer: WireDiagnosticEvent[] | undefined;
@@ -170,6 +224,7 @@ function createHook(recording: boolean): KaiDevtoolsHook {
   return {
     version: 1,
     recording,
+    payload,
     drain() {
       if (!buffer) return [];
       const history = buffer;
@@ -264,7 +319,29 @@ export function installKaiDevtoolsHook(): KaiDevtoolsHook | undefined {
   const existing = window.__KAI_DEVTOOLS_HOOK__;
   if (existing) return existing;
 
-  const hook = createHook(wanted());
+  // BOTH signals read here, once, synchronously, and they are independent:
+  // activation never implies payload, which is the property that makes a
+  // guessable `?kai-devtools=1` safe to leave reachable on a live site.
+  const recording = wanted();
+  const payload = payloadWanted();
+
+  // Only ever turned ON here. The dormant, no-signal path must keep allocating
+  // nothing at all, and `setWirePayloadCapture(false)` on a fresh realm would
+  // create the shared state just to write a default into it.
+  if (payload) setWirePayloadCapture(true);
+
+  if (payload && !recording) {
+    // Deciding loudly. The payload signal is a modifier, not an activator, so on
+    // its own it does exactly nothing -- and a developer who set it and sees no
+    // content would reasonably conclude the switch is broken.
+    console.warn(
+      `[kai-devtools] localStorage['${PAYLOAD_KEY}'] is set, but nothing activated the recorder, ` +
+        `so no events are being captured at all. Set localStorage['${SIGNAL_KEY}'] = '1' ` +
+        `(or add ?${SIGNAL_KEY}=1) as well.`,
+    );
+  }
+
+  const hook = createHook(recording, payload);
   window.__KAI_DEVTOOLS_HOOK__ = hook;
   return hook;
 }

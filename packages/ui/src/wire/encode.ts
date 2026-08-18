@@ -7,6 +7,8 @@ import type { ChatMessage, MessagePart } from '../elements/chat-types';
 import type { ToolPart } from '../components/tool-types';
 import { classifyAttachment, textFileContent, type ClassifiedFile } from './files';
 import { resolveMediaPolicy, type MediaPolicy, type MediaTypeFilter } from './media-types';
+import { wireDiagnosticsActive, wirePayloadActive } from './diagnostics';
+import { base64Bytes, createEncodeProbe, type EncodeProbe } from './encode-probe';
 
 export interface OpenAIToolCall {
   id: string;
@@ -100,6 +102,30 @@ export interface FileEncodeOptions {
    * enable it; that would just move the failure to a provider 400.
    */
   accept?: MediaTypeFilter;
+  /**
+   * The app's own id for the logical turn this encode belongs to, carried onto
+   * every diagnostic event the encode emits. Purely diagnostic: nothing here
+   * branches on it and it never reaches a provider.
+   *
+   * THE SAME FIELD, THE SAME MEANING, as `ConsumeOptions.traceId` -- and that
+   * symmetry is the whole payoff. Encoding happens BEFORE a read opens, so
+   * there is no stream to attach an encode to and the kit will not invent one.
+   * Pass the same id to both halves:
+   *
+   *   const body = toOpenAIMessages(messages, { traceId: 'turn-42' });
+   *   readOpenAIStream(res, sink, { traceId: 'turn-42' });
+   *
+   * and the request and the response it produced sit together, with a tool loop
+   * or a sub-agent fan-out grouping into one trace. Without it you still see
+   * both halves; they are simply unlinked, which is the honest rendering --
+   * pinning an encode to "the next stream that opens" would be a guess, and an
+   * encode may be followed by no stream at all.
+   */
+  traceId?: string;
+  /** The app's name for this call inside its trace (`'planner'`, `'retry-2'`).
+   *  Same field and same meaning as `ConsumeOptions.label`. Absent when not
+   *  supplied. */
+  label?: string;
 }
 
 export type AnthropicEncodeOptions = FileEncodeOptions;
@@ -173,12 +199,52 @@ function encodeFilePart<T>(
   policy: UnencodableFilePolicy,
   media: MediaPolicy,
   toBlock: (file: ClassifiedFile) => WireFileResult<T>,
+  probe: EncodeProbe | undefined,
+  messageIndex: number,
 ): T | null {
   const classified = classifyAttachment(part.attachment, media);
-  if (classified.status === 'kit-side') return null;
+  // What the HOST declared, which is the only label available on a path where
+  // classification never got as far as settling one.
+  const declared = part.attachment.mediaType;
+  const filename = part.attachment.filename;
 
-  const refuse = (reason: string): null => {
-    if (policy === 'skip') return null;
+  if (classified.status === 'kit-side') {
+    // Reported in the attachment ledger, and NOT as a drop: a `source-document`
+    // is the citation chip beside a RAG answer, and its content is already in
+    // the prompt that produced that answer. Nothing was lost.
+    probe?.attachment(
+      {
+        ...(declared !== undefined ? { mediaType: declared } : {}),
+        encoded: false,
+        disposition: 'skipped',
+        reason:
+          'it is a kit-side attachment (a source-document citation chip), not something the user staged to send.',
+      },
+      filename,
+    );
+    return null;
+  }
+
+  const refuse = (reason: string, file?: ClassifiedFile): null => {
+    const mediaType = file?.mediaType ?? declared;
+    if (policy === 'skip') {
+      // THE SKIP THE DEVELOPER ASKED FOR BY NAME, now visible. It is still
+      // silent on the wire, exactly as documented; what changed is that the
+      // panel can say "this attachment rendered in the thread and was never
+      // sent", which is the sentence nobody could get out of the kit before.
+      probe?.attachment(
+        {
+          ...(mediaType !== undefined ? { mediaType } : {}),
+          ...bytesOf(file),
+          encoded: false,
+          disposition: 'skipped',
+          reason,
+        },
+        filename,
+      );
+      probe?.dropped('file', reason, messageIndex, partIndex, part);
+      return null;
+    }
     throw new WireEncodeError(
       `Cannot encode file part ${partIndex} of message "${messageId}": ${reason} Pass { onUnencodableFile: 'skip' } to drop it instead of failing.`,
       messageId,
@@ -189,7 +255,49 @@ function encodeFilePart<T>(
   if (classified.status === 'unencodable') return refuse(classified.reason);
 
   const shaped = toBlock(classified.file);
-  return shaped.ok ? shaped.block : refuse(shaped.reason);
+  if (!shaped.ok) return refuse(shaped.reason, classified.file);
+
+  probe?.attachment(
+    {
+      mediaType: classified.file.mediaType,
+      ...bytesOf(classified.file),
+      encoded: true,
+      // A text file rides as text CONTENT on both wires -- worth naming
+      // separately, because it is how an attachment can be "sent" and still not
+      // be a file as far as the model is concerned.
+      disposition: classified.file.kind === 'text' ? 'as-text' : 'encoded',
+    },
+    filename,
+  );
+  return shaped.block;
+}
+
+/**
+ * The size of what went on the wire, when it went on the wire at all.
+ *
+ * ★ GATED BEHIND PAYLOAD CAPTURE, for the same reason `encode.request.bytes`
+ * is, and the deciding argument is that THE COST RECURS. The whole thread is
+ * re-encoded on every turn, so a 10 MB attachment sitting in history is not a
+ * one-time 4.3 ms -- it is 4.3 ms per turn for as long as a subscriber is
+ * attached. Unbounded-per-turn is what fails "cheap enough to leave on", not
+ * the absolute number.
+ *
+ * The diagnosis survives the omission: "your image/png attachment was skipped,
+ * so the model never saw it" is the finding, and the size is a refinement of
+ * it. `mediaType`, `encoded`, `disposition` and `reason` cost nothing and are
+ * reported unconditionally. Arming payload gives exact sizes, which is
+ * precisely the moment a developer has already accepted paying for content.
+ *
+ * ABSENT rather than estimated, always. For a remote attachment the provider
+ * dereferences that URL itself and the bytes never enter this process; with
+ * payload off the scan is simply not run. Both read as "not reported" under the
+ * absence rule, and neither is ever backfilled with a guess -- see the rejected
+ * candidates at `base64Bytes`.
+ */
+function bytesOf(file?: ClassifiedFile): { bytes?: number } {
+  if (!wirePayloadActive()) return {};
+  if (file?.source.type !== 'base64') return {};
+  return { bytes: base64Bytes(file.source.data) };
 }
 
 /** `image_url` takes an https URL and a `data:` URI in the same field, so an
@@ -434,7 +542,16 @@ export function toOpenAIMessages(
   const media = resolveMediaPolicy({ accept: options.accept });
   const out: OpenAIWireMessage[] = [];
 
+  // Gated BEFORE anything is allocated, so with nobody listening this whole
+  // ledger costs one symbol read for the entire encode.
+  const probe = wireDiagnosticsActive() ? createEncodeProbe(options) : undefined;
+  if (probe) {
+    for (const message of messages) for (const part of message.parts) probe.seen(part.type);
+  }
+
+  let messageIndex = -1;
   for (const message of messages) {
+    messageIndex++;
     if (message.role === 'user') {
       // Built in PART ORDER, with runs of adjacent text merged into one entry.
       // A file authored after the text stays after it: `parts` is an ordered
@@ -455,19 +572,47 @@ export function toOpenAIMessages(
       message.parts.forEach((part, partIndex) => {
         if (part.type === 'text') {
           buffered += part.text;
+          if (part.text !== '') probe?.encoded('text');
           return;
         }
-        if (part.type !== 'file') return;
-        const block = encodeFilePart(part, message.id, partIndex, filePolicy, media, openAIFileBlock);
+        if (part.type !== 'file') {
+          // The drop the waiver above declares, now also reported. `part.type`
+          // is read off a part this branch has ALREADY discriminated -- no new
+          // switch, which is what keeps `lint:silent-drops` looking at exactly
+          // the sites it looked at before.
+          probe?.dropped(
+            part.type,
+            'a USER turn carries authored content only: reasoning and tool parts are assistant-side, and cards and sources are kit-side UI with no OpenAI wire form.',
+            messageIndex,
+            partIndex,
+            part,
+          );
+          return;
+        }
+        const block = encodeFilePart(
+          part,
+          message.id,
+          partIndex,
+          filePolicy,
+          media,
+          openAIFileBlock,
+          probe,
+          messageIndex,
+        );
         if (!block) return;
         flushText();
         content.push(block);
+        probe?.encoded('file');
         carriesFile = true;
       });
       flushText();
 
       // No file survived, so this is an ordinary turn and stays a plain string.
       if (!carriesFile) {
+        // `textOf`'s own waiver names the same drops the callback above just
+        // reported, over the same parts array in the same branch. Reporting them
+        // again HERE would double-count every card and source in a user turn, so
+        // the callback is the single site and this one deliberately stays quiet.
         const text = textOf(message.parts);
         if (text !== '') out.push({ role: 'user', content: text });
         continue;
@@ -502,28 +647,82 @@ export function toOpenAIMessages(
       reasoning = [];
     };
 
+    let partIndex = -1;
     for (const part of message.parts) {
+      partIndex++;
       if (part.type === 'text') {
         // Text that arrives AFTER a call is the model's answer to it, so the
         // call and its result have to be on the wire before this text is.
         if (pending.length > 0) flush();
         text += part.text;
+        if (part.text !== '') probe?.encoded('text');
         continue;
       }
       if (part.type === 'reasoning') {
-        if (!includeReasoning) continue;
+        if (!includeReasoning) {
+          probe?.dropped(
+            'reasoning',
+            "reasoning is omitted by default, because omitting is measured-accepted everywhere and costs about 25% fewer prompt tokens per round. Pass { reasoning: 'include' } to send the model its own prior thinking back.",
+            messageIndex,
+            partIndex,
+            part,
+          );
+          continue;
+        }
         // A block after a call belongs to the round that READ the result, for the
         // same reason text does. Same rule as `toAnthropicMessages`.
         if (pending.length > 0) flush();
         const detail = reasoningDetailOf(part);
-        if (detail) reasoning.push(detail);
+        if (detail) {
+          reasoning.push(detail);
+          probe?.encoded('reasoning');
+          continue;
+        }
+        // ★ THE REASONING ROUND TRIP, reported rather than changed. `detailOf`
+        // only produces an entry for a part whose `raw` came from
+        // `openai.reasoning_details`, so a part read off `reasoning_content`
+        // (DeepSeek-direct) has no round-trippable carrier and is not echoed --
+        // and the model loses its own prior thinking on the next turn. The
+        // ruling stands and is deliberate; what changes here is that it is
+        // visible. See `reasoningDetailOf` for which blocks make it and why.
+        probe?.dropped(
+          'reasoning',
+          'it has no round-trippable `reasoning_details` carrier -- an opaque or signed block can be echoed back, but a part read from `reasoning_content` has neither, and re-sending an unverifiable block is the documented 400. The model does not see its own prior thinking on the next turn.',
+          messageIndex,
+          partIndex,
+          part,
+        );
         continue;
       }
-      if (part.type === 'tool' && isSettled(part.tool)) pending.push(part.tool);
+      if (part.type === 'tool') {
+        if (isSettled(part.tool)) {
+          pending.push(part.tool);
+          probe?.encoded('tool');
+        } else {
+          probe?.dropped(
+            'tool',
+            'the call has no result yet (or no provider tool call id). Both APIs require every echoed tool call to have exactly one matching result, so a half-formed one is left off rather than sent.',
+            messageIndex,
+            partIndex,
+            part,
+          );
+        }
+        continue;
+      }
+      // card, source, and a `file` part on an ASSISTANT turn. Same parts the
+      // function's waiver names, read off a part already discriminated above.
+      probe?.dropped(
+        part.type,
+        'cards and sources are kit-side UI with no OpenAI wire form, and a `file` part on an ASSISTANT turn has none either -- the API takes image and document content on user turns only.',
+        messageIndex,
+        partIndex,
+        part,
+      );
     }
     flush();
   }
 
+  probe?.finish('openai', messages.length, out);
   return out;
 }
 
@@ -584,6 +783,12 @@ export function toAnthropicMessages(
   const media = resolveMediaPolicy({ accept: options.accept });
   const out: AnthropicWireMessage[] = [];
 
+  // Gated before anything is allocated, exactly as in `toOpenAIMessages`.
+  const probe = wireDiagnosticsActive() ? createEncodeProbe(options) : undefined;
+  if (probe) {
+    for (const message of messages) for (const part of message.parts) probe.seen(part.type);
+  }
+
   /** Append to the trailing user message when there is one, so the wire never
    *  carries two user turns in a row. */
   const pushUser = (content: AnthropicContentBlock[]): void => {
@@ -592,19 +797,47 @@ export function toAnthropicMessages(
     else out.push({ role: 'user', content });
   };
 
+  let messageIndex = -1;
   for (const message of messages) {
+    messageIndex++;
     if (message.role === 'user') {
       // Part order, for the same reason as `toOpenAIMessages`.
       const userBlocks: AnthropicContentBlock[] = [];
       // lint-silent-drops: drops reasoning,tool,card,source -- a USER turn carries authored content only; reasoning and tool parts are assistant-side, cards and sources are kit-side UI with no Anthropic wire form.
       message.parts.forEach((part, partIndex) => {
         if (part.type === 'text') {
-          if (part.text !== '') userBlocks.push({ type: 'text', text: part.text });
+          if (part.text !== '') {
+            userBlocks.push({ type: 'text', text: part.text });
+            probe?.encoded('text');
+          }
           return;
         }
-        if (part.type !== 'file') return;
-        const block = encodeFilePart(part, message.id, partIndex, filePolicy, media, anthropicFileBlock);
-        if (block) userBlocks.push(block);
+        if (part.type !== 'file') {
+          // The drop this callback's waiver declares, reported. `part.type` is
+          // read off a part the branch already discriminated.
+          probe?.dropped(
+            part.type,
+            'a USER turn carries authored content only: reasoning and tool parts are assistant-side, and cards and sources are kit-side UI with no Anthropic wire form.',
+            messageIndex,
+            partIndex,
+            part,
+          );
+          return;
+        }
+        const block = encodeFilePart(
+          part,
+          message.id,
+          partIndex,
+          filePolicy,
+          media,
+          anthropicFileBlock,
+          probe,
+          messageIndex,
+        );
+        if (block) {
+          userBlocks.push(block);
+          probe?.encoded('file');
+        }
       });
       if (userBlocks.length > 0) pushUser(userBlocks);
       continue;
@@ -645,6 +878,7 @@ export function toAnthropicMessages(
           // result, so the result has to be on the wire before it is.
           if (results.length > 0) flush();
           blocks.push(part.raw.payload as AnthropicContentBlock);
+          probe?.encoded('reasoning');
           break;
         }
         case 'text': {
@@ -652,11 +886,22 @@ export function toAnthropicMessages(
           // Text after a call is the model's answer to it. Same reason.
           if (results.length > 0) flush();
           blocks.push({ type: 'text', text: part.text });
+          probe?.encoded('text');
           break;
         }
         case 'tool': {
           const tool = part.tool;
-          if (!isSettled(tool)) break;
+          if (!isSettled(tool)) {
+            probe?.dropped(
+              'tool',
+              'the call has no result yet (or no provider tool call id). Both APIs require every echoed tool call to have exactly one matching result, so a half-formed one is left off rather than sent.',
+              messageIndex,
+              partIndex,
+              part,
+            );
+            break;
+          }
+          probe?.encoded('tool');
           blocks.push({
             type: 'tool_use',
             id: tool.toolCallId,
@@ -683,6 +928,13 @@ export function toAnthropicMessages(
           // card and source are kit-side. A `file` part reaches this arm only on
           // an ASSISTANT turn, where the API accepts no image or document
           // content at all -- user attachments are handled in the user branch.
+          probe?.dropped(
+            part.type,
+            'cards and sources are kit-side UI, and a `file` part on an ASSISTANT turn has no Anthropic representation -- the API takes image and document content on user turns only.',
+            messageIndex,
+            partIndex,
+            part,
+          );
           break;
       }
     });
@@ -690,5 +942,6 @@ export function toAnthropicMessages(
     flush();
   }
 
+  probe?.finish('anthropic', messages.length, out);
   return out;
 }

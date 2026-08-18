@@ -21,7 +21,14 @@ import type {
 } from './chunk';
 import { openaiChatFormat } from './formats/openai';
 import { anthropicMessagesFormat } from './formats/anthropic';
-import { emitWireDiagnostic, nextStreamId, wireDiagnosticsActive } from './diagnostics';
+import {
+  emitWireDiagnostic,
+  nextStreamId,
+  wireCorrelation,
+  wireDiagnosticsActive,
+  withPayload,
+  type WireCorrelation,
+} from './diagnostics';
 
 /** Byte length, not `String.length`: a multibyte frame is bigger than its
  *  character count and the number is meant to be comparable with what the socket
@@ -45,6 +52,53 @@ function sourceKind(source: StreamSource): 'response' | 'stream' | 'iterable' {
   return typeof (source as ReadableStream<Uint8Array>).getReader === 'function'
     ? 'stream'
     : 'iterable';
+}
+
+/**
+ * The connection identity fields of `wire.open`, for a `Response` source.
+ *
+ * ORIGIN AND PATHNAME ONLY. The query string is dropped here and is reported
+ * nowhere, under no switch: `?api_key=sk-...` is a credential rather than
+ * conversation content, so it is not the payload key's business either. What a
+ * reader actually needs from it is one bit -- was there one -- and that is
+ * `hasQuery`.
+ *
+ * EVERY FIELD IS OMITTED RATHER THAN GUESSED. A `Response` constructed in a test
+ * or handed back by a service worker carries `url: ''`, and an empty string
+ * would read as "served from the origin root". Same for a missing content-type:
+ * absent means "the response did not say", which is a different fact from
+ * "it said nothing", and only one of them is true.
+ *
+ * Only ever called from inside an active-diagnostics branch.
+ */
+function connectionOf(res: Response): {
+  url?: string;
+  hasQuery?: boolean;
+  status?: number;
+  contentType?: string;
+} {
+  const out: { url?: string; hasQuery?: boolean; status?: number; contentType?: string } = {};
+
+  if (typeof res.status === 'number') out.status = res.status;
+
+  // `headers` is duck-typed like the rest of this file: a Response-shaped object
+  // from a runtime we have not met may not carry a full Headers implementation.
+  const contentType = res.headers?.get?.('content-type');
+  if (typeof contentType === 'string' && contentType !== '') out.contentType = contentType;
+
+  const raw = typeof res.url === 'string' ? res.url : '';
+  if (raw !== '') {
+    try {
+      const parsed = new URL(raw);
+      out.url = `${parsed.origin}${parsed.pathname}`;
+      out.hasQuery = parsed.search !== '';
+    } catch {
+      // A relative or malformed URL. Reporting the raw string would leak the
+      // very query string this function exists to strip, so it is dropped whole.
+    }
+  }
+
+  return out;
 }
 
 export type StreamSource =
@@ -119,6 +173,20 @@ function buildMessage(status: number, statusText: string, bodyText: string, body
   return snippet ? `${head}: ${snippet}` : head;
 }
 
+/**
+ * The `name` of whatever was thrown, when there is one to read.
+ *
+ * Duck-typed rather than `instanceof Error`: a `DOMException` from a fetch
+ * abort, an error from another realm, and a host object that merely looks like
+ * an error all carry a usable `name`, and only the first of those is an `Error`
+ * in this realm. A bare string or number carries none, and that is reported as
+ * ABSENT -- filling in `'Error'` would invent a class the throw never claimed.
+ */
+function errorNameOf(err: unknown): string | undefined {
+  const name = (err as { name?: unknown } | null | undefined)?.name;
+  return typeof name === 'string' && name !== '' ? name : undefined;
+}
+
 /** Duck-typed, because `Response` may not be a global in every runtime the kit
  *  is imported into. A ReadableStream has no `ok`, and an async iterable that
  *  happens to have all three of these is not a shape any transport produces. */
@@ -145,7 +213,7 @@ async function wireErrorFrom(res: Response): Promise<WireError> {
 
 async function toByteSource(
   source: StreamSource,
-  ctx?: { streamId?: string },
+  correlation?: WireCorrelation,
 ): Promise<ByteSource> {
   if (!isResponse(source)) return source;
   if (!source.ok) {
@@ -154,7 +222,7 @@ async function toByteSource(
       emitWireDiagnostic({
         type: 'wire.failed',
         t: Date.now(),
-        streamId: ctx?.streamId,
+        ...correlation,
         status: err.status,
         statusText: err.statusText,
         bodyBytes: byteLength(err.bodyText),
@@ -165,6 +233,14 @@ async function toByteSource(
         ...(providerErrorCode(err.body) !== undefined
           ? { providerCode: providerErrorCode(err.body) }
           : {}),
+        // The message is the field that echoes request content back, which is
+        // precisely why it is here and not beside `providerCode`.
+        ...withPayload(() => ({
+          bodyText: err.bodyText,
+          ...(providerMessage(err.body) !== undefined
+            ? { message: providerMessage(err.body) }
+            : {}),
+        })),
       });
     }
     throw err;
@@ -186,14 +262,19 @@ export async function readModelStream(
   // FIRST, before the source is even resolved: a failure inside `toByteSource`
   // still needs an id to report itself under.
   const streamId = opts.streamId ?? nextStreamId();
-  const bytes = await toByteSource(source, { streamId });
+  // Built once and spread onto every event this read emits, `wire.failed`
+  // included -- a read that dies before its first frame still belongs to the
+  // app's trace, and that is exactly the read someone is looking for.
+  const correlation = wireCorrelation(streamId, opts);
+  const bytes = await toByteSource(source, correlation);
   if (wireDiagnosticsActive()) {
     emitWireDiagnostic({
       type: 'wire.open',
       t: Date.now(),
-      streamId,
+      ...correlation,
       format: opts.format.id,
       source: sourceKind(source),
+      ...(isResponse(source) ? connectionOf(source) : {}),
     });
   }
   // Opened ONCE per stream, which is the whole point of the open()/push() shape:
@@ -201,6 +282,10 @@ export async function readModelStream(
   const reader = opts.format.open();
 
   let frames = 0;
+  // Chunks YIELDED by this generator, counted here rather than read back off
+  // `consumeModelStream`: when the read dies, that function is mid-throw and
+  // has nothing to hand back.
+  let yielded = 0;
   // The raw payload of the frame currently being handed over. `onRawFrame` fires
   // immediately before `sseJson` yields, so this is always the frame the next
   // loop iteration is about to push.
@@ -231,26 +316,64 @@ export async function readModelStream(
         emitWireDiagnostic({
           type: 'wire.frame',
           t: Date.now(),
-          streamId,
+          ...correlation,
           seq: frames,
           bytes: byteLength(rawFrame),
           chunks: produced.length,
           fields: [...fields],
           ...(model ? { model } : {}),
+          ...withPayload(() => ({ raw: rawFrame })),
         });
       }
-      for (const chunk of produced) yield chunk;
+      for (const chunk of produced) {
+        yielded++;
+        yield chunk;
+      }
     }
   }
   // `_frames` is INTERNAL and deliberately not on `ConsumeOptions`: it is read
   // once, at the close event, and a public option would invite a caller to
   // supply one. A direct `consumeModelStream` caller passes nothing and its
   // `wire.close` correctly omits `frames` -- there were none.
-  return consumeModelStream(chunks(), sink, {
-    ...opts,
-    streamId,
-    _frames: () => frames,
-  } as ConsumeOptions);
+  //
+  // OBSERVE AND RETHROW. `wire.close` is emitted inside `consumeModelStream`, so
+  // a read that throws before reaching it ended with no terminal event at all --
+  // a stream a panel showed open forever. This is the terminal event for that
+  // case, and it is the ONLY thing this wrapper does: the error is not caught,
+  // not wrapped, not delayed and not swallowed. `return await` rather than a
+  // bare `return` is what puts the rejection inside this try at all.
+  //
+  // It covers a throw from anywhere under the read -- the byte source dying, the
+  // format reader, the host's own sink -- because from the outside all of them
+  // are the same fact: this read stopped and produced no turn.
+  try {
+    return await consumeModelStream(chunks(), sink, {
+      ...opts,
+      streamId,
+      _frames: () => frames,
+    } as ConsumeOptions);
+  } catch (err) {
+    if (wireDiagnosticsActive()) {
+      const name = errorNameOf(err);
+      emitWireDiagnostic({
+        type: 'wire.interrupted',
+        t: Date.now(),
+        ...correlation,
+        frames,
+        chunks: yielded,
+        // Only a self-identifying abort is called one. Guessing would turn "the
+        // provider dropped the connection" into "your user navigated away", and
+        // those two have opposite fixes.
+        reason: name === 'AbortError' ? 'abort' : 'error',
+        ...(name !== undefined ? { errorName: name } : {}),
+        ...withPayload(() => {
+          const message = (err as { message?: unknown } | null | undefined)?.message;
+          return typeof message === 'string' ? { message } : {};
+        }),
+      });
+    }
+    throw err;
+  }
 }
 
 /** OpenAI chat-completions SSE. Also what all nine catalog integrations except

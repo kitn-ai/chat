@@ -60,11 +60,15 @@ export type { ByteSource } from './sse';
 // stream counter can make a panel lie about a stream that never happened.
 export { subscribeWireDiagnostics } from './diagnostics';
 export type {
+  EncodeAttachmentReport,
+  EncodeDroppedEvent,
+  EncodeRequestEvent,
   WireCloseEvent,
   WireDiagnosticBase,
   WireDiagnosticEvent,
   WireFailedEvent,
   WireFrameEvent,
+  WireInterruptedEvent,
   WireOpenEvent,
   WirePartEvent,
 } from './diagnostics';

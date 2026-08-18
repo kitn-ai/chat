@@ -179,6 +179,55 @@ step('stream ids minted by two module instances do not collide');
   }
 }
 
+// ── Check 5: the WRITE path, in the shipped bundle ───────────────────────────
+//
+// Same class as check 1, different half. The encode events are emitted from a
+// pure function with no stream behind it, so a bundler that decided the emitter
+// was unreachable from that path would take them out on their own while the
+// read events kept arriving -- a green check 1 over a silent write path.
+//
+// BEFORE check 4, deliberately: that one installs DOM globals.
+step('an encode through ./wire reaches a ./diagnostics subscriber, metadata only');
+{
+  const diagnostics = await import(diagUrl);
+  const wire = await import(wireUrl);
+
+  const seen = [];
+  const off = diagnostics.subscribeWireDiagnostics((e) => seen.push(e));
+  wire.toOpenAIMessages([
+    {
+      id: 'a1',
+      role: 'assistant',
+      parts: [
+        { type: 'text', text: 'GUARD-SENTINEL-message-text' },
+        { type: 'card', envelope: { type: 'weather', data: {} } },
+      ],
+    },
+  ]);
+  if (typeof off === 'function') off();
+
+  const types = seen.map((e) => e.type);
+  for (const type of ['encode.request', 'encode.dropped']) {
+    if (!types.includes(type)) {
+      fail(
+        `Expected a ${type} event from an encode performed through dist/wire.js; got ` +
+          `[${types.join(', ') || 'nothing at all'}]. The write path is instrumented in source; ` +
+          'if it emits nothing here, the emitter was dropped from the shipped bundle and every ' +
+          'consumer gets a panel that can never say what was sent.',
+      );
+    }
+  }
+
+  // The boundary, asserted against the SHIPPED code rather than the source: with
+  // no payload signal set, nothing content-bearing may appear anywhere.
+  if (JSON.stringify(seen).includes('GUARD-SENTINEL-message-text')) {
+    fail(
+      'An encode event carried the message text with no payload signal set. The default ' +
+        'stream is metadata, and the shipped bundle is what a production site runs.',
+    );
+  }
+}
+
 // ── Check 4: the chain the panel actually failed on ──────────────────────────
 //
 // LAST, because it installs DOM globals that the checks above should not see.
