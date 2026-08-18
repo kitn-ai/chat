@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { BUILTIN_CARD_TAGS, cardSchemas, cardSchemaNames, cardTools } from '@kitn.ai/ui/schemas';
 import type { AnthropicToolDef, JsonSchemaToolDef, OpenAIToolDef } from '@kitn.ai/ui/schemas';
 import { reference, coverageSummary } from './tools/reference';
-import { cardTagForType, cardHostTags } from './manifest';
+import { cardTagForType, cardHostTags, entryForTag, listElements } from './manifest';
 import { invariants } from '../catalog/invariants';
 import { surfaceRecipes } from '../catalog/surfaces';
 import type { TInvariant } from '../catalog/catalog-types';
@@ -76,6 +76,26 @@ describe('component_reference', () => {
     const text = (out.content as { type: string; text: string }[])[0].text;
     expect(text).toMatch(/@kitn\.ai\/ui\/elements\/conversation-list/);
     expect(text).not.toMatch(/@kitn\.ai\/ui\/elements\/conversations'/);
+  });
+
+  it('does not claim register-all for an element register-all does not cover', async () => {
+    // Derived, not hard-coded: entryForTag is undefined for exactly the tags
+    // register-impl.ts does not import — currently one, kai-remote, the deliberate
+    // opt-in exception documented at element-diagnostics.ts:347-363. Finding it by
+    // walking the manifest (instead of writing 'kai-remote' or '79'/'80' here) means
+    // a second such element is covered by this test the day it exists.
+    const optedOut = listElements().filter((t) => entryForTag(t) === undefined);
+    expect(optedOut.length).toBeGreaterThan(0);
+    const tag = optedOut[0];
+
+    const out = await reference.handler({ name: tag });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+
+    expect(text).toMatch(/### Getting the element/);
+    // the false claim this exists to catch: register-all does NOT register this tag
+    expect(text).not.toMatch(/import '@kitn\.ai\/ui\/elements';\n/);
+    // it must still decide loudly rather than staying quiet about the exception
+    expect(text).toMatch(/not part of|opt-in|does not register|is not registered/i);
   });
 
   it('lists all element tagNames when name is omitted', async () => {

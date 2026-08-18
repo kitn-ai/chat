@@ -562,19 +562,38 @@ function formatReference(tag: string, provider: ToolProvider): string {
   // who has the invariants and not this line is steered to the wrong diagnosis.
   const entry = entryForTag(tag);
   const iface = el.name;
-  lines.push(
-    '',
-    '### Getting the element',
-    'Register it before you use it. If you skip this the element never upgrades: ' +
-      'nothing renders, **no error and no warning is logged**, a property you set ' +
-      'assigns and reads back correctly, and ' +
-      `\`customElements.whenDefined('${tag}')\` never resolves.`,
-    '',
-    '```ts',
-    "import '@kitn.ai/ui/elements';",
-    ...(entry ? [`import '@kitn.ai/ui/elements/${entry}'; // or just this one`] : []),
-    '```',
-  );
+  const neverUpgrades =
+    'If you skip registering it the element never upgrades: nothing renders, ' +
+    '**no error and no warning is logged**, a property you set assigns and reads ' +
+    `back correctly, and \`customElements.whenDefined('${tag}')\` never resolves.`;
+  lines.push('', '### Getting the element');
+  if (entry) {
+    lines.push(
+      `Register it before you use it. ${neverUpgrades}`,
+      '',
+      '```ts',
+      "import '@kitn.ai/ui/elements';",
+      `import '@kitn.ai/ui/elements/${entry}'; // or just this one`,
+      '```',
+    );
+  } else {
+    // entryForTag is undefined exactly when register-impl.ts does not import this
+    // element's source file — i.e. it is NOT in the register-all bundle. The only
+    // current instance is kai-remote, a deliberate exception (opt-in cross-origin
+    // iframe card) documented at src/elements/element-diagnostics.ts:347-363 and
+    // vite.config.elements.ts:44-50. `import '@kitn.ai/ui/elements'` would NOT
+    // register a tag in this state, so asserting it here is exactly the false
+    // claim this section exists to prevent — and the manifest that would tell us
+    // this tag's real per-element specifier deliberately excludes it too, so
+    // guessing one (e.g. by stripping `kai-`) risks the same wrong-import bug
+    // this tool exists to catch. Say so honestly instead of guessing.
+    lines.push(
+      `**\`${tag}\` is opt-in — it is not part of \`import '@kitn.ai/ui/elements'\` ` +
+        "(register-all), and that import alone will NOT register it.** Find its " +
+        `specific \`@kitn.ai/ui/elements/<name>\` entry point in the package's published ` +
+        `exports before using it. ${neverUpgrades}`,
+    );
+  }
   if (iface) {
     lines.push(
       '',
