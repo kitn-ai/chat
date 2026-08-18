@@ -13,6 +13,7 @@ import {
   Attachments,
   Attachment,
   AttachmentPreview,
+  AttachmentInfo,
   AttachmentHoverCard,
   AttachmentHoverCardTrigger,
   AttachmentHoverCardContent,
@@ -499,10 +500,13 @@ function MessageBody(props: MessageBodyProps) {
                    keeps a thread readable, and it is the whole reason the
                    thread is not the composer's chip strip.
 
-                   The cost of `grid` is that a tile draws no filename, so the
-                   hover card comes with it — that is the affordance the tile
-                   omits, and `<AttachmentPreview>` also emits an `sr-only`
-                   label under `grid` so the name is not hover-only for AT. */
+                   A grid tile draws no filename of its own, and hiding one
+                   behind the hover card is not good enough: that serves a
+                   pointer and nothing else. So `<AttachmentInfo>` renders a
+                   VISIBLE truncated caption on every non-image tile — no hover,
+                   no focus, no tap required — and the hover card is an upgrade
+                   to the full name and media type rather than the only way to
+                   get either. */
                 <Attachments variant="grid" class={props.isUser ? 'mb-2 ml-auto' : 'mb-2'}>
                   {/* Reference-keyed <For> is right HERE: the run's part objects
                       are carried over untouched by the folds, and an attachment
@@ -513,6 +517,7 @@ function MessageBody(props: MessageBodyProps) {
                         <AttachmentHoverCard>
                           <AttachmentHoverCardTrigger class="block size-full">
                             <AttachmentPreview />
+                            <AttachmentInfo />
                           </AttachmentHoverCardTrigger>
                           <AttachmentHoverCardContent>
                             {/* An image gets the full preview; everything else

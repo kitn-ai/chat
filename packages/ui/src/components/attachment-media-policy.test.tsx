@@ -29,7 +29,7 @@
  * and re-introducing a prefix switch here turns it red (a prefix switch calls
  * `application/json` a document; the policy calls it text).
  */
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { render, cleanup } from '@solidjs/testing-library';
 import {
@@ -100,13 +100,61 @@ describe('getMediaCategory', () => {
     }
   });
 
-  it('reports a type no shipped wire can carry as unsendable', () => {
-    // Named at the declaration in media-types.ts: "SVG and BMP are the ones
-    // people actually try, and both are a 400 at request time".
-    for (const mediaType of ['image/svg+xml', 'image/bmp', 'video/mp4', 'audio/mpeg', 'application/zip']) {
-      expect(DEFAULT_MEDIA_POLICY.decide(mediaType).status, mediaType).toBe('unsupported');
-      expect(getMediaCategory(file(mediaType)), mediaType).toBe('unsendable');
+  /**
+   * ★ THE UNSENDABLE SIDE, AS A PROPERTY RATHER THAN A LIST.
+   *
+   * The complement of the encodable set is infinite, so there is nothing in
+   * `media-types.ts` to enumerate and no list to derive. What CAN be derived is
+   * the biconditional — `unsendable` if and only if the policy says
+   * `unsupported` — and a corpus wide enough that a renderer special-case has
+   * nowhere to hide. An earlier version of this test hand-typed five types, so a
+   * special case for a sixth (`application/x-tar`, say) sailed past it.
+   *
+   * The corpus is built three ways, only the last of which is typed out:
+   *   1. every declared capability (must be sendable),
+   *   2. a NEAR MISS derived from each declared pattern — a sibling subtype the
+   *      pattern does not cover — which is what catches a type nobody thought
+   *      to name, and which grows on its own when a capability is added,
+   *   3. the handful of real-world types worth naming, because `media-types.ts`
+   *      calls SVG and BMP out at `:76-77` as the ones people actually try.
+   */
+  it('is unsendable exactly when no shipped wire can carry it', () => {
+    /** A sibling of `pattern` that it must NOT match — one probe per declared
+     *  capability, so registering a capability registers its probe too.
+     *  `application/pdf` -> `application/x-not-pdf`. A `*` subtype has to move
+     *  top-level type instead, since `text/*` covers every subtype by
+     *  construction and no sibling of it exists. */
+    const nearMiss = (pattern: string): string => {
+      const [type, sub] = pattern.split('/');
+      return sub === '*' ? `x-not-${type}/plain` : `${type}/x-not-${sub}`;
+    };
+
+    const corpus = [
+      ...encodableMediaTypes().map(sampleOf),
+      ...encodableMediaTypes().map(nearMiss),
+      'image/svg+xml',
+      'image/bmp',
+      'video/mp4',
+      'audio/mpeg',
+      'application/zip',
+      'application/x-tar',
+    ];
+
+    let unsendableSeen = 0;
+    for (const mediaType of corpus) {
+      const noWireCanCarryIt = DEFAULT_MEDIA_POLICY.decide(mediaType).status === 'unsupported';
+      if (noWireCanCarryIt) unsendableSeen += 1;
+      expect(getMediaCategory(file(mediaType)) === 'unsendable', mediaType).toBe(noWireCanCarryIt);
     }
+    // Both sides of the biconditional have to be exercised or it passes
+    // vacuously: a corpus of only-sendable types would prove nothing.
+    expect(unsendableSeen).toBeGreaterThan(0);
+    expect(unsendableSeen).toBeLessThan(corpus.length);
+
+    // The two the module names explicitly, asserted head-on so the corpus can
+    // never drift away from the documented intent.
+    expect(getMediaCategory(file('image/svg+xml'))).toBe('unsendable');
+    expect(getMediaCategory(file('image/bmp'))).toBe('unsendable');
   });
 
   it('leaves a file nobody could name as unknown rather than claiming it is unsendable', () => {
@@ -207,7 +255,71 @@ describe('the thread previews attachments at a size a human can see', () => {
     expect(container.querySelector('.size-24')).toBeInTheDocument();
   });
 
-  it('still reaches the filename and media type for a non-image attachment', () => {
+  /**
+   * ★ NO INTERACTION MAY BE REQUIRED TO READ A FILENAME.
+   *
+   * The first cut of this change moved the thread to the 96px grid tile and put
+   * the filename in the hover card plus an `sr-only` label. That serves a mouse
+   * user and a screen-reader user and NOBODY ELSE: a sighted keyboard-only user
+   * and a touch user both get a blank grey square. Measured in a real browser it
+   * was `visibleText: ""` on every non-image tile, with zero focusable elements
+   * inside any of them.
+   *
+   * An image tile is self-describing — the image IS the content. A PDF, a zip
+   * and a text file are not, so they carry a visible truncated filename and the
+   * hover card is upgraded to the full name and media type rather than being the
+   * only way to get either.
+   */
+  const visibleText = (el: Element): string => {
+    // jsdom applies no CSS, so `sr-only` text is in `textContent` like any
+    // other. Strip it to measure what a sighted user can actually read.
+    const clone = el.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll('.sr-only').forEach((n) => n.remove());
+    return (clone.textContent ?? '').trim();
+  };
+
+  it('shows a non-image attachment filename without any hover, focus or tap', () => {
+    const nonImages: AttachmentData[] = [
+      file('application/pdf', { url: 'https://example.com/spec.pdf', filename: 'spec.pdf' }),
+      file('text/markdown', { url: TINY_GIF, filename: 'notes.md' }),
+      file('application/zip', { url: TINY_GIF, filename: 'archive.zip' }),
+      file(undefined, { url: TINY_GIF, filename: 'main.rs' }),
+    ];
+
+    for (const attachment of nonImages) {
+      const { container, unmount } = render(() => (
+        <MessageBody parts={[filePart(attachment)]} isUser markdown={false} />
+      ));
+      const tile = container.querySelector('.group') as HTMLElement;
+      expect(tile, attachment.filename).toBeTruthy();
+      expect(visibleText(tile), attachment.filename).toContain(attachment.filename!);
+      unmount();
+    }
+  });
+
+  it('leaves an image tile to speak for itself', () => {
+    // Not a caption on everything — the tile IS the image, and stamping a
+    // filename across it would be noise where the content is already the label.
+    const { container } = render(() => (
+      <MessageBody
+        parts={[filePart(file('image/png', { url: TINY_GIF, filename: 'shot.png' }))]}
+        isUser
+        markdown={false}
+      />
+    ));
+    const tile = container.querySelector('.group') as HTMLElement;
+    expect(container.querySelector('img')).toBeInTheDocument();
+    expect(visibleText(tile)).toBe('');
+  });
+
+  /**
+   * The two halves, tied together. The caption is the identity and needs no
+   * interaction; the media type is a DETAIL and lives in the hover card — which
+   * is only an acceptable place for it because the card is now reachable by
+   * keyboard as well as by pointer. Before this change the tile contained no
+   * focusable element at all, so this test could not have been written.
+   */
+  it('opens the full name and media type from the KEYBOARD, not just on hover', () => {
     const { container } = render(() => (
       <MessageBody
         parts={[filePart(file('application/pdf', { url: 'https://example.com/spec.pdf', filename: 'spec.pdf' }))]}
@@ -215,8 +327,23 @@ describe('the thread previews attachments at a size a human can see', () => {
         markdown={false}
       />
     ));
+
+    // Visible without touching anything.
     expect(container.textContent).toContain('spec.pdf');
-    expect(container.textContent).toContain('application/pdf');
+
+    const trigger = container.querySelector('[tabindex="0"]') as HTMLElement;
+    expect(trigger, 'the tile must be a tab stop').toBeTruthy();
+
+    vi.useFakeTimers();
+    try {
+      trigger.focus();
+      expect(document.activeElement).toBe(trigger);
+      vi.advanceTimersByTime(50);
+      // The card portals out of `container`, so look at the document.
+      expect(document.body.textContent).toContain('application/pdf');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('marks an unsendable attachment in the thread too', () => {

@@ -288,23 +288,7 @@ function AttachmentPreview(props: AttachmentPreviewProps) {
     }
 
     const Icon = mediaCategoryIcons[ctx.mediaCategory];
-    return (
-      <>
-        {local.fallbackIcon ?? renderIcon(Icon)}
-        {/* A grid tile draws no `<AttachmentInfo>` — it is a self-contained
-            visual — so an icon-only tile was previously an unlabelled box to
-            everything except a sighted mouse user with a hover card. The image
-            branch above has always had `alt`; this is the same courtesy for the
-            branch that does not. Only for `grid`: the other variants render the
-            label visibly and would announce it twice. */}
-        <Show when={ctx.variant === 'grid'}>
-          <span class="sr-only">
-            {getAttachmentLabel(ctx.data)}
-            {ctx.data.mediaType ? ` (${ctx.data.mediaType})` : ''}
-          </span>
-        </Show>
-      </>
-    );
+    return local.fallbackIcon ?? renderIcon(Icon);
   };
 
   return (
@@ -337,7 +321,46 @@ function AttachmentInfo(props: AttachmentInfoProps) {
   const label = () => getAttachmentLabel(ctx.data);
 
   return (
-    <Show when={ctx.variant !== 'grid'}>
+    <Show
+      when={ctx.variant !== 'grid'}
+      fallback={
+        /*
+         * ★ A GRID TILE IS SELF-DESCRIBING ONLY WHEN IT IS AN IMAGE.
+         *
+         * A tile used to render no label at all, on the theory that it is "a
+         * self-contained visual". True of a photo; false of a PDF, a zip or a
+         * text file, which draw a 16px glyph on a grey square and are otherwise
+         * anonymous. The name was reachable by hover (pointer only) and by an
+         * `sr-only` line (assistive tech only), which between them serve
+         * everyone EXCEPT a sighted keyboard user and a sighted touch user —
+         * measured in a real browser as `visibleText: ""` on every non-image
+         * tile, with no focusable element inside any of them.
+         *
+         * So a non-image tile carries a visible, truncated caption and needs no
+         * interaction of any kind. An image tile still carries none: the image
+         * is the content, and stamping a filename over it is noise. That is
+         * also why the `sr-only` label was REMOVED from `<AttachmentPreview>`
+         * rather than kept alongside this — an image has `alt`, everything else
+         * now has this, and keeping both would announce the name twice.
+         */
+        <Show when={ctx.mediaCategory !== 'image'}>
+          {/* A `div`, not a `span` — `AttachmentInfoProps` extends
+              `JSX.HTMLAttributes<HTMLDivElement>`, so `rest` carries a
+              div-typed `ref` and the other branch below is a div too. */}
+          <div
+            class={cn(
+              'absolute inset-x-0 bottom-0 truncate px-1.5 py-1 text-caption',
+              'bg-background/85 backdrop-blur-sm',
+              ctx.mediaCategory === 'unsendable' ? 'text-warning' : 'text-foreground',
+              local.class,
+            )}
+            {...rest}
+          >
+            {label()}
+          </div>
+        </Show>
+      }
+    >
       <div class={cn('min-w-0 flex-1', local.class)} {...rest}>
         <span class="block truncate">{label()}</span>
         {/* The media-type subtitle is a two-line affordance — only the `list`
