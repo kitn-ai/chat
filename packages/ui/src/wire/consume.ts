@@ -565,9 +565,21 @@ export async function consumeModelStream(
       ms: Date.now() - startedAt,
       // The assembled turn: everything the sink was driven with, in one place,
       // which is what a panel renders when someone asks "what did it actually
-      // say". `error.message` is deliberately NOT here -- it is on
-      // `ModelTurn.error`, and `errorCode` beside this is the metadata half.
-      ...withPayload(() => ({ text, reasoning, toolCalls, sources })),
+      // say" -- plus the in-band error's own message.
+      //
+      // ALL THREE TERMINAL EVENTS TREAT PROVIDER MESSAGE TEXT IDENTICALLY:
+      // `wire.close`, `wire.failed` and `wire.interrupted` each keep it out of
+      // the metadata (where only `errorCode` travels, because a message can
+      // echo request content back) and each publish it under `payload`, which
+      // is the switch that accepts exactly that. A developer who armed payload
+      // is most often chasing the in-band error that explains an empty turn.
+      ...withPayload(() => ({
+        text,
+        reasoning,
+        toolCalls,
+        sources,
+        ...(error?.message !== undefined ? { message: error.message } : {}),
+      })),
     });
   }
 
