@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { readOpenAIStream } from './read';
 import { consumeModelStream } from './consume';
 import { toOpenAIMessages } from './encode';
-import { subscribeWireDiagnostics, type WireDiagnosticEvent } from './diagnostics';
+import { subscribeWireDiagnostics, type KaiDiagnosticEvent, type WireDiagnosticEvent } from './diagnostics';
 
 const nullSink = () =>
   ({
@@ -36,7 +36,7 @@ afterEach(() => {
 
 describe('trace correlation', () => {
   it('two reads sharing a traceId with different labels carry both to EVERY event type', async () => {
-    const events: WireDiagnosticEvent[] = [];
+    const events: KaiDiagnosticEvent[] = [];
     off = subscribeWireDiagnostics((e) => events.push(e));
 
     await readOpenAIStream(new Response(BODY), nullSink(), {
@@ -69,7 +69,7 @@ describe('trace correlation', () => {
   });
 
   it('wire.failed carries them too -- it fires before a single frame is read', async () => {
-    const events: WireDiagnosticEvent[] = [];
+    const events: KaiDiagnosticEvent[] = [];
     off = subscribeWireDiagnostics((e) => events.push(e));
     await expect(
       readOpenAIStream(new Response('{"error":{"code":"nope"}}', { status: 401 }), nullSink(), {
@@ -83,7 +83,7 @@ describe('trace correlation', () => {
   });
 
   it('consumeModelStream takes them directly, the same way it takes streamId', async () => {
-    const events: WireDiagnosticEvent[] = [];
+    const events: KaiDiagnosticEvent[] = [];
     off = subscribeWireDiagnostics((e) => events.push(e));
     async function* chunks() {
       yield { text: 'hi' };
@@ -101,7 +101,7 @@ describe('trace correlation', () => {
     // Encoding happens BEFORE a read opens, so there is no streamId to attach an
     // encode to and the kit will not invent one. The app's own id is the link,
     // and the two options bags spell it the same way on purpose.
-    const events: WireDiagnosticEvent[] = [];
+    const events: KaiDiagnosticEvent[] = [];
     off = subscribeWireDiagnostics((e) => events.push(e));
 
     toOpenAIMessages([{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }], {
@@ -127,7 +127,7 @@ describe('trace correlation', () => {
   });
 
   it('an encode with no traceId carries NO correlation key at all', () => {
-    const events: WireDiagnosticEvent[] = [];
+    const events: KaiDiagnosticEvent[] = [];
     off = subscribeWireDiagnostics((e) => events.push(e));
     toOpenAIMessages([
       {
@@ -148,7 +148,7 @@ describe('trace correlation', () => {
   });
 
   it('with neither supplied the KEYS ARE ABSENT -- not present-and-undefined', async () => {
-    const events: WireDiagnosticEvent[] = [];
+    const events: KaiDiagnosticEvent[] = [];
     off = subscribeWireDiagnostics((e) => events.push(e));
     await readOpenAIStream(new Response(BODY), nullSink());
     expect(events.length).toBeGreaterThan(0);

@@ -240,4 +240,34 @@ describe('classifyAttributeValue — a closed vocabulary of SHAPES', () => {
   it('flags a bare attribute, which component-register parses to undefined', () => {
     expect(classifyAttributeValue('')).toBe('empty-attribute');
   });
+
+  it('is content-free over hostile inputs, including a PARTIAL leak', () => {
+    // The END-TO-END boundary lives in ONE place — `wire/payload-boundary.test.ts`,
+    // which sweeps both layers with sentinels because a panel receives both on
+    // one stream. This case is the half that sweep cannot reach: the classifier
+    // called directly, with the shapes most likely to smuggle something through
+    // — an object KEY that looks like a marker, an array of them, and JSON whose
+    // VALUES are sentinels.
+    //
+    // The token is SHORT on purpose. A truncation is the most likely way this
+    // ever breaks (it is the obvious "safe" alternative to a length), and a long
+    // sentinel is cut through the middle by one, leaving `toContain` green over
+    // a real leak. Six characters trips any truncation that keeps six.
+    const LEAK = 'zQ7leak';
+    const hostile = [
+      `${LEAK}-plain-text`,
+      `[object Object],${LEAK}-appended`,
+      JSON.stringify({ [`${LEAK}-key`]: `${LEAK}-value` }),
+      JSON.stringify([`${LEAK}-a`, `${LEAK}-b`]),
+      JSON.stringify(`${LEAK}-json-string`),
+      `{"broken": "${LEAK}-unterminated"`,
+      `${LEAK}-`.repeat(40),
+      '',
+    ];
+
+    const previews = hostile.map((h) => classifyAttributeValue(h));
+    // Non-vacuity: something really was classified.
+    expect(previews.filter((p) => p !== undefined).length).toBeGreaterThan(0);
+    expect(JSON.stringify(previews)).not.toContain(LEAK);
+  });
 });

@@ -11,7 +11,7 @@
 // can answer "is the context that goes to the model the context I think it is".
 import { afterEach, describe, expect, it } from 'vitest';
 import { toAnthropicMessages, toOpenAIMessages } from './encode';
-import { subscribeWireDiagnostics, type WireDiagnosticEvent } from './diagnostics';
+import { subscribeWireDiagnostics, type KaiDiagnosticEvent, type WireDiagnosticEvent } from './diagnostics';
 import type { AttachmentData } from '../components/attachment-types';
 import type { ChatMessage } from '../elements/chat-types';
 
@@ -28,7 +28,7 @@ const image = (over: Partial<AttachmentData> = {}): AttachmentData => ({
 });
 
 let off: (() => void) | undefined;
-let events: WireDiagnosticEvent[] = [];
+let events: KaiDiagnosticEvent[] = [];
 const listen = () => {
   // Drops the previous subscription first. Without this a test that listens
   // twice leaves the first subscriber alive, pushing into the same array, and

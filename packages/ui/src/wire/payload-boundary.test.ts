@@ -18,10 +18,17 @@ import { reportRequest } from '../diagnostics/report-request';
 import {
   setWirePayloadCapture,
   subscribeWireDiagnostics,
+  type KaiDiagnosticEvent,
   type WireDiagnosticEvent,
 } from './diagnostics';
 import type { AttachmentData } from '../components/attachment-types';
 import type { ChatMessage } from '../elements/chat-types';
+// The ELEMENT layer emits onto this same stream, so it is swept by this same
+// file rather than by a second one with a second idea of the rule. See the
+// element block at the bottom.
+import '../elements/conversation-list';
+import '../elements/agent-card';
+import { emitElementRegistry } from '../elements/element-diagnostics';
 
 const nullSink = () =>
   ({
@@ -360,5 +367,219 @@ describe('the payload boundary', () => {
     setWirePayloadCapture(false);
     const events = await driveEverything();
     expect(JSON.stringify(events)).not.toContain(S.text);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE ELEMENT LAYER, swept by the SAME rule and in the SAME file.
+//
+// `element.*` events ride this one emitter, so a panel receives them mixed in
+// with the wire events and a reviewer should be able to check the boundary in
+// one place. Extending this sweep rather than writing a second one is
+// deliberate: two boundary tests are two chances for the rule to drift, and the
+// half that drifts is invisible until it leaks.
+//
+// THE INVARIANT IS STRONGER HERE, and that is the whole point of the block.
+// The wire events carry content under an opt-in `payload` key. The element
+// events carry NO payload key at all, in either signal state -- everything they
+// report is a tag, a prop name, a kind, a count, a length, or a shape drawn
+// from a closed vocabulary. So the assertion is not "content moved under one
+// key", it is "there is no content, and the switch does not change that".
+//
+// That matters more than it looks. Element props hold the entire conversation,
+// the user's own drafted text, conversation titles and file names -- and unlike
+// the wire code, this ships to every consumer of the elements bundle whether or
+// not they ever parse a stream. If the payload switch ever grew an element
+// branch, this block fails rather than the leak shipping.
+// ---------------------------------------------------------------------------
+
+/**
+ * A SHORT, unmistakable token at the head of every element sentinel.
+ *
+ * Long descriptive sentinels alone are not enough here, and a mutation proved
+ * it: a leak that shipped `raw.slice(0, 20)` beside the length was caught only
+ * by an exact-value assertion, because the 20-character prefix cut through the
+ * MIDDLE of every sentinel and `toContain(fullSentinel)` stayed happily green.
+ * A truncation is the most likely way this boundary ever breaks -- it is the
+ * obvious "safe" alternative someone reaches for instead of a length -- so the
+ * sweep has to catch a partial leak, not just a whole one.
+ *
+ * Six characters, so any truncation that keeps six or more characters of a
+ * consumer value trips it.
+ */
+const LEAK = 'zQ7leak';
+
+/** Element sentinels, kept SEPARATE from `S` because the invariant differs:
+ *  these must never appear ANYWHERE, under any key, in either state -- whereas
+ *  `S`'s are REQUIRED to show up under `.payload` when the switch is on. */
+const E = {
+  title: `${LEAK}-conversation-was-titled-this`,
+  id: `${LEAK}-conversation-id-value`,
+  nested: `${LEAK}-buried-three-levels-down`,
+  key: `${LEAK}-an-object-KEY-not-a-value`,
+  attrText: `${LEAK}-typed-into-an-attribute`,
+  agentLabel: `${LEAK}-agent-status-label`,
+};
+
+/** The full strings AND the shared head. The head is the one that survives a
+ *  truncation, so it is the assertion that actually holds the line. */
+const ELEMENT_SENTINELS = [...Object.values(E), LEAK];
+
+/** Every wrong thing a consumer can do that this layer reports, with a sentinel
+ *  planted in each channel a value could be read from: item values, a nested
+ *  value, an object KEY, and raw attribute text. */
+function driveElements(): KaiDiagnosticEvent[] {
+  const events: KaiDiagnosticEvent[] = [];
+  const off = subscribeWireDiagnostics((e) => events.push(e));
+  try {
+    const list = document.createElement('kai-conversations') as HTMLElement &
+      Record<string, unknown>;
+    document.body.appendChild(list);
+
+    const seeded = [
+      {
+        id: E.id,
+        title: E.title,
+        scope: { type: 'collection' },
+        messageCount: 3,
+        meta: { deep: { deeper: E.nested } },
+        [E.key]: 'x',
+      },
+      { id: `${E.id}-2`, title: `${E.title}-2`, scope: { type: 'collection' }, messageCount: 1 },
+    ];
+
+    list.conversations = seeded;
+    list.conversations = seeded; // same-array-reference
+    list.conversations = [...seeded]; // mutated-in-place
+
+    // The attribute channel, on an element that survives the misuse, in four
+    // shapes: raw text, the stringified-object marker with text appended,
+    // valid JSON holding a sentinel, and a long value whose LENGTH is reported.
+    const card = document.createElement('kai-agent-card') as HTMLElement & Record<string, unknown>;
+    document.body.appendChild(card);
+    card.setAttribute('status', E.attrText);
+    card.setAttribute('status', `[object Object]${E.attrText}`);
+    card.setAttribute('status', JSON.stringify({ [E.key]: E.agentLabel }));
+    card.setAttribute('status', `${E.agentLabel}-`.repeat(40));
+
+    // The registry snapshot, taken while the sentinel-bearing props are live on
+    // a mounted element — so "it reports tags, not the state of the props"
+    // is asserted rather than assumed from reading it.
+    emitElementRegistry();
+
+    list.remove();
+    card.remove();
+  } finally {
+    off();
+  }
+  return events;
+}
+
+const elementEvents = (events: KaiDiagnosticEvent[]) =>
+  events.filter((e) => e.type.startsWith('element.'));
+
+afterEach(() => {
+  document.body.innerHTML = '';
+});
+
+describe('the payload boundary — element events', () => {
+  it('OFF: no sentinel anywhere, and no element event carries a payload key', () => {
+    const events = driveElements();
+
+    // Non-vacuity first: the assertions below are over something.
+    expect(elementEvents(events).length).toBeGreaterThan(3);
+
+    const json = JSON.stringify(events);
+    for (const sentinel of ELEMENT_SENTINELS) {
+      expect(json, `leaked: ${sentinel}`).not.toContain(sentinel);
+    }
+    for (const e of elementEvents(events)) expect('payload' in e).toBe(false);
+  });
+
+  it('ON: turning payload capture on changes NOTHING about the element events', () => {
+    setWirePayloadCapture(true);
+    const events = driveElements();
+
+    expect(elementEvents(events).length).toBeGreaterThan(3);
+
+    // The stronger claim: not "content moved under one key" but "there is no
+    // content", in the state where the wire layer starts emitting some.
+    const json = JSON.stringify(events);
+    for (const sentinel of ELEMENT_SENTINELS) {
+      expect(json, `leaked with payload ON: ${sentinel}`).not.toContain(sentinel);
+    }
+    for (const e of elementEvents(events)) expect('payload' in e).toBe(false);
+
+    // Structural, exactly as the wire block does it: strip the one key and the
+    // remainder must still be clean. Vacuous here today by construction — and
+    // that is the assertion. The day an element event grows a payload branch,
+    // this is what makes it obey the same rule instead of inventing a new one.
+    const stripped = events.map((e) => {
+      const { payload: _payload, ...rest } = e as unknown as Record<string, unknown>;
+      return rest;
+    });
+    const remainder = JSON.stringify(stripped);
+    for (const sentinel of ELEMENT_SENTINELS) expect(remainder).not.toContain(sentinel);
+  });
+
+  it('ON: the switch really WAS on — proven on the wire side in the same state', async () => {
+    // Without this the test above passes just as well against a switch that
+    // does nothing, which is the failure mode that makes a boundary test
+    // decorative. So: same signal state, drive the wire, and require that a
+    // payload key DID appear there.
+    setWirePayloadCapture(true);
+    const wire = await driveEverything();
+    expect(wire.some((e) => 'payload' in (e as Record<string, unknown>))).toBe(true);
+  });
+
+  it('ON: one mixed session — neither sentinel set survives stripping .payload', async () => {
+    // The sweep the file exists for, over BOTH layers at once, because that is
+    // how a panel actually receives them.
+    setWirePayloadCapture(true);
+    const events: KaiDiagnosticEvent[] = [];
+    const off = subscribeWireDiagnostics((e) => events.push(e));
+    try {
+      toOpenAIMessages(THREAD);
+      await readOpenAIStream(new Response(BODY), nullSink());
+      driveElements();
+    } finally {
+      off();
+    }
+
+    // Both layers really emitted.
+    expect(elementEvents(events).length).toBeGreaterThan(3);
+    expect(events.some((e) => e.type.startsWith('wire.'))).toBe(true);
+
+    const stripped = events.map((e) => {
+      const { payload: _payload, ...rest } = e as unknown as Record<string, unknown>;
+      return rest;
+    });
+    const remainder = JSON.stringify(stripped);
+    for (const sentinel of [...SENTINELS, ...ELEMENT_SENTINELS]) {
+      expect(remainder, `leaked beside the metadata: ${sentinel}`).not.toContain(sentinel);
+    }
+  });
+
+  it('a long attribute is reported by LENGTH — a truncation would ship a prefix', () => {
+    const events = driveElements();
+    const previews = events
+      .filter((e) => e.type === 'element.violation')
+      .map((e) => (e as unknown as { valuePreview?: string }).valuePreview)
+      .filter((p): p is string => p !== undefined);
+
+    expect(previews.length).toBeGreaterThan(0);
+    // The one field that reads the raw text at all. `string(len=N)` is the only
+    // form that can carry an arbitrary consumer value, and it carries a number.
+    const longValue = `${E.agentLabel}-`.repeat(40);
+    expect(previews).toContain(`string(len=${longValue.length})`);
+    for (const sentinel of ELEMENT_SENTINELS) {
+      expect(JSON.stringify(previews)).not.toContain(sentinel);
+    }
+  });
+
+  it('the sentinel search can FIND one — otherwise this whole block is decoration', () => {
+    const planted = JSON.stringify([{ type: 'element.violation', leaked: E.title }]);
+    expect(planted).toContain(E.title);
+    expect(JSON.stringify(driveElements())).not.toContain(E.title);
   });
 });

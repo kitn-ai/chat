@@ -43,6 +43,17 @@ export type { ToolKind } from '../components/tool-classify';
 // missed the one register-impl emits at load. SSR-safe and a no-op with no
 // subscriber, so calling it unconditionally is fine.
 //
+// WHY THIS ONE PRODUCER IS PUBLIC while `@kitn.ai/ui/diagnostics` deliberately
+// keeps `emitWireDiagnostic`, `nextStreamId` and `setWirePayloadCapture`
+// internal. That rule exists because a consumer able to forge events or reset
+// the stream counter can make a panel lie about a stream that never happened,
+// and one able to flip payload capture can start recording an app's users'
+// conversations without the app deciding to. This function takes no arguments
+// and reports nothing but `customElements.get()` over the manifest: there is no
+// value to forge, no counter to move and no capture to arm. It can only tell the
+// truth about the registry, which is the one thing a late-attaching panel cannot
+// find out for itself.
+//
 // The event TYPES are re-exported here as well as from @kitn.ai/ui/diagnostics:
 // a consumer already importing the elements entry should not have to add a
 // second specifier to name the events it is handed.

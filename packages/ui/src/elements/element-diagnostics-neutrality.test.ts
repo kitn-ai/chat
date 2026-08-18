@@ -28,13 +28,18 @@
  * runs differ to show the comparison can fail at all.
  */
 import { describe, it, expect, afterEach } from 'vitest';
-import { subscribeWireDiagnostics, type KaiDiagnosticEvent } from '../wire/diagnostics';
+import {
+  setWirePayloadCapture,
+  subscribeWireDiagnostics,
+  type KaiDiagnosticEvent,
+} from '../wire/diagnostics';
 import './conversation-list';
 import './agent-card';
 import './badge';
 
 afterEach(() => {
   document.body.innerHTML = '';
+  setWirePayloadCapture(false);
 });
 
 /**
@@ -204,6 +209,42 @@ describe('a subscriber changes nothing about how an element behaves', () => {
 
     expect(b.dom).not.toBe(a.dom);
     expect(b.updates).not.toEqual(a.updates);
+  });
+});
+
+describe('the payload signal changes nothing at the element layer', () => {
+  it('renders and updates identically with payload capture ON', () => {
+    // A second axis, and a NEW one: the payload opt-in landed on the wire
+    // emitter after this capability was written. The element events do not
+    // consult it — they have no payload key and nothing they report is
+    // content — but "does not consult it" is an assumption about a switch that
+    // did not exist when the code was written, so it gets asserted rather than
+    // reasoned about.
+    const script = (el: HTMLElement & Record<string, unknown>) => {
+      const list = seed();
+      el.conversations = list;
+      el.conversations = list;
+      el.conversations = [...list];
+    };
+
+    const off1 = subscribeWireDiagnostics(() => {});
+    const plain = run('kai-conversations', script);
+    off1();
+
+    setWirePayloadCapture(true);
+    const events: KaiDiagnosticEvent[] = [];
+    const off2 = subscribeWireDiagnostics((e) => events.push(e));
+    const captured = run('kai-conversations', script);
+    off2();
+
+    // The violations really fired in the payload-on run.
+    const violations = events.filter((e) => e.type === 'element.violation');
+    expect(violations.length).toBeGreaterThan(0);
+    // And not one of them grew a payload key.
+    for (const e of violations) expect('payload' in e).toBe(false);
+
+    expect(captured.updates).toEqual(plain.updates);
+    expect(captured.dom).toBe(plain.dom);
   });
 });
 
