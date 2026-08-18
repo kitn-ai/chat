@@ -335,9 +335,25 @@ export function tierDelta({ strong, weak, strongFindings = [], weakFindings = []
     .filter((f) => implicitIds.has(f.dimension))
     .map((f) => ({ ...f, tierRevealed: true }));
 
+  // DENOMINATOR SKEW. R1 lets a dimension leave the score, so two runs of one
+  // scenario can be normalised over different weights -- and `--compare` is the
+  // ONE place a comparison actually happens, which is exactly where the per-run
+  // report's comparability caveat never reaches. Surfaced rather than left for
+  // the reader to notice that 10.00 and 10.00 were computed over 13 and 19.
+  const skew =
+    strong.totalWeight !== undefined && weak.totalWeight !== undefined && strong.totalWeight !== weak.totalWeight
+      ? {
+          strongWeight: strong.totalWeight,
+          weakWeight: weak.totalWeight,
+          declared: strong.declaredWeight ?? weak.declaredWeight ?? null,
+          note: 'The two scores were normalised over DIFFERENT weights, because a dimension applied to one run and not the other. They are not directly comparable; read the per-dimension rows instead of the headline.',
+        }
+      : null;
+
   return {
     scenarioId: strong.scenarioId,
     thresholds: { strongHasIt: STRONG_HAS_IT, weakLacksIt: WEAK_LACKS_IT },
+    denominatorSkew: skew,
     strong: { model: strong.model, tier: strong.tier, normalized: strong.normalized, verdict: strong.verdict },
     weak: { model: weak.model, tier: weak.tier, normalized: weak.normalized, verdict: weak.verdict },
     rows,

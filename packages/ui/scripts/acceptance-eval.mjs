@@ -300,7 +300,7 @@ async function evaluate({ runDir, findingsPath, gatesPath }) {
     caveats: [
       ...scored.notApplicable.map(
         (id) =>
-          `${id} was NOT APPLICABLE: the output contains no code, so the gate had no subject. It is out of the score entirely — neither passed nor failed — and the remaining weights were renormalised. For a refusal answer that is the correct reading; for an answer that was supposed to contain code, read it as the answer being empty and check \`completeness\`.`,
+          `${id} was NOT APPLICABLE: it found no code it could read, so the gate had no subject. It is out of the score entirely — neither passed nor failed — and the remaining weights were renormalised. For a refusal answer that is the correct reading; for an answer that was supposed to contain code, read it as the answer being empty and check \`completeness\`.`,
       ),
       ...(scored.notApplicable.length
         ? [
@@ -357,7 +357,7 @@ function renderReport(e) {
 
 ${
   e.notApplicable.length
-    ? `**${e.notApplicable.length} dimension(s) did not apply** — ${e.notApplicable.join(', ')} — because the output contains no code for them to examine. They are out of the score entirely, and the remaining weights are renormalised over ${e.totalWeight} of ${e.declaredWeight}. That is the correct reading of an answer that is prose by design (a refusal, a diagnosis); if this answer was supposed to contain code, the emptiness shows up in \`completeness\` instead.\n`
+    ? `**${e.notApplicable.length} dimension(s) did not apply** — ${e.notApplicable.join(', ')} — because these gates found no code they could read in the output. They are out of the score entirely, and the remaining weights are renormalised over ${e.totalWeight} of ${e.declaredWeight}. That is the correct reading of an answer that is prose by design (a refusal, a diagnosis); if this answer was supposed to contain code, the emptiness shows up in \`completeness\` instead. Only the gates the evaluator runs itself can report this — an external gate that did not run is a failure, not an absence.\n`
     : ''
 }${
   e.failedGates.length
@@ -417,6 +417,11 @@ function renderDelta(d) {
 | score | ${d.strong.normalized} | ${d.weak.normalized} |
 | verdict | ${d.strong.verdict} | ${d.weak.verdict} |
 
+${
+  d.denominatorSkew
+    ? `> **⚠ Different denominators.** The strong run was scored over ${d.denominatorSkew.strongWeight} weight and the weak run over ${d.denominatorSkew.weakWeight}, because a dimension applied to one and not the other. ${d.denominatorSkew.note}\n`
+    : ''
+}
 **The headline is not "did it pass".** It is how far down the model tier the
 catalog keeps working. Anything the strong model gets right and the weak one gets
 wrong names a contract the catalog leaves IMPLICIT and is currently relying on

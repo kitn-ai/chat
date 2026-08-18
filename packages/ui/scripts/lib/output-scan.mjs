@@ -13,9 +13,40 @@
 import { NEEDLE_TABLE, variantsOf } from './audit-needles.mjs';
 
 /** Extensions treated as CODE. Prose is judged, not scanned. */
-export const CODE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.vue', '.svelte', '.html', '.astro'];
+export const CODE_EXTENSIONS = [
+  '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.vue', '.svelte', '.html', '.htm', '.astro', '.py',
+];
+
+/**
+ * Files whose CONTENT is read for fenced code. Deliberately only the markdown
+ * family: anything else that is not a code file is treated as UNREAD, and an
+ * unread file blocks the "no subject" verdict rather than being ignored.
+ *
+ * `.txt` is NOT here on purpose. A `main.txt` full of raw code has no fences, so
+ * fence-extracting it would find nothing and the scan would then claim there was
+ * no code — a confident verdict produced by not looking, which is the failure
+ * this whole area keeps producing.
+ */
+export const PROSE_EXTENSIONS = ['.md', '.markdown', '.mdx'];
 
 export const isCodeFile = (name) => CODE_EXTENSIONS.some((ext) => name.toLowerCase().endsWith(ext));
+export const isProseFile = (name) => PROSE_EXTENSIONS.some((ext) => name.toLowerCase().endsWith(ext));
+
+/**
+ * Files the scan did NOT read at all: neither code, nor prose it extracts fences
+ * from. Their existence means "we found no code" cannot be upgraded to "there is
+ * no code", so the scorer refuses a not-applicable verdict while any exist.
+ */
+export const unreadFiles = (files) => files.filter((f) => !isCodeFile(f.name) && !isProseFile(f.name)).map((f) => f.name);
+
+/**
+ * The language token, stripped of the decorations real markdown carries:
+ * ```{html}``` (R-style braces), ```html,twoslash``` (comma attributes) and
+ * ```html:src/main.ts``` (path annotations) all mean html. Each of those forms
+ * previously fell through as an unknown language, so the block was skipped and
+ * the gate went on to describe the file as containing no code.
+ */
+const normaliseFenceLang = (lang) => String(lang).toLowerCase().replace(/^[{[(]|[}\])]$/g, '').split(/[,;:{}]/)[0].trim();
 
 /** Fence languages that mean "this block is code the agent is proposing". */
 const CODE_FENCE_LANGS = new Set(['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'javascript', 'typescript', 'html', 'vue', 'svelte', 'astro']);
@@ -109,9 +140,13 @@ export function codeUnits(files) {
       units.push(f);
       continue;
     }
+    // Only PROSE files are fence-extracted. Anything else that is not code is
+    // unread, and `unreadFiles` reports it rather than letting it pass as
+    // "nothing to see".
+    if (!isProseFile(f.name)) continue;
     let index = 0;
     for (const block of fencedBlocks(f.text)) {
-      if (!CODE_FENCE_LANGS.has(block.lang.toLowerCase())) continue;
+      if (!CODE_FENCE_LANGS.has(normaliseFenceLang(block.lang))) continue;
       units.push({ name: `${f.name}#fence${index++}`, text: block.text });
     }
   }
@@ -192,6 +227,8 @@ export function gateElementsExist({ files, knownTags }) {
     id: 'elements-exist',
     passed: fabricated.length === 0,
     filesScanned: code.length,
+    filesSeen: files.length,
+    unread: unreadFiles(files),
     vacuous: code.length === 0,
     tagsUsed: [...used].sort(),
     fabricated,
@@ -233,6 +270,8 @@ export function gateAuditClean({ files }) {
     id: 'audit-clean',
     passed: hits.length === 0,
     filesScanned: code.length,
+    filesSeen: files.length,
+    unread: unreadFiles(files),
     vacuous: code.length === 0,
     hits,
     detail: hits.length

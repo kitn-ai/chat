@@ -306,7 +306,7 @@ export function assertRubricCoverage(scenarios, expected) {
 
 /**
  * @typedef {{ id: string, dimension: string, severity: string, summary?: string, attribution: Record<string, unknown> }} Finding
- * @typedef {{ passed: boolean, detail?: string, vacuous?: boolean }} GateResult
+ * @typedef {{ passed: boolean, detail?: string, vacuous?: boolean, filesSeen?: number, filesScanned?: number, unread?: string[] }} GateResult
  */
 
 /**
@@ -384,11 +384,50 @@ export function scoreRun({ scenario, gates = {}, judged = {}, findings = [] }) {
         );
         raw = 0;
         source = 'invalid-gate';
+      } else if (g.vacuous !== undefined && typeof g.vacuous !== 'boolean') {
+        // H1's rule, applied to the field R1 added. `vacuous` was introduced
+        // untyped and REMOVED THE DIMENSION on anything truthy -- `"false"`,
+        // `"no"`, `1`, `{}`, `[]`. `"false"` is the exact input H1's own error
+        // message cites, so the new field quietly undid the validation H1 added,
+        // on the same object.
+        problems.push(
+          `mechanical dimension "${d.id}" has \`vacuous: ${JSON.stringify(g.vacuous)}\` (${typeof g.vacuous}). It must be a real boolean. A truthy string removes the dimension from the score entirely, so "false" would delete the very gate it claims to be reporting.`,
+        );
+        raw = 0;
+        source = 'invalid-gate';
+      } else if (g.vacuous && d.runner !== 'evaluator') {
+        // AN EXTERNAL GATE CANNOT BE VACUOUS. It does not scan anything, so it
+        // has no way to discover an absence of subject: tsc either ran or it did
+        // not, a browser either registered the elements or it did not. Honouring
+        // `vacuous` on `compiles`/`registers`/`streams` reopened exactly the hole
+        // this branch keeps closing -- measured, a real S1 run with real code in
+        // it scored 10.00/10 and exit 0 on three external gates marked
+        // `{passed:false, vacuous:true}`, where the previous commit had given a
+        // gated failure.
+        problems.push(
+          `mechanical dimension "${d.id}" is an EXTERNAL gate and reported \`vacuous: true\`. Only the gates the evaluator runs itself can discover that there was nothing to scan; an external gate ran or it did not, and "it had no subject" is not a verdict it can produce. Report \`passed: false\` if it did not run.`,
+        );
+        raw = 0;
+        source = 'invalid-gate';
+      } else if (g.vacuous && (g.unread?.length || (g.filesSeen ?? 0) > 0 && (g.filesScanned ?? 0) === 0 && g.unread === undefined)) {
+        // NOT APPLICABLE IS A CLAIM ABOUT THE OUTPUT, so it may not be made over
+        // files the scan could not read. `main.txt`, `notes.rst`, an indented
+        // block -- each yields zero code units, and calling that "there is no
+        // code" is the same confident verdict produced by not looking. A gate
+        // that predates `unread` (no field at all) is refused too rather than
+        // trusted.
+        problems.push(
+          `mechanical dimension "${d.id}" reported no subject, but the output contains file(s) the scan cannot read${
+            g.unread?.length ? `: ${g.unread.join(', ')}` : ''
+          }. "Found no code" is not "there is no code" while something went unread.`,
+        );
+        raw = 0;
+        source = 'invalid-gate';
       } else if (g.vacuous) {
-        // NOT APPLICABLE — neither a pass nor a failure.
+        // NOT APPLICABLE -- neither a pass nor a failure.
         //
         // This is the correction to an over-correction, and it is worth stating
-        // fully because both wrong answers are tempting.
+        // fully because every neighbouring answer is tempting and wrong.
         //
         // ORIGINALLY a gate that scanned nothing scored a full 10, which handed
         // out weight nobody earned: an S7 run drew 32% of its weight from two
@@ -396,7 +435,7 @@ export function scoreRun({ scenario, gates = {}, judged = {}, findings = [] }) {
         //
         // THE FIRST FIX made it score 0, and that INVERTED THE BIAS ONTO THE
         // DECK'S BEST ANSWER. S6's textbook reply is a pure-prose honest
-        // refusal — no code, because writing code would mean inventing the
+        // refusal -- no code, because writing code would mean inventing the
         // element. That answer scored 6.53 and `gated-fail`, on two gates
         // reporting "0 kai-* tag(s) used, all of which the kit ships". The
         // module's own comment says flagging that answer "would punish exactly
@@ -405,16 +444,16 @@ export function scoreRun({ scenario, gates = {}, judged = {}, findings = [] }) {
         // The honest reading is that there is NO SUBJECT. "Every element it uses
         // exists" over an answer that uses no elements is not a claim that can
         // be true or false. That is absence of subject, not absence of merit, so
-        // the dimension leaves the score entirely — out of the numerator AND the
-        // denominator — and the remaining weights renormalise. A correct refusal
-        // can then reach 10, and no free weight is awarded, which is the H2
-        // property preserved.
+        // the dimension leaves the score entirely -- out of the numerator AND
+        // the denominator -- and the remaining weights renormalise. A correct
+        // refusal can then reach 10, and no free weight is awarded, which is the
+        // H2 property preserved.
         //
         // It is never silent: the row survives with `applicable: false`, the
         // verdict carries `notApplicable`, and the report prints a section for
         // it. The scenarios where a no-code answer is a BAD answer are covered
         // by the judged dimensions and by the external gates, which fail rather
-        // than vanish — `completeness` on "build me a research UI" cannot score
+        // than vanish -- `completeness` on "build me a research UI" cannot score
         // 10 on an answer containing nothing.
         rows.push({
           id: d.id,
@@ -426,7 +465,8 @@ export function scoreRun({ scenario, gates = {}, judged = {}, findings = [] }) {
           capped: false,
           score: null,
           applicable: false,
-          source: 'not applicable — the gate had no subject to examine (no code in the output)',
+          // What is actually KNOWN, rather than a claim about the whole output.
+          source: `not applicable - the gate found no code it could read across ${g.filesSeen ?? 0} output file(s)`,
           detail: g.detail,
           findings: findings.filter((f) => f.dimension === d.id).map((f) => f.id),
         });

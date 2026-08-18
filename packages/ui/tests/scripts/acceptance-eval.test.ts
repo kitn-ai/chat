@@ -228,6 +228,21 @@ describe('mechanical gates sit UNDER the judged score', () => {
     }
   });
 
+  // H-C — RESTORED. The old H2 test carried the only assertion pinning that a
+  // PASSING non-vacuous mechanical gate scores exactly 10, and deleting that
+  // test took the pin with it: `raw = g.passed ? 10 : 0` mutated to `? 9 : 0`
+  // went green. Its successor asserted an inequality, which cannot see that.
+  it('a passing non-vacuous mechanical gate scores exactly 10, and a failing one exactly 0', () => {
+    const s6 = scenarios.find((s) => s.id === 'S6')!;
+    const pass = scoreRun({ scenario: s6, gates: gateAll('S6'), judged: judgeAll('S6', 0) });
+    for (const row of pass.rows.filter((r) => r.gate === 'mechanical')) {
+      expect(row.score, `${row.id} did not score exactly 10`).toBe(10);
+      expect(row.raw).toBe(10);
+    }
+    const fail = scoreRun({ scenario: s6, gates: gateAll('S6', false), judged: judgeAll('S6', 0) });
+    for (const row of fail.rows.filter((r) => r.gate === 'mechanical')) expect(row.score).toBe(0);
+  });
+
   it('does not award weight for a gate with no subject either', () => {
     const s6 = scenarios.find((s) => s.id === 'S6')!;
     const judged = judgeAll('S6', 5);
@@ -252,6 +267,60 @@ describe('mechanical gates sit UNDER the judged score', () => {
     expect(r.verdict).toBe('gated-fail');
     expect(r.failedGates).toContain('elements-exist');
     expect(r.notApplicable).toEqual([]);
+  });
+
+  // ★H-A — the field R1 introduced undid the validation H1 added, on the same
+  // object. An external gate cannot be vacuous: it does not scan, so it has no
+  // way to discover an absence of subject. Measured, a real S1 run WITH code
+  // scored 10.00/10 exit 0 on three external gates marked vacuous.
+  it.each([['compiles'], ['registers'], ['streams']])('refuses `vacuous` on the external gate %s', (id) => {
+    const s2 = scenarios.find((s) => s.id === 'S2')!;
+    if (!rubricFor(s2).dimensions.some((d) => d.id === id)) return;
+    expect(() =>
+      scoreRun({
+        scenario: s2,
+        gates: { ...gateAll('S2'), [id]: { passed: false, vacuous: true } },
+        judged: judgeAll('S2', 10),
+      }),
+    ).toThrow(/EXTERNAL gate and reported/);
+  });
+
+  it.each([['false'], ['no'], [1], [{}], [[]]])('refuses a non-boolean `vacuous` of %o', (vacuous) => {
+    const s6 = scenarios.find((s) => s.id === 'S6')!;
+    expect(() =>
+      scoreRun({
+        scenario: s6,
+        gates: { ...gateAll('S6'), 'elements-exist': { passed: true, vacuous } as unknown as { passed: boolean } },
+        judged: judgeAll('S6', 10),
+      }),
+    ).toThrow(/must be a real boolean/);
+  });
+
+  it('refuses "not applicable" while the output holds files the scan could not read', () => {
+    const s6 = scenarios.find((s) => s.id === 'S6')!;
+    const na = { passed: true, vacuous: true, filesSeen: 2, unread: ['main.txt'] };
+    expect(() => scoreRun({ scenario: s6, gates: { ...gateAll('S6'), 'elements-exist': na }, judged: judgeAll('S6', 10) })).toThrow(
+      /cannot read/,
+    );
+    // POSITIVE CONTROL: the same shape with nothing unread is accepted.
+    const ok = { passed: true, vacuous: true, filesSeen: 1, unread: [] };
+    expect(() => scoreRun({ scenario: s6, gates: { ...gateAll('S6'), 'elements-exist': ok }, judged: judgeAll('S6', 10) })).not.toThrow();
+  });
+
+  it('says what it actually knows in the not-applicable row, not "the output contains no code"', () => {
+    const s6 = scenarios.find((s) => s.id === 'S6')!;
+    const r = scoreRun({
+      scenario: s6,
+      gates: {
+        'elements-exist': { passed: true, vacuous: true, filesSeen: 3, unread: [] },
+        'audit-clean': { passed: true, vacuous: true, filesSeen: 3, unread: [] },
+      },
+      judged: judgeAll('S6', 10),
+    });
+    const row = r.rows.find((x) => x.id === 'elements-exist')!;
+    expect(row.source).toContain('found no code it could read');
+    expect(row.source).toContain('3 output file(s)');
+    expect(row.source).not.toContain('contains no code');
   });
 
   // H1 — the machine verdicts were the UNVALIDATED half, while judged scores
@@ -445,6 +514,43 @@ describe('tier delta names what the catalog leaves implicit', () => {
     expect(d.heldAtWeakTier).toBe(false);
   });
 
+  // H-D — the null filter is NOT inert. Without it a strong-run n/a row against
+  // a weak-run 0 prints `delta: 0` — "both models scored the same" — which is
+  // the tier axis reporting a FALSE EQUALITY, on the one number this whole
+  // measurement exists to produce.
+  it('treats a not-applicable row as absent, never as a zero', () => {
+    const strong = evaluation({
+      model: 'strong',
+      rows: [
+        { id: 'elements-exist', gate: 'mechanical', weight: 3, score: null },
+        { id: 'honesty-bound', gate: 'judged', weight: 4, score: 10 },
+      ],
+    });
+    const weak = evaluation({
+      model: 'weak',
+      rows: [
+        { id: 'elements-exist', gate: 'mechanical', weight: 3, score: 0 },
+        { id: 'honesty-bound', gate: 'judged', weight: 4, score: 10 },
+      ],
+    });
+    const d = tierDelta({ strong, weak });
+    const row = d.rows.find((r) => r.id === 'elements-exist')!;
+    expect(row.delta, 'a null row was folded in as 0 and printed a false equality').toBeNull();
+    expect(row.strong).toBeNull();
+    // …and it is not claimed as a contract the catalog leaves implicit either.
+    expect(d.implicitContracts).not.toContain('elements-exist');
+  });
+
+  it('surfaces a denominator skew, which the per-run caveat can never reach', () => {
+    const strong = evaluation({ totalWeight: 19, declaredWeight: 19 });
+    const weak = evaluation({ totalWeight: 13, declaredWeight: 19 });
+    const d = tierDelta({ strong, weak });
+    expect(d.denominatorSkew).toMatchObject({ strongWeight: 19, weakWeight: 13 });
+
+    // POSITIVE CONTROL: equal denominators report no skew.
+    expect(tierDelta({ strong, weak: evaluation({ totalWeight: 19, declaredWeight: 19 }) }).denominatorSkew).toBeNull();
+  });
+
   it('refuses to compare across scenarios or across kit versions', () => {
     expect(() => tierDelta({ strong: evaluation({}), weak: evaluation({ scenarioId: 'S1' }) })).toThrow(/across scenarios/);
     expect(() => tierDelta({ strong: evaluation({}), weak: evaluation({ kitVersion: '2.0.0' }) })).toThrow(/different kit versions/);
@@ -495,7 +601,8 @@ describe('the gates the evaluator runs for itself', () => {
     const g = gateElementsExist({ files: [{ name: 'NOTES.md', text: 'There is no <kai-datagrid> in this kit.' }], knownTags });
     expect(g.fabricated).toEqual([]);
     // …and it SAYS it looked at nothing, rather than reporting a clean pass.
-    // The scorer turns that vacuity into a zero; see the H2 case above.
+    // The scorer treats that as NOT APPLICABLE — out of the score entirely —
+    // which is what lets a pure-prose refusal reach 10. See the R1 cases above.
     expect(g.vacuous).toBe(true);
     expect(g.filesScanned).toBe(0);
   });
@@ -566,6 +673,43 @@ describe('the gates the evaluator runs for itself', () => {
 
   it('takes the first word of the info string as the language', () => {
     expect(fencedBlocks('```ts twoslash\nconst a = 1;\n```')[0].lang).toBe('ts');
+  });
+
+  // H-B — the vacuity signal cannot distinguish "no subject" from "subject the
+  // gate failed to read", so anything it cannot read must be REPORTED rather
+  // than silently counted as absence.
+  it.each([['main.txt'], ['notes.rst'], ['run.sh'], ['data.json']])('reports %s as unread rather than as no-code', (name) => {
+    const g = gateElementsExist({ files: [{ name, text: '<kai-datagrid></kai-datagrid>' }], knownTags });
+    expect(g.unread).toContain(name);
+    expect(g.vacuous).toBe(true);
+    // The scorer refuses a not-applicable verdict while these exist — pinned in
+    // the mechanical-gate suite; here we pin that the gate SURFACES them.
+  });
+
+  it.each([['a.md'], ['a.ts'], ['a.htm'], ['a.py']])('does not report %s as unread — it is read', (name) => {
+    expect(gateElementsExist({ files: [{ name, text: '// nothing\n' }], knownTags }).unread).toEqual([]);
+  });
+
+  it('does not fence-extract a non-prose file, so raw code in main.txt is not "no code"', () => {
+    expect(codeUnits([{ name: 'main.txt', text: '```ts\nconst a = 1;\n```' }])).toEqual([]);
+    expect(codeUnits([{ name: 'main.md', text: '```ts\nconst a = 1;\n```' }])).toHaveLength(1);
+  });
+
+  it('reports how many files it saw, not only how many it read', () => {
+    const g = gateElementsExist({ files: [{ name: 'a.md', text: 'prose' }, { name: 'b.txt', text: 'x' }], knownTags });
+    expect(g.filesSeen).toBe(2);
+    expect(g.filesScanned).toBe(0);
+  });
+
+  // R2 follow-on: the decorations real markdown carries on an info string.
+  it.each([
+    ['{html}', '```{html}\n<kai-datagrid></kai-datagrid>\n```\n'],
+    ['html,twoslash', '```html,twoslash\n<kai-datagrid></kai-datagrid>\n```\n'],
+    ['html:src/main.html', '```html:src/main.html\n<kai-datagrid></kai-datagrid>\n```\n'],
+  ])('normalises the fence language %s so the block is still read', (_label, text) => {
+    const g = gateElementsExist({ files: [{ name: 'a.md', text }], knownTags });
+    expect(g.vacuous).toBe(false);
+    expect(g.passed).toBe(false);
   });
 
   it('ignores a fence in a language that is not code', () => {
@@ -859,11 +1003,15 @@ describe('the evaluator CLI, end to end over a prepared run', () => {
     expect(evaluation.verdict).toBe('scored');
     expect(evaluation.notApplicable.sort()).toEqual(['audit-clean', 'elements-exist']);
 
-    // …and the report SAYS the dimensions dropped out, rather than quietly
-    // scoring over a smaller denominator.
+    // ALL FOUR LOUDNESS SIGNALS, each pinned. Deleting the comparability caveat
+    // used to leave the suite green, so one of the four had nothing holding it.
     const report = readFileSync(join(runDir, 'REPORT.md'), 'utf8');
     expect(report).toContain('did not apply');
     expect(report).toContain('renormalised');
+    expect(report, 'the comparability caveat is unpinned').toContain('only loosely comparable');
+    expect(report).toContain('found no code it could read');
+    // …and the claim is the honest one, not the old overreach.
+    expect(report).not.toContain('the output contains no code');
     rmSync(prose);
   });
 

@@ -75,11 +75,10 @@ export function looksAnthropic(model) {
  * Exactly the owner-named entries, `~` prefix optional on either side.
  *
  * @param {string} model
- * @param {readonly string[]} [allowed] test-only injection; see routeModel
  */
-export function isOpenRouterAllowed(model, allowed = OPENROUTER_ALLOWED) {
+export function isOpenRouterAllowed(model) {
   const id = bare(model).toLowerCase();
-  return allowed.some((m) => bare(m).toLowerCase() === id);
+  return OPENROUTER_ALLOWED.some((m) => bare(m).toLowerCase() === id);
 }
 
 /**
@@ -94,19 +93,10 @@ export function isOpenRouterAllowed(model, allowed = OPENROUTER_ALLOWED) {
  * path; the result then says `pathSource: 'inferred'` so the ledger records that
  * nobody typed it. An inference is still a decision, so callers print it.
  *
- * `allowed` exists ONLY so a test can supply a fixture list. It is not a
- * runtime affordance and no CLI passes it: the real list is frozen and widening
- * it is a commit. Why it is needed at all -- the ORDER of the two checks below
- * is a safety property (the Anthropic refusal is tested before the allow-list is
- * consulted), and with the real list that order is unobservable, because no
- * Anthropic model sits on it for a reordering to trip over. Hoisting an
- * allow-list success branch above the refusal left the whole suite green. A
- * fixture list that DOES contain one makes the ordering testable.
- *
- * @param {{ model?: string, path?: string, allowed?: readonly string[] }} input
+ * @param {{ model?: string, path?: string }} input
  * @returns {RouteDecision}
  */
-export function routeModel({ model, path, allowed: allowList = OPENROUTER_ALLOWED } = {}) {
+export function routeModel({ model, path } = {}) {
   const id = String(model ?? '').trim();
   if (!id) {
     return {
@@ -124,28 +114,44 @@ export function routeModel({ model, path, allowed: allowList = OPENROUTER_ALLOWE
     };
   }
 
-  // ORDER IS LOAD-BEARING BELOW, in a way that survived an adversarial review
-  // and must not be "tidied":
-  //
-  //  1. The Anthropic refusal is tested BEFORE the allow-list is consulted, so
-  //     widening OPENROUTER_ALLOWED can never open a metered path for an
-  //     Anthropic model. The refusal does not depend on the list at all.
-  //  2. The metered path additionally REQUIRES allow-list membership. So a
-  //     model whose identity check is defeated -- a homoglyph, a zero-width
-  //     joiner, a spelling nobody anticipated -- still cannot reach OpenRouter,
-  //     because it will not be on the list either. An identity-check miss
-  //     therefore cannot cause spend; it can only cause an over-refusal, which
-  //     is the safe direction.
-  const anthropic = looksAnthropic(id);
-  const allowed = isOpenRouterAllowed(id, allowList);
+  return decideRoute({ anthropic: looksAnthropic(id), allowed: isOpenRouterAllowed(id), path, id });
+}
 
+/**
+ * THE DECISION TABLE, over booleans, with no access to the allow-list.
+ *
+ * Extracted so the ORDER of the checks can be pinned. The order is a safety
+ * property -- the Anthropic refusal is evaluated BEFORE membership is consulted,
+ * so widening the allow-list can never open a metered path for an Anthropic
+ * model -- and against the real list that order is unobservable, because no
+ * Anthropic model sits on it for a reordering to trip over. Hoisting an
+ * allow-list success branch above the refusal left the whole suite green.
+ *
+ * A test drives `decideRoute({ anthropic: true, allowed: true, path:
+ * 'openrouter' })` and asserts the refusal still wins. That pins the property
+ * exactly, and unlike an `allowed` parameter on `routeModel` it adds NO widening
+ * seam to a spend-control entry point: this function cannot read or extend the
+ * allow-list, so it cannot open spend even in principle. `routeModel` keeps its
+ * original two-argument shape.
+ *
+ * THE SECOND STRUCTURAL PROPERTY, also load-bearing: the metered path requires
+ * `allowed` to be true. So a model whose identity check is defeated -- a
+ * homoglyph, a zero-width joiner, a spelling nobody anticipated -- still cannot
+ * reach OpenRouter, because it will not be on the list either. An identity-check
+ * miss therefore cannot cause spend; it can only cause an over-refusal, which is
+ * the safe direction.
+ *
+ * @param {{ anthropic: boolean, allowed: boolean, path?: string, id?: string }} input
+ * @returns {RouteDecision}
+ */
+export function decideRoute({ anthropic, allowed, path, id = '(model)' }) {
   // THE HEADLINE RULE. Named explicitly in the error, because the whole point of
   // refusing is that the operator learns which rule stopped them.
   if (anthropic && path === 'openrouter') {
     return {
       ok: false,
       rule: 'anthropic-never-openrouter',
-      error: `"${id}" is an Anthropic model and the openrouter path was selected. Anthropic models run through the owner's Claude Code subscription; OpenRouter is used only for the models the owner has named (${allowList.join(', ')}). This is REFUSED rather than rerouted: the two paths bill to different places, and quietly moving the run would also make the executionPath recorded in the ledger untrue. Re-run with --path claude-code, or name a different model.`,
+      error: `"${id}" is an Anthropic model and the openrouter path was selected. Anthropic models run through the owner's Claude Code subscription; OpenRouter is used only for the models the owner has named (${OPENROUTER_ALLOWED.join(', ')}). This is REFUSED rather than rerouted: the two paths bill to different places, and quietly moving the run would also make the executionPath recorded in the ledger untrue. Re-run with --path claude-code, or name a different model.`,
     };
   }
 
@@ -183,14 +189,14 @@ export function routeModel({ model, path, allowed: allowList = OPENROUTER_ALLOWE
     return {
       ok: false,
       rule: 'openrouter-not-owner-named',
-      error: `"${id}" is not one of the models the owner has named for OpenRouter (${allowList.join(', ')}). Metered spend is authorised by adding the model to OPENROUTER_ALLOWED in scripts/lib/run-routing.mjs, deliberately and in a commit — not by passing it on a command line.`,
+      error: `"${id}" is not one of the models the owner has named for OpenRouter (${OPENROUTER_ALLOWED.join(', ')}). Metered spend is authorised by adding the model to OPENROUTER_ALLOWED in scripts/lib/run-routing.mjs, deliberately and in a commit — not by passing it on a command line.`,
     };
   }
 
   return {
     ok: false,
     rule: 'no-path-for-model',
-    error: `"${id}" is neither an Anthropic model nor one of the owner-named OpenRouter models (${allowList.join(', ')}), so there is no path it may take. Neither "charge the card" nor "use the subscription" is this script's decision to make.`,
+    error: `"${id}" is neither an Anthropic model nor one of the owner-named OpenRouter models (${OPENROUTER_ALLOWED.join(', ')}), so there is no path it may take. Neither "charge the card" nor "use the subscription" is this script's decision to make.`,
   };
 }
 

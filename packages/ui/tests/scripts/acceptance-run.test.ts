@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { listScenarios } from '../../src/agent-tooling/catalog/scenarios';
-import { EXECUTION_PATHS, OPENROUTER_ALLOWED, isOpenRouterAllowed, looksAnthropic, routeModel } from '../../scripts/lib/run-routing.mjs';
+import { EXECUTION_PATHS, OPENROUTER_ALLOWED, decideRoute, isOpenRouterAllowed, looksAnthropic, routeModel } from '../../scripts/lib/run-routing.mjs';
 import { verifyHandover } from '../../scripts/lib/handover.mjs';
 
 const PKG = join(__dirname, '..', '..');
@@ -112,32 +112,45 @@ describe('the two-path router', () => {
     expect(routeModel({ model: homoglyph }).ok).toBe(false);
   });
 
-  // R4 — the ORDER of the two checks is a safety property, and with the real
+  // R4 — the ORDER of the two checks is a safety property, and against the real
   // allow-list it is unobservable: no Anthropic model sits on it, so hoisting an
   // allow-list success branch above the Anthropic refusal left the suite green.
-  // A fixture list that DOES contain one makes a reorder go red.
-  it('refuses an Anthropic model on the metered path EVEN IF it is on the allow-list', () => {
-    const compromised = Object.freeze(['claude-opus-5', '~deepseek/deepseek-v4-flash-latest']);
-
-    // The refusal is evaluated before membership is consulted, so membership
-    // cannot rescue it.
-    const d = routeModel({ model: 'claude-opus-5', path: 'openrouter', allowed: compromised });
+  //
+  // Pinned through `decideRoute`, a pure predicate over the two booleans. It has
+  // NO access to the allow-list, so unlike an `allowed` parameter on
+  // `routeModel` this seam cannot open spend even in principle.
+  it('refuses an Anthropic model on the metered path EVEN IF it is allow-listed', () => {
+    const d = decideRoute({ anthropic: true, allowed: true, path: 'openrouter', id: 'claude-opus-5' });
     expect(d.ok).toBe(false);
     expect(d.rule).toBe('anthropic-never-openrouter');
 
     // With no path given it must still infer the SUBSCRIPTION, not the metered
     // path it is now nominally allowed on.
-    expect(routeModel({ model: 'claude-opus-5', allowed: compromised })).toMatchObject({
-      ok: true,
-      path: 'claude-code',
-    });
+    expect(decideRoute({ anthropic: true, allowed: true })).toMatchObject({ ok: true, path: 'claude-code' });
+  });
 
-    // NON-VACUITY: the fixture list really is in effect — a model on it that is
-    // NOT Anthropic routes to openrouter, where against the real list it would
-    // be refused.
-    expect(isOpenRouterAllowed('claude-opus-5', compromised)).toBe(true);
-    expect(routeModel({ model: 'meta/llama-4', path: 'openrouter' }).ok).toBe(false);
-    expect(routeModel({ model: 'meta/llama-4', path: 'openrouter', allowed: ['meta/llama-4'] }).ok).toBe(true);
+  it('requires allow-list membership for the metered path, so an identity miss cannot cause spend', () => {
+    // The second structural property, stated over the booleans: not-Anthropic
+    // and not-allowed has NO path at all.
+    expect(decideRoute({ anthropic: false, allowed: false, path: 'openrouter' }).ok).toBe(false);
+    expect(decideRoute({ anthropic: false, allowed: false }).ok).toBe(false);
+    expect(decideRoute({ anthropic: false, allowed: true, path: 'openrouter' }).ok).toBe(true);
+
+    // …and end to end: both segments homoglyphed defeats the identity check and
+    // still cannot reach the metered path.
+    expect(looksAnthropic('аnthropic/claude-sonnet-4')).toBe(true); // one segment is not enough
+    const homoglyph = 'аnthropic/сlaude-sonnet-4';
+    expect(looksAnthropic(homoglyph), 'the fixture no longer defeats the identity check').toBe(false);
+    expect(routeModel({ model: homoglyph, path: 'openrouter' }).ok).toBe(false);
+    expect(routeModel({ model: homoglyph }).ok).toBe(false);
+  });
+
+  it('exposes no way to widen the allow-list through the routing entry point', () => {
+    // `routeModel` takes model and path, and nothing else. A third argument that
+    // could supply an allow-list would be a widening seam on a spend control.
+    expect(routeModel.length).toBeLessThanOrEqual(1);
+    expect(isOpenRouterAllowed.length).toBe(1);
+    expect(routeModel({ model: 'meta/llama-4', path: 'openrouter', allowed: ['meta/llama-4'] } as never).ok).toBe(false);
   });
 
   it('records a canonical model alongside the raw one, so spellings do not fragment a comparison', () => {
