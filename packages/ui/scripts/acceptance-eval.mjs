@@ -20,6 +20,7 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { importCatalog, CATALOG_PATHS } from './lib/import-catalog.mjs';
+import { EXECUTION_PATHS, routeModel } from './lib/run-routing.mjs';
 import { gateAuditClean, gateElementsExist, scanJudgeLeak } from './lib/output-scan.mjs';
 import { DIMENSIONS, SEVERITIES, dimension, rubricFor, assertRubricCoverage, scoreRun, severity } from './lib/rubric.mjs';
 import { attributeFindings, prioritiseCatalogChanges, tierDelta, ATTRIBUTION_KINDS } from './lib/catalog-attribution.mjs';
@@ -71,8 +72,54 @@ function loadRun(runDir) {
     );
   }
   const info = JSON.parse(readFileSync(infoPath, 'utf8'));
+  validateLedger(info);
   const files = readOutputFiles(join(runDir, 'output'));
   return { runDir, info, files };
+}
+
+/**
+ * THE LEDGER IS READ, SO IT MUST BE CHECKED.
+ *
+ * The evaluator used to trust every field and print them as fact. A run whose
+ * `executionPath` had been edited to `"free-lol"`, set to null, or DELETED
+ * scored fine and exit 0 — and a deleted path rendered the literal `undefined`
+ * in the bolded execution-path cell of REPORT.md. That is worse than having no
+ * record at all, because a cost comparison would read it as a finding.
+ *
+ * Worse still, a model/path PAIR that `routeModel` refuses could be presented as
+ * something that happened: a report asserting an Anthropic model ran on the
+ * metered path is precisely the claim the router exists to make impossible, and
+ * printing it from an unchecked file re-opens the hole from the reading end.
+ *
+ * So the same decision function that authorised the run re-authorises the
+ * record. One function, both ends.
+ */
+function validateLedger(info) {
+  const problems = [];
+  for (const field of ['runId', 'scenarioId', 'model', 'tier', 'date']) {
+    if (typeof info[field] !== 'string' || !info[field]) problems.push(`\`${field}\` is missing or not a string`);
+  }
+  if (!EXECUTION_PATHS.includes(info.executionPath)) {
+    problems.push(
+      `\`executionPath\` is ${JSON.stringify(info.executionPath)}, which is not one of ${EXECUTION_PATHS.join(' | ')}. An unrecognised or absent path renders as fact in the report and would be trusted by a cost comparison.`,
+    );
+  }
+  if (!['explicit', 'inferred'].includes(info.pathSource)) {
+    problems.push(`\`pathSource\` is ${JSON.stringify(info.pathSource)}; it must say whether a human typed the path or it was inferred.`);
+  }
+  if (typeof info.model === 'string' && EXECUTION_PATHS.includes(info.executionPath)) {
+    const decision = routeModel({ model: info.model, path: info.executionPath });
+    if (!decision.ok) {
+      problems.push(
+        `the ledger records "${info.model}" on the ${info.executionPath} path, a combination the router REFUSES [${decision.rule}]. Either the file was edited after the run or the run bypassed the router; the report will not assert it as fact.`,
+      );
+    } else if (decision.path !== info.executionPath) {
+      problems.push(`the ledger records the ${info.executionPath} path, but "${info.model}" routes to ${decision.path}.`);
+    }
+  }
+  if (problems.length) {
+    fail(`the run ledger does not validate, so nothing was scored:\n  - ${problems.join('\n  - ')}`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -123,11 +170,26 @@ async function evaluate({ runDir, findingsPath, gatesPath }) {
   // `not-a-catalog-gap` accept any page name, and the escape hatch stops costing
   // anything — which is the one property that keeps it from swallowing the
   // analysis. Read from the pack, not from a list here, so it is this run's pack.
+  // WALKED, not a top-level listing. A flat readdir saw 13 of the pack's 93
+  // pages -- every per-element page lives under `elements/`, and those are the
+  // ones an agent reads most. So the escape hatch was unusable for exactly the
+  // pages a finding is most likely to be about, which forces the mis-filing the
+  // resolution exists to prevent.
   const agentPackDir = join(info.packDir ?? join(runDir, 'pack'), 'agent');
   if (existsSync(agentPackDir)) {
-    facts.pages = readdirSync(agentPackDir, { withFileTypes: true })
-      .filter((e) => e.isFile())
-      .map((e) => e.name);
+    const pages = [];
+    const walk = (dir, prefix) => {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        const rel = prefix ? `${prefix}/${e.name}` : e.name;
+        if (e.isDirectory()) walk(join(dir, e.name), rel);
+        else pages.push(rel);
+      }
+    };
+    walk(agentPackDir, '');
+    // Both spellings resolve: a finding may name `kai-chat.md` or the path
+    // `elements/kai-chat.md`, and refusing one of them would be pedantry that
+    // costs the analysis a real attribution.
+    facts.pages = [...new Set([...pages, ...pages.map((p) => p.split('/').pop())])];
   }
   assertRubricCoverage(scenarios);
 
@@ -175,6 +237,20 @@ async function evaluate({ runDir, findingsPath, gatesPath }) {
 
   const attributed = attributeFindings({ findings: findings.findings ?? [], catalog: facts });
   const scored = scoreRun({ scenario, gates, judged: findings.judgedScores ?? {}, findings: attributed });
+
+  // A FAILED RUN WITH NO FINDINGS IS NOT AN EVALUATION.
+  //
+  // It was accepted, and rendered "_nothing to change_" under the improvement
+  // analysis next to "Addressable share: 0 — every finding names a catalog
+  // change" — a sentence that is vacuously true over zero findings and reads as
+  // though the catalog came out clean. The whole premise is that what an agent
+  // could not build names what the catalog is missing, so a run that could not
+  // build it and produced no findings has skipped the only step that mattered.
+  if (!attributed.length && (scored.failedGates.length || scored.verdict !== 'scored')) {
+    fail(
+      `${info.runId} is a ${scored.verdict}${scored.failedGates.length ? ` (${scored.failedGates.join(', ')})` : ''} with ZERO findings recorded. That is not an evaluation: the premise of the deck is that whatever the agent could not build names what the catalog is missing, so a failing run must say what went wrong and what would have prevented it. Record at least one finding, or — if the catalog genuinely said it plainly — one attributed \`not-a-catalog-gap\`.`,
+    );
+  }
 
   const weightOf = (f) => dimension(f.dimension)?.weight ?? 1;
   const rank = (id) => severity(id)?.rank ?? 1;
@@ -272,9 +348,11 @@ many findings each would close.
 ${ranked}
 
 ${
-  e.analysis.notCatalogGaps.length
-    ? `${e.analysis.notCatalogGaps.length} finding(s) were attributed \`not-a-catalog-gap\` — the catalog said it plainly and the output got it wrong anyway. Addressable share: ${e.analysis.addressableShare}.`
-    : `Addressable share: ${e.analysis.addressableShare} — every finding names a catalog change.`
+  e.analysis.totalFindings === 0
+    ? '**No findings were recorded**, so there is no addressable share to report — this run proposes no catalog change because nothing was filed against it, not because the catalog was measured and found complete.'
+    : e.analysis.notCatalogGaps.length
+      ? `${e.analysis.notCatalogGaps.length} of ${e.analysis.totalFindings} finding(s) were attributed \`not-a-catalog-gap\` — the catalog said it plainly and the output got it wrong anyway. Addressable share: ${e.analysis.addressableShare}.`
+      : `Addressable share: ${e.analysis.addressableShare} — all ${e.analysis.totalFindings} finding(s) name a catalog change.`
 }
 
 ${
@@ -316,7 +394,24 @@ Thresholds, stated rather than tuned: strong >= ${d.thresholds.strongHasIt}, wea
 
 ${d.implicitContracts.length ? d.implicitContracts.map((id) => `- **${id}**`).join('\n') : '_None: the two tiers agree everywhere, so this scenario reveals nothing about tier robustness._'}
 
-${d.revealedFindings.length ? `${d.revealedFindings.length} finding(s) from the weak run sit on those dimensions and are tagged \`tierRevealed\` for the prioritiser.` : ''}
+${d.revealedFindings.length ? `${d.revealedFindings.length} finding(s) from the weak run sit on those dimensions.` : ''}
+
+## Catalog changes, re-ranked with the tier evidence
+
+The weak run's findings, with the tier-revealed ones tagged. **A tier-revealed
+change is worth more than its raw count suggests**: the strong model did not fall
+into it, so the catalog is currently relying on the model's priors to supply
+that contract, and it stops being supplied somewhere below this tier.
+
+| # | change | kind | closes | severity weight | tier-revealed |
+| --- | --- | --- | --- | --- | --- |
+${
+  d.rankedWithTier?.ranked.length
+    ? d.rankedWithTier.ranked
+        .map((c, i) => `| ${i + 1} | \`${c.changeId}\` | ${c.kind} | ${c.closes} | ${c.severityWeight} | ${c.tierRevealed ? '**yes**' : ''} |`)
+        .join('\n')
+    : '| — | _the weak run recorded no findings_ | | | | |'
+}
 
 Held at the weak tier: **${d.heldAtWeakTier ? 'yes' : 'no'}**.
 `;
@@ -497,6 +592,21 @@ if (args.includes('--compare')) {
   } catch (err) {
     fail(err.message);
   }
+  // CONSUME `tierRevealed` RATHER THAN ANNOUNCING IT. It was computed, described
+  // in the delta's prose, and then dropped: the per-run report's ranked table had
+  // already been written, so its tier-revealed column was empty after every
+  // compare. The prioritisation is re-run HERE over the weak run's findings with
+  // the tier tags applied, which is the only place both halves exist at once —
+  // and it is the ranking that should change, because a gap the strong model did
+  // not fall into is a contract the catalog is relying on the model to supply.
+  const revealedIds = new Set(d.revealedFindings.map((f) => f.id));
+  const weakTagged = (weak.findings ?? []).map((f) => ({ ...f, tierRevealed: revealedIds.has(f.id) }));
+  d.rankedWithTier = prioritiseCatalogChanges({
+    findings: weakTagged,
+    weightOf: (f) => dimension(f.dimension)?.weight ?? 1,
+    severityRank: (id) => severity(id)?.rank ?? 1,
+  });
+
   const report = renderDelta(d);
   const dest = arg('--out');
   if (dest) {

@@ -12,6 +12,7 @@ import {
   assertRubricCoverage,
   dimension,
   rubricFor,
+  rubricShape,
   scoreRun,
 } from '../../scripts/lib/rubric.mjs';
 import {
@@ -21,7 +22,7 @@ import {
   resolveAttribution,
   tierDelta,
 } from '../../scripts/lib/catalog-attribution.mjs';
-import { gateAuditClean, gateElementsExist, scanJudgeLeak } from '../../scripts/lib/output-scan.mjs';
+import { codeUnits, gateAuditClean, gateElementsExist, scanJudgeLeak } from '../../scripts/lib/output-scan.mjs';
 import { proposedFabricationRow, renderFabricatedPage } from '../../scripts/lib/fabrications.mjs';
 
 const PKG = join(__dirname, '..', '..');
@@ -68,6 +69,71 @@ describe('the rubric covers the deck it scores', () => {
     expect(() => assertRubricCoverage([fake])).toThrow(/no rubric dimension claims/);
   });
 
+  // I1 — THE SHAPE, PINNED. Line-to-dimension coverage stays green while a
+  // criterion is REWRITTEN: turning S4's "compiles and registers" into "the
+  // emitted code compiles" keeps every line claimed and silently drops the
+  // `registers` dimension, taking its weight out of the denominator so the score
+  // goes UP on a scenario that just lost a gate. This table is authored intent,
+  // not a derivable fact — update it deliberately when the deck changes.
+  const EXPECTED_SHAPE: Record<string, { dimensions: string[]; totalWeight: number }> = {
+    S1: {
+      dimensions: ['audit-clean', 'compiles', 'completeness', 'contract-correctness', 'elements-exist', 'honesty-bound', 'invariant-compliance', 'registers', 'wiring-topology'],
+      totalWeight: 26,
+    },
+    S2: {
+      dimensions: ['audit-clean', 'compiles', 'completeness', 'contract-correctness', 'elements-exist', 'honesty-bound', 'invariant-compliance', 'streams'],
+      totalWeight: 24,
+    },
+    S3: {
+      dimensions: ['audit-clean', 'completeness', 'contract-correctness', 'elements-exist', 'honesty-bound', 'invariant-compliance', 'wiring-topology'],
+      totalWeight: 21,
+    },
+    S4: {
+      dimensions: ['audit-clean', 'compiles', 'completeness', 'contract-correctness', 'elements-exist', 'honesty-bound', 'invariant-compliance', 'registers'],
+      totalWeight: 24,
+    },
+    S5: {
+      dimensions: ['audit-clean', 'completeness', 'contract-correctness', 'elements-exist', 'honesty-bound', 'invariant-compliance', 'registers'],
+      totalWeight: 21,
+    },
+    S6: {
+      dimensions: ['audit-clean', 'completeness', 'contract-correctness', 'elements-exist', 'honesty-bound', 'invariant-compliance'],
+      totalWeight: 19,
+    },
+    S7: {
+      dimensions: ['audit-clean', 'completeness', 'contract-correctness', 'elements-exist', 'honesty-bound', 'invariant-compliance'],
+      totalWeight: 19,
+    },
+  };
+
+  it('pins the dimension SET and total weight per scenario, so one cannot drop out silently', () => {
+    expect(() => assertRubricCoverage(scenarios, EXPECTED_SHAPE)).not.toThrow();
+    // Non-vacuity: the table covers the whole deck.
+    expect(Object.keys(EXPECTED_SHAPE).sort()).toEqual(scenarios.map((s) => s.id).sort());
+  });
+
+  it('the shape pin can see a dimension drop out while every line stays claimed', () => {
+    // S4's real line, rewritten so `registers` no longer applies. Coverage alone
+    // is still satisfied — `compiles` claims it — which is exactly the hole.
+    const rewritten = { id: 'S4', scoring: ['the emitted code compiles'], depth: 'whole surface' };
+    expect(rubricFor(rewritten).unclaimed).toEqual([]);
+    expect(rubricShape(rewritten).dimensions).not.toContain('registers');
+    expect(() => assertRubricCoverage([rewritten], EXPECTED_SHAPE)).toThrow(/NO LONGER APPLY/);
+  });
+
+  // F9 — the dimension-SET half and the WEIGHT half are separate guards, and the
+  // set half was masking the weight half in every case the deck currently
+  // produces. A weight change with an unchanged set is the drift that reprices
+  // every past score without changing which criteria applied.
+  it('catches a weight change even when the dimension set is identical', () => {
+    const s6 = scenarios.find((s) => s.id === 'S6')!;
+    const shape = rubricShape(s6);
+    expect(() => assertRubricCoverage([s6], { S6: shape })).not.toThrow();
+    expect(() =>
+      assertRubricCoverage([s6], { S6: { dimensions: shape.dimensions, totalWeight: shape.totalWeight + 1 } }),
+    ).toThrow(/total weight moved/);
+  });
+
   it('picks the dimensions each scenario actually needs', () => {
     const ids = (id: string) => rubricFor(scenarios.find((s) => s.id === id)!).dimensions.map((d) => d.id);
     // S2 names streaming and compilation; S7 is a prose answer and names neither.
@@ -88,10 +154,17 @@ describe('the rubric covers the deck it scores', () => {
     expect(rubricFor(scenarios.find((s) => s.id === 'S6')!).note).toMatch(/STRONGEST SIGNAL/);
   });
 
-  it('scores the refusal scenario\'s honesty bound as the heaviest single dimension', () => {
+  // PINNED EXACTLY. `toBeGreaterThanOrEqual` let the weight fall 4 -> 3 and stay
+  // green, which is the whole failure mode this assertion exists to prevent:
+  // the refusal scenario's honesty bound is the deck's strongest signal and its
+  // weight is the thing that makes it one.
+  it('scores the refusal scenario\'s honesty bound as the single heaviest dimension', () => {
     const s6 = rubricFor(scenarios.find((s) => s.id === 'S6')!);
     const honesty = s6.dimensions.find((d) => d.id === 'honesty-bound')!;
-    for (const d of s6.dimensions) expect(honesty.weight).toBeGreaterThanOrEqual(d.weight);
+    expect(honesty.weight).toBe(4);
+    for (const d of s6.dimensions) {
+      if (d.id !== 'honesty-bound') expect(honesty.weight, `${d.id} matches or beats it`).toBeGreaterThan(d.weight);
+    }
   });
 
   it('names the cardTypes answer as CORRECT in the anchor a judge reads', () => {
@@ -131,10 +204,54 @@ describe('mechanical gates sit UNDER the judged score', () => {
     expect(r.normalized).toBeLessThan(10);
   });
 
-  it('surfaces a gate that scanned nothing rather than counting it as clean', () => {
+  // H2 — a gate that scanned nothing used to score a full 10 while the report's
+  // own caveat beside it read "That is not a pass". A real S7 run took 32% of
+  // its weight from two gates that opened zero files.
+  it('a VACUOUS gate scores ZERO, not full weight', () => {
     const s6 = scenarios.find((s) => s.id === 'S6')!;
-    const r = scoreRun({ scenario: s6, gates: { ...gateAll('S6'), 'elements-exist': { passed: true, vacuous: true } }, judged: judgeAll('S6', 8) });
+    const r = scoreRun({ scenario: s6, gates: { ...gateAll('S6'), 'elements-exist': { passed: true, vacuous: true } }, judged: judgeAll('S6', 10) });
+    const row = r.rows.find((x) => x.id === 'elements-exist')!;
+    expect(row.score).toBe(0);
+    expect(row.source).toContain('VACUOUS');
     expect(r.vacuousGates).toContain('elements-exist');
+    expect(r.verdict).toBe('gated-fail');
+
+    // POSITIVE CONTROL: the identical gate, non-vacuous, does score 10 — so the
+    // zero above is about vacuity and not about the gate being broken.
+    const ok = scoreRun({ scenario: s6, gates: gateAll('S6'), judged: judgeAll('S6', 10) });
+    expect(ok.rows.find((x) => x.id === 'elements-exist')!.score).toBe(10);
+    expect(ok.verdict).toBe('scored');
+  });
+
+  // H1 — the machine verdicts were the UNVALIDATED half, while judged scores
+  // were runtime-checked. Backwards: gates outrank judgement.
+  it.each([['false'], ['no'], ['not run'], [1], [{}], [null], [undefined as unknown as string]])(
+    'refuses a gate whose `passed` is %o rather than scoring it',
+    (passed) => {
+      const s6 = scenarios.find((s) => s.id === 'S6')!;
+      expect(() =>
+        scoreRun({
+          scenario: s6,
+          gates: { ...gateAll('S6'), 'elements-exist': { passed } as unknown as { passed: boolean } },
+          judged: judgeAll('S6', 8),
+        }),
+      ).toThrow(/must be a real boolean|has no gate result/);
+    },
+  );
+
+  it('the string "false" specifically does not score a perfect 10', () => {
+    const s6 = scenarios.find((s) => s.id === 'S6')!;
+    let scored: { normalized: number } | undefined;
+    try {
+      scored = scoreRun({
+        scenario: s6,
+        gates: { ...gateAll('S6'), 'elements-exist': { passed: 'false' } as unknown as { passed: boolean } },
+        judged: judgeAll('S6', 10),
+      });
+    } catch {
+      scored = undefined;
+    }
+    expect(scored, 'a truthy string scored instead of being refused').toBeUndefined();
   });
 });
 
@@ -302,6 +419,21 @@ describe('tier delta names what the catalog leaves implicit', () => {
     expect(() => tierDelta({ strong: evaluation({}), weak: evaluation({ kitVersion: '2.0.0' }) })).toThrow(/different kit versions/);
     expect(() => tierDelta({ strong: evaluation({}), weak: evaluation({ kitVersion: '2.0.0' }), allowVersionSkew: true })).not.toThrow();
   });
+
+  // F13 — ABSENCE IS NOT COMPATIBILITY. The guard required both versions to be
+  // present before it could fire, so a run missing the field compared clean
+  // against anything: the case where you most need to know the packs may have
+  // differed was the one it waved through.
+  it.each<[string, { weak?: boolean; strong?: boolean }]>([
+    ['the weak run', { weak: true }],
+    ['the strong run', { strong: true }],
+    ['both runs', { weak: true, strong: true }],
+  ])('refuses a comparison when %s records no kit version', (_label, which) => {
+    const strong = evaluation(which.strong ? { kitVersion: undefined } : {});
+    const weak = evaluation(which.weak ? { kitVersion: undefined } : {});
+    expect(() => tierDelta({ strong, weak })).toThrow(/does not record a kit version/);
+    expect(() => tierDelta({ strong, weak, allowVersionSkew: true })).not.toThrow();
+  });
 });
 
 describe('the gates the evaluator runs for itself', () => {
@@ -330,10 +462,51 @@ describe('the gates the evaluator runs for itself', () => {
 
   it('does not scan prose, so the honest refusal is not punished', () => {
     const g = gateElementsExist({ files: [{ name: 'NOTES.md', text: 'There is no <kai-datagrid> in this kit.' }], knownTags });
-    expect(g.passed).toBe(true);
+    expect(g.fabricated).toEqual([]);
     // …and it SAYS it looked at nothing, rather than reporting a clean pass.
+    // The scorer turns that vacuity into a zero; see the H2 case above.
     expect(g.vacuous).toBe(true);
     expect(g.filesScanned).toBe(0);
+  });
+
+  // A prose answer with the code in a fence is the SHAPE of the debugging
+  // scenario's best answer, and the gates saw nothing at all in it.
+  it('scans fenced code inside a prose file, and only fenced code', () => {
+    const file = {
+      name: 'ANSWER.md',
+      text: [
+        'The kit has no grid, but here is the fix:',
+        '',
+        '```ts',
+        "chat.messages = messages.map((m, i) => (i === last ? { ...m } : m));",
+        '```',
+        '',
+        'Note that <kai-datagrid> outside a fence is me talking, not proposing.',
+      ].join('\n'),
+    };
+    const units = codeUnits([file]);
+    expect(units).toHaveLength(1);
+    expect(units[0].text).toContain('chat.messages =');
+    // The prose mention did not travel into the scanned unit.
+    expect(units[0].text).not.toContain('kai-datagrid');
+
+    const g = gateElementsExist({ files: [file], knownTags });
+    expect(g.vacuous).toBe(false);
+    expect(g.passed).toBe(true);
+  });
+
+  it('catches a fabricated tag written inside a fence', () => {
+    const g = gateElementsExist({
+      files: [{ name: 'ANSWER.md', text: '```html\n<kai-datagrid rows="10"></kai-datagrid>\n```\n' }],
+      knownTags,
+    });
+    expect(g.passed).toBe(false);
+    expect(g.fabricated.map((f) => f.tag)).toContain('kai-datagrid');
+  });
+
+  it('ignores a fence in a language that is not code', () => {
+    expect(codeUnits([{ name: 'a.md', text: '```json\n{"a":1}\n```\n' }])).toEqual([]);
+    expect(codeUnits([{ name: 'a.md', text: '```\nplain block\n```\n' }])).toEqual([]);
   });
 
   it('refuses to run against an empty known-tag set rather than reporting everything fabricated', () => {
@@ -351,6 +524,24 @@ describe('the gates the evaluator runs for itself', () => {
     const line = scenarios.find((s) => s.id === 'S6')!.scoring[0];
     expect(scanJudgeLeak({ files: [{ name: 'a.md', text: `notes: ${line}` }], scenarios }).clean).toBe(false);
     expect(scanJudgeLeak({ files: [{ name: 'a.ts', text: 'const chat = document.querySelector("kai-chat");' }], scenarios }).clean).toBe(true);
+  });
+
+  // F21 — the rewrites a copy-paste picks up on its own. Verbatim-only matching
+  // missed every one of these on text that is plainly the same sentence.
+  it.each([
+    ['capitalised', (l: string) => l.toUpperCase()],
+    ['doubled spaces', (l: string) => l.replace(/ /g, '  ')],
+    ['a newline mid-line', (l: string) => l.replace(' ', '\n')],
+    ['leading and trailing space', (l: string) => `   ${l}   `],
+  ])('still detects a scoring line that was %s on the way out', (_label, mangle) => {
+    const line = scenarios.find((s) => s.id === 'S6')!.scoring[0];
+    expect(scanJudgeLeak({ files: [{ name: 'a.md', text: mangle(line) }], scenarios }).clean).toBe(false);
+  });
+
+  // …and the honest bound is stated in the result itself, not only in prose.
+  it('says what it detects, so nobody reads it as general contamination detection', () => {
+    const r = scanJudgeLeak({ files: [], scenarios });
+    expect(r.detects).toContain('NOT paraphrase');
   });
 });
 
@@ -492,6 +683,99 @@ describe('the evaluator CLI, end to end over a prepared run', () => {
       }),
     );
     expect(run([EVAL, '--run', runDir]).code).toBe(0);
+  });
+
+  // F11/I3 — a flat readdir named 13 of the pack's 93 pages. Every PER-ELEMENT
+  // page lives under `elements/`, and those are the ones an attribution is most
+  // likely to be about, so the escape hatch was unusable exactly where it is
+  // needed and the finding would have to be mis-filed somewhere else.
+  it.each([['elements/kai-chat.md'], ['kai-chat.md']])('resolves the per-element page %s, not just the top level', (page) => {
+    writeFileSync(
+      join(runDir, 'findings.json'),
+      findings({
+        findings: [
+          {
+            id: 'x',
+            dimension: 'completeness',
+            severity: 'cosmetic-or-practice',
+            summary: 'x',
+            attribution: { kind: 'not-a-catalog-gap', page, quote: 'q' },
+          },
+        ],
+      }),
+    );
+    const r = run([EVAL, '--run', runDir]);
+    expect(r.code, r.out).toBe(0);
+  });
+
+  it('the element pages really are nested, so the case above is not trivially true', () => {
+    const info = JSON.parse(readFileSync(join(runDir, 'run-info.json'), 'utf8'));
+    const top = readdirSync(join(info.packDir, 'agent'), { withFileTypes: true }).filter((e) => e.isFile()).length;
+    const nested = readdirSync(join(info.packDir, 'agent', 'elements')).length;
+    expect(nested).toBeGreaterThan(top);
+  });
+
+  // H5 — the evaluator read the ledger and printed it as fact without checking a
+  // single field. A deleted executionPath rendered the literal `undefined` in
+  // the bolded execution-path cell, which a cost comparison would trust.
+  describe('the ledger is validated on read, not trusted', () => {
+    const withLedger = (mutate: (info: Record<string, unknown>) => void): { code: number; out: string } => {
+      const path = join(runDir, 'run-info.json');
+      const original = readFileSync(path, 'utf8');
+      const info = JSON.parse(original) as Record<string, unknown>;
+      mutate(info);
+      writeFileSync(path, JSON.stringify(info, null, 2));
+      writeFileSync(join(runDir, 'findings.json'), findings());
+      try {
+        return run([EVAL, '--run', runDir]);
+      } finally {
+        writeFileSync(path, original);
+      }
+    };
+
+    it.each([
+      ['an unknown path label', (i: Record<string, unknown>) => { i.executionPath = 'free-lol'; }, 'not one of'],
+      ['a null path', (i: Record<string, unknown>) => { i.executionPath = null; }, 'not one of'],
+      ['a DELETED path', (i: Record<string, unknown>) => { delete i.executionPath; }, 'not one of'],
+      ['a missing pathSource', (i: Record<string, unknown>) => { delete i.pathSource; }, 'pathSource'],
+      ['a missing tier', (i: Record<string, unknown>) => { delete i.tier; }, '`tier` is missing'],
+    ])('refuses %s', (_label, mutate, expected) => {
+      const r = withLedger(mutate);
+      expect(r.code).not.toBe(0);
+      expect(r.out).toContain(expected);
+      // And the bad value never reaches the report as fact.
+      expect(r.out).not.toContain('Wrote');
+    });
+
+    // The sharpest case: a pairing the ROUTER refuses, presented as history.
+    it('refuses a model/path pair the router would never have produced', () => {
+      const r = withLedger((i) => {
+        i.model = 'claude-opus-5';
+        i.executionPath = 'openrouter';
+      });
+      expect(r.code).not.toBe(0);
+      expect(r.out).toContain('a combination the router REFUSES');
+      expect(r.out).toContain('anthropic-never-openrouter');
+    });
+
+    // POSITIVE CONTROL: the untouched ledger still validates, so the refusals
+    // above are about the mutations and not about validation rejecting anything.
+    it('accepts the ledger the runner actually wrote', () => {
+      writeFileSync(join(runDir, 'findings.json'), findings());
+      expect(run([EVAL, '--run', runDir]).code).toBe(0);
+    });
+  });
+
+  // I4 — a gated failure with no findings rendered "_nothing to change_" beside
+  // "Addressable share: 0 — every finding names a catalog change", a sentence
+  // vacuously true over zero findings that reads as a clean bill of health.
+  it('refuses a failing run that recorded no findings at all', () => {
+    writeFileSync(join(runDir, 'output', 'bad.ts'), '<kai-datagrid></kai-datagrid>\n');
+    writeFileSync(join(runDir, 'findings.json'), findings({ findings: [] }));
+    const r = run([EVAL, '--run', runDir]);
+    expect(r.code).not.toBe(0);
+    expect(r.out).toContain('ZERO findings recorded');
+    rmSync(join(runDir, 'output', 'bad.ts'));
   });
 
   it('refuses a findings file belonging to a different run', () => {

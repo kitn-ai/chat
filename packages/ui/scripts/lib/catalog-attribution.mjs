@@ -283,10 +283,22 @@ export function tierDelta({ strong, weak, strongFindings = [], weakFindings = []
       `cannot compare tiers across scenarios (${strong.scenarioId} vs ${weak.scenarioId}). A tier delta is only meaningful over the same task.`,
     );
   }
-  if (!allowVersionSkew && strong.kitVersion && weak.kitVersion && strong.kitVersion !== weak.kitVersion) {
-    throw new Error(
-      `the two runs were packed from different kit versions (${strong.kitVersion} vs ${weak.kitVersion}). The packs differ, so the delta would confound the model with the catalog. Re-run one, or pass --allow-version-skew and say so in the report.`,
-    );
+  // ABSENCE IS NOT COMPATIBILITY. The guard used to require BOTH versions to be
+  // present before it could fire, so a run missing the field compared clean
+  // against anything and produced a delta at exit 0 -- the one case where you
+  // most need to know the packs might have differed is the case it waved
+  // through. An unknown version is now as disqualifying as a mismatched one.
+  if (!allowVersionSkew) {
+    if (!strong.kitVersion || !weak.kitVersion) {
+      throw new Error(
+        `one of the runs does not record a kit version (strong: ${JSON.stringify(strong.kitVersion)}, weak: ${JSON.stringify(weak.kitVersion)}), so there is no way to know the two packs matched. A missing version is not a matching version. Re-evaluate the run, or pass --allow-version-skew and say so in the report.`,
+      );
+    }
+    if (strong.kitVersion !== weak.kitVersion) {
+      throw new Error(
+        `the two runs were packed from different kit versions (${strong.kitVersion} vs ${weak.kitVersion}). The packs differ, so the delta would confound the model with the catalog. Re-run one, or pass --allow-version-skew and say so in the report.`,
+      );
+    }
   }
 
   const byId = (r) => new Map(r.rows.map((row) => [row.id, row]));

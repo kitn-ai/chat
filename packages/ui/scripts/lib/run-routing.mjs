@@ -19,8 +19,16 @@
 // is a separate seam (see acceptance-run.mjs); this file only answers "is this
 // combination allowed, and which path is it".
 
+// FROZEN, both lists, and this is a spend control rather than tidiness.
+// `scripts/` is in no tsconfig program and `checkJs` is off, so tsc cannot see a
+// `push` here: a planted `OPENROUTER_ALLOWED.push('openai/gpt-5')` produced zero
+// type errors, routed an unauthorised model to the metered path, and the CLI
+// then printed the widened list inside its own refusal message as though it were
+// the authorised one. Freezing makes that a TypeError in strict mode (every ESM
+// module is strict) at the moment of the push, instead of a silent invoice.
+
 /** The two paths. An unrecognised label is a hard refusal, never a default. */
-export const EXECUTION_PATHS = /** @type {const} */ (['claude-code', 'openrouter']);
+export const EXECUTION_PATHS = Object.freeze(/** @type {const} */ (['claude-code', 'openrouter']));
 
 /**
  * Models the owner has named for the metered path. THIS IS AN ALLOWLIST, not a
@@ -31,10 +39,22 @@ export const EXECUTION_PATHS = /** @type {const} */ (['claude-code', 'openrouter
  * about the tree, so there is nothing in the repo to derive it from. Adding an
  * entry is the act of authorising it.
  */
-export const OPENROUTER_ALLOWED = /** @type {const} */ (['~deepseek/deepseek-v4-flash-latest']);
+export const OPENROUTER_ALLOWED = Object.freeze(/** @type {const} */ (['~deepseek/deepseek-v4-flash-latest']));
 
 /** `~` is OpenRouter's floor-price prefix; it is not part of the model identity. */
 const bare = (model) => String(model ?? '').trim().replace(/^~/, '');
+
+/**
+ * THE FORM THE LEDGER RECORDS AND COMPARISONS KEY ON.
+ *
+ * The decision already normalises (trim, drop `~`, lowercase) but the record
+ * used to keep whatever was typed, so `Claude-Opus-5`, `claude-opus-5 ` and
+ * `~claude-opus-5` produced three different ledger strings for one model and a
+ * cross-run comparison silently treated them as three models. The raw spelling
+ * is still kept beside it — this is a canonical form for grouping, not a claim
+ * about what the operator wrote.
+ */
+export const canonicalModel = (model) => bare(model).toLowerCase();
 
 /**
  * Anthropic by IDENTITY, checked segment by segment rather than with a substring
@@ -58,7 +78,7 @@ export function isOpenRouterAllowed(model) {
 }
 
 /**
- * @typedef {{ ok: true, path: 'claude-code' | 'openrouter', pathSource: 'explicit' | 'inferred', model: string, rule: string }} RouteAllowed
+ * @typedef {{ ok: true, path: 'claude-code' | 'openrouter', pathSource: 'explicit' | 'inferred', model: string, modelCanonical: string, rule: string }} RouteAllowed
  * @typedef {{ ok: false, rule: string, error: string }} RouteRefused
  * @typedef {RouteAllowed | RouteRefused} RouteDecision
  */
@@ -90,6 +110,18 @@ export function routeModel({ model, path } = {}) {
     };
   }
 
+  // ORDER IS LOAD-BEARING BELOW, in a way that survived an adversarial review
+  // and must not be "tidied":
+  //
+  //  1. The Anthropic refusal is tested BEFORE the allow-list is consulted, so
+  //     widening OPENROUTER_ALLOWED can never open a metered path for an
+  //     Anthropic model. The refusal does not depend on the list at all.
+  //  2. The metered path additionally REQUIRES allow-list membership. So a
+  //     model whose identity check is defeated -- a homoglyph, a zero-width
+  //     joiner, a spelling nobody anticipated -- still cannot reach OpenRouter,
+  //     because it will not be on the list either. An identity-check miss
+  //     therefore cannot cause spend; it can only cause an over-refusal, which
+  //     is the safe direction.
   const anthropic = looksAnthropic(id);
   const allowed = isOpenRouterAllowed(id);
 
@@ -117,6 +149,7 @@ export function routeModel({ model, path } = {}) {
       path: 'claude-code',
       pathSource: path === 'claude-code' ? 'explicit' : 'inferred',
       model: id,
+      modelCanonical: canonicalModel(id),
       rule: 'anthropic-via-subscription',
     };
   }
@@ -127,6 +160,7 @@ export function routeModel({ model, path } = {}) {
       path: 'openrouter',
       pathSource: path === 'openrouter' ? 'explicit' : 'inferred',
       model: id,
+      modelCanonical: canonicalModel(id),
       rule: 'owner-named-openrouter-model',
     };
   }

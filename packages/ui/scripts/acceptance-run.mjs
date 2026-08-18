@@ -20,20 +20,38 @@
 
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { assertRoute, routeModel, EXECUTION_PATHS, OPENROUTER_ALLOWED } from './lib/run-routing.mjs';
 import { importCatalog } from './lib/import-catalog.mjs';
+import { HANDOVER_PREFIX, digestOf, filesUnder, verifyHandover } from './lib/handover.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PACKER = join(ROOT, 'scripts/acceptance-pack.mjs');
 const args = process.argv.slice(2);
 
+/**
+ * A flag's value, refusing the next FLAG as a value.
+ *
+ * `--tier --runs-dir /tmp/x` used to record `tier: "--runs-dir"` and then
+ * consume the directory as a positional nobody read, so the run was ledgered
+ * under a tier that is a flag name and the runs directory silently became
+ * whatever `--runs-dir` fell back to. Every field here ends up in a comparison,
+ * so a swallowed argument is a corrupted measurement rather than a typo.
+ */
 const arg = (name) => {
   const i = args.indexOf(name);
-  return i === -1 ? undefined : args[i + 1];
+  if (i === -1) return undefined;
+  const value = args[i + 1];
+  if (value === undefined || value.startsWith('--')) {
+    console.error(
+      `✗ acceptance-run: ${name} was given no value${value ? ` (the next token is the flag ${value})` : ''}. Every field on this command line is recorded in the ledger and compared across runs, so a missing one is refused rather than guessed.`,
+    );
+    process.exit(1);
+  }
+  return value;
 };
 
 function fail(msg) {
@@ -45,91 +63,12 @@ const USAGE = `usage:
   acceptance-run.mjs --scenario <S1..S7> --model <id> --tier <label> --runs-dir <dir>
                      [--path ${EXECUTION_PATHS.join('|')}] [--effort <label>]
                      [--handover <dir>] [--exec <module>] [--note <text>]
+  acceptance-run.mjs --prune-handovers <runs-dir>
   acceptance-run.mjs --self-test
 
 Execution paths: Anthropic models run through the owner's Claude Code
 subscription; OpenRouter carries only ${OPENROUTER_ALLOWED.join(', ')}.
 A mismatch is REFUSED, never rerouted — the two bill to different places.`;
-
-// ---------------------------------------------------------------------------
-// Handover isolation
-// ---------------------------------------------------------------------------
-
-/** Every file under `root`, as repo-relative-to-root paths. */
-function filesUnder(root) {
-  const out = [];
-  const walk = (dir, prefix) => {
-    for (const e of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
-      const full = join(dir, e.name);
-      const rel = prefix ? `${prefix}/${e.name}` : e.name;
-      if (e.isDirectory()) walk(full, rel);
-      else out.push(rel);
-    }
-  };
-  walk(root, '');
-  return out;
-}
-
-/**
- * CONTAMINATION CONTROL, and an honest statement of its limit.
- *
- * What this enforces: the handover directory contains a copy of `agent/` and
- * NOTHING else — no `judge/`, no `PACK.md`, no other run. It sits outside the
- * runs directory, so walking up from it reaches no answer key and no sibling
- * run; that is the property `<run>/agent` could never have, because `..` from
- * there is the judge directory.
- *
- * What it does NOT enforce: an agent's filesystem access. This script does not
- * sandbox anything. If the harness running the agent can read the whole disk, it
- * can read the judge directory whatever this checks. The backstop for that is on
- * the other side — the evaluator refuses to score output containing a scoring
- * line verbatim, because the packer redacted every one of them out of `agent/`.
- * Between the two: this makes leakage require deliberate effort, and the
- * evaluator notices when someone made it.
- */
-export function verifyHandover({ handoverDir, sourceDir, runsDir, scoringLines }) {
-  const problems = [];
-
-  const rel = relative(resolve(runsDir), resolve(handoverDir));
-  if (rel && !rel.startsWith('..')) {
-    problems.push(
-      `the handover directory ${handoverDir} is INSIDE the runs directory ${runsDir}. An agent given it can walk up into the judge material and into every other run. Point --handover somewhere else.`,
-    );
-  }
-
-  const got = filesUnder(handoverDir);
-  const want = filesUnder(sourceDir);
-  const extra = got.filter((f) => !want.includes(f));
-  const missing = want.filter((f) => !got.includes(f));
-  if (extra.length) problems.push(`the handover carries ${extra.length} file(s) the pack did not: ${extra.join(', ')}`);
-  if (missing.length) problems.push(`the handover is missing ${missing.length} packed file(s): ${missing.join(', ')}`);
-
-  const judgey = got.filter((f) => /(^|\/)judge(\/|$)/i.test(f) || /JUDGE\.md$/i.test(f) || /^PACK\.md$/i.test(f));
-  if (judgey.length) problems.push(`judge material reached the handover: ${judgey.join(', ')}`);
-
-  // The packer redacts every scenario's scoring lines out of agent/. Re-checked
-  // here rather than assumed: this is the last point before an agent reads it.
-  const leaked = [];
-  for (const f of got) {
-    const text = readFileSync(join(handoverDir, f), 'utf8');
-    for (const line of scoringLines) if (text.includes(line)) leaked.push(`${f}: ${line}`);
-  }
-  if (leaked.length) problems.push(`a scoring line survived redaction into the handover: ${leaked.join(' | ')}`);
-
-  return { ok: problems.length === 0, problems, fileCount: got.length, files: got };
-}
-
-/** A digest over the handed-over bytes, so a later evaluation can prove which pack was read. */
-function digestOf(root) {
-  const h = createHash('sha256');
-  for (const f of filesUnder(root)) {
-    h.update(f);
-    h.update('\0');
-    h.update(readFileSync(join(root, f)));
-    h.update('\0');
-  }
-  return `sha256:${h.digest('hex')}`;
-}
 
 // ---------------------------------------------------------------------------
 // Self-test: watch every refusal fire
@@ -212,6 +151,55 @@ if (args.includes('--self-test')) {
   selfTest();
   process.exit(0);
 }
+
+// MAINTENANCE: sweep handovers nothing references any more.
+//
+// A handover has to outlive the process that made it — the agent reads it later
+// — so it cannot be cleaned up on exit, and they accumulate. A review swept 824
+// abandoned directories out of TMPDIR. Failed runs now prune their own, and this
+// clears what earlier ones left: every directory matching our prefix that no
+// run-info.json under `<runs-dir>` still points at.
+if (args.includes('--prune-handovers')) {
+  const runsRoot = arg('--prune-handovers');
+  const referenced = new Set();
+  const collect = (dir, depth) => {
+    if (depth > 3) return;
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      if (!e.isDirectory()) continue;
+      const info = join(dir, e.name, 'run-info.json');
+      if (existsSync(info)) {
+        try {
+          referenced.add(resolve(JSON.parse(readFileSync(info, 'utf8')).handoverDir ?? ''));
+        } catch {
+          /* an unreadable ledger protects nothing; treat it as referencing nothing */
+        }
+      } else collect(join(dir, e.name), depth + 1);
+    }
+  };
+  if (existsSync(runsRoot)) collect(runsRoot, 0);
+
+  const tmp = tmpdir();
+  const candidates = readdirSync(tmp).filter((e) => e.startsWith(HANDOVER_PREFIX));
+  let removed = 0;
+  const kept = [];
+  for (const name of candidates) {
+    const full = resolve(join(tmp, name));
+    if (referenced.has(full)) {
+      kept.push(name);
+      continue;
+    }
+    try {
+      rmSync(full, { recursive: true, force: true });
+      removed += 1;
+    } catch (err) {
+      console.error(`  could not remove ${full}: ${err?.message ?? err}`);
+    }
+  }
+  console.log(
+    `acceptance-run: pruned ${removed} of ${candidates.length} handover director(ies) under ${tmp}; kept ${kept.length} still referenced by a ledger under ${runsRoot}.`,
+  );
+  process.exit(0);
+}
 if (args.includes('--help') || args.length === 0) {
   console.log(USAGE);
   process.exit(args.length === 0 ? 1 : 0);
@@ -263,12 +251,31 @@ const catalog = await importCatalog();
 const allScoringLines = [...new Set(catalog.listScenarios().flatMap((s) => s.scoring))];
 if (!allScoringLines.length) fail('the deck reports no scoring lines at all; the redaction re-check would be vacuous.');
 
-const handoverDir = arg('--handover') ?? mkdtempSync(join(tmpdir(), `kai-handover-${runId}-`));
-if (existsSync(handoverDir) && readdirSync(handoverDir).length) {
+const explicitHandover = arg('--handover');
+const handoverDir = explicitHandover ?? mkdtempSync(join(tmpdir(), `${HANDOVER_PREFIX}${runId}-`));
+// Only a handover THIS process created is ever removed, and only on a path
+// where no agent can have read it yet.
+const ownsHandover = !explicitHandover;
+if (existsSync(handoverDir) && readdirSync(handoverDir).length && explicitHandover) {
   fail(`--handover ${handoverDir} is not empty. The agent must receive the pack and nothing else.`);
 }
 mkdirSync(handoverDir, { recursive: true });
+
+// ONLY `agent/`. Never the pack root, which contains `judge/`. This is the
+// structural half of the isolation: the ancestor check above is a backstop for
+// where the directory SITS, and this is what it CONTAINS.
 cpSync(join(packDir, 'agent'), handoverDir, { recursive: true });
+
+/** Remove a handover we created, so a failed run never leaves one lying around. */
+const pruneHandover = (why) => {
+  if (!ownsHandover) return;
+  try {
+    rmSync(handoverDir, { recursive: true, force: true });
+    console.error(`acceptance-run: removed the handover at ${handoverDir} (${why}).`);
+  } catch (err) {
+    console.error(`acceptance-run: COULD NOT remove the handover at ${handoverDir} — ${err?.message ?? err}. Delete it by hand; it is a pack from a run that failed.`);
+  }
+};
 
 const handover = verifyHandover({
   handoverDir,
@@ -277,6 +284,11 @@ const handover = verifyHandover({
   scoringLines: allScoringLines,
 });
 if (!handover.ok) {
+  // Prune BEFORE failing. A handover that failed verification is exactly the one
+  // that must not survive on disk: the reviewer swept 824 abandoned directories
+  // out of TMPDIR, some of them holding a live answer key, all of them left by
+  // runs that had already failed.
+  pruneHandover('it did not verify');
   fail(`the handover is not clean, so no agent was given anything:\n  - ${handover.problems.join('\n  - ')}`);
 }
 
@@ -289,6 +301,9 @@ const runInfo = {
   scenarioId,
   // Everything needed to compare this run to another, and to know what it cost.
   model: route.model,
+  // The form comparisons key on. Three spellings of one model used to produce
+  // three ledger strings and a cross-run comparison read them as three models.
+  modelCanonical: route.modelCanonical,
   tier,
   effort: arg('--effort') ?? null,
   executionPath: route.path,

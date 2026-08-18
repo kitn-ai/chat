@@ -58,3 +58,39 @@ export const fabrications: TFabrication[] = [];
 export function listFabrications(): TFabrication[] {
   return z.array(Fabrication).parse(fabrications);
 }
+
+/**
+ * Resolve rows against the tags the kit actually ships, in BOTH directions.
+ *
+ * This is a named function rather than a loop inside the test for one reason:
+ * the record is empty, so a loop over it iterates zero times and passes whatever
+ * the rule is. Deleting both assertions left the suite green. A rule that cannot
+ * be exercised is not a guard, and the direction it protects — `invented`, the
+ * one that rots when the kit later ships the tag — is the direction this file's
+ * own comment says matters most.
+ *
+ * Extracted so it can be run over FIXTURES that make it fire, and over the live
+ * record, from the same code path.
+ *
+ * @returns problems; empty means every row resolves
+ */
+export function resolveFabrications(rows: TFabrication[], knownTags: Iterable<string>): string[] {
+  const known = new Set(knownTags);
+  if (known.size === 0) {
+    // Otherwise every row "resolves" in the direction that matters and none in
+    // the other, which is a broken input reported as a clean record.
+    return ['no known tags were supplied, so nothing could be resolved'];
+  }
+  const problems: string[] = [];
+  for (const row of rows) {
+    if (known.has(row.invented)) {
+      problems.push(
+        `\`${row.invented}\` is recorded as invented, but the kit SHIPS it now. Delete the row: it tells every future agent that a real element does not exist, on the one page whose job is saying what is real.`,
+      );
+    }
+    if (row.useInstead && !known.has(row.useInstead)) {
+      problems.push(`\`${row.invented}\` points at \`${row.useInstead}\` as the replacement, and the kit does not ship that either.`);
+    }
+  }
+  return problems;
+}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import derived from './derived.json';
-import { Fabrication, listFabrications, type TFabrication } from './fabrications';
+import { Fabrication, listFabrications, resolveFabrications, type TFabrication } from './fabrications';
 
 // The PAGE this record renders into is tested in tests/scripts/acceptance-eval.test.ts.
 // It lives there and not here because the renderer is a .mjs build script, and
@@ -29,33 +29,39 @@ describe('the fabrication record', () => {
     expect(rows).toHaveLength(0);
   });
 
-  // BOTH DIRECTIONS. The direction that rots is `invented`: the day the kit
-  // ships a tag some agent once invented, the row becomes a lie on the one page
-  // whose job is telling agents what is real.
-  it('resolves every recorded row against the derived layer, in both directions', () => {
-    for (const row of listFabrications()) {
-      expect(realTags.has(row.invented), `${row.invented} is recorded as invented but the kit now SHIPS it — delete the row`).toBe(
-        false,
-      );
-      if (row.useInstead) {
-        expect(realTags.has(row.useInstead), `${row.useInstead} is offered as a replacement and does not exist`).toBe(true);
-      }
-    }
+  // BOTH DIRECTIONS, over the LIVE record. Today this iterates zero rows and so
+  // proves nothing on its own — which is exactly why the rule itself is a named
+  // function, exercised against fixtures in the test below. Deleting this
+  // assertion used to leave the suite green.
+  it('every recorded row resolves against the derived layer', () => {
+    expect(resolveFabrications(listFabrications(), realTags)).toEqual([]);
   });
 
-  // POSITIVE CONTROL for the loop above. With zero rows it iterates zero times
-  // and passes whatever the resolution rule is, so the rule is exercised here
-  // against fixtures that make it fire in each direction.
-  it('the resolution rule can actually see both failures', () => {
-    const shipsItNow = { ...base, invented: 'kai-chat' };
-    expect(realTags.has(shipsItNow.invented)).toBe(true); // would fail the record check
+  // THE RULE ITSELF, made to fire. Previously this asserted `realTags.has(...)`,
+  // which exercises the SET and not the RULE — it would have passed with the
+  // resolution function deleted entirely.
+  it('fires on a row whose invented tag the kit now SHIPS — the direction that rots', () => {
+    const stale = { ...base, invented: 'kai-chat' };
+    const problems = resolveFabrications([stale], realTags);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('SHIPS it now');
+  });
 
-    const replacementMissing = { ...base, useInstead: 'kai-not-an-element' };
-    expect(realTags.has(replacementMissing.useInstead)).toBe(false); // would fail the record check
+  it('fires on a replacement the kit does not ship', () => {
+    const problems = resolveFabrications([{ ...base, useInstead: 'kai-not-an-element' }], realTags);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('does not ship that either');
+  });
 
-    // And the honest row still resolves.
+  it('accepts an honest row, so the rule is not simply refusing everything', () => {
+    expect(resolveFabrications([base], realTags)).toEqual([]);
+    // Both halves of the honest row are real facts about the tree, not fixtures.
     expect(realTags.has(base.invented)).toBe(false);
     expect(realTags.has(base.useInstead!)).toBe(true);
+  });
+
+  it('refuses an empty known-tag set instead of reporting a clean record', () => {
+    expect(resolveFabrications([base], [])).toHaveLength(1);
   });
 
   it('refuses a row that drops the replacement without saying why', () => {

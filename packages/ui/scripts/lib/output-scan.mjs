@@ -17,6 +17,52 @@ export const CODE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.
 
 export const isCodeFile = (name) => CODE_EXTENSIONS.some((ext) => name.toLowerCase().endsWith(ext));
 
+/** Fence languages that mean "this block is code the agent is proposing". */
+const CODE_FENCE_LANGS = new Set(['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'javascript', 'typescript', 'html', 'vue', 'svelte', 'astro']);
+
+/**
+ * THE UNITS THE GATES ACTUALLY SCAN: every code file, plus every fenced code
+ * block inside a prose file.
+ *
+ * Fences are included because of a real hole. Several scenarios — the debugging
+ * one especially — are answered as prose with the fix in a fenced block, and a
+ * gate that only read `.ts` files saw nothing at all. It then scored a clean
+ * pass on the strength of having opened zero files, taking a third of that
+ * scenario's weight for it.
+ *
+ * Prose OUTSIDE a fence is still never scanned, and that is not an oversight: an
+ * answer that says "there is no <kai-datagrid> in this kit" is the best possible
+ * answer to the refusal scenario, and flagging it for naming the thing it
+ * declined to invent would punish exactly the behaviour the deck exists to
+ * reward. The fence is the boundary between "here is code I am giving you" and
+ * "here is me talking about code".
+ *
+ * KNOWN RESIDUAL: an answer that fences a block to illustrate what NOT to write
+ * would be read as proposing it. Accepted, and worth knowing — the alternative
+ * (ignoring fences) silently un-measures every prose-shaped answer, which is the
+ * larger and quieter error. A judge seeing this can attribute it as a pack
+ * defect.
+ *
+ * @param {{ name: string, text: string }[]} files
+ * @returns {{ name: string, text: string }[]}
+ */
+export function codeUnits(files) {
+  /** @type {{ name: string, text: string }[]} */
+  const units = [];
+  for (const f of files) {
+    if (isCodeFile(f.name)) {
+      units.push(f);
+      continue;
+    }
+    let index = 0;
+    for (const m of f.text.matchAll(/^[ \t]*```([A-Za-z0-9+-]*)[ \t]*\r?\n([\s\S]*?)^[ \t]*```/gm)) {
+      if (!CODE_FENCE_LANGS.has(m[1].toLowerCase())) continue;
+      units.push({ name: `${f.name}#fence${index++}`, text: m[2] });
+    }
+  }
+  return units;
+}
+
 /**
  * Positions where a `kai-*` string is unambiguously an ELEMENT TAG.
  *
@@ -76,7 +122,7 @@ export function gateElementsExist({ files, knownTags }) {
       'gateElementsExist was given an empty known-tag set. Every tag would be reported fabricated, which is a broken input, not a finding.',
     );
   }
-  const code = files.filter((f) => isCodeFile(f.name));
+  const code = codeUnits(files);
   /** @type {{ tag: string, file: string, where: string }[]} */
   const fabricated = [];
   /** @type {Set<string>} */
@@ -115,7 +161,7 @@ export function gateElementsExist({ files, knownTags }) {
  * @param {{ files: { name: string, text: string }[] }} input
  */
 export function gateAuditClean({ files }) {
-  const code = files.filter((f) => isCodeFile(f.name));
+  const code = codeUnits(files);
   /** @type {{ key: string, invariant: string, needle: string, file: string }[]} */
   const hits = [];
   for (const f of code) {
@@ -141,25 +187,50 @@ export function gateAuditClean({ files }) {
 }
 
 /**
- * CONTAMINATION CONTROL. The packer redacts every scenario's scoring lines out
- * of `agent/`, so a scoring line appearing VERBATIM in the agent's output means
- * the agent read `judge/`. That run is not a measurement of the catalog, it is a
- * measurement of the answer key, and it must be refused rather than scored.
+ * CONTAMINATION BACKSTOP — and read what it is before relying on it.
  *
- * Checked over EVERY scenario's lines, not this run's, because a pack for S1 is
- * still contaminated by an agent that read S2's key.
+ * WHAT IT CATCHES: an answer key that was COPY-PASTED. The packer redacts every
+ * scenario's scoring line out of `agent/`, so a scoring line reappearing in the
+ * output means the text came from `judge/`. Checked over EVERY scenario's lines
+ * rather than this run's, because a pack for S1 is still contaminated by an
+ * agent that read S2's key.
+ *
+ * WHAT IT DOES NOT CATCH, stated plainly because the honest bound matters more
+ * than the guard: AN AGENT THAT READ THE KEY AND WROTE IN ITS OWN WORDS. A
+ * reviewer defeated the original form with capitalisation, a doubled space, a
+ * newline mid-line, half a line, a paraphrase and an en-dash. Case and
+ * whitespace are normalised below because that is cheap and closes the
+ * accidental half; the rest is not closable by string matching, and widening the
+ * match toward paraphrase would only trade misses for false accusations of
+ * cheating. So: THIS DETECTS COPY-PASTE, NOT READING. The real control is
+ * structural — the agent is handed `agent/` and never told where `judge/` is.
  *
  * @param {{ files: { name: string, text: string }[], scenarios: { id: string, scoring: string[] }[] }} input
  */
 export function scanJudgeLeak({ files, scenarios }) {
+  // Case-folded, whitespace-collapsed, and the dash forms unified — the three
+  // rewrites a copy-paste picks up on its own from a formatter or an editor.
+  const normalise = (s) =>
+    s
+      .toLowerCase()
+      .replace(/[‐-―]/g, '-')
+      .replace(/\s+/g, ' ')
+      .trim();
+
   /** @type {{ scenario: string, line: string, file: string }[]} */
   const leaks = [];
   for (const f of files) {
+    const haystack = normalise(f.text);
     for (const s of scenarios) {
       for (const line of s.scoring) {
-        if (f.text.includes(line)) leaks.push({ scenario: s.id, line, file: f.name });
+        if (haystack.includes(normalise(line))) leaks.push({ scenario: s.id, line, file: f.name });
       }
     }
   }
-  return { clean: leaks.length === 0, filesScanned: files.length, leaks };
+  return {
+    clean: leaks.length === 0,
+    filesScanned: files.length,
+    leaks,
+    detects: 'copy-paste of a scoring line, case- and whitespace-insensitive. NOT paraphrase, and NOT an agent that read the key and wrote its own words.',
+  };
 }

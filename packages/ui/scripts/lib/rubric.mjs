@@ -253,8 +253,28 @@ export function rubricFor(scenario) {
   };
 }
 
-/** Loud version, for callers that must not proceed on a drifted rubric. */
-export function assertRubricCoverage(scenarios) {
+/** The applicable dimension SET and total weight — what a pin has to compare. */
+export function rubricShape(scenario) {
+  const r = rubricFor(scenario);
+  return { dimensions: r.dimensions.map((d) => d.id).sort(), totalWeight: r.totalWeight };
+}
+
+/**
+ * Loud version, for callers that must not proceed on a drifted rubric.
+ *
+ * TWO CHECKS, because the first one alone let a dimension vanish silently.
+ * Line-to-dimension coverage answers "is every criterion claimed by something",
+ * and that stays true while a criterion is REWRITTEN: changing S4's
+ * "compiles and registers" to "the emitted code compiles" keeps every line
+ * claimed, and quietly drops the `registers` dimension along with its weight.
+ * The score then goes UP, out of a smaller denominator, on a scenario that lost
+ * a gate. So an optional `expected` shape pins the dimension SET and the total
+ * weight per scenario; supply it from the test that owns the deck's intent.
+ *
+ * @param {{ id: string, scoring: string[] }[]} scenarios
+ * @param {Record<string, { dimensions: string[], totalWeight: number }>} [expected]
+ */
+export function assertRubricCoverage(scenarios, expected) {
   const problems = [];
   for (const s of scenarios) {
     const r = rubricFor(s);
@@ -262,6 +282,20 @@ export function assertRubricCoverage(scenarios) {
       problems.push(
         `${s.id}: no rubric dimension claims the scoring line "${line}". Add a claim pattern in rubric.mjs, or the criterion silently contributes nothing to the score.`,
       );
+    }
+    const want = expected?.[s.id];
+    if (!want) continue;
+    const got = rubricShape(s);
+    const missing = want.dimensions.filter((d) => !got.dimensions.includes(d));
+    const extra = got.dimensions.filter((d) => !want.dimensions.includes(d));
+    if (missing.length) {
+      problems.push(
+        `${s.id}: the dimension(s) ${missing.join(', ')} NO LONGER APPLY. Every scoring line is still claimed, so the coverage check alone stays green while the score is computed over a smaller denominator — which makes it go up on a scenario that just lost a criterion.`,
+      );
+    }
+    if (extra.length) problems.push(`${s.id}: unexpected dimension(s) ${extra.join(', ')}.`);
+    if (got.totalWeight !== want.totalWeight) {
+      problems.push(`${s.id}: total weight moved ${want.totalWeight} -> ${got.totalWeight}. Scores before and after are not comparable.`);
     }
   }
   if (problems.length) {
@@ -335,9 +369,34 @@ export function scoreRun({ scenario, gates = {}, judged = {}, findings = [] }) {
         );
         raw = 0;
         source = 'missing-gate';
+      } else if (typeof g.passed !== 'boolean') {
+        // A MACHINE VERDICT MUST BE VALIDATED AT LEAST AS STRICTLY AS A JUDGED
+        // ONE. Judged scores were runtime-checked from the start while these
+        // were trusted, which is backwards: the gates are the half that
+        // OUTRANKS judgement, so a bad value here is worth more than a bad
+        // score there. `"false"` is what any shell pipeline that stringifies a
+        // boolean emits, and it is truthy — it scored a perfect 10 while
+        // reading, in plain English, as the opposite. `passed: boolean` in a
+        // JSDoc typedef is documentation; these scripts are in no tsconfig
+        // program and `checkJs` is off, so nothing was checking it.
+        problems.push(
+          `mechanical dimension "${d.id}" has \`passed: ${JSON.stringify(g.passed)}\` (${typeof g.passed}). A gate verdict must be a real boolean — true or false, not "true", "false", "no", 1 or {}. A string is truthy whatever it says, so "false" would score a perfect 10 while reading as its own opposite.`,
+        );
+        raw = 0;
+        source = 'invalid-gate';
+      } else if (g.vacuous) {
+        // A GATE THAT SCANNED NOTHING IS NOT A PASS, and the report already said
+        // so in its own caveat while the score awarded full weight for it — the
+        // report contradicting the number it printed. A vacuous gate is
+        // epistemically identical to an unrun one: it produces the same silence,
+        // and silence is not evidence. So it fails, loudly, rather than handing
+        // out weight nobody earned. Real case: an S7 run took 32% of its weight
+        // from two gates that opened zero files.
+        raw = 0;
+        source = 'gate (VACUOUS — scanned nothing, so it cannot pass)';
       } else {
         raw = g.passed ? 10 : 0;
-        source = g.vacuous ? 'gate (VACUOUS — scanned nothing)' : 'gate';
+        source = 'gate';
       }
     } else {
       const j = judged[d.id];

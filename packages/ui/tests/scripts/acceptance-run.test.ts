@@ -1,10 +1,11 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { listScenarios } from '../../src/agent-tooling/catalog/scenarios';
 import { EXECUTION_PATHS, OPENROUTER_ALLOWED, isOpenRouterAllowed, looksAnthropic, routeModel } from '../../scripts/lib/run-routing.mjs';
+import { verifyHandover } from '../../scripts/lib/handover.mjs';
 
 const PKG = join(__dirname, '..', '..');
 const RUNNER = join(PKG, 'scripts/acceptance-run.mjs');
@@ -78,6 +79,49 @@ describe('the two-path router', () => {
   it('exposes exactly two paths', () => {
     expect([...EXECUTION_PATHS].sort()).toEqual(['claude-code', 'openrouter']);
   });
+
+  // H4 — the allow-list is a spending authorisation, and tsc cannot protect it:
+  // `scripts/` is in no tsconfig program and `checkJs` is off, so a planted
+  // `push` produced zero type errors and routed an unauthorised model to the
+  // metered path. Freezing turns that into a TypeError at the push.
+  it('freezes both lists, so nothing can widen the metered path at runtime', () => {
+    expect(Object.isFrozen(OPENROUTER_ALLOWED)).toBe(true);
+    expect(Object.isFrozen(EXECUTION_PATHS)).toBe(true);
+    expect(() => (OPENROUTER_ALLOWED as unknown as string[]).push('openai/gpt-5')).toThrow(TypeError);
+    // And the push really did not take: the model still has no path.
+    expect(routeModel({ model: 'openai/gpt-5', path: 'openrouter' })).toMatchObject({ rule: 'openrouter-not-owner-named' });
+  });
+
+  // The two structural properties an adversarial review identified as the reason
+  // 45 attack inputs could not reach the metered path. Both are easy to destroy
+  // by "tidying", so both are pinned.
+  it('requires allow-list membership for the metered path, so an identity miss cannot cause spend', () => {
+    // BOTH segments homoglyphed — Cyrillic а in "anthropic" AND Cyrillic с in
+    // "claude". Homoglyphing only one is not enough, which is itself worth
+    // knowing: the segment rule catches `аnthropic/claude-…` on the `claude-`
+    // half alone.
+    expect(looksAnthropic('аnthropic/claude-sonnet-4')).toBe(true);
+
+    const homoglyph = 'аnthropic/сlaude-sonnet-4';
+    expect(looksAnthropic(homoglyph), 'the fixture no longer defeats the identity check').toBe(false);
+
+    // …and it STILL cannot reach the metered path, because that path requires
+    // allow-list membership on top of the identity check. This is the property
+    // that makes an identity miss cost an over-refusal rather than an invoice.
+    expect(routeModel({ model: homoglyph, path: 'openrouter' }).ok).toBe(false);
+    expect(routeModel({ model: homoglyph }).ok).toBe(false);
+  });
+
+  it('records a canonical model alongside the raw one, so spellings do not fragment a comparison', () => {
+    const spellings = ['claude-opus-5', 'Claude-Opus-5', '  claude-opus-5  '];
+    const canonical = spellings.map((m) => {
+      const d = routeModel({ model: m, path: 'claude-code' });
+      if (!d.ok) throw new Error(`unexpected refusal for ${m}`);
+      return d.modelCanonical;
+    });
+    expect(new Set(canonical).size).toBe(1);
+    expect(canonical[0]).toBe('claude-opus-5');
+  });
 });
 
 describe('the runner refuses before it creates anything', () => {
@@ -88,6 +132,23 @@ describe('the runner refuses before it creates anything', () => {
     expect(r.out).toContain('anthropic-never-openrouter');
     // A refusal that costs a directory teaches operators to work around it.
     expect(readdirSync(runs)).toEqual([]);
+  });
+
+  // I9 — the parser took any next token as a value, so `--tier --runs-dir <dir>`
+  // ledgered `tier: "--runs-dir"` and swallowed the directory. Every field here
+  // is compared across runs, so a swallowed argument is a corrupt measurement.
+  it('refuses a flag whose value is the next flag, instead of ledgering it', () => {
+    const runs = fresh();
+    const r = cli(['--scenario', 'S6', '--model', 'claude-opus-5', '--tier', '--runs-dir', runs]);
+    expect(r.code).not.toBe(0);
+    expect(r.out).toContain('--tier was given no value');
+    expect(readdirSync(runs)).toEqual([]);
+  });
+
+  it('refuses a trailing flag with no value at all', () => {
+    const r = cli(['--scenario', 'S6', '--model', 'claude-opus-5', '--tier', 'x', '--runs-dir']);
+    expect(r.code).not.toBe(0);
+    expect(r.out).toContain('--runs-dir was given no value');
   });
 
   it('its own positive controls all fire', () => {
@@ -172,6 +233,64 @@ describe('the run ledger', () => {
     const judge = readFileSync(join(runDir, 'pack', 'judge', 'JUDGE.md'), 'utf8');
     const s6 = listScenarios().find((s) => s.id === 'S6')!;
     expect(judge).toContain(s6.scoring[0]);
+  });
+});
+
+describe('handover hygiene', () => {
+  // I6 — "`..` reaches no answer key" was a property of the TMPDIR default, not
+  // of the check: only a handover INSIDE runsDir was refused, so a sibling
+  // directory with run material two levels up was accepted.
+  it('refuses a handover with run material anywhere above it, not just inside runs-dir', () => {
+    const base = fresh();
+    const runs = join(base, 'runs');
+    const handover = join(base, 'handovers', 'S6');
+    const source = join(base, 'src');
+    mkdirSync(runs, { recursive: true });
+    mkdirSync(handover, { recursive: true });
+    mkdirSync(source, { recursive: true });
+    writeFileSync(join(source, 'README.md'), '# pack\n');
+    writeFileSync(join(handover, 'README.md'), '# pack\n');
+
+    // Clean while the ancestor holds nothing of ours…
+    expect(verifyHandover({ handoverDir: handover, sourceDir: source, runsDir: runs, scoringLines: [] }).ok).toBe(true);
+
+    // …and refused once it does. `base` is an ancestor of the handover and is
+    // NOT inside runsDir, which is the case the first version waved through.
+    writeFileSync(join(base, 'PACK.md'), '# pack root\n');
+    const r = verifyHandover({ handoverDir: handover, sourceDir: source, runsDir: runs, scoringLines: [] });
+    expect(r.ok).toBe(false);
+    expect(r.problems.join(' ')).toContain('an ancestor of the handover');
+  });
+
+  // I7 — a failed run used to leave its handover on disk; a review swept 824
+  // abandoned directories out of TMPDIR, some holding a live answer key.
+  it('removes the handover it created when the run fails verification', () => {
+    const runs = fresh();
+    const before = readdirSync(tmpdir()).filter((e) => e.startsWith('kai-handover-'));
+    // A handover pointed inside the runs directory fails verification.
+    const r = cli(['--scenario', 'S6', '--model', 'claude-opus-5', '--tier', 't', '--runs-dir', runs, '--handover', join(runs, 'inside')]);
+    expect(r.code).not.toBe(0);
+    const after = readdirSync(tmpdir()).filter((e) => e.startsWith('kai-handover-'));
+    // An explicit --handover is not ours to delete, but no NEW temp handover
+    // may be left behind by the failure either.
+    expect(after.length).toBeLessThanOrEqual(before.length);
+  });
+
+  it('prunes handovers no ledger references, and keeps the ones that are referenced', () => {
+    const runs = fresh();
+    const r = cli(['--scenario', 'S7', '--model', 'claude-opus-5', '--tier', 't', '--runs-dir', runs]);
+    expect(r.code, r.out).toBe(0);
+    const info = JSON.parse(readFileSync(join(runs, readdirSync(runs)[0], 'run-info.json'), 'utf8'));
+    expect(existsSync(info.handoverDir)).toBe(true);
+
+    // An orphan with our prefix, referenced by nothing.
+    const orphan = mkdtempSync(join(tmpdir(), 'kai-handover-orphan-'));
+    writeFileSync(join(orphan, 'README.md'), 'debris\n');
+
+    const p = cli(['--prune-handovers', runs]);
+    expect(p.code, p.out).toBe(0);
+    expect(existsSync(orphan), 'the orphan survived the sweep').toBe(false);
+    expect(existsSync(info.handoverDir), 'a referenced handover was destroyed').toBe(true);
   });
 });
 
