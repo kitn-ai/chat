@@ -36,13 +36,13 @@
 // -- scoring-line redaction, import specifiers resolving against the exports
 // map, the floor, artifact agreement, needle soundness -- can refuse to produce
 // a pack rather than produce one and then complain about it.
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as esbuild from 'esbuild';
-import { runFloor, formatFloor, selfTest, assertArtifactsAgree, faultsSince, SETTLE_MS } from './lib/invariant-floor.mjs';
-import { NEEDLES, verifyNeedles, selfTestNeedles, variantsOf } from './lib/audit-needles.mjs';
+import { runFloor, formatFloor, selfTest, assertArtifactsAgree, faultsSince, faultCount, SETTLE_MS } from './lib/invariant-floor.mjs';
+import { NEEDLE_TABLE, NEEDLES, verifyNeedles, selfTestNeedles, variantsOf } from './lib/audit-needles.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CATALOG_DIR = join(ROOT, 'src/agent-tooling/catalog');
@@ -60,14 +60,24 @@ function arg(name) {
 }
 
 /**
- * `process.exit()` does not flush pending stdout writes, and stdout to a PIPE is
- * async -- so the report branches printed nothing at all when run under
- * execFileSync, while looking fine in a terminal. Flush first, then exit.
+ * Terminal path. DELIBERATELY NOT `process.exit()`, for two reasons that both
+ * bit:
+ *
+ *  - `process.exit()` does not flush pending stdout writes, and stdout to a PIPE
+ *    is async, so the report branches printed nothing at all under execFileSync
+ *    while looking fine in a terminal;
+ *  - `process.exit()` also kills PENDING TIMERS, which is how `--floor` and
+ *    `--self-test` -- the two things CI runs -- ended up outside the late-fault
+ *    guard entirely: a 900ms fault in a real `right` form never got the chance
+ *    to happen, and the run reported "floor clean".
+ *
+ * Setting the code and returning lets the loop drain naturally: pending timers
+ * fire, faults are recorded, and the exit guard has something to see. A clean
+ * run has nothing pending and exits immediately, so this costs nothing.
  */
-async function exitAfterFlush(code) {
+function finish(code) {
   completed = true;
-  await new Promise((r) => process.stdout.write('', r));
-  process.exit(code);
+  process.exitCode = code;
 }
 
 /**
@@ -79,13 +89,76 @@ async function exitAfterFlush(code) {
  * finding. Every terminal path sets `completed`; anything else is a failure.
  */
 let completed = false;
+/**
+ * Paths this process CREATED, and nothing else. `--out` is `mkdir -p`'d, so a
+ * pre-existing directory is accepted, and the first version of the late-fault
+ * guard did `rmSync(out, { recursive: true })` -- which destroys whatever was
+ * already there. `--out .` would have taken the repository with it. Only these
+ * entries are ever removed.
+ */
+let createdEntries = [];
+/** Faults recorded after this mark are LATE: the floor already gave its verdict. */
+let floorMark = Infinity;
+
 process.on('exit', () => {
-  if (completed) return;
-  console.error(
-    '✗ acceptance-pack: the run ended without reaching a terminal path — it neither packed, listed, nor reported. Treat this as a failure, not an empty result.',
-  );
-  process.exitCode = process.exitCode || 1;
+  // Wrapped, all of it. A throw inside an `exit` listener is swallowed by the
+  // persistent `uncaughtException` handler, which aborts the REST of this
+  // listener -- so a failed rmSync used to skip the `console.error` and the
+  // exit code below it, and the run exited 0 with the pack still on disk. That
+  // is the exact silent-success mode this guard exists to prevent.
+  try {
+    if (!completed) {
+      console.error(
+        '✗ acceptance-pack: the run ended without reaching a terminal path — it neither packed, listed, nor reported. Treat this as a failure, not an empty result.',
+      );
+      process.exitCode = process.exitCode || 1;
+    }
+    const late = floorMark === Infinity ? [] : faultsSince(floorMark);
+    if (!late.length) return;
+
+    // EXIT CODE FIRST. Anything below can throw; the verdict must not depend on
+    // whether cleanup succeeded.
+    process.exitCode = 1;
+    console.error(
+      `✗ acceptance-pack: ${late.length} fault(s) arrived after the floor's verdict — ${late.map((f) => f.error).join('; ')}.`,
+    );
+    const failures = [];
+    for (const entry of createdEntries) {
+      try {
+        rmSync(entry, { recursive: true, force: true });
+      } catch (err) {
+        failures.push(`${entry}: ${err && err.message ? err.message : err}`);
+      }
+    }
+    if (failures.length) {
+      console.error(
+        `✗ acceptance-pack: AND THE PACK COULD NOT BE REMOVED — ${failures.join('; ')}. There is a pack on disk from a run that FAILED; delete it by hand before anyone reads it.`,
+      );
+    } else if (createdEntries.length) {
+      console.error(`✗ acceptance-pack: removed ${createdEntries.join(', ')} — a pack must never outlive a run that failed.`);
+    }
+  } catch (err) {
+    // Last resort: never let this listener fail silently.
+    process.exitCode = 1;
+    try {
+      console.error(`✗ acceptance-pack: the exit guard itself failed: ${err && err.message ? err.message : err}`);
+    } catch {
+      /* nothing left to try */
+    }
+  }
 });
+
+// A pathological `right` form (a very long timer, an interval the floor could
+// not clear) must not hang CI. Unref'd, so it never keeps the loop alive by
+// itself -- it only fires if something ELSE is still holding it open.
+const watchdog = setTimeout(() => {
+  console.error(
+    '✗ acceptance-pack: still running 30s after the work finished — something the catalog scheduled is holding the event loop open. Failing rather than hanging.',
+  );
+  process.exitCode = 1;
+  process.exit(1);
+}, 30_000);
+watchdog.unref();
 
 /** The authored catalog modules are TypeScript; bundle them once and import. */
 async function importCatalog() {
@@ -561,6 +634,38 @@ ${blocks.join('\n\n---\n\n')}
 `;
 }
 
+/**
+ * The recall breakdown, GENERATED from the per-needle tier annotation rather
+ * than written out beside it. The hand-written version drifted twice -- a needle
+ * filed as surviving anything that a rename measurably kills, and one in no tier
+ * at all -- and a guard that only caught an OMITTED needle could not see a
+ * MISPLACED one. Each tier's promise is machine-checked against the transform
+ * corpora in audit-needles.mjs before the pack is written, so what this prints
+ * is a measured claim, not a restatement.
+ */
+function renderRecallTiers() {
+  const of = (tier) => Object.values(NEEDLE_TABLE).filter((r) => r.tier === tier);
+  const list = (recs) => recs.map((r) => `\`${r.needle}\``).join(', ');
+  const notes = Object.values(NEEDLE_TABLE)
+    .filter((r) => r.note)
+    .map((r) => `- \`${r.needle}\` — ${r.note}.`)
+    .join('\n');
+  return `Recall varies by item, and here is exactly how far each one goes. Both tiers
+below are checked against re-spellings of their own mistake before this page is
+written, in both directions — a needle that quietly stopped earning its tier
+fails the build rather than over-promising here.
+
+1. **Survives renaming your variables** — ${list(of('rename-proof'))}. Quote
+   style, trailing semicolons and the surrounding variable names are all
+   irrelevant: the needle is the operation itself.
+2. **Survives quote style and semicolons, but names one specific token** —
+   ${list(of('literal-bound'))}. Spell that token differently — a variable where
+   the literal is, a different name for the receiver — and it goes quiet.
+
+${notes ? `Two of those are near-verbatim by design:\n\n${notes}\n` : ''}
+None of them survive a rewrite into a template literal.`;
+}
+
 function renderSelfAudit({ selfAuditItems, derived }) {
   const items = selfAuditItems
     .map(
@@ -594,28 +699,7 @@ from, and in **none** of the recommended forms — in either quote style — so 
 is a real finding, not a style opinion. Where an item lists two strings they are
 the same needle spelled with single and with double quotes; **check both**.
 
-Recall varies by item, and here is exactly how far it goes, because an
-over-promise would be worse than a gap:
-
-1. **Survive anything but a rewrite** — \`.messages.push(\`, \`.parts.push(\`,
-   \`.url}>\`. Quote style, semicolons and every variable name around them are
-   irrelevant, because the needle is the operation itself.
-2. **Survive quote style and semicolons, but name one specific token** —
-   \`setAttribute('messages'\`, \`setAttribute('policy'\`, \`'_blank')\`,
-   \`'data: '\`, \`document.addEventListener('kai-\`, \`Bearer ' + apiKey\`,
-   \`.innerHTML = part.\`. Spell that token differently — a variable where the
-   literal is, a different name for the value — and they go quiet.
-3. **Depend on the receiver being named the way this catalog names it** —
-   \`chat.conversations\`, \`wrapper.addEventListener('kai-\`,
-   \`chat.addEventListener('kai-conversation-select'\`,
-   \`setTimeout(() => { chat.\`, \`'DOMContentLoaded', () => { chat.\`. The last
-   two are near-verbatim **on purpose**: \`setTimeout\` and
-   \`DOMContentLoaded\` are perfectly legitimate for other work, so nothing
-   shorter separates the mistake from correct code, and a needle that flags
-   correct code is worse than a narrow one. Rename your variable and these stop
-   finding anything.
-
-None of them survive a rewrite into a template literal.
+${renderRecallTiers()}
 
 **Zero hits does not mean correct; a hit means definitely wrong.** Part 2 is the
 half that does not depend on spelling.
@@ -902,13 +986,21 @@ throw inside a **DOM event listener** — which is neither of the first two,
 because jsdom routes a listener's exception to its virtual console where no
 process-level handler sees it.
 
-Blame is assigned STRUCTURALLY, not by the clock. A timer a fragment schedules
-is owned by the case that scheduled it, however late it fires, because
-attributing by "which case was running when it landed" sends the reader to
-correct code — a 50ms timer, or a chain of nested 0ms ones, lands inside the
-next example's window. Rejections from a \`.then\` are the one route still
-attributed by arrival; they settle inside their own drain in practice, and this
-sentence is the residual rather than a claim that they cannot.
+Blame is assigned STRUCTURALLY, not by the clock. A timer a fragment schedules is
+owned by the case that scheduled it, however late it fires, because attributing
+by "which case was running when it landed" sends the reader to correct code — a
+50ms timer, or a chain of nested 0ms ones, lands inside the next example's
+window. A rejection CREATED inside such a timer is owned the same way: the
+window stays set across the callback and one macrotask beyond it, which is where
+\`unhandledRejection\` fires.
+
+**The residual, measured rather than assumed:** a rejection created somewhere no
+case owns — a \`.then\` on a promise the harness itself made, resolving after
+its case's drain — is still attributed by arrival. It fails the run either way;
+what it can get wrong is which example it names.
+
+A rejection that gets a handler shortly afterwards is **retracted** and is not a
+failure at all, so a pack is never destroyed over a run that did nothing wrong.
 
 The bound is time, not route. Each case is drained to quiescence, then the run
 settles for **${SETTLE_MS}ms** before the floor gives a verdict; a fault inside
@@ -1042,12 +1134,13 @@ function verifySpecifiers(text, pkg, readSource) {
 // Main
 // ---------------------------------------------------------------------------
 
+async function main() {
 const catalog = await importCatalog();
 const scenarios = catalog.listScenarios();
 
 if (args.includes('--list')) {
   for (const s of scenarios) console.log(`${s.id}  ${s.depth}`);
-  await exitAfterFlush(0);
+  return finish(0);
 }
 
 const derived = JSON.parse(readFileSync(join(CATALOG_DIR, 'derived.json'), 'utf8'));
@@ -1082,7 +1175,11 @@ if (args.includes('--self-test')) {
     fail(`the pack's own positive controls failed:\n  - ${[...r.failed, ...needleFailed].join('\n  - ')}`);
   }
   console.log('✓ acceptance-pack: every planted fault was detected.');
-  await exitAfterFlush(0);
+  // The mark is set even on the verification paths: a late fault in --floor or
+  // --self-test is exactly as much a failure as one during a pack, and those two
+  // are what CI runs.
+  floorMark = faultCount();
+  return finish(0);
 }
 
 const invariants = catalog.listInvariants();
@@ -1091,7 +1188,8 @@ if (args.includes('--floor')) {
   console.log(formatFloor(floor));
   if (!floor.ok) fail(`${floor.errors.length} floor failure(s). The catalog's own recommended code does not run.`);
   console.log(`✓ acceptance-pack: floor clean — ${floor.results.length} examples executed.`);
-  await exitAfterFlush(0);
+  floorMark = floor.mark;
+  return finish(0);
 }
 
 const id = arg('--scenario');
@@ -1114,28 +1212,6 @@ assertArtifactsAgree(derived.elements, meta);
 const needleProblems = verifyNeedles(invariants);
 if (needleProblems.length) {
   fail(`the self-audit needles are unsound, so nothing was packed:\n  - ${needleProblems.join('\n  - ')}`);
-}
-
-/**
- * The recall breakdown on SELF-AUDIT.md sorts every needle into a tier. It is
- * authored prose over a machine-checked table, which is exactly the pairing that
- * drifts -- the first draft of it put `chat.conversations` in the
- * survives-anything tier, and a rename measurement said otherwise. A needle
- * missing from the breakdown is a needle the page silently over-promises about.
- */
-function assertBreakdownCoversEveryNeedle(page) {
-  const start = page.indexOf('Recall varies by item');
-  const end = page.indexOf('None of them survive');
-  if (start === -1 || end === -1 || end < start) fail('the self-audit recall breakdown is missing or malformed.');
-  const block = page.slice(start, end);
-  const missing = Object.values(NEEDLES).filter((n) => !block.includes(n));
-  if (missing.length) {
-    fail(
-      `the self-audit recall breakdown does not sort ${missing.length} needle(s): ${missing
-        .map((n) => JSON.stringify(n))
-        .join(', ')}. Every needle must be tiered, or the page over-promises about the ones it omits.`,
-    );
-  }
 }
 
 const metaByTag = new Map(meta.map((m) => [m.tag, m]));
@@ -1264,9 +1340,7 @@ addAgent('DELIVERY.md', renderDelivery({ pkg, kitVersion, derived, solidExports 
 addAgent('ELEMENTS.md', renderElementIndex({ derived, meta, universal, intents, capabilityOf }));
 addAgent('SHARED-PROPS.md', renderSharedProps({ universal, meta }));
 addAgent('INVARIANTS.md', renderInvariants({ invariants, derived }));
-const selfAuditPage = renderSelfAudit({ selfAuditItems, derived });
-assertBreakdownCoversEveryNeedle(selfAuditPage);
-addAgent('SELF-AUDIT.md', selfAuditPage);
+addAgent('SELF-AUDIT.md', renderSelfAudit({ selfAuditItems, derived }));
 addAgent('RECIPES.md', renderRecipes({ recipes }));
 addAgent('PARTS.md', renderParts({ derived, partConsumption }));
 addAgent('INTEGRATIONS.md', renderIntegrations({ derived }));
@@ -1309,33 +1383,21 @@ addJudge('FLOOR.md', renderFloorReport(floor, specifiers));
 
 // --- write ------------------------------------------------------------------
 
-// THE LATE-FAULT GUARD. `settle()` inside runFloor covers faults scheduled
-// within SETTLE_MS; anything later than that would previously land AFTER the
-// pack was on disk, leaving a complete pack that claims success while the
-// process dies. There is no bound that makes "later" impossible, so the write
-// decision is made robust instead: if any fault is recorded after the floor's
-// verdict, the pack is REMOVED and the run exits 1.
-let writtenRoot;
-const floorMark = floor.mark;
-process.on('exit', () => {
-  const late = faultsSince(floorMark);
-  if (!late.length) return;
-  if (writtenRoot) rmSync(writtenRoot, { recursive: true, force: true });
-  console.error(
-    `✗ acceptance-pack: ${late.length} fault(s) arrived after the floor's verdict — ${late
-      .map((f) => f.error)
-      .join('; ')}. ${
-      writtenRoot ? `The pack at ${writtenRoot} was REMOVED` : 'Nothing was written'
-    }: a pack on disk must never outlive a run that failed.`,
-  );
-  process.exitCode = 1;
-});
-
 const agentDir = join(out, 'agent');
 const judgeDir = join(out, 'judge');
+// REFUSE a non-empty --out rather than merging into it. Half of the data-loss
+// hazard is the removal; the other half is accepting a directory that already
+// has someone else's files in it, which is what made the removal dangerous.
+if (existsSync(out) && readdirSync(out).length) {
+  fail(
+    `--out ${out} is not empty. Point it at a new or empty directory: the pack refuses to write into one it does not own, and its cleanup only ever removes what it created.`,
+  );
+}
 mkdirSync(join(agentDir, 'elements'), { recursive: true });
-writtenRoot = out;
 mkdirSync(judgeDir, { recursive: true });
+// EXACTLY what this run creates -- never `out` itself, which may have existed.
+createdEntries = [agentDir, judgeDir, join(out, 'PACK.md')];
+floorMark = floor.mark;
 
 const write = (dir, name, body) => writeFileSync(join(dir, name), body.endsWith('\n') ? body : body + '\n');
 for (const p of agentPages) write(agentDir, p.name, p.body);
@@ -1387,7 +1449,10 @@ Scenario: ${scenario.id} — ${scenario.depth}.
 `,
 );
 
-completed = true;
+finish(0);
 console.log(
   `acceptance-pack: packed ${scenario.id} into ${out} (agent/: ${elementPages.length} element pages + ${agentPages.length} guides; judge/: ${judgePages.length} reports + catalog.json)`,
 );
+}
+
+await main();

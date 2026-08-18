@@ -75,9 +75,18 @@ function assert(cond, msg) {
 const FAULTS = [];
 let currentWindow = null;
 
-const record = (err, owner = currentWindow) => {
-  FAULTS.push({ window: owner, error: err && err.message ? err.message : String(err), consumed: false });
+const record = (err, owner = currentWindow, promise = undefined) => {
+  FAULTS.push({
+    window: owner,
+    error: err && err.message ? err.message : String(err),
+    consumed: false,
+    retracted: false,
+    promise,
+  });
 };
+
+/** Faults that still count: not retracted by a later handler. */
+const liveFaults = (list) => list.filter((f) => !f.retracted);
 
 /**
  * Timers a fragment schedules, OWNED by the case that scheduled them.
@@ -95,10 +104,26 @@ const record = (err, owner = currentWindow) => {
  */
 function ownedTimers(owner) {
   const wrap = (fn) => (...a) => {
+    // `currentWindow` is set for the duration too, not just the try/catch: a
+    // `Promise.reject` CREATED inside the callback surfaces later through
+    // `unhandledRejection`, which reads the clock. Without this line that
+    // rejection was blamed on whichever example happened to be running -- the
+    // same misattribution, surviving on the one route the try/catch cannot see.
+    const previous = currentWindow;
+    currentWindow = owner;
     try {
       return fn(...a);
     } catch (err) {
       record(err, owner);
+    } finally {
+      // Restored on the NEXT macrotask turn, not synchronously. Node fires
+      // `unhandledRejection` at the end of the current tick's microtask drain --
+      // AFTER a synchronous `finally` would have put the window back -- so a
+      // rejection created inside this callback would read the clock again. The
+      // identity guard means a window that opened meanwhile is never stomped.
+      setTimeout(() => {
+        if (currentWindow === owner) currentWindow = previous;
+      }, 0);
     }
   };
   return {
@@ -114,7 +139,15 @@ function ownedTimers(owner) {
 // swallowed by this very handler and the run HUNG, exiting 0 with no output.
 // Found by the hang; the `completed` guard in the packer exists so a silent
 // exit-0 can never look like success again.
-process.on('unhandledRejection', (reason) => record(reason));
+process.on('unhandledRejection', (reason, promise) => record(reason, currentWindow, promise));
+// N6: a rejection handled a tick later is NOT a failure. Without this the exit
+// guard deletes the pack of a run that did nothing wrong -- the false-positive
+// twin of deleting the wrong directory, and just as bad for a runner that has to
+// trust the verdict.
+process.on('rejectionHandled', (promise) => {
+  const f = FAULTS.find((x) => x.promise === promise);
+  if (f) f.retracted = true;
+});
 // A persistent `uncaughtException` handler stops Node crashing, which is the
 // point: a crash after the pack is on disk leaves a pack that looks written.
 // Nothing is swallowed -- every fault reaches the sink, and the sink is what
@@ -131,7 +164,7 @@ const W = dom.window;
 /** How many faults have been seen so far — the caller's acknowledgement mark. */
 export const faultCount = () => FAULTS.length;
 /** Everything recorded after `mark`, for the late-fault guard. */
-export const faultsSince = (mark) => FAULTS.slice(mark);
+export const faultsSince = (mark) => liveFaults(FAULTS.slice(mark));
 
 /**
  * Wall-clock settle, for faults scheduled further out than the per-case drain
@@ -182,6 +215,9 @@ function deferred() {
 // completes inside its own window instead of surfacing in the next one; a fault
 // scheduled beyond it is handled by `settle()` and, past that, by the caller's
 // exit guard.
+// Only ever waited on the failure path: a rejection handled a tick later must be
+// allowed to retract itself before a case is called failed.
+const REJECTION_GRACE_MS = 60;
 const MIN_TURNS = 4;
 const QUIET_TURNS = 3;
 const MAX_TURNS = 40;
@@ -210,7 +246,15 @@ async function withAsyncFaultTrap(label, fn) {
   // during the window, so a timer another case scheduled would fail an innocent
   // one -- the same misattribution, moved rather than fixed. A fault with a
   // different owner, or none, is left for the post-run sweep.
-  const mine = FAULTS.slice(mark).filter((f) => f.window === label);
+  const own = () => liveFaults(FAULTS.slice(mark)).filter((f) => f.window === label);
+  let mine = own();
+  if (mine.length) {
+    // A rejection that gets a handler slightly later is not a failure, and
+    // `rejectionHandled` can arrive after the drain has stopped. Pay this only
+    // on the failure path, so a clean run costs nothing.
+    await new Promise((r) => setTimeout(r, REJECTION_GRACE_MS));
+    mine = own();
+  }
   if (mine.length) {
     for (const f of mine) f.consumed = true;
     throw new FloorAssertionError(
@@ -842,7 +886,7 @@ export async function runFloor(invariants, helpers, { harnesses = HARNESSES } = 
   // the case that SCHEDULED it, so it is reported against that case rather than
   // against whichever example happened to be running -- sending a reader to
   // correct code is worse than saying "this could not be attributed".
-  for (const f of FAULTS.slice(startMark).filter((x) => !x.consumed)) {
+  for (const f of liveFaults(FAULTS.slice(startMark)).filter((x) => !x.consumed)) {
     f.consumed = true;
     if (f.window) {
       errors.push(`${f.window}: failed after its case finished, in a continuation it scheduled: ${f.error}`);
@@ -918,6 +962,26 @@ export async function selfTest(helpers) {
       examples: [{ wrong: 'x', right: "setTimeout(() => { throw new Error('BEYOND DRAIN BOOM'); }, 120);" }],
     },
     {
+      // N5: a rejection CREATED inside an owned timer. The try/catch cannot see
+      // it -- it surfaces through unhandledRejection later -- so this is the one
+      // shape where attribution could still fall back to the clock.
+      id: 'zz-timer-reject',
+      examples: [
+        { wrong: 'x', right: "setTimeout(() => { Promise.reject(new Error('TIMER REJECT BOOM')); }, 60);" },
+      ],
+    },
+    {
+      // N6: a rejection that gets a handler a tick later is NOT a failure. The
+      // guard must not delete the pack of a run that did nothing wrong.
+      id: 'zz-handled-rejection',
+      examples: [
+        {
+          wrong: 'x',
+          right: "const p = Promise.reject(new Error('benign-handled')); setTimeout(() => p.catch(() => {}), 10);",
+        },
+      ],
+    },
+    {
       // The shape review measured: nested 0ms timers outlive any fixed number of
       // drain turns, and used to be blamed on the NEXT row.
       id: 'zz-nested-timers',
@@ -986,6 +1050,14 @@ export async function selfTest(helpers) {
       stubs: [],
       cases: [{ label: 'schedules a nested chain', bindings: () => ({}), check: () => {} }],
     },
+    'zz-timer-reject#0': {
+      stubs: [],
+      cases: [{ label: 'rejects from inside a timer', bindings: () => ({}), check: () => {} }],
+    },
+    'zz-handled-rejection#0': {
+      stubs: [],
+      cases: [{ label: 'a rejection that is handled a tick later', bindings: () => ({}), check: () => {} }],
+    },
     'zz-no-cases#0': { stubs: [], cases: [] },
     'zz-good#0': freshArray,
     'zz-dangling#0': { stubs: [], cases: [{ label: 'never runs', bindings: () => ({}), check: () => {} }] },
@@ -1014,6 +1086,15 @@ export async function selfTest(helpers) {
       'a chain of nested 0ms timers outliving the drain is also blamed on its own case',
       errors.some((e) => e.includes('NESTED BOOM') && e.startsWith('zz-nested-timers#0')) &&
         !errors.some((e) => e.includes('NESTED BOOM') && !e.startsWith('zz-nested-timers#0')),
+    ],
+    [
+      'a REJECTION created inside an owned timer is blamed on its own case, not on the clock',
+      errors.some((e) => e.includes('TIMER REJECT BOOM') && e.startsWith('zz-timer-reject#0')) &&
+        !errors.some((e) => e.includes('TIMER REJECT BOOM') && !e.startsWith('zz-timer-reject#0')),
+    ],
+    [
+      'a rejection HANDLED a tick later is not a failure at all',
+      !errors.some((e) => e.includes('benign-handled')) && status('zz-handled-rejection#0') === 'passed',
     ],
     ['an example with no harness is reported, not skipped', status('zz-unharnessed#0') === 'no-harness'],
     ['a missing harness raises a structural error', errors.some((e) => e.includes('no harness for zz-unharnessed#0'))],

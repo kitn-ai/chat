@@ -377,12 +377,26 @@ describe('acceptance pack', () => {
     expect(floorReport).toMatch(/settles for \*\*\d+ms\*\*/);
     expect(floorReport).toContain('removes the\npack');
     expect(floorReport).toContain('Blame is assigned STRUCTURALLY');
+    // The residual must be stated, and the retraction rule with it -- last round
+    // the hedge here was measurably false for one shape.
+    expect(floorReport).toContain('The residual, measured rather than assumed');
+    expect(floorReport).toContain('retracted');
     // A4: the symbol check must report its own coverage, including any skip.
     expect(floorReport).toContain('## Import specifiers the pack names');
+    // The list of symbols the pack NAMES contains a symbol whether or not it was
+    // checked, so asserting presence there proves nothing about coverage -- the
+    // first version of this said "is not reported as checked" and could not mean
+    // it. What proves coverage is ABSENCE from the UNCHECKED section.
+    const uncheckedSection = floorReport.slice(floorReport.indexOf('## Import specifiers the pack names'));
     for (const sym of ['Chat (react)', 'useKaiChat (react)', 'elementsReady (elements)', 'createAssistantStream (state)']) {
-      expect(floorReport, `${sym} is not reported as checked`).toContain(sym);
+      expect(floorReport, `${sym} is not named at all`).toContain(sym);
+      expect(uncheckedSection, `${sym} is reported UNCHECKED`).not.toContain(
+        `\`${sym.split(' ')[0]}\` was NOT checked`,
+      );
     }
-    expect(floorReport).toMatch(/nothing was skipped|UNCHECKED — read this as a gap/);
+    // A positive assertion, not an alternation that is true in both states.
+    expect(floorReport).toContain('nothing was skipped');
+    expect(floorReport).not.toContain('UNCHECKED — read this as a gap');
     // JUDGE.md must not overclaim either.
     expect(readFileSync(join(judge, 'JUDGE.md'), 'utf8')).toContain('executed against the stand-ins');
   });
@@ -399,6 +413,10 @@ describe('acceptance pack', () => {
       'a throw inside a DOM EVENT LISTENER is reported failed (jsdom hides these in its virtual console)',
       'a fault scheduled BEYOND the per-case drain is blamed on the case that SCHEDULED it, not on another example',
       'a chain of nested 0ms timers outliving the drain is also blamed on its own case',
+      'a REJECTION created inside an owned timer is blamed on its own case, not on the clock',
+      'a rejection HANDLED a tick later is not a failure at all',
+      'needle check: a needle OVERSTATED as rename-proof is reported',
+      'needle check: a needle UNDERSTATED as literal-bound is reported',
       'needle check: a needle whose other quote variant fires on a right form is reported',
       'needle check: a needle matches the same mistake spelled with double quotes',
       'an example with no harness is reported, not skipped',
