@@ -24,6 +24,21 @@
 export { installKaiDevtoolsHook } from './hook';
 export type { KaiDevtoolsHook } from './hook';
 
+// The app's DELIBERATE DISCLOSURE of what it actually sent.
+//
+// The one producer on this surface, and the exception is principled rather than
+// a slip: `emitWireDiagnostic` stays internal because a consumer holding it can
+// forge any event and make a panel lie about a stream that never happened,
+// while this emits a single type whose whole content is "what the app says it
+// sent" -- a subject on which the app is the authority. Nothing to forge.
+//
+// It exists because the kit structurally cannot see the request: the system
+// prompt, the model choice and any RAG or guardrail injection are added by the
+// app's own route. See the module docblock for why disclosure is the app's
+// decision and never the kit's collection.
+export { reportRequest } from './report-request';
+export type { ReportRequestOptions } from './report-request';
+
 // The event contract, re-exported so a panel binds to ONE specifier instead of
 // reaching into ./wire for the types and ./diagnostics for the hook.
 //
@@ -36,6 +51,7 @@ export type { KaiDevtoolsHook } from './hook';
 // decision, made through the signal.
 export { subscribeWireDiagnostics } from '../wire/diagnostics';
 export type {
+  AppRequestEvent,
   EncodeAttachmentReport,
   EncodeDroppedEvent,
   EncodeRequestEvent,

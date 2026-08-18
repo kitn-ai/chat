@@ -228,6 +228,77 @@ step('an encode through ./wire reaches a ./diagnostics subscriber, metadata only
   }
 }
 
+// ── Check 6: the app's disclosure, and the REVERSE bundle direction ──────────
+//
+// `reportRequest` lives in dist/diagnostics.js and emits into the shared state
+// that dist/wire.js reads. That is the OPPOSITE direction from check 1, which
+// subscribes through ./diagnostics and emits from ./wire, and a direction no
+// other check walks: a build in which ./diagnostics could receive but not
+// EMIT would pass every check above and leave this one event silent.
+//
+// It also runs under plain node with no DOM globals in scope, which is the SSR
+// claim executed rather than merely imported -- hence its placement before
+// check 4, which installs a JSDOM window.
+step('reportRequest emits from ./diagnostics to a ./wire subscriber, under node, metadata only');
+{
+  const diagnostics = await import(diagUrl);
+  const wire = await import(wireUrl);
+
+  if (typeof diagnostics.reportRequest !== 'function') {
+    fail('dist/diagnostics.js does not export reportRequest as a function.');
+  } else {
+    const seen = [];
+    // Subscribing through ./wire on purpose: the emit is in the OTHER bundle.
+    const off = wire.subscribeWireDiagnostics((e) => seen.push(e));
+    diagnostics.reportRequest(
+      {
+        model: 'guard/requested-model',
+        messages: [
+          { role: 'system', content: 'GUARD-SENTINEL-system-prompt' },
+          { role: 'user', content: 'GUARD-SENTINEL-user-text' },
+        ],
+        tools: [{ type: 'function', function: { name: 'lookup' } }],
+      },
+      { traceId: 'guard-trace', url: 'https://guard.example.com/api/chat?key=GUARD-SENTINEL-key' },
+    );
+    if (typeof off === 'function') off();
+
+    const event = seen.find((e) => e.type === 'app.request');
+    if (!event) {
+      fail(
+        'reportRequest called through dist/diagnostics.js delivered NO app.request event to a ' +
+          `subscriber registered through dist/wire.js; got [${seen.map((e) => e.type).join(', ') || 'nothing at all'}]. ` +
+          'The two bundles each inline the emitter, so this is the duplication class seen from ' +
+          'the direction only this event travels.',
+      );
+    } else {
+      // The finding the whole event exists for: the system prompt the kit
+      // cannot otherwise see, counted.
+      if (event.systemMessages !== 1) {
+        fail(`Expected app.request.systemMessages === 1, got ${JSON.stringify(event.systemMessages)}.`);
+      }
+      if (event.model !== 'guard/requested-model') {
+        fail(`Expected the REQUESTED model verbatim, got ${JSON.stringify(event.model)}.`);
+      }
+      // Metadata only by default, asserted against the shipped bundle. The
+      // query string is out even under payload, so it is swept here too.
+      const json = JSON.stringify(event);
+      for (const sentinel of [
+        'GUARD-SENTINEL-system-prompt',
+        'GUARD-SENTINEL-user-text',
+        'GUARD-SENTINEL-key',
+      ]) {
+        if (json.includes(sentinel)) {
+          fail(
+            `app.request carried "${sentinel}" with no payload signal set. An app's system prompt ` +
+              'is the most sensitive string it owns, and the shipped bundle is what runs in production.',
+          );
+        }
+      }
+    }
+  }
+}
+
 // ── Check 4: the chain the panel actually failed on ──────────────────────────
 //
 // LAST, because it installs DOM globals that the checks above should not see.

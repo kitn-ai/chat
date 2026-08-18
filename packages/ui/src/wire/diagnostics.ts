@@ -350,6 +350,101 @@ export interface EncodeDroppedEvent extends WireDiagnosticBase {
   payload?: { part: unknown };
 }
 
+/**
+ * What the APP says it sent. Emitted only by `reportRequest`, never by the kit
+ * on its own.
+ *
+ * ★ THE ONLY EVENT THE KIT DOES NOT OBSERVE FOR ITSELF, and that is the point.
+ * In the normal shape the app's server route adds the system prompt, picks the
+ * model, and performs any RAG or guardrail injection, and NONE of it passes
+ * through the kit -- which is why `encode.request.systemMessages` is always 0.
+ * That 0 says "the system prompt is being added somewhere I cannot see"; this
+ * event is how a developer chooses to make that somewhere visible.
+ *
+ * Deliberate disclosure, so it is the app's decision and not the kit's
+ * collection. See `reportRequest` for why that distinction is load-bearing.
+ */
+export interface AppRequestEvent extends WireDiagnosticBase {
+  type: 'app.request';
+  /** Length of the body's `messages` array. Absent when there was no array to
+   *  count -- which is a different fact from a request carrying none. */
+  messages?: number;
+  /**
+   * Role counts over that array, INCLUDING `system`.
+   *
+   * This is the half the kit structurally cannot see: `ChatMessage.role` has no
+   * system member at all, so a system prompt exists only in the body the app
+   * builds. A role nobody sent is absent rather than 0.
+   *
+   * ★ THESE COUNTS NEED NOT SUM TO `messages`, and a consumer must not assume
+   * they do. An entry stating no readable role is counted in `messages` and
+   * contributes to no bucket -- a body of 5 messages where 1 states a role
+   * gives `messages: 5` with `byRole: { user: 1 }`. That is deliberate:
+   * bucketing the rest under `'unknown'` would invent a role nobody sent. A
+   * panel rendering these as a stacked bar should render the difference as
+   * unattributed rather than scaling it away.
+   */
+  byRole?: Record<string, number>;
+  /**
+   * System-role messages, stated explicitly whenever the array could be counted.
+   *
+   * ZERO IS A FINDING and must be distinguishable from "not reported": it says
+   * nothing is setting a system prompt at this layer either. Reading it off
+   * `byRole.system` could not tell those apart, which is the whole reason this
+   * field is separate -- and it lines up directly against
+   * `EncodeRequestEvent.systemMessages` for the comparison that answers "are
+   * additional prompts being added?".
+   */
+  systemMessages?: number;
+  /** Length of the body's `tools` array. A present-but-empty array reports 0,
+   *  which is a real and different state from the key being absent: it says the
+   *  app meant to send tools and sent none. Absent when there is no array. */
+  tools?: number;
+  /**
+   * The REQUESTED model, read verbatim from the body.
+   *
+   * ★ NEVER INFERRED, and absent stays absent. Paired with `WireFrameEvent`'s
+   * SERVED model this is the devtools spec's "selected Claude, served gpt-4o"
+   * finding -- two independent facts a panel COMPARES and never reconciles.
+   * Deriving either half from the other would make them agree in exactly the
+   * mismatch case the pair exists to catch.
+   */
+  model?: string;
+  /** ORIGIN AND PATHNAME ONLY, on the same terms as `WireOpenEvent.url`: a
+   *  query string can carry a credential, and a credential is not conversation
+   *  content, so it does not travel under any switch. Absent when no URL was
+   *  supplied or it did not parse. */
+  url?: string;
+  /** Whether that URL carried a query string. Absent exactly when `url` is. */
+  hasQuery?: boolean;
+  /**
+   * UTF-8 byte length of the body AS IT WILL BE SENT.
+   *
+   * PRESENT ONLY UNDER PAYLOAD CAPTURE, by the same rule
+   * `EncodeRequestEvent.bytes` follows: measuring means materializing the body,
+   * and a request is made every turn.
+   *
+   * ABSENT WHENEVER IT CANNOT BE KNOWN EXACTLY, which is a larger set than it
+   * looks. A string, a JSON-declaring body, a `Blob`/`File` and an
+   * `ArrayBuffer` or view can all be measured exactly and are. A `FormData`, a
+   * `ReadableStream`, a `URLSearchParams`, a `Map`, or a circular body cannot,
+   * and report nothing -- never the length of the `"{}"` they happen to
+   * stringify to, which is how a 40 MB upload came to report `bytes: 2`.
+   */
+  bytes?: number;
+  /**
+   * Content-bearing, so opt-in: the body itself, exactly as handed over.
+   *
+   * ★ PUBLISHED BY REFERENCE, NOT CLONED. A subscriber that mutates
+   * `payload.body` mutates the object the app is about to send. Deep-cloning
+   * every request would be expensive on exactly the large bodies worth
+   * inspecting, and would defeat the point of handing the real thing over -- so
+   * the contract is that a consumer TREATS THIS AS READ-ONLY. Clone it yourself
+   * if you intend to edit it.
+   */
+  payload?: { body: unknown };
+}
+
 export type WireDiagnosticEvent =
   | WireOpenEvent
   | WireFrameEvent
@@ -358,7 +453,8 @@ export type WireDiagnosticEvent =
   | WireFailedEvent
   | WireInterruptedEvent
   | EncodeRequestEvent
-  | EncodeDroppedEvent;
+  | EncodeDroppedEvent
+  | AppRequestEvent;
 
 /** The three correlating fields, built ONCE per read and spread onto every
  *  event it emits. One definition so `read.ts` and `consume.ts` cannot drift
