@@ -1040,18 +1040,36 @@ function slotPlacementFor(tag: string): { parent: string; slot: string } | null 
 }
 
 /**
+ * The tag every front end emits whether or not the caller asked for it.
+ *
+ * The input schema only ADVISES including it ("usually kai-chat plus …"), and
+ * every renderer here builds its surface around the chat element regardless. So
+ * "is `kai-chat` in `components`" is a question about the REQUEST, never about
+ * what gets emitted, and the two must not be confused — see `slottedInChat`.
+ */
+const ALWAYS_EMITTED_TAG = 'kai-chat';
+
+/**
  * The companions this surface SLOTS into `<kai-chat>`, in `components` order.
  *
- * Both halves are required: the catalog has to state a placement, and the parent
- * has to be in the request. A `components` list naming a slotted child without
- * its parent still gets the child — as a sibling, with the notice below — rather
- * than a `slot=` attribute pointing at an element that is not there.
+ * ★ THIS GATED ON `components.includes('kai-chat')` AND THAT WAS THE BUG BACK.
+ * The rationale read well — do not point a `slot=` at an element that is not
+ * there — and it was false for the only parent this function admits: the chat is
+ * emitted unconditionally, so the check could never protect anything and could
+ * only ever fire on a request that omitted a tag the output contains anyway.
+ * Measured on `components: ['kai-conversations']`, it reproduced the original
+ * defect verbatim — `<kai-chat></kai-chat>` above a bare `<kai-conversations>`
+ * under "wire data props", the exact emit this whole change exists to remove.
+ * `scaffold.test.ts` drives both shapes now.
+ *
+ * A future placement under a parent that is NOT always emitted would need that
+ * check back, scoped to that parent. It does not need it for this one.
  */
 function slottedInChat(components: readonly string[]): { tag: string; slot: string }[] {
   return components.flatMap((tag) => {
     const placement = slotPlacementFor(tag);
-    if (!placement || placement.parent !== 'kai-chat') return [];
-    return components.includes(placement.parent) ? [{ tag, slot: placement.slot }] : [];
+    if (!placement || placement.parent !== ALWAYS_EMITTED_TAG) return [];
+    return [{ tag, slot: placement.slot }];
   });
 }
 
@@ -1070,7 +1088,7 @@ function slottedInChat(components: readonly string[]): { tag: string; slot: stri
  * alternative — quietly emitting the layout the catalog does not describe, under
  * a comment claiming the composition — is how the original defect read.
  */
-function railSiblingNote(tag: string): string[] {
+function railSiblingNote(tag: string, placement: { parent: string; slot: string }): string[] {
   const w = conversationsWiring();
   // The wrapper's handler prop, DERIVED the way the wrapper generator derives it:
   // drop the `kai-` prefix, PascalCase the rest, prefix `on`. That is what makes
@@ -1078,11 +1096,11 @@ function railSiblingNote(tag: string): string[] {
   const handler = `on${toPascalCase(w.event)}`;
   return [
     `      {/* NOT WIRED, and NOT SLOTTED — both deliberate, both fixable here.`,
-    `          COMPOSITION: the kit composes this as <${tag} slot="sidebar"> INSIDE`,
-    `          <kai-chat>, which owns the two-column layout and the collapse behaviour.`,
+    `          COMPOSITION: the kit composes this as <${tag} slot="${placement.slot}"> INSIDE`,
+    `          <${placement.parent}>, which renders it into a fixed-width ::part(${placement.slot}) column.`,
     `          The generated React wrappers take no \`slot\` prop (see WebComponentProps`,
     `          in @kitn.ai/ui/react), so this renders as a sibling instead. Drop to the`,
-    `          raw <kai-chat> custom element if you want the slotted layout.`,
+    `          raw <${placement.parent}> custom element if you want the slotted layout.`,
     `          WIRING: set ${w.property}={...} and ${handler}={...} — the handler`,
     `          reads event.detail.id and calls setMessages with that thread. */}`,
   ];
@@ -1118,8 +1136,21 @@ function slottedChildMarkup(
 ): string[] {
   const w = conversationsWiring();
   return slottedInChat(components).flatMap((s) => [
-    `${pad}<!-- SLOTTED, not a sibling: <kai-chat> owns the two-column layout, the`,
-    `${pad}     collapse behaviour and the responsive breakpoint.${opts.wired ? ' src/main.ts drives it.' : ''} -->`,
+    // What the shell DOES, and — the half a comment gets wrong by being generous
+    // — what it does not. `<kai-chat>`'s sidebar region is one fixed-width aside
+    // (`chat-thread.tsx`), exposed as a part and nothing more: it does not listen
+    // for the rail's collapse, and it has no responsive behaviour, so a rail that
+    // collapses inside it leaves the column exactly as wide as it was.
+    ...htmlComment(
+      [
+        `SLOTTED, not a sibling: <kai-chat> renders this into its own`,
+        `::part(${s.slot}) aside — a fixed-width column, and that is the whole of`,
+        `what the shell does with it. Collapsing the rail does NOT narrow the`,
+        `column: use <kai-workspace> (sidebarWidth / sidebarCollapsed /`,
+        `collapseBelow) or your own layout if it has to collapse or resize.${opts.wired ? ' src/main.ts drives the rail.' : ''}`,
+      ],
+      pad,
+    ),
     ...(opts.wired ? [] : htmlComment(notWiredNote(s.tag, w.property, w.event), pad)),
     `${pad}<${s.tag}${opts.ids ? ` id="${s.tag.replace(/^kai-/, '')}"` : ''} slot="${s.slot}" style="display:block;height:100%"></${s.tag}>`,
   ]);
@@ -2014,7 +2045,17 @@ function renderJsx(components: readonly string[], ctx: RenderCtx, framework: str
 
   // SCAF-9: exclude message-embedded tags from import list.
   // SCAF-14: workspace uses Resizable+ResizableItem+Artifact — keep them in the import list.
-  const renderableTags = components.filter((t) => !MESSAGE_EMBEDDED_TAGS.has(t));
+  //
+  // `ALWAYS_EMITTED_TAG` is unioned in for the reason it exists: this target
+  // renders `<Chat …>` whether or not the caller listed `kai-chat`, so keying
+  // the imports off `components` alone emitted a file that USES `Chat` and never
+  // imports it. Measured on `components: ['kai-conversations']` — a TS2304 in
+  // the consumer's own build. Every cell `verify:scaffold` compiles carries
+  // kai-chat already (it is `BASE_COMPONENT`), so this changes no gated output;
+  // it fixes the ungated shape the gate cannot see.
+  const renderableTags = [
+    ...new Set([ALWAYS_EMITTED_TAG, ...components.filter((t) => !MESSAGE_EMBEDDED_TAGS.has(t))]),
+  ];
   // For workspace: replace 'kai-resizable' with 'kai-resizable-item' so we get ResizableItem too.
   const importTags = workspace
     ? [...new Set([...renderableTags.filter((t) => t !== 'kai-resizable'), 'kai-resizable', 'kai-resizable-item'])]
@@ -2053,7 +2094,9 @@ function renderJsx(components: readonly string[], ctx: RenderCtx, framework: str
     } else if (slotPlacementFor(t)) {
       // The catalog says where this one goes, and this target cannot put it
       // there — so it says so, rather than emitting a layout nothing describes.
-      companionJsxLines.push(...railSiblingNote(t), `      <${toPascalCase(t)} />`);
+      // The placement is PASSED IN, not restated: the note names the parent and
+      // the slot, and both belong to the record.
+      companionJsxLines.push(...railSiblingNote(t, slotPlacementFor(t)!), `      <${toPascalCase(t)} />`);
     } else {
       companionJsxLines.push(`      {/* wire data props — see the component_reference MCP tool */}`);
       companionJsxLines.push(`      <${toPascalCase(t)} />`);
@@ -2943,7 +2986,13 @@ function renderTanstackStart(components: readonly string[], ctx: RenderCtx): str
   const hasEmbedded = components.some((t) => MESSAGE_EMBEDDED_TAGS.has(t));
   const workspace = isWorkspace(components);
 
-  const renderableTags = components.filter((t) => !MESSAGE_EMBEDDED_TAGS.has(t));
+  // Same union as renderJsx, for the same measured reason: this target renders
+  // `<Chat …>` unconditionally, so the import list cannot come from `components`
+  // alone or a caller who omitted kai-chat gets a file that uses `Chat` without
+  // importing it.
+  const renderableTags = [
+    ...new Set([ALWAYS_EMITTED_TAG, ...components.filter((t) => !MESSAGE_EMBEDDED_TAGS.has(t))]),
+  ];
   const importTags = workspace
     ? [...new Set([...renderableTags.filter((t) => t !== 'kai-resizable'), 'kai-resizable', 'kai-resizable-item'])]
     : renderableTags;
@@ -2976,7 +3025,9 @@ function renderTanstackStart(components: readonly string[], ctx: RenderCtx): str
     } else if (slotPlacementFor(t)) {
       // The catalog says where this one goes, and this target cannot put it
       // there — so it says so, rather than emitting a layout nothing describes.
-      companionJsxLines.push(...railSiblingNote(t), `      <${toPascalCase(t)} />`);
+      // The placement is PASSED IN, not restated: the note names the parent and
+      // the slot, and both belong to the record.
+      companionJsxLines.push(...railSiblingNote(t, slotPlacementFor(t)!), `      <${toPascalCase(t)} />`);
     } else {
       companionJsxLines.push(`      {/* wire data props — see the component_reference MCP tool */}`);
       companionJsxLines.push(`      <${toPascalCase(t)} />`);

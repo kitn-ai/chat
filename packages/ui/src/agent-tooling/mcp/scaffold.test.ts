@@ -216,25 +216,73 @@ describe('scaffold', () => {
     }
   });
 
+  /**
+   * Both ways a caller can ask for the rail.
+   *
+   * The second one is not a curiosity: `components` only ADVISES including
+   * `kai-chat` (the schema says so) while every renderer emits the chat element
+   * unconditionally, so a list that omits it is a shape real callers reach — and
+   * the first version of this fix left it emitting the original defect verbatim,
+   * bare tag and "wire data props" comment included, because the placement was
+   * gated on `components.includes('kai-chat')`.
+   */
+  const RAIL_SURFACES = [['kai-chat', 'kai-conversations'], ['kai-conversations']] as const;
+
   it('every front end either wires the rail, declares it unwired, or does not draw it', async () => {
     // The html target is the one the brief's two tests drive. This is the same
     // rule over the other seven, and it is deliberately conditional on the tag
     // being DRAWN: solid renders Solid components rather than <kai-*>, so it
     // draws no rail at all — a fact worth stating rather than asserting around.
-    for (const framework of FRONTENDS_FOR_SURFACE) {
+    for (const components of RAIL_SURFACES) {
+      for (const framework of FRONTENDS_FOR_SURFACE) {
+        const out = await scaffold.handler({
+          components: [...components],
+          integration: 'mock',
+          placement: 'full-page',
+          framework,
+        });
+        const front = (out.content as { type: string; text: string }[])[0].text.split('=== (2)')[0];
+        const drawn = /<kai-conversations|<Conversations\b/.test(front);
+        if (!drawn) continue;
+        const wired = /\.conversations\s*=|conversations=\{|:conversations\.prop|\[conversations\]/.test(front) &&
+          /kai-conversation-select|onConversationSelect/.test(front);
+        const declared = front.includes('NOT WIRED');
+        const where = `${framework} × [${components.join(', ')}]`;
+        expect(wired || declared, `${where}: the rail is drawn with neither wiring nor a NOT WIRED notice`).toBe(true);
+        // The exact wording the old emit shipped, and the reason a builder
+        // followed it into an empty rail. Its absence is the point.
+        expect(front, `${where}: still emits the bare "wire data props" comment`).not.toContain(
+          'wire data props',
+        );
+      }
+    }
+  });
+
+  it('places the rail the same way whether or not the caller listed kai-chat', async () => {
+    // The renderer emits <kai-chat> either way, so the composition cannot depend
+    // on the caller having named it. Compared against the recipe, not against a
+    // literal, for the same reason the composition test above is.
+    const placement = surfaceRecipes
+      .flatMap((r) => r.composition ?? [])
+      .find((c) => c.child === 'kai-conversations');
+    expect(placement, 'no composition record for kai-conversations').toBeDefined();
+    for (const components of RAIL_SURFACES) {
       const out = await scaffold.handler({
-        components: ['kai-chat', 'kai-conversations'],
+        components: [...components],
         integration: 'mock',
         placement: 'full-page',
-        framework,
+        framework: 'html',
       });
-      const front = (out.content as { type: string; text: string }[])[0].text.split('=== (2)')[0];
-      const drawn = /<kai-conversations|<Conversations\b/.test(front);
-      if (!drawn) continue;
-      const wired = /\.conversations\s*=|conversations=\{|:conversations\.prop|\[conversations\]/.test(front) &&
-        /kai-conversation-select|onConversationSelect/.test(front);
-      const declared = front.includes('NOT WIRED');
-      expect(wired || declared, `${framework}: the rail is drawn with neither wiring nor a NOT WIRED notice`).toBe(true);
+      const text = (out.content as { type: string; text: string }[])[0].text;
+      const where = `[${components.join(', ')}]`;
+      expect(text, `${where}: the rail is not slotted`).toMatch(
+        new RegExp(`<${placement!.child}[^>]*slot=["']${placement!.slot}["']`),
+      );
+      const open = text.indexOf(`<${placement!.parent} `);
+      expect(
+        text.slice(open, text.indexOf(`</${placement!.parent}>`, open)),
+        `${where}: the rail is not inside <${placement!.parent}>`,
+      ).toMatch(new RegExp(`<${placement!.child}\\b`));
     }
   });
 
