@@ -222,6 +222,8 @@ reviews:
     # reviewed against that guide instead.
     markdownlint:
       enabled: false
+    github-checks:
+        enabled: false
 
 knowledge_base:
   code_guidelines:
