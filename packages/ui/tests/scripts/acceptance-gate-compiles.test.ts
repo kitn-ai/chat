@@ -1,4 +1,4 @@
-// THE `compiles` GATE, and the third outcome it forced into the contract.
+// THE `compiles` GATE.
 //
 // The gate itself needs a real `tsc` over a built `dist/`, and it proves itself
 // there: `node scripts/acceptance-gate-compiles.mjs --self-test` plants a fault
@@ -7,15 +7,18 @@
 // passes), so what is pinned HERE is everything around it that a compile is not
 // needed to check:
 //
-//   · the scoring contract for an external gate with no subject, in rubric.mjs;
-//   · that a gates.json cannot type its way to that verdict;
-//   · the three outcomes as the EVALUATOR sees them, end to end through the CLI;
+//   · the scoring contract for an external gate, in rubric.mjs;
+//   · the outcomes as the EVALUATOR sees them, end to end through the CLI;
 //   · the gate script's refusals, which all fire before any tsc runs.
 //
-// The one thing to keep in mind while reading: not-applicable is not a pass and
-// not a failure, and BOTH of the wrong answers have already shipped here. Scoring
-// a subject-less gate 10 handed out weight nobody earned; scoring it 0 made the
-// deck's best answer — a correct prose refusal — score worst and hard-fail.
+// THERE IS NO NOT-APPLICABLE OUTCOME FOR AN EXTERNAL GATE, and a block of tests
+// covering one was deleted with it. It let an empty output leave the score,
+// adjudicated by acceptance-eval's own `codeUnits` scan — a scan that reads only
+// code files and LABELLED fences, so an unlabelled fence (how models most often
+// emit code) is indistinguishable from prose. Measured: an S1 run with ZERO
+// output files scored 8.93/10 and exit 0, and a mixed answer that fabricated
+// `<kai-datagrid>` and did not typecheck scored every mechanical gate 10/10.
+// A mechanical dimension with no gate result is an ERROR again.
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -52,11 +55,10 @@ const judgeAll = (scenarioId: string, score: number) => {
  * Every mechanical dimension of a scenario, passing, with named overrides.
  *
  * The cast is deliberate and it is the point of several tests below: the shapes
- * being fed in are the INVALID ones — `adjudicated: 1`, a string where a boolean
- * belongs — and the whole question is whether `scoreRun` refuses them at
- * runtime. These scripts are in no tsconfig program with `checkJs`, so a JSDoc
- * type is documentation; nothing was checking it, which is how `"false"` scored
- * a perfect 10 twice.
+ * being fed in are the INVALID ones — a string where a boolean belongs — and the
+ * whole question is whether `scoreRun` refuses them at runtime. These scripts are
+ * in no tsconfig program with `checkJs`, so a JSDoc type is documentation;
+ * nothing was checking it, which is how `"false"` scored a perfect 10 twice.
  */
 const gateAll = (scenarioId: string, over: Record<string, unknown> = {}) => {
   const s = scenarios.find((x) => x.id === scenarioId)!;
@@ -87,87 +89,52 @@ describe('the `compiles` dimension is declared as an external mechanical gate', 
   });
 });
 
-describe('an external gate with no subject — the third outcome', () => {
-  // UNCHANGED, and it must stay that way: a runner asserting its own vacuity is
-  // how a real S1 run WITH code scored 10.00/10 on three gates that claimed to
-  // have found nothing.
-  it('still refuses `vacuous` asserted by the external runner itself', () => {
+describe('an external gate cannot excuse itself, and nobody can excuse it for it', () => {
+  // A runner asserting its own vacuity is how a real S1 run WITH code scored
+  // 10.00/10 on three gates that claimed to have found nothing.
+  it('refuses `vacuous` asserted by the external runner itself', () => {
     expect(() =>
       scoreRun({ scenario: S1, gates: gateAll('S1', { compiles: { passed: false, vacuous: true } }), judged: judgeAll('S1', 10) }),
     ).toThrow(/EXTERNAL gate and reported/);
   });
 
-  // NEW, and it is the whole point: an answer that is prose by design has no
-  // subject for `compiles` either. The verdict belongs to whoever LOOKED at the
-  // output, which is the evaluator, and it is stamped as such.
-  it('accepts it once the EVALUATOR has adjudicated, and takes the dimension out of the score', () => {
-    const r = scoreRun({
-      scenario: S1,
-      gates: gateAll('S1', {
-        compiles: { passed: false, vacuous: true, adjudicated: 'evaluator', filesSeen: 1, filesScanned: 0, unread: [] },
-      }),
-      judged: judgeAll('S1', 10),
-    });
-    expect(r.notApplicable).toContain('compiles');
-    expect(r.verdict).toBe('scored');
-    expect(r.failedGates).not.toContain('compiles');
-    const row = r.rows.find((x) => x.id === 'compiles')!;
-    expect(row.applicable).toBe(false);
-    expect(row.score).toBeNull();
-    // Out of the denominator, not zeroed inside it.
-    expect(r.totalWeight).toBeLessThan(r.declaredWeight);
-    // And the row says WHOSE scan established it. The gate did not look.
-    expect(row.source).toContain("the evaluator's own scan");
-    expect(row.source).toContain('this external gate had no subject');
-  });
-
-  // Absence of SUBJECT is not absence of MERIT. This is the regression that made
-  // a correct refusal the worst-scoring answer in the deck.
-  it('lets an otherwise perfect answer reach 10 rather than hard-failing it', () => {
-    const r = scoreRun({
-      scenario: S1,
-      gates: {
-        'elements-exist': { passed: true, vacuous: true, filesSeen: 1, unread: [] },
-        'audit-clean': { passed: true, vacuous: true, filesSeen: 1, unread: [] },
-        compiles: { passed: false, vacuous: true, adjudicated: 'evaluator', filesSeen: 1, filesScanned: 0, unread: [] },
-        registers: { passed: false, vacuous: true, adjudicated: 'evaluator', filesSeen: 1, filesScanned: 0, unread: [] },
-      },
-      judged: judgeAll('S1', 10),
-    });
-    expect(r.normalized).toBe(10);
-    expect(r.verdict).toBe('scored');
-  });
-
-  // H1's rule applied to the third field on this object, because the first two
-  // were both defeated by a truthy string that read as its own opposite.
-  it.each([[true], ['true'], [1], [{}], [[]], ['Evaluator'], ['evaluator ']])(
-    'refuses an `adjudicated` of %o rather than reading it as truthy',
-    (adjudicated) => {
-      expect(() =>
-        scoreRun({
-          scenario: S1,
-          gates: gateAll('S1', { compiles: { passed: false, vacuous: true, adjudicated } }),
-          judged: judgeAll('S1', 10),
-        }),
-      ).toThrow(/adjudicated/);
-    },
-  );
-
-  it('still refuses the adjudicated absence while a file in the output went unread', () => {
+  // THE DELETED BRANCH, pinned as refused. An `adjudicated: 'evaluator'` stamp
+  // used to unlock the refusal above and take the dimension out of the score.
+  // It confers nothing now: the field is unknown and the refusal fires anyway.
+  it('refuses it just as firmly when a gates file claims the evaluator adjudicated', () => {
     expect(() =>
       scoreRun({
         scenario: S1,
         gates: gateAll('S1', {
-          compiles: { passed: false, vacuous: true, adjudicated: 'evaluator', filesSeen: 2, filesScanned: 0, unread: ['main.txt'] },
+          compiles: { passed: false, vacuous: true, adjudicated: 'evaluator', filesSeen: 1, filesScanned: 0, unread: [] },
         }),
         judged: judgeAll('S1', 10),
       }),
-    ).toThrow(/cannot read/);
+    ).toThrow(/EXTERNAL gate and reported/);
   });
 
-  // A gate that RAN and failed is still a gated failure. The new branch must not
-  // have widened into "external gates can excuse themselves".
-  it('still fails a gate that had a subject and did not compile', () => {
+  // A missing verdict is an ERROR, which is the behaviour the deleted branch
+  // replaced with a silent renormalisation.
+  it('errors on a mechanical dimension with no gate result at all', () => {
+    const gates = gateAll('S1');
+    delete (gates as Record<string, unknown>).compiles;
+    expect(() => scoreRun({ scenario: S1, gates, judged: judgeAll('S1', 10) })).toThrow(/has no gate result/);
+  });
+
+  // The evaluator's OWN gates keep the vacuity path they always had — this is
+  // the half that was not removed, and the assertion that says so.
+  it('still lets an EVALUATOR-run gate report vacuity, which the external ones may not', () => {
+    const r = scoreRun({
+      scenario: S1,
+      gates: gateAll('S1', { 'elements-exist': { passed: true, vacuous: true, filesSeen: 1, unread: [] } }),
+      judged: judgeAll('S1', 10),
+    });
+    expect(r.notApplicable).toContain('elements-exist');
+    expect(r.notApplicable).not.toContain('compiles');
+  });
+
+  // A gate that RAN and failed is a gated failure.
+  it('fails a gate that had a subject and did not compile', () => {
     const r = scoreRun({
       scenario: S1,
       gates: gateAll('S1', { compiles: { passed: false, detail: 'TS2345' } }),
@@ -260,7 +227,7 @@ describe('the gate script refuses before it compiles anything', () => {
   });
 });
 
-describe('the evaluator adjudicates the absence, and refuses every attempt to type it', () => {
+describe('the evaluator, end to end through the CLI', () => {
   let runDir = '';
   const findings = () =>
     JSON.stringify({
@@ -288,53 +255,32 @@ describe('the evaluator adjudicates the absence, and refuses every attempt to ty
     else writeFileSync(p, JSON.stringify(gates, null, 2));
   };
 
-  // OUTCOME 3, end to end and with NOTHING supplied. This is the case the old
-  // contract could not express: it used to be a hard error naming a missing gate.
-  it('scores a prose-only answer with compiles NOT APPLICABLE, not 0 and not an error', () => {
+  // THE RESTORED HARD ERROR. A prose-only answer with nothing supplied used to
+  // be adjudicated not-applicable and scored; it is a missing gate again.
+  it('hard-errors on a prose-only answer with no gate supplied, rather than scoring it', () => {
     withOutput({ 'ANSWER.md': 'There is no such element in this kit, and I am not going to invent one.\n' });
-    withGates(null);
-    const r = run([EVAL, '--run', runDir]);
-    expect(r.code, r.out).toBe(0);
-    const report = readFileSync(join(runDir, 'REPORT.md'), 'utf8');
-    expect(report).toContain('dimension(s) did not apply');
-    expect(report).toContain('compiles');
-    expect(report).not.toContain('Gated failure');
-    const evaluation = JSON.parse(readFileSync(join(runDir, 'evaluation.json'), 'utf8')) as {
-      notApplicable: string[];
-      verdict: string;
-      rows: { id: string; score: number | null; source: string }[];
-    };
-    expect(evaluation.notApplicable).toContain('compiles');
-    expect(evaluation.verdict).toBe('scored');
-    const row = evaluation.rows.find((x) => x.id === 'compiles')!;
-    expect(row.score).toBeNull();
-    expect(row.source).toContain("the evaluator's own scan");
-  });
-
-  // The other half of that: the adjudication is a claim about the OUTPUT, so it
-  // may not be made while a file in the output went unread.
-  it('does NOT adjudicate an absence when a file went unread — that is still a missing gate', () => {
-    withOutput({ 'main.txt': 'const a: number = 1;\n' });
     withGates(null);
     const r = run([EVAL, '--run', runDir]);
     expect(r.code).not.toBe(0);
     expect(r.out).toContain('has no gate result');
   });
 
-  it('refuses a supplied verdict that claims to have compiled an output with no code in it', () => {
-    withOutput({ 'ANSWER.md': 'No code here.\n' });
-    withGates({ compiles: { passed: true, detail: 'trust me' }, registers: { passed: true } });
+  // The same, with NO OUTPUT FILES AT ALL — the measured case: this scored
+  // 8.93/10 and exit 0 while the adjudication branch existed.
+  it('hard-errors on a run that produced no output files at all', () => {
+    withOutput({});
+    withGates(null);
     const r = run([EVAL, '--run', runDir]);
     expect(r.code).not.toBe(0);
-    expect(r.out).toContain('found no code it could read');
+    expect(r.out).toContain('has no gate result');
   });
 
-  it.each([[true], ['true'], ['evaluator']])('refuses a gates file that types `adjudicated: %o` itself', (adjudicated) => {
-    withOutput({ 'main.ts': "const chat = document.querySelector('kai-chat');\nvoid chat;\n" });
-    withGates({ compiles: { passed: true, adjudicated }, registers: { passed: true } });
+  it('hard-errors when a file went unread and no gate was supplied', () => {
+    withOutput({ 'main.txt': 'const a: number = 1;\n' });
+    withGates(null);
     const r = run([EVAL, '--run', runDir]);
     expect(r.code).not.toBe(0);
-    expect(r.out).toContain('not an operator');
+    expect(r.out).toContain('has no gate result');
   });
 
   // THE MEASURED REGRESSION, through the CLI. Real code in the output, three

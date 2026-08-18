@@ -310,15 +310,12 @@ stripped off:
 acceptance-gate-compiles: wrote compiles = FAILED into .../gates.json
 ```
 
-**And an answer with no code in it gets NO verdict at all**, which is the whole
-design of the third outcome:
+**And an answer with no code in it FAILS**, with the reason recorded — this gate
+only applies to scenarios that asked for code, so an answer without any did not
+do the thing:
 
 ```
-acceptance-gate-compiles: NOT APPLICABLE — 1 output file(s) and not one unit of code in any of them.
-  Nothing was written to gates.json, deliberately. An external gate cannot report "there was nothing to look at":
-  it did not read the output, and a self-declared absence is what scored a real S1 run 10.00/10 once.
-  acceptance-eval runs the same scan itself and marks the dimension not-applicable — out of the score entirely,
-  neither passed nor failed. Run it and read the not-applicable section of REPORT.md.
+acceptance-gate-compiles: wrote compiles = FAILED into .../gates.json
 ```
 
 It refuses a scenario the dimension does not apply to, rather than compiling
@@ -351,7 +348,7 @@ Generate the findings template, fill it, then evaluate:
 ```
 $ pnpm --filter @kitn.ai/ui exec node scripts/acceptance-eval.mjs --template /tmp/runs/20260818-111308-S1-claude-opus-5
 acceptance-eval: wrote .../findings.template.json — fill judgedScores and findings, then --run ...
-  external gates still needed: compiles, registers (supply via --gates; absent scores 0, never "skipped" — unless the output contains no code at all, which the evaluator adjudicates as not-applicable)
+  external gates still needed: compiles, registers (supply via --gates; absent is an ERROR, never "skipped" and never a pass)
   · compiles: node scripts/acceptance-gate-compiles.mjs --run /tmp/runs/20260818-111308-S1-claude-opus-5 --framework <react|vue|…>
 ```
 
@@ -451,49 +448,43 @@ because an unrun gate and a clean gate produce the same silence and only one of
 them means anything. `elements-exist` and `audit-clean` the evaluator computes
 itself from the output text and the catalog; supplying either through `--gates`
 is refused. `compiles`, `registers` and `streams` need real tooling and come in
-through `--gates`. The one exception is an output with no code in it at all, and
-it is not an exception a gate may claim for itself — see below.
+through `--gates`. There is no exception: an output with no code in it is a
+FAILED `compiles`, not an absent one — see below.
 
 **Severity caps the dimension.** From an S1 run: a `does-not-render` finding
 filed against `completeness` produced `0.0 (capped from 7.0)`. The ladder is
 `does-not-render` (cap 0) · `does-not-function` (3) · `does-not-wire` (5) ·
 `cosmetic-or-practice` (8, never blocking).
 
-**Not-applicable is not failed.** A prose answer — a refusal, a diagnosis — has
-no code for a gate to read, so every gate that needs one leaves the score
-entirely. From a real S1 run answered as prose, with nothing supplied through
-`--gates` at all:
+**Not-applicable belongs to the evaluator's OWN gates, and to no other.** A
+prose answer — a refusal, a diagnosis — gives `elements-exist` and `audit-clean`
+nothing to read, and those two leave the score entirely rather than scoring 0.
+They are the gates the evaluator runs itself, over the output it holds.
 
-```
-## Verdict: scored — 10.00 / 10
+**An external gate never leaves the score.** That was tried and removed. The
+evaluator ran the same `codeUnits()` scan for the external dimensions too and,
+finding nothing, marked them not-applicable with an `adjudicated: 'evaluator'`
+stamp. The scan cannot support that verdict: it reads recognised code files and
+LABELLED fences, so an unlabelled fence — how models most often emit code — is
+indistinguishable from prose, and "no code my scanner recognises" was being read
+as "no code". Measured: an S1 run producing **zero output files** scored 8.93/10
+and exit 0 where it had previously hard-failed, and a mixed answer that
+fabricated `<kai-datagrid>` and failed typecheck scored every mechanical gate
+10/10.
 
-**4 dimension(s) did not apply** — elements-exist, audit-clean, compiles, registers — because these
-gates found no code they could read in the output. They are out of the score entirely, and the
-remaining weights are renormalised over 15 of 26. ... No gate REPORTED this about itself — the
-evaluator's own scan of the output established it, which is the only way it can be established.
-```
+Deleting it cost nothing, because the benefit was unreachable. The
+prose-by-design case it was argued for is S6's refusal and S7's diagnosis, and
+neither scenario carries an external mechanical dimension at all —
+`compiles`/`registers`/`streams` exist only on S1/S2/S4/S5, where an answer with
+no code is a failure and not an absence. So:
 
-**WHO gets to say there was nothing to look at is the whole point.** Both wrong
-answers have already shipped here: scoring a subject-less gate 10 handed out
-weight nobody earned, and scoring it 0 made a correct prose refusal — the deck's
-best answer — score worst and then hard-fail. Absence of subject is not absence
-of merit. But an external runner cannot discover an absence either: it never read
-the output, and a hand-written `{passed: false, vacuous: true}` on three external
-gates once scored a real S1 run **with code in it** 10.00/10, exit 0.
+- a self-declared `vacuous: true` from a runner is refused, as it always was;
+- so is one that claims the evaluator adjudicated it;
+- an external gate with no result at all is an ERROR, never a skip and never a
+  pass;
+- `compiles` reports `passed: false` when it finds nothing to compile.
 
-So the verdict belongs to the party that looked. The evaluator runs `codeUnits`
-over the output for its own gates already; when that finds nothing, and nothing
-in the output went unread, it marks every mechanical dimension not-applicable and
-stamps the external ones `adjudicated: 'evaluator'`. Three things follow, and
-each is enforced:
-
-- a gates file may not supply `adjudicated` — it is refused, not ignored;
-- a gates file that reports an external gate `passed: true` over an output the
-  evaluator found no code in is refused (`a compile … over nothing is not a pass`);
-- a self-declared `vacuous: true` from a runner is refused exactly as before.
-
-`tests/scripts/acceptance-gate-compiles.test.ts` pins all three, and each one was
-mutation-tested — the check was watched going red before it was trusted.
+`tests/scripts/acceptance-gate-compiles.test.ts` pins each of those.
 
 **The tier delta** is the point of running two models. `--compare` puts them side
 by side, and warns when the denominators differ:
@@ -652,15 +643,13 @@ they are missing — and nothing runs them. Supplying one by hand means writing
 You get those verdicts by doing the work yourself: mount the output in a browser
 and check `customElements.get`, drive it with a mock provider-SSE fixture. What
 you may NOT write is `vacuous: true` — a runner that never read the output cannot
-discover that there was nothing in it, and `adjudicated` is refused outright
-because it is the evaluator's stamp, not an operator's. If the answer really
-contains no code, supply nothing: the evaluator scans the output itself and takes
-the dimension out of the score.
+discover that there was nothing in it. And do not leave the gate out: an absent
+external verdict is a hard error, not a skip. If the answer really contains no
+code, that is `passed: false` on a scenario that asked for some.
 
 The shape to copy when implementing them is `acceptance-gate-compiles.mjs`, and
-the part worth copying is not the tsc plumbing — it is that the script decides
-between *failed* and *had no subject* by asking the same `codeUnits()` the
-evaluator asks, and hands the second one back rather than answering it.
+the part worth copying is not the tsc plumbing — it is that the script always
+returns a verdict, and says in `detail` exactly what it did and did not read.
 
 **`FABRICATED.md` is empty by construction.** `fabrications.ts` holds no rows,
 and the page in every pack says so in those words. Read the emptiness as "nobody

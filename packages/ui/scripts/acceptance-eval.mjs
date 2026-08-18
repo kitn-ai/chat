@@ -21,7 +21,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { importCatalog, CATALOG_PATHS } from './lib/import-catalog.mjs';
 import { EXECUTION_PATHS, routeModel } from './lib/run-routing.mjs';
-import { codeUnits, gateAuditClean, gateElementsExist, scanJudgeLeak, unreadFiles } from './lib/output-scan.mjs';
+import { gateAuditClean, gateElementsExist, scanJudgeLeak } from './lib/output-scan.mjs';
 import { DIMENSIONS, SEVERITIES, dimension, rubricFor, assertRubricCoverage, scoreRun, severity } from './lib/rubric.mjs';
 import { attributeFindings, prioritiseCatalogChanges, tierDelta, ATTRIBUTION_KINDS } from './lib/catalog-attribution.mjs';
 import { proposedFabricationRow } from './lib/fabrications.mjs';
@@ -255,58 +255,29 @@ async function evaluate({ runDir, findingsPath, gatesPath }) {
   const applicable = new Set(rubric.dimensions.map((d) => d.id));
   const gates = {};
   for (const [id, g] of Object.entries(computed)) if (applicable.has(id)) gates[id] = g;
-  for (const [id, g] of Object.entries(supplied)) {
-    // THE ADJUDICATION STAMP IS NOT SOMETHING A GATES FILE MAY CARRY. It records
-    // that THIS process scanned the output and found no subject, so a supplied
-    // one is REFUSED rather than stripped: quietly deleting it would leave the
-    // forgery invisible, and "not applicable" would be one hand-typed field away
-    // again — which is how the last two regressions on this object happened.
-    if (g && typeof g === 'object' && 'adjudicated' in g) {
-      fail(
-        `the gates file supplies \`adjudicated\` on "${id}". That field is not an operator's to write: it records that THIS process scanned the output and found no subject, and it is the only thing that lets an external gate leave the score. Remove it — if the output really contains no code, the evaluator adds it after its own scan.`,
-      );
-    }
-    if (applicable.has(id)) gates[id] = g;
-  }
+  for (const [id, g] of Object.entries(supplied)) if (applicable.has(id)) gates[id] = g;
 
-  // ── NOT APPLICABLE IS THE EVALUATOR'S CALL ─────────────────────────────────
+  // NO NOT-APPLICABLE ADJUDICATION FOR EXTERNAL GATES, and this is where one
+  // used to live. The evaluator ran `codeUnits` over the output and, finding
+  // nothing, marked every external mechanical dimension not-applicable. The
+  // scan cannot support that verdict: `codeUnits` only extracts fences whose
+  // language is in CODE_FENCE_LANGS, so an UNLABELLED fence — how models most
+  // often emit code — is indistinguishable from prose, and "no code my scanner
+  // recognises" was being adjudicated as "no code". Measured: an S1 run with
+  // ZERO output files scored 8.93/10 and exit 0 where it had previously
+  // hard-failed, and a mixed answer fabricating `<kai-datagrid>` and failing
+  // typecheck scored every mechanical gate 10/10.
   //
-  // `alwaysApplies: false` plus a prose answer produces a THIRD outcome that the
-  // supplied-gate contract cannot express: the output contains no code, so
-  // "does it compile" is not a question with an answer. Scoring that 0 is the
-  // regression that made a correct refusal the deck's worst-scoring answer;
-  // scoring it 10 hands out weight nobody earned; and an external runner cannot
-  // report it itself, because it did not look at the output.
+  // Deleted rather than tightened, because the benefit was unreachable. The
+  // case it was written for is a prose-by-design answer (S6's refusal, S7's
+  // diagnosis), and those scenarios carry NO external mechanical dimension:
+  // `compiles`/`registers`/`streams` exist only on S1/S2/S4/S5, where an answer
+  // containing no code is a failure and not an absence. So the whole cost
+  // landed on the code scenarios and none of the benefit was reachable.
   //
-  // The evaluator did look — `codeUnits` over the run's output is the same scan
-  // its own two gates run — so it decides, once, for every mechanical dimension
-  // at once. `unread` blocks the verdict for the same reason it always did: a
-  // file the scan cannot read means "found no code" has not earned the right to
-  // become "there is no code".
-  const units = codeUnits(files);
-  const unread = unreadFiles(files);
-  const noSubject = units.length === 0 && unread.length === 0;
-  if (noSubject) {
-    for (const d of rubric.dimensions) {
-      if (d.gate !== 'mechanical' || d.runner !== 'external') continue;
-      const given = gates[d.id];
-      if (given && given.passed === true) {
-        fail(
-          `the gates file reports "${d.id}" as PASSED, but this evaluator's own scan of ${files.length} output file(s) found no code it could read. A compile, a registration or a stream over nothing is not a pass. Either the gate was run against something that is not in output/, or the verdict is invented.`,
-        );
-      }
-      gates[d.id] = {
-        ...given,
-        passed: false,
-        vacuous: true,
-        adjudicated: 'evaluator',
-        filesSeen: files.length,
-        filesScanned: 0,
-        unread: [],
-        detail: `no code in the output for this gate to have a subject — established by the evaluator's own scan, not by ${d.id} reporting it${given ? ' (a supplied verdict was superseded)' : ' (nothing was supplied)'}`,
-      };
-    }
-  }
+  // A mechanical dimension with no gate result is therefore an ERROR again —
+  // `scoreRun` raises it — and the `compiles` gate reports `passed: false` when
+  // it finds nothing to compile rather than declining to write a verdict.
 
   const attributed = attributeFindings({ findings: findings.findings ?? [], catalog: facts });
   const scored = scoreRun({ scenario, gates, judged: findings.judgedScores ?? {}, findings: attributed });
@@ -408,7 +379,7 @@ function renderReport(e) {
 
 ${
   e.notApplicable.length
-    ? `**${e.notApplicable.length} dimension(s) did not apply** — ${e.notApplicable.join(', ')} — because these gates found no code they could read in the output. They are out of the score entirely, and the remaining weights are renormalised over ${e.totalWeight} of ${e.declaredWeight}. That is the correct reading of an answer that is prose by design (a refusal, a diagnosis); if this answer was supposed to contain code, the emptiness shows up in \`completeness\` instead. No gate REPORTED this about itself — the evaluator's own scan of the output established it, which is the only way it can be established. An external gate that ran and found the code broken is a failure; an external gate that simply did not run is also a failure. Absence is a fact about the OUTPUT.\n`
+    ? `**${e.notApplicable.length} dimension(s) did not apply** — ${e.notApplicable.join(', ')} — because these gates found no code they could read in the output. They are out of the score entirely, and the remaining weights are renormalised over ${e.totalWeight} of ${e.declaredWeight}. That is the correct reading of an answer that is prose by design (a refusal, a diagnosis); if this answer was supposed to contain code, the emptiness shows up in \`completeness\` instead. Only the gates the evaluator runs itself can report this — an external gate that did not run is a failure, not an absence.\n`
     : ''
 }${
   e.failedGates.length
@@ -659,7 +630,7 @@ if (args.includes('--template')) {
   console.log(`acceptance-eval: wrote ${dest} — fill judgedScores and findings, then --run ${runDir}.`);
   const external = rubric.dimensions.filter((d) => d.gate === 'mechanical' && d.runner === 'external').map((d) => d.id);
   console.log(
-    `  external gates still needed: ${external.join(', ') || 'none'} (supply via --gates; absent scores 0, never "skipped" — unless the output contains no code at all, which the evaluator adjudicates as not-applicable)`,
+    `  external gates still needed: ${external.join(', ') || 'none'} (supply via --gates; absent is an ERROR, never "skipped" and never a pass)`,
   );
   if (external.includes('compiles')) {
     console.log(`  · compiles: node scripts/acceptance-gate-compiles.mjs --run ${runDir} --framework <react|vue|…>`);

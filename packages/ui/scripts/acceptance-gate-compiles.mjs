@@ -12,31 +12,27 @@
 //
 // It writes `compiles` into the run's `gates.json` and touches no other key.
 //
-// THREE OUTCOMES, NOT TWO
-// -----------------------
-// `compiles` is `alwaysApplies: false`, and an acceptance answer may legitimately
-// contain no code at all — S6 is a refusal, S7 is a diagnosis, and a correct
-// refusal is the strongest signal in the deck. So:
-//
+// TWO OUTCOMES, AND NO THIRD
+// --------------------------
 //   code, and it compiles      -> { passed: true }
 //   code, and it does not      -> { passed: false } + the diagnostics
-//   NO CODE IN THE OUTPUT      -> not this gate's call. It writes NOTHING and
-//                                 says so; the evaluator adjudicates it from its
-//                                 own scan and the dimension leaves the score.
+//   NO CODE IN THE OUTPUT      -> { passed: false }, with the reason spelled out
 //
-// The third one is the whole design problem. An external gate may not report
-// `vacuous: true` — `scoreRun` refuses it, because a runner that never read the
-// output cannot discover that there was nothing in it, and a hand-written
-// `{passed:false, vacuous:true}` once scored a real S1 run 10.00/10. But forcing
-// an empty output to `passed: false` is the OTHER recorded regression: it makes
-// the deck's best answer score worst and then hard-fail. Absence of subject is
-// not absence of merit.
+// A third outcome was tried and removed. It let an empty output leave the score
+// as "not applicable", adjudicated by acceptance-eval's own `codeUnits` scan.
+// That scan cannot carry the verdict: it recognises code files and LABELLED
+// fences, so an unlabelled fence — how models most often emit code — reads as
+// prose, and "no code my scanner recognises" became "no code". Measured: an S1
+// run with ZERO output files scored 8.93/10 and exit 0, and a mixed answer that
+// fabricated `<kai-datagrid>` and did not typecheck scored every mechanical gate
+// 10/10.
 //
-// The resolution is that neither verdict belongs to this script. It reports what
-// it found (and, when it found nothing, reports that it is not the one who gets
-// to say so); acceptance-eval runs `codeUnits` over the same output itself and
-// stamps the not-applicable verdict with `adjudicated: 'evaluator'`. See the
-// long comment at that branch in scripts/lib/rubric.mjs.
+// The prose-by-design case it was written for (S6's refusal, S7's diagnosis)
+// never reached this gate anyway: `compiles` is `alwaysApplies: false` and no
+// external mechanical dimension appears on those scenarios at all. Where this
+// gate DOES apply, the scenario asked for code, and an answer with none did not
+// do the thing. An external gate may still not report `vacuous: true` —
+// `scoreRun` refuses it — and a missing gate result is an error, not a skip.
 //
 // WHAT COUNTS AS A SUBJECT
 // ------------------------
@@ -164,26 +160,18 @@ function runGate({ runDir, framework, keep = false, harness: shared }) {
   const units = codeUnits(files);
   const unread = unreadFiles(files);
 
-  // OUTCOME 3 — NOT THIS SCRIPT'S CALL.
-  if (units.length === 0 && unread.length === 0) {
-    console.log(
-      `acceptance-gate-compiles: NOT APPLICABLE — ${files.length} output file(s) and not one unit of code in any of them.\n` +
-        '  Nothing was written to gates.json, deliberately. An external gate cannot report "there was nothing to look at":\n' +
-        "  it did not read the output, and a self-declared absence is what scored a real S1 run 10.00/10 once.\n" +
-        "  acceptance-eval runs the same scan itself and marks the dimension not-applicable — out of the score entirely,\n" +
-        '  neither passed nor failed. Run it and read the not-applicable section of REPORT.md.',
-    );
-    return { wrote: false };
-  }
-
-  // "Found no code" may not be upgraded to "there is no code" while a file went
-  // unread. That is a claim about the OUTPUT, and something in it was not read.
+  // NO CODE TO COMPILE IS A FAILURE, not an absence. `compiles` only applies to
+  // scenarios that asked for code, so an answer with none did not do the thing.
+  // "Found no code" may not be upgraded to "there IS no code" either: the scan
+  // reads only recognised code files and LABELLED fences, so an unlabelled fence
+  // — how models most often emit code — looks exactly like prose to it.
   if (units.length === 0) {
     return {
-      wrote: true,
       result: {
         passed: false,
-        detail: `no code unit could be read, and ${unread.length} output file(s) went unread (${unread.join(', ')}). "Found nothing" is not "there is nothing" while something was not looked at, so this is a failure to determine rather than an absence.`,
+        detail: unread.length
+          ? `no code unit could be read, and ${unread.length} output file(s) went unread (${unread.join(', ')}). "Found nothing" is not "there is nothing" while something was not looked at, so this is a failure to determine rather than an absence.`
+          : `no code unit could be read across ${files.length} output file(s), so nothing was compiled. Either the answer contains no code — a failure on a scenario that asked for some — or it emitted code this scan cannot recognise (an unlabelled fence reads as prose). Neither is a pass.`,
         filesSeen: files.length,
         filesScanned: 0,
         unread,
@@ -196,7 +184,6 @@ function runGate({ runDir, framework, keep = false, harness: shared }) {
 
   if (!planned.length) {
     return {
-      wrote: true,
       result: {
         passed: false,
         detail: `the output contains ${units.length} code unit(s) and none of them is TypeScript the consumer project compiles.${skipNote}`,
@@ -224,7 +211,6 @@ function runGate({ runDir, framework, keep = false, harness: shared }) {
         : `  ✗ ${errors.length} error(s) under the ${project} project (framework ${framework}):\n${errors.map((e) => `      ${e}`).join('\n')}`,
     );
     return {
-      wrote: true,
       result: {
         passed,
         detail: passed
@@ -277,7 +263,7 @@ async function selfTest() {
   const tmpl = planFiles(codeUnits([{ name: 'App.vue', text: '<template><p>x</p></template>\n' }]));
   check('a template-only component is reported, not counted as compiled', tmpl.files.length === 0 && tmpl.skipped.length === 1);
 
-  // ── the three outcomes, through runGate itself ──
+  // ── the outcomes, through runGate itself ──
   //
   // ONE harness for every fixture below: standing up the temp tree costs more
   // than the compiles do. `harness.selfTest(project)` still runs once, and every
@@ -296,22 +282,23 @@ async function selfTest() {
   harness.selfTest('default');
   const gate = (name, files, framework = 'react') => runGate({ runDir: fixture(name, files), framework, harness });
 
-  const na = runGate({ runDir: fixture('prose-only', { 'ANSWER.md': 'There is no such element and I will not invent one.\n' }), framework: 'react', harness });
+  const none = gate('prose-only', { 'ANSWER.md': 'There is no such element and I will not invent one.\n' });
   check(
-    'OUTCOME 3 — a pure-prose answer produces NO gate result at all, rather than a passed:false',
-    na.wrote === false && na.result === undefined,
+    'an output with no code at all is a FAILURE with the reason, never a skip and never an absence',
+    none.result.passed === false && /no code unit could be read/.test(none.result.detail),
+    none.result?.detail,
   );
 
   const unreadable = gate('unreadable', { 'main.txt': 'const a: number = 1;\n' });
   check(
     'an unread file BLOCKS the absence verdict — "found nothing" is not "there is nothing"',
-    unreadable.wrote === true && unreadable.result.passed === false && /unread/.test(unreadable.result.detail),
+    unreadable.result.passed === false && /unread/.test(unreadable.result.detail),
   );
 
   const jsOnly = gate('js-only', { 'main.js': 'export const a = 1;\n' });
   check(
     'code tsc cannot check is a FAILURE with a reason, never an absence',
-    jsOnly.wrote === true && jsOnly.result.passed === false && /none of them is TypeScript/.test(jsOnly.result.detail),
+    jsOnly.result.passed === false && /none of them is TypeScript/.test(jsOnly.result.detail),
   );
 
   // ── the compiler is really running, and really strict ──
@@ -429,21 +416,10 @@ if (!rubricFor(scenario).dimensions.some((d) => d.id === GATE_ID)) {
 console.log(`acceptance-gate-compiles: ${info.runId} — ${scenario.id}, framework ${framework} → ${FRAMEWORK_PROJECT[framework]} project`);
 
 const gatesPath = arg('--gates') ?? join(runDir, 'gates.json');
-const { wrote, result } = runGate({ runDir, framework, keep: args.includes('--keep') });
-
-if (!wrote) {
-  // Do not leave a stale verdict behind: a gates.json written by an earlier run
-  // over different output would be read as this run's.
-  if (existsSync(gatesPath)) {
-    const existing = JSON.parse(readFileSync(gatesPath, 'utf8'));
-    if (GATE_ID in existing) {
-      delete existing[GATE_ID];
-      writeFileSync(gatesPath, `${JSON.stringify(existing, null, 2)}\n`);
-      console.log(`  · removed a stale "${GATE_ID}" verdict from ${gatesPath}`);
-    }
-  }
-  process.exit(0);
-}
+// ALWAYS a verdict. There is no path on which this gate declines to write one:
+// an output with nothing to compile is `passed: false`, so a stale verdict from
+// an earlier run over different output is overwritten rather than left behind.
+const { result } = runGate({ runDir, framework, keep: args.includes('--keep') });
 
 const existing = existsSync(gatesPath) ? JSON.parse(readFileSync(gatesPath, 'utf8')) : {};
 existing[GATE_ID] = result;

@@ -306,7 +306,7 @@ export function assertRubricCoverage(scenarios, expected) {
 
 /**
  * @typedef {{ id: string, dimension: string, severity: string, summary?: string, attribution: Record<string, unknown> }} Finding
- * @typedef {{ passed: boolean, detail?: string, vacuous?: boolean, adjudicated?: 'evaluator', filesSeen?: number, filesScanned?: number, unread?: string[] }} GateResult
+ * @typedef {{ passed: boolean, detail?: string, vacuous?: boolean, filesSeen?: number, filesScanned?: number, unread?: string[] }} GateResult
  */
 
 /**
@@ -395,47 +395,33 @@ export function scoreRun({ scenario, gates = {}, judged = {}, findings = [] }) {
         );
         raw = 0;
         source = 'invalid-gate';
-      } else if (g.adjudicated !== undefined && g.adjudicated !== 'evaluator') {
-        // THE FIELD THAT UNLOCKS THE BRANCH BELOW IS VALIDATED LIKE THE TWO THAT
-        // ALREADY BURNED US. `passed` was trusted and `"false"` scored a perfect
-        // 10; `vacuous` was then added untyped and `"false"` DELETED the whole
-        // dimension. Both were truthy strings that read as their own opposite.
-        // `adjudicated` is the third field on this object, so it is checked for
-        // an EXACT value rather than for truthiness: `true`, `"true"`, `1`, `{}`
-        // and `"evaluator "` are all refused rather than quietly conferring
-        // authority.
-        problems.push(
-          `mechanical dimension "${d.id}" has \`adjudicated: ${JSON.stringify(g.adjudicated)}\` (${typeof g.adjudicated}). The only value that means anything is the exact string "evaluator", and only the evaluator sets it — it records that the EVALUATOR's own scan of the output established there was no subject. Anything else is refused rather than read as truthy.`,
-        );
-        raw = 0;
-        source = 'invalid-gate';
-      } else if (g.vacuous && d.runner !== 'evaluator' && g.adjudicated !== 'evaluator') {
-        // AN EXTERNAL GATE CANNOT ASSERT ITS OWN VACUITY. It does not scan the
-        // output, so it has no way to discover an absence of subject: tsc either
-        // ran or it did not, a browser either registered the elements or it did
-        // not. Honouring a self-declared `vacuous` on
-        // `compiles`/`registers`/`streams` reopened exactly the hole this branch
-        // keeps closing -- measured, a real S1 run with real code in it scored
-        // 10.00/10 and exit 0 on three external gates marked
+      } else if (g.vacuous && d.runner !== 'evaluator') {
+        // AN EXTERNAL GATE CANNOT BE VACUOUS. It does not scan anything, so it
+        // has no way to discover an absence of subject: tsc either ran or it did
+        // not, a browser either registered the elements or it did not. Honouring
+        // `vacuous` on `compiles`/`registers`/`streams` reopened exactly the hole
+        // this branch keeps closing -- measured, a real S1 run with real code in
+        // it scored 10.00/10 and exit 0 on three external gates marked
         // `{passed:false, vacuous:true}`, where the previous commit had given a
-        // gated failure. That refusal is UNCHANGED and still fires here.
+        // gated failure.
         //
-        // WHAT IS NEW, AND WHY IT IS NOT THAT HOLE REOPENED. An output that is
-        // prose BY DESIGN -- S6's refusal, S7's diagnosis -- has no subject for
-        // `compiles` either, and forcing that to `passed: false` recreates the
-        // OTHER recorded regression, in which the deck's best answer scored
-        // worst and then hard-failed. Absence of subject is not absence of
-        // merit. Resolving which of the two it is takes someone who LOOKED at
-        // the output, and that is the evaluator: it holds the files and runs
-        // `codeUnits` over them for its own gates already. So the
-        // not-applicable verdict on an external dimension is the EVALUATOR's to
-        // make, stamped `adjudicated: 'evaluator'` after its own scan, and an
-        // unstamped claim from a runner is refused exactly as before. A
-        // gates.json that types the stamp by hand does not get it either:
-        // acceptance-eval strips the field off every SUPPLIED gate before
-        // scoring and re-adds it only where its own scan agrees.
+        // THE EVALUATOR MAY NOT MAKE THIS CALL ON THE GATE'S BEHALF EITHER, and
+        // that was tried: an `adjudicated: 'evaluator'` stamp let the evaluator's
+        // own `codeUnits` scan mark an external dimension not-applicable when it
+        // found no code. `codeUnits` only recognises fences whose language is in
+        // CODE_FENCE_LANGS, so an UNLABELLED fence -- how models most often emit
+        // code -- is indistinguishable from prose, and "no code my scanner
+        // recognises" was being read as "no code". Measured: an S1 run producing
+        // ZERO output files scored 8.93/10 and exit 0 where it had previously
+        // hard-failed, and a mixed answer that fabricated `<kai-datagrid>` and
+        // did not typecheck scored every mechanical gate 10/10. The benefit was
+        // unreachable anyway -- the scenarios the stamp was argued for (S6's
+        // refusal, S7's diagnosis) carry no external mechanical dimension at all,
+        // since `compiles`/`registers`/`streams` exist only on S1/S2/S4/S5 -- so
+        // the whole cost landed on the code scenarios. An external gate reports
+        // `passed: false` when it found nothing to compile.
         problems.push(
-          `mechanical dimension "${d.id}" is an EXTERNAL gate and reported \`vacuous: true\` without the evaluator's adjudication. An external runner ran or it did not; "there was nothing to look at" is a claim about the OUTPUT, and only a scan of the output can establish it. Report \`passed: false\` if it did not run — and if the output really does contain no code, the evaluator marks the dimension not-applicable itself.`,
+          `mechanical dimension "${d.id}" is an EXTERNAL gate and reported \`vacuous: true\`. Only the gates the evaluator runs itself can discover that there was nothing to scan; an external gate ran or it did not, and "it had no subject" is not a verdict it can produce. Report \`passed: false\` if it did not run.`,
         );
         raw = 0;
         source = 'invalid-gate';
@@ -496,12 +482,7 @@ export function scoreRun({ scenario, gates = {}, judged = {}, findings = [] }) {
           score: null,
           applicable: false,
           // What is actually KNOWN, rather than a claim about the whole output.
-          // An external dimension names WHOSE scan established it, because the
-          // gate itself did not look and must not be read as having done so.
-          source:
-            d.runner === 'evaluator'
-              ? `not applicable - the gate found no code it could read across ${g.filesSeen ?? 0} output file(s)`
-              : `not applicable - the evaluator's own scan found no code it could read across ${g.filesSeen ?? 0} output file(s), so this external gate had no subject`,
+          source: `not applicable - the gate found no code it could read across ${g.filesSeen ?? 0} output file(s)`,
           detail: g.detail,
           findings: findings.filter((f) => f.dimension === d.id).map((f) => f.id),
         });
