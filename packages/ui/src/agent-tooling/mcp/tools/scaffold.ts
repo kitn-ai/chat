@@ -330,6 +330,17 @@ function realStreamBody(opts: {
   /** lines emitted right after the value is read and guarded */
   afterValue?: string[];
   /**
+   * Lines emitted in the `finally` block, after the turn has settled.
+   *
+   * `finally` rather than after the `try`, and that is the whole reason this hook
+   * exists rather than each renderer appending its own lines: anything that keeps a
+   * SECOND view of the thread in step with it (a conversation row's count, its
+   * title, its timestamps) has to run on the error path too, or a failed turn
+   * leaves the two views disagreeing — the user's own message is on the thread
+   * whether or not the model answered.
+   */
+  afterTurn?: string[];
+  /**
    * The attachments capability: an EXPRESSION producing this turn's staged
    * attachments, which become `file` parts ahead of the message's text part.
    *
@@ -352,7 +363,7 @@ function realStreamBody(opts: {
 }): string {
   const {
     pad, read, commitSet, setterAdapter, setLoading, bodyPayload, strictRoles = false, toolLoop, thread,
-    cards = false, valueSource = 'e.detail.value', afterValue = [], mock = false, filesExpr,
+    cards = false, valueSource = 'e.detail.value', afterValue = [], afterTurn = [], mock = false, filesExpr,
   } = opts;
   const asConst = strictRoles ? ' as const' : '';
   // Under strict TS an un-annotated array literal widens the part's `type` to
@@ -452,6 +463,7 @@ function realStreamBody(opts: {
     `${pad}  // is why the whole loop runs above it and not after.`,
     `${pad}  stream.done();`,
     `${pad}  ${setLoading('false')}`,
+    ...afterTurn.map((l) => `${pad}  ${l}`),
     `${pad}}`,
   ].join('\n');
 }
@@ -1782,6 +1794,17 @@ function htmlModule(ctx: RenderCtx, components: readonly string[]): string {
   // rather than a conversation they never had — the rule `SAMPLE_AGENTIC_MESSAGE`
   // states for the message list, applied to the list of lists. The conversation
   // ROWS are placeholder chrome, marked as such, like `sampleSources`.
+  //
+  // ★ THE ROW IS ALSO KEPT IN STEP, and it was not. This wiring shipped with the
+  // thread swap correct and the row inert: written once at creation and never
+  // touched again, so after a real turn the rail read "New chat / 0 messages /
+  // just now" beside a thread holding two messages — four dead fields, on the one
+  // surface a consumer copies wholesale. `syncActiveRow` below is the fix, and it
+  // is emitted as a worked example of the `reactivity-two-halves` invariant
+  // because a consumer who copies HALF of it gets a rail that is silently stale
+  // rather than one that is obviously broken. Run-guarded by
+  // `tests/agent-tooling/emitted-conversation-rail.live.test.ts`, which reads the
+  // rail's SHADOW DOM — no string assertion can tell the two halves apart.
   const conversationsSetupLines = conversations
     ? [
         `  const conversationsEl = document.getElementById('conversations') as KaiConversationsElement;`,
@@ -1808,6 +1831,53 @@ function htmlModule(ctx: RenderCtx, components: readonly string[]): string {
         `    conversationsEl.activeId = activeId;`,
         `  };`,
         `  showConversations();`,
+        ``,
+        `  // The row's title, derived the way every chat app derives it: the first`,
+        `  // thing the user said, on one line. Swap in your own — a summariser, or`,
+        `  // whatever the user renamed the thread to — this is the fallback, not a`,
+        `  // policy. Returns undefined for an empty thread so the row keeps the`,
+        `  // placeholder it was created with rather than losing its label.`,
+        `  const TITLE_MAX = 48;`,
+        `  const titleFrom = (messages: KaiChatElement['messages']): string | undefined => {`,
+        `    const first = messages.find((message) => message.role === 'user');`,
+        `    // flatMap, not filter: a message can open with file parts, and this`,
+        `    // narrows the part union without needing a type predicate.`,
+        `    const text = (first?.parts ?? [])`,
+        `      .flatMap((part) => (part.type === 'text' ? [part.text] : []))`,
+        `      .join(' ')`,
+        `      .replace(/\\s+/g, ' ')`,
+        `      .trim();`,
+        `    if (!text) return undefined;`,
+        `    return text.length > TITLE_MAX ? \`\${text.slice(0, TITLE_MAX).trimEnd()}…\` : text;`,
+        `  };`,
+        ``,
+        `  // The row and the thread are two views of one conversation, and only the`,
+        `  // HOST keeps them in step: <kai-conversations> renders what it is handed and`,
+        `  // reports what was clicked, nothing more. Without this the rail reads`,
+        `  // "New chat / 0 messages / just now" forever, whatever the user does.`,
+        `  const syncActiveRow = () => {`,
+        `    const messages = chat.messages ?? [];`,
+        `    const at = new Date().toISOString();`,
+        `    // BOTH HALVES OF THE CONTRACT, and the rail is silently stale without`,
+        `    // either. A NEW ARRAY is what NOTIFIES — handing the same array back is a`,
+        `    // no-op even when a row inside it changed. A NEW OBJECT for the row that`,
+        `    // changed is what makes it VISIBLE, because the rail renders rows through`,
+        `    // a reference-keyed list and never re-renders a row whose identity held.`,
+        `    // So: map to a fresh row. Never \`row.messageCount = …\` — that mutation`,
+        `    // updates the data and leaves the screen showing the old numbers.`,
+        `    conversationRows = conversationRows.map((row) =>`,
+        `      row.id === activeId`,
+        `        ? {`,
+        `            ...row,`,
+        `            title: titleFrom(messages) ?? row.title,`,
+        `            messageCount: messages.length,`,
+        `            lastMessageAt: at,`,
+        `            updatedAt: at,`,
+        `          }`,
+        `        : row,`,
+        `    );`,
+        `    showConversations();`,
+        `  };`,
         ``,
         `  conversationsEl.addEventListener('kai-conversation-select', (event: Event) => {`,
         `    const { id } = (event as CustomEvent<{ id: string }>).detail;`,
@@ -1968,6 +2038,14 @@ function htmlModule(ctx: RenderCtx, components: readonly string[]): string {
         'chat.messages ?? []',
       ),
       mock: ctx.isMock,
+      // ONE call site, in the `finally`, and deliberately not also on submit. The
+      // finally sees the WHOLE turn — the user's message and the assistant's — so
+      // one call cannot leave the row disagreeing with the thread, and it runs on
+      // the error path too, where the user's message is on the thread regardless.
+      // The cost is that the title appears when the reply settles rather than the
+      // instant the user hits send; call it right after `chat.messages = history`
+      // as well if you want it sooner.
+      afterTurn: conversations ? [`syncActiveRow();  // keep the rail's row in step with the thread`] : [],
       ...(attachments
         ? {
             filesExpr: 'files',
