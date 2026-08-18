@@ -106,6 +106,25 @@ test.describe('exactly one tab stop per hover card, in every child configuration
     expect(cStops, `stops inside kai-source#c: ${JSON.stringify(stops)}`).toHaveLength(1);
   });
 
+  /**
+   * A card that CANNOT open must not be a tab stop at all.
+   *
+   * `HoverCardRoot.enter()` early-returns while `disabled`, so a focusable
+   * disabled trigger is a stop that announces nothing and reveals nothing —
+   * exactly the dead stop the `aria-describedby` rationale on `HoverCardTrigger`
+   * argues against. It is also a regression rather than a pre-existing gap: the
+   * trigger was never focusable before this branch. No shipped composition sets
+   * `disabled` (attachments never do), which is why it was not caught by the
+   * thread measurements.
+   */
+  test('a disabled hover card is not a tab stop at all', async ({ page }) => {
+    const stops = await tabStopsBetweenSentinels(page);
+    expect(
+      stops.filter((s) => s === '#e-inert' || s.startsWith('e>')),
+      `a disabled card must contribute zero stops — tab stops: ${JSON.stringify(stops)}`,
+    ).toHaveLength(0);
+  });
+
   test('no hover card anywhere contributes more than one stop', async ({ page }) => {
     // The blunt version of the three above: it catches an extra stop appearing
     // somewhere none of them thought to look. Scoped per widget rather than as
@@ -159,10 +178,21 @@ test.describe('the focus-open path works on a real Tab, not only on .focus()', (
   });
 
   /**
-   * ★ THE SHIPPED CONFIGURATION, and the one the regression was measured on.
-   * An attachment tile has no slot anywhere near its trigger, so it exercises a
-   * different path from config B above — which is exactly why B passing is not
-   * evidence about this.
+   * ★★ DO NOT SIMPLIFY THIS AWAY INTO THE PRIMITIVE FIXTURES ABOVE. THIS IS THE
+   * TEST THAT DISCRIMINATES.
+   *
+   * An attachment tile inside a mounted `<kai-chat>` has no slot anywhere near
+   * its trigger and sits much deeper in the shadow tree than config B, and that
+   * difference is not cosmetic — it is the whole reason this file exists:
+   *
+   *   - When the focus-open regression was live, config B (`<kai-hover-card>`
+   *     with an inert slotted child) OPENED correctly on a real Tab. A suite
+   *     built only from the primitive would have reported the bug ABSENT.
+   *   - Independent verification later broke the fix a second way, and again
+   *     only this test went red — the primitive-fixture tests both stayed green.
+   *
+   * Twice now, "the primitive works" has been false evidence about the
+   * composition that ships. Keep a REAL `<kai-chat>` in this file.
    */
   test('tabbing onto an attachment tile in a real thread opens its card', async ({ page }) => {
     await tabToTriggerInside(page, 'd');

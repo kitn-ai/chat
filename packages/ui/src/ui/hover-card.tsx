@@ -20,6 +20,9 @@ interface HoverCardCtx {
   /** Ties a focused trigger to the card it reveals. Without it a keyboard tab
    *  stop announces nothing, which is a focus stop that wastes the user's time. */
   contentId: string;
+  /** Whether this card refuses to open. Read by the TRIGGER, not just by
+   *  `enter()`: a card that cannot open must not be in the tab order either. */
+  disabled: Accessor<boolean>;
 }
 const Ctx = createContext<HoverCardCtx>();
 const useHoverCard = () => {
@@ -78,6 +81,7 @@ export function HoverCardRoot(props: HoverCardRootProps) {
       setTrigger, setContent,
       trigger, content,
       contentId,
+      disabled: () => props.disabled ?? false,
     }}>
       {props.children}
     </Ctx.Provider>
@@ -166,7 +170,12 @@ const hasFocusableChild = (root: HTMLElement): boolean => {
 export function HoverCardTrigger(props: HoverCardTriggerProps) {
   const ctx = useHoverCard();
   const [detectedInert, setDetectedInert] = createSignal(false);
-  const isFocusable = () => props.focusable ?? detectedInert();
+  // `&& !disabled` last, and it beats an explicit `focusable` — a disabled card
+  // early-returns out of `enter()`, so a stop here could never open anything.
+  // Landing on it would announce nothing and reveal nothing, which is the dead
+  // stop the note above argues against; forcing one is not an escape hatch
+  // anybody should get.
+  const isFocusable = () => (props.focusable ?? detectedInert()) && !ctx.disabled();
 
   return (
     <As

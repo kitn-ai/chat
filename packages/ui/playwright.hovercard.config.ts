@@ -10,7 +10,13 @@ import { defineConfig, devices } from '@playwright/test';
  *
  * Deliberately self-contained and Storybook-free: it serves the built
  * `dist/kai.es.js` and one static fixture, so it exercises the SHIPPED bundle
- * and shares no setup with the other e2e configs. Needs `nx build ui` first.
+ * and shares no setup with the other e2e configs.
+ *
+ * `globalSetup` ENFORCES that the bundle is fresh rather than asking politely in
+ * a comment. Driving `dist` is the value of this suite and also its failure
+ * mode: run it without rebuilding and it passes against yesterday's code — which
+ * happened for real, when a deliberately broken fix produced a green run until
+ * the bundle was rebuilt.
  *
  * The server is the workspace's own vite via `pnpm exec` — never bare `npx`,
  * for the hermetic-CI reason `playwright.config.ts` documents. `pnpm exec`
@@ -27,6 +33,7 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: 'tests/e2e',
   testMatch: /hover-card-tabstops\.spec\.ts$/,
+  globalSetup: './tests/e2e/hover-card-global-setup.ts',
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: 0,

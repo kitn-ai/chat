@@ -45,6 +45,17 @@
       <kai-source id="c" href="https://example.com" label="a source"></kai-source>
     </section>
 
+    <!-- E: DISABLED. `enter()` early-returns on `disabled`, so this card can
+         never open — which makes a tab stop here a stop that announces nothing
+         and shows nothing. It must contribute ZERO stops, not a dead one. -->
+    <section>
+      <h2>E: disabled, inert children</h2>
+      <kai-hover-card id="e" disabled>
+        <div id="e-inert">a disabled tile</div>
+        <div slot="card">card E</div>
+      </kai-hover-card>
+    </section>
+
     <!-- D: the SHIPPED configuration — an attachment tile in a real thread,
          where the trigger is the stop and there is no slot anywhere near it.
          This is the one the focus-open regression was measured on, so the
