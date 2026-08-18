@@ -39,6 +39,9 @@ const S = {
   filename: 'SENTINEL-payslip.png',
   providerMessage: 'SENTINEL-your-key-sk-live-1234-is-invalid',
   droppedCard: 'SENTINEL-card-contents',
+  // An IN-BAND error: the request succeeded and the stream itself carried the
+  // failure. This is the one a developer chasing an empty turn is looking for.
+  inBandError: 'SENTINEL-rate-limited-on-org-acme-prod',
 };
 
 const BODY = [
@@ -77,7 +80,18 @@ const THREAD: ChatMessage[] = [
   },
 ];
 
-/** Everything a full session emits: an encode, a read, and a failure. */
+/** A 200 whose stream carries the failure in-band. `wire.close` reports it. */
+const IN_BAND_ERROR_BODY = [
+  `data: {"error":{"code":"rate_limit_exceeded","message":"${S.inBandError}"}}`,
+  '',
+  'data: [DONE]',
+  '',
+  '',
+].join('\n');
+
+/** Everything a full session emits: an encode, a read, a transport failure, and
+ *  an in-band one. All three terminal events, so the boundary is asserted over
+ *  every path that can carry a provider's own error text. */
 async function driveEverything(): Promise<WireDiagnosticEvent[]> {
   const events: WireDiagnosticEvent[] = [];
   const off = subscribeWireDiagnostics((e) => events.push(e));
@@ -90,6 +104,7 @@ async function driveEverything(): Promise<WireDiagnosticEvent[]> {
       }),
       nullSink(),
     ).catch(() => undefined);
+    await readOpenAIStream(new Response(IN_BAND_ERROR_BODY), nullSink());
   } finally {
     off();
   }
@@ -216,6 +231,48 @@ describe('the payload boundary', () => {
     expect(cut.payload.message).toBe('SENTINEL-socket-died-mid-turn');
     const { payload: _p, ...rest } = cut;
     expect(JSON.stringify(rest)).not.toContain('SENTINEL-socket-died-mid-turn');
+  });
+
+  it('ON: wire.close carries the in-band error MESSAGE, like both its siblings', async () => {
+    // All three terminal events -- close, failed, interrupted -- face the same
+    // hazard (a provider message can echo request content back) and now answer
+    // it identically. An asymmetry between them reads as an oversight and gets
+    // "fixed" later by someone with less context.
+    setWirePayloadCapture(true);
+    const events: WireDiagnosticEvent[] = [];
+    const off = subscribeWireDiagnostics((e) => events.push(e));
+    await readOpenAIStream(new Response(IN_BAND_ERROR_BODY), nullSink());
+    off();
+
+    const close = events.find((e) => e.type === 'wire.close') as any;
+    expect(close.payload.message).toBe(S.inBandError);
+    // The metadata default is untouched: the CODE travels, the message does not.
+    expect(close.errorCode).toBe('rate_limit_exceeded');
+    const { payload: _p, ...rest } = close;
+    expect(JSON.stringify(rest)).not.toContain(S.inBandError);
+  });
+
+  it('OFF: wire.close reports the error CODE and never the message', async () => {
+    const events: WireDiagnosticEvent[] = [];
+    const off = subscribeWireDiagnostics((e) => events.push(e));
+    await readOpenAIStream(new Response(IN_BAND_ERROR_BODY), nullSink());
+    off();
+    const close = events.find((e) => e.type === 'wire.close') as any;
+    expect(close.errorCode).toBe('rate_limit_exceeded');
+    expect('payload' in close).toBe(false);
+    expect(JSON.stringify(close)).not.toContain(S.inBandError);
+  });
+
+  it('ON: encode.request reports bytes, exactly, because the body is materialized anyway', async () => {
+    setWirePayloadCapture(true);
+    const events: WireDiagnosticEvent[] = [];
+    const off = subscribeWireDiagnostics((e) => events.push(e));
+    const body = toOpenAIMessages(THREAD);
+    off();
+    const req = events.find((e) => e.type === 'encode.request') as any;
+    // EXACT, not an estimate: an estimate that looked like a measurement would
+    // be worse than the absent field.
+    expect(req.bytes).toBe(new TextEncoder().encode(JSON.stringify(body)).length);
   });
 
   it('turning it back OFF stops the capture for the next read', async () => {

@@ -16,7 +16,12 @@
 //
 // SSR: no window, no globals at module scope. The TextEncoder is built on first
 // use, the same rule `read.ts` follows.
-import { emitWireDiagnostic, withPayload, type EncodeAttachmentReport } from './diagnostics';
+import {
+  emitWireDiagnostic,
+  wirePayloadActive,
+  withPayload,
+  type EncodeAttachmentReport,
+} from './diagnostics';
 
 /** Built on first use and cached -- never at module scope, so this module keeps
  *  importing cleanly in a runtime that lacks the global. Only ever reached from
@@ -26,10 +31,27 @@ let encoder: TextEncoder | undefined;
 /**
  * UTF-8 byte length of the encoded body, or undefined when it cannot be one.
  *
- * `JSON.stringify` is not total: a circular `tool.output` or a BigInt anywhere
- * in a host's own data throws, and a diagnostic must never be the thing that
- * breaks an encode. The field goes absent, which reads as "not reported" rather
- * than as a size.
+ * ★ ONLY CALLED WHEN PAYLOAD CAPTURE IS ON, i.e. when the body is being
+ * materialized for a subscriber anyway. `base64Bytes` below refuses to decode a
+ * 40 MB attachment to count it, on the grounds that the diagnostic would cost
+ * more than the encode it is watching -- and stringifying the whole body to
+ * produce one number is that same mistake one level up. With payload off the
+ * field is OMITTED, which reads as "not reported" under the absence rule.
+ *
+ * Measured against the built bundle, subscribed with payload OFF, on a thread
+ * of ten 1 MB attachments whose bare encode is 4.2 ms: ungated the
+ * instrumentation cost +36.6 ms and +0.9 MB of heap; gated it costs +5.8 ms and
+ * no measurable heap. (Upper bounds -- the box was not idle. `--expose-gc`, 15
+ * runs, `scripts/`-adjacent harness in the PR.)
+ *
+ * NOT REPLACED BY AN ESTIMATE. A number that looks like a measurement and is
+ * not is worse than an absent field, and a size threshold would make the
+ * field's presence depend on how big the body happened to be -- which is the
+ * one thing a reader would then be unable to conclude anything from.
+ *
+ * `JSON.stringify` is not total either: a circular `tool.output` or a BigInt
+ * anywhere in a host's own data throws, and a diagnostic must never be the thing
+ * that breaks an encode. That case goes absent for the same reason.
  */
 function bodyBytes(body: unknown): number | undefined {
   try {
@@ -46,6 +68,29 @@ function bodyBytes(body: unknown): number | undefined {
  * Four base64 characters carry three bytes, less the padding. Decoding a 40 MB
  * attachment to count it would make the diagnostic more expensive than the
  * encode it is watching.
+ *
+ * ★ THIS IS AN O(n) SCAN AND THERE IS NO EXACT WAY AROUND IT. Measured at about
+ * 0.43 ms per MB of attachment, which is the residual reason an instrumented
+ * encode still scales with attachment size even with `bytes` gated off. Three
+ * alternatives were measured against this one and rejected:
+ *
+ *   · A charCodeAt counting loop -- 7x SLOWER on the shape that actually occurs
+ *     (a `data:` URI, no whitespace): 2.77 ms vs 0.61 ms per 1.4 MB. It avoids
+ *     a copy that a whitespace-free `.replace` never makes, because V8 returns
+ *     the original string when the pattern does not match. Strictly worse.
+ *   · Native whitespace `.test()` then O(1) arithmetic on `.length` -- exact,
+ *     and identical in time (0.60 ms), because the test is the same full scan.
+ *     No win worth the extra branch.
+ *   · Probing only a prefix for whitespace, then O(1) arithmetic -- 170x faster
+ *     (0.0036 ms) and REJECTED anyway: it assumes whitespace is periodic line
+ *     wrapping, so a payload whose only whitespace sits past the probe window
+ *     is silently OVER-counted. That is an estimate wearing a measurement's
+ *     clothes, which is the one thing this event's size fields must never be.
+ *
+ * So exactness is kept and the cost is stated rather than hidden. Whether an
+ * exact per-attachment size is worth 0.43 ms per MB is a product call; if it
+ * ever is not, the answer is to gate this field the way `bodyBytes` is gated,
+ * not to start guessing.
  */
 export function base64Bytes(data: string): number {
   const clean = data.replace(/\s/g, '');
@@ -134,7 +179,10 @@ export function createEncodeProbe(opts: { traceId?: string; label?: string }): E
     finish(format, threadMessages, body) {
       const byRole: Record<string, number> = {};
       for (const message of body) bump(byRole, message.role);
-      const bytes = bodyBytes(body);
+      // Gated: measuring costs a full serialization of every inlined
+      // attachment, so it happens only when the body is already being
+      // materialized for the payload key. See `bodyBytes`.
+      const bytes = wirePayloadActive() ? bodyBytes(body) : undefined;
       emitWireDiagnostic({
         type: 'encode.request',
         t: Date.now(),

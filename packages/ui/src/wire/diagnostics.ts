@@ -145,12 +145,21 @@ export interface WireCloseEvent extends WireDiagnosticBase {
   errorCode?: string | number;
   usage?: ModelUsage;
   ms: number;
-  /** Content-bearing, so opt-in: the assembled turn. */
+  /** Content-bearing, so opt-in: the assembled turn, plus the in-band error's
+   *  own message.
+   *
+   *  ALL THREE TERMINAL EVENTS TREAT PROVIDER MESSAGE TEXT IDENTICALLY --
+   *  `wire.close`, `wire.failed` and `wire.interrupted`. Each faces the same
+   *  hazard, that a provider's message can echo request content back, and
+   *  payload is precisely the switch that accepts it. Disagreeing here would
+   *  read as an oversight and be "fixed" later by someone with less context. */
   payload?: {
     text: string;
     reasoning: string;
     toolCalls: unknown[];
     sources: unknown[];
+    /** The in-band error's message. Absent when the turn carried no error. */
+    message?: string;
   };
 }
 
@@ -285,8 +294,17 @@ export interface EncodeRequestEvent extends WireDiagnosticBase {
   partsEncoded: Record<string, number>;
   /** One entry per `file` part the encoder handled, in encounter order. */
   attachments: EncodeAttachmentReport[];
-  /** UTF-8 byte length of the encoded body as JSON. Absent when the body could
-   *  not be stringified (a circular `tool.output`, a BigInt). */
+  /**
+   * UTF-8 byte length of the encoded body as JSON.
+   *
+   * PRESENT ONLY WHEN PAYLOAD CAPTURE IS ON, because producing it means
+   * serializing the whole body -- every inlined attachment included -- and
+   * that is a cost the metadata stream refuses to pay for one number. When the
+   * body is already being materialized for `payload`, it is free and exact.
+   * Absent also when the body could not be stringified at all (a circular
+   * `tool.output`, a BigInt). Absent means NOT REPORTED, never zero, and it is
+   * deliberately not backfilled with an estimate.
+   */
   bytes?: number;
   /** Content-bearing, so opt-in. `attachments` is positionally aligned with the
    *  metadata array above. */

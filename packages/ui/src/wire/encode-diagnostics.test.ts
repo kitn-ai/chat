@@ -62,7 +62,29 @@ describe('encode.request', () => {
     expect(req.threadMessages).toBe(24);
     expect(req.wireMessages).toBe(24);
     expect(req.byRole).toEqual({ user: 12, assistant: 12 });
-    expect(req.bytes).toBeGreaterThan(0);
+  });
+
+  it('bytes is ABSENT with payload off -- the number is not worth materializing the body for', () => {
+    listen();
+    toOpenAIMessages([
+      {
+        id: 'u1',
+        role: 'user',
+        parts: [
+          { type: 'text', text: 'here is a big one' },
+          { type: 'file', attachment: image({ url: `data:image/png;base64,${'A'.repeat(4096)}` }) },
+        ],
+      },
+    ]);
+    const req = request();
+    // Producing it means JSON.stringify over every inlined attachment, which is
+    // the exact cost `base64Bytes` refuses one level down. Absent reads as "not
+    // reported", which is a true statement; a cheap estimate dressed up as a
+    // measurement would not be.
+    expect('bytes' in req).toBe(false);
+    // Everything that does NOT cost a full serialization is still reported.
+    expect(req.attachments[0].bytes).toBe(3072);
+    expect(req.wireMessages).toBe(1);
   });
 
   it('systemMessages is a stated ZERO, because that is the finding', () => {
