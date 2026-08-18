@@ -222,10 +222,12 @@ reviews:
     # reviewed against that guide instead.
     markdownlint:
       enabled: false
+    github-checks:
+      enabled: false
 
 knowledge_base:
   code_guidelines:
-    enabled: true
+    enabled: false
     # `**/CLAUDE.md` is already in CodeRabbit's defaults; it is repeated here
     # because setting this key may replace the default list rather than extend
     # it, and losing CLAUDE.md would quietly gut this whole configuration.
