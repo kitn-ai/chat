@@ -26,6 +26,7 @@ import {
   nextStreamId,
   wireCorrelation,
   wireDiagnosticsActive,
+  withPayload,
   type WireCorrelation,
 } from './diagnostics';
 
@@ -232,6 +233,14 @@ async function toByteSource(
         ...(providerErrorCode(err.body) !== undefined
           ? { providerCode: providerErrorCode(err.body) }
           : {}),
+        // The message is the field that echoes request content back, which is
+        // precisely why it is here and not beside `providerCode`.
+        ...withPayload(() => ({
+          bodyText: err.bodyText,
+          ...(providerMessage(err.body) !== undefined
+            ? { message: providerMessage(err.body) }
+            : {}),
+        })),
       });
     }
     throw err;
@@ -313,6 +322,7 @@ export async function readModelStream(
           chunks: produced.length,
           fields: [...fields],
           ...(model ? { model } : {}),
+          ...withPayload(() => ({ raw: rawFrame })),
         });
       }
       for (const chunk of produced) {
@@ -356,6 +366,10 @@ export async function readModelStream(
         // those two have opposite fixes.
         reason: name === 'AbortError' ? 'abort' : 'error',
         ...(name !== undefined ? { errorName: name } : {}),
+        ...withPayload(() => {
+          const message = (err as { message?: unknown } | null | undefined)?.message;
+          return typeof message === 'string' ? { message } : {};
+        }),
       });
     }
     throw err;

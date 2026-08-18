@@ -23,6 +23,7 @@ import {
   nextStreamId,
   wireCorrelation,
   wireDiagnosticsActive,
+  withPayload,
   type WireCorrelation,
 } from './diagnostics';
 
@@ -283,7 +284,14 @@ function createPartsRecorder(correlation: WireCorrelation): AssistantStreamSink 
    *  references before and after. The builders return a new array with a new
    *  object for the item they changed, so the first slot that differs IS the
    *  part that moved. Computed only when someone is listening. */
-  const record = (variant: string, before: MessagePart[], chars?: number) => {
+  const record = (
+    variant: string,
+    before: MessagePart[],
+    chars?: number,
+    /** Built ONLY when the payload switch is on -- a thunk, so with it off
+     *  nothing here is read or copied. */
+    payload?: () => { delta?: string; patch?: unknown; source?: unknown },
+  ) => {
     if (parts.length > before.length) {
       counts[variant] = (counts[variant] ?? 0) + (parts.length - before.length);
     }
@@ -302,6 +310,7 @@ function createPartsRecorder(correlation: WireCorrelation): AssistantStreamSink 
       variant,
       index,
       ...(chars !== undefined ? { chars } : {}),
+      ...(payload ? withPayload(payload) : {}),
     });
   };
 
@@ -309,7 +318,7 @@ function createPartsRecorder(correlation: WireCorrelation): AssistantStreamSink 
     appendText(delta) {
       const before = parts;
       parts = appendTextPart(parts, delta);
-      record('text', before, delta.length);
+      record('text', before, delta.length, () => ({ delta }));
     },
     appendReasoning(delta, opts) {
       const before = parts;
@@ -321,17 +330,19 @@ function createPartsRecorder(correlation: WireCorrelation): AssistantStreamSink 
       // adapter guarantees (same chunks in, same parts out, whatever the byte
       // boundaries). The host's own sink still receives it.
       parts = appendReasoningPart(parts, delta, { ...opts, streamId: undefined });
-      record('reasoning', before, delta.length);
+      record('reasoning', before, delta.length, () => ({ delta }));
     },
     upsertTool(toolCallId, patch) {
       const before = parts;
       parts = upsertToolPart(parts, toolCallId, patch);
-      record('tool', before);
+      // The patch is where the tool's arguments and its output live, so the
+      // whole thing is payload and none of it is metadata.
+      record('tool', before, undefined, () => ({ patch }));
     },
     addSource(source) {
       const before = parts;
       parts = [...parts, { type: 'source', source }];
-      record('source', before);
+      record('source', before, undefined, () => ({ source }));
     },
     parts: () => parts,
     partCounts: () => counts,
@@ -552,6 +563,11 @@ export async function consumeModelStream(
       ...(error?.code !== undefined ? { errorCode: error.code } : {}),
       ...(usage ? { usage } : {}),
       ms: Date.now() - startedAt,
+      // The assembled turn: everything the sink was driven with, in one place,
+      // which is what a panel renders when someone asks "what did it actually
+      // say". `error.message` is deliberately NOT here -- it is on
+      // `ModelTurn.error`, and `errorCode` beside this is the metadata half.
+      ...withPayload(() => ({ text, reasoning, toolCalls, sources })),
     });
   }
 

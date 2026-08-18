@@ -4,14 +4,21 @@
 // out", so it is the only layer that can tell a wrong-dialect read from a quiet
 // one. That fact was previously visible nowhere; this is where it gets said.
 //
-// METADATA ONLY, and the rule is checkable rather than a matter of taste: if a
-// value comes from the model, the end user, or the app's data, it is PAYLOAD; if
-// it describes the shape, size, timing or identity of that value, it is
-// METADATA. Every field below is metadata by that rule. `errorCode` yes,
+// METADATA BY DEFAULT, and the rule is checkable rather than a matter of taste:
+// if a value comes from the model, the end user, or the app's data, it is
+// PAYLOAD; if it describes the shape, size, timing or identity of that value, it
+// is METADATA. Every field below is metadata by that rule. `errorCode` yes,
 // `message` no -- some providers echo request content back inside the message,
-// which is why the code is the half that travels. There is no payload switch in
-// this iteration; when one lands it goes under a single optional `payload` key
-// so a reviewer checks one key rather than re-reads every field name.
+// which is why the code is the half that travels.
+//
+// PAYLOAD IS A SEPARATE, DELIBERATE SWITCH (`wirePayloadActive`), off by
+// default, with its own signal that no URL can set. Every content-bearing value
+// lives under ONE optional `payload` key, which is what makes the boundary
+// reviewable: a reviewer checks one key rather than re-reading every field
+// name, and `payload-boundary.test.ts` asserts it structurally by deleting that
+// key and finding nothing left. The one thing that never appears under it
+// either is a response URL's query string -- `?api_key=` is a CREDENTIAL, a
+// different class from conversation content, and it does not get a switch.
 //
 // FORWARD COMPATIBILITY, producer side: never repurpose a field name and never
 // change what a value means. New information is a new field or a new type.
@@ -104,6 +111,8 @@ export interface WireFrameEvent extends WireDiagnosticBase {
   fields: string[];
   /** Present when this frame stated a model id. */
   model?: string;
+  /** Content-bearing, so opt-in: the raw `data:` payload, verbatim. */
+  payload?: { raw: string };
 }
 
 /** A message part the recorder actually produced. */
@@ -114,6 +123,10 @@ export interface WirePartEvent extends WireDiagnosticBase {
   index: number;
   /** Delta LENGTH, never the delta. Present for text and reasoning only. */
   chars?: number;
+  /** Content-bearing, so opt-in. One key per variant this write can carry:
+   *  `delta` for text and reasoning, `patch` for a tool write (which holds the
+   *  arguments and the output), `source` for a citation. */
+  payload?: { delta?: string; patch?: unknown; source?: unknown };
 }
 
 /** The turn finished. Everything the widened empty-turn guard judges on. */
@@ -132,6 +145,13 @@ export interface WireCloseEvent extends WireDiagnosticBase {
   errorCode?: string | number;
   usage?: ModelUsage;
   ms: number;
+  /** Content-bearing, so opt-in: the assembled turn. */
+  payload?: {
+    text: string;
+    reasoning: string;
+    toolCalls: unknown[];
+    sources: unknown[];
+  };
 }
 
 /**
@@ -182,6 +202,10 @@ export interface WireFailedEvent extends WireDiagnosticBase {
   /** The parsed body's error CODE. Never the message: a provider's error text
    *  can echo request content back. */
   providerCode?: string | number;
+  /** Content-bearing, so opt-in: the raw body and the provider's own error
+   *  message, which is exactly the field that echoes request content back and
+   *  is why the code is the half that travels by default. */
+  payload?: { bodyText: string; message?: string };
 }
 
 /** One attachment the encoder handled, and what became of it.
@@ -375,6 +399,10 @@ const STATE_KEY = Symbol.for('kai.wire.diagnostics.v1');
 interface DiagnosticsState {
   subs: Subscriber[];
   seq: number;
+  /** Whether content-bearing values may ride under the `payload` key. A
+   *  SEPARATE switch from having a subscriber, and it lives here for the same
+   *  reason the subscriber list does: two copies of this module must agree. */
+  payload: boolean;
 }
 
 /** `globalThis` viewed as the one property we put on it. */
@@ -394,7 +422,7 @@ function peekState(): DiagnosticsState | undefined {
 /** Read, creating on first use. Only the two paths that must WRITE call this. */
 function state(): DiagnosticsState {
   const holder = globalThis as unknown as StateHolder;
-  return (holder[STATE_KEY] ??= { subs: [], seq: 0 });
+  return (holder[STATE_KEY] ??= { subs: [], seq: 0, payload: false });
 }
 
 /**
@@ -423,6 +451,54 @@ export function subscribeWireDiagnostics(fn: Subscriber): () => void {
 export function wireDiagnosticsActive(): boolean {
   const s = peekState();
   return s !== undefined && s.subs.length > 0;
+}
+
+/**
+ * INTERNAL. Whether content-bearing values may ride under the `payload` key.
+ *
+ * A SEPARATE SWITCH FROM `wireDiagnosticsActive`, and the separation is the
+ * security property rather than a preference. The panel is a pasted script tag
+ * on a live site and `?kai-devtools=1` is guessable; a stranger who guesses it
+ * gets the SHAPE of a conversation and not one word of its content. Turning
+ * that into content takes a second, deliberate signal that no URL can set.
+ *
+ * Every emission site checks this INSIDE its `wireDiagnosticsActive()` branch
+ * and builds the payload object only then, so a session with a subscriber and
+ * no payload switch pays one extra boolean read per event.
+ */
+export function wirePayloadActive(): boolean {
+  const s = peekState();
+  return s !== undefined && s.payload;
+}
+
+/**
+ * INTERNAL. Turn payload capture on or off.
+ *
+ * Called by the devtools hook at install, from the payload signal it read
+ * synchronously. It is not part of the public surface: a consumer who can flip
+ * this can make the kit start recording its own users' conversations, and that
+ * is a decision the app makes through the signal, deliberately, not something a
+ * dependency can reach in and do.
+ *
+ * Turning it ON allocates the shared state; turning it OFF does not, so the
+ * dormant no-signal path still allocates nothing at all.
+ */
+export function setWirePayloadCapture(on: boolean): void {
+  if (!on && peekState() === undefined) return;
+  state().payload = on;
+}
+
+/**
+ * INTERNAL. The `payload` key, or nothing.
+ *
+ * Every content-bearing value in this module goes through here, which is what
+ * makes the boundary reviewable: there is one call to grep for, one key to
+ * strip in a test, and no field-by-field audit. The builder is a THUNK so that
+ * with the switch off nothing is read, copied or stringified -- the cost of
+ * carrying an unused payload is a boolean.
+ */
+export function withPayload<T>(build: () => T): { payload: T } | Record<string, never> {
+  return wirePayloadActive() ? { payload: build() } : {};
 }
 
 /**

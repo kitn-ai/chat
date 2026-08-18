@@ -16,7 +16,7 @@
 //
 // SSR: no window, no globals at module scope. The TextEncoder is built on first
 // use, the same rule `read.ts` follows.
-import { emitWireDiagnostic, type EncodeAttachmentReport } from './diagnostics';
+import { emitWireDiagnostic, withPayload, type EncodeAttachmentReport } from './diagnostics';
 
 /** Built on first use and cached -- never at module scope, so this module keeps
  *  importing cleanly in a runtime that lacks the global. Only ever reached from
@@ -110,7 +110,6 @@ export function createEncodeProbe(opts: { traceId?: string; label?: string }): E
     seen: (variant) => bump(partsIn, variant),
     encoded: (variant) => bump(partsEncoded, variant),
     dropped(variant, reason, messageIndex, partIndex, part) {
-      void part; // published under the payload key; see the payload commit
       emitWireDiagnostic({
         type: 'encode.dropped',
         t: Date.now(),
@@ -120,6 +119,9 @@ export function createEncodeProbe(opts: { traceId?: string; label?: string }): E
         messageIndex,
         partIndex,
         reason,
+        // The part itself, by reference and unread. This function does not know
+        // what a part is and must not: knowing would mean discriminating one.
+        ...withPayload(() => ({ part })),
       });
     },
     attachment(report, filename) {
@@ -148,6 +150,11 @@ export function createEncodeProbe(opts: { traceId?: string; label?: string }): E
         partsEncoded,
         attachments,
         ...(bytes !== undefined ? { bytes } : {}),
+        // The encoded body, and the filenames held back from the ledger above.
+        ...withPayload(() => ({
+          body,
+          ...(filenames.length > 0 ? { attachments: filenames } : {}),
+        })),
       });
     },
   };

@@ -26,6 +26,14 @@ export type { KaiDevtoolsHook } from './hook';
 
 // The event contract, re-exported so a panel binds to ONE specifier instead of
 // reaching into ./wire for the types and ./diagnostics for the hook.
+//
+// SUBSCRIPTION AND TYPES ONLY. The producer side -- `emitWireDiagnostic`,
+// `wireDiagnosticsActive`, `nextStreamId`, and now `setWirePayloadCapture` and
+// `wirePayloadActive` -- stays internal. A consumer that can forge events or
+// reset the stream counter can make a panel lie about a stream that never
+// happened, and one that can flip payload capture can start recording an app's
+// users' conversations without the app deciding to. Payload is the app's
+// decision, made through the signal.
 export { subscribeWireDiagnostics } from '../wire/diagnostics';
 export type {
   EncodeAttachmentReport,
