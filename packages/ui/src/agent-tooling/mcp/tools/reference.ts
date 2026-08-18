@@ -9,7 +9,15 @@ import {
 } from '@kitn.ai/ui/schemas';
 import type { CardSchemaName, ToolProvider } from '@kitn.ai/ui/schemas';
 import type { Tool } from './types';
-import { cardHostTags, cardTagForType, cardTypeForTag, getElement, listElements } from '../manifest';
+import {
+  cardHostTags,
+  cardTagForType,
+  cardTypeForTag,
+  entryForTag,
+  getElement,
+  listElements,
+  optInEntryForTag,
+} from '../manifest';
 import type { CemMember } from '../manifest';
 // The RAW literals, not listInvariants() / listSurfaceRecipes(). Those re-run a
 // zod parse over the whole catalog, and this is a per-lookup serving path called
@@ -251,6 +259,27 @@ function invariantsFor(tag: string): TInvariant[] {
   return invariants.filter((i) => !i.appliesTo.tags || i.appliesTo.tags.includes(tag));
 }
 
+/**
+ * The recipe's nesting, as markup a reader can paste.
+ *
+ * `noteSep` is how much of the record to print: the appendix passes ' — ' and
+ * gets the WHY, an element lookup passes '' and gets only the shape, on the same
+ * split the wiring rows already use. A recipe with no `composition` prints
+ * nothing at all rather than "flat" — the field being absent means nobody
+ * decided, and a rendered "(none)" would turn a gap into a claim.
+ */
+function compositionLines(r: TSurfaceRecipe, noteSep: string): string[] {
+  if (!r.composition) return [];
+  return [
+    '- **Composition** — where the parts go (a slotted child, not a sibling):',
+    ...r.composition.map(
+      (c) =>
+        `  - \`<${c.child} slot="${c.slot}">\` goes INSIDE \`<${c.parent}>\`` +
+        (noteSep && c.note ? `${noteSep}${c.note}` : ''),
+    ),
+  ];
+}
+
 function recipesFor(tag: string): TSurfaceRecipe[] {
   return surfaceRecipes.filter((r) => r.ingredients.includes(tag));
 }
@@ -370,6 +399,15 @@ export function coverageSummary(applicable: TInvariant[]): string {
 /**
  * `###` to match every other section heading in this file (see '### Props'),
  * `####` for the per-record blocks, matching the card contract's sub-headings.
+ *
+ * Each invariant gets its heading (id, scope, coverage) and its one-line
+ * `statement` — enough to apply the rule and to know how much to trust it —
+ * but NOT the diagnosis and wrong/right examples. Those are the bulk: measured
+ * on this tree, the full body of the 7 catalog records runs ~13 KB, and every
+ * unscoped record (5 of 7) applies to all 80 elements, so printing the full
+ * body here paid that in full on every lookup. `renderInvariantAppendix`
+ * carries the long form exactly once; this function points to it instead of
+ * repeating it.
  */
 function catalogSectionLines(tag: string): string[] {
   const applicable = invariantsFor(tag);
@@ -381,17 +419,14 @@ function catalogSectionLines(tag: string): string[] {
       '### Invariants',
       'Rules that have already broken real consumers of this kit. Each block says what enforces ' +
         'it — read that line rather than assuming CI catches a violation, because nothing here ' +
-        'reads YOUR code.' + coverageSummary(applicable),
+        'reads YOUR code.' + coverageSummary(applicable) + ' Diagnosis and wrong/right examples for ' +
+        'every invariant are served once, not repeated per element — call component_reference with ' +
+        '{ name: "invariants" }.',
     );
 
     for (const inv of applicable) {
       const scope = scopeOf(inv);
       lines.push('', `#### ${inv.id}${scope ? ` (${scope})` : ''} — ${coverageOf(inv)}`, inv.statement);
-      if (inv.diagnosis.length > 0) {
-        lines.push('', 'If you are debugging:');
-        for (const d of inv.diagnosis) lines.push(`- ${d.symptom} → ${d.cause}`);
-      }
-      lines.push(...exampleLines(inv.examples));
     }
   }
 
@@ -405,7 +440,9 @@ function catalogSectionLines(tag: string): string[] {
       '### Appears in surface recipes',
       'Compositions this element is part of, each with the whole ingredient list and the host ' +
         'wiring — nothing coordinates one element with another except your own code ' +
-        '(host-coordinates).',
+        '(host-coordinates). The WHY behind each wiring edge, and the caveats on the nesting ' +
+        'below, are served once rather than repeated per ingredient — call component_reference ' +
+        'with { name: "recipes" }.',
     );
     for (const r of recipes) {
       lines.push(
@@ -414,6 +451,13 @@ function catalogSectionLines(tag: string): string[] {
         `- **Ingredients:** ${r.ingredients.map((t) => `\`<${t}>\``).join(', ')}`,
         `- **Delivery:** ${r.targets.join(', ')} · archetype: ${r.archetypes.join(', ')}`,
         `- **Backend:** your own endpoint, read with \`${r.backend.reader}\` from \`@kitn.ai/ui/wire\``,
+        // WHERE the parts go. Printed per element and not only in the appendix,
+        // because this is the one fact a builder cannot infer from anything else
+        // on the page: the wiring rows say which event drives which property and
+        // are silent about nesting, so an element lookup that omitted this left
+        // the reader to guess between a child and a sibling. Short enough to
+        // repeat; the `note` (the WHY) stays in the appendix with the wiring notes.
+        ...compositionLines(r, ''),
         // Bare ids, deliberately. This row is a DEPENDENCY list, not a coverage
         // claim, and it can only ever be read a few lines below the full
         // `### Invariants` section in the same response, where each of these ids
@@ -421,18 +465,115 @@ function catalogSectionLines(tag: string): string[] {
         // print it a second (and, with two recipes, a third) time per element for
         // no fact a reader does not already have on the page.
         `- **Invariants it leans on:** ${r.invariants.join(', ')}`,
+        // Compact: the edge (event out of A, property into B) with no `note`.
+        // The note is the WHY — often a full sentence, sometimes several — and
+        // repeating it is the same shape of duplication task 4 removed from
+        // invariants: this recipe's ingredients (kai-chat, kai-conversations,
+        // kai-resizable, kai-artifact) all print this identical wiring list.
+        // `renderRecipeAppendix` carries the notes exactly once.
         '- **Wiring** — event out of A, property into B, wired by the host:',
       );
       for (const w of r.wiring) {
-        lines.push(
-          `  - \`<${w.from}>\` fires \`${w.event}\` → host sets \`${w.to}.${w.property}\`` +
-            (w.note ? ` — ${w.note}` : ''),
-        );
+        lines.push(`  - \`<${w.from}>\` fires \`${w.event}\` → host sets \`${w.to}.${w.property}\``);
       }
     }
   }
 
   return lines;
+}
+
+/**
+ * The long-form recipe reference, served exactly once rather than repeated on
+ * every ingredient. `catalogSectionLines` prints the ingredients, delivery,
+ * backend and a compact wiring list (edge only, no `note`) per element and
+ * points here for the rest — the WHY behind each wiring edge, which is the
+ * bulk: `workspace-chat` alone has 4 ingredients, and every one of them
+ * printed every wiring note in full before this moved. Reached via
+ * `component_reference({ name: "recipes" })`.
+ */
+function renderRecipeAppendix(): string[] {
+  const lines: string[] = [
+    `## Surface recipe catalog (${surfaceRecipes.length} total) — wiring notes`,
+    '',
+    'Every element lookup that appears in a recipe lists its ingredients, delivery, backend and ' +
+      'a compact wiring list (event out of A, property into B). This is the long form: the WHY ' +
+      'behind each wiring edge, written once here rather than repeated on every ingredient.',
+  ];
+
+  for (const r of surfaceRecipes) {
+    lines.push(
+      '',
+      `#### ${r.id} — ${r.intent}`,
+      `- **Ingredients:** ${r.ingredients.map((t) => `\`<${t}>\``).join(', ')}`,
+      `- **Delivery:** ${r.targets.join(', ')} · archetype: ${r.archetypes.join(', ')}`,
+      `- **Backend:** your own endpoint, read with \`${r.backend.reader}\` from \`@kitn.ai/ui/wire\``,
+      `- **Invariants it leans on:** ${r.invariants.join(', ')}`,
+      ...compositionLines(r, ' — '),
+      '- **Wiring** — event out of A, property into B, wired by the host:',
+    );
+    for (const w of r.wiring) {
+      lines.push(
+        `  - \`<${w.from}>\` fires \`${w.event}\` → host sets \`${w.to}.${w.property}\`` +
+          (w.note ? ` — ${w.note}` : ''),
+      );
+    }
+  }
+
+  return lines;
+}
+
+/**
+ * The long-form invariant reference, served exactly once rather than repeated
+ * on every element it applies to. `catalogSectionLines` prints only the id,
+ * scope and one-line statement per element and points here for the rest —
+ * this is that "rest": every record's full statement again for context, its
+ * diagnosis rows, and its wrong/right examples, each written once for the
+ * whole catalog regardless of how many of the 80 elements the record applies
+ * to. Reached via `component_reference({ name: "invariants" })`.
+ */
+function renderInvariantAppendix(): string[] {
+  const lines: string[] = [
+    `## Invariant catalog (${invariants.length} total) — diagnosis and examples`,
+    '',
+    'Every element lookup lists the invariants that apply to it by id and one-line statement. ' +
+      'This is the long form: full statement, diagnosis and wrong/right examples for each record, ' +
+      'written once here rather than repeated on every element it applies to.',
+  ];
+
+  for (const inv of invariants) {
+    const scope = scopeOf(inv);
+    lines.push('', `#### ${inv.id}${scope ? ` (${scope})` : ''} — ${coverageOf(inv)}`, inv.statement);
+    if (inv.diagnosis.length > 0) {
+      lines.push('', 'If you are debugging:');
+      for (const d of inv.diagnosis) lines.push(`- ${d.symptom} → ${d.cause}`);
+    }
+    lines.push(...exampleLines(inv.examples));
+  }
+
+  return lines;
+}
+
+/**
+ * The payload out of `CustomEvent<T>`, or `undefined` when there is no payload.
+ *
+ * The manifest types every event, but as the wrapper — printing that raw teaches
+ * a reader to write `CustomEvent<...>` where a payload belongs. Anything that is
+ * not of the form `CustomEvent<…>` has NO payload to print, and this returns
+ * `undefined` so the caller omits the `detail` clause entirely.
+ *
+ * That is read off the generator rather than guessed at. gen-element-api.mjs
+ * writes the CEM type as ``CustomEvent<${e.detail}>`` when the element declares a
+ * detail and the bare string `CustomEvent` when it does not — exactly two shapes,
+ * and the bare one means the detail is `void` (e.g. `'kai-click': void` in
+ * button.tsx). Passing an unrecognised type through unchanged looked like a safe
+ * fallback for an already-unwrapped payload; what it actually caught was the void
+ * events, which then rendered ``Carries no detail. `detail`: `CustomEvent` `` — a
+ * line contradicting itself, on 13 events across 10 elements. The whole-manifest
+ * probe in reference.test.ts holds both directions of the rule.
+ */
+function eventDetail(typeText: string | undefined): string | undefined {
+  const m = /^CustomEvent<([\s\S]*)>$/.exec(typeText?.trim() ?? '');
+  return m ? m[1].trim() || undefined : undefined;
 }
 
 function formatReference(tag: string, provider: ToolProvider): string {
@@ -454,6 +595,66 @@ function formatReference(tag: string, provider: ToolProvider): string {
   lines.push(`## <${tag}>`);
   if (el.description) {
     lines.push('', el.description.trim());
+  }
+
+  // ── Getting the element ────────────────────────────────────────────────────
+  // FIRST, above every other section. An element that never upgrades renders
+  // nothing and logs NOTHING: the property assigns and reads back fine, and
+  // whenDefined() never settles, so the listener is never attached. That symptom
+  // is also what props-not-attributes blames on a different cause, so a reader
+  // who has the invariants and not this line is steered to the wrong diagnosis.
+  const entry = entryForTag(tag);
+  const iface = el.name;
+  const neverUpgrades =
+    'If you skip registering it the element never upgrades: nothing renders, ' +
+    '**no error and no warning is logged**, a property you set assigns and reads ' +
+    `back correctly, and \`customElements.whenDefined('${tag}')\` never resolves.`;
+  lines.push('', '### Getting the element');
+  if (entry) {
+    lines.push(
+      `Register it before you use it. ${neverUpgrades}`,
+      '',
+      '```ts',
+      "import '@kitn.ai/ui/elements';",
+      `import '@kitn.ai/ui/elements/${entry}'; // or just this one`,
+      '```',
+    );
+  } else {
+    // entryForTag is undefined exactly when register-impl.ts does not import this
+    // element's source file — i.e. it is NOT in the register-all bundle. The only
+    // current instance is kai-remote, a deliberate exception (opt-in cross-origin
+    // iframe card) documented at src/elements/element-diagnostics.ts:347-363 and
+    // vite.config.elements.ts:44-50. `import '@kitn.ai/ui/elements'` would NOT
+    // register a tag in this state, so asserting it here is exactly the false
+    // claim this section exists to prevent.
+    //
+    // The specifier is still NOT guessed — stripping `kai-` is wrong for ten of
+    // the eighty elements. `optInEntryForTag` reads it off the module the
+    // per-element build actually emitted, matched to this tag by the tag literal
+    // it registers; see the note there. Telling the reader to go look it up was
+    // the last place in this reference where "how to make the element exist" did
+    // not answer itself, and the answer was in the build config all along.
+    const optIn = optInEntryForTag(tag);
+    lines.push(
+      `**\`${tag}\` is opt-in — it is not part of \`import '@kitn.ai/ui/elements'\` ` +
+        '(register-all), and that import alone will NOT register it.** ' +
+        (optIn
+          ? `Import its own entry point instead. ${neverUpgrades}`
+          : // No built module claims this tag, so there is no specifier to name.
+            // Stay honest rather than inventing one.
+            'Find its specific `@kitn.ai/ui/elements/<name>` entry point in the ' +
+            `package's published exports before using it. ${neverUpgrades}`),
+    );
+    if (optIn) {
+      lines.push('', '```ts', `import '@kitn.ai/ui/elements/${optIn}';`, '```');
+    }
+  }
+  if (iface) {
+    lines.push(
+      '',
+      `TypeScript: \`import type { ${iface} } from '@kitn.ai/ui/elements';\` — ` +
+        'the element interface ships with the package; do not hand-roll a structural type.',
+    );
   }
 
   // ── Contract note ──────────────────────────────────────────────────────────
@@ -516,7 +717,12 @@ function formatReference(tag: string, provider: ToolProvider): string {
     lines.push('', '### Events (CustomEvent, listen via addEventListener)');
     for (const ev of events) {
       const desc = ev.description?.trim() ?? '';
-      lines.push(`- **${ev.name}** — ${desc}`);
+      const detail = eventDetail(ev.type?.text);
+      lines.push(
+        detail
+          ? `- **${ev.name}** — ${desc} \`detail\`: \`${detail}\``
+          : `- **${ev.name}** — ${desc}`,
+      );
     }
   }
 
@@ -595,7 +801,16 @@ export const reference: Tool = {
     'For a card-backed element it also returns the card\'s JSON Schema and a ready-to-send ' +
     'tool definition generated from it — pass `provider` to get that provider\'s envelope.',
   inputSchema: z.object({
-    name: z.string().optional(),
+    name: z
+      .string()
+      .optional()
+      .describe(
+        'The element tag, e.g. "kai-chat". Omit it (or pass "list") to get the ' +
+          'index of every element with a one-line summary, then ask again for the one you want. ' +
+          'Pass "invariants" for the full diagnosis and wrong/right examples behind every ' +
+          'invariant id an element lookup shows. Pass "recipes" for the full wiring notes ' +
+          'behind every surface recipe an element lookup names.',
+      ),
     provider: z
       .enum(PROVIDERS)
       .optional()
@@ -646,7 +861,15 @@ export const reference: Tool = {
         '\n\nCall component_reference with a specific name (e.g. { name: "kai-chat" }) for full API details.' +
         `\n\nCard-backed elements — ask for one of these to get its JSON Schema and a generated ` +
         `\`${KAI_TOOL_PREFIX}*\` tool definition:\n  ${cardRows.join(', ')}` +
-        `\nThe elements that HOST them (and carry the \`cardTypes\` / \`cardSchemas\` props): ${cardHostTags().join(', ')}`;
+        `\nThe elements that HOST them (and carry the \`cardTypes\` / \`cardSchemas\` props): ${cardHostTags().join(', ')}` +
+        `\n\nCall component_reference with { name: "invariants" } for the full diagnosis and ` +
+        'wrong/right examples behind every invariant id shown on an element lookup.' +
+        `\n\nCall component_reference with { name: "recipes" } for the full wiring notes behind ` +
+        'every surface recipe an element lookup names.';
+    } else if (name === 'invariants') {
+      text = renderInvariantAppendix().join('\n');
+    } else if (name === 'recipes') {
+      text = renderRecipeAppendix().join('\n');
     } else {
       text = formatReference(name, provider);
     }

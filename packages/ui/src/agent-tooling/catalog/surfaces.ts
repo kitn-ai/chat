@@ -116,6 +116,49 @@ export const surfaceRecipes: TSurfaceRecipe[] = [
     targets: ['bundler'],
     ingredients: ['kai-chat', 'kai-conversations', 'kai-resizable', 'kai-artifact'],
     backend: { endpoint: 'consumer-owned', reader: 'readModelStream' },
+    // WHERE the parts go, which the wiring edges below never said. Until this
+    // field existed a builder could read the whole recipe, the whole element
+    // reference and the whole scaffold and still not know whether the rail was a
+    // child of the chat or a sibling beside it — and the two answers lay out
+    // differently, so it is not a detail anyone can defer. One agent building
+    // from the MCP said so in as many words and then guessed.
+    //
+    // Slotted, and the tree decided it rather than taste: `<kai-chat>` declares a
+    // `sidebar` slot whose own description is "Left column (your nav /
+    // conversation list). Fixed width; use compose-your-own for resizable", and
+    // this recipe's own corpus story — chat-slots.stories.tsx — composes exactly
+    // `<kai-conversations slot="sidebar">` inside `<kai-chat>`.
+    //
+    // THE TREE ALSO PUBLISHES THE OTHER ANSWER, and an earlier version of this
+    // comment claimed it did not ("nothing in the tree composes them as
+    // siblings") — asserted without looking, which is the same defect as the
+    // over-generous `note` below it. The docs put the pair side by side in at
+    // least five places: guides/frameworks/html.mdx, svelte.mdx (a section
+    // titled "Add a conversation sidebar"), angular.mdx, vue.mdx, and
+    // examples/knowledge-base.mdx with its live demo. Every one of them is a
+    // layout the CONSUMER owns — a flex row they write, or `<kai-resizable>` —
+    // which is the compose-your-own path the slot's own description points at,
+    // and is what you want when the rail must resize. So the two are not in
+    // conflict about what is legal; this record says which one the RECIPE is,
+    // and the docs currently present the sibling form without saying that.
+    composition: [
+      {
+        child: 'kai-conversations',
+        parent: 'kai-chat',
+        slot: 'sidebar',
+        // Every clause here is checked against chat-thread.tsx, not inferred
+        // from the slot's name. The shell's whole sidebar implementation is one
+        // `<aside part="sidebar" class="flex w-64 shrink-0 …">` around a
+        // `<slot name="sidebar" />`: fixed width, no responsive class in the
+        // file, no collapse logic, and `<kai-chat>` never listens for
+        // `kai-collapse-toggle`. Collapse belongs to the rail
+        // (`collapsed`/`collapse()`), and conversation-list.tsx says so in as
+        // many words: "the host owns the surrounding region". A note that
+        // credited the shell with collapse and a breakpoint would send a builder
+        // into a 16rem empty column holding a floating reopen button.
+        note: 'the rail is a light-DOM child of <kai-chat> carrying slot="sidebar", not a sibling: the shell renders it into its own ::part(sidebar) aside, a FIXED-WIDTH column (w-64 in chat-thread.tsx, exposed as a part so you can restyle it) — and that is the whole of what the shell does. Collapse is the RAIL\'s own (collapsed / collapse() / kai-collapse-toggle) and <kai-chat> does not react to it, so a collapsed rail leaves the column at its fixed width; there is no responsive behaviour here either. Give the rail height (display:block;height:100%) and drive it through its own JS properties — being slotted changes where it renders, never how it is wired. If the COLUMN itself has to collapse, resize or respond to width, that is <kai-workspace> (sidebarWidth / sidebarCollapsed / collapseBelow) or a layout you own',
+      },
+    ],
     wiring: [
       {
         from: 'kai-conversations',

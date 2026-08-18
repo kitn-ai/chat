@@ -180,6 +180,50 @@ Separately and not part of B: `dist/` carries two Solid chunks at 754 KiB and 65
 points each bundling the component set is expected, but 1.4 MiB across two looks like duplication
 rather than necessity. That is its own investigation, not a packaging fix.
 
+### C. Process guards — enforce the coordination rules the same way we enforce the code ones
+
+Iteration 1 produced sound code: five tasks, every one independently reviewed, every finding real.
+**Nearly every mistake in that session was the orchestrator's, not the code's** — and the expensive
+ones, because a coordination error voids a measurement run or forces rework rather than failing a
+test. The code rules in this repo are enforced by scripts precisely because prose failed
+(`lint:silent-drops` exists because a comment explaining a silent drop shipped unchallenged). The
+**process** rules are still prose.
+
+Five candidates, each smaller than guards this repo already runs:
+
+1. **Artifact freshness.** Any harness that measures a built artifact records its hash and mtime, and
+   fails when a source it claims to measure is newer. The 2026-08-18 demo ran against a `dist/` built
+   15 hours before the tool it was measuring changed, and its top three findings were exactly what the
+   newer code already fixed. The whole run was worthless and nobody noticed until afterwards.
+2. **Documented-gate parity.** Every command in a doc's "gates" list must appear in the CI workflow,
+   and every required CI step must appear in the list. The composition-catalog handoff said "every gate
+   is green" and listed five commands; the required `test` job had been red on `verify:pack` the entire
+   time, because that command was not in the list. Same shape as `lint:cdn-pins`, which already asserts
+   doc literals against the source of truth.
+3. **A writer lock.** The plan's workspace holds a file naming the live implementer and the files it
+   owns; the controller and every agent check it before writing. Twice in one session the controller
+   put two writers on one file — once committing to a branch after telling an implementer it was the
+   sole writer, once resuming a fix into a file another implementer held. Neither cost anything, and
+   both were caught by the people involved rather than by anything structural.
+4. **One brief template.** The standing prohibitions (no `git checkout`/`reset`/`stash`, no rebuild, no
+   subagents, watch every test fail first) live in one template rather than being retyped per dispatch.
+   They were present in every implementer brief and absent from every reviewer brief, and a re-reviewer
+   duly checked a file out into a live working tree to verify a red/green.
+5. **Thresholds cite their derivation.** A numeric threshold in a plan or test carries either the
+   command that produced it or an explicit "ratchet, not a target" label. The `<6000` byte budget in
+   iteration 1 was invented while drafting; it survived only because the implementer refused to weaken
+   the assertion and reported the measured number instead.
+
+**Not mechanizable, and worth stating so it is not mistaken for covered:** asserting something without
+looking it up. The claim that a merge conflict was "almost certainly the release-please version bump"
+was wrong — there was no version conflict at all, and acting on it would have silently unwired a
+generator. No guard prevents that. Reading before asserting is the only control, and the same session
+shows it working: reading the code before writing the plan is what caught that `kai-chat → chat` is the
+wrong import derivation for 10 of the 80 elements.
+
+**Sequencing:** after iteration 1 lands, before the ladder starts. The ladder is five more rungs of
+exactly this coordination.
+
 ## Risks
 
 - **The ladder finds component bugs, not documentation bugs.** That is a feature — it is what the
