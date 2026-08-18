@@ -107,6 +107,28 @@ function validateLedger(info) {
   if (!['explicit', 'inferred'].includes(info.pathSource)) {
     problems.push(`\`pathSource\` is ${JSON.stringify(info.pathSource)}; it must say whether a human typed the path or it was inferred.`);
   }
+
+  // EVERY FIELD THE REPORT PRINTS IS VALIDATED, or it is not printed. Four more
+  // rendered straight into the report as fact, `undefined` included. `kitVersion`
+  // is the sharpest: the compare guard depends on it, so an unvalidated one let
+  // this step write an evaluation.json that the NEXT step would refuse -- a
+  // failure deferred to the point where it is hardest to trace.
+  if (typeof info.kitVersion !== 'string' || !info.kitVersion) {
+    problems.push(
+      `\`kitVersion\` is ${JSON.stringify(info.kitVersion)}. The report prints it, and --compare refuses a run without one, so writing this evaluation would defer the failure to a later step.`,
+    );
+  }
+  if (typeof info.routingRule !== 'string' || !info.routingRule) {
+    problems.push(`\`routingRule\` is ${JSON.stringify(info.routingRule)}; the report prints it beside the execution path as the reason that path was taken.`);
+  }
+  if (typeof info.handoverDigest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(info.handoverDigest)) {
+    problems.push(
+      `\`handoverDigest\` is ${JSON.stringify(info.handoverDigest)}; it must be a sha256 digest. It is the only evidence of WHICH pack the agent read, so an unchecked one is worse than none.`,
+    );
+  }
+  if (!Number.isInteger(info.handoverFiles) || info.handoverFiles <= 0) {
+    problems.push(`\`handoverFiles\` is ${JSON.stringify(info.handoverFiles)}; a handover of zero files is not a run that measured anything.`);
+  }
   if (typeof info.model === 'string' && EXECUTION_PATHS.includes(info.executionPath)) {
     const decision = routeModel({ model: info.model, path: info.executionPath });
     if (!decision.ok) {
@@ -246,7 +268,11 @@ async function evaluate({ runDir, findingsPath, gatesPath }) {
   // though the catalog came out clean. The whole premise is that what an agent
   // could not build names what the catalog is missing, so a run that could not
   // build it and produced no findings has skipped the only step that mattered.
-  if (!attributed.length && (scored.failedGates.length || scored.verdict !== 'scored')) {
+  // Keyed on ACTUAL failures. It previously also fired on `verdict !== 'scored'`,
+  // which caught runs whose only anomaly was a dimension with no subject -- so a
+  // flawless prose refusal, whose honest findings list IS empty, was refused
+  // outright. A clean run with nothing to report is a legitimate outcome.
+  if (!attributed.length && (scored.failedGates.length || scored.blockingFindings.length)) {
     fail(
       `${info.runId} is a ${scored.verdict}${scored.failedGates.length ? ` (${scored.failedGates.join(', ')})` : ''} with ZERO findings recorded. That is not an evaluation: the premise of the deck is that whatever the agent could not build names what the catalog is missing, so a failing run must say what went wrong and what would have prevented it. Record at least one finding, or — if the catalog genuinely said it plainly — one attributed \`not-a-catalog-gap\`.`,
     );
@@ -272,9 +298,15 @@ async function evaluate({ runDir, findingsPath, gatesPath }) {
     analysis,
     fabricationProposals,
     caveats: [
-      ...scored.vacuousGates.map(
-        (id) => `${id} scanned ZERO code files. That is not a pass; it means the output had no code for it to look at.`,
+      ...scored.notApplicable.map(
+        (id) =>
+          `${id} was NOT APPLICABLE: the output contains no code, so the gate had no subject. It is out of the score entirely — neither passed nor failed — and the remaining weights were renormalised. For a refusal answer that is the correct reading; for an answer that was supposed to contain code, read it as the answer being empty and check \`completeness\`.`,
       ),
+      ...(scored.notApplicable.length
+        ? [
+            `The score is normalised over ${scored.totalWeight} of ${scored.declaredWeight} declared weight. Two runs of this scenario scored over different denominators are only loosely comparable.`,
+          ]
+        : []),
       ...(rubric.note ? [rubric.note] : []),
       'audit-clean is a FLOOR: a needle firing proves a defect, a needle not firing proves only that the literal wrong form is absent.',
     ],
@@ -289,7 +321,9 @@ function renderReport(e) {
   const rows = e.rows
     .map(
       (r) =>
-        `| ${r.id} | ${r.gate} | ${r.weight} | ${r.score.toFixed(1)}${r.capped ? ` (capped from ${r.raw.toFixed(1)})` : ''} | ${r.source} | ${r.detail ?? ''} |`,
+        `| ${r.id} | ${r.gate} | ${r.applicable === false ? 'n/a' : r.weight} | ${
+          r.score === null ? '—' : `${r.score.toFixed(1)}${r.capped ? ` (capped from ${r.raw.toFixed(1)})` : ''}`
+        } | ${r.source} | ${r.detail ?? ''} |`,
     )
     .join('\n');
 
@@ -322,6 +356,10 @@ function renderReport(e) {
 ## Verdict: ${e.verdict} — ${e.normalized.toFixed(2)} / 10
 
 ${
+  e.notApplicable.length
+    ? `**${e.notApplicable.length} dimension(s) did not apply** — ${e.notApplicable.join(', ')} — because the output contains no code for them to examine. They are out of the score entirely, and the remaining weights are renormalised over ${e.totalWeight} of ${e.declaredWeight}. That is the correct reading of an answer that is prose by design (a refusal, a diagnosis); if this answer was supposed to contain code, the emptiness shows up in \`completeness\` instead.\n`
+    : ''
+}${
   e.failedGates.length
     ? `**Gated failure.** ${e.failedGates.join(', ')} did not pass. A gated failure outranks the score: "it scored ${e.normalized.toFixed(2)}" and "it does not compile" are different facts.`
     : e.blockingFindings.length

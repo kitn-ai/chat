@@ -60,8 +60,16 @@ describe('the fabrication record', () => {
     expect(realTags.has(base.useInstead!)).toBe(true);
   });
 
+  // ISOLATED. With `base` (whose useInstead is a real tag) an empty set trips the
+  // REPLACEMENT branch too, so this passed with the size guard neutered. The row
+  // here has no replacement at all, leaving the size guard as the only branch
+  // that can fire.
   it('refuses an empty known-tag set instead of reporting a clean record', () => {
-    expect(resolveFabrications([base], [])).toHaveLength(1);
+    const noReplacement = { ...base, useInstead: null, noReplacementReason: 'the kit ships no grid element' };
+    expect(resolveFabrications([noReplacement], realTags)).toEqual([]);
+    const problems = resolveFabrications([noReplacement], []);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('no known tags were supplied');
   });
 
   it('refuses a row that drops the replacement without saying why', () => {

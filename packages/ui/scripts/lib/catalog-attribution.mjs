@@ -301,7 +301,11 @@ export function tierDelta({ strong, weak, strongFindings = [], weakFindings = []
     }
   }
 
-  const byId = (r) => new Map(r.rows.map((row) => [row.id, row]));
+  // A row scored `null` is NOT APPLICABLE -- the gate had no subject -- so it is
+  // treated as absent rather than as a zero. Folding it in as 0 would report a
+  // dimension the strong model "held" and the weak one "lost" purely because one
+  // answer happened to contain code and the other did not.
+  const byId = (r) => new Map(r.rows.filter((row) => row.score !== null).map((row) => [row.id, row]));
   const s = byId(strong);
   const w = byId(weak);
   const ids = [...new Set([...s.keys(), ...w.keys()])].sort();

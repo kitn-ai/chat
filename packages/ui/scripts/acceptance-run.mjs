@@ -368,6 +368,10 @@ if (!execModule) {
 const transport = await import(pathToFileURL(resolve(execModule)).href);
 if (typeof transport.runAgent !== 'function') {
   runInfo.status = 'transport-invalid';
+  // No agent ever received this pack, so the handover is debris. Both transport
+  // failure paths used to leak one.
+  pruneHandover('the transport was invalid, so no agent read the pack');
+  runInfo.handoverPruned = true;
   writeRunInfo();
   fail(`${execModule} exports no runAgent(request) function.`);
 }
@@ -388,6 +392,10 @@ try {
 } catch (err) {
   runInfo.status = 'transport-failed';
   runInfo.transport = { error: String(err && err.message ? err.message : err) };
+  pruneHandover('the transport threw');
+  runInfo.handoverPruned = true;
+  // Recorded rather than left implied: the ledger must not point at a directory
+  // that is gone without saying it was removed on purpose.
   writeRunInfo();
   fail(`the transport threw: ${runInfo.transport.error}. The run is recorded as failed rather than left looking prepared.`);
 }

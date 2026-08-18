@@ -21,6 +21,53 @@ export const isCodeFile = (name) => CODE_EXTENSIONS.some((ext) => name.toLowerCa
 const CODE_FENCE_LANGS = new Set(['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'javascript', 'typescript', 'html', 'vue', 'svelte', 'astro']);
 
 /**
+ * Every CommonMark fenced block: THREE OR MORE backticks, or three or more
+ * tildes, with a closing fence of the same character and at least the same
+ * length.
+ *
+ * A regex for exactly three backticks is what shipped, and it did not merely
+ * miss the other forms — IT FAILED OPEN when they were mixed. A `~~~html` block
+ * was invisible, so a fabricated tag inside it was never seen; and because a
+ * recognised ```ts block elsewhere in the file made the scan non-vacuous, the
+ * gate reported a CLEAN PASS rather than "nothing to look at". That is the H2
+ * failure mode again in a narrower disguise: a confident verdict produced by not
+ * looking.
+ *
+ * @param {string} text
+ * @returns {{ lang: string, text: string }[]}
+ */
+export function fencedBlocks(text) {
+  const lines = text.split(/\r?\n/);
+  const blocks = [];
+  let open = null;
+  for (const line of lines) {
+    const fence = /^[ \t]{0,3}(`{3,}|~{3,})[ \t]*(.*)$/.exec(line);
+    if (open) {
+      // A closing fence is the same character, at least as long, and carries no
+      // info string. Anything else is content — including a shorter run of the
+      // same character, which is why length is compared rather than equality.
+      if (fence && fence[1][0] === open.char && fence[1].length >= open.length && fence[2].trim() === '') {
+        blocks.push({ lang: open.lang, text: open.body.join('\n') });
+        open = null;
+      } else {
+        open.body.push(line);
+      }
+      continue;
+    }
+    if (!fence) continue;
+    // Backtick info strings may not contain a backtick (CommonMark); the info
+    // string is the first word, so `ts twoslash` is still ts.
+    const info = fence[2].trim();
+    if (fence[1][0] === '`' && info.includes('`')) continue;
+    open = { char: fence[1][0], length: fence[1].length, lang: info.split(/\s+/)[0] ?? '', body: [] };
+  }
+  // An UNCLOSED fence still yields its content. Dropping it would let a
+  // truncated answer hide code from the gates, which is the fail-open direction.
+  if (open) blocks.push({ lang: open.lang, text: open.body.join('\n') });
+  return blocks;
+}
+
+/**
  * THE UNITS THE GATES ACTUALLY SCAN: every code file, plus every fenced code
  * block inside a prose file.
  *
@@ -37,11 +84,19 @@ const CODE_FENCE_LANGS = new Set(['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'javas
  * reward. The fence is the boundary between "here is code I am giving you" and
  * "here is me talking about code".
  *
- * KNOWN RESIDUAL: an answer that fences a block to illustrate what NOT to write
- * would be read as proposing it. Accepted, and worth knowing — the alternative
- * (ignoring fences) silently un-measures every prose-shaped answer, which is the
- * larger and quieter error. A judge seeing this can attribute it as a pack
- * defect.
+ * KNOWN RESIDUAL, and it applies to BOTH evaluator-run gates rather than only
+ * the tag one:
+ *
+ *  - `gateElementsExist` reads a fenced `<kai-datagrid>` as a proposal even when
+ *    the surrounding prose says "do not write this".
+ *  - `gateAuditClean` has the identical shape: a ```ts block illustrating
+ *    `chat.messages.push(m)` as the WRONG form fires `reactivity-two-halves#0`,
+ *    which is the pack's own teaching example quoted back at it.
+ *
+ * Accepted in both cases. The alternative — ignoring fences — silently
+ * un-measures every prose-shaped answer, which is the larger and quieter error,
+ * and a false positive here is visible in the report where a false negative is
+ * not. A judge who sees it can attribute it as a `pack-defect`.
  *
  * @param {{ name: string, text: string }[]} files
  * @returns {{ name: string, text: string }[]}
@@ -55,9 +110,9 @@ export function codeUnits(files) {
       continue;
     }
     let index = 0;
-    for (const m of f.text.matchAll(/^[ \t]*```([A-Za-z0-9+-]*)[ \t]*\r?\n([\s\S]*?)^[ \t]*```/gm)) {
-      if (!CODE_FENCE_LANGS.has(m[1].toLowerCase())) continue;
-      units.push({ name: `${f.name}#fence${index++}`, text: m[2] });
+    for (const block of fencedBlocks(f.text)) {
+      if (!CODE_FENCE_LANGS.has(block.lang.toLowerCase())) continue;
+      units.push({ name: `${f.name}#fence${index++}`, text: block.text });
     }
   }
   return units;

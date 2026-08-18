@@ -22,7 +22,7 @@ import {
   resolveAttribution,
   tierDelta,
 } from '../../scripts/lib/catalog-attribution.mjs';
-import { codeUnits, gateAuditClean, gateElementsExist, scanJudgeLeak } from '../../scripts/lib/output-scan.mjs';
+import { codeUnits, fencedBlocks, gateAuditClean, gateElementsExist, scanJudgeLeak } from '../../scripts/lib/output-scan.mjs';
 import { proposedFabricationRow, renderFabricatedPage } from '../../scripts/lib/fabrications.mjs';
 
 const PKG = join(__dirname, '..', '..');
@@ -204,23 +204,54 @@ describe('mechanical gates sit UNDER the judged score', () => {
     expect(r.normalized).toBeLessThan(10);
   });
 
-  // H2 — a gate that scanned nothing used to score a full 10 while the report's
-  // own caveat beside it read "That is not a pass". A real S7 run took 32% of
-  // its weight from two gates that opened zero files.
-  it('a VACUOUS gate scores ZERO, not full weight', () => {
+  // R1 — THE CORRECTION TO AN OVER-CORRECTION. Scoring a subject-less gate 0
+  // inverted the bias onto the deck's BEST answer: S6's textbook reply is a
+  // pure-prose refusal, and it scored 6.53 `gated-fail` on two gates that had
+  // nothing to look at. Absence of subject is not absence of merit.
+  it('a gate with no subject is NOT APPLICABLE — out of the score, not failed', () => {
     const s6 = scenarios.find((s) => s.id === 'S6')!;
-    const r = scoreRun({ scenario: s6, gates: { ...gateAll('S6'), 'elements-exist': { passed: true, vacuous: true } }, judged: judgeAll('S6', 10) });
-    const row = r.rows.find((x) => x.id === 'elements-exist')!;
-    expect(row.score).toBe(0);
-    expect(row.source).toContain('VACUOUS');
-    expect(r.vacuousGates).toContain('elements-exist');
-    expect(r.verdict).toBe('gated-fail');
+    const r = scoreRun({
+      scenario: s6,
+      gates: { 'elements-exist': { passed: true, vacuous: true }, 'audit-clean': { passed: true, vacuous: true } },
+      judged: judgeAll('S6', 10),
+    });
+    expect(r.notApplicable.sort()).toEqual(['audit-clean', 'elements-exist']);
+    expect(r.verdict).toBe('scored');
+    // A flawless prose refusal reaches a clean 10.
+    expect(r.normalized).toBe(10);
+    // Out of the denominator, not zeroed inside it.
+    expect(r.totalWeight).toBeLessThan(r.declaredWeight);
+    for (const id of r.notApplicable) {
+      const row = r.rows.find((x) => x.id === id)!;
+      expect(row.score).toBeNull();
+      expect(row.applicable).toBe(false);
+    }
+  });
 
-    // POSITIVE CONTROL: the identical gate, non-vacuous, does score 10 — so the
-    // zero above is about vacuity and not about the gate being broken.
-    const ok = scoreRun({ scenario: s6, gates: gateAll('S6'), judged: judgeAll('S6', 10) });
-    expect(ok.rows.find((x) => x.id === 'elements-exist')!.score).toBe(10);
-    expect(ok.verdict).toBe('scored');
+  it('does not award weight for a gate with no subject either', () => {
+    const s6 = scenarios.find((s) => s.id === 'S6')!;
+    const judged = judgeAll('S6', 5);
+    const withSubject = scoreRun({ scenario: s6, gates: gateAll('S6'), judged });
+    const without = scoreRun({
+      scenario: s6,
+      gates: { 'elements-exist': { passed: true, vacuous: true }, 'audit-clean': { passed: true, vacuous: true } },
+      judged,
+    });
+    // Passing gates lift a middling judged score; absent ones must not.
+    expect(withSubject.normalized).toBeGreaterThan(without.normalized);
+    expect(without.normalized).toBe(5);
+  });
+
+  it('still FAILS a gate that had a subject and did not pass', () => {
+    const s6 = scenarios.find((s) => s.id === 'S6')!;
+    const r = scoreRun({
+      scenario: s6,
+      gates: { ...gateAll('S6'), 'elements-exist': { passed: false, detail: 'fabricated' } },
+      judged: judgeAll('S6', 10),
+    });
+    expect(r.verdict).toBe('gated-fail');
+    expect(r.failedGates).toContain('elements-exist');
+    expect(r.notApplicable).toEqual([]);
   });
 
   // H1 — the machine verdicts were the UNVALIDATED half, while judged scores
@@ -460,7 +491,7 @@ describe('the gates the evaluator runs for itself', () => {
     expect(g.tagsUsed).toEqual([]);
   });
 
-  it('does not scan prose, so the honest refusal is not punished', () => {
+  it('does not read tags out of prose, so a refusal naming what it declined to invent is clean', () => {
     const g = gateElementsExist({ files: [{ name: 'NOTES.md', text: 'There is no <kai-datagrid> in this kit.' }], knownTags });
     expect(g.fabricated).toEqual([]);
     // …and it SAYS it looked at nothing, rather than reporting a clean pass.
@@ -502,6 +533,39 @@ describe('the gates the evaluator runs for itself', () => {
     });
     expect(g.passed).toBe(false);
     expect(g.fabricated.map((f) => f.tag)).toContain('kai-datagrid');
+  });
+
+  // R2 — only exactly-three backticks were recognised, and mixed with a
+  // recognised fence the gate reported a CLEAN PASS rather than "nothing to
+  // look at". That is the vacuity failure again, in a narrower disguise.
+  it.each([
+    ['tilde fences', '~~~html\n<kai-datagrid></kai-datagrid>\n~~~\n'],
+    ['four backticks', '````html\n<kai-datagrid></kai-datagrid>\n````\n'],
+    ['four tildes', '~~~~html\n<kai-datagrid></kai-datagrid>\n~~~~\n'],
+    ['an unclosed fence', '```html\n<kai-datagrid></kai-datagrid>\n'],
+  ])('catches a fabricated tag inside %s', (_label, text) => {
+    const g = gateElementsExist({ files: [{ name: 'A.md', text }], knownTags });
+    expect(g.passed).toBe(false);
+    expect(g.fabricated.map((f) => f.tag)).toContain('kai-datagrid');
+  });
+
+  it('FAILS CLOSED when an unrecognised fence sits beside a recognised one', () => {
+    const text = '```ts\nconst a = 1;\n```\n\n~~~html\n<kai-datagrid></kai-datagrid>\n~~~\n';
+    const g = gateElementsExist({ files: [{ name: 'A.md', text }], knownTags });
+    // The ```ts block made the scan non-vacuous, so "no hits" would have been
+    // reported as a confident pass.
+    expect(g.vacuous).toBe(false);
+    expect(g.passed).toBe(false);
+  });
+
+  it('treats a shorter run of the same character as content, not as a close', () => {
+    const blocks = fencedBlocks('````ts\na\n```\nb\n````');
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].text).toBe('a\n```\nb');
+  });
+
+  it('takes the first word of the info string as the language', () => {
+    expect(fencedBlocks('```ts twoslash\nconst a = 1;\n```')[0].lang).toBe('ts');
   });
 
   it('ignores a fence in a language that is not code', () => {
@@ -739,6 +803,12 @@ describe('the evaluator CLI, end to end over a prepared run', () => {
       ['a DELETED path', (i: Record<string, unknown>) => { delete i.executionPath; }, 'not one of'],
       ['a missing pathSource', (i: Record<string, unknown>) => { delete i.pathSource; }, 'pathSource'],
       ['a missing tier', (i: Record<string, unknown>) => { delete i.tier; }, '`tier` is missing'],
+      // R3 — four more fields rendered into the report as fact while unvalidated.
+      ['a deleted kitVersion', (i: Record<string, unknown>) => { delete i.kitVersion; }, '`kitVersion` is'],
+      ['a deleted routingRule', (i: Record<string, unknown>) => { delete i.routingRule; }, '`routingRule` is'],
+      ['a malformed handoverDigest', (i: Record<string, unknown>) => { i.handoverDigest = 'nope'; }, '`handoverDigest` is'],
+      ['a deleted handoverDigest', (i: Record<string, unknown>) => { delete i.handoverDigest; }, '`handoverDigest` is'],
+      ['a zero handoverFiles', (i: Record<string, unknown>) => { i.handoverFiles = 0; }, '`handoverFiles` is'],
     ])('refuses %s', (_label, mutate, expected) => {
       const r = withLedger(mutate);
       expect(r.code).not.toBe(0);
@@ -764,6 +834,37 @@ describe('the evaluator CLI, end to end over a prepared run', () => {
       writeFileSync(join(runDir, 'findings.json'), findings());
       expect(run([EVAL, '--run', runDir]).code).toBe(0);
     });
+  });
+
+  // R1 END TO END — the deck's best answer, measured through the CLI. It was
+  // refused outright (exit 1) because its honest findings list is empty and two
+  // gates had nothing to examine.
+  it('scores a flawless pure-prose refusal a clean 10 with no findings', () => {
+    const prose = join(runDir, 'output', 'REFUSAL.md');
+    const existing = readdirSync(join(runDir, 'output'));
+    for (const f of existing) rmSync(join(runDir, 'output', f), { recursive: true });
+    writeFileSync(prose, 'There is no grid element in this kit and I am not going to invent one.\n');
+    writeFileSync(
+      join(runDir, 'findings.json'),
+      JSON.stringify({
+        judgedScores: { 'contract-correctness': 10, 'invariant-compliance': 10, 'honesty-bound': 10, completeness: 10 },
+        findings: [],
+      }),
+    );
+    const r = run([EVAL, '--run', runDir]);
+    expect(r.code, r.out).toBe(0);
+    expect(r.out).toContain('10.00/10');
+
+    const evaluation = JSON.parse(readFileSync(join(runDir, 'evaluation.json'), 'utf8'));
+    expect(evaluation.verdict).toBe('scored');
+    expect(evaluation.notApplicable.sort()).toEqual(['audit-clean', 'elements-exist']);
+
+    // …and the report SAYS the dimensions dropped out, rather than quietly
+    // scoring over a smaller denominator.
+    const report = readFileSync(join(runDir, 'REPORT.md'), 'utf8');
+    expect(report).toContain('did not apply');
+    expect(report).toContain('renormalised');
+    rmSync(prose);
   });
 
   // I4 — a gated failure with no findings rendered "_nothing to change_" beside

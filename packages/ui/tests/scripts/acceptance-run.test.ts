@@ -112,6 +112,34 @@ describe('the two-path router', () => {
     expect(routeModel({ model: homoglyph }).ok).toBe(false);
   });
 
+  // R4 — the ORDER of the two checks is a safety property, and with the real
+  // allow-list it is unobservable: no Anthropic model sits on it, so hoisting an
+  // allow-list success branch above the Anthropic refusal left the suite green.
+  // A fixture list that DOES contain one makes a reorder go red.
+  it('refuses an Anthropic model on the metered path EVEN IF it is on the allow-list', () => {
+    const compromised = Object.freeze(['claude-opus-5', '~deepseek/deepseek-v4-flash-latest']);
+
+    // The refusal is evaluated before membership is consulted, so membership
+    // cannot rescue it.
+    const d = routeModel({ model: 'claude-opus-5', path: 'openrouter', allowed: compromised });
+    expect(d.ok).toBe(false);
+    expect(d.rule).toBe('anthropic-never-openrouter');
+
+    // With no path given it must still infer the SUBSCRIPTION, not the metered
+    // path it is now nominally allowed on.
+    expect(routeModel({ model: 'claude-opus-5', allowed: compromised })).toMatchObject({
+      ok: true,
+      path: 'claude-code',
+    });
+
+    // NON-VACUITY: the fixture list really is in effect — a model on it that is
+    // NOT Anthropic routes to openrouter, where against the real list it would
+    // be refused.
+    expect(isOpenRouterAllowed('claude-opus-5', compromised)).toBe(true);
+    expect(routeModel({ model: 'meta/llama-4', path: 'openrouter' }).ok).toBe(false);
+    expect(routeModel({ model: 'meta/llama-4', path: 'openrouter', allowed: ['meta/llama-4'] }).ok).toBe(true);
+  });
+
   it('records a canonical model alongside the raw one, so spellings do not fragment a comparison', () => {
     const spellings = ['claude-opus-5', 'Claude-Opus-5', '  claude-opus-5  '];
     const canonical = spellings.map((m) => {
@@ -262,18 +290,39 @@ describe('handover hygiene', () => {
     expect(r.problems.join(' ')).toContain('an ancestor of the handover');
   });
 
-  // I7 — a failed run used to leave its handover on disk; a review swept 824
-  // abandoned directories out of TMPDIR, some holding a live answer key.
-  it('removes the handover it created when the run fails verification', () => {
+  // R5 — the first version of this test could not fail: it passed an explicit
+  // --handover (so `ownsHandover` is false and the prune is skipped BY DESIGN)
+  // and asserted `after <= before` over a shared TMPDIR, which is true
+  // unconditionally. It is now driven through the DEFAULT handover, and asserts
+  // the exact directory the ledger names is gone.
+  it.each([
+    ['a transport with no runAgent export', 'export const nothing = 1;\n', 'transport-invalid'],
+    ['a transport that throws', 'export async function runAgent() { throw new Error("no key"); }\n', 'transport-failed'],
+  ])('removes the handover it created when the run fails: %s', (_label, moduleSource, expectedStatus) => {
     const runs = fresh();
-    const before = readdirSync(tmpdir()).filter((e) => e.startsWith('kai-handover-'));
-    // A handover pointed inside the runs directory fails verification.
-    const r = cli(['--scenario', 'S6', '--model', 'claude-opus-5', '--tier', 't', '--runs-dir', runs, '--handover', join(runs, 'inside')]);
+    const mod = join(fresh(), 'transport.mjs');
+    writeFileSync(mod, moduleSource);
+
+    const r = cli(['--scenario', 'S7', '--model', 'claude-opus-5', '--tier', 't', '--runs-dir', runs, '--exec', mod]);
     expect(r.code).not.toBe(0);
-    const after = readdirSync(tmpdir()).filter((e) => e.startsWith('kai-handover-'));
-    // An explicit --handover is not ours to delete, but no NEW temp handover
-    // may be left behind by the failure either.
-    expect(after.length).toBeLessThanOrEqual(before.length);
+
+    const info = JSON.parse(readFileSync(join(runs, readdirSync(runs)[0], 'run-info.json'), 'utf8'));
+    expect(info.status).toBe(expectedStatus);
+    // The specific directory, not a count over a shared TMPDIR.
+    expect(String(info.handoverDir)).toContain('kai-handover-');
+    expect(existsSync(info.handoverDir), `${info.handoverDir} survived a failed run`).toBe(false);
+    // …and the ledger says it was removed on purpose, so it does not merely
+    // point at a directory that is mysteriously gone.
+    expect(info.handoverPruned).toBe(true);
+  });
+
+  it('keeps the handover when the run SUCCEEDS, because the agent still has to read it', () => {
+    const runs = fresh();
+    const r = cli(['--scenario', 'S7', '--model', 'claude-opus-5', '--tier', 't', '--runs-dir', runs]);
+    expect(r.code, r.out).toBe(0);
+    const info = JSON.parse(readFileSync(join(runs, readdirSync(runs)[0], 'run-info.json'), 'utf8'));
+    expect(existsSync(info.handoverDir)).toBe(true);
+    expect(info.handoverPruned).toBeUndefined();
   });
 
   it('prunes handovers no ledger references, and keeps the ones that are referenced', () => {

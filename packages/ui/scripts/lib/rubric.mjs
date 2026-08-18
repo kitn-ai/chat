@@ -385,15 +385,52 @@ export function scoreRun({ scenario, gates = {}, judged = {}, findings = [] }) {
         raw = 0;
         source = 'invalid-gate';
       } else if (g.vacuous) {
-        // A GATE THAT SCANNED NOTHING IS NOT A PASS, and the report already said
-        // so in its own caveat while the score awarded full weight for it — the
-        // report contradicting the number it printed. A vacuous gate is
-        // epistemically identical to an unrun one: it produces the same silence,
-        // and silence is not evidence. So it fails, loudly, rather than handing
-        // out weight nobody earned. Real case: an S7 run took 32% of its weight
-        // from two gates that opened zero files.
-        raw = 0;
-        source = 'gate (VACUOUS — scanned nothing, so it cannot pass)';
+        // NOT APPLICABLE — neither a pass nor a failure.
+        //
+        // This is the correction to an over-correction, and it is worth stating
+        // fully because both wrong answers are tempting.
+        //
+        // ORIGINALLY a gate that scanned nothing scored a full 10, which handed
+        // out weight nobody earned: an S7 run drew 32% of its weight from two
+        // gates that opened zero files.
+        //
+        // THE FIRST FIX made it score 0, and that INVERTED THE BIAS ONTO THE
+        // DECK'S BEST ANSWER. S6's textbook reply is a pure-prose honest
+        // refusal — no code, because writing code would mean inventing the
+        // element. That answer scored 6.53 and `gated-fail`, on two gates
+        // reporting "0 kai-* tag(s) used, all of which the kit ships". The
+        // module's own comment says flagging that answer "would punish exactly
+        // the behaviour the deck exists to reward"; the code was doing it.
+        //
+        // The honest reading is that there is NO SUBJECT. "Every element it uses
+        // exists" over an answer that uses no elements is not a claim that can
+        // be true or false. That is absence of subject, not absence of merit, so
+        // the dimension leaves the score entirely — out of the numerator AND the
+        // denominator — and the remaining weights renormalise. A correct refusal
+        // can then reach 10, and no free weight is awarded, which is the H2
+        // property preserved.
+        //
+        // It is never silent: the row survives with `applicable: false`, the
+        // verdict carries `notApplicable`, and the report prints a section for
+        // it. The scenarios where a no-code answer is a BAD answer are covered
+        // by the judged dimensions and by the external gates, which fail rather
+        // than vanish — `completeness` on "build me a research UI" cannot score
+        // 10 on an answer containing nothing.
+        rows.push({
+          id: d.id,
+          title: d.title,
+          gate: d.gate,
+          weight: d.weight,
+          raw: null,
+          cap: 10,
+          capped: false,
+          score: null,
+          applicable: false,
+          source: 'not applicable — the gate had no subject to examine (no code in the output)',
+          detail: g.detail,
+          findings: findings.filter((f) => f.dimension === d.id).map((f) => f.id),
+        });
+        continue;
       } else {
         raw = g.passed ? 10 : 0;
         source = 'gate';
@@ -442,14 +479,22 @@ export function scoreRun({ scenario, gates = {}, judged = {}, findings = [] }) {
     throw err;
   }
 
-  const totalWeight = rows.reduce((n, r) => n + r.weight, 0);
-  const weighted = rows.reduce((n, r) => n + r.weight * r.score, 0);
-  // Normalised to 0-10 over the APPLICABLE weight only, so scenarios with
-  // different dimension sets stay comparable to each other.
+  const scoring = rows.filter((r) => r.applicable !== false);
+  const notApplicable = rows.filter((r) => r.applicable === false).map((r) => r.id);
+
+  // The denominator is the APPLICABLE weight, so a dimension with no subject
+  // leaves the score rather than dragging it down. `declaredWeight` is kept
+  // beside it because two runs of one scenario can now be scored over different
+  // denominators, and a comparison has to be able to see that.
+  const declaredWeight = rows.reduce((n, r) => n + r.weight, 0);
+  const totalWeight = scoring.reduce((n, r) => n + r.weight, 0);
+  const weighted = scoring.reduce((n, r) => n + r.weight * r.score, 0);
   const normalized = totalWeight ? Number((weighted / totalWeight).toFixed(2)) : 0;
 
-  const failedGates = rows.filter((r) => r.gate === 'mechanical' && r.score === 0).map((r) => r.id);
-  const vacuousGates = rows.filter((r) => r.source.startsWith('gate (VACUOUS')).map((r) => r.id);
+  // A FAILED gate, not a missing subject. `score === 0` alone used to include
+  // the not-applicable rows and turned the deck's best answer into a gated
+  // failure.
+  const failedGates = scoring.filter((r) => r.gate === 'mechanical' && r.score === 0).map((r) => r.id);
   const blocking = findings.filter((f) => severity(f.severity)?.blocking).map((f) => f.id);
 
   return {
@@ -457,13 +502,19 @@ export function scoreRun({ scenario, gates = {}, judged = {}, findings = [] }) {
     note: rubric.note,
     rows,
     totalWeight,
+    declaredWeight,
     weighted,
     normalized,
     failedGates,
-    vacuousGates,
+    // Never silent: named here, rendered in the report, and carried in the
+    // caveats. Dropping a dimension quietly would be its own defect.
+    notApplicable,
     blockingFindings: blocking,
     // A gated failure is reported as gated, not as a low score: "it scored 6.1"
     // and "it does not compile" are different facts and the second one outranks.
+    // `not-applicable` is deliberately NOT a failure verdict — it says the
+    // question did not arise, which is the honest reading of an answer that
+    // correctly contains no code.
     verdict: failedGates.length ? 'gated-fail' : blocking.length ? 'scored-with-blocking-findings' : 'scored',
   };
 }
