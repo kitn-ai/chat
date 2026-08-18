@@ -651,7 +651,37 @@ for (const el of elements) {
       if (node.kind === ts.SyntaxKind.TrueKeyword) return true;
       if (node.kind === ts.SyntaxKind.FalseKeyword) return false;
       if (ts.isNumericLiteral(node)) return Number(node.text);
-      if (ts.isArrayLiteralExpression(node)) return node.elements.map((e) => evalNode(e));
+      if (ts.isArrayLiteralExpression(node)) {
+        // ARRAY spread is evaluated; OBJECT spread is still refused a few lines
+        // down, and the asymmetry is deliberate. A spread MEMBER of a part/slot
+        // object could silently overwrite a `name` and take an entry down with
+        // it — the hazard that rejection documents. A spread ELEMENT of a
+        // registry array is the opposite: it is how one list of parts is SHARED
+        // by two elements rather than typed twice (`ATTACHMENT_ITEM_PARTS` is
+        // spread into both MESSAGE_PARTS and ATTACHMENTS_PARTS, because a
+        // message renders its `file` parts through the same chrome
+        // `<kai-attachments>` does). Refusing it forces the copy this repo
+        // spends most of its guards undoing, and the identifier branch below
+        // already resolves the reference statically.
+        const out = [];
+        for (const el of node.elements) {
+          if (!ts.isSpreadElement(el)) {
+            out.push(evalNode(el));
+            continue;
+          }
+          const spread = evalNode(el.expression);
+          if (!Array.isArray(spread)) {
+            throw new Error(
+              `gen-element-api (evalNode): a spread in ${REGISTRY} resolved to ${typeof spread}, not an\n` +
+                '  array. Only `...SOME_CONST` where the const is a top-level array in slots.ts is\n' +
+                '  supported; anything else would flatten to nothing and silently drop the entries\n' +
+                '  around it.',
+            );
+          }
+          out.push(...spread);
+        }
+        return out;
+      }
       if (ts.isObjectLiteralExpression(node)) {
         const obj = {};
         for (const p of node.properties) {

@@ -492,6 +492,16 @@
         "name": "preview",
         "doc": "The image shown in an attachment’s hover-card preview. Bounded by default (max ~320×256, aspect preserved) so a large image never blows up the card. Raise or lower the cap from outside.",
         "recipe": "kai-attachments::part(preview) { max-width: 32rem; max-height: 24rem }"
+      },
+      {
+        "name": "attachment",
+        "doc": "One attachment item: the chip, row or tile, whichever variant is rendering. Restyle its background, radius or border from outside without caring which layout it is.",
+        "recipe": "kai-chat::part(attachment) { border-radius: 0.25rem }"
+      },
+      {
+        "name": "attachment-name",
+        "doc": "The attachment’s filename label. Present in every variant that shows one (a grid tile omits it for an image, which is its own label). Retune its type or hide it entirely.",
+        "recipe": "kai-chat::part(attachment-name) { font-size: 0.75rem }"
       }
     ]
   },
@@ -4849,6 +4859,16 @@
         "name": "citations",
         "doc": "The citation row rendered from the message’s `source` parts: a wrapped row of chips below the bubble, never inside it. Restyle its spacing or hide it entirely from outside.",
         "recipe": "kai-message::part(citations) { gap: 0.5rem }"
+      },
+      {
+        "name": "attachment",
+        "doc": "One attachment item: the chip, row or tile, whichever variant is rendering. Restyle its background, radius or border from outside without caring which layout it is.",
+        "recipe": "kai-chat::part(attachment) { border-radius: 0.25rem }"
+      },
+      {
+        "name": "attachment-name",
+        "doc": "The attachment’s filename label. Present in every variant that shows one (a grid tile omits it for an image, which is its own label). Retune its type or hide it entirely.",
+        "recipe": "kai-chat::part(attachment-name) { font-size: 0.75rem }"
       },
       {
         "name": "avatar",

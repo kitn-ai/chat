@@ -605,6 +605,8 @@ Restyle from outside the Shadow DOM via `kai-message::part(name)`.
 | `::part(content)` | The rendered message text/markdown region (same node as `bubble`). Target it to tune typography from outside. <br>`kai-message::part(content) { font-size: 0.9375rem }` |
 | `::part(actions)` | The action-bar row (copy / like / regenerate …). Restyle its spacing or hide it entirely from outside. <br>`kai-message::part(actions) { gap: 0.25rem }` |
 | `::part(citations)` | The citation row rendered from the message’s `source` parts: a wrapped row of chips below the bubble, never inside it. Restyle its spacing or hide it entirely from outside. <br>`kai-message::part(citations) { gap: 0.5rem }` |
+| `::part(attachment)` | One attachment item: the chip, row or tile, whichever variant is rendering. Restyle its background, radius or border from outside without caring which layout it is. <br>`kai-chat::part(attachment) { border-radius: 0.25rem }` |
+| `::part(attachment-name)` | The attachment’s filename label. Present in every variant that shows one (a grid tile omits it for an image, which is its own label). Retune its type or hide it entirely. <br>`kai-chat::part(attachment-name) { font-size: 0.75rem }` |
 | `::part(avatar)` | Replaces the built-in avatar rail with your own node. Use `avatar="none"` to omit the rail and let the body span the full row. |
 
 #### Composed from
@@ -794,6 +796,8 @@ Restyle from outside the Shadow DOM via `kai-attachments::part(name)`.
 | Part | Description |
 |------|-------------|
 | `::part(preview)` | The image shown in an attachment’s hover-card preview. Bounded by default (max ~320×256, aspect preserved) so a large image never blows up the card. Raise or lower the cap from outside. <br>`kai-attachments::part(preview) { max-width: 32rem; max-height: 24rem }` |
+| `::part(attachment)` | One attachment item: the chip, row or tile, whichever variant is rendering. Restyle its background, radius or border from outside without caring which layout it is. <br>`kai-chat::part(attachment) { border-radius: 0.25rem }` |
+| `::part(attachment-name)` | The attachment’s filename label. Present in every variant that shows one (a grid tile omits it for an image, which is its own label). Retune its type or hide it entirely. <br>`kai-chat::part(attachment-name) { font-size: 0.75rem }` |
 
 #### Composed from
 

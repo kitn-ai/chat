@@ -126,9 +126,21 @@ describe('MESSAGE_SLOTS registry', () => {
 });
 
 describe('MESSAGE_PARTS registry', () => {
-  it('declares row / bubble / content / actions / citations, with unique names', () => {
+  it('declares row / bubble / content / actions / citations / attachment, with unique names', () => {
     const names = MESSAGE_PARTS.map((p) => p.name);
-    expect(names).toEqual(['row', 'bubble', 'content', 'actions', 'citations']);
+    // The last two come from ATTACHMENT_ITEM_PARTS, shared with
+    // `<kai-attachments>`: a message renders its `file` parts through the same
+    // Attachment chrome, so it exposes the same handles. Spread rather than
+    // restated, which is why they appear here without being typed here.
+    expect(names).toEqual([
+      'row',
+      'bubble',
+      'content',
+      'actions',
+      'citations',
+      'attachment',
+      'attachment-name',
+    ]);
     expect(new Set(names).size).toBe(names.length);
   });
 

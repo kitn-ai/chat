@@ -215,6 +215,22 @@ function Attachment(props: AttachmentProps) {
           ],
           local.class,
         )}
+        // ★ A STABLE HANDLE ON "THIS IS AN ATTACHMENT", published the way this
+        // kit publishes them (`part="row"`, `part="bubble content"`,
+        // `part="citations"`). Consumers get a `::part(attachment)` styling seam
+        // — and, just as importantly, anything asserting on the rendering gets
+        // something to key on that is not a class name or a position.
+        //
+        // That is not a hypothetical convenience. The conformance harness pinned
+        // this component by `span.truncate` and broke the day the thread moved
+        // from the inline chip to the grid tile; the obvious repair — "the
+        // innermost div holding both the media icon and the filename" — was
+        // measured to be WORSE, because when the filename is missing `.last()`
+        // slides silently up to the assistant's message row, which contains the
+        // tool panel echoing the same filename in its JSON. The assertion then
+        // passes while the user sees an anonymous grey box. A position that
+        // still resolves, to the wrong node, is the failure that stays green.
+        part="attachment"
         // The mark lives on the ITEM rather than on `<AttachmentPreview>`,
         // because the sub-parts are optional in composition — a consumer who
         // renders only an `<AttachmentInfo>` still has to be told. `title` is
@@ -354,6 +370,7 @@ function AttachmentInfo(props: AttachmentInfoProps) {
               ctx.mediaCategory === 'unsendable' ? 'text-warning' : 'text-foreground',
               local.class,
             )}
+            part="attachment-name"
             {...rest}
           >
             {label()}
@@ -361,7 +378,10 @@ function AttachmentInfo(props: AttachmentInfoProps) {
         </Show>
       }
     >
-      <div class={cn('min-w-0 flex-1', local.class)} {...rest}>
+      {/* Same `part` in both branches: an assertion (or a consumer's CSS) that
+          asks for the attachment's name must not have to know which variant is
+          rendering. That is the whole point of publishing it. */}
+      <div class={cn('min-w-0 flex-1', local.class)} part="attachment-name" {...rest}>
         <span class="block truncate">{label()}</span>
         {/* The media-type subtitle is a two-line affordance — only the `list`
             variant has room for it; `inline` chips are a fixed single-line height.
