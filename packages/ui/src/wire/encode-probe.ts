@@ -69,10 +69,15 @@ function bodyBytes(body: unknown): number | undefined {
  * attachment to count it would make the diagnostic more expensive than the
  * encode it is watching.
  *
- * ★ THIS IS AN O(n) SCAN AND THERE IS NO EXACT WAY AROUND IT. Measured at about
- * 0.43 ms per MB of attachment, which is the residual reason an instrumented
- * encode still scales with attachment size even with `bytes` gated off. Three
- * alternatives were measured against this one and rejected:
+ * ★ THIS IS AN O(n) SCAN AND THERE IS NO EXACT WAY AROUND IT -- about 0.43 ms
+ * per MB of attachment. THAT IS WHY ITS CALLER IS PAYLOAD-GATED (see `bytesOf`
+ * in encode.ts): the thread is re-encoded every turn, so the scan is a
+ * recurring per-turn cost rather than a one-off, and unbounded-per-turn is what
+ * fails "cheap enough to leave on". With payload off this is never called; with
+ * payload on it runs and the number is exact.
+ *
+ * THE ALTERNATIVE WAS NOT TO GUESS, and three candidates were measured before
+ * settling on gating instead:
  *
  *   · A charCodeAt counting loop -- 7x SLOWER on the shape that actually occurs
  *     (a `data:` URI, no whitespace): 2.77 ms vs 0.61 ms per 1.4 MB. It avoids
@@ -85,12 +90,12 @@ function bodyBytes(body: unknown): number | undefined {
  *     (0.0036 ms) and REJECTED anyway: it assumes whitespace is periodic line
  *     wrapping, so a payload whose only whitespace sits past the probe window
  *     is silently OVER-counted. That is an estimate wearing a measurement's
- *     clothes, which is the one thing this event's size fields must never be.
+ *     clothes, which is the one thing a size field must never be.
  *
- * So exactness is kept and the cost is stated rather than hidden. Whether an
- * exact per-attachment size is worth 0.43 ms per MB is a product call; if it
- * ever is not, the answer is to gate this field the way `bodyBytes` is gated,
- * not to start guessing.
+ * So the resolution is exact-but-gated rather than always-on-but-approximate. A
+ * cheaper counter is welcome; a less truthful one is not, and `base64-bytes.
+ * test.ts` pins the arithmetic against a real decode so any replacement has to
+ * prove it is the same function rather than merely a plausible one.
  */
 export function base64Bytes(data: string): number {
   const clean = data.replace(/\s/g, '');

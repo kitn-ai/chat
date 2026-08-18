@@ -7,7 +7,7 @@ import type { ChatMessage, MessagePart } from '../elements/chat-types';
 import type { ToolPart } from '../components/tool-types';
 import { classifyAttachment, textFileContent, type ClassifiedFile } from './files';
 import { resolveMediaPolicy, type MediaPolicy, type MediaTypeFilter } from './media-types';
-import { wireDiagnosticsActive } from './diagnostics';
+import { wireDiagnosticsActive, wirePayloadActive } from './diagnostics';
 import { base64Bytes, createEncodeProbe, type EncodeProbe } from './encode-probe';
 
 export interface OpenAIToolCall {
@@ -272,13 +272,30 @@ function encodeFilePart<T>(
   return shaped.block;
 }
 
-/** The size of what went on the wire, when it went on the wire at all.
+/**
+ * The size of what went on the wire, when it went on the wire at all.
  *
- *  ABSENT for a remote attachment: the provider dereferences that URL itself
- *  and the bytes never enter this process, so any number here would be
- *  invented. Counted from the base64 length rather than by decoding -- see
- *  `base64Bytes`. */
+ * ★ GATED BEHIND PAYLOAD CAPTURE, for the same reason `encode.request.bytes`
+ * is, and the deciding argument is that THE COST RECURS. The whole thread is
+ * re-encoded on every turn, so a 10 MB attachment sitting in history is not a
+ * one-time 4.3 ms -- it is 4.3 ms per turn for as long as a subscriber is
+ * attached. Unbounded-per-turn is what fails "cheap enough to leave on", not
+ * the absolute number.
+ *
+ * The diagnosis survives the omission: "your image/png attachment was skipped,
+ * so the model never saw it" is the finding, and the size is a refinement of
+ * it. `mediaType`, `encoded`, `disposition` and `reason` cost nothing and are
+ * reported unconditionally. Arming payload gives exact sizes, which is
+ * precisely the moment a developer has already accepted paying for content.
+ *
+ * ABSENT rather than estimated, always. For a remote attachment the provider
+ * dereferences that URL itself and the bytes never enter this process; with
+ * payload off the scan is simply not run. Both read as "not reported" under the
+ * absence rule, and neither is ever backfilled with a guess -- see the rejected
+ * candidates at `base64Bytes`.
+ */
 function bytesOf(file?: ClassifiedFile): { bytes?: number } {
+  if (!wirePayloadActive()) return {};
   if (file?.source.type !== 'base64') return {};
   return { bytes: base64Bytes(file.source.data) };
 }

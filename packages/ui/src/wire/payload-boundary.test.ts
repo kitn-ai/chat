@@ -263,6 +263,26 @@ describe('the payload boundary', () => {
     expect(JSON.stringify(close)).not.toContain(S.inBandError);
   });
 
+  it('ON: attachment sizes are reported, and they are EXACT', async () => {
+    setWirePayloadCapture(true);
+    const events: WireDiagnosticEvent[] = [];
+    const off = subscribeWireDiagnostics((e) => events.push(e));
+    toOpenAIMessages(THREAD);
+    off();
+
+    const entry = (events.find((e) => e.type === 'encode.request') as any).attachments[0];
+    // `iVBORw0KGgo=` is 12 base64 characters standing for exactly 8 bytes. Not
+    // an estimate, not a threshold, not a prefix probe -- the same exact count
+    // the metadata stream simply declines to pay for when nobody armed payload.
+    expect(entry.bytes).toBe(8);
+    expect(entry.mediaType).toBe('image/png');
+    // A size is metadata, so it stays OUTSIDE the payload key even though it is
+    // only computed when payload is on. What gates it is cost, not sensitivity.
+    expect((events.find((e) => e.type === 'encode.request') as any).payload.attachments).toEqual([
+      { filename: S.filename },
+    ]);
+  });
+
   it('ON: encode.request reports bytes, exactly, because the body is materialized anyway', async () => {
     setWirePayloadCapture(true);
     const events: WireDiagnosticEvent[] = [];

@@ -82,8 +82,11 @@ describe('encode.request', () => {
     // reported", which is a true statement; a cheap estimate dressed up as a
     // measurement would not be.
     expect('bytes' in req).toBe(false);
-    // Everything that does NOT cost a full serialization is still reported.
-    expect(req.attachments[0].bytes).toBe(3072);
+    // And not on the attachment rows either: same class of measurement, same
+    // materialization cost, so one rule rather than two exceptions.
+    expect('bytes' in req.attachments[0]).toBe(false);
+    // Everything that costs nothing is still reported.
+    expect(req.attachments[0].mediaType).toBe('image/png');
     expect(req.wireMessages).toBe(1);
   });
 
@@ -116,15 +119,21 @@ describe('encode.request', () => {
     expect(req.partsEncoded).toEqual({ text: 1 });
   });
 
-  it('an attachment is reported by media type and SIZE, never by name or content', () => {
+  it('an attachment is reported by media type and FATE, never by name or content', () => {
     listen();
     toOpenAIMessages([
       { id: 'u1', role: 'user', parts: [{ type: 'file', attachment: image() }] },
     ]);
     const req = request();
+    // No `bytes` with payload off: counting it is an O(n) scan of the payload,
+    // and the thread is re-encoded EVERY turn, so it is a recurring per-turn
+    // cost rather than a one-off. The diagnosis does not need it -- "your
+    // image/png attachment was skipped" is the finding; the size is a
+    // refinement of it, available the moment payload capture is armed.
     expect(req.attachments).toEqual([
-      { mediaType: 'image/png', bytes: 8, encoded: true, disposition: 'encoded' },
+      { mediaType: 'image/png', encoded: true, disposition: 'encoded' },
     ]);
+    expect('bytes' in req.attachments[0]).toBe(false);
     expect(JSON.stringify(events)).not.toContain('shot.png');
   });
 
@@ -138,12 +147,33 @@ describe('encode.request', () => {
       url: `data:text/plain;base64,${btoa('hello there')}`,
     };
     toOpenAIMessages([{ id: 'u1', role: 'user', parts: [{ type: 'file', attachment: txt }] }]);
-    expect(request().attachments[0]).toMatchObject({
+    expect(request().attachments[0]).toEqual({
       mediaType: 'text/plain',
-      bytes: 11,
       encoded: true,
       disposition: 'as-text',
     });
+  });
+
+  it('a SKIPPED attachment keeps its reason with payload off -- that IS the finding', () => {
+    listen();
+    toOpenAIMessages(
+      [
+        {
+          id: 'u1',
+          role: 'user',
+          parts: [{ type: 'file', attachment: image({ url: 'blob:http://localhost/abc' }) }],
+        },
+      ],
+      { onUnencodableFile: 'skip' },
+    );
+    const entry = request().attachments[0];
+    // Everything that costs nothing to know is still reported. Only the size,
+    // which costs a scan of the payload, waits for payload capture.
+    expect(entry.mediaType).toBe('image/png');
+    expect(entry.encoded).toBe(false);
+    expect(entry.disposition).toBe('skipped');
+    expect(entry.reason).toContain('blob:');
+    expect('bytes' in entry).toBe(false);
   });
 
   it('a remote attachment omits bytes rather than reporting a confident zero', () => {

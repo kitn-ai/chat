@@ -230,10 +230,19 @@ export interface EncodeAttachmentReport {
   /**
    * Byte length of the bytes that went on the wire.
    *
-   * ABSENT for a remote attachment, always. The provider dereferences that URL
-   * itself and the bytes never enter this process, so any number here would be
+   * PRESENT ONLY WHEN PAYLOAD CAPTURE IS ON. Counting it exactly is an O(n)
+   * scan of the payload, and the whole thread is re-encoded every turn, so it
+   * is a recurring per-turn cost rather than a one-off -- the same rule
+   * `EncodeRequestEvent.bytes` follows, for the same reason. The fields around
+   * it cost nothing and are always present, so the diagnosis ("this attachment
+   * was skipped") survives without the refinement ("...and it was 240 kB").
+   *
+   * ABSENT for a remote attachment even then: the provider dereferences that
+   * URL itself and the bytes never enter this process, so any number would be
    * invented -- and `0` beside a 40 MB PDF is the exact confident zero the
    * forward-compat rule exists to prevent.
+   *
+   * Absent always means NOT REPORTED, and is never backfilled with an estimate.
    */
   bytes?: number;
   /** Whether anything at all reached the wire for this attachment. */
