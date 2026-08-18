@@ -397,13 +397,24 @@ the invariant-coverage test is the control that proves it."
 
 ---
 
-### Task 5: Wire every component the scaffold emits
+### Task 5: Say how these two compose, then wire it
 
-`scaffold` accepts a multi-component surface, emits `<kai-conversations>` into the markup, and produces a `main.ts` that mentions it **zero** times — no `conversations` property, no `kai-conversation-select` listener, no thread map. Paste it verbatim and you get a working chat beside an empty grey rail, with no error and no clue. The wiring it omits already exists as prose in `component_reference`'s `workspace-chat` recipe.
+Two defects, and the second is the one that matters.
+
+**The wiring.** `scaffold` accepts a multi-component surface, emits `<kai-conversations>` into the markup, and produces a `main.ts` that mentions it **zero** times — no `conversations` property, no `kai-conversation-select` listener, no thread map. Paste it verbatim and you get a working chat beside an empty grey rail, with no error and no clue.
+
+**The composition.** `<kai-chat>` documents a `sidebar` slot whose own description is "left column (your nav / conversation list)". The scaffolder instead emits `<kai-conversations>` as a *sibling* below the chat, in a `flex-direction: column`. Both cannot be right. The demo agent's words: *"nothing in the MCP told me which is the intended composition. That is a question I still cannot answer from the MCP."* It guessed, and changed the flex direction on judgement.
+
+This is the difference between "the scaffold forgot a listener" and "the kit has an opinion about how these compose and states it." Deciding it well IS the product — how components compose is a fact about this kit's own domain, not an application-layer choice.
 
 **Files:**
+- Modify: `packages/ui/src/agent-tooling/catalog/surfaces.ts` (the `workspace-chat` recipe — authored, edit this, never `derived.json`)
 - Modify: `packages/ui/src/agent-tooling/mcp/tools/scaffold.ts`
 - Test: `packages/ui/src/agent-tooling/mcp/scaffold.test.ts`
+
+**Deciding it:** read `<kai-chat>`'s `sidebar` slot description in the CEM and the `workspace-chat` recipe in `surfaces.ts`. If the recipe already states a composition, the scaffolder must match it — the scaffolder is wrong, not the recipe. If the recipe does **not** state one, state it: the slot exists and is documented for exactly this, so slotting is the intended composition unless something in the tree contradicts it. Record the decision in the recipe so `component_reference` serves it, and say plainly in the report which of those two cases you found.
+
+After editing `surfaces.ts`, run `pnpm --filter @kitn.ai/ui run lint:catalog-drift` — it refuses any authored claim that does not resolve against the tree.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -430,7 +441,33 @@ Add to the existing scaffold suite (match its existing call style — read a nei
       'kai-conversations is emitted with neither wiring nor a NOT WIRED notice',
     ).toBe(true);
   });
+
+  it('emits the composition the catalog states, not a different one', async () => {
+    const out = await scaffold.handler({
+      components: ['kai-chat', 'kai-conversations'],
+      integration: 'mock',
+      placement: 'full-page',
+      framework: 'html',
+    });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+
+    // The recipe is the authority. Read it rather than restating its answer here,
+    // so this test follows the catalog if the decision is ever revised.
+    const recipe = surfaceRecipes.find((r) => r.id === 'workspace-chat');
+    expect(recipe, 'workspace-chat recipe is missing').toBeDefined();
+    const slots = JSON.stringify(recipe).includes('sidebar');
+
+    if (slots) {
+      // slotted: the rail goes INSIDE kai-chat, carrying slot="sidebar"
+      expect(text).toMatch(/<kai-conversations[^>]*slot=["']sidebar["']/);
+    } else {
+      // sibling: then it must NOT claim the slot
+      expect(text).not.toMatch(/slot=["']sidebar["']/);
+    }
+  });
 ```
+
+Import `surfaceRecipes` from `../catalog/surfaces` in the test file if it is not already imported.
 
 - [ ] **Step 2: Run the test to verify it fails**
 
