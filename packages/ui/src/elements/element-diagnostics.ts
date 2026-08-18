@@ -16,10 +16,17 @@
 // OBSERVE-ONLY, AND STRUCTURALLY SO. Two of the three hooks are wrappers around
 // prototype methods, which is the risky shape, so the discipline is fixed:
 //
-//   * the inner method is called FIRST and UNCONDITIONALLY, with the arguments
-//     untouched, before this file looks at anything;
+//   * the inner method is ALWAYS called, exactly once, with the arguments
+//     untouched, and no branch can skip it;
 //   * its return value is passed straight back;
-//   * everything this file then does is a read.
+//   * everything else this file does is a read.
+//
+// The ORDER of the observation relative to the delegation differs between the
+// two, and each site says why. `connectedCallback` observes after, because the
+// channel it registers on does not exist until the inner call has run.
+// `attributeChangedCallback` observes BEFORE, because the inner call is what
+// throws on the very input being reported, and a report after it would go
+// missing in exactly the case it exists to explain.
 //
 // The third hook is not a wrapper at all: `addPropertyChangedCallback` is
 // component-register's own public observation channel -- solid-element itself
@@ -213,21 +220,46 @@ export function installElementDiagnostics(tag: string, proto: object): void {
   // ---- Capability 1: an array/object prop set as an HTML attribute ---------
   const innerAttributeChanged = target.attributeChangedCallback;
   target.attributeChangedCallback = function (name, oldVal, newVal) {
-    // Call through FIRST, unconditionally, arguments untouched. Everything
-    // after this point is a read.
-    innerAttributeChanged?.call(this, name, oldVal, newVal);
-
-    if (newVal === null) return; // an attribute REMOVAL is not a misuse
-    if (!wireDiagnosticsActive()) return; // the zero-cost gate, before any work
-    try {
-      const prop = attrToProp.get(name);
-      if (prop === undefined) return; // a scalar prop: attributes are correct there
-      const valuePreview = classifyAttributeValue(newVal);
-      if (valuePreview === undefined) return; // valid JSON for an object: not a misuse
-      emitViolation('array-prop-as-attribute', tag, prop, { valuePreview });
-    } catch {
-      // a broken diagnostic must never break the element
+    // REPORTED BEFORE DELEGATING, and this one is the exception to the
+    // call-through-first rule for a reason worth stating.
+    //
+    // Delegating first looks safer and is strictly worse here, because the
+    // inner call is exactly what CRASHES on the input being reported. Assigning
+    // `"[object Object]"` to `conversations` pushes that string into the Solid
+    // signal, and the facade dies with `(props.conversations ?? []) is not
+    // iterable` from inside a computation -- an uncaught TypeError with no
+    // attribution to the consumer's actual mistake. That throw propagates out of
+    // `innerAttributeChanged.call(...)`, so a report placed after it never runs:
+    // the diagnostic would go missing in precisely the case it exists to
+    // explain. (Observed exactly that way -- the neutrality suite caught it.)
+    //
+    // Neutrality is untouched. The element still receives the identical call
+    // with identical arguments; only the ORDER of an observation relative to it
+    // moved, and there is no `return` between here and the delegation that could
+    // skip it. Emission is synchronous, so a subscriber runs before the element
+    // does -- the same property the wire emitter already has.
+    if (newVal !== null && wireDiagnosticsActive()) {
+      // `newVal === null` is an attribute REMOVAL, which is not a misuse.
+      // `wireDiagnosticsActive()` is the zero-cost gate, ahead of any work.
+      try {
+        const prop = attrToProp.get(name);
+        // A prop absent from the map is a SCALAR one, where an attribute is the
+        // supported way to set it, so this costs one failed lookup and stops.
+        if (prop !== undefined) {
+          const valuePreview = classifyAttributeValue(newVal);
+          // `undefined` means the attribute held valid JSON for an object or an
+          // array and the property really will receive it. That works;
+          // reporting it would be reporting correct code.
+          if (valuePreview !== undefined) {
+            emitViolation('array-prop-as-attribute', tag, prop, { valuePreview });
+          }
+        }
+      } catch {
+        // a broken diagnostic must never break the element
+      }
     }
+
+    innerAttributeChanged?.call(this, name, oldVal, newVal);
   };
 
   // ---- Capability 2: the same reference handed back -----------------------

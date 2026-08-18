@@ -61,7 +61,11 @@ const kinds = () => violations().map((v) => v.kind);
  * nothing about the real path.
  */
 function mount(): HTMLElement & Record<string, unknown> {
-  const el = document.createElement(TAG) as HTMLElement & Record<string, unknown>;
+  // Through `unknown`: the generated element-types.d.ts gives createElement a
+  // precise `KaiConversationsElement` for this literal tag, which does not
+  // overlap an open index signature. Widening it here is the point — the script
+  // below sets props deliberately wrongly.
+  const el = document.createElement(TAG) as unknown as HTMLElement & Record<string, unknown>;
   document.body.appendChild(el);
   return el;
 }

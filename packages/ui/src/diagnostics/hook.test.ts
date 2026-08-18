@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { WireDiagnosticEvent } from '../wire/diagnostics';
+import type { KaiDiagnosticEvent, WireDiagnosticEvent } from '../wire/diagnostics';
 
 /** A fresh module graph per case. The hook is a module-level singleton AND a
  *  window global, so both have to be reset together -- importing them after the
@@ -110,7 +110,7 @@ describe('installKaiDevtoolsHook — the capture model', () => {
     emitWireDiagnostic(ev());
     expect(hook.drain()).toEqual([]);
 
-    const seen: WireDiagnosticEvent[] = [];
+    const seen: KaiDiagnosticEvent[] = [];
     const off = hook.subscribe((e) => seen.push(e));
     emitWireDiagnostic(ev({ type: 'wire.close' }));
     expect(seen).toHaveLength(1);
@@ -147,7 +147,7 @@ describe('attach — one synchronous handover', () => {
     const e1 = ev({ t: 1 });
     emitWireDiagnostic(e1); // buffered before anyone attached
 
-    const seen: WireDiagnosticEvent[] = [];
+    const seen: KaiDiagnosticEvent[] = [];
     const e2 = ev({ t: 2 });
     const off = hook.attach((e) => {
       seen.push(e);
@@ -168,7 +168,7 @@ describe('attach — one synchronous handover', () => {
     const hook = installKaiDevtoolsHook()!;
     emitWireDiagnostic(ev({ t: 1 })); // nothing is retained while dormant
 
-    const seen: WireDiagnosticEvent[] = [];
+    const seen: KaiDiagnosticEvent[] = [];
     const off = hook.attach((e) => seen.push(e));
     expect(seen).toEqual([]);
     const live = ev({ t: 2 });
@@ -189,7 +189,7 @@ describe('attach — a throwing callback cannot wedge the hook', () => {
     emitWireDiagnostic(e1);
     emitWireDiagnostic(e2);
 
-    const seen: WireDiagnosticEvent[] = [];
+    const seen: KaiDiagnosticEvent[] = [];
     // Throws on the FIRST buffered event, mid-replay -- the worst moment, since
     // the subscription is already installed but the handover is not finished.
     const off = hook.attach((e) => {
@@ -215,7 +215,7 @@ describe('attach — a throwing callback cannot wedge the hook', () => {
     const gap = ev({ t: 4 });
     emitWireDiagnostic(gap);
 
-    const second: WireDiagnosticEvent[] = [];
+    const second: KaiDiagnosticEvent[] = [];
     const off2 = hook.attach((e) => second.push(e));
     expect(second).toEqual([gap]);
     off2();
@@ -226,7 +226,7 @@ describe('attach — a throwing callback cannot wedge the hook', () => {
     const { installKaiDevtoolsHook, emitWireDiagnostic } = await fresh();
     const hook = installKaiDevtoolsHook()!;
 
-    const seen: WireDiagnosticEvent[] = [];
+    const seen: KaiDiagnosticEvent[] = [];
     const off = hook.attach((e) => {
       seen.push(e);
       if (e.t === 1) throw new Error('boom');
@@ -244,7 +244,7 @@ describe('retention handover — the panel owns retention once attached', () => 
     const { installKaiDevtoolsHook, emitWireDiagnostic } = await fresh();
     const hook = installKaiDevtoolsHook()!;
 
-    const seen: WireDiagnosticEvent[] = [];
+    const seen: KaiDiagnosticEvent[] = [];
     const off = hook.attach((e) => seen.push(e));
 
     for (let i = 0; i < 100; i++) emitWireDiagnostic(ev({ t: i }));
@@ -256,7 +256,7 @@ describe('retention handover — the panel owns retention once attached', () => 
     // Detached: retention resumes so a re-attach gets the gap.
     for (let i = 0; i < 5; i++) emitWireDiagnostic(ev({ t: 1000 + i }));
 
-    const second: WireDiagnosticEvent[] = [];
+    const second: KaiDiagnosticEvent[] = [];
     const off2 = hook.attach((e) => second.push(e));
     expect(second).toHaveLength(5);
     expect(second.map((e) => e.t)).toEqual([1000, 1001, 1002, 1003, 1004]);

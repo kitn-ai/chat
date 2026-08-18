@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { WireDiagnosticEvent } from './diagnostics';
+import type { KaiDiagnosticEvent, WireDiagnosticEvent } from './diagnostics';
 
 /**
  * TWO COPIES OF THIS MODULE MUST SHARE ONE EMITTER.
@@ -38,7 +38,7 @@ describe('the emitter state is shared across module copies', () => {
 
   it('a subscriber on copy A receives an event emitted through copy B', async () => {
     const { a, b } = await twoCopies();
-    const seen: WireDiagnosticEvent[] = [];
+    const seen: KaiDiagnosticEvent[] = [];
     const off = a.subscribeWireDiagnostics((e) => seen.push(e));
 
     // Copy B must see that someone is listening, or its emission sites stay
