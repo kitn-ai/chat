@@ -18,8 +18,8 @@ import { reportRequest } from '../diagnostics/report-request';
 import {
   setWirePayloadCapture,
   subscribeWireDiagnostics,
+  // The FULL union. This file now sweeps both layers, and both ride one emitter.
   type KaiDiagnosticEvent,
-  type WireDiagnosticEvent,
 } from './diagnostics';
 import type { AttachmentData } from '../components/attachment-types';
 import type { ChatMessage } from '../elements/chat-types';
@@ -115,8 +115,8 @@ const IN_BAND_ERROR_BODY = [
  *  a transport failure, and an in-band one. All three terminal events, so the
  *  boundary is asserted over every path that can carry a provider's own error
  *  text -- and over the one path that carries the APP's text. */
-async function driveEverything(): Promise<WireDiagnosticEvent[]> {
-  const events: WireDiagnosticEvent[] = [];
+async function driveEverything(): Promise<KaiDiagnosticEvent[]> {
+  const events: KaiDiagnosticEvent[] = [];
   const off = subscribeWireDiagnostics((e) => events.push(e));
   try {
     reportRequest(APP_BODY, { url: 'https://app.example.com/api/chat' });
@@ -179,7 +179,7 @@ describe('the payload boundary', () => {
 
   it('ON: the query string is STILL never reported -- a credential is not payload', async () => {
     setWirePayloadCapture(true);
-    const events: WireDiagnosticEvent[] = [];
+    const events: KaiDiagnosticEvent[] = [];
     const off = subscribeWireDiagnostics((e) => events.push(e));
     const res = new Response(BODY);
     Object.defineProperty(res, 'url', {
@@ -194,7 +194,7 @@ describe('the payload boundary', () => {
 
   it('ON: encode.request carries the body and the attachment FILENAMES', async () => {
     setWirePayloadCapture(true);
-    const events: WireDiagnosticEvent[] = [];
+    const events: KaiDiagnosticEvent[] = [];
     const off = subscribeWireDiagnostics((e) => events.push(e));
     toOpenAIMessages(THREAD);
     off();
@@ -210,7 +210,7 @@ describe('the payload boundary', () => {
 
   it('ON: encode.dropped carries the dropped part itself', async () => {
     setWirePayloadCapture(true);
-    const events: WireDiagnosticEvent[] = [];
+    const events: KaiDiagnosticEvent[] = [];
     const off = subscribeWireDiagnostics((e) => events.push(e));
     toOpenAIMessages(THREAD);
     off();
@@ -222,7 +222,7 @@ describe('the payload boundary', () => {
 
   it('ON: wire.failed carries bodyText and the provider MESSAGE', async () => {
     setWirePayloadCapture(true);
-    const events: WireDiagnosticEvent[] = [];
+    const events: KaiDiagnosticEvent[] = [];
     const off = subscribeWireDiagnostics((e) => events.push(e));
     await readOpenAIStream(
       new Response(JSON.stringify({ error: { code: 'x', message: S.providerMessage } }), {
@@ -240,7 +240,7 @@ describe('the payload boundary', () => {
 
   it('ON: wire.interrupted carries the error message, never beside errorName', async () => {
     setWirePayloadCapture(true);
-    const events: WireDiagnosticEvent[] = [];
+    const events: KaiDiagnosticEvent[] = [];
     const off = subscribeWireDiagnostics((e) => events.push(e));
     const boom = new TypeError('SENTINEL-socket-died-mid-turn');
     const stream = new ReadableStream<Uint8Array>({
@@ -263,7 +263,7 @@ describe('the payload boundary', () => {
     // it identically. An asymmetry between them reads as an oversight and gets
     // "fixed" later by someone with less context.
     setWirePayloadCapture(true);
-    const events: WireDiagnosticEvent[] = [];
+    const events: KaiDiagnosticEvent[] = [];
     const off = subscribeWireDiagnostics((e) => events.push(e));
     await readOpenAIStream(new Response(IN_BAND_ERROR_BODY), nullSink());
     off();
@@ -277,7 +277,7 @@ describe('the payload boundary', () => {
   });
 
   it('OFF: wire.close reports the error CODE and never the message', async () => {
-    const events: WireDiagnosticEvent[] = [];
+    const events: KaiDiagnosticEvent[] = [];
     const off = subscribeWireDiagnostics((e) => events.push(e));
     await readOpenAIStream(new Response(IN_BAND_ERROR_BODY), nullSink());
     off();
@@ -289,7 +289,7 @@ describe('the payload boundary', () => {
 
   it('ON: attachment sizes are reported, and they are EXACT', async () => {
     setWirePayloadCapture(true);
-    const events: WireDiagnosticEvent[] = [];
+    const events: KaiDiagnosticEvent[] = [];
     const off = subscribeWireDiagnostics((e) => events.push(e));
     toOpenAIMessages(THREAD);
     off();
@@ -309,7 +309,7 @@ describe('the payload boundary', () => {
 
   it('ON: encode.request reports bytes, exactly, because the body is materialized anyway', async () => {
     setWirePayloadCapture(true);
-    const events: WireDiagnosticEvent[] = [];
+    const events: KaiDiagnosticEvent[] = [];
     const off = subscribeWireDiagnostics((e) => events.push(e));
     const body = toOpenAIMessages(THREAD);
     off();
@@ -320,7 +320,7 @@ describe('the payload boundary', () => {
   });
 
   it('OFF: app.request describes the system prompt without quoting it', async () => {
-    const events: WireDiagnosticEvent[] = [];
+    const events: KaiDiagnosticEvent[] = [];
     const off = subscribeWireDiagnostics((e) => events.push(e));
     reportRequest(APP_BODY, { url: 'https://app.example.com/api/chat?key=sk-live-SECRET' });
     off();
@@ -345,7 +345,7 @@ describe('the payload boundary', () => {
 
   it('ON: app.request carries the whole body, and only under .payload', async () => {
     setWirePayloadCapture(true);
-    const events: WireDiagnosticEvent[] = [];
+    const events: KaiDiagnosticEvent[] = [];
     const off = subscribeWireDiagnostics((e) => events.push(e));
     reportRequest(APP_BODY, { url: 'https://app.example.com/api/chat?key=sk-live-SECRET' });
     off();
@@ -432,7 +432,7 @@ function driveElements(): KaiDiagnosticEvent[] {
   const events: KaiDiagnosticEvent[] = [];
   const off = subscribeWireDiagnostics((e) => events.push(e));
   try {
-    const list = document.createElement('kai-conversations') as HTMLElement &
+    const list = document.createElement('kai-conversations') as unknown as HTMLElement &
       Record<string, unknown>;
     document.body.appendChild(list);
 
@@ -529,7 +529,7 @@ describe('the payload boundary — element events', () => {
     // payload key DID appear there.
     setWirePayloadCapture(true);
     const wire = await driveEverything();
-    expect(wire.some((e) => 'payload' in (e as Record<string, unknown>))).toBe(true);
+    expect(wire.some((e) => 'payload' in (e as unknown as Record<string, unknown>))).toBe(true);
   });
 
   it('ON: one mixed session — neither sentinel set survives stripping .payload', async () => {

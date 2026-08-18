@@ -41,6 +41,8 @@
  *     standing behind its choice.
  */
 import { describe, it, expect } from 'vitest';
+import { isElementDiagnosticEvent } from '../wire/diagnostics';
+import type { ElementDiagnosticEvent } from './diagnostic-events';
 import manifest from './element-manifest.json';
 import meta from './element-meta.json';
 import nonScalar from './element-nonscalar.json';
@@ -107,6 +109,32 @@ describe('element-nonscalar.json — the ~2 KB of element-meta.json that ships',
 
   it('names only tags that really exist', () => {
     for (const tag of Object.keys(map)) expect(metaTags).toContain(tag);
+  });
+
+  it('every element event type starts with `element.`, which is what the guard tests', () => {
+    // `isElementDiagnosticEvent` in wire/diagnostics.ts narrows the shared
+    // stream by that prefix, and it is the ONE place the prefix is restated.
+    // Everything downstream — every test that reads `streamId` or `traceId` off
+    // "every event", and any panel that switches on the two families — depends
+    // on the union's members really carrying it. A new element event type named
+    // without the prefix would make the guard silently classify it as a WIRE
+    // event, which is the quiet wrong answer this pins.
+    //
+    // Exhaustive by construction: the array is typed as the union's `type`
+    // field, so adding a member to `ElementDiagnosticEvent` without adding it
+    // here is a compile error, not a silent gap.
+    const ALL_ELEMENT_TYPES: Array<ElementDiagnosticEvent['type']> = [
+      'element.violation',
+      'element.registry',
+    ];
+    for (const type of ALL_ELEMENT_TYPES) {
+      expect(type.startsWith('element.')).toBe(true);
+      expect(isElementDiagnosticEvent({ type, t: 0 } as ElementDiagnosticEvent)).toBe(true);
+    }
+    // And the complement really is the complement — otherwise "not an element
+    // event" would not mean "a wire event".
+    expect(isElementDiagnosticEvent({ type: 'wire.open', t: 0 } as never)).toBe(false);
+    expect(isElementDiagnosticEvent({ type: 'encode.request', t: 0 } as never)).toBe(false);
   });
 
   it('covers the props the kai- contract is actually about', () => {

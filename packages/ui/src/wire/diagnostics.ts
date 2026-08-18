@@ -516,6 +516,27 @@ export function wireCorrelation(
  */
 export type KaiDiagnosticEvent = WireDiagnosticEvent | ElementDiagnosticEvent;
 
+/**
+ * Narrow the shared stream to the element half — and, by negation, to the wire
+ * half, which is what most callers actually want:
+ *
+ *   if (isElementDiagnosticEvent(e)) { … } else { e.streamId … }
+ *
+ * WHY THIS DIRECTION and not an `isWireDiagnosticEvent`. The element family is
+ * CLOSED and small; the wire family is the one that keeps growing (`wire.*` and
+ * `encode.*` today, and the inventory has `kit.warn` queued behind them). A
+ * positive `wire.*` allowlist would silently start answering "not a wire event"
+ * for each new family, which is the quiet wrong answer. Testing for the closed
+ * set and taking the complement stays correct as the open set grows.
+ *
+ * Exists because a panel, and every test in this repo that reads `streamId` or
+ * `traceId` off "every event", needs exactly this one check now that two layers
+ * share one channel. The prefix is pinned by `element-artifact-divergence.test.ts`.
+ */
+export function isElementDiagnosticEvent(e: KaiDiagnosticEvent): e is ElementDiagnosticEvent {
+  return e.type.startsWith('element.');
+}
+
 type Subscriber = (e: KaiDiagnosticEvent) => void;
 
 /**
