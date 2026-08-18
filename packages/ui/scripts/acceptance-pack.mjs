@@ -597,20 +597,25 @@ the same needle spelled with single and with double quotes; **check both**.
 Recall varies by item, and here is exactly how far it goes, because an
 over-promise would be worse than a gap:
 
-- \`.messages.push(\`, \`.parts.push(\`, \`.url}>\` and \`chat.conversations\`
-  catch the mistake **however you spelled the quotes and the surrounding
-  variables**.
-- \`setAttribute('messages'\`, \`'_blank')\`, \`'data: '\`,
-  \`document.addEventListener('kai-\` catch it in **either quote style**, but
-  depend on the argument being written as a literal — a variable in that
-  position slips past.
-- \`setTimeout(() => { chat.\` and \`'DOMContentLoaded', () => { chat.\` are
-  **near-verbatim on purpose**. Both APIs are perfectly legitimate for other
-  work, so nothing shorter separates the mistake from correct code, and a needle
-  that flags correct code is worse than a narrow one. Reformat the line and
-  these go quiet.
-- None of them survive a rewrite into a template literal or a differently-named
-  receiver on the left of an assignment.
+1. **Survive anything but a rewrite** — \`.messages.push(\`, \`.parts.push(\`,
+   \`.url}>\`. Quote style, semicolons and every variable name around them are
+   irrelevant, because the needle is the operation itself.
+2. **Survive quote style and semicolons, but name one specific token** —
+   \`setAttribute('messages'\`, \`setAttribute('policy'\`, \`'_blank')\`,
+   \`'data: '\`, \`document.addEventListener('kai-\`, \`Bearer ' + apiKey\`,
+   \`.innerHTML = part.\`. Spell that token differently — a variable where the
+   literal is, a different name for the value — and they go quiet.
+3. **Depend on the receiver being named the way this catalog names it** —
+   \`chat.conversations\`, \`wrapper.addEventListener('kai-\`,
+   \`chat.addEventListener('kai-conversation-select'\`,
+   \`setTimeout(() => { chat.\`, \`'DOMContentLoaded', () => { chat.\`. The last
+   two are near-verbatim **on purpose**: \`setTimeout\` and
+   \`DOMContentLoaded\` are perfectly legitimate for other work, so nothing
+   shorter separates the mistake from correct code, and a needle that flags
+   correct code is worse than a narrow one. Rename your variable and these stop
+   finding anything.
+
+None of them survive a rewrite into a template literal.
 
 **Zero hits does not mean correct; a hit means definitely wrong.** Part 2 is the
 half that does not depend on spelling.
@@ -1111,6 +1116,28 @@ if (needleProblems.length) {
   fail(`the self-audit needles are unsound, so nothing was packed:\n  - ${needleProblems.join('\n  - ')}`);
 }
 
+/**
+ * The recall breakdown on SELF-AUDIT.md sorts every needle into a tier. It is
+ * authored prose over a machine-checked table, which is exactly the pairing that
+ * drifts -- the first draft of it put `chat.conversations` in the
+ * survives-anything tier, and a rename measurement said otherwise. A needle
+ * missing from the breakdown is a needle the page silently over-promises about.
+ */
+function assertBreakdownCoversEveryNeedle(page) {
+  const start = page.indexOf('Recall varies by item');
+  const end = page.indexOf('None of them survive');
+  if (start === -1 || end === -1 || end < start) fail('the self-audit recall breakdown is missing or malformed.');
+  const block = page.slice(start, end);
+  const missing = Object.values(NEEDLES).filter((n) => !block.includes(n));
+  if (missing.length) {
+    fail(
+      `the self-audit recall breakdown does not sort ${missing.length} needle(s): ${missing
+        .map((n) => JSON.stringify(n))
+        .join(', ')}. Every needle must be tiered, or the page over-promises about the ones it omits.`,
+    );
+  }
+}
+
 const metaByTag = new Map(meta.map((m) => [m.tag, m]));
 
 // A prop is universal when element-meta.json flags it so -- the flag is set by
@@ -1237,7 +1264,9 @@ addAgent('DELIVERY.md', renderDelivery({ pkg, kitVersion, derived, solidExports 
 addAgent('ELEMENTS.md', renderElementIndex({ derived, meta, universal, intents, capabilityOf }));
 addAgent('SHARED-PROPS.md', renderSharedProps({ universal, meta }));
 addAgent('INVARIANTS.md', renderInvariants({ invariants, derived }));
-addAgent('SELF-AUDIT.md', renderSelfAudit({ selfAuditItems, derived }));
+const selfAuditPage = renderSelfAudit({ selfAuditItems, derived });
+assertBreakdownCoversEveryNeedle(selfAuditPage);
+addAgent('SELF-AUDIT.md', selfAuditPage);
 addAgent('RECIPES.md', renderRecipes({ recipes }));
 addAgent('PARTS.md', renderParts({ derived, partConsumption }));
 addAgent('INTEGRATIONS.md', renderIntegrations({ derived }));
