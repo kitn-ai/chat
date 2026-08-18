@@ -169,8 +169,32 @@ export interface StreamSummary {
   /** `t` of this stream's LAST event so far. */
   lastAt?: number;
   /** Correlates several streams into one logical turn, when the app reports it
-   *  (a tool loop is several streams and one trace). Absent is normal. */
+   *  (a tool loop is several streams and one trace). Absent is normal.
+   *
+   *  IT IS ALSO THE ONLY LINK between what was ENCODED and what was READ. The
+   *  encoder runs before the read opens, so it cannot know a streamId; the app
+   *  passes the same traceId to both halves, and without it the two sides
+   *  cannot be joined at all. See `EncodeGroup`. */
   traceId?: string;
+  /** A human label for the trace, when the app supplied one. */
+  traceLabel?: string;
+}
+
+/** Why an encode could not be pinned to a stream. Stated rather than implied,
+ *  because the UI has to explain it: the panel is otherwise silently missing
+ *  half the picture and the developer has no idea a knob exists. */
+export type UncorrelatedReason =
+  /** The app supplied no traceId, so there is nothing to join on. */
+  | 'no-trace-id'
+  /** A traceId was supplied but no stream reported it. */
+  | 'no-matching-stream';
+
+/** Encode events that could not be attached to any stream. */
+export interface EncodeGroup {
+  traceId?: string;
+  requests: RequestSummary[];
+  dropped: DroppedRow[];
+  reason: UncorrelatedReason;
 }
 
 export interface FoldResult {
@@ -179,6 +203,9 @@ export interface FoldResult {
    *  hidden: it is how someone learns their kit reports more than their panel
    *  renders. */
   unknownTypes: Record<string, number>;
+  /** Encodes that reached no stream. NEVER guessed into one -- see the note on
+   *  the fold's encode handling. */
+  uncorrelated: EncodeGroup[];
 }
 
 const KNOWN = new Set([
@@ -200,6 +227,19 @@ export function foldStreams(events: readonly WireDiagnosticEvent[]): FoldResult 
   // Which (variant, index) pairs a stream has already produced, so the live
   // parts count is DISTINCT PARTS rather than write events. See `wire.part`.
   const seenParts = new Map<string, Set<string>>();
+
+  /**
+   * Encode events, held aside and joined by traceId AFTER the fold.
+   *
+   * THEY MUST NOT CREATE OR TOUCH A STREAM ON THEIR OWN. Encoding happens
+   * before the read opens, so an encode never carries a streamId, and the
+   * tempting fallbacks are all wrong: attaching to "the next stream that opens"
+   * is a timing heuristic that breaks the moment two requests overlap -- which
+   * is precisely when somebody opens this panel. So the join is the app's
+   * explicit traceId or nothing, and "nothing" is reported rather than hidden.
+   */
+  const encodes = new Map<string, EncodeGroup>();
+  const NO_TRACE = '\u0000no-trace';
 
   // A missing streamId is its own bucket rather than a dropped event: the
   // correlator is optional in the envelope, and an uncorrelated event is still
@@ -225,6 +265,36 @@ export function foldStreams(events: readonly WireDiagnosticEvent[]): FoldResult 
       unknownTypes[e.type] = (unknownTypes[e.type] ?? 0) + 1;
       continue;
     }
+    if (e.type === 'encode.request' || e.type === 'encode.dropped') {
+      const trace = str(field(e, 'traceId'));
+      const key = trace ?? NO_TRACE;
+      let group = encodes.get(key);
+      if (!group) {
+        group = { traceId: trace, requests: [], dropped: [], reason: 'no-trace-id' };
+        encodes.set(key, group);
+      }
+      if (e.type === 'encode.request') {
+        const attachments = field(e, 'attachments');
+        group.requests.push({
+          format: str(field(e, 'format')),
+          messages: num(field(e, 'messages')),
+          byRole: { ...((field(e, 'byRole') as Record<string, number>) ?? {}) },
+          parts: { ...((field(e, 'parts') as Record<string, number>) ?? {}) },
+          bodyBytes: num(field(e, 'bodyBytes')),
+          attachments: Array.isArray(attachments) ? (attachments as AttachmentRow[]) : [],
+        });
+      } else {
+        group.dropped.push({
+          variant: str(field(e, 'variant')) ?? 'unknown',
+          count: num(field(e, 'count')) ?? 1,
+          messageIndex: num(field(e, 'messageIndex')),
+          partIndex: num(field(e, 'partIndex')),
+          reason: str(field(e, 'reason')),
+        });
+      }
+      continue;
+    }
+
     const s = summaryFor(e);
 
     // Absolute bounds and the trace correlator, tracked for every event type so
@@ -236,6 +306,8 @@ export function foldStreams(events: readonly WireDiagnosticEvent[]): FoldResult 
     }
     const trace = str(field(e, 'traceId'));
     if (trace) s.traceId = trace;
+    const traceLabel = str(field(e, 'traceLabel')) ?? str(field(e, 'label'));
+    if (traceLabel) s.traceLabel = traceLabel;
 
     switch (e.type) {
       case 'wire.open': {
@@ -345,28 +417,6 @@ export function foldStreams(events: readonly WireDiagnosticEvent[]): FoldResult 
         s.open = false;
         break;
       }
-      case 'encode.request': {
-        const attachments = field(e, 'attachments');
-        s.request = {
-          format: str(field(e, 'format')),
-          messages: num(field(e, 'messages')),
-          byRole: { ...((field(e, 'byRole') as Record<string, number>) ?? {}) },
-          parts: { ...((field(e, 'parts') as Record<string, number>) ?? {}) },
-          bodyBytes: num(field(e, 'bodyBytes')),
-          attachments: Array.isArray(attachments) ? (attachments as AttachmentRow[]) : [],
-        };
-        break;
-      }
-      case 'encode.dropped': {
-        s.dropped.push({
-          variant: str(field(e, 'variant')) ?? 'unknown',
-          count: num(field(e, 'count')) ?? 1,
-          messageIndex: num(field(e, 'messageIndex')),
-          partIndex: num(field(e, 'partIndex')),
-          reason: str(field(e, 'reason')),
-        });
-        break;
-      }
       case 'wire.failed': {
         s.status = num(field(e, 'status'));
         const provider = field(e, 'providerCode');
@@ -378,7 +428,32 @@ export function foldStreams(events: readonly WireDiagnosticEvent[]): FoldResult 
     }
   }
 
-  return { streams: [...byId.values()], unknownTypes };
+  // Join the encodes to their streams by TRACE, and report every one that
+  // could not be joined together with the reason -- an app that never passes a
+  // traceId should learn that from the panel, not be quietly shown half a
+  // picture.
+  const streams = [...byId.values()];
+  const uncorrelated: EncodeGroup[] = [];
+  for (const group of encodes.values()) {
+    if (!group.traceId) {
+      uncorrelated.push({ ...group, reason: 'no-trace-id' });
+      continue;
+    }
+    const matches = streams.filter((s) => s.traceId === group.traceId);
+    if (matches.length === 0) {
+      uncorrelated.push({ ...group, reason: 'no-matching-stream' });
+      continue;
+    }
+    // One trace can cover several streams: a tool loop is several reads and one
+    // logical turn, and the request that opened it belongs to all of them.
+    for (const stream of matches) {
+      const last = group.requests[group.requests.length - 1];
+      if (last) stream.request = last;
+      stream.dropped.push(...group.dropped);
+    }
+  }
+
+  return { streams, unknownTypes, uncorrelated };
 }
 
 // ── The verdict layer ────────────────────────────────────────────────────────

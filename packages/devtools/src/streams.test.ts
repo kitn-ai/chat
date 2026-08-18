@@ -429,7 +429,9 @@ describe('findingsFor', () => {
 const REQUEST = {
   type: 'encode.request',
   t: 0,
-  streamId: 'w-1',
+  // The correlator is the TRACE, supplied by the app to both the encoder and
+  // the reader. An encoder cannot know a streamId: it runs before the read.
+  traceId: 'w-1',
   format: 'openai.chat-completions',
   messages: 4,
   byRole: { user: 2, assistant: 2 },
@@ -444,7 +446,7 @@ describe('the write path', () => {
   it('retains the request inventory on the stream', () => {
     const s = fold([
       REQUEST,
-      { type: 'wire.open', t: 1, streamId: 'w-1', format: 'openai.chat-completions', source: 'response' },
+      { type: 'wire.open', t: 1, streamId: 's-1', traceId: 'w-1', format: 'openai.chat-completions', source: 'response' },
     ]);
     expect(s.request).toMatchObject({
       format: 'openai.chat-completions',
@@ -459,8 +461,9 @@ describe('the write path', () => {
   it('retains every dropped part', () => {
     const s = fold([
       REQUEST,
-      { type: 'encode.dropped', t: 2, streamId: 'w-1', variant: 'card', count: 2, reason: 'no representation on this wire' },
-      { type: 'encode.dropped', t: 3, streamId: 'w-1', variant: 'file', count: 1, messageIndex: 1, partIndex: 0, reason: 'onUnencodableFile: skip' },
+      { type: 'wire.open', t: 1, streamId: 's-1', traceId: 'w-1', format: 'f', source: 'response' },
+      { type: 'encode.dropped', t: 2, traceId: 'w-1', variant: 'card', count: 2, reason: 'no representation on this wire' },
+      { type: 'encode.dropped', t: 3, traceId: 'w-1', variant: 'file', count: 1, messageIndex: 1, partIndex: 0, reason: 'onUnencodableFile: skip' },
     ]);
     expect(s.dropped).toHaveLength(2);
     expect(s.dropped[1]).toMatchObject({ variant: 'file', count: 1, reason: 'onUnencodableFile: skip' });
@@ -480,7 +483,7 @@ describe('the write path', () => {
       { ...REQUEST, attachments: [
         { mediaType: 'image/png', bytes: 245760, encoded: false, disposition: 'skipped', reason: 'this provider does not accept image parts' },
       ] },
-      { type: 'wire.open', t: 1, streamId: 'w-1', format: 'openai.chat-completions', source: 'response' },
+      { type: 'wire.open', t: 1, streamId: 's-1', traceId: 'w-1', format: 'openai.chat-completions', source: 'response' },
     ];
     const f = find(events, 'attachments')!;
     expect(f.verdict).toBe('fail');
@@ -495,18 +498,24 @@ describe('the write path', () => {
       { ...REQUEST, attachments: [
         { mediaType: 'text/csv', bytes: 900, encoded: true, disposition: 'as-text', reason: 'inlined as text' },
       ] },
+      { type: 'wire.open', t: 1, streamId: 's-1', traceId: 'w-1', format: 'f', source: 'response' },
     ];
     expect(find(events, 'attachments')!.verdict).toBe('warn');
   });
 
   it('all-encoded attachments pass', () => {
-    expect(find([REQUEST], 'attachments')!.verdict).toBe('ok');
+    const events = [
+      REQUEST,
+      { type: 'wire.open', t: 1, streamId: 's-1', traceId: 'w-1', format: 'f', source: 'response' },
+    ];
+    expect(find(events, 'attachments')!.verdict).toBe('ok');
   });
 
   it('a dropped part is a failure naming the variant and the reason', () => {
     const events = [
       REQUEST,
-      { type: 'encode.dropped', t: 2, streamId: 'w-1', variant: 'card', count: 2, reason: 'no representation on this wire' },
+      { type: 'wire.open', t: 1, streamId: 's-1', traceId: 'w-1', format: 'f', source: 'response' },
+      { type: 'encode.dropped', t: 2, traceId: 'w-1', variant: 'card', count: 2, reason: 'no representation on this wire' },
     ];
     const f = find(events, 'dropped')!;
     expect(f.verdict).toBe('fail');
@@ -542,5 +551,77 @@ describe('the write path', () => {
     expect(s.dropped).toEqual([]);
     expect(s.url).toBeUndefined();
     expect(s.contentType).toBeUndefined();
+  });
+});
+
+describe('encode correlation', () => {
+  const REQ = (over: Record<string, unknown> = {}) => ({
+    type: 'encode.request', t: 0, format: 'openai.chat-completions',
+    messages: 2, byRole: { user: 1 }, parts: { text: 1 }, bodyBytes: 900,
+    attachments: [], ...over,
+  });
+
+  it('pins an encode to the stream sharing its traceId', () => {
+    const { streams, uncorrelated } = foldStreams([
+      REQ({ traceId: 'tr-1' }),
+      { type: 'wire.open', t: 5, streamId: 'wire-1', traceId: 'tr-1', format: 'f', source: 'response' },
+    ].map(ev));
+    expect(streams[0].request).toMatchObject({ bodyBytes: 900 });
+    expect(uncorrelated).toEqual([]);
+  });
+
+  it('carries the trace label when the app supplied one', () => {
+    const { streams } = foldStreams([
+      { type: 'wire.open', t: 0, streamId: 'wire-1', traceId: 'tr-9', traceLabel: 'checkout retry', format: 'f', source: 'response' },
+    ].map(ev));
+    expect(streams[0].traceId).toBe('tr-9');
+    expect(streams[0].traceLabel).toBe('checkout retry');
+  });
+
+  it('leaves an encode with NO traceId uncorrelated, and never guesses', () => {
+    // The encoder ran and a stream opened right afterwards. Attaching on that
+    // basis would be a timing heuristic, and a wrong one the moment two
+    // requests overlap -- which is exactly when someone opens this panel.
+    const { streams, uncorrelated } = foldStreams([
+      REQ(),
+      { type: 'encode.dropped', t: 1, variant: 'card', count: 1, reason: 'no representation' },
+      { type: 'wire.open', t: 5, streamId: 'wire-1', format: 'f', source: 'response' },
+    ].map(ev));
+
+    expect(streams[0].request).toBeUndefined();
+    expect(streams[0].dropped).toEqual([]);
+
+    expect(uncorrelated).toHaveLength(1);
+    expect(uncorrelated[0].traceId).toBeUndefined();
+    expect(uncorrelated[0].requests).toHaveLength(1);
+    expect(uncorrelated[0].dropped).toHaveLength(1);
+    expect(uncorrelated[0].reason).toBe('no-trace-id');
+  });
+
+  it('keeps a traceId that matched no stream separate, and says why', () => {
+    const { streams, uncorrelated } = foldStreams([
+      REQ({ traceId: 'tr-orphan' }),
+      { type: 'wire.open', t: 5, streamId: 'wire-1', traceId: 'tr-other', format: 'f', source: 'response' },
+    ].map(ev));
+    expect(streams[0].request).toBeUndefined();
+    expect(uncorrelated).toHaveLength(1);
+    expect(uncorrelated[0].traceId).toBe('tr-orphan');
+    expect(uncorrelated[0].reason).toBe('no-matching-stream');
+  });
+
+  it('pins one encode onto every stream of a multi-stream trace', () => {
+    // A tool loop is several reads and one logical turn.
+    const { streams } = foldStreams([
+      REQ({ traceId: 'loop' }),
+      { type: 'wire.open', t: 1, streamId: 'wire-1', traceId: 'loop', format: 'f', source: 'response' },
+      { type: 'wire.open', t: 2, streamId: 'wire-2', traceId: 'loop', format: 'f', source: 'response' },
+    ].map(ev));
+    expect(streams).toHaveLength(2);
+    expect(streams[0].request).toBeDefined();
+    expect(streams[1].request).toBeDefined();
+  });
+
+  it('reports nothing uncorrelated when there are no encode events', () => {
+    expect(foldStreams(HEALTHY_EVENTS.map(ev)).uncorrelated).toEqual([]);
   });
 });
