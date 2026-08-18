@@ -648,7 +648,13 @@ export const reference: Tool = {
     'For a card-backed element it also returns the card\'s JSON Schema and a ready-to-send ' +
     'tool definition generated from it — pass `provider` to get that provider\'s envelope.',
   inputSchema: z.object({
-    name: z.string().optional(),
+    name: z
+      .string()
+      .optional()
+      .describe(
+        'The element tag, e.g. "kai-chat". Omit it (or pass "list") to get the ' +
+          'index of every element with a one-line summary, then ask again for the one you want.',
+      ),
     provider: z
       .enum(PROVIDERS)
       .optional()

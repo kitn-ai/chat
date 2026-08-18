@@ -39,6 +39,15 @@ describe('component_reference', () => {
     expect(text).toMatch(/KaiChatElement/);
   });
 
+  it('tells the caller, in the schema, how to discover what exists', async () => {
+    const shape = (reference.inputSchema as unknown as {
+      shape: { name: { description?: string } };
+    }).shape;
+    const desc = shape.name.description ?? '';
+    expect(desc).toMatch(/omit/i);
+    expect(desc).toMatch(/list/i);
+  });
+
   it('gives every event its payload shape, not just a sentence', async () => {
     const out = await reference.handler({ name: 'kai-chat' });
     const text = (out.content as { type: string; text: string }[])[0].text;
