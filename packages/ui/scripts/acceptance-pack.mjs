@@ -43,6 +43,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as esbuild from 'esbuild';
 import { runFloor, formatFloor, selfTest, assertArtifactsAgree, faultsSince, faultCount, SETTLE_MS } from './lib/invariant-floor.mjs';
 import { NEEDLE_TABLE, NEEDLES, verifyNeedles, selfTestNeedles, variantsOf } from './lib/audit-needles.mjs';
+import { renderFabricatedPage } from './lib/fabrications.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CATALOG_DIR = join(ROOT, 'src/agent-tooling/catalog');
@@ -170,6 +171,7 @@ async function importCatalog() {
       `export { listScenarios } from ${JSON.stringify(join(CATALOG_DIR, 'scenarios.ts'))};`,
       `export { listInvariants } from ${JSON.stringify(join(CATALOG_DIR, 'invariants.ts'))};`,
       `export { listSurfaceRecipes, listInventory, listPartConsumption } from ${JSON.stringify(join(CATALOG_DIR, 'surfaces.ts'))};`,
+      `export { listFabrications } from ${JSON.stringify(join(CATALOG_DIR, 'fabrications.ts'))};`,
     ].join('\n'),
   );
   const bundle = join(tmp, 'bundle.mjs');
@@ -854,28 +856,13 @@ ${list(bySort('ingredient'))}
 `;
 }
 
-function renderFabricated() {
-  return `# Components other agents invented
-
-**This section is empty. No acceptance runs have happened yet.**
-
-That is the honest state of it, not a placeholder: this page is the accumulated
-memory of tags, props and events that agents working from this pack have
-confidently written and which do not exist. It can only be filled in by running
-the deck and recording what came back, so until a run happens there is nothing
-truthful to put here.
-
-Do not read the emptiness as "agents get this right". Read it as "nobody has
-looked yet".
-
-| invented | what the agent wanted | what to use instead | first seen |
-| --- | --- | --- | --- |
-
-## When this table has rows
-
-Check anything you are about to write against it, and against
-[ELEMENTS.md](ELEMENTS.md), which is the authoritative list either way.
-`;
+// The page is rendered by scripts/lib/fabrications.mjs from the authored record
+// in src/agent-tooling/catalog/fabrications.ts -- the write-back path this page
+// did not have. Both states (empty, populated) are tested directly against that
+// renderer, which is why the rendering does not live here: with the record empty
+// today, a test through the packer could only ever exercise one of them.
+function renderFabricated(fabrications) {
+  return renderFabricatedPage(fabrications);
 }
 
 // ---------------------------------------------------------------------------
@@ -1346,7 +1333,7 @@ addAgent('PARTS.md', renderParts({ derived, partConsumption }));
 addAgent('INTEGRATIONS.md', renderIntegrations({ derived }));
 addAgent('THEME.md', renderTheme({ tokens: themeTokens, droppedFragments }));
 addAgent('INVENTORY.md', renderInventory({ inventory }));
-addAgent('FABRICATED.md', renderFabricated());
+addAgent('FABRICATED.md', renderFabricated(catalog.listFabrications()));
 
 addJudge('JUDGE.md', renderJudge({ scenario, invariants, recipes, kitVersion, floor }));
 

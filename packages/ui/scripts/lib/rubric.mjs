@@ -1,0 +1,410 @@
+// THE RUBRIC. Weighted dimensions, 0-10 anchors, one comparable score, and a
+// severity ladder defined by RUNTIME IMPACT rather than by how bad it feels.
+//
+// Two structural commitments, both of which exist because a score that can only
+// be argued about is worth nothing:
+//
+// 1. A dimension is EITHER mechanically gated OR judged, never a blend. Where a
+//    machine can answer ("does it compile", "does every tag exist", "does it
+//    stream"), the machine answers and the judge may not overrule it. Supplying
+//    a judged score for a mechanical dimension is a hard error, and so is
+//    supplying a gate result for a judged one. That is what "machine-checkable
+//    gates UNDER the judged score" has to mean if it is to mean anything.
+//
+// 2. A mechanical dimension with NO gate result is a hard error, not a pass and
+//    not a skip. This branch has been bitten repeatedly by a green that meant
+//    "the check never ran"; an unrun gate must be as loud as a failed one.
+//
+// Nothing in this module reads the filesystem, invokes a model, or knows what an
+// API key is. The catalog facts it needs are passed in.
+
+/**
+ * SEVERITY IS RUNTIME IMPACT. Not "how wrong does this look" — what does the
+ * consumer see. The ladder is ordered by what the user of the built app loses.
+ *
+ * `cap` is the highest score the affected dimension may take once a finding at
+ * that severity is recorded. This is what gives severity teeth: a judge cannot
+ * award 9 for wiring topology on output whose wiring does not connect.
+ */
+export const SEVERITIES = [
+  {
+    id: 'does-not-render',
+    rank: 4,
+    cap: 0,
+    blocking: true,
+    means: 'the output mounts and shows nothing, or throws during render. The user sees a blank area.',
+  },
+  {
+    id: 'does-not-function',
+    rank: 3,
+    cap: 3,
+    blocking: true,
+    means: 'it renders, but the thing asked for does not work: a callback never fires, a stream never appends, a submit does nothing.',
+  },
+  {
+    id: 'does-not-wire',
+    rank: 2,
+    cap: 5,
+    blocking: true,
+    means: 'each piece works alone and they are not connected: selecting a conversation does not change the thread, a panel never receives its data.',
+  },
+  {
+    id: 'cosmetic-or-practice',
+    rank: 1,
+    cap: 8,
+    blocking: false,
+    means: 'it renders, functions and wires; a best-practice or clarity issue remains. Never a reason to fail a run.',
+  },
+];
+
+export const SEVERITY_IDS = SEVERITIES.map((s) => s.id);
+export const severity = (id) => SEVERITIES.find((s) => s.id === id);
+
+/**
+ * THE DIMENSIONS.
+ *
+ * `claims` are matched against the scenario's own `scoring` lines. This is a
+ * hand-written mapping and there is no honest way around that — the scoring
+ * lines are English — but it is checked rather than trusted: `rubricFor` returns
+ * every scoring line NO dimension claimed, and `assertRubricCoverage` fails on a
+ * non-empty list. So editing a scoring line without teaching the rubric about it
+ * goes red instead of quietly dropping a criterion from the score.
+ *
+ * `runner` on a mechanical dimension says who produces the verdict:
+ *   'evaluator' — computed here, from the output text plus the catalog.
+ *   'external'  — needs real tooling (tsc, a browser, a mock wire). Supplied to
+ *                 the evaluator; ABSENT IS AN ERROR, never a pass. THIS IS THE
+ *                 SEAM CI DOES NOT CROSS.
+ */
+export const DIMENSIONS = [
+  {
+    id: 'elements-exist',
+    title: 'Correct elements — nothing fabricated',
+    gate: 'mechanical',
+    runner: 'evaluator',
+    weight: 3,
+    alwaysApplies: true,
+    claims: [/fabricat/i, /no such element/i],
+    anchors: {
+      10: 'every kai-* tag used as a tag is one the kit ships.',
+      0: 'at least one kai-* tag does not exist. A tag outside the kai- namespace is NOT a fabrication: registering your own element and pointing kai-chat.cardTypes at it is a legitimate answer.',
+    },
+  },
+  {
+    id: 'audit-clean',
+    title: 'Self-audit floor — no wrong-form needle fires',
+    gate: 'mechanical',
+    runner: 'evaluator',
+    weight: 3,
+    alwaysApplies: true,
+    claims: [/hand-rolled/i, /@kitn\.ai\/ui\/wire/],
+    anchors: {
+      10: 'no needle from the pack\'s own self-audit table fires on the emitted code, in either quote style.',
+      0: 'a wrong-form needle fires. Note the asymmetry: firing is proof of a defect, not firing is only a floor.',
+    },
+  },
+  {
+    id: 'compiles',
+    title: 'Compiles under the real consumer tsc projects',
+    gate: 'mechanical',
+    runner: 'external',
+    weight: 3,
+    alwaysApplies: false,
+    claims: [/\bcompiles?\b/i],
+    anchors: {
+      10: 'tsc --strict is clean under the consumer project for the framework asked for, resolving @kitn.ai/ui through the shipped exports map.',
+      0: 'it does not compile, or no compile was run — an unrun gate scores 0, never "skipped".',
+    },
+  },
+  {
+    id: 'registers',
+    title: 'The elements actually register and render',
+    gate: 'mechanical',
+    runner: 'external',
+    weight: 2,
+    alwaysApplies: false,
+    claims: [/\bregisters?\b/i, /\bregistration\b/i],
+    anchors: {
+      10: 'every element the output uses is defined in customElements and renders non-empty in a real browser.',
+      0: 'an element never upgrades, or renders empty.',
+    },
+  },
+  {
+    id: 'streams',
+    title: 'Streams against a mock wire',
+    gate: 'mechanical',
+    runner: 'external',
+    weight: 2,
+    alwaysApplies: false,
+    claims: [/\bstreams?\b/i, /\bSSE\b/],
+    anchors: {
+      10: 'driven by a mock provider-SSE fixture, tokens append to the thread and the finished turn matches the fixture.',
+      0: 'nothing appends, parts are dropped, or no stream was run.',
+    },
+  },
+  {
+    id: 'contract-correctness',
+    title: 'The kai- contract: properties vs attributes, event names, listener placement, delivery target',
+    gate: 'judged',
+    weight: 3,
+    alwaysApplies: true,
+    claims: [/propert/i, /attribute/i, /\bwired\b/i, /contract/i, /script-tag/i, /bundler/i],
+    anchors: {
+      10: 'arrays, objects and functions set as JS properties; every event name exists on the element it is listened on; listeners on the element itself; the delivery target respected end to end.',
+      7: 'the contract is honoured everywhere it matters, with one cosmetic slip (a scalar set as a property, an unnecessary cast).',
+      3: 'one real contract breach: an object through an attribute, a listener on a parent, an event name that does not exist.',
+      0: 'the contract is not in evidence — attributes and properties used interchangeably, invented event names.',
+    },
+  },
+  {
+    id: 'invariant-compliance',
+    title: 'The invariants applied, not merely quoted',
+    gate: 'judged',
+    weight: 3,
+    alwaysApplies: true,
+    claims: [/invariant/i, /-two-halves/i, /same array reference/i, /new array/i, /upgrade race/i],
+    anchors: {
+      10: 'every invariant that applies to this output is honoured in the code, and where one is `open` the output says so rather than assuming a guarantee.',
+      7: 'all applied; one is honoured by accident (the right shape for the wrong stated reason).',
+      3: 'one invariant broken in a way a consumer would hit.',
+      0: 'the invariants had no effect on the output.',
+    },
+  },
+  {
+    id: 'wiring-topology',
+    title: 'Host-coordinates topology: event out of A, property into B',
+    gate: 'judged',
+    weight: 2,
+    alwaysApplies: false,
+    claims: [/wiring/i, /\bwired\b/i],
+    anchors: {
+      10: 'every edge the task needs exists, on the correct elements in the correct direction, wired by the host.',
+      7: 'the edges are right; one is wired more indirectly than it needs to be.',
+      3: 'an edge is inverted or attached to the wrong element — the classic being a listener on the element that displays the data rather than the one that owns the list.',
+      0: 'the elements are placed in one subtree and expected to coordinate themselves.',
+    },
+  },
+  {
+    id: 'honesty-bound',
+    title: 'The honesty bound — refuse, or compose and name the gap',
+    gate: 'judged',
+    weight: 4,
+    alwaysApplies: true,
+    claims: [/refus/i, /invent/i],
+    anchors: {
+      10: 'nothing is invented, and where the kit cannot do what was asked the output SAYS SO and names what is missing. TWO SHAPES BOTH SCORE 10: refusing outright, and composing an honest answer out of what exists — registering your own element and routing it through kai-chat.cardTypes is a correct answer, not a failed refusal, because it fabricates no kai-* tag and states plainly what the kit does not provide.',
+      7: 'nothing invented; the gap is worked around without being named clearly.',
+      3: 'a prop, event or import path is invented rather than a tag — smaller blast radius, same failure of honesty.',
+      0: 'a kai-* element that does not exist is presented as if it does.',
+    },
+  },
+  {
+    id: 'completeness',
+    title: 'Does it actually do what was asked',
+    gate: 'judged',
+    weight: 3,
+    alwaysApplies: true,
+    claims: [/human eyeball/i, /\brender\b/i],
+    anchors: {
+      10: 'the surface asked for is there and usable, judged against the reference story where one exists.',
+      7: 'the substance is there; a named part of the request is missing and the omission is stated.',
+      3: 'a fragment: it demonstrates the idea and is not the thing requested.',
+      0: 'it does not address the request.',
+    },
+  },
+];
+
+export const dimension = (id) => DIMENSIONS.find((d) => d.id === id);
+export const MECHANICAL_IDS = DIMENSIONS.filter((d) => d.gate === 'mechanical').map((d) => d.id);
+export const JUDGED_IDS = DIMENSIONS.filter((d) => d.gate === 'judged').map((d) => d.id);
+
+/**
+ * Honest notes about what a given scenario can and cannot discriminate. These
+ * are judgements about the deck, not measurements, and they are here so a report
+ * cannot quietly present a weak signal as a strong one.
+ */
+export const SCENARIO_NOTES = {
+  S4: 'Expected to fail hardest, by design. A low score here is information about the recipe layer, not about the model.',
+  S6: 'THE STRONGEST SIGNAL IN THE DECK. A model with no catalog cannot refuse honestly, because it does not know what does not exist; this is the one scenario whose passing depends almost entirely on the pack. Score honesty-bound as a first-class outcome, not as a tiebreak. Both shapes pass: refusing, and composing through kai-chat.cardTypes with your own element.',
+  S7: 'DISCRIMINATES WEAKLY. The prompt ("nothing updates while streaming") is close to a keyword lookup against the invariant\'s own diagnosis field, and a strong model answers it from priors without reading anything. Treat a pass as near-baseline; only a FAILURE here is informative.',
+};
+
+/**
+ * The dimensions that apply to one scenario, plus the scoring lines nothing
+ * claimed. A non-empty `unclaimed` means the rubric has drifted from the deck.
+ *
+ * @param {{ id: string, scoring: string[], depth?: string }} scenario
+ */
+export function rubricFor(scenario) {
+  const claimedBy = new Map(scenario.scoring.map((line) => [line, []]));
+  const applicable = [];
+  for (const d of DIMENSIONS) {
+    const matched = scenario.scoring.filter((line) => d.claims.some((re) => re.test(line)));
+    for (const line of matched) claimedBy.get(line).push(d.id);
+    if (d.alwaysApplies || matched.length) applicable.push({ ...d, claimed: matched });
+  }
+  return {
+    scenarioId: scenario.id,
+    note: SCENARIO_NOTES[scenario.id],
+    dimensions: applicable,
+    claimedBy: Object.fromEntries(claimedBy),
+    unclaimed: scenario.scoring.filter((line) => claimedBy.get(line).length === 0),
+    totalWeight: applicable.reduce((n, d) => n + d.weight, 0),
+  };
+}
+
+/** Loud version, for callers that must not proceed on a drifted rubric. */
+export function assertRubricCoverage(scenarios) {
+  const problems = [];
+  for (const s of scenarios) {
+    const r = rubricFor(s);
+    for (const line of r.unclaimed) {
+      problems.push(
+        `${s.id}: no rubric dimension claims the scoring line "${line}". Add a claim pattern in rubric.mjs, or the criterion silently contributes nothing to the score.`,
+      );
+    }
+  }
+  if (problems.length) {
+    throw new Error(`the rubric does not cover the deck:\n  - ${problems.join('\n  - ')}`);
+  }
+  return true;
+}
+
+/**
+ * @typedef {{ id: string, dimension: string, severity: string, summary?: string, attribution: Record<string, unknown> }} Finding
+ * @typedef {{ passed: boolean, detail?: string, vacuous?: boolean }} GateResult
+ */
+
+/**
+ * Score one run.
+ *
+ * `gates`, `judged` and `findings` are optional to CALL and not optional to
+ * satisfy: omitting a gate a scenario needs is an error raised below, not a
+ * default. The signature is permissive so the error can be a sentence rather
+ * than a type failure at a call site that cannot explain itself.
+ *
+ * @param {{
+ *   scenario: { id: string, scoring: string[], depth?: string },
+ *   gates?: Record<string, GateResult>,
+ *   judged?: Record<string, number>,
+ *   findings?: Finding[],
+ * }} input
+ */
+export function scoreRun({ scenario, gates = {}, judged = {}, findings = [] }) {
+  const rubric = rubricFor(scenario);
+  if (rubric.unclaimed.length) assertRubricCoverage([scenario]);
+
+  const applicableIds = new Set(rubric.dimensions.map((d) => d.id));
+  const problems = [];
+
+  for (const id of Object.keys(gates)) {
+    if (!applicableIds.has(id)) problems.push(`gate result supplied for "${id}", which does not apply to ${scenario.id}`);
+    else if (dimension(id).gate !== 'mechanical') {
+      problems.push(
+        `gate result supplied for "${id}", which is a JUDGED dimension. A gate cannot stand in for judgement; that blend is what the mechanical/judged split exists to prevent.`,
+      );
+    }
+  }
+  for (const id of Object.keys(judged)) {
+    if (!applicableIds.has(id)) problems.push(`judged score supplied for "${id}", which does not apply to ${scenario.id}`);
+    else if (dimension(id).gate !== 'judged') {
+      problems.push(
+        `judged score supplied for "${id}", which is MECHANICALLY gated. A judge may not overrule a machine verdict — that is the point of gating it.`,
+      );
+    }
+  }
+  for (const f of findings) {
+    if (!applicableIds.has(f.dimension)) problems.push(`finding "${f.id}" names dimension "${f.dimension}", which does not apply to ${scenario.id}`);
+    if (!SEVERITY_IDS.includes(f.severity)) problems.push(`finding "${f.id}" has severity "${f.severity}"; the ladder is ${SEVERITY_IDS.join(' | ')}`);
+    if (!f.attribution) {
+      problems.push(
+        `finding "${f.id}" has no attribution. Every finding must name the catalog record that should have prevented it — an unattributed finding is a complaint, and the whole point of a run is the list of catalog changes it produces.`,
+      );
+    }
+  }
+
+  const rows = [];
+  for (const d of rubric.dimensions) {
+    let raw;
+    let source;
+    if (d.gate === 'mechanical') {
+      const g = gates[d.id];
+      if (g === undefined) {
+        problems.push(
+          `mechanical dimension "${d.id}" has no gate result. That is an ERROR, not a skip and not a pass: an unrun gate and a clean gate produce the same silence, and only one of them means anything. Run it (${d.runner === 'external' ? 'external tooling — see the seam in acceptance-run.mjs' : 'the evaluator computes this one'}) or drop the dimension from the scenario.`,
+        );
+        raw = 0;
+        source = 'missing-gate';
+      } else {
+        raw = g.passed ? 10 : 0;
+        source = g.vacuous ? 'gate (VACUOUS — scanned nothing)' : 'gate';
+      }
+    } else {
+      const j = judged[d.id];
+      if (j === undefined) {
+        problems.push(`judged dimension "${d.id}" has no score.`);
+        raw = 0;
+        source = 'missing-judgement';
+      } else if (typeof j !== 'number' || j < 0 || j > 10) {
+        problems.push(`judged dimension "${d.id}" scored ${JSON.stringify(j)}; the scale is 0-10.`);
+        raw = 0;
+        source = 'invalid';
+      } else {
+        raw = j;
+        source = 'judged';
+      }
+    }
+
+    // Severity caps. Applied AFTER the raw score, so the cap is visible as a
+    // correction rather than folded into the judgement.
+    const applied = findings.filter((f) => f.dimension === d.id);
+    const cap = applied.reduce((lo, f) => Math.min(lo, severity(f.severity)?.cap ?? 10), 10);
+    const score = Math.min(raw, cap);
+
+    rows.push({
+      id: d.id,
+      title: d.title,
+      gate: d.gate,
+      weight: d.weight,
+      raw,
+      cap,
+      capped: score < raw,
+      score,
+      source,
+      detail: d.gate === 'mechanical' ? gates[d.id]?.detail : undefined,
+      findings: applied.map((f) => f.id),
+    });
+  }
+
+  if (problems.length) {
+    const err = new Error(`the run cannot be scored:\n  - ${problems.join('\n  - ')}`);
+    // @ts-expect-error -- structured for callers that render rather than print.
+    err.problems = problems;
+    throw err;
+  }
+
+  const totalWeight = rows.reduce((n, r) => n + r.weight, 0);
+  const weighted = rows.reduce((n, r) => n + r.weight * r.score, 0);
+  // Normalised to 0-10 over the APPLICABLE weight only, so scenarios with
+  // different dimension sets stay comparable to each other.
+  const normalized = totalWeight ? Number((weighted / totalWeight).toFixed(2)) : 0;
+
+  const failedGates = rows.filter((r) => r.gate === 'mechanical' && r.score === 0).map((r) => r.id);
+  const vacuousGates = rows.filter((r) => r.source.startsWith('gate (VACUOUS')).map((r) => r.id);
+  const blocking = findings.filter((f) => severity(f.severity)?.blocking).map((f) => f.id);
+
+  return {
+    scenarioId: scenario.id,
+    note: rubric.note,
+    rows,
+    totalWeight,
+    weighted,
+    normalized,
+    failedGates,
+    vacuousGates,
+    blockingFindings: blocking,
+    // A gated failure is reported as gated, not as a low score: "it scored 6.1"
+    // and "it does not compile" are different facts and the second one outranks.
+    verdict: failedGates.length ? 'gated-fail' : blocking.length ? 'scored-with-blocking-findings' : 'scored',
+  };
+}
