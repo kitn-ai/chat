@@ -375,6 +375,14 @@ export interface AppRequestEvent extends WireDiagnosticBase {
    * This is the half the kit structurally cannot see: `ChatMessage.role` has no
    * system member at all, so a system prompt exists only in the body the app
    * builds. A role nobody sent is absent rather than 0.
+   *
+   * ★ THESE COUNTS NEED NOT SUM TO `messages`, and a consumer must not assume
+   * they do. An entry stating no readable role is counted in `messages` and
+   * contributes to no bucket -- a body of 5 messages where 1 states a role
+   * gives `messages: 5` with `byRole: { user: 1 }`. That is deliberate:
+   * bucketing the rest under `'unknown'` would invent a role nobody sent. A
+   * panel rendering these as a stacked bar should render the difference as
+   * unattributed rather than scaling it away.
    */
   byRole?: Record<string, number>;
   /**
@@ -409,12 +417,31 @@ export interface AppRequestEvent extends WireDiagnosticBase {
   url?: string;
   /** Whether that URL carried a query string. Absent exactly when `url` is. */
   hasQuery?: boolean;
-  /** UTF-8 byte length of the body as JSON. PRESENT ONLY UNDER PAYLOAD CAPTURE,
-   *  by the same rule `EncodeRequestEvent.bytes` follows: measuring means
-   *  materializing the body, and a request is made every turn. Absent also when
-   *  the body could not be stringified at all. */
+  /**
+   * UTF-8 byte length of the body AS IT WILL BE SENT.
+   *
+   * PRESENT ONLY UNDER PAYLOAD CAPTURE, by the same rule
+   * `EncodeRequestEvent.bytes` follows: measuring means materializing the body,
+   * and a request is made every turn.
+   *
+   * ABSENT WHENEVER IT CANNOT BE KNOWN EXACTLY, which is a larger set than it
+   * looks. A string, a JSON-declaring body, a `Blob`/`File` and an
+   * `ArrayBuffer` or view can all be measured exactly and are. A `FormData`, a
+   * `ReadableStream`, a `URLSearchParams`, a `Map`, or a circular body cannot,
+   * and report nothing -- never the length of the `"{}"` they happen to
+   * stringify to, which is how a 40 MB upload came to report `bytes: 2`.
+   */
   bytes?: number;
-  /** Content-bearing, so opt-in: the body itself, exactly as handed over. */
+  /**
+   * Content-bearing, so opt-in: the body itself, exactly as handed over.
+   *
+   * ★ PUBLISHED BY REFERENCE, NOT CLONED. A subscriber that mutates
+   * `payload.body` mutates the object the app is about to send. Deep-cloning
+   * every request would be expensive on exactly the large bodies worth
+   * inspecting, and would defeat the point of handing the real thing over -- so
+   * the contract is that a consumer TREATS THIS AS READ-ONLY. Clone it yourself
+   * if you intend to edit it.
+   */
   payload?: { body: unknown };
 }
 
