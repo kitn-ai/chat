@@ -190,6 +190,12 @@ export function Dialog(props: DialogProps) {
             tabindex={-1}
             data-expanded={presence.state() === 'open' ? '' : undefined}
             data-closed={presence.state() === 'closed' ? '' : undefined}
+            // `outline-none` is DELIBERATE here and must stay. This is a
+            // `tabindex={-1}` focus-trap container: it is focused
+            // programmatically on open to move keyboard and screen-reader
+            // context into the dialog, and is never a tab stop. Drawing a ring
+            // would put a blue box around the entire dialog every time it
+            // opened. The controls inside it carry their own focus rings.
             class={cn(
               'flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-border bg-background text-foreground shadow-xl outline-none',
               'animate-in fade-in-0 zoom-in-95 data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95 motion-reduce:animate-none',

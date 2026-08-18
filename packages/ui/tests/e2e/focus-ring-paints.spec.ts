@@ -64,8 +64,31 @@ const MIN_FOCUSABLES_MEASURED = 28;
 /** A 2px ring around even a small control changes far more than this. */
 const MIN_RING_PIXELS = 20;
 
-const FOCUSABLE_SELECTOR =
-  'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"]),[contenteditable="true"]';
+/**
+ * What a keyboard user can actually Tab to. Two subtleties, both of which this
+ * selector originally got wrong and both of which made it under-report:
+ *
+ *  - `[contenteditable]:not([contenteditable="false"])`, NOT
+ *    `[contenteditable="true"]`. The composer sets
+ *    `contentEditable="plaintext-only"`, a real tab stop that the ="true" form
+ *    never matches — the single most important text surface in the kit was
+ *    being skipped silently.
+ *  - `:not([tabindex="-1"])` on EVERY clause, not just the `[tabindex]` one. A
+ *    `<button tabindex="-1">` is out of the tab order but still matches
+ *    `button:not([disabled])`, so natively-focusable elements opted out of Tab
+ *    were still being counted as tab stops.
+ */
+const FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]',
+  '[contenteditable]:not([contenteditable="false"])',
+]
+  .map((s) => `${s}:not([tabindex="-1"])`)
+  .join(',');
 
 /* ------------------------------------------------------------------ helpers */
 
@@ -189,10 +212,16 @@ async function focusablesOf(page: Page, selectorRoot: 'mounts' | 'controls') {
       };
       const host = document.getElementById(rootId);
       if (host) collect(host);
-      // Only things a user could actually see and focus.
+      // Only things a user could actually SEE. A control at `opacity: 0` (the
+      // scroll-to-bottom button in its resting state) has no pixels to change,
+      // so measuring paint on it says nothing about focus styling. Those are a
+      // separate defect — focusable but invisible — reported by the companion
+      // check below rather than silently folded into this one.
       return out.filter((el) => {
         const r = el.getBoundingClientRect();
-        return r.width > 2 && r.height > 2;
+        if (r.width <= 2 || r.height <= 2) return false;
+        const cs = getComputedStyle(el);
+        return cs.visibility !== 'hidden' && Number(cs.opacity) > 0.01;
       });
     },
     { rootId: selectorRoot, sel: FOCUSABLE_SELECTOR },
@@ -339,5 +368,52 @@ test('every focusable control in every kai-* element paints a focus indicator', 
     failures,
     `${failures.length} focusable control(s) show NO visible focus indicator to a keyboard user:\n` +
       failures.map((f) => `  ✗ ${f}`).join('\n'),
+  ).toEqual([]);
+});
+
+/**
+ * The other half of "no visible focus indicator": a control the user can Tab to
+ * but cannot see at all. Excluding these from the paint measurement above is
+ * only honest if something still fails on them, otherwise hiding a control
+ * becomes a way to make the paint guard go quiet.
+ */
+test('no kai-* element leaves an invisible control in the tab order', async ({ page }) => {
+  await assertDocumentHasNoTailwind(page);
+
+  const offenders: string[] = [];
+  for (const tag of TAGS) {
+    await mountOnly(page, tag);
+    const found = await page.evaluate(
+      ({ sel, tag }) => {
+        const out: Element[] = [];
+        const collect = (root: ParentNode) => {
+          for (const el of Array.from(root.querySelectorAll('*'))) {
+            if (el.matches(sel)) out.push(el);
+            if ((el as HTMLElement).shadowRoot) collect((el as HTMLElement).shadowRoot!);
+          }
+        };
+        collect(document.getElementById('mounts')!);
+        return out
+          .filter((el) => {
+            const r = el.getBoundingClientRect();
+            if (r.width <= 2 || r.height <= 2) return false;
+            const cs = getComputedStyle(el);
+            return cs.visibility === 'hidden' || Number(cs.opacity) <= 0.01;
+          })
+          .map((el) => {
+            const label = el.getAttribute('aria-label') || (el.textContent || '').trim().slice(0, 24);
+            return `${tag} › ${el.tagName.toLowerCase()}${label ? ` "${label}"` : ''}`;
+          });
+      },
+      { sel: FOCUSABLE_SELECTOR, tag },
+    );
+    offenders.push(...found);
+  }
+
+  expect(
+    offenders,
+    'these controls are invisible (opacity 0 / visibility hidden) yet still reachable by Tab, ' +
+      'so a keyboard user lands on something they cannot see:\n' +
+      offenders.map((o) => `  ✗ ${o}`).join('\n'),
   ).toEqual([]);
 });

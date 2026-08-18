@@ -62,7 +62,11 @@ function CodeBlockCode(props: CodeBlockCodeProps) {
 
   const classNames = () =>
     cn(
-      'w-full overflow-x-auto [&>pre]:px-4 [&>pre]:py-4',
+      // `kai-focus-inset`: this region fills a rounded `overflow: clip` wrapper,
+      // so the default focus outline (offset 2px, i.e. entirely outside the
+      // border box) was clipped away and keyboard users saw nothing. The inset
+      // ring is drawn inside the box, where the wrapper cannot erase it.
+      'w-full overflow-x-auto kai-focus-inset [&>pre]:px-4 [&>pre]:py-4',
       codeTextSize(),
       local.class
     );
