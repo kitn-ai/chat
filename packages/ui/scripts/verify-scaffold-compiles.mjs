@@ -212,31 +212,21 @@
 //
 // `--keep` leaves the temp directory in place and prints its path.
 // `--filter agentic` narrows the matrix while iterating.
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, symlinkSync, rmSync, existsSync, readdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, rmSync, existsSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { tmpdir } from 'node:os';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
+// THE TSC HARNESS IS SHARED, NOT COPIED. The temp tree, the six projects and the
+// anti-theatre self-test moved to scripts/lib/consumer-tsc-projects.mjs so the
+// acceptance deck's `compiles` gate compiles against the same definition this
+// gate does. A second copy of PROJECTS is exactly the defect class this repo
+// keeps paying for; read that module's header before editing either caller.
+import { EXT, FRAMEWORK_PROJECT as PROJECT, createConsumerTsc, liftScript } from './lib/consumer-tsc-projects.mjs';
 
-// Resolve tooling through Node's resolver rather than a hard-coded
-// node_modules path: pnpm's layout differs between a workspace root, a
-// worktree, and CI, and a wrong guess here fails as a wall of TS2307 that reads
-// like a scaffolder defect.
+// `typescript` is loaded through Node's resolver rather than imported: the
+// checks below use its AST API synchronously, deep inside functions.
 const require = createRequire(import.meta.url);
-/** Directory a package was installed into, resolved from this script. */
-const pkgDir = (name) => {
-  try {
-    return dirname(require.resolve(`${name}/package.json`));
-  } catch {
-    try {
-      // Packages without a `./package.json` export (older typings packages).
-      return dirname(require.resolve(name));
-    } catch {
-      return null;
-    }
-  }
-};
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const KEEP = process.argv.includes('--keep');
@@ -322,339 +312,24 @@ let INTEGRATIONS = [];
  * any other cell — `htmlStructureCheck` keeps only the checks tsc cannot make.
  */
 const FRAMEWORKS = ['react', 'next', 'tanstack-start', 'vue', 'svelte', 'angular', 'solid', 'html'];
-const EXT = {
-  react: 'tsx', next: 'tsx', 'tanstack-start': 'tsx', vue: 'ts', svelte: 'ts',
-  angular: 'ts', solid: 'tsx', html: 'ts',
-};
-/** Which tsc project each framework compiles under — see the header. */
-const PROJECT = {
-  react: 'default', next: 'default', 'tanstack-start': 'default', vue: 'default', svelte: 'default',
-  angular: 'angular', solid: 'solid', html: 'default',
-};
 
 const fail = (msg) => {
   console.error(`\n✗ verify-scaffold-compiles: ${msg}\n`);
   process.exit(1);
 };
 
-if (!existsSync(resolve(ROOT, 'dist/wire/index.d.ts'))) {
-  fail('dist/wire/index.d.ts not found. Run `nx build ui` first: this checks the SHIPPED types.');
-}
-
-const tmp = mkdtempSync(join(tmpdir(), 'kai-scaffold-tsc-'));
-const cleanup = () => {
-  if (KEEP) console.log(`\n  (--keep) harness left at ${tmp}`);
-  else rmSync(tmp, { recursive: true, force: true });
-};
-
-// ── 1. node_modules: the REAL package, resolved through its own exports map ──
-const nm = join(tmp, 'node_modules');
-mkdirSync(join(nm, '@kitn.ai'), { recursive: true });
-mkdirSync(join(nm, '@types'), { recursive: true });
-symlinkSync(ROOT, join(nm, '@kitn.ai/ui'), 'dir');
-// Every one of these is REQUIRED. A missing package would surface as TS2307 on
-// dozens of files and read like a scaffolder defect, so fail loudly instead.
-// `solid-js` is what the solid scaffold's own JSX is checked against, and
-// `@angular/core` is what the angular one's decorator + signals resolve to —
-// both are as load-bearing here as react's types are for the JSX family.
-for (const scope of ['@angular', '@sveltejs', '@tanstack', '@cloudflare', '@langchain', '@mastra']) {
-  mkdirSync(join(nm, scope), { recursive: true });
-}
-for (const pkg of [
-  // ── front end (block 1) ──
-  'react', 'react-dom', 'vue', 'svelte', '@types/react', '@types/react-dom',
-  'solid-js', '@angular/core',
-  // ── backend routes (block 2) ──
-  // The HOSTS. These decide the shape a route has to have, and getting one wrong
-  // is the defect class block (2) keeps shipping, so they are the real packages
-  // rather than a `declare module`. @types/node is load-bearing twice over: it is
-  // what makes route-node's `Request` undici's instead of the browser's.
-  '@types/node', '@types/express', 'express', '@sveltejs/kit',
-  '@tanstack/react-router', '@tanstack/react-start', '@cloudflare/workers-types',
-  // Not imported by any route, but `routeTree.gen.ts` augments it by name, and a
-  // `declare module` only resolves against THIS node_modules tree.
-  '@tanstack/router-core',
-  '@angular/ssr', 'vite',
-  // The SDKs an integration's handler calls. Also real: a stub would make
-  // `streamText(...)` / `createReactAgent(...)` accept anything, so a scaffold
-  // that calls them wrongly would compile here and fail in the consumer's app.
-  'ai', '@langchain/core', '@langchain/openai', '@langchain/langgraph',
-  '@mastra/client-js', 'zod',
-]) {
-  const src = pkgDir(pkg);
-  if (!src) {
-    cleanup();
-    fail(`'${pkg}' is not installed. Run \`pnpm install\` at the repo root.`);
-  }
-  symlinkSync(src, join(nm, pkg), 'dir');
-}
-// @angular/core's own typings reference rxjs. skipLibCheck means a miss is not
-// fatal, so this one is best-effort rather than a hard requirement.
-const rxjs = pkgDir('rxjs');
-if (rxjs) symlinkSync(rxjs, join(nm, 'rxjs'), 'dir');
-
-// Only the packages a scaffold imports that this repo does not install.
-writeFileSync(
-  join(tmp, 'shims.d.ts'),
-  `// Third-party packages this repo does not install. These stand in ONLY so the
-// import resolves; they mirror the real signatures closely enough that a genuine
-// misuse in the emitted code still errors. Keep them permissive where the real
-// package is permissive, and no looser: a shim that swallows a real defect makes
-// this whole harness theatre.
-declare module 'next/dynamic' {
-  import type { ComponentType } from 'react';
-  export default function dynamic<P = Record<string, unknown>>(
-    loader: () => Promise<ComponentType<P> | { default: ComponentType<P> }>,
-    options?: { ssr?: boolean; loading?: ComponentType },
-  ): ComponentType<P>;
-}
-declare module '@tanstack/react-router' {
-  import type { ComponentType } from 'react';
-  // The real options object carries loaders, validators, ssr, etc. Only
-  // \`component\` matters here, so the rest stays open.
-  type RouteOptions = { component: ComponentType } & Record<string, unknown>;
-  export function createFileRoute(path: string): (options: RouteOptions) => unknown;
-  export function createLazyFileRoute(path: string): (options: RouteOptions) => unknown;
-}
-declare module '*.css';
-`,
-);
-
-/** Options every project shares: what `npm create vite` turns on, which is what
- *  a consumer builds with. */
-const BASE_OPTIONS = {
-  target: 'ES2022',
-  lib: ['ES2022', 'DOM', 'DOM.Iterable'],
-  module: 'ESNext',
-  moduleResolution: 'bundler',
-  strict: true,
-  noUnusedLocals: true,
-  noUnusedParameters: true,
-  noEmit: true,
-  skipLibCheck: true,
-  esModuleInterop: true,
-  forceConsistentCasingInFileNames: true,
-};
-
-/**
- * The three tsc projects. `default` stays at the temp root (so the existing
- * shims.d.ts and its non-recursive `include` keep working); the other two are
- * subdirectories, which Node/TS resolve node_modules for by walking up.
- *
- * The per-project options are not stylistic — they mirror what each framework's
- * own generated tsconfig sets, and getting them wrong turns a healthy scaffold
- * into a wall of harness noise:
- *   · angular: `experimentalDecorators` (see the tsconfig `ng new` writes).
- *   · solid:   `jsx: preserve` + `jsxImportSource: solid-js` (see the tsconfig
- *              in examples/starters/solid).
- */
-const PROJECTS = {
-  default: { dir: tmp, options: { jsx: 'react-jsx' } },
-  angular: {
-    dir: join(tmp, 'angular'),
-    // Copied from the tsconfig.json `ng new` actually writes, not invented. Every
-    // one of these is stricter than the react/vue baseline, and the first version
-    // of this harness without them shipped an emitted `input.query` that `ng
-    // build` rejected with TS4111 while this gate stayed green.
-    options: {
-      experimentalDecorators: true,
-      noImplicitOverride: true,
-      noPropertyAccessFromIndexSignature: true,
-      noImplicitReturns: true,
-      noFallthroughCasesInSwitch: true,
-      isolatedModules: true,
-    },
-  },
-  solid: { dir: join(tmp, 'solid'), options: { jsx: 'preserve', jsxImportSource: 'solid-js' } },
-
-  /**
-   * The three ROUTE projects. Block (2) runs on a server, and which server
-   * decides the global types — which is exactly the axis block (2) kept getting
-   * wrong, so each host gets the tsconfig it really ships with.
-   *
-   * `types` is set EXPLICITLY on all three. With the field absent, tsc pulls in
-   * every package under node_modules/@types, so a Worker route would silently be
-   * checked with Node's globals and a Vite middleware with the browser's. That
-   * default is what would quietly hand `request.json()` back as `any`.
-   *
-   * Routes live one directory per case (`<project>/<label>/…`) because a route is
-   * a multi-FILE document — the Vite adapter emits src/server/chat.ts AND
-   * vite-chat-api.ts, and the second imports the first. `moduleDetection: force`
-   * keeps a file that happens to have no import/export from leaking into the
-   * global scope and colliding with the other 98 cases.
-   */
-  'route-node': {
-    dir: join(tmp, 'route-node'),
-    include: ['**/*.ts', '**/*.d.ts'],
-    // A stock `npm create vite` tsconfig.node.json: ES lib, node types, NO DOM,
-    // and `module: nodenext`. The missing DOM lib is what makes `Request` resolve
-    // to undici's (json(): Promise<unknown>) rather than the browser's
-    // (json(): Promise<any>), and therefore what a consumer's `tsc -b` really sees
-    // for vite.config.ts → vite-chat-api.ts → server/chat.ts.
-    //
-    // nodenext is the OTHER half of that fidelity, and it is the only project here
-    // that runs in it. It was deliberately absent until 0.19.x: the kit's shipped
-    // .d.ts files re-exported './read', './encode', … with no file extension, which
-    // `bundler` tolerates and node16/nodenext rejects — and with skipLibCheck on
-    // (every Vite template) the rejection is SUPPRESSED and the whole public API
-    // silently becomes `any`. Measured on 0.19.0, same file, only the mode changed:
-    //   moduleResolution: bundler   `const x: OpenAIWireMessage = 12345` -> TS2322
-    //   module: nodenext            the same line compiles CLEAN
-    // So this project would have passed vacuously, which is why it stayed on
-    // bundler with `assertRelativeImportsHaveExtensions` covering TS2835 textually.
-    //
-    // scripts/emit-subpath-dts.mjs now stamps an explicit extension on every
-    // relative specifier it emits, so nodenext resolves the kit for real and the
-    // swap is live. The selfTest below is what keeps it honest: re-break a single
-    // specifier in dist/wire/index.d.ts and THIS project — alone among the six —
-    // fails with "`@kitn.ai/ui/wire` is resolving to `any`" while every bundler
-    // project stays green. Nothing else in the repo's gates can see that.
-    //
-    // `packageJson: { type: 'module' }` is load-bearing, not decoration. The temp
-    // dir has no package.json of its own, so nodenext would infer CommonJS and
-    // fail 24 routes on TS1470 (`import.meta` is not allowed) plus a bogus
-    // "vite has no exported member 'Plugin'" — neither of which a real Vite
-    // template (which ships `"type": "module"`) would ever see.
-    packageJson: { type: 'module' },
-    options: {
-      lib: ['ES2023'],
-      types: ['node'],
-      moduleDetection: 'force',
-      module: 'nodenext',
-      moduleResolution: 'nodenext',
-    },
-    // Proves express's types are the REAL ones and did not resolve to `any`.
-    probe: {
-      code: `import type { RequestHandler } from 'express';\nexport const bad: RequestHandler = 5;\n`,
-      expect: /error TS2322/,
-      why: "express's types resolved to `any`",
-    },
-  },
-  'route-web': {
-    dir: join(tmp, 'route-web'),
-    include: ['**/*.ts', '**/*.d.ts'],
-    // Next, SvelteKit and TanStack Start all ship DOM in `lib` (see the tsconfig
-    // each one generates), so `request.json()` is legitimately `any` here and the
-    // undici narrowing below does not apply. Keeping this project HONESTLY
-    // different from route-node is the point: a route that only compiles because
-    // the harness gave it the browser's globals is not a route that runs.
-    options: { lib: ['ES2023', 'DOM', 'DOM.Iterable'], types: ['node'], moduleDetection: 'force' },
-    probe: {
-      code: `import type { RequestHandler } from '@sveltejs/kit';\nexport const bad: RequestHandler = 5;\n`,
-      expect: /error TS2322/,
-      why: "@sveltejs/kit's types resolved to `any`",
-    },
-  },
-  'route-worker': {
-    dir: join(tmp, 'route-worker'),
-    include: ['**/*.ts', '**/*.d.ts'],
-    // workers-types AND node, which is the combination the emitted Worker route
-    // itself prescribes: "set compatibility_date 2025-04-01 (or later) with
-    // nodejs_compat, which populates process.env from your bindings". Dropping
-    // node here would fail the route on `process.env` for a reason the scaffold
-    // already tells the consumer how to fix.
-    options: {
-      lib: ['ES2023'],
-      types: ['@cloudflare/workers-types', 'node'],
-      moduleDetection: 'force',
-    },
-    probe: {
-      code: `export const bad: Ai = 5;\n`,
-      expect: /error TS2322/,
-      why: '@cloudflare/workers-types resolved to `any`',
-    },
-  },
-};
-
-for (const [name, project] of Object.entries(PROJECTS)) {
-  if (name !== 'default') mkdirSync(project.dir, { recursive: true });
-  if (project.packageJson)
-    writeFileSync(join(project.dir, 'package.json'), JSON.stringify(project.packageJson, null, 2));
-  writeFileSync(
-    join(project.dir, 'tsconfig.json'),
-    JSON.stringify(
-      {
-        compilerOptions: { ...BASE_OPTIONS, ...project.options },
-        include: project.include ?? ['*.ts', '*.tsx'],
-      },
-      null,
-      2,
-    ),
-  );
-}
-
-const tsDir = pkgDir('typescript');
-if (!tsDir) fail('typescript is not installed. Run `pnpm install` at the repo root.');
-const TSC = join(tsDir, 'bin/tsc');
-
-/** Run tsc over one project; return raw diagnostics text ('' when clean). */
-function runTsc(project = 'default') {
-  try {
-    execFileSync(process.execPath, [TSC, '--project', join(PROJECTS[project].dir, 'tsconfig.json')], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    return '';
-  } catch (e) {
-    return `${e.stdout ?? ''}${e.stderr ?? ''}`;
+// EXT and PROJECT now live in the shared module, so a framework added to the
+// list above and nowhere else would write `<label>.undefined` into a project
+// keyed `undefined` — a cell that compiles nothing and says nothing. Refuse.
+for (const f of FRAMEWORKS) {
+  if (!EXT[f] || !PROJECT[f]) {
+    fail(`framework "${f}" has no file extension / tsc project in scripts/lib/consumer-tsc-projects.mjs.`);
   }
 }
 
-/** Delete every generated source file in a project, keeping tsconfig/shims. */
-function clearSources(project = 'default') {
-  for (const f of readdirSync(PROJECTS[project].dir)) {
-    if (/\.tsx?$/.test(f) && f !== 'shims.d.ts') rmSync(join(PROJECTS[project].dir, f), { force: true });
-  }
-}
-
-// ── 2. Anti-theatre self-test: these MUST fail to compile ───────────────────
-// Run for EVERY project. A green angular/solid matrix under a tsconfig whose
-// types silently resolved to `any` would be exactly the kind of check that
-// proves nothing, and the two new projects are the ones most likely to be
-// misconfigured (a wrong `jsx`, a missing symlink).
-function selfTest(project = 'default') {
-  const { dir, probe } = PROJECTS[project];
-  writeFileSync(
-    join(dir, 'probe-wrong-type.ts'),
-    `import { toOpenAIMessages } from '@kitn.ai/ui/wire';\nexport const bad: number = toOpenAIMessages([]);\n`,
-  );
-  writeFileSync(
-    join(dir, 'probe-unused-import.ts'),
-    `import { applyToolOutput } from '@kitn.ai/ui/wire';\nexport const ok = 1;\n`,
-  );
-  // A route project's whole value is the HOST typings it adds, and those are the
-  // ones most likely to have silently not resolved (a missing devDependency, a
-  // wrong `types` entry). Assigning 5 to one of their types has to error, or the
-  // package came back as `any` and every route below would pass vacuously.
-  if (probe) writeFileSync(join(dir, 'probe-framework.ts'), probe.code);
-  const out = runTsc(project);
-  const wrongType = /probe-wrong-type\.ts.*error TS2322/s.test(out);
-  const unused = /probe-unused-import\.ts.*error TS6133/s.test(out);
-  const frameworkReal = !probe || new RegExp(`probe-framework\\.ts.*${probe.expect.source}`, 's').test(out);
-  clearSources(project);
-  if (!wrongType)
-    fail(
-      `self-test [${project}]: assigning OpenAIWireMessage[] to \`number\` did NOT error.\n` +
-        '  `@kitn.ai/ui/wire` is resolving to `any` (or not at all), so a green matrix would be meaningless.\n' +
-        `  tsc said:\n${out || '  (nothing)'}`,
-    );
-  if (!unused)
-    fail(
-      `self-test [${project}]: an unused import did NOT error.\n` +
-        '  noUnusedLocals is not in effect, which is the single most valuable check here.\n' +
-        `  tsc said:\n${out || '  (nothing)'}`,
-    );
-  if (!frameworkReal)
-    fail(
-      `self-test [${project}]: the framework probe did NOT error — ${probe.why}.\n` +
-        '  Every route in this project would then typecheck against `any` and prove nothing.\n' +
-        `  tsc said:\n${out || '  (nothing)'}`,
-    );
-  console.log(
-    `  ✓ self-test [${project}]: types resolve for real (TS2322) and noUnusedLocals is live (TS6133)` +
-      (probe ? ' + host typings are real' : ''),
-  );
-}
+// The temp tree, the six tsc projects and the anti-theatre self-test — one
+// definition, shared with scripts/acceptance-gate-compiles.mjs.
+const { tmp, PROJECTS, runTsc, clearSources, selfTest, cleanup } = createConsumerTsc({ keep: KEEP, fail });
 
 /**
  * The angular template, which tsc cannot see.
@@ -1100,31 +775,8 @@ function frontEnd(text) {
   return block.replace(/^=== \(1\) FRONT-END[^\n]*===\n/, '');
 }
 
-/**
- * Lift a `<script>` block out of a .vue/.svelte single-file component into
- * plain TS. See the header: the `void [...]` footer stands in for the template.
- */
-function liftScript(block) {
-  const m = block.match(/<script[^>]*>\n?([\s\S]*?)\n?<\/script>/);
-  if (!m) return null;
-  const lines = m[1].split('\n');
-  // Dedent by the smallest indent on a non-blank line (svelte indents by 2).
-  const indents = lines.filter((l) => l.trim()).map((l) => l.match(/^ */)[0].length);
-  const pad = indents.length ? Math.min(...indents) : 0;
-  const body = lines.map((l) => l.slice(pad)).join('\n');
-  // Column-zero declarations only, and NEVER imports.
-  const names = new Set();
-  for (const line of body.split('\n')) {
-    const d = line.match(/^(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)/);
-    if (d) names.add(d[1]);
-    const f = line.match(/^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/);
-    if (f) names.add(f[1]);
-  }
-  const footer = names.size
-    ? `\n// harness: the template would read these; see verify-scaffold-compiles.mjs\nvoid [${[...names].join(', ')}];\n`
-    : '';
-  return `${body}\n${footer}`;
-}
+// `liftScript` moved to scripts/lib/consumer-tsc-projects.mjs — the acceptance
+// `compiles` gate has to lift a .vue/.svelte answer the same way this does.
 
 /**
  * The `html` target, which tsc CAN now see.

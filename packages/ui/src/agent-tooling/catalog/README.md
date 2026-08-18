@@ -44,14 +44,18 @@ of the tree by a generator; everything else is written by hand.
 | `scripts/acceptance-pack.mjs` | Builds one scenario's pack: `agent/` and `judge/` |
 | `scripts/acceptance-run.mjs` | Records what is about to be measured, and isolates the handover. Invokes no model |
 | `scripts/acceptance-eval.mjs` | Scores a run and produces the catalog-improvement analysis |
+| `scripts/acceptance-gate-compiles.mjs` | The `compiles` gate. Runs `tsc --strict` over the output under the real consumer projects and writes `gates.json` |
 
-`scripts/lib/` holds the pieces those three share: `rubric.mjs` (weighted
+`scripts/lib/` holds the pieces those four share: `rubric.mjs` (weighted
 dimensions, 0–10 anchors, the severity ladder), `catalog-attribution.mjs` (the
 improvement analysis), `invariant-floor.mjs` (executes every `examples[].right`),
 `audit-needles.mjs` (the self-audit search strings and their recall tier),
 `output-scan.mjs` (the two gates the evaluator runs itself), `run-routing.mjs`
 (which model may take which execution path), `handover.mjs` (the judge-leak
-scan), `import-catalog.mjs` (esbuild-bundles the authored TS for plain Node).
+scan), `import-catalog.mjs` (esbuild-bundles the authored TS for plain Node),
+`consumer-tsc-projects.mjs` (the throwaway consumer tree and the six tsc
+projects — shared with `verify:scaffold`, never copied), `compile-plan.mjs`
+(which scanned units tsc can actually check, and what the rest are reported as).
 
 ---
 
@@ -280,14 +284,75 @@ export async function runAgent(request) {
 hand an agent the answer key by accident — it is never told where the answer key
 is. CI never passes `--exec`.
 
-### 5. Score it
+### 5. Run the external gates
+
+`compiles` is implemented; `registers` and `streams` are not (see *What is not
+built*). It compiles the run's output under the same tsc projects
+`verify:scaffold` uses — the real `@kitn.ai/ui` exports map, `--strict`,
+`noUnusedLocals` — and writes its verdict into the run's `gates.json`. It needs
+a built tree, and it will not guess which framework was asked for:
+
+```
+$ pnpm --filter @kitn.ai/ui exec node scripts/acceptance-gate-compiles.mjs \
+    --run /tmp/runs/20260818-181634-S1-claude-opus-5 --framework react
+acceptance-gate-compiles: 20260818-181634-S1-claude-opus-5 — S1, framework react → default project
+  ✓ self-test [default]: types resolve for real (TS2322) and noUnusedLocals is live (TS6133)
+  ✓ 1 unit(s) compile clean under the default project (framework react)
+acceptance-gate-compiles: wrote compiles = PASSED into .../gates.json
+```
+
+A failure names the file and the diagnostic, with the harness's own path prefix
+stripped off:
+
+```
+  ✗ 1 error(s) under the default project (framework react):
+      src/main.ts(30,26): error TS2345: Argument of type 'ReadableStream<Uint8Array<ArrayBuffer>> | null' is not assignable to parameter of type 'StreamSource'.
+acceptance-gate-compiles: wrote compiles = FAILED into .../gates.json
+```
+
+**And an answer with no code in it gets NO verdict at all**, which is the whole
+design of the third outcome:
+
+```
+acceptance-gate-compiles: NOT APPLICABLE — 1 output file(s) and not one unit of code in any of them.
+  Nothing was written to gates.json, deliberately. An external gate cannot report "there was nothing to look at":
+  it did not read the output, and a self-declared absence is what scored a real S1 run 10.00/10 once.
+  acceptance-eval runs the same scan itself and marks the dimension not-applicable — out of the score entirely,
+  neither passed nor failed. Run it and read the not-applicable section of REPORT.md.
+```
+
+It refuses a scenario the dimension does not apply to, rather than compiling
+something whose result the evaluator would then throw away:
+
+```
+✗ acceptance-gate-compiles: "compiles" does not apply to S6 — no scoring line in that scenario claims it, so acceptance-eval would refuse a gates file that answered it. Scenarios that need it: S1, S2, S4.
+```
+
+`--self-test` plants a fault per outcome and watches each one fire, including
+the ones only `--strict` produces and a sandbox whose tsconfig has been gutted:
+
+```
+$ pnpm --filter @kitn.ai/ui run gate:compiles:self-test
+...
+✓ OUTCOME 2 — an implicit `any` (TS7006) — the error ONLY --strict produces
+✓ OUTCOME 2 — a possibly-null value used without a check (TS18047/TS2531) — strictNullChecks is live
+✓ OUTCOME 2 — an unused import (TS6133) — noUnusedLocals is live, which is what fails a stock `npm run build`
+✓ OUTCOME 2 — a WRONG-TYPE use of the kit (TS2322) — @kitn.ai/ui did not resolve to `any`
+✓ OUTCOME 2 — a broken fence inside a markdown answer — a prose-shaped answer is measured too
+✓ the sandbox control PASSES on the real tsconfig (positive control)
+✓ a sandbox whose tsconfig lost its strict flags is DETECTED, so a green cannot come from a dead harness
+✓ acceptance-gate-compiles: 16 controls, every planted fault detected.
+```
+
+### 6. Score it
 
 Generate the findings template, fill it, then evaluate:
 
 ```
 $ pnpm --filter @kitn.ai/ui exec node scripts/acceptance-eval.mjs --template /tmp/runs/20260818-111308-S1-claude-opus-5
 acceptance-eval: wrote .../findings.template.json — fill judgedScores and findings, then --run ...
-  external gates still needed: compiles, registers (supply via --gates; absent scores 0, never "skipped")
+  external gates still needed: compiles, registers (supply via --gates; absent scores 0, never "skipped" — unless the output contains no code at all, which the evaluator adjudicates as not-applicable)
+  · compiles: node scripts/acceptance-gate-compiles.mjs --run /tmp/runs/20260818-111308-S1-claude-opus-5 --framework <react|vue|…>
 ```
 
 The template carries the full rubric, the severity ladder and the attribution
@@ -386,7 +451,8 @@ because an unrun gate and a clean gate produce the same silence and only one of
 them means anything. `elements-exist` and `audit-clean` the evaluator computes
 itself from the output text and the catalog; supplying either through `--gates`
 is refused. `compiles`, `registers` and `streams` need real tooling and come in
-through `--gates`.
+through `--gates`. The one exception is an output with no code in it at all, and
+it is not an exception a gate may claim for itself — see below.
 
 **Severity caps the dimension.** From an S1 run: a `does-not-render` finding
 filed against `completeness` produced `0.0 (capped from 7.0)`. The ladder is
@@ -394,15 +460,40 @@ filed against `completeness` produced `0.0 (capped from 7.0)`. The ladder is
 `cosmetic-or-practice` (8, never blocking).
 
 **Not-applicable is not failed.** A prose answer — a refusal, a diagnosis — has
-no code for the two scanning gates to read, so they leave the score entirely:
+no code for a gate to read, so every gate that needs one leaves the score
+entirely. From a real S1 run answered as prose, with nothing supplied through
+`--gates` at all:
 
 ```
-**2 dimension(s) did not apply** — elements-exist, audit-clean — because these
-gates found no code they could read in the output. They are out of the score
-entirely, and the remaining weights are renormalised over 13 of 19. ... Only the
-gates the evaluator runs itself can report this — an external gate that did not
-run is a failure, not an absence.
+## Verdict: scored — 10.00 / 10
+
+**4 dimension(s) did not apply** — elements-exist, audit-clean, compiles, registers — because these
+gates found no code they could read in the output. They are out of the score entirely, and the
+remaining weights are renormalised over 15 of 26. ... No gate REPORTED this about itself — the
+evaluator's own scan of the output established it, which is the only way it can be established.
 ```
+
+**WHO gets to say there was nothing to look at is the whole point.** Both wrong
+answers have already shipped here: scoring a subject-less gate 10 handed out
+weight nobody earned, and scoring it 0 made a correct prose refusal — the deck's
+best answer — score worst and then hard-fail. Absence of subject is not absence
+of merit. But an external runner cannot discover an absence either: it never read
+the output, and a hand-written `{passed: false, vacuous: true}` on three external
+gates once scored a real S1 run **with code in it** 10.00/10, exit 0.
+
+So the verdict belongs to the party that looked. The evaluator runs `codeUnits`
+over the output for its own gates already; when that finds nothing, and nothing
+in the output went unread, it marks every mechanical dimension not-applicable and
+stamps the external ones `adjudicated: 'evaluator'`. Three things follow, and
+each is enforced:
+
+- a gates file may not supply `adjudicated` — it is refused, not ignored;
+- a gates file that reports an external gate `passed: true` over an output the
+  evaluator found no code in is refused (`a compile … over nothing is not a pass`);
+- a self-declared `vacuous: true` from a runner is refused exactly as before.
+
+`tests/scripts/acceptance-gate-compiles.test.ts` pins all three, and each one was
+mutation-tested — the check was watched going red before it was trusted.
 
 **The tier delta** is the point of running two models. `--compare` puts them side
 by side, and warns when the denominators differ:
@@ -519,11 +610,19 @@ pnpm --filter @kitn.ai/ui exec node scripts/acceptance-pack.mjs --floor
 pnpm --filter @kitn.ai/ui exec vitest run --project=unit src/agent-tooling/catalog tests/scripts
 ```
 
-That last one, on this tree:
+And, if you touched the `compiles` gate or the tsc projects it shares with
+`verify:scaffold` (both need a build):
 
 ```
- Test Files  30 passed (30)
-      Tests  406 passed (406)
+pnpm --filter @kitn.ai/ui run gate:compiles:self-test
+pnpm --filter @kitn.ai/ui run verify:scaffold
+```
+
+The vitest line above, on this tree:
+
+```
+ Test Files  32 passed (32)
+      Tests  448 passed (448)
 ```
 
 Each script also takes `--self-test`, which watches every refusal fire rather
@@ -538,24 +637,30 @@ Say this plainly, because the machinery looks more finished than it is.
 **No acceptance run has ever happened.** Everything above was exercised with
 hand-written stand-in output. No model has been given a pack.
 
-**The three external gates are declared, fail closed, and are unimplemented.**
-`compiles`, `registers` and `streams` have weights, anchors and a refusal if they
-are missing — and nothing runs them. Supplying one by hand means writing
+**Two of the three external gates are still unimplemented.** `compiles` now runs
+(step 5 above). `registers` and `streams` have weights, anchors and a refusal if
+they are missing — and nothing runs them. Supplying one by hand means writing
 `gates.json` in the run directory:
 
 ```json
 {
-  "compiles": { "passed": true,  "detail": "tsc --strict clean under the react consumer project" },
-  "registers": { "passed": false, "detail": "kai-artifact never upgraded" }
+  "registers": { "passed": false, "detail": "kai-artifact never upgraded" },
+  "streams":   { "passed": true,  "detail": "tokens appended; final turn matched the fixture" }
 }
 ```
 
-You get those verdicts by doing the work yourself: drop the emitted code into a
-consumer app and run `tsc --strict` (`verify:scaffold` already stands up three
-tsc projects that resolve `@kitn.ai/ui` through the shipped exports map), mount
-it in a browser and check `customElements.get`, drive it with a mock provider-SSE
-fixture. An external gate may not report `vacuous: true` — only the gates the
-evaluator runs itself can discover there was nothing to scan.
+You get those verdicts by doing the work yourself: mount the output in a browser
+and check `customElements.get`, drive it with a mock provider-SSE fixture. What
+you may NOT write is `vacuous: true` — a runner that never read the output cannot
+discover that there was nothing in it, and `adjudicated` is refused outright
+because it is the evaluator's stamp, not an operator's. If the answer really
+contains no code, supply nothing: the evaluator scans the output itself and takes
+the dimension out of the score.
+
+The shape to copy when implementing them is `acceptance-gate-compiles.mjs`, and
+the part worth copying is not the tsc plumbing — it is that the script decides
+between *failed* and *had no subject* by asking the same `codeUnits()` the
+evaluator asks, and hands the second one back rather than answering it.
 
 **`FABRICATED.md` is empty by construction.** `fabrications.ts` holds no rows,
 and the page in every pack says so in those words. Read the emptiness as "nobody

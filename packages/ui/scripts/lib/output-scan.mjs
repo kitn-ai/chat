@@ -56,7 +56,10 @@ export const unreadFiles = (files) => files.filter((f) => !isCodeFile(f.name) &&
 const normaliseFenceLang = (lang) => String(lang).toLowerCase().replace(/^[{[(]|[}\])]$/g, '').split(/[,;:{}]/)[0].trim();
 
 /** Fence languages that mean "this block is code the agent is proposing". */
-const CODE_FENCE_LANGS = new Set(['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'javascript', 'typescript', 'html', 'vue', 'svelte', 'astro']);
+export const CODE_FENCE_LANGS = new Set(['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'javascript', 'typescript', 'html', 'vue', 'svelte', 'astro']);
+
+/** The fence language, normalised — exported so a caller can decide what to DO with a unit. */
+export const fenceLang = normaliseFenceLang;
 
 /**
  * Every CommonMark fenced block: THREE OR MORE backticks, or three or more
@@ -136,15 +139,21 @@ export function fencedBlocks(text) {
  * and a false positive here is visible in the report where a false negative is
  * not. A judge who sees it can attribute it as a `pack-defect`.
  *
+ * Each unit carries a `lang`: the file's extension for a real file, the
+ * normalised fence language for a fenced block. The two scanning gates ignore
+ * it — they search text — but a caller that has to WRITE the unit to disk (the
+ * `compiles` gate does) needs to know what it is, and re-deriving that from the
+ * name would be a second definition of the same fact.
+ *
  * @param {{ name: string, text: string }[]} files
- * @returns {{ name: string, text: string }[]}
+ * @returns {{ name: string, text: string, lang: string, from: string }[]}
  */
 export function codeUnits(files) {
-  /** @type {{ name: string, text: string }[]} */
+  /** @type {{ name: string, text: string, lang: string, from: string }[]} */
   const units = [];
   for (const f of files) {
     if (isCodeFile(f.name)) {
-      units.push(f);
+      units.push({ ...f, lang: f.name.toLowerCase().split('.').pop(), from: f.name });
       continue;
     }
     // Only PROSE files are fence-extracted. Anything else that is not code is
@@ -153,8 +162,9 @@ export function codeUnits(files) {
     if (!isProseFile(f.name)) continue;
     let index = 0;
     for (const block of fencedBlocks(f.text)) {
-      if (!CODE_FENCE_LANGS.has(normaliseFenceLang(block.lang))) continue;
-      units.push({ name: `${f.name}#fence${index++}`, text: block.text });
+      const lang = normaliseFenceLang(block.lang);
+      if (!CODE_FENCE_LANGS.has(lang)) continue;
+      units.push({ name: `${f.name}#fence${index++}`, text: block.text, lang, from: f.name });
     }
   }
   return units;

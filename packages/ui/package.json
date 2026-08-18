@@ -176,6 +176,8 @@
     "verify:quarantine": "node scripts/verify-quarantine.mjs --self-test && node scripts/verify-quarantine.mjs",
     "verify:react-wrappers": "node scripts/verify-react-wrappers.mjs --self-test && node scripts/verify-react-wrappers.mjs",
     "verify:scaffold": "node scripts/verify-scaffold-compiles.mjs",
+    "gate:compiles": "node scripts/acceptance-gate-compiles.mjs",
+    "gate:compiles:self-test": "node scripts/acceptance-gate-compiles.mjs --self-test",
     "verify:schemas": "node scripts/verify-schemas-exported.mjs --self-test && node scripts/verify-schemas-exported.mjs",
     "verify:shader-lazy": "node scripts/verify-shader-lazy.mjs --self-test && node scripts/verify-shader-lazy.mjs",
     "verify:solid-coverage": "node scripts/verify-solid-coverage.mjs --self-test && node scripts/verify-solid-coverage.mjs",
