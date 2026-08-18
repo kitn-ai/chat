@@ -55,6 +55,10 @@ export type {
   EncodeAttachmentReport,
   EncodeDroppedEvent,
   EncodeRequestEvent,
+  // The union over EVERY layer that emits — `wire.*` and `element.*` alike.
+  // This is the one a panel switches on; the per-type names below stay exported
+  // for code that has already narrowed.
+  KaiDiagnosticEvent,
   WireCloseEvent,
   WireDiagnosticBase,
   WireDiagnosticEvent,
@@ -64,3 +68,15 @@ export type {
   WireOpenEvent,
   WirePartEvent,
 } from '../wire/diagnostics';
+
+// The ELEMENT-layer events, on the same stream and therefore named from the same
+// specifier. Types only — nothing here imports element runtime, so this entry
+// stays free of element bytes and a consumer who only parses streams pays
+// nothing for them. `KaiDiagnosticEvent` above is the union a panel switches on.
+export type {
+  ElementDiagnosticBase,
+  ElementDiagnosticEvent,
+  ElementRegistryEvent,
+  ElementViolationEvent,
+  ElementViolationKind,
+} from '../elements/diagnostic-events';

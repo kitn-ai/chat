@@ -37,7 +37,12 @@
 import {
   setWirePayloadCapture,
   subscribeWireDiagnostics,
-  type WireDiagnosticEvent,
+  // The FULL union — `wire.*` and `element.*` alike. There is one emitter and
+  // one stream, so the buffer, the queue and every callback below are typed to
+  // carry whatever any layer emits. Nothing in this file inspects an event, so
+  // widening it is genuinely a type change and not a behaviour one; the hook
+  // buffers and forwards, and a panel discriminates on `type`.
+  type KaiDiagnosticEvent,
 } from '../wire/diagnostics';
 
 /** The localStorage key and query parameter. Same spelling in both, so the two
@@ -78,7 +83,7 @@ export interface KaiDevtoolsHook {
    *
    *  Kept for contract compatibility, but `attach` is what a panel should use:
    *  pairing this with `subscribe` cannot be done without a race (see there). */
-  drain(): WireDiagnosticEvent[];
+  drain(): KaiDiagnosticEvent[];
   /** Live events from now on. Works on both branches -- subscribing is what
    *  re-arms emission, so a panel can attach mid-session and see events from
    *  that moment forward, with no history.
@@ -88,7 +93,7 @@ export interface KaiDevtoolsHook {
    *  Deliberate, and worth knowing before you add a passive logger -- one that
    *  subscribes and never drains stops history accumulating for a panel that
    *  attaches later, which will then see only the gap forward. */
-  subscribe(fn: (e: WireDiagnosticEvent) => void): () => void;
+  subscribe(fn: (e: KaiDiagnosticEvent) => void): () => void;
   /**
    * History and live delivery in ONE synchronous step. Returns the unsubscribe.
    *
@@ -106,7 +111,7 @@ export interface KaiDevtoolsHook {
    * Additive, so `version` stays 1: the forward-compat rules allow new members,
    * and an older panel that never calls this keeps working unchanged.
    */
-  attach(fn: (e: WireDiagnosticEvent) => void): () => void;
+  attach(fn: (e: KaiDiagnosticEvent) => void): () => void;
   /** Set the signal and reload, so the next load records from the first event.
    *  Reload is the primary path because it is the only one that yields HISTORY,
    *  and the answer is usually near the beginning of a session. */
@@ -185,7 +190,7 @@ function wanted(): boolean {
 function createHook(recording: boolean, payload: boolean): KaiDevtoolsHook {
   // Allocated ONLY on the wanted branch. On the dormant branch there is no
   // buffer to size and nothing is retained for the whole session.
-  let buffer: WireDiagnosticEvent[] | undefined;
+  let buffer: KaiDiagnosticEvent[] | undefined;
 
   // How many consumers of THIS hook are listening, via `subscribe` or `attach`.
   //
@@ -209,7 +214,7 @@ function createHook(recording: boolean, payload: boolean): KaiDevtoolsHook {
   /** Track a consumer so retention can follow the last one out. Idempotent on
    *  the returned unsubscribe: calling it twice must not decrement twice and
    *  leave the count below the number actually listening. */
-  const track = (fn: (e: WireDiagnosticEvent) => void): (() => void) => {
+  const track = (fn: (e: KaiDiagnosticEvent) => void): (() => void) => {
     consumers++;
     const off = subscribeWireDiagnostics(fn);
     let live = true;
@@ -246,7 +251,7 @@ function createHook(recording: boolean, payload: boolean): KaiDevtoolsHook {
       // one. Live arrivals queue while the history plays, then drain in arrival
       // order, so `fn` sees one strictly ordered sequence with no duplicates.
       let direct = false;
-      const queue: WireDiagnosticEvent[] = [];
+      const queue: KaiDiagnosticEvent[] = [];
       const off = track((e) => {
         if (direct) fn(e);
         else queue.push(e);
@@ -265,7 +270,7 @@ function createHook(recording: boolean, payload: boolean): KaiDevtoolsHook {
       //
       // So the handover ALWAYS completes and ALWAYS returns a working `off`. A
       // callback that throws on one event still receives the ones after it.
-      const deliver = (e: WireDiagnosticEvent) => {
+      const deliver = (e: KaiDiagnosticEvent) => {
         try {
           fn(e);
         } catch {

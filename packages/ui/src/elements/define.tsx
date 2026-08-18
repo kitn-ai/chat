@@ -1,6 +1,7 @@
 import { customElement } from 'solid-element';
 import { ChatConfig } from '../primitives/chat-config';
 import { ELEMENT_CSS } from './css';
+import { elementDiagnosticsWanted, installElementDiagnostics } from './element-diagnostics';
 import { createSignal, onCleanup, Show, type JSX } from 'solid-js';
 
 /**
@@ -197,10 +198,22 @@ function defineWithNonReflectingProps<T>(
   tag: string,
   keys: readonly string[],
   define: () => T,
+  /**
+   * Anything else that must be on the prototype BEFORE the registry sees the
+   * class. Today that is the element-layer diagnostics, and it needs this seam
+   * for a reason that is adjacent to the one above but not the same: `define()`
+   * SNAPSHOTS the lifecycle callbacks (`connectedCallback`,
+   * `attributeChangedCallback`, …) off the prototype into the custom-element
+   * definition, and the browser invokes the snapshot. A wrapper installed
+   * afterwards is present on the prototype, passes `hasOwnProperty`, and is
+   * never called. See `installElementDiagnostics`.
+   */
+  alsoPatch?: (proto: object) => void,
 ): { result: T; handled: boolean } {
-  // `handled` = nothing more for the caller to do. With no colliding props there is
-  // nothing to install at all, so that case is trivially handled.
-  if (keys.length === 0) return { result: define(), handled: true };
+  // `handled` = nothing more for the caller to do. With no colliding props and
+  // nothing else to patch there is nothing to install at all, so that case is
+  // trivially handled.
+  if (keys.length === 0 && !alsoPatch) return { result: define(), handled: true };
   const registry = customElements;
   const hadOwnDefine = Object.prototype.hasOwnProperty.call(registry, 'define');
   const inner = registry.define;
@@ -214,7 +227,8 @@ function defineWithNonReflectingProps<T>(
       options?: ElementDefinitionOptions,
     ) {
       if (name === tag) {
-        installNonReflectingProps(constructor.prototype, keys);
+        if (keys.length) installNonReflectingProps(constructor.prototype, keys);
+        alsoPatch?.(constructor.prototype);
         handled = true;
       }
       return inner.call(this, name, constructor, options);
@@ -388,8 +402,25 @@ export function defineWebComponent<P extends Record<string, unknown>, E = Record
     );
   };
 
-  const { result: Ctor, handled } = defineWithNonReflectingProps(tag, shadowedProps, () =>
-    customElement(tag, defaults, renderFacade),
+  // Element-layer diagnostics: report the three `kai-` contract violations that
+  // are otherwise silent (an array or object prop set as an HTML attribute, the
+  // same array reference handed back, a new array of the same item objects).
+  //
+  // HERE because this function is the single choke point — every kai-* element
+  // registers through it, which `elements/slots.test.ts` already enforces — so
+  // one call covers every element with no per-element work and no second list.
+  //
+  // Through the pre-define seam, not after the fact, because the registry
+  // snapshots lifecycle callbacks at definition time; see `alsoPatch` above.
+  // `elementDiagnosticsWanted` is asked first so a tag with no non-scalar prop
+  // (37 of the 80) does not even pay for the registry interception.
+  const wantsDiagnostics = elementDiagnosticsWanted(tag);
+
+  const { result: Ctor, handled } = defineWithNonReflectingProps(
+    tag,
+    shadowedProps,
+    () => customElement(tag, defaults, renderFacade),
+    wantsDiagnostics ? (proto) => installElementDiagnostics(tag, proto) : undefined,
   );
 
   // Belt and braces for the one path the wrap cannot see: if `customElements.define`
@@ -400,4 +431,14 @@ export function defineWebComponent<P extends Record<string, unknown>, E = Record
   // in the normal case, where the accessors are already on this same prototype.
   const proto = (Ctor as unknown as { prototype?: object } | undefined)?.prototype;
   if (!handled && proto) installNonReflectingProps(proto, shadowedProps);
+
+  // NOTE the diagnostics have no equivalent late fallback, and must not get one.
+  // The non-reflecting props still work when installed late (they only have to
+  // beat the NEXT constructor); the diagnostics do not, because the registry has
+  // already snapshotted the lifecycle callbacks it will invoke. Installing them
+  // here would produce a wrapper that is visibly present and never called —
+  // which is worse than not installing it, since it would read as coverage. So
+  // in the one environment the pre-define seam cannot reach (a frozen registry:
+  // SES lockdown, a sealed polyfill), element diagnostics are simply absent, and
+  // every other element behaviour is unaffected.
 }

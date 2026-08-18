@@ -38,6 +38,34 @@ export type { CodeHighlightingOptions } from '../primitives/highlighter';
 export { classifyTool } from '../components/tool-classify';
 export type { ToolKind } from '../components/tool-classify';
 
+// Element-layer diagnostics. `emitElementRegistry()` re-emits the which-elements-
+// are-defined snapshot on demand, for a panel that attached mid-session and so
+// missed the one register-impl emits at load. SSR-safe and a no-op with no
+// subscriber, so calling it unconditionally is fine.
+//
+// WHY THIS ONE PRODUCER IS PUBLIC while `@kitn.ai/ui/diagnostics` deliberately
+// keeps `emitWireDiagnostic`, `nextStreamId` and `setWirePayloadCapture`
+// internal. That rule exists because a consumer able to forge events or reset
+// the stream counter can make a panel lie about a stream that never happened,
+// and one able to flip payload capture can start recording an app's users'
+// conversations without the app deciding to. This function takes no arguments
+// and reports nothing but `customElements.get()` over the manifest: there is no
+// value to forge, no counter to move and no capture to arm. It can only tell the
+// truth about the registry, which is the one thing a late-attaching panel cannot
+// find out for itself.
+//
+// The event TYPES are re-exported here as well as from @kitn.ai/ui/diagnostics:
+// a consumer already importing the elements entry should not have to add a
+// second specifier to name the events it is handed.
+export { emitElementRegistry } from './element-diagnostics';
+export type {
+  ElementDiagnosticBase,
+  ElementDiagnosticEvent,
+  ElementRegistryEvent,
+  ElementViolationEvent,
+  ElementViolationKind,
+} from './diagnostic-events';
+
 // Imperative toast API — usable directly from the elements entry so consumers
 // who only import the web-components bundle still get `toast()`. The store is
 // SSR-safe (no DOM touched until the first toast is raised on the client).

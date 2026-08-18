@@ -163,7 +163,7 @@
     "build:elements": "node scripts/gen-elements-manifest.mjs && vite build --config vite.config.elements.ts && node scripts/gen-element-dts.mjs",
     "postbuild": "npm run build:theme && npm run build:api && npm run build:schemas && npm run build:subpath-dts && npm run verify:dts",
     "build:theme": "node scripts/build-theme-tokens.mjs",
-    "build:api": "node scripts/gen-elements-manifest.mjs && node scripts/gen-element-api.mjs",
+    "build:api": "node scripts/gen-elements-manifest.mjs && node scripts/gen-element-api.mjs && node scripts/gen-element-nonscalar.mjs",
     "build:schemas": "node scripts/copy-card-schemas.mjs",
     "build:card-validation": "node scripts/gen-card-validation-schemas.mjs",
     "build:subpath-dts": "node scripts/emit-subpath-dts.mjs",

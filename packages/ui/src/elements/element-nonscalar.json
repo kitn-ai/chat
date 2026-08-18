@@ -1,0 +1,182 @@
+{
+  "kai-agent-card": [
+    "status"
+  ],
+  "kai-artifact": [
+    "files"
+  ],
+  "kai-attachments": [
+    "items"
+  ],
+  "kai-audio-visualizer": [
+    "audioElement",
+    "bands",
+    "shader",
+    "stream"
+  ],
+  "kai-cards": [
+    "cards",
+    "policy",
+    "schemas",
+    "types"
+  ],
+  "kai-chain-of-thought": [
+    "defaultValue",
+    "steps",
+    "value"
+  ],
+  "kai-chat": [
+    "cardSchemas",
+    "cardTypes",
+    "context",
+    "kindIcons",
+    "messages",
+    "models",
+    "suggestions",
+    "triggers",
+    "value"
+  ],
+  "kai-choice": [
+    "data",
+    "resolution"
+  ],
+  "kai-command": [
+    "items"
+  ],
+  "kai-compare": [
+    "data",
+    "selection"
+  ],
+  "kai-composer": [
+    "highlights",
+    "kindIcons",
+    "triggers",
+    "value"
+  ],
+  "kai-confirm": [
+    "data",
+    "resolution"
+  ],
+  "kai-context": [
+    "context"
+  ],
+  "kai-conversations": [
+    "conversations",
+    "groups"
+  ],
+  "kai-embed": [
+    "data"
+  ],
+  "kai-feedback-bar": [
+    "categories"
+  ],
+  "kai-file-tree": [
+    "defaultExpanded",
+    "files"
+  ],
+  "kai-form": [
+    "data",
+    "defaultValues",
+    "resolution",
+    "values"
+  ],
+  "kai-image": [
+    "bytes"
+  ],
+  "kai-link-preview": [
+    "data"
+  ],
+  "kai-menu": [
+    "items"
+  ],
+  "kai-message": [
+    "cardSchemas",
+    "cardTypes",
+    "message"
+  ],
+  "kai-model-switcher": [
+    "models"
+  ],
+  "kai-nav": [
+    "defaultCollapsed",
+    "items"
+  ],
+  "kai-pane": [
+    "status"
+  ],
+  "kai-pane-group": [
+    "tabs"
+  ],
+  "kai-prompt-input": [
+    "attachments",
+    "kindIcons",
+    "suggestions",
+    "triggers",
+    "value"
+  ],
+  "kai-remote": [
+    "envelope",
+    "policy"
+  ],
+  "kai-resizable": [
+    "maximizedIndex"
+  ],
+  "kai-response-stream": [
+    "text"
+  ],
+  "kai-scope-picker": [
+    "availableAuthors",
+    "availableTags"
+  ],
+  "kai-segmented": [
+    "options"
+  ],
+  "kai-skills": [
+    "skills"
+  ],
+  "kai-sources": [
+    "sources"
+  ],
+  "kai-suggestions": [
+    "suggestions"
+  ],
+  "kai-tabs": [
+    "items"
+  ],
+  "kai-tasks": [
+    "data",
+    "defaultValue",
+    "resolution",
+    "value"
+  ],
+  "kai-thread": [
+    "cardSchemas",
+    "cardTypes",
+    "messages"
+  ],
+  "kai-toast-region": [
+    "target",
+    "toasts"
+  ],
+  "kai-tool": [
+    "tool"
+  ],
+  "kai-voice-input": [
+    "transcribe"
+  ],
+  "kai-voice-output": [
+    "synthesize"
+  ],
+  "kai-workspace": [
+    "cardSchemas",
+    "cardTypes",
+    "context",
+    "conversations",
+    "groups",
+    "kindIcons",
+    "messages",
+    "models",
+    "suggestions",
+    "triggers"
+  ]
+}

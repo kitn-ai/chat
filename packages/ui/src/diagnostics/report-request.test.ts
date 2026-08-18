@@ -16,11 +16,12 @@ import { reportRequest } from './report-request';
 import {
   setWirePayloadCapture,
   subscribeWireDiagnostics,
+  type KaiDiagnosticEvent,
   type WireDiagnosticEvent,
 } from '../wire/diagnostics';
 
 let off: (() => void) | undefined;
-let events: WireDiagnosticEvent[] = [];
+let events: KaiDiagnosticEvent[] = [];
 const listen = () => {
   off?.();
   events = [];

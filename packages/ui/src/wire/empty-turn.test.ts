@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { readOpenAIStream } from './read';
-import { subscribeWireDiagnostics, type WireDiagnosticEvent } from './diagnostics';
+import { subscribeWireDiagnostics, type KaiDiagnosticEvent, type WireDiagnosticEvent } from './diagnostics';
 
 /** The REAL `AssistantStreamSink` method names (see chunk.ts): `upsertTool`. */
 const nullSink = () =>
@@ -82,7 +82,7 @@ describe('the guard runs after tools.settle', () => {
   });
 
   it('wire.close agrees with itself: a tool part and no errorCode', async () => {
-    const events: WireDiagnosticEvent[] = [];
+    const events: KaiDiagnosticEvent[] = [];
     off = subscribeWireDiagnostics((e) => events.push(e));
     await readOpenAIStream(namelessTool(), nullSink());
     const close = events.at(-1) as any;

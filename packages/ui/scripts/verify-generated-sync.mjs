@@ -127,6 +127,11 @@ const FIX = 'pnpm --filter @kitn.ai/ui run build:api';
 const GENERATED = [
   { file: 'packages/ui/src/elements/element-meta.json', probe: 'overwrite' },
   { file: 'packages/ui/src/elements/element-manifest.json', probe: 'overwrite' },
+  // The ~2 KB of element-meta.json that SHIPS: tag -> its non-scalar prop names,
+  // read at runtime by src/elements/element-diagnostics.ts. Stale bytes here mean
+  // a prop that silently stopped being watched, which is invisible by nature —
+  // the check for it is a check that does not fire.
+  { file: 'packages/ui/src/elements/element-nonscalar.json', probe: 'overwrite' },
   { file: 'packages/ui/src/elements/icon-names.json', probe: 'overwrite' },
   { file: 'packages/ui/src/elements/element-types.d.ts', probe: 'overwrite' },
   { file: 'packages/ui/frameworks/react/index.tsx', probe: 'overwrite' },

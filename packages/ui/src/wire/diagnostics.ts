@@ -28,6 +28,17 @@
 // SSR: no `window`, no `Date` and no other global touched at module scope, so
 // this imports cleanly anywhere the rest of `wire/` does.
 import type { ModelUsage } from './chunk';
+// TYPE-ONLY, and that is what makes it legal here. `elements/diagnostic-events`
+// declares interfaces and nothing else -- no imports, no runtime -- so this
+// specifier is erased at build and `wire/` acquires no dependency on
+// `elements/`. A real one would be a layering inversion AND would drag the
+// element bundle into every consumer that only parses streams.
+//
+// It has to be named from somewhere, because a subscriber receives ONE stream
+// and the union is what lets it discriminate on `type` instead of being handed
+// an open bag. The alternative -- declaring the element events inside this file
+// -- puts element concepts in the wire layer, which is worse.
+import type { ElementDiagnosticEvent } from '../elements/diagnostic-events';
 
 /** The envelope every diagnostic event shares. `t` is `Date.now()` at emission. */
 export interface WireDiagnosticBase {
@@ -485,7 +496,50 @@ export function wireCorrelation(
   };
 }
 
-type Subscriber = (e: WireDiagnosticEvent) => void;
+/**
+ * EVERY diagnostic event, from every layer that emits one.
+ *
+ * There is one emitter and one stream, so there has to be one union. `wire.*`
+ * events say what the parse pipeline saw; `element.*` events say what a
+ * consumer did to a live custom element. A panel wants both and wants them in
+ * arrival order, which is precisely why they share a channel rather than
+ * getting one each.
+ *
+ * WIDENING, not repurposing: no existing field changed meaning and no existing
+ * type was renamed, so the forward-compat rule at the top of this file holds. A
+ * consumer that already switches on `type` and ignores what it does not know --
+ * which the contract requires -- is unaffected. What DOES move is the static
+ * type a `.d.ts` consumer sees on `subscribeWireDiagnostics`, `drain()` and
+ * `attach()`: it is now the wider union, so code that assigned the callback
+ * parameter straight into a `WireDiagnosticEvent` needs a narrowing check it
+ * should have had anyway.
+ */
+export type KaiDiagnosticEvent = WireDiagnosticEvent | ElementDiagnosticEvent;
+
+/**
+ * Narrow the shared stream to the element half — and, by negation, to the wire
+ * half, which is what most callers actually want:
+ *
+ *   if (isElementDiagnosticEvent(e)) { … } else { e.streamId … }
+ *
+ * WHY THIS DIRECTION and not an `isWireDiagnosticEvent`. The element family is
+ * CLOSED and small; the non-element side is the one that keeps growing, and it
+ * does not even share one prefix -- `wire.*`, `encode.*` and `app.*` are all in
+ * `WireDiagnosticEvent` today, with `kit.warn` queued in the inventory behind
+ * them. That is not a prediction: `encode.*` and `app.*` both arrived while this
+ * branch was open, so a positive `wire.*` allowlist written a fortnight ago
+ * would already be answering "not a wire event" for two live families. Testing
+ * the closed set and taking the complement stays correct as the open set grows.
+ *
+ * Exists because a panel, and every test in this repo that reads `streamId` or
+ * `traceId` off "every event", needs exactly this one check now that two layers
+ * share one channel. The prefix is pinned by `element-artifact-divergence.test.ts`.
+ */
+export function isElementDiagnosticEvent(e: KaiDiagnosticEvent): e is ElementDiagnosticEvent {
+  return e.type.startsWith('element.');
+}
+
+type Subscriber = (e: KaiDiagnosticEvent) => void;
 
 /**
  * THE MUTABLE STATE LIVES ON A GLOBAL, DELIBERATELY.
@@ -634,7 +688,7 @@ export function withPayload<T>(build: () => T): { payload: T } | Record<string, 
  * than re-reported because there is nowhere to report it TO that is not itself
  * a subscriber.
  */
-export function emitWireDiagnostic(e: WireDiagnosticEvent): void {
+export function emitWireDiagnostic(e: KaiDiagnosticEvent): void {
   const s = peekState();
   if (!s) return; // nobody has ever subscribed in this realm
   for (const fn of [...s.subs]) {

@@ -14,7 +14,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { reportRequest } from './report-request';
 import { readOpenAIStream } from '../wire/read';
-import { subscribeWireDiagnostics, type WireDiagnosticEvent } from '../wire/diagnostics';
+import { subscribeWireDiagnostics, isElementDiagnosticEvent, type KaiDiagnosticEvent } from '../wire/diagnostics';
 
 const nullSink = () =>
   ({
@@ -41,7 +41,7 @@ afterEach(() => {
 
 describe('requested vs served model', () => {
   it('★ surfaces the mismatch: asked for Claude, served gpt-4o', async () => {
-    const events: WireDiagnosticEvent[] = [];
+    const events: KaiDiagnosticEvent[] = [];
     off = subscribeWireDiagnostics((e) => events.push(e));
 
     reportRequest(
@@ -61,11 +61,17 @@ describe('requested vs served model', () => {
 
     // One trace ties the two halves together; nothing else does, and nothing
     // guesses at the pairing from timing.
-    for (const e of events) expect(e.traceId).toBe('turn-1');
+    //
+    // `traceId` is a WIRE field — the element events share this stream and are
+    // not trace-scoped — so the narrowing is explicit, and asserted to be TOTAL
+    // rather than assumed: everything this test provokes is a wire event.
+    const wire = events.filter((e) => !isElementDiagnosticEvent(e));
+    expect(wire).toHaveLength(events.length);
+    for (const e of wire) expect(e.traceId).toBe('turn-1');
   });
 
   it('a stream that states no model leaves SERVED absent -- the request does not fill it', async () => {
-    const events: WireDiagnosticEvent[] = [];
+    const events: KaiDiagnosticEvent[] = [];
     off = subscribeWireDiagnostics((e) => events.push(e));
 
     reportRequest({ model: 'anthropic/claude-sonnet-4.5' }, { traceId: 'turn-2' });
@@ -81,7 +87,7 @@ describe('requested vs served model', () => {
   });
 
   it('a request that states no model leaves REQUESTED absent -- the stream does not fill it', async () => {
-    const events: WireDiagnosticEvent[] = [];
+    const events: KaiDiagnosticEvent[] = [];
     off = subscribeWireDiagnostics((e) => events.push(e));
 
     // The common shape: the route picks the model server-side, so the client
