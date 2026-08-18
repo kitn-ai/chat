@@ -313,13 +313,23 @@ describe('the thread previews attachments at a size a human can see', () => {
   });
 
   /**
-   * The two halves, tied together. The caption is the identity and needs no
-   * interaction; the media type is a DETAIL and lives in the hover card — which
-   * is only an acceptable place for it because the card is now reachable by
-   * keyboard as well as by pointer. Before this change the tile contained no
-   * focusable element at all, so this test could not have been written.
+   * The two halves, tied together: the caption is the identity and needs no
+   * interaction, the media type is a DETAIL and lives in the hover card.
+   *
+   * ★ THIS TEST IS NOT ABOUT THE KEYBOARD, and it used to claim it was. It was
+   * named "opens the full name and media type from the KEYBOARD, not just on
+   * hover" while calling `trigger.focus()` — programmatic focus, the one path
+   * that already worked. jsdom has no tab-order engine and cannot press Tab, so
+   * this layer can NEVER fail for the reason that name claimed, and the gap it
+   * papered over was real: tabbing to this exact tile in a real browser left the
+   * card shut, because Solid's delegated focus events did not fire on a real Tab
+   * inside the shadow root.
+   *
+   * Renamed to what it actually checks. The keyboard claim moved to
+   * `tests/e2e/hover-card-tabstops.spec.ts`, which presses a real Tab against
+   * the built bundle — including this same attachment-tile configuration.
    */
-  it('opens the full name and media type from the KEYBOARD, not just on hover', () => {
+  it('opens the media type on programmatic focus (real Tab covered in e2e)', () => {
     const { container } = render(() => (
       <MessageBody
         parts={[filePart(file('application/pdf', { url: 'https://example.com/spec.pdf', filename: 'spec.pdf' }))]}

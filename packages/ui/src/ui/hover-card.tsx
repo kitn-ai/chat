@@ -110,7 +110,16 @@ const FOCUSABLE_CHILD =
  *  checked through `assignedElements()`, because a `<slot>` in the shadow tree
  *  contains none of the light-DOM nodes it projects — the `kai-hover-card`
  *  facade wraps a bare `<slot />`, so without this branch every use of that
- *  element would be told its children are inert. */
+ *  element would be told its children are inert.
+ *
+ *  ★ WHEN this runs is as load-bearing as what it asks. At ref time the facade's
+ *  trigger contains `<slot></slot>` with NOTHING assigned yet, so a single call
+ *  from the ref answers "inert" for a slot that is about to receive a focusable
+ *  `<a>` — and the trigger stamps a second tab stop on top of the child's. That
+ *  is the very regression the `assignedElements()` branch was added to prevent,
+ *  reintroduced by timing rather than by logic. Measured with a real Tab key:
+ *  4 stops across a 3-widget fixture. So the caller re-runs this on
+ *  `slotchange`; see `HoverCardTrigger`. */
 const hasFocusableChild = (root: HTMLElement): boolean => {
   if (root.querySelector(FOCUSABLE_CHILD)) return true;
   return Array.from(root.querySelectorAll('slot')).some((slot) =>
@@ -134,10 +143,22 @@ const hasFocusableChild = (root: HTMLElement): boolean => {
  *
  * Hence delegation rather than an unconditional `tabindex`: adding one always
  * would give every existing consumer TWO stops for one card, which is a worse
- * bug than the one being fixed. The check runs once, in the ref, against the
- * children as mounted.
+ * bug than the one being fixed. The check runs in the ref AND again on every
+ * `slotchange`, because slot assignment happens after the ref and a one-shot
+ * check calls a not-yet-filled `<slot>` inert (see `hasFocusableChild`).
  *
- * `aria-describedby` is what makes the new stop worth arriving at: the card is
+ * ★ THE FOCUS LISTENERS ARE NATIVE, NOT SOLID'S DELEGATED `onFocusIn`. Solid
+ * delegates a fixed set of events from the document and retargets them into
+ * component trees; inside these shadow roots that path runs for a PROGRAMMATIC
+ * `.focus()` and, in the deeper trees, not for a real Tab. Measured: tabbing to
+ * an attachment tile in a mounted `<kai-chat>` left the card shut and
+ * `aria-describedby` null while `.focus()` on the same element opened it — so
+ * every keyboard user got a tab stop that announced nothing and showed nothing,
+ * which is worse than no stop at all. `addEventListener` in the ref does not
+ * care how focus arrived. Anything in this kit relying on delegated focus
+ * events inside a shadow root is suspect for the same reason.
+ *
+ * `aria-describedby` is what makes the stop worth arriving at: the card is
  * DESCRIPTIVE, not an action, so the trigger gets no `role="button"` — that
  * would promise an activation that does not exist — and instead points at the
  * content it reveals so a screen reader reads it out.
@@ -183,14 +204,34 @@ export function HoverCardTrigger(props: HoverCardTriggerProps) {
       )}
       ref={(el: HTMLElement) => {
         ctx.setTrigger(el);
-        setDetectedInert(!hasFocusableChild(el));
+
+        // Native listeners, deliberately — see the note above. `focusin` /
+        // `focusout` rather than `focus` / `blur` because these have to fire
+        // for a focusable CHILD too, and only the -in/-out pair bubbles.
+        const enter = () => ctx.enter();
+        const leave = () => ctx.leave();
+        el.addEventListener('focusin', enter);
+        el.addEventListener('focusout', leave);
+        onCleanup(() => {
+          el.removeEventListener('focusin', enter);
+          el.removeEventListener('focusout', leave);
+        });
+
+        // Ask now for the direct-children case, and again whenever a slot is
+        // filled or emptied. Both are needed: `slotchange` never fires for a
+        // trigger with no slot in it, and the ref-time answer is wrong for one
+        // that has.
+        const evaluate = () => setDetectedInert(!hasFocusableChild(el));
+        evaluate();
+        for (const slot of Array.from(el.querySelectorAll('slot'))) {
+          slot.addEventListener('slotchange', evaluate);
+          onCleanup(() => slot.removeEventListener('slotchange', evaluate));
+        }
       }}
       tabIndex={isFocusable() ? 0 : undefined}
       aria-describedby={isFocusable() && ctx.open() ? ctx.contentId : undefined}
       onPointerEnter={ctx.enter}
       onPointerLeave={ctx.leave}
-      onFocusIn={ctx.enter}
-      onFocusOut={ctx.leave}
     >
       {props.children}
     </As>

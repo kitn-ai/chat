@@ -1,0 +1,89 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>hover-card tab stops</title>
+    <style>
+      body { font: 14px system-ui, sans-serif; margin: 0; padding: 24px; }
+      section { margin-bottom: 20px; }
+      h2 { font-size: 12px; color: #666; margin: 0 0 6px; }
+    </style>
+  </head>
+  <body>
+    <!-- Boundaries so a Tab sweep has a known start and end, and so a stop that
+         escapes the widget is visible as "landed on the sentinel" rather than as
+         a silently missing count. -->
+    <button id="before">before</button>
+
+    <!-- A: SLOTTED focusable child. The trigger must delegate — the slotted <a>
+         is the stop, and the trigger must NOT add a second one. This is the
+         configuration that regressed: at ref time the trigger's only child is an
+         unassigned <slot>, so a predicate that runs once sees "inert". -->
+    <section>
+      <h2>A: slotted focusable child</h2>
+      <kai-hover-card id="a">
+        <a id="a-link" href="https://example.com">a slotted link</a>
+        <div slot="card">card A</div>
+      </kai-hover-card>
+    </section>
+
+    <!-- B: SLOTTED inert child. Nothing inside can take focus, so the trigger
+         itself must be the one stop. -->
+    <section>
+      <h2>B: slotted inert child</h2>
+      <kai-hover-card id="b">
+        <div id="b-inert">a tile with no controls in it</div>
+        <div slot="card">card B</div>
+      </kai-hover-card>
+    </section>
+
+    <!-- C: DIRECT focusable child (no slot indirection) — kai-source composes
+         SourceTrigger > <a> inside its own shadow tree. Correct before this
+         change and must stay correct. -->
+    <section>
+      <h2>C: direct focusable child</h2>
+      <kai-source id="c" href="https://example.com" label="a source"></kai-source>
+    </section>
+
+    <!-- D: the SHIPPED configuration — an attachment tile in a real thread,
+         where the trigger is the stop and there is no slot anywhere near it.
+         This is the one the focus-open regression was measured on, so the
+         fixture has to contain it rather than assume config B stands in for it. -->
+    <section>
+      <h2>D: attachment tile in a thread</h2>
+      <div style="height: 320px"><kai-chat id="d"></kai-chat></div>
+    </section>
+
+    <button id="after">after</button>
+
+    <script type="module">
+      import '/dist/kai.es.js';
+      await customElements.whenDefined('kai-hover-card');
+      await customElements.whenDefined('kai-source');
+      await customElements.whenDefined('kai-chat');
+
+      document.getElementById('d').messages = [
+        {
+          id: 'm1',
+          role: 'user',
+          parts: [
+            {
+              type: 'file',
+              attachment: {
+                id: 'f1',
+                type: 'file',
+                filename: 'spec.pdf',
+                mediaType: 'application/pdf',
+                url: 'data:application/pdf;base64,JVBERi0xLjQK',
+              },
+            },
+          ],
+        },
+      ];
+      // Slot assignment + any post-mount re-evaluation settle in a microtask;
+      // give the page a real frame so the test measures the settled state.
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      document.body.dataset.ready = '1';
+    </script>
+  </body>
+</html>
