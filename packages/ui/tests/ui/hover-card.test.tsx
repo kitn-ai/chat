@@ -53,12 +53,56 @@ describe('HoverCard determinism (HC-1)', () => {
     expect(screen.queryByTestId('content')).toBeTruthy();
   });
 
-  it('opens on focus (keyboard)', () => {
+  /**
+   * ★ MOVE FOCUS. DO NOT FIRE AT IT.
+   *
+   * This test used to read:
+   *
+   *     const trg = screen.getByTestId('trg').parentElement!;
+   *     fireEvent.focusIn(trg);
+   *
+   * — which synthesises the event on the trigger span. That proves the handler
+   * is WIRED and says nothing about whether focus can ever ARRIVE there, and it
+   * sat on top of a path that was broken the whole time it was green: the
+   * trigger never set `tabindex`, so a real Tab key skipped straight past it and
+   * `onFocusIn` was unreachable from any keyboard.
+   *
+   * It stayed green for two reasons worth remembering. The synthetic event is
+   * the first. The second is that this harness happens to put a `<button>`
+   * inside the trigger, and `focusin` BUBBLES — so even a version of this test
+   * that focused something real would have passed here while the inert-children
+   * case (an attachment tile: a div, an img, an svg) had no tab stop at all.
+   *
+   * So both shapes are covered below, and both move focus for real.
+   */
+  it('opens on focus that a keyboard could actually deliver — delegating case', () => {
     setup();
-    const trg = screen.getByTestId('trg').parentElement!;
-    fireEvent.focusIn(trg);
+    const button = screen.getByTestId('trg');
+
+    // Real focus, and assert it LANDED before believing anything downstream.
+    button.focus();
+    expect(document.activeElement).toBe(button);
+
     vi.advanceTimersByTime(100);
     expect(screen.queryByTestId('content')).toBeTruthy();
+  });
+
+  it('opens on focus that a keyboard could actually deliver — inert children', () => {
+    // No `<button>` to delegate to. This is the shape that was unreachable, and
+    // the assertion that fails on the old trigger.
+    const { container } = render(() => (
+      <HoverCardRoot openDelay={100} closeDelay={100}>
+        <HoverCardTrigger><div>a tile with no controls in it</div></HoverCardTrigger>
+        <HoverCardContent><div data-testid="inert-content">card</div></HoverCardContent>
+      </HoverCardRoot>
+    ));
+
+    const trigger = container.querySelector('span') as HTMLElement;
+    trigger.focus();
+    expect(document.activeElement, 'the trigger itself must be able to hold focus').toBe(trigger);
+
+    vi.advanceTimersByTime(100);
+    expect(screen.queryByTestId('inert-content')).toBeTruthy();
   });
 
   it('focus transit trigger -> content keeps it open', async () => {

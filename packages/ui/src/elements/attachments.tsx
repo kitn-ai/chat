@@ -84,10 +84,11 @@ defineWebComponent<Props, Events>('kai-attachments', {
                 fallback={
                   <>
                     <AttachmentPreview />
-                    {/* Info only for non-grid; grid is a self-contained visual tile. */}
-                    <Show when={variant() !== 'grid'}>
-                      <AttachmentInfo showMediaType={showMediaType()} />
-                    </Show>
+                    {/* Rendered for EVERY variant now. `AttachmentInfo` decides
+                        what a grid tile gets — a visible caption for a non-image
+                        tile, nothing for an image, which is the only tile that
+                        really is a self-contained visual. */}
+                    <AttachmentInfo showMediaType={showMediaType()} />
                   </>
                 }
               >
@@ -101,9 +102,7 @@ defineWebComponent<Props, Events>('kai-attachments', {
                       : `flex items-center gap-1.5${variant() === 'list' ? ' w-full' : ''}`}
                   >
                     <AttachmentPreview />
-                    <Show when={variant() !== 'grid'}>
-                      <AttachmentInfo showMediaType={showMediaType()} />
-                    </Show>
+                    <AttachmentInfo showMediaType={showMediaType()} />
                   </AttachmentHoverCardTrigger>
                   <AttachmentHoverCardContent>
                     {/* For image attachments, preview the actual thumbnail;
