@@ -11,6 +11,14 @@ import type { CardSchemaName, ToolProvider } from '@kitn.ai/ui/schemas';
 import type { Tool } from './types';
 import { cardHostTags, cardTagForType, cardTypeForTag, getElement, listElements } from '../manifest';
 import type { CemMember } from '../manifest';
+// The RAW literals, not listInvariants() / listSurfaceRecipes(). Those re-run a
+// zod parse over the whole catalog, and this is a per-lookup serving path called
+// once for every element a harness asks about. The parse is not skipped, only
+// moved: invariants.test.ts and surfaces.test.ts run it over these same literals
+// in CI, so a malformed record fails a test rather than a request.
+import { invariants } from '../../catalog/invariants';
+import { surfaceRecipes } from '../../catalog/surfaces';
+import type { TInvariant, TInvariantExample, TSurfaceRecipe } from '../../catalog/catalog-types';
 
 /**
  * component_reference — look up AI/UI (kai-*) web components, their props,
@@ -225,6 +233,208 @@ function renderCardHost(tag: string): string[] {
   ];
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// The composition catalog: invariants, and recipe membership
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * An invariant applies to a tag if it is unscoped by tag, or names it.
+ *
+ * `appliesTo.targets` deliberately does NOT filter here: `upgrade-race` is
+ * scoped to script-tag DELIVERY, which is a fact about how the page loads and
+ * not about which element is on it — every element can be dropped onto a CDN
+ * page. So it is served everywhere and the scope is RENDERED (see `scopeOf`),
+ * which is the difference between a conditional rule a reader can apply and an
+ * unqualified one they will either over-apply or stop trusting.
+ */
+function invariantsFor(tag: string): TInvariant[] {
+  return invariants.filter((i) => !i.appliesTo.tags || i.appliesTo.tags.includes(tag));
+}
+
+function recipesFor(tag: string): TSurfaceRecipe[] {
+  return surfaceRecipes.filter((r) => r.ingredients.includes(tag));
+}
+
+/**
+ * How the coverage of one invariant reads — never a bare status word, and never
+ * silence.
+ *
+ * Three of the catalog's records are enforced by NOTHING and two more by half of
+ * what they say. A section that printed every rule as an equal-looking bullet
+ * would put back exactly the overstatement those records were rewritten to
+ * remove, one layer further out where it is harder to see. The wording also says
+ * whose code the guard reads: every path here is inside the KIT's own repo, and
+ * none of them checks the consumer's.
+ */
+function coverageOf(inv: TInvariant): string {
+  const by = inv.enforcedBy;
+  // `guard` is '' only for kind:'none', and that combination reaches neither the
+  // 'enforced' nor the 'partial' branch below: invariants.test.ts ("open ⟺
+  // enforcedBy.kind none") asserts the equivalence in BOTH directions, so a
+  // kind:'none' record is always status:'open'. Named here because a reader of
+  // this file alone cannot see what makes `enforced by ` with nothing after it
+  // unreachable.
+  const guard =
+    by.kind === 'test'
+      ? `the kit's own tests (${by.paths.join(', ')})`
+      : by.kind === 'lint'
+        ? `the kit's \`${by.script}\` script, in required CI`
+        : by.kind === 'structural'
+          ? `a structural guarantee in ${by.path}`
+          : '';
+
+  switch (inv.status) {
+    case 'enforced':
+      return `enforced by ${guard}`;
+    case 'partial':
+      return `PARTIALLY ENFORCED: one half is covered, by ${guard}; the statement says which half is not`;
+    case 'open':
+      return (
+        'NOT ENFORCED: nothing in the kit checks this' +
+        (by.kind === 'none' && by.until ? `, until ${by.until}` : '') +
+        '. A rule you apply, not a guarantee you will be warned about'
+      );
+  }
+}
+
+/** What narrows an invariant, when something does. `targets` is not `tags`. */
+function scopeOf(inv: TInvariant): string {
+  const { tags, targets, parts } = inv.appliesTo;
+  const bits: string[] = [];
+  if (tags) bits.push(`only ${tags.join(', ')}`);
+  if (targets) bits.push(`${targets.join(' / ')} delivery only`);
+  if (parts) bits.push(`parts ${parts.join(', ')}`);
+  return bits.join('; ');
+}
+
+/**
+ * The wrong/right pairs, as one fenced block per invariant.
+ *
+ * A fence rather than inline code because a `right` form is allowed to span
+ * lines (the URL guards do), and because the pairs are meant to be
+ * pattern-matched and grepped verbatim — the self-audit checklist greps emitted
+ * code for the `wrong` form and expects zero hits, which only works if what is
+ * served here is the literal and not a paraphrase of it.
+ */
+function exampleLines(examples: TInvariantExample[]): string[] {
+  if (examples.length === 0) return [];
+  const out: string[] = ['', '```js'];
+  examples.forEach((ex, i) => {
+    if (i > 0) out.push('');
+    out.push('// WRONG', ex.wrong, '// RIGHT', ex.right);
+    if (ex.note) out.push(...ex.note.split('\n').map((l) => `// ${l}`));
+  });
+  out.push('```');
+  return out;
+}
+
+/**
+ * The one sentence saying how much of this section is actually guarded.
+ *
+ * BOTH numerators are derived and both are needed. `open` alone was the first
+ * form of this line, and it is the more quotable half: "3 of the 7 below are
+ * enforced by NOTHING" compresses, in any reader summarising it, into "3
+ * unenforced, 4 enforced" — and two of that four are `partial`, covered on one
+ * half only. That is this repo's own compression-drops-the-qualifier failure,
+ * sitting in the sentence written to prevent it. Naming both counts leaves the
+ * compression nothing to invent.
+ *
+ * Returns '' when every applicable record is fully enforced, so the line can
+ * never outlive the gap it describes and become a comfortable falsehood.
+ *
+ * Exported for reference.test.ts, which drives all four count combinations over
+ * synthetic records — the real catalog can only instance one of them at a time.
+ */
+export function coverageSummary(applicable: TInvariant[]): string {
+  const open = applicable.filter((i) => i.status === 'open').length;
+  const partial = applicable.filter((i) => i.status === 'partial').length;
+  if (open === 0 && partial === 0) return '';
+
+  const total = applicable.length;
+  const half = (n: number) => `only half of what ${n === 1 ? 'it says' : 'they say'}`;
+  const clauses: string[] = [];
+
+  if (open > 0) {
+    clauses.push(`${open} of the ${total} below ${open === 1 ? 'is' : 'are'} enforced by NOTHING at all`);
+  }
+  if (partial > 0) {
+    clauses.push(
+      open > 0
+        ? `${partial} more by ${half(partial)}`
+        : `${partial} of the ${total} below ${partial === 1 ? 'is' : 'are'} enforced by ${half(partial)}`,
+    );
+  }
+  return ` ${clauses.join(', and ')}.`;
+}
+
+/**
+ * `###` to match every other section heading in this file (see '### Props'),
+ * `####` for the per-record blocks, matching the card contract's sub-headings.
+ */
+function catalogSectionLines(tag: string): string[] {
+  const applicable = invariantsFor(tag);
+  const lines: string[] = [];
+
+  if (applicable.length > 0) {
+    lines.push(
+      '',
+      '### Invariants',
+      'Rules that have already broken real consumers of this kit. Each block says what enforces ' +
+        'it — read that line rather than assuming CI catches a violation, because nothing here ' +
+        'reads YOUR code.' + coverageSummary(applicable),
+    );
+
+    for (const inv of applicable) {
+      const scope = scopeOf(inv);
+      lines.push('', `#### ${inv.id}${scope ? ` (${scope})` : ''} — ${coverageOf(inv)}`, inv.statement);
+      if (inv.diagnosis.length > 0) {
+        lines.push('', 'If you are debugging:');
+        for (const d of inv.diagnosis) lines.push(`- ${d.symptom} → ${d.cause}`);
+      }
+      lines.push(...exampleLines(inv.examples));
+    }
+  }
+
+  // No recipe, no section. An element that is in none gets its universal
+  // invariants and nothing else — a "part of: (none)" row would be a fabricated
+  // membership claim dressed as an empty one.
+  const recipes = recipesFor(tag);
+  if (recipes.length > 0) {
+    lines.push(
+      '',
+      '### Appears in surface recipes',
+      'Compositions this element is part of, each with the whole ingredient list and the host ' +
+        'wiring — nothing coordinates one element with another except your own code ' +
+        '(host-coordinates).',
+    );
+    for (const r of recipes) {
+      lines.push(
+        '',
+        `#### ${r.id} — ${r.intent}`,
+        `- **Ingredients:** ${r.ingredients.map((t) => `\`<${t}>\``).join(', ')}`,
+        `- **Delivery:** ${r.targets.join(', ')} · archetype: ${r.archetypes.join(', ')}`,
+        `- **Backend:** your own endpoint, read with \`${r.backend.reader}\` from \`@kitn.ai/ui/wire\``,
+        // Bare ids, deliberately. This row is a DEPENDENCY list, not a coverage
+        // claim, and it can only ever be read a few lines below the full
+        // `### Invariants` section in the same response, where each of these ids
+        // already carries its own coverage line. Repeating the status here would
+        // print it a second (and, with two recipes, a third) time per element for
+        // no fact a reader does not already have on the page.
+        `- **Invariants it leans on:** ${r.invariants.join(', ')}`,
+        '- **Wiring** — event out of A, property into B, wired by the host:',
+      );
+      for (const w of r.wiring) {
+        lines.push(
+          `  - \`<${w.from}>\` fires \`${w.event}\` → host sets \`${w.to}.${w.property}\`` +
+            (w.note ? ` — ${w.note}` : ''),
+        );
+      }
+    }
+  }
+
+  return lines;
+}
+
 function formatReference(tag: string, provider: ToolProvider): string {
   const el = getElement(tag);
 
@@ -371,6 +581,9 @@ function formatReference(tag: string, provider: ToolProvider): string {
       }
     }
   }
+
+  // ── The composition catalog ────────────────────────────────────────────────
+  lines.push(...catalogSectionLines(tag));
 
   return lines.join('\n');
 }

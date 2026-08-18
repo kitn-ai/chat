@@ -135,6 +135,15 @@ jobs:
       - name: Silent-drop guard (wire encoders)
         run: pnpm --filter @kitn.ai/ui run lint:silent-drops
 
+      # Every authored catalog claim (element tags, events, properties, invariant
+      # ids, corpus paths, inventory titles, scenario invariant refs) must resolve
+      # against the derived layer and the tree. This is what stops the authored
+      # surface layer becoming prose about a tree that moved underneath it.
+      # Self-test first: a checker that cannot detect is a green lie. Needs no
+      # build -- it reads derived.json and bundles the catalog with esbuild.
+      - name: Catalog drift guard (authored claims resolve)
+        run: pnpm --filter @kitn.ai/ui run lint:catalog-drift
+
       # Reintroduction guard for `url: URL.createObjectURL(file)` -- an object
       # URL staged onto an attachment's `url`, the field the wire has to encode.
       # It resolves only inside the tab that minted it, so it renders a perfect

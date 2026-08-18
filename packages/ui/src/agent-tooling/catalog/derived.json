@@ -1,0 +1,5008 @@
+{
+  "elements": [
+    {
+      "tag": "kai-agent-card",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "name",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "active",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "needsAttention",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "status",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-activate",
+        "kai-menu"
+      ],
+      "methods": [],
+      "parts": [
+        "status",
+        "menu"
+      ],
+      "composedFrom": [
+        "AgentCard"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-artifact",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "src",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "files",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "tab",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "defaultTab",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "activeFile",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "sandbox",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "iframeTitle",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "maximized",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "expandable",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "openInTab",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "noNav",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "noReload",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "noHome",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "noPathField",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "noTabs",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "standalone",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "readonlyPath",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "displayUrl",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-file-select",
+        "kai-maximize-change",
+        "kai-maximize-intent",
+        "kai-navigate",
+        "kai-tab-change"
+      ],
+      "methods": [
+        "back",
+        "forward",
+        "reload",
+        "home",
+        "navigate",
+        "selectFile",
+        "openExternal",
+        "maximize",
+        "restore"
+      ],
+      "parts": [],
+      "composedFrom": [
+        "Artifact"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-attachments",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "items",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "variant",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "hoverCard",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "removable",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "showMediaType",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "emptyText",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-remove"
+      ],
+      "methods": [],
+      "parts": [
+        "preview",
+        "attachment",
+        "attachment-name"
+      ],
+      "composedFrom": [
+        "Attachments",
+        "Attachment",
+        "AttachmentPreview",
+        "AttachmentInfo",
+        "AttachmentRemove",
+        "AttachmentHoverCard",
+        "AttachmentHoverCardTrigger",
+        "AttachmentHoverCardContent",
+        "AttachmentEmpty"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-audio-visualizer",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "variant",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "state",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "size",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "barCount",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "count",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "radius",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "spread",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "interval",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "color",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "complexity",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "label",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "stream",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "audioElement",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "bands",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "shader",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "animateWhenNotVisible",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [],
+      "methods": [],
+      "parts": [
+        "bar",
+        "cell",
+        "highlighted",
+        "canvas"
+      ],
+      "composedFrom": [
+        "AudioVisualizer"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-avatar",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "src",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "alt",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "fallback",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "size",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [],
+      "methods": [],
+      "parts": [],
+      "composedFrom": [
+        "Avatar"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-badge",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "variant",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [],
+      "methods": [],
+      "parts": [
+        "badge"
+      ],
+      "composedFrom": [
+        "Badge"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-button",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "variant",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "size",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "icon",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "iconTrailing",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "label",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "disabled",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "full",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "align",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "type",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-click"
+      ],
+      "methods": [
+        "focus",
+        "blur",
+        "click"
+      ],
+      "parts": [
+        "button"
+      ],
+      "composedFrom": [
+        "Button"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-card",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "appearance",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "orientation",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "collapse",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "dense",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "dismissible",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "href",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "target",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "rel",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "clickable",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-card-click",
+        "kai-dismiss"
+      ],
+      "methods": [],
+      "parts": [
+        "card",
+        "media",
+        "header",
+        "body",
+        "footer",
+        "dismiss"
+      ],
+      "composedFrom": [
+        "Card"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-cards",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "cards",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "types",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "schemas",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "policy",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "validateCards",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-card-resolved"
+      ],
+      "methods": [
+        "resolve",
+        "dismiss",
+        "getCard"
+      ],
+      "parts": [],
+      "composedFrom": [
+        "CardFallback"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-chain-of-thought",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "steps",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "type",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "value",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "defaultValue",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-value-change"
+      ],
+      "methods": [
+        "expand",
+        "collapse",
+        "toggle"
+      ],
+      "parts": [],
+      "composedFrom": [
+        "ChainOfThoughtAccordion"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-chat",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "search",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "value",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "placeholder",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "loading",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "suggestions",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "suggestionMode",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "persistSuggestions",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "proseSize",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "codeTheme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "codeHighlight",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "chatTitle",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "models",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "currentModel",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "context",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "scrollButton",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "headerStart",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "headerEnd",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "headerFull",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "sidebar",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "empty",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "composer",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "composerActions",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "footer",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "voice",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "triggers",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "kindIcons",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "actionsReveal",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "accept",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "messages",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "cardTypes",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "cardSchemas",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-attachments-change",
+        "kai-attachments-rejected",
+        "kai-message-action",
+        "kai-model-change",
+        "kai-search",
+        "kai-submit",
+        "kai-suggestion-click",
+        "kai-value-change",
+        "kai-voice"
+      ],
+      "methods": [
+        "focus",
+        "blur",
+        "clear",
+        "send",
+        "scrollToBottom"
+      ],
+      "parts": [
+        "header-bar",
+        "header",
+        "sidebar",
+        "footer"
+      ],
+      "composedFrom": [
+        "ChatThread"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-checkpoint",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "label",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "tooltip",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "variant",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "size",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-select"
+      ],
+      "methods": [],
+      "parts": [],
+      "composedFrom": [
+        "Checkpoint",
+        "CheckpointIcon",
+        "CheckpointTrigger"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-choice",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "data",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "cardId",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "heading",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "resolution",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "value",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "defaultValue",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "disabled",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-value-change"
+      ],
+      "methods": [
+        "focus",
+        "select",
+        "send",
+        "dismiss",
+        "reopen"
+      ],
+      "parts": [],
+      "composedFrom": [
+        "ChoiceCard"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-coachmark",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "open",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "defaultOpen",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "headline",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "badge",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "placement",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "tone",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "arrow",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-dismiss",
+        "kai-open-change"
+      ],
+      "methods": [
+        "show",
+        "hide",
+        "toggle"
+      ],
+      "parts": [
+        "bubble",
+        "arrow",
+        "badge",
+        "title",
+        "dismiss"
+      ],
+      "composedFrom": [
+        "Coachmark"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-code-block",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "code",
+          "scalar": true,
+          "optional": false,
+          "fn": false
+        },
+        {
+          "name": "language",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "codeTheme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "codeHighlight",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "proseSize",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [],
+      "methods": [],
+      "parts": [],
+      "composedFrom": [
+        "CodeBlock",
+        "CodeBlockCode"
+      ],
+      "tokens": [
+        "--color-code-foreground"
+      ]
+    },
+    {
+      "tag": "kai-command",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "items",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "placeholder",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "emptyLabel",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-active-change",
+        "kai-query-change",
+        "kai-select"
+      ],
+      "methods": [
+        "focus",
+        "blur",
+        "clear"
+      ],
+      "parts": [
+        "shortcut"
+      ],
+      "composedFrom": [
+        "CommandList"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-compare",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "data",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "compareId",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "selection",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "layout",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "proseSize",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "codeTheme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "codeHighlight",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-compare-select",
+        "kai-error",
+        "kai-ready"
+      ],
+      "methods": [
+        "select",
+        "focus"
+      ],
+      "parts": [],
+      "composedFrom": [
+        "ResponseCompare"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-composer",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "value",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "placeholder",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "disabled",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "loading",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "maxHeight",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "submitOnEnter",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "triggers",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "highlights",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "kindIcons",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-blur",
+        "kai-entity-add",
+        "kai-entity-remove",
+        "kai-focus",
+        "kai-submit",
+        "kai-trigger",
+        "kai-trigger-close",
+        "kai-value-change"
+      ],
+      "methods": [
+        "focus",
+        "blur",
+        "clear",
+        "send",
+        "insertEntity"
+      ],
+      "parts": [],
+      "composedFrom": [
+        "Composer"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-confirm",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "data",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "cardId",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "heading",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "autofocus",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "resolution",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [],
+      "methods": [
+        "focus",
+        "confirm",
+        "dismiss",
+        "reopen"
+      ],
+      "parts": [],
+      "composedFrom": [
+        "ConfirmCard"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-context",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "context",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "warnThreshold",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "dangerThreshold",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-threshold-change"
+      ],
+      "methods": [],
+      "parts": [
+        "track",
+        "fill"
+      ],
+      "composedFrom": [
+        "Context",
+        "ContextTrigger",
+        "ContextContent",
+        "ContextContentHeader",
+        "ContextContentBody",
+        "ContextContentFooter",
+        "ContextInputUsage",
+        "ContextOutputUsage",
+        "ContextReasoningUsage",
+        "ContextCacheUsage"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-conversations",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "groups",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "conversations",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "activeId",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "collapsed",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "defaultCollapsed",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-collapse-toggle",
+        "kai-conversation-select",
+        "kai-new-chat",
+        "kai-search",
+        "kai-toggle-sidebar"
+      ],
+      "methods": [
+        "focus",
+        "clear",
+        "select",
+        "collapse",
+        "expand",
+        "toggle"
+      ],
+      "parts": [
+        "trailing"
+      ],
+      "composedFrom": [
+        "ConversationList",
+        "CollapsedRail"
+      ],
+      "tokens": [
+        "--color-sidebar",
+        "--color-scrollbar-thumb"
+      ]
+    },
+    {
+      "tag": "kai-dialog",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "open",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "defaultOpen",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-open-change"
+      ],
+      "methods": [
+        "show",
+        "hide",
+        "toggle",
+        "focus"
+      ],
+      "parts": [
+        "backdrop",
+        "panel",
+        "body",
+        "header",
+        "footer"
+      ],
+      "composedFrom": [
+        "Dialog"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-editable-label",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "value",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "editing",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "placeholder",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "disabled",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-cancel",
+        "kai-rename"
+      ],
+      "methods": [
+        "edit",
+        "commit",
+        "cancel"
+      ],
+      "parts": [
+        "text",
+        "input"
+      ],
+      "composedFrom": [
+        "EditableLabel"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-embed",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "cardId",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "data",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [],
+      "methods": [],
+      "parts": [],
+      "composedFrom": [
+        "Embed"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-empty",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "emptyTitle",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "description",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [],
+      "methods": [],
+      "parts": [],
+      "composedFrom": [
+        "Empty",
+        "EmptyHeader",
+        "EmptyMedia",
+        "EmptyTitle",
+        "EmptyDescription",
+        "EmptyContent"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-feedback-bar",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "barTitle",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "collectDetail",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "categories",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "detailTitle",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "detailPlaceholder",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "submitLabel",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "thanksMessage",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-close",
+        "kai-feedback",
+        "kai-feedback-detail"
+      ],
+      "methods": [],
+      "parts": [],
+      "composedFrom": [
+        "FeedbackBar"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-file-tree",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "files",
+          "scalar": false,
+          "optional": false,
+          "fn": false
+        },
+        {
+          "name": "activeFile",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "defaultExpanded",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "summary",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-select"
+      ],
+      "methods": [],
+      "parts": [
+        "summary",
+        "status",
+        "stat-additions",
+        "stat-deletions"
+      ],
+      "composedFrom": [
+        "FileTree"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-file-upload",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "multiple",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "accept",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "disabled",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "label",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-files-added"
+      ],
+      "methods": [],
+      "parts": [],
+      "composedFrom": [
+        "FileUpload",
+        "FileUploadTrigger"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-form",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "data",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "cardId",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "heading",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "resolution",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "values",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "defaultValues",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "disabled",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-values-change"
+      ],
+      "methods": [
+        "focus",
+        "send",
+        "validate",
+        "reset",
+        "dismiss",
+        "reopen"
+      ],
+      "parts": [],
+      "composedFrom": [
+        "Form"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-hover-card",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "openDelay",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "closeDelay",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "placement",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "open",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "defaultOpen",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "disabled",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-open-change"
+      ],
+      "methods": [
+        "show",
+        "hide",
+        "toggle"
+      ],
+      "parts": [],
+      "composedFrom": [
+        "HoverCardRoot",
+        "HoverCardTrigger",
+        "HoverCardContent"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-icon",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "name",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "size",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [],
+      "methods": [],
+      "parts": [
+        "icon"
+      ],
+      "composedFrom": [],
+      "tokens": []
+    },
+    {
+      "tag": "kai-image",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "base64",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "bytes",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "alt",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "mediaType",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [],
+      "methods": [],
+      "parts": [],
+      "composedFrom": [
+        "Image"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-input",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "type",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "value",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "placeholder",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "label",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "hint",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "error",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "size",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "disabled",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "readonly",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "required",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "invalid",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "name",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "autocomplete",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "inputmode",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-change",
+        "kai-input"
+      ],
+      "methods": [
+        "focus",
+        "select",
+        "clear"
+      ],
+      "parts": [
+        "field",
+        "input",
+        "label",
+        "hint"
+      ],
+      "composedFrom": [
+        "Input"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-kbd",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "keys",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "platform",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "size",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [],
+      "methods": [],
+      "parts": [
+        "key",
+        "separator"
+      ],
+      "composedFrom": [
+        "Kbd"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-link-preview",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "cardId",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "data",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [],
+      "methods": [],
+      "parts": [],
+      "composedFrom": [
+        "LinkPreview"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-loader",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "variant",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "size",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "text",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [],
+      "methods": [],
+      "parts": [],
+      "composedFrom": [
+        "Loader"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-markdown",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "content",
+          "scalar": true,
+          "optional": false,
+          "fn": false
+        },
+        {
+          "name": "proseSize",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "codeTheme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "codeHighlight",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [],
+      "methods": [],
+      "parts": [],
+      "composedFrom": [
+        "Markdown"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-menu",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "items",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "placement",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "triggerIcon",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "triggerLabel",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "triggerIconTrailing",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "label",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "open",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "defaultOpen",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "disabled",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-open-change",
+        "kai-select"
+      ],
+      "methods": [
+        "show",
+        "hide",
+        "toggle"
+      ],
+      "parts": [
+        "shortcut"
+      ],
+      "composedFrom": [
+        "Dropdown",
+        "DropdownTrigger",
+        "DropdownContent",
+        "DropdownItem",
+        "DropdownSeparator",
+        "DropdownLabel",
+        "DropdownCheckboxItem",
+        "DropdownRadioItem",
+        "DropdownSub",
+        "DropdownSubTrigger",
+        "DropdownSubContent",
+        "Kbd"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-message",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "message",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "role",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "markdown",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "proseSize",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "codeTheme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "codeHighlight",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "actionsReveal",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "avatarSrc",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "avatarFallback",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "avatar",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "cardTypes",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "cardSchemas",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-message-action"
+      ],
+      "methods": [
+        "copy"
+      ],
+      "parts": [
+        "row",
+        "bubble",
+        "content",
+        "actions",
+        "citations",
+        "attachment",
+        "attachment-name",
+        "avatar"
+      ],
+      "composedFrom": [
+        "Message",
+        "MessageAvatar",
+        "MessageBody"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-model-switcher",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "models",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "currentModel",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "open",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "defaultOpen",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "disabled",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-model-change",
+        "kai-open-change"
+      ],
+      "methods": [
+        "show",
+        "hide",
+        "toggle"
+      ],
+      "parts": [],
+      "composedFrom": [
+        "ModelSwitcher"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-nav",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "items",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "value",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "defaultValue",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "defaultCollapsed",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-nav-item-action",
+        "kai-nav-item-close",
+        "kai-nav-select"
+      ],
+      "methods": [
+        "select"
+      ],
+      "parts": [
+        "nav",
+        "item",
+        "group",
+        "chevron",
+        "status",
+        "meta",
+        "item-action"
+      ],
+      "composedFrom": [
+        "Nav"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-notice",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "severity",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "icon",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "dismissible",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-dismiss"
+      ],
+      "methods": [],
+      "parts": [],
+      "composedFrom": [
+        "Notice"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-pane",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "headline",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "subtitle",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "maximized",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "focused",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "showSplit",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "showDock",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "status",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-close",
+        "kai-dock",
+        "kai-maximize",
+        "kai-split"
+      ],
+      "methods": [],
+      "parts": [
+        "header",
+        "body",
+        "controls",
+        "footer"
+      ],
+      "composedFrom": [
+        "Pane"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-pane-group",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "tabs",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "active",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "focused",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-tab-change",
+        "kai-tab-close",
+        "kai-tab-menu"
+      ],
+      "methods": [
+        "select",
+        "focus"
+      ],
+      "parts": [
+        "tabs",
+        "tab",
+        "body",
+        "menu",
+        "close"
+      ],
+      "composedFrom": [
+        "PaneGroup"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-popover",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "placement",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "gutter",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "open",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "defaultOpen",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "disabled",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-open-change"
+      ],
+      "methods": [
+        "show",
+        "hide",
+        "toggle"
+      ],
+      "parts": [],
+      "composedFrom": [
+        "Popover"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-progress-bar",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "value",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "max",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "label",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "tone",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [],
+      "methods": [],
+      "parts": [
+        "track",
+        "fill"
+      ],
+      "composedFrom": [
+        "ProgressBar"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-prompt-dock",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "frame",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "appearance",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [],
+      "methods": [],
+      "parts": [
+        "tray",
+        "top",
+        "bottom"
+      ],
+      "composedFrom": [
+        "PromptDock"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-prompt-input",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "value",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "placeholder",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "disabled",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "loading",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "suggestions",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "suggestionMode",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "search",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "voice",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "stoppable",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "submit",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "attach",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "attachments",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "triggers",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "kindIcons",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-attachments-change",
+        "kai-search",
+        "kai-stop",
+        "kai-submit",
+        "kai-suggestion-click",
+        "kai-toolbar-action",
+        "kai-value-change",
+        "kai-voice"
+      ],
+      "methods": [
+        "focus",
+        "blur",
+        "clear",
+        "send"
+      ],
+      "parts": [
+        "send"
+      ],
+      "composedFrom": [
+        "PromptInput",
+        "PromptInputTextarea",
+        "PromptInputActions",
+        "PromptSuggestion",
+        "Button",
+        "Tooltip",
+        "Attachments",
+        "Attachment",
+        "AttachmentPreview",
+        "AttachmentInfo",
+        "AttachmentRemove"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-reasoning",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "text",
+          "scalar": true,
+          "optional": false,
+          "fn": false
+        },
+        {
+          "name": "label",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "open",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "defaultOpen",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "streaming",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "markdown",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "disabled",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-open-change"
+      ],
+      "methods": [
+        "show",
+        "hide",
+        "toggle"
+      ],
+      "parts": [],
+      "composedFrom": [
+        "Reasoning",
+        "ReasoningTrigger",
+        "ReasoningContent"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-remote",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "src",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "providerOrigin",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "envelope",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "policy",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [],
+      "methods": [],
+      "parts": [],
+      "composedFrom": [],
+      "tokens": []
+    },
+    {
+      "tag": "kai-resizable",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "orientation",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "maximizedIndex",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "handle",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-change",
+        "kai-maximize-change",
+        "kai-maximize-state"
+      ],
+      "methods": [
+        "maximize",
+        "restore"
+      ],
+      "parts": [],
+      "composedFrom": [
+        "ResizableHandle"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-resizable-item",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "size",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "min",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "max",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "locked",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "hidden",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "collapsed",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-change",
+        "kai-maximize-change",
+        "kai-maximize-state"
+      ],
+      "methods": [],
+      "parts": [],
+      "composedFrom": [
+        "ResizableHandle"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-response-stream",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "text",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "mode",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "speed",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "as",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-complete"
+      ],
+      "methods": [],
+      "parts": [],
+      "composedFrom": [
+        "ResponseStream"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-scope-picker",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "availableAuthors",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "availableTags",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "currentLabel",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "open",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "defaultOpen",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "disabled",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-open-change",
+        "kai-scope-change"
+      ],
+      "methods": [
+        "show",
+        "hide",
+        "toggle"
+      ],
+      "parts": [],
+      "composedFrom": [
+        "ChatScopePicker"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-screen",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "open",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "defaultOpen",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "headline",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "back",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "noInert",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-back",
+        "kai-open-change"
+      ],
+      "methods": [
+        "show",
+        "hide",
+        "toggle",
+        "focus"
+      ],
+      "parts": [
+        "header",
+        "back",
+        "body",
+        "title"
+      ],
+      "composedFrom": [
+        "Screen"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-scroll-area",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "orientation",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [],
+      "methods": [],
+      "parts": [
+        "viewport"
+      ],
+      "composedFrom": [
+        "ScrollArea"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-scroll-button",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "for",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "variant",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "size",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-scroll"
+      ],
+      "methods": [],
+      "parts": [],
+      "composedFrom": [
+        "Button"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-search",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "value",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "placeholder",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "icon",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "debounce",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "loading",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "shortcut",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-change",
+        "kai-search",
+        "kai-submit"
+      ],
+      "methods": [
+        "focus",
+        "clear"
+      ],
+      "parts": [
+        "field",
+        "input",
+        "clear"
+      ],
+      "composedFrom": [
+        "Input",
+        "Kbd",
+        "Loader"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-segmented",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "options",
+          "scalar": false,
+          "optional": false,
+          "fn": false
+        },
+        {
+          "name": "value",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "size",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-change"
+      ],
+      "methods": [],
+      "parts": [
+        "track",
+        "segment"
+      ],
+      "composedFrom": [
+        "Segmented"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-separator",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "orientation",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [],
+      "methods": [],
+      "parts": [
+        "separator"
+      ],
+      "composedFrom": [
+        "Separator"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-setting-item",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "label",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "description",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [],
+      "methods": [],
+      "parts": [
+        "label",
+        "control"
+      ],
+      "composedFrom": [
+        "SettingItem"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-settings-group",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "heading",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "description",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [],
+      "methods": [],
+      "parts": [
+        "header",
+        "body"
+      ],
+      "composedFrom": [
+        "SettingsGroup"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-skeleton",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "variant",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "width",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "height",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "lines",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [],
+      "methods": [],
+      "parts": [
+        "skeleton"
+      ],
+      "composedFrom": [
+        "Skeleton"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-skills",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "skills",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [],
+      "methods": [],
+      "parts": [],
+      "composedFrom": [
+        "MessageSkills"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-source",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "href",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "label",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "headline",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "description",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "showFavicon",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [],
+      "methods": [],
+      "parts": [],
+      "composedFrom": [
+        "Source",
+        "SourceTrigger",
+        "SourceContent",
+        "SourceList"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-sources",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "sources",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "showFavicon",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "numbered",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [],
+      "methods": [],
+      "parts": [],
+      "composedFrom": [
+        "Source",
+        "SourceTrigger",
+        "SourceContent",
+        "SourceList"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-status",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "status",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "pulse",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "label",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "size",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [],
+      "methods": [],
+      "parts": [
+        "dot"
+      ],
+      "composedFrom": [
+        "Status"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-suggestions",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "suggestions",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "variant",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "size",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "layout",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "block",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "highlight",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-select"
+      ],
+      "methods": [],
+      "parts": [],
+      "composedFrom": [
+        "PromptSuggestion"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-switch",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "checked",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "defaultChecked",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "disabled",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "label",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "name",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "value",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-change"
+      ],
+      "methods": [
+        "toggle",
+        "focus"
+      ],
+      "parts": [],
+      "composedFrom": [
+        "Switch"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-tabs",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "items",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "value",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "defaultValue",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "variant",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "block",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "disabled",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-tab-change"
+      ],
+      "methods": [
+        "select",
+        "focus"
+      ],
+      "parts": [
+        "tablist",
+        "tab"
+      ],
+      "composedFrom": [
+        "Tabs"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-tasks",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "data",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "cardId",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "heading",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "resolution",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "value",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "defaultValue",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "disabled",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "readonly",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-value-change"
+      ],
+      "methods": [
+        "select",
+        "toggle",
+        "send",
+        "focus",
+        "dismiss",
+        "reopen"
+      ],
+      "parts": [],
+      "composedFrom": [
+        "TasksCard"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-text-shimmer",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "text",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "as",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "duration",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "spread",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [],
+      "methods": [],
+      "parts": [],
+      "composedFrom": [
+        "TextShimmer"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-thinking-bar",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "text",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "stoppable",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "stopLabel",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-stop"
+      ],
+      "methods": [],
+      "parts": [],
+      "composedFrom": [
+        "ThinkingBar"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-thread",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "messages",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "loading",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "proseSize",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "codeTheme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "codeHighlight",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "actionsReveal",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "scrollButton",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "class",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "cardTypes",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "cardSchemas",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-message-action"
+      ],
+      "methods": [
+        "scrollToBottom"
+      ],
+      "parts": [],
+      "composedFrom": [
+        "Thread"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-toast-region",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "toasts",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "position",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "max",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "stack",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "appearance",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "inverse",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "target",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-action",
+        "kai-dismiss"
+      ],
+      "methods": [],
+      "parts": [],
+      "composedFrom": [
+        "ToastRegion"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-tool",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "tool",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "open",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "defaultOpen",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "disabled",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-open-change"
+      ],
+      "methods": [
+        "show",
+        "hide",
+        "toggle"
+      ],
+      "parts": [],
+      "composedFrom": [
+        "Tool"
+      ],
+      "tokens": [
+        "--color-tool-blue",
+        "--color-tool-amber",
+        "--color-tool-green",
+        "--color-tool-red"
+      ]
+    },
+    {
+      "tag": "kai-tooltip",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "content",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "openDelay",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "closeDelay",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "placement",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "open",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "defaultOpen",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "disabled",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-open-change"
+      ],
+      "methods": [
+        "show",
+        "hide",
+        "toggle"
+      ],
+      "parts": [],
+      "composedFrom": [
+        "Tooltip"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-voice-input",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "transcribe",
+          "scalar": false,
+          "optional": true,
+          "fn": true
+        },
+        {
+          "name": "disabled",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "recognitionLang",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "interim",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-audio-captured",
+        "kai-recording-change",
+        "kai-transcript-interim",
+        "kai-transcription"
+      ],
+      "methods": [
+        "start",
+        "stop"
+      ],
+      "parts": [],
+      "composedFrom": [
+        "VoiceInput"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-voice-output",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "text",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "autoplay",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "synthesize",
+          "scalar": false,
+          "optional": true,
+          "fn": true
+        },
+        {
+          "name": "disabled",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-speaking-change",
+        "kai-synthesized"
+      ],
+      "methods": [
+        "speak",
+        "pause",
+        "resume",
+        "stop"
+      ],
+      "parts": [
+        "button"
+      ],
+      "composedFrom": [
+        "VoiceOutput"
+      ],
+      "tokens": []
+    },
+    {
+      "tag": "kai-workspace",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "groups",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "conversations",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "activeId",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "messages",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "value",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "placeholder",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "loading",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "suggestions",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "suggestionMode",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "proseSize",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "codeTheme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "codeHighlight",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "chatTitle",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "models",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "currentModel",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "context",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "scrollButton",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "search",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "voice",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "triggers",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "kindIcons",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "sidebarWidth",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "sidebarMinWidth",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "sidebarMaxWidth",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "sidebarCollapsed",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "defaultSidebarCollapsed",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "collapseBelow",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "compact",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "noConversations",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "cardTypes",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "cardSchemas",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-conversation-select",
+        "kai-message-action",
+        "kai-model-change",
+        "kai-new-chat",
+        "kai-search",
+        "kai-sidebar-toggle",
+        "kai-submit",
+        "kai-suggestion-click",
+        "kai-value-change",
+        "kai-voice"
+      ],
+      "methods": [
+        "toggleSidebar",
+        "collapseSidebar",
+        "expandSidebar",
+        "focus",
+        "clear",
+        "send",
+        "scrollToBottom"
+      ],
+      "parts": [
+        "sidebar"
+      ],
+      "composedFrom": [
+        "ChatThread",
+        "ConversationList",
+        "CollapsedRail",
+        "ResizablePanelGroup",
+        "ResizablePanel",
+        "ResizableHandle"
+      ],
+      "tokens": []
+    }
+  ],
+  "partVariants": [
+    "text",
+    "reasoning",
+    "tool",
+    "card",
+    "source",
+    "file"
+  ],
+  "integrations": [
+    {
+      "id": "openai",
+      "category": "provider",
+      "streamFormat": "openai-sse",
+      "keyExposure": "needs-proxy"
+    },
+    {
+      "id": "anthropic",
+      "category": "provider",
+      "streamFormat": "native",
+      "keyExposure": "needs-proxy"
+    },
+    {
+      "id": "openrouter",
+      "category": "gateway",
+      "streamFormat": "openai-sse",
+      "keyExposure": "needs-proxy"
+    },
+    {
+      "id": "vercel-ai-sdk",
+      "category": "framework",
+      "streamFormat": "ai-sdk",
+      "keyExposure": "needs-proxy"
+    },
+    {
+      "id": "langgraph",
+      "category": "framework",
+      "streamFormat": "openai-sse",
+      "keyExposure": "needs-proxy"
+    },
+    {
+      "id": "cloudflare",
+      "category": "provider",
+      "streamFormat": "openai-sse",
+      "keyExposure": "needs-proxy"
+    },
+    {
+      "id": "ollama",
+      "category": "provider",
+      "streamFormat": "openai-sse",
+      "keyExposure": "frontend-safe"
+    },
+    {
+      "id": "mastra",
+      "category": "harness",
+      "streamFormat": "openai-sse",
+      "keyExposure": "needs-proxy"
+    },
+    {
+      "id": "pi",
+      "category": "harness",
+      "streamFormat": "native",
+      "keyExposure": "needs-proxy"
+    },
+    {
+      "id": "pydantic-ai",
+      "category": "framework",
+      "streamFormat": "openai-sse",
+      "keyExposure": "needs-proxy"
+    },
+    {
+      "id": "mock",
+      "category": "mock",
+      "streamFormat": "native",
+      "keyExposure": "frontend-safe"
+    }
+  ],
+  "capabilityGroups": [
+    {
+      "id": "sources",
+      "components": [
+        "kai-sources"
+      ]
+    },
+    {
+      "id": "tool+reasoning",
+      "components": [
+        "kai-tool",
+        "kai-reasoning"
+      ]
+    },
+    {
+      "id": "artifact+resizable",
+      "components": [
+        "kai-artifact",
+        "kai-resizable"
+      ]
+    },
+    {
+      "id": "voice-input",
+      "components": [
+        "kai-voice-input"
+      ]
+    },
+    {
+      "id": "file-upload+attachments",
+      "components": [
+        "kai-file-upload",
+        "kai-attachments"
+      ]
+    }
+  ],
+  "themeTokens": [
+    "--kai-color-",
+    "--kai-color-accent",
+    "--kai-color-accent-foreground",
+    "--kai-color-background",
+    "--kai-color-border",
+    "--kai-color-card",
+    "--kai-color-card-foreground",
+    "--kai-color-code-foreground",
+    "--kai-color-destructive",
+    "--kai-color-destructive-foreground",
+    "--kai-color-destructive-soft",
+    "--kai-color-foreground",
+    "--kai-color-hover",
+    "--kai-color-info",
+    "--kai-color-info-foreground",
+    "--kai-color-info-soft",
+    "--kai-color-input",
+    "--kai-color-muted",
+    "--kai-color-muted-foreground",
+    "--kai-color-popover",
+    "--kai-color-popover-foreground",
+    "--kai-color-primary",
+    "--kai-color-primary-foreground",
+    "--kai-color-ring",
+    "--kai-color-scrollbar-thumb",
+    "--kai-color-scrollbar-thumb-hover",
+    "--kai-color-secondary",
+    "--kai-color-secondary-foreground",
+    "--kai-color-selected",
+    "--kai-color-sidebar",
+    "--kai-color-success",
+    "--kai-color-success-foreground",
+    "--kai-color-success-soft",
+    "--kai-color-surface",
+    "--kai-color-surface-strong",
+    "--kai-color-surface-sunken",
+    "--kai-color-tool-",
+    "--kai-color-tool-amber",
+    "--kai-color-tool-blue",
+    "--kai-color-tool-green",
+    "--kai-color-tool-red",
+    "--kai-color-warning",
+    "--kai-color-warning-foreground",
+    "--kai-color-warning-soft",
+    "--kai-font-code",
+    "--kai-radius",
+    "--kai-shadow-color",
+    "--kai-text-",
+    "--kai-text-body",
+    "--kai-text-caption",
+    "--kai-text-meta",
+    "--kai-text-title"
+  ],
+  "eventExceptions": [
+    {
+      "file": "src/elements/artifact.tsx",
+      "event": "kai-maximize-intent",
+      "bubbles": true,
+      "composed": true
+    },
+    {
+      "file": "src/elements/resizable.tsx",
+      "event": "kai-maximize-state",
+      "bubbles": false,
+      "composed": true
+    },
+    {
+      "file": "src/primitives/card-routing.ts",
+      "event": "kai-card",
+      "bubbles": true,
+      "composed": true
+    }
+  ]
+}

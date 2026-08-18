@@ -137,6 +137,7 @@ const GENERATED = [
   { file: 'packages/ui/frameworks/react/index.tsx', probe: 'overwrite' },
   { file: 'packages/ui/llms.txt', probe: 'overwrite' },
   { file: 'packages/ui/llms-full.txt', probe: 'overwrite' },
+  { file: 'packages/ui/src/agent-tooling/catalog/derived.json', probe: 'overwrite' },
   { file: 'docs/web-components.md', probe: 'in-block' },
 ];
 
