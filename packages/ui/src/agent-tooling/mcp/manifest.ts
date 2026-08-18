@@ -17,7 +17,7 @@
  * `cardTagForType` for the rule and for what happens when an eighth card type lands.
  */
 
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join, dirname, resolve } from 'node:path';
 // The package's own public entry, by the same specifier the scaffolder tells a
@@ -258,6 +258,81 @@ import { tags as ELEMENT_ENTRY_TAGS } from '../../elements/element-manifest.json
  */
 export function entryForTag(tag: string): string | undefined {
   return (ELEMENT_ENTRY_TAGS as Record<string, string>)[tag];
+}
+
+/**
+ * The per-element entry basename for a tag the register-all bundle does NOT
+ * carry, e.g. 'kai-remote' -> 'remote'. `undefined` for every tag `entryForTag`
+ * already answers, and for a tag no built module registers.
+ *
+ * WHY THIS EXISTS. `entryForTag` reads element-manifest.json, which is generated
+ * from the import list in register-impl.ts — so an opt-in element is absent from
+ * it by construction, and the reference had nothing to name. It said "find the
+ * entry point in the package's published exports", which is the one place in the
+ * reference where "how to make this element exist" does not answer itself.
+ *
+ * WHY IT IS READ AND NOT DERIVED. Stripping `kai-` is wrong for ten of the eighty
+ * elements, so guessing here risks exactly the broken import this tool exists to
+ * catch. The fact is stated in vite.config.elements.ts, which adds an explicit
+ * entry for each opt-in element precisely "so `@kitn.ai/ui/elements/remote`
+ * resolves to a real dist file" — but a vite config is not shipped in the
+ * package, so the runtime reads that intent where it LANDS: dist/elements/. A
+ * candidate is a built module that element-manifest.json does not already claim
+ * (plus the two non-element entries the same build emits), and it is matched to a
+ * tag by the tag literal it registers. So the answer is the built artifact's,
+ * confirmed against the tag rather than assumed from a filename.
+ *
+ * dist/elements/ is a sibling of the manifest in both contexts — the bundled bin
+ * (dist/mcp.es.js) and vitest-over-source, which resolveManifestPath already
+ * normalises — so this needs no second resolution strategy. A missing or
+ * unreadable directory yields `undefined` rather than throwing: the caller's
+ * fallback is the honest "this is opt-in" paragraph it already prints.
+ */
+export function optInEntryForTag(tag: string): string | undefined {
+  if (entryForTag(tag)) return undefined;
+  return optInEntries().get(tag);
+}
+
+/** Not element entries: the register-all barrel and the DOM autoloader, both
+ *  emitted into dist/elements/ by the same per-element build. */
+const NON_ELEMENT_ENTRIES = new Set(['index', 'autoloader']);
+
+let _optInEntries: Map<string, string> | undefined;
+
+function optInEntries(): Map<string, string> {
+  if (_optInEntries) return _optInEntries;
+  _optInEntries = new Map();
+
+  const dir = join(dirname(resolveManifestPath()), 'elements');
+  let candidates: string[];
+  try {
+    const registered = new Set(Object.values(ELEMENT_ENTRY_TAGS as Record<string, string>));
+    candidates = readdirSync(dir)
+      .filter((f) => f.endsWith('.js'))
+      .map((f) => f.slice(0, -'.js'.length))
+      .filter((base) => !registered.has(base) && !NON_ELEMENT_ENTRIES.has(base));
+  } catch {
+    return _optInEntries;
+  }
+
+  // Only the tags element-manifest.json does not already answer for. Narrow on
+  // purpose: an element module may mention a tag it merely renders, and matching
+  // against the whole tag list would let that be read as a registration.
+  const unclaimed = listElements().filter((t) => !entryForTag(t));
+
+  for (const base of candidates) {
+    let code: string;
+    try {
+      code = readFileSync(join(dir, `${base}.js`), 'utf-8');
+    } catch {
+      continue;
+    }
+    for (const tag of unclaimed) {
+      if (!_optInEntries.has(tag) && code.includes(`"${tag}"`)) _optInEntries.set(tag, base);
+    }
+  }
+
+  return _optInEntries;
 }
 
 // ── Which elements have anything to do with cards ────────────────────────────

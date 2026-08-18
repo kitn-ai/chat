@@ -16,6 +16,7 @@ import {
   entryForTag,
   getElement,
   listElements,
+  optInEntryForTag,
 } from '../manifest';
 import type { CemMember } from '../manifest';
 // The RAW literals, not listInvariants() / listSurfaceRecipes(). Those re-run a
@@ -439,7 +440,9 @@ function catalogSectionLines(tag: string): string[] {
       '### Appears in surface recipes',
       'Compositions this element is part of, each with the whole ingredient list and the host ' +
         'wiring — nothing coordinates one element with another except your own code ' +
-        '(host-coordinates).',
+        '(host-coordinates). The WHY behind each wiring edge, and the caveats on the nesting ' +
+        'below, are served once rather than repeated per ingredient — call component_reference ' +
+        'with { name: "recipes" }.',
     );
     for (const r of recipes) {
       lines.push(
@@ -551,15 +554,26 @@ function renderInvariantAppendix(): string[] {
 }
 
 /**
- * The payload out of `CustomEvent<T>`. The manifest types every event, but as the
- * wrapper — printing that raw teaches a reader to write `CustomEvent<...>` where a
- * payload belongs. A type that is not wrapped is returned unchanged.
+ * The payload out of `CustomEvent<T>`, or `undefined` when there is no payload.
+ *
+ * The manifest types every event, but as the wrapper — printing that raw teaches
+ * a reader to write `CustomEvent<...>` where a payload belongs. Anything that is
+ * not of the form `CustomEvent<…>` has NO payload to print, and this returns
+ * `undefined` so the caller omits the `detail` clause entirely.
+ *
+ * That is read off the generator rather than guessed at. gen-element-api.mjs
+ * writes the CEM type as ``CustomEvent<${e.detail}>`` when the element declares a
+ * detail and the bare string `CustomEvent` when it does not — exactly two shapes,
+ * and the bare one means the detail is `void` (e.g. `'kai-click': void` in
+ * button.tsx). Passing an unrecognised type through unchanged looked like a safe
+ * fallback for an already-unwrapped payload; what it actually caught was the void
+ * events, which then rendered ``Carries no detail. `detail`: `CustomEvent` `` — a
+ * line contradicting itself, on 13 events across 10 elements. The whole-manifest
+ * probe in reference.test.ts holds both directions of the rule.
  */
 function eventDetail(typeText: string | undefined): string | undefined {
-  const t = typeText?.trim();
-  if (!t) return undefined;
-  const m = /^CustomEvent<([\s\S]*)>$/.exec(t);
-  return (m ? m[1] : t).trim() || undefined;
+  const m = /^CustomEvent<([\s\S]*)>$/.exec(typeText?.trim() ?? '');
+  return m ? m[1].trim() || undefined : undefined;
 }
 
 function formatReference(tag: string, provider: ToolProvider): string {
@@ -612,16 +626,28 @@ function formatReference(tag: string, provider: ToolProvider): string {
     // iframe card) documented at src/elements/element-diagnostics.ts:347-363 and
     // vite.config.elements.ts:44-50. `import '@kitn.ai/ui/elements'` would NOT
     // register a tag in this state, so asserting it here is exactly the false
-    // claim this section exists to prevent — and the manifest that would tell us
-    // this tag's real per-element specifier deliberately excludes it too, so
-    // guessing one (e.g. by stripping `kai-`) risks the same wrong-import bug
-    // this tool exists to catch. Say so honestly instead of guessing.
+    // claim this section exists to prevent.
+    //
+    // The specifier is still NOT guessed — stripping `kai-` is wrong for ten of
+    // the eighty elements. `optInEntryForTag` reads it off the module the
+    // per-element build actually emitted, matched to this tag by the tag literal
+    // it registers; see the note there. Telling the reader to go look it up was
+    // the last place in this reference where "how to make the element exist" did
+    // not answer itself, and the answer was in the build config all along.
+    const optIn = optInEntryForTag(tag);
     lines.push(
       `**\`${tag}\` is opt-in — it is not part of \`import '@kitn.ai/ui/elements'\` ` +
-        "(register-all), and that import alone will NOT register it.** Find its " +
-        `specific \`@kitn.ai/ui/elements/<name>\` entry point in the package's published ` +
-        `exports before using it. ${neverUpgrades}`,
+        '(register-all), and that import alone will NOT register it.** ' +
+        (optIn
+          ? `Import its own entry point instead. ${neverUpgrades}`
+          : // No built module claims this tag, so there is no specifier to name.
+            // Stay honest rather than inventing one.
+            'Find its specific `@kitn.ai/ui/elements/<name>` entry point in the ' +
+            `package's published exports before using it. ${neverUpgrades}`),
     );
+    if (optIn) {
+      lines.push('', '```ts', `import '@kitn.ai/ui/elements/${optIn}';`, '```');
+    }
   }
   if (iface) {
     lines.push(

@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BUILTIN_CARD_TAGS, cardSchemas, cardSchemaNames, cardTools } from '@kitn.ai/ui/schemas';
 import type { AnthropicToolDef, JsonSchemaToolDef, OpenAIToolDef } from '@kitn.ai/ui/schemas';
 import { reference, coverageSummary } from './tools/reference';
-import { cardTagForType, cardHostTags, entryForTag, listElements } from './manifest';
+import { cardTagForType, cardHostTags, entryForTag, getElement, listElements } from './manifest';
 import { invariants } from '../catalog/invariants';
 import { surfaceRecipes } from '../catalog/surfaces';
 import type { TInvariant } from '../catalog/catalog-types';
@@ -60,13 +60,71 @@ describe('component_reference', () => {
     expect(events).toMatch(/kai-submit/);
     expect(events).toMatch(/value: string/);
     expect(events).not.toMatch(/CustomEvent</); // unwrapped, not raw
+  });
 
-    // no event may be listed without a detail, since the manifest types all of them
-    const listed = events.split('\n').filter((l) => l.startsWith('- **kai-'));
-    expect(listed.length).toBeGreaterThan(0);
-    for (const line of listed) {
-      expect(line, `event line carries no detail: ${line}`).toMatch(/`detail`:/);
+  /**
+   * The `detail` clause, pinned over EVERY event in the manifest rather than
+   * kai-chat's.
+   *
+   * The rule is read off the generator, not guessed: gen-element-api.mjs writes
+   * an event's CEM type as `CustomEvent<${e.detail}>` when the element declares
+   * a payload and the bare string `CustomEvent` when it does not (a `void`
+   * detail, e.g. `'kai-click': void` in button.tsx). Exactly two shapes, so the
+   * manifest itself says which events carry a payload and which carry none —
+   * and the rendered line must agree with it in both directions.
+   *
+   * The previous version of this check could not fail. It ran over kai-chat
+   * alone, where every event has a payload, and its two probes were both
+   * satisfied by the wrong output: `not.toMatch(/CustomEvent</)` passes on a
+   * bare `CustomEvent` because there is no `<`, and "every line has a
+   * `detail`:" passes on a clause that is merely FALSE. Thirteen events across
+   * ten elements shipped `Carries no detail. \`detail\`: \`CustomEvent\``
+   * underneath it.
+   */
+  it('claims a payload for exactly the events the manifest gives one', async () => {
+    const withPayload: string[] = [];
+    const withoutPayload: string[] = [];
+
+    for (const tag of listElements()) {
+      const events = getElement(tag)?.events ?? [];
+      if (events.length === 0) continue;
+
+      const out = await reference.handler({ name: tag });
+      const text = (out.content as { type: string; text: string }[])[0].text;
+      const start = text.indexOf('### Events');
+      expect(start, `${tag} has ${events.length} events and no Events section`).toBeGreaterThan(-1);
+      const rest = text.slice(start + 4);
+      const next = rest.indexOf('\n### ');
+      const section = next === -1 ? rest : rest.slice(0, next);
+
+      for (const ev of events) {
+        const line = section
+          .split('\n')
+          .find((l) => l.startsWith(`- **${ev.name}** `));
+        expect(line, `${tag}: no rendered line for ${ev.name}`).toBeDefined();
+
+        const type = ev.type?.text?.trim() ?? '';
+        const wrapped = /^CustomEvent<([\s\S]*)>$/.exec(type);
+        if (wrapped) {
+          withPayload.push(`${tag}/${ev.name}`);
+          expect(
+            line,
+            `${tag}: ${ev.name} is typed ${type} and must render its payload`,
+          ).toContain(`\`detail\`: \`${wrapped[1].trim()}\``);
+        } else {
+          withoutPayload.push(`${tag}/${ev.name}`);
+          expect(
+            line,
+            `${tag}: ${ev.name} is typed bare \`CustomEvent\` (no payload) and must not claim a detail`,
+          ).not.toMatch(/`detail`:/);
+        }
+      }
     }
+
+    // Neither population may be empty, or one half of the rule is unexercised
+    // and this test is back to passing for the wrong reason.
+    expect(withPayload.length).toBeGreaterThan(0);
+    expect(withoutPayload.length).toBeGreaterThan(0);
   });
 
   it('uses the real per-element entry, not the tag with kai- stripped', async () => {
@@ -96,6 +154,51 @@ describe('component_reference', () => {
     expect(text).not.toMatch(/import '@kitn\.ai\/ui\/elements';\n/);
     // it must still decide loudly rather than staying quiet about the exception
     expect(text).toMatch(/not part of|opt-in|does not register|is not registered/i);
+  });
+
+  /**
+   * "Register it some other way" is only useful if it says WHICH other way.
+   *
+   * Declining to derive the specifier by stripping `kai-` was right — ten of the
+   * eighty elements do not match that derivation. But the answer is not unknown:
+   * the per-element build emits a real module for this tag, and the reference has
+   * to name it.
+   *
+   * This probe does NOT re-run the tool's own lookup. It reads the specifier back
+   * out of the rendered text and resolves it against dist/elements/ — so the
+   * assertion is that the string the reference hands a consumer resolves to a
+   * built module which registers this exact tag, which is the thing that was
+   * wrong when the reference guessed and the thing that would be wrong again.
+   */
+  it('names the entry point for an opt-in element instead of telling the reader to go find it', async () => {
+    const distElements = resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      '../../../dist/elements',
+    );
+    const optedOut = listElements().filter((t) => entryForTag(t) === undefined);
+    expect(optedOut.length).toBeGreaterThan(0);
+
+    for (const tag of optedOut) {
+      const out = await reference.handler({ name: tag });
+      const text = (out.content as { type: string; text: string }[])[0].text;
+
+      const named = [...text.matchAll(/@kitn\.ai\/ui\/elements\/([a-z0-9-]+)/g)].map((m) => m[1]);
+      expect(named, `${tag}: no @kitn.ai/ui/elements/<name> specifier in the reference`).not.toHaveLength(0);
+
+      for (const name of named) {
+        const module = resolve(distElements, `${name}.js`);
+        expect(existsSync(module), `${tag}: names ${name}, which is not a built module`).toBe(true);
+        expect(
+          readFileSync(module, 'utf-8'),
+          `${tag}: names ${name}, which does not register ${tag}`,
+        ).toContain(`"${tag}"`);
+      }
+
+      // and it must not send the reader off to look the answer up themselves
+      expect(text, `${tag}: still tells the reader to go find the entry point`).not.toMatch(
+        /Find its specific/i,
+      );
+    }
   });
 
   it('lists all element tagNames when name is omitted', async () => {
@@ -528,6 +631,44 @@ describe('component_reference does not overstate what the catalog enforces', () 
     expect(text).toContain('host-coordinates');
     expect(text).not.toContain(wrong.wrong);
     expect(text).toMatch(/name: "invariants"/);
+  });
+
+  /**
+   * The other half of the same dedup, which shipped without its signpost.
+   *
+   * Both appendices were extracted in the same pass and only the invariants one
+   * grew a pointer, so the corrected composition note — the rail is a fixed-width
+   * column, the collapse is the rail's own, `<kai-chat>` does not react to it —
+   * sat in the recipes appendix with nothing in any element lookup mentioning it
+   * exists. A kai-chat lookup printed the nesting line with that caveat stripped
+   * and no way to learn there was more.
+   *
+   * The population is derived from the recipe catalog, not written as kai-chat: a
+   * fifth ingredient is covered here the day it is added.
+   */
+  it('an element with a recipe section points at the recipes appendix, as the invariants section does at its own', async () => {
+    const ingredients = listElements().filter((tag) =>
+      surfaceRecipes.some((r) => r.ingredients.includes(tag)),
+    );
+    expect(ingredients.length).toBeGreaterThan(0);
+
+    for (const tag of ingredients) {
+      const section = sectionOf(await textFor(tag), 'Appears in surface recipes');
+      expect(section, `${tag} is a recipe ingredient and has no recipe section`).toBeDefined();
+      expect(section, `${tag}: recipe section does not point at the recipes appendix`).toMatch(
+        /name: "recipes"/,
+      );
+    }
+
+    // and no signpost where there is no section to point from — a pointer on an
+    // element in no recipe is the "fabricated membership" failure in another form
+    const outsiders = listElements().filter((tag) => !ingredients.includes(tag));
+    expect(outsiders.length).toBeGreaterThan(0);
+    for (const tag of outsiders.slice(0, 5)) {
+      expect(await textFor(tag), `${tag} is in no recipe but points at the recipes appendix`).not.toMatch(
+        /name: "recipes"/,
+      );
+    }
   });
 
   it('a recipe row carries the ingredients, so the membership is actionable', async () => {
