@@ -442,6 +442,18 @@ function catalogSectionLines(tag: string): string[] {
   return lines;
 }
 
+/**
+ * The payload out of `CustomEvent<T>`. The manifest types every event, but as the
+ * wrapper — printing that raw teaches a reader to write `CustomEvent<...>` where a
+ * payload belongs. A type that is not wrapped is returned unchanged.
+ */
+function eventDetail(typeText: string | undefined): string | undefined {
+  const t = typeText?.trim();
+  if (!t) return undefined;
+  const m = /^CustomEvent<([\s\S]*)>$/.exec(t);
+  return (m ? m[1] : t).trim() || undefined;
+}
+
 function formatReference(tag: string, provider: ToolProvider): string {
   const el = getElement(tag);
 
@@ -552,7 +564,12 @@ function formatReference(tag: string, provider: ToolProvider): string {
     lines.push('', '### Events (CustomEvent, listen via addEventListener)');
     for (const ev of events) {
       const desc = ev.description?.trim() ?? '';
-      lines.push(`- **${ev.name}** — ${desc}`);
+      const detail = eventDetail(ev.type?.text);
+      lines.push(
+        detail
+          ? `- **${ev.name}** — ${desc} \`detail\`: \`${detail}\``
+          : `- **${ev.name}** — ${desc}`,
+      );
     }
   }
 

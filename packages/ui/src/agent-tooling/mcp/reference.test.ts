@@ -39,6 +39,27 @@ describe('component_reference', () => {
     expect(text).toMatch(/KaiChatElement/);
   });
 
+  it('gives every event its payload shape, not just a sentence', async () => {
+    const out = await reference.handler({ name: 'kai-chat' });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+
+    const events = text.slice(
+      text.indexOf('### Events'),
+      text.indexOf('### Methods'),
+    );
+    // the payload, unwrapped from CustomEvent<...>
+    expect(events).toMatch(/kai-submit/);
+    expect(events).toMatch(/value: string/);
+    expect(events).not.toMatch(/CustomEvent</); // unwrapped, not raw
+
+    // no event may be listed without a detail, since the manifest types all of them
+    const listed = events.split('\n').filter((l) => l.startsWith('- **kai-'));
+    expect(listed.length).toBeGreaterThan(0);
+    for (const line of listed) {
+      expect(line, `event line carries no detail: ${line}`).toMatch(/`detail`:/);
+    }
+  });
+
   it('uses the real per-element entry, not the tag with kai- stripped', async () => {
     // kai-conversations resolves to 'conversation-list'. Ten of eighty elements do
     // not match the naive derivation, so this asserts the manifest is consulted.
