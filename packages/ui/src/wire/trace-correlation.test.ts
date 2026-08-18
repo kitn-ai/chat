@@ -7,6 +7,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { readOpenAIStream } from './read';
 import { consumeModelStream } from './consume';
+import { toOpenAIMessages } from './encode';
 import { subscribeWireDiagnostics, type WireDiagnosticEvent } from './diagnostics';
 
 const nullSink = () =>
@@ -93,6 +94,56 @@ describe('trace correlation', () => {
     for (const e of events) {
       expect(e.traceId).toBe('turn-9');
       expect(e.label).toBe('direct');
+    }
+  });
+
+  it('ONE traceId spans the write path and the read path', async () => {
+    // Encoding happens BEFORE a read opens, so there is no streamId to attach an
+    // encode to and the kit will not invent one. The app's own id is the link,
+    // and the two options bags spell it the same way on purpose.
+    const events: WireDiagnosticEvent[] = [];
+    off = subscribeWireDiagnostics((e) => events.push(e));
+
+    toOpenAIMessages([{ id: 'u1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }], {
+      traceId: 'turn-42',
+      label: 'round-1',
+    });
+    await readOpenAIStream(new Response(BODY), nullSink(), {
+      traceId: 'turn-42',
+      label: 'round-1',
+    });
+
+    const types = new Set(events.map((e) => e.type));
+    expect(types).toContain('encode.request');
+    expect(types).toContain('wire.close');
+    for (const e of events) {
+      expect(e.traceId).toBe('turn-42');
+      expect(e.label).toBe('round-1');
+    }
+    // The encode is NOT pinned to the stream. It has no streamId at all, rather
+    // than being attached to whichever stream happened to open next.
+    const encode = events.find((e) => e.type === 'encode.request')!;
+    expect('streamId' in encode).toBe(false);
+  });
+
+  it('an encode with no traceId carries NO correlation key at all', () => {
+    const events: WireDiagnosticEvent[] = [];
+    off = subscribeWireDiagnostics((e) => events.push(e));
+    toOpenAIMessages([
+      {
+        id: 'a1',
+        role: 'assistant',
+        parts: [
+          { type: 'text', text: 'hi' },
+          { type: 'card', envelope: { type: 'weather', data: {} } as any },
+        ],
+      },
+    ]);
+    expect(events.length).toBeGreaterThan(1); // request AND a drop
+    for (const e of events) {
+      expect('traceId' in e).toBe(false);
+      expect('label' in e).toBe(false);
+      expect('streamId' in e).toBe(false);
     }
   });
 

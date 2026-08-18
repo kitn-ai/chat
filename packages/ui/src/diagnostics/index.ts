@@ -28,6 +28,9 @@ export type { KaiDevtoolsHook } from './hook';
 // reaching into ./wire for the types and ./diagnostics for the hook.
 export { subscribeWireDiagnostics } from '../wire/diagnostics';
 export type {
+  EncodeAttachmentReport,
+  EncodeDroppedEvent,
+  EncodeRequestEvent,
   WireCloseEvent,
   WireDiagnosticBase,
   WireDiagnosticEvent,

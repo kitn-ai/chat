@@ -184,13 +184,130 @@ export interface WireFailedEvent extends WireDiagnosticBase {
   providerCode?: string | number;
 }
 
+/** One attachment the encoder handled, and what became of it.
+ *
+ *  MEDIA TYPE AND SIZE, never the name and never the bytes. A filename is
+ *  something the user typed and is payload; the media type and the size are
+ *  facts about the shape of what went on the wire. */
+export interface EncodeAttachmentReport {
+  /** As the encoder settled it, which is not always what the host declared: a
+   *  `data:` URI's own media type wins over the field beside it. Absent when
+   *  nothing named the file and classification failed before settling one. */
+  mediaType?: string;
+  /**
+   * Byte length of the bytes that went on the wire.
+   *
+   * ABSENT for a remote attachment, always. The provider dereferences that URL
+   * itself and the bytes never enter this process, so any number here would be
+   * invented -- and `0` beside a 40 MB PDF is the exact confident zero the
+   * forward-compat rule exists to prevent.
+   */
+  bytes?: number;
+  /** Whether anything at all reached the wire for this attachment. */
+  encoded: boolean;
+  /**
+   * `'encoded'` -- became an image/file/document block.
+   * `'as-text'`  -- a text file, inlined as text CONTENT, because neither API
+   *                 has an arbitrary-file block. Worth distinguishing: it is
+   *                 why an attachment can be "sent" and still not be visible to
+   *                 the model as a file.
+   * `'skipped'`  -- nothing went out for it. See `reason`.
+   */
+  disposition: 'encoded' | 'skipped' | 'as-text';
+  /** Why it was skipped, in the encoder's own words -- the same sentence the
+   *  throw would have carried. Present on `'skipped'` only. */
+  reason?: string;
+}
+
+/**
+ * A thread was encoded for a provider. THE WRITE-PATH HEADLINE.
+ *
+ * CONTEXT INTEGRITY is the question this answers: is the context that goes to
+ * the model the context you think it is? The encoder is the one layer that sees
+ * both sides -- the `ChatMessage[]` going in and the provider messages coming
+ * out -- so it is the only place the delta between them can be stated as data
+ * instead of as folklore.
+ *
+ * Every field is metadata: counts, variant names, media types, sizes. The
+ * encoded body itself lives under `payload`.
+ */
+export interface EncodeRequestEvent extends WireDiagnosticBase {
+  type: 'encode.request';
+  format: 'openai' | 'anthropic';
+  /** `ChatMessage[]` in. */
+  threadMessages: number;
+  /** Provider messages out. NOT the same number, by design: one assistant turn
+   *  carrying a tool call splits into three wire messages, and a truncating
+   *  host shrinks it the other way. The delta is the point. */
+  wireMessages: number;
+  /**
+   * System-role messages in the ENCODED OUTPUT.
+   *
+   * ZERO IS THE COMMON ANSWER AND IT IS THE FINDING, which is why it is a
+   * stated 0 rather than an omitted key: `ChatMessage.role` has no system
+   * member at all, so the system prompt is always being added somewhere the kit
+   * cannot see -- a server route, a gateway, a middleware. A developer chasing
+   * "why is the model ignoring its instructions" needs to know the kit is not
+   * the layer holding them.
+   */
+  systemMessages: number;
+  /** Role counts over the ENCODED OUTPUT. A role with no messages is absent
+   *  rather than 0; `systemMessages` is stated separately for that reason. */
+  byRole: Record<string, number>;
+  /** Part variants present in the THREAD, by count. */
+  partsIn: Record<string, number>;
+  /** Part variants that reached the wire, by count. `partsIn` minus this is the
+   *  round-trip loss, and each loss also has its own `encode.dropped`. */
+  partsEncoded: Record<string, number>;
+  /** One entry per `file` part the encoder handled, in encounter order. */
+  attachments: EncodeAttachmentReport[];
+  /** UTF-8 byte length of the encoded body as JSON. Absent when the body could
+   *  not be stringified (a circular `tool.output`, a BigInt). */
+  bytes?: number;
+  /** Content-bearing, so opt-in. `attachments` is positionally aligned with the
+   *  metadata array above. */
+  payload?: { body: unknown; attachments?: Array<{ filename?: string }> };
+}
+
+/**
+ * A part that was in the thread and is NOT on the wire.
+ *
+ * THE EVENT THE WHOLE WRITE PATH IS FOR. "Your attachment rendered in the
+ * thread and was never sent to the model" was a sentence nobody could get out
+ * of the kit, and every one of these drops is deliberate, documented, and was
+ * invisible.
+ *
+ * It reports; it never decides. Nothing about what the encoders drop changed in
+ * order to add it.
+ */
+export interface EncodeDroppedEvent extends WireDiagnosticBase {
+  type: 'encode.dropped';
+  /** The `MessagePart` type, taken from the part itself at the site that
+   *  already discriminated it. */
+  variant: string;
+  /** Parts this event accounts for. Always 1 today -- every site reports per
+   *  part, because per-part is what carries the indices -- and the field exists
+   *  so a site that ever aggregates can say N without a new event type. */
+  count: number;
+  /** Position in the `ChatMessage[]` that was passed in. */
+  messageIndex?: number;
+  /** Position in that message's `parts`. */
+  partIndex?: number;
+  /** The reason documented at the drop site, in one sentence. */
+  reason: string;
+  /** Content-bearing, so opt-in: the dropped part itself, verbatim. */
+  payload?: { part: unknown };
+}
+
 export type WireDiagnosticEvent =
   | WireOpenEvent
   | WireFrameEvent
   | WirePartEvent
   | WireCloseEvent
   | WireFailedEvent
-  | WireInterruptedEvent;
+  | WireInterruptedEvent
+  | EncodeRequestEvent
+  | EncodeDroppedEvent;
 
 /** The three correlating fields, built ONCE per read and spread onto every
  *  event it emits. One definition so `read.ts` and `consume.ts` cannot drift
