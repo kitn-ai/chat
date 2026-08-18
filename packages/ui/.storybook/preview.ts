@@ -114,9 +114,19 @@ const preview: Preview = {
     layout: 'fullscreen',
     // Accessibility (axe) runs per-story in both the Storybook UI panel and the
     // `vitest --project=storybook` test run. `test: 'error'` makes a11y
-    // violations FAIL the test run/CI. The kit-wide a11y audit (PR #49) plus the
-    // code-block/checkpoint fixes cleared the real violations, so a11y is gated.
-    // Override per-story with a local `a11y.test` parameter if a fixture differs.
+    // violations FAIL that run. Override per-story with a local `a11y.test`
+    // parameter if a fixture differs.
+    //
+    // "so a11y is gated" is what this comment used to say, and it was wrong on
+    // both halves. It credited a kit-wide audit script (`scripts/audit-a11y.mjs`,
+    // PR #49) that had no assertions and always exited 0, and that is now deleted.
+    // And the `storybook` job is ADVISORY -- it is not in the branch ruleset, so
+    // a red run here does not block a merge. What IS gated on a11y in the
+    // required `test` job is the focus-indicator paint guard
+    // (tests/e2e/focus-ring-paints.spec.ts). Per-story axe here is real signal
+    // and worth keeping; it is just not a gate, and the kit does not currently
+    // pass a full axe sweep -- see apps/docs/.../guides/accessibility.mdx for the
+    // standing violations.
     //
     // `context.exclude` is the kit's ONE documented a11y exception: the Shiki
     // dark theme (github-dark-dimmed) renders code comments at #768390 (~3.87:1),

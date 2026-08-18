@@ -159,6 +159,10 @@ export function Embed(props: EmbedProps): JSX.Element {
               </button>
             }
           >
+            {/* `outline-none` is DELIBERATE here and must stay: a `tabindex="-1"`
+                wrapper focused programmatically after the user activates the
+                player, so keyboard context lands on the embed. Not a tab stop —
+                the iframe inside it takes focus from there. */}
             <div ref={(el) => (playerRegion = el)} tabindex="-1" class="absolute inset-0 outline-none">
               <iframe
                 src={(resolved() as { value: ResolvedEmbed }).value.embedUrl}

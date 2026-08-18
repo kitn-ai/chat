@@ -109,6 +109,11 @@ defineWebComponent<Props, Events>('kai-scroll-button', {
       variant={props.variant ?? 'outline'}
       size={props.size ?? 'icon'}
       aria-label="Scroll to bottom"
+      // While at the bottom this button is fully transparent and pointer-inert,
+      // but it stayed in the tab order — a keyboard user landed on a control
+      // they could not see. Mirrors ScrollButton in components/scroll-button.tsx.
+      tabindex={isAtBottom() ? -1 : 0}
+      aria-hidden={isAtBottom() ? 'true' : undefined}
       class={cn(
         'rounded-full transition-all duration-150 ease-out',
         !isAtBottom()

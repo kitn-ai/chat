@@ -40,12 +40,23 @@
   /* One token-driven focus ring for EVERY focusable element in the shadow root.
      Blue by default (via --color-ring), consistent in light + dark, and
      overridable through --kai-color-ring. Uses `outline` (not a box-shadow
-     ring) so it never clips on overflow and follows the element's radius;
-     `:focus-visible` so it only appears for keyboard navigation, never on a
-     mouse click. Components that render their own ring set
-     `focus-visible:outline-none` (a utility in a later cascade layer) and win
-     over this — so there's no double ring, just a guaranteed blue fallback for
-     the many controls that have no explicit focus style. */
+     ring) because it follows the element's radius and — unlike a `ring-*`
+     utility — is written in literal values, so it does not depend on any
+     `--tw-*` custom property. That matters more than it looks: `@property`
+     registration is document-global and is ignored inside a shadow root, so
+     every `--tw-*` here is unset and every `ring-*` utility computes to
+     nothing. This literal rule is the only reason most of the kit had a focus
+     indicator at all. `:focus-visible` so it only appears for keyboard
+     navigation, never on a mouse click. Components that render their own ring
+     set `focus-visible:outline-none` (a utility in a later cascade layer) and
+     win over this — so there's no double ring, just a guaranteed blue fallback
+     for the many controls that have no explicit focus style.
+
+     CAVEAT, learned the hard way: an outline is NOT immune to clipping. It is
+     unaffected by the element's OWN overflow, but `outline-offset: 2px` draws
+     it entirely outside the border box, where an ANCESTOR with
+     `overflow: clip`/`hidden` erases it completely. Controls that sit flush
+     inside such a container need `.kai-focus-inset` below. */
   :focus-visible {
     outline: 2px solid var(--color-ring);
     outline-offset: 2px;
@@ -87,6 +98,19 @@
 }
 
 @layer components {
+  /* Focus ring drawn INSIDE the element's border box, for focusable regions
+     that sit flush against a clipping ancestor. The scrollable code-block body
+     and the message log are both `overflow-*` regions filling a rounded
+     `overflow: clip` container, so the default `outline-offset: 2px` put the
+     whole ring outside the clip and it never painted — the outline computed
+     correctly, matched `:focus-visible`, and was erased before it reached the
+     screen. A negative offset keeps it clear of the boundary. Same token and
+     width as the base ring, so it reads identically. */
+  .kai-focus-inset:focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: -2px;
+  }
+
   /* Designed radio + checkbox (appearance-none) so the form controls read as
      intentional, theme correctly in light/dark, and have comfortable targets —
      replacing the weak native defaults. Used via `.kai-radio` / `.kai-checkbox`. */

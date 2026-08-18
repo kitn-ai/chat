@@ -799,9 +799,16 @@ export function Composer(props: ComposerProps): JSX.Element {
   // This is covered by updateTriggerState() in handleInput.
 
   const maxH = () => props.maxHeight ?? 240;
+  // No `outline-none` in the default class. This element is `contenteditable`
+  // with `role="textbox"` — a real tab stop, and the primary one in the kit —
+  // and suppressing the outline left keyboard users with no indication that the
+  // message input was focused. `kai-focus-inset` draws the ring inside the
+  // border box, because the editable fills a rounded, clipping composer shell
+  // that would otherwise erase an outset one. A consumer passing
+  // `editableClass` still replaces this wholesale.
   const editableCls = () =>
     props.editableClass ??
-    'text-foreground min-h-[44px] w-full overflow-y-auto outline-none whitespace-pre-wrap break-words';
+    'text-foreground min-h-[44px] w-full overflow-y-auto kai-focus-inset whitespace-pre-wrap break-words';
 
   const inner = (
     <>
