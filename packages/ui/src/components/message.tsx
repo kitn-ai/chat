@@ -9,7 +9,16 @@ import type { ChatMessageAction, CustomAction, FeedbackVote, MessagePart, Messag
 import { useChatConfig, textClass } from "../primitives/chat-config";
 import { Reasoning, ReasoningTrigger, ReasoningContent } from "./reasoning";
 import { Tool } from "./tool";
-import { Attachments, Attachment, AttachmentPreview, AttachmentInfo } from "./attachments";
+import {
+  Attachments,
+  Attachment,
+  AttachmentPreview,
+  AttachmentHoverCard,
+  AttachmentHoverCardTrigger,
+  AttachmentHoverCardContent,
+  getAttachmentLabel,
+  getMediaCategory,
+} from "./attachments";
 import { Source, SourceTrigger, SourceContent, SourceList } from "./source";
 import { CardRenderer, type CardSchemaMap } from "./card-renderer";
 import type { CardComponentMap } from "../primitives/card-registry";
@@ -477,15 +486,64 @@ function MessageBody(props: MessageBodyProps) {
           <Switch fallback={null}>
             <Match when={groupAs(group(), 'files')}>
               {(g) => (
-                <Attachments variant="inline" class={props.isUser ? 'mb-2 justify-end' : 'mb-2'}>
+                /* `grid`, NOT `inline`. The inline chip gives an image a 20x20
+                   preview — a thumbnail nobody can read — while the 96px tile
+                   and the hover-card full preview both already existed here and
+                   the thread used neither.
+
+                   WHY GRID AND NOT LIST, since `list` shows the filename
+                   outright: `list` stacks (`flex-col`), so a message carrying
+                   four attachments becomes four full-width rows and pushes the
+                   conversation off screen. `grid` is `flex-wrap w-fit`, so the
+                   same four are one 96px-tall row of tiles. Density is what
+                   keeps a thread readable, and it is the whole reason the
+                   thread is not the composer's chip strip.
+
+                   The cost of `grid` is that a tile draws no filename, so the
+                   hover card comes with it — that is the affordance the tile
+                   omits, and `<AttachmentPreview>` also emits an `sr-only`
+                   label under `grid` so the name is not hover-only for AT. */
+                <Attachments variant="grid" class={props.isUser ? 'mb-2 ml-auto' : 'mb-2'}>
                   {/* Reference-keyed <For> is right HERE: the run's part objects
                       are carried over untouched by the folds, and an attachment
                       holds no state worth preserving. */}
                   <For each={g().parts}>
                     {(fp) => (
                       <Attachment data={fp.attachment}>
-                        <AttachmentPreview />
-                        <AttachmentInfo />
+                        <AttachmentHoverCard>
+                          <AttachmentHoverCardTrigger class="block size-full">
+                            <AttachmentPreview />
+                          </AttachmentHoverCardTrigger>
+                          <AttachmentHoverCardContent>
+                            {/* An image gets the full preview; everything else
+                                gets the name and type the tile could not fit. */}
+                            <Show
+                              when={
+                                getMediaCategory(fp.attachment) === 'image' &&
+                                fp.attachment.type === 'file' &&
+                                fp.attachment.url
+                              }
+                              fallback={
+                                <>
+                                  <div class="text-body font-medium">
+                                    {getAttachmentLabel(fp.attachment)}
+                                  </div>
+                                  <Show when={fp.attachment.mediaType}>
+                                    <div class="text-muted-foreground text-caption">
+                                      {fp.attachment.mediaType}
+                                    </div>
+                                  </Show>
+                                </>
+                              }
+                            >
+                              <img
+                                alt={getAttachmentLabel(fp.attachment)}
+                                class="block max-h-64 max-w-xs rounded object-contain"
+                                src={fp.attachment.url}
+                              />
+                            </Show>
+                          </AttachmentHoverCardContent>
+                        </AttachmentHoverCard>
                       </Attachment>
                     )}
                   </For>
