@@ -429,7 +429,7 @@ if (!rubricFor(scenario).dimensions.some((d) => d.id === GATE_ID)) {
 console.log(`acceptance-gate-compiles: ${info.runId} — ${scenario.id}, framework ${framework} → ${FRAMEWORK_PROJECT[framework]} project`);
 
 const gatesPath = arg('--gates') ?? join(runDir, 'gates.json');
-const { wrote, result } = runGate({ runDir, framework, gatesPath, keep: args.includes('--keep') });
+const { wrote, result } = runGate({ runDir, framework, keep: args.includes('--keep') });
 
 if (!wrote) {
   // Do not leave a stale verdict behind: a gates.json written by an earlier run
