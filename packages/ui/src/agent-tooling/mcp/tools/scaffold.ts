@@ -21,6 +21,12 @@ import { chatRoutePreamble, defaultModelFor } from '../../route-emit';
 // so the Node MCP pass typechecks and bundles it unchanged. See
 // `ATTACHMENT_ACCEPT`.
 import { encodableMediaTypes } from '../../../wire/media-types';
+// The composition catalog, read for one fact: where a companion element GOES.
+// The RAW literal rather than `listSurfaceRecipes()`, matching `reference.ts` —
+// the accessor re-runs a zod parse over the whole catalog on every call, and
+// these records are already validated by their own tests and by
+// `lint:catalog-drift`.
+import { surfaceRecipes } from '../../catalog/surfaces';
 
 /**
  * scaffold — the keystone tool. Composes a working chat surface from four axes:
@@ -1007,6 +1013,155 @@ function isWorkspace(components: readonly string[]): boolean {
   return components.includes('kai-resizable') && components.includes('kai-artifact');
 }
 
+// ── composition: where a companion GOES ──────────────────────────────────────
+
+/**
+ * The catalog's nesting decision for one tag, or null.
+ *
+ * READ from the surface recipes rather than typed here, so the slot name and the
+ * parent live in exactly one place. Before this, the scaffolder emitted the
+ * conversation rail as a sibling BELOW the chat in a `flex-direction: column`,
+ * while `<kai-chat>` documented a `sidebar` slot described as "left column (your
+ * nav / conversation list)" — two answers, no way to tell which the kit meant.
+ * Now there is one answer and this reads it; revising the recipe moves the
+ * emitters with it.
+ *
+ * Deliberately not a Map built once at module scope: the recipes are a handful
+ * of records, this runs a few times per request, and a lazily-built cache is a
+ * second place for the answer to live.
+ */
+function slotPlacementFor(tag: string): { parent: string; slot: string } | null {
+  for (const r of surfaceRecipes) {
+    for (const c of r.composition ?? []) {
+      if (c.child === tag) return { parent: c.parent, slot: c.slot };
+    }
+  }
+  return null;
+}
+
+/**
+ * The companions this surface SLOTS into `<kai-chat>`, in `components` order.
+ *
+ * Both halves are required: the catalog has to state a placement, and the parent
+ * has to be in the request. A `components` list naming a slotted child without
+ * its parent still gets the child — as a sibling, with the notice below — rather
+ * than a `slot=` attribute pointing at an element that is not there.
+ */
+function slottedInChat(components: readonly string[]): { tag: string; slot: string }[] {
+  return components.flatMap((tag) => {
+    const placement = slotPlacementFor(tag);
+    if (!placement || placement.parent !== 'kai-chat') return [];
+    return components.includes(placement.parent) ? [{ tag, slot: placement.slot }] : [];
+  });
+}
+
+/**
+ * What the React family says instead, because it cannot say the other thing.
+ *
+ * The catalog composes the rail INSIDE `<kai-chat>` on the `sidebar` slot, and
+ * the generated React wrappers cannot express that: `WebComponentProps`
+ * (frameworks/react/runtime.tsx) declares `theme`, `className`, `style`, `id`
+ * and `children` and nothing else, and the runtime's `createElement` forwards
+ * exactly those four — so `<Conversations slot="sidebar" />` is
+ * `error TS2322: Property 'slot' does not exist`, measured with the same tsc
+ * `verify:scaffold` runs, and would not reach the DOM even if it compiled.
+ *
+ * So this target emits the sibling it CAN emit and says which one it is. The
+ * alternative — quietly emitting the layout the catalog does not describe, under
+ * a comment claiming the composition — is how the original defect read.
+ */
+function railSiblingNote(tag: string): string[] {
+  const w = conversationsWiring();
+  // The wrapper's handler prop, DERIVED the way the wrapper generator derives it:
+  // drop the `kai-` prefix, PascalCase the rest, prefix `on`. That is what makes
+  // `kai-conversation-select` into `onConversationSelect` in react/index.tsx.
+  const handler = `on${toPascalCase(w.event)}`;
+  return [
+    `      {/* NOT WIRED, and NOT SLOTTED — both deliberate, both fixable here.`,
+    `          COMPOSITION: the kit composes this as <${tag} slot="sidebar"> INSIDE`,
+    `          <kai-chat>, which owns the two-column layout and the collapse behaviour.`,
+    `          The generated React wrappers take no \`slot\` prop (see WebComponentProps`,
+    `          in @kitn.ai/ui/react), so this renders as a sibling instead. Drop to the`,
+    `          raw <kai-chat> custom element if you want the slotted layout.`,
+    `          WIRING: set ${w.property}={...} and ${handler}={...} — the handler`,
+    `          reads event.detail.id and calls setMessages with that thread. */}`,
+  ];
+}
+
+/** Wrap prose in one `<!-- … -->` block at `pad`, closing on the LAST line
+ *  whatever the length — an index-counted closer silently stops closing the day
+ *  the prose grows a line. */
+function htmlComment(lines: string[], pad: string): string[] {
+  return lines.map(
+    (l, i) => `${pad}${i === 0 ? '<!-- ' : '     '}${l}${i === lines.length - 1 ? ' -->' : ''}`,
+  );
+}
+
+/**
+ * The slotted companions as markup, for every target that writes real tags:
+ * html, vue, svelte and angular all spell an element and an attribute the same
+ * way, so they share this rather than carrying four copies of the decision.
+ *
+ * `wired` is what the target actually DID, not what it should have done. The
+ * html target emits the full wiring in `htmlModule` and passes true; the others
+ * pass false and get the notice, because the alternative — a rail that renders
+ * and does nothing, under a comment that says "wire data props" — is the defect
+ * this whole change is about. The React family is absent from this list on
+ * purpose: `WebComponentProps` in frameworks/react/runtime.tsx has no `slot`,
+ * and the runtime does not forward one, so a `<Conversations slot="sidebar" />`
+ * would neither typecheck nor render there. See `railSiblingNote`.
+ */
+function slottedChildMarkup(
+  components: readonly string[],
+  pad: string,
+  opts: { wired: boolean; ids: boolean },
+): string[] {
+  const w = conversationsWiring();
+  return slottedInChat(components).flatMap((s) => [
+    `${pad}<!-- SLOTTED, not a sibling: <kai-chat> owns the two-column layout, the`,
+    `${pad}     collapse behaviour and the responsive breakpoint.${opts.wired ? ' src/main.ts drives it.' : ''} -->`,
+    ...(opts.wired ? [] : htmlComment(notWiredNote(s.tag, w.property, w.event), pad)),
+    `${pad}<${s.tag}${opts.ids ? ` id="${s.tag.replace(/^kai-/, '')}"` : ''} slot="${s.slot}" style="display:block;height:100%"></${s.tag}>`,
+  ]);
+}
+
+/**
+ * What an emitted-but-unwired companion says about itself.
+ *
+ * The bar is the one the previous text failed: a builder pasted
+ * `<!-- wire data props — see the component_reference MCP tool -->`, got a
+ * working chat beside an empty grey column, and could not tell from the output
+ * whether the rail was broken, unwired, or waiting on data — so it names the
+ * PROPERTY and the EVENT, which is the whole of what is missing.
+ *
+ * "NOT WIRED" is the greppable half and the tests key on it. Keep the words.
+ */
+function notWiredNote(tag: string, property: string, event: string): string[] {
+  return [
+    `NOT WIRED: <${tag}> needs el.${property} (a JS property — arrays are never`,
+    `attributes) and a ${event} listener that sets kai-chat.messages from your own`,
+    `thread store. The html target emits that wiring in full; ask the`,
+    `component_reference MCP tool for the workspace-chat recipe to see the shape.`,
+  ];
+}
+
+/**
+ * The rail's contract, in one place: the property to set and the event to hear.
+ *
+ * The EVENT is read off the recipe — that is precisely what a wiring edge is —
+ * so renaming the event in the catalog renames it in every emitted comment. The
+ * PROPERTY is not: a wiring edge names the property the event WRITES (`messages`
+ * on `<kai-chat>`), never the one that feeds the source element, so `conversations`
+ * is a copy of the element's own API and is registered here as one. The
+ * fall-through keeps the emitted note truthful if the edge is ever removed.
+ */
+function conversationsWiring(): { property: string; event: string } {
+  const edge = surfaceRecipes
+    .flatMap((r) => r.wiring)
+    .find((w) => w.from === 'kai-conversations' && w.to === 'kai-chat' && w.property === 'messages');
+  return { property: 'conversations', event: edge?.event ?? 'kai-conversation-select' };
+}
+
 // ── attachments ───────────────────────────────────────────────────────────────
 
 /**
@@ -1393,13 +1548,32 @@ interface RenderCtx {
  * block of its own, above the chat, with ids the emitted module wires together.
  */
 function componentTags(components: readonly string[], chatFill: string): string {
+  // The catalog's nesting decision, applied: a slotted companion is a CHILD of
+  // <kai-chat> and never a sibling in the column below it, so it comes out of the
+  // companion loop the same way the workspace and attachment pairs do.
+  const slotted = slottedInChat(components);
+  const slottedTags = new Set(slotted.map((s) => s.tag));
   const companionTags = components.filter(
     (t) =>
       t !== 'kai-chat' &&
       !MESSAGE_EMBEDDED_TAGS.has(t) &&
       !WORKSPACE_STRUCTURAL_TAGS.has(t) &&
+      !slottedTags.has(t) &&
       !(hasAttachments(components) && ATTACHMENT_TAGS.has(t)),
   );
+  // `display:block;height:100%` because a custom element is inline by default and
+  // an inline rail collapses to its text height in the shell's fixed-width
+  // column. The same two declarations the chat-slots story puts on it.
+  const chatBlock = (pad: string): string[] =>
+    slotted.length === 0
+      ? [`${pad}<kai-chat id="chat" suggestion-mode="submit" style="${chatFill}"></kai-chat>`]
+      : [
+          `${pad}<kai-chat id="chat" suggestion-mode="submit" style="${chatFill}">`,
+          // wired: `htmlModule` below emits the property, the two listeners and
+          // the thread map. This is the one target that does.
+          ...slottedChildMarkup(components, `${pad}  `, { wired: true, ids: true }),
+          `${pad}</kai-chat>`,
+        ];
   const hasEmbedded = components.some((t) => MESSAGE_EMBEDDED_TAGS.has(t));
   const hasStandaloneCompanions = companionTags.length > 0;
 
@@ -1433,7 +1607,7 @@ function componentTags(components: readonly string[], chatFill: string): string 
       `  <!-- kai-resizable needs kai-resizable-item children to render panels. -->`,
       `  <kai-resizable orientation="horizontal" style="display:block;width:100%;height:100%">`,
       `    <kai-resizable-item size="40%" min="240px">`,
-      `      <kai-chat id="chat" suggestion-mode="submit" style="${chatFill}"></kai-chat>`,
+      ...chatBlock('      '),
       `    </kai-resizable-item>`,
       `    <kai-resizable-item min="280px">`,
       `      <!-- Replace src with your artifact URL or set .files for multi-file preview. -->`,
@@ -1442,7 +1616,7 @@ function componentTags(components: readonly string[], chatFill: string): string 
       `  </kai-resizable>`,
     );
   } else {
-    lines.push(`  <kai-chat id="chat" suggestion-mode="submit" style="${chatFill}"></kai-chat>`);
+    lines.push(...chatBlock('  '));
   }
 
   if (hasEmbedded) {
@@ -1503,6 +1677,7 @@ function htmlModule(ctx: RenderCtx, components: readonly string[]): string {
   const hasEmbedded = components.some((t) => MESSAGE_EMBEDDED_TAGS.has(t));
   const hasSources = components.includes('kai-sources');
   const attachments = hasAttachments(components);
+  const conversations = slottedInChat(components).some((s) => s.tag === 'kai-conversations');
 
   // MODULE scope, like `model`/`runTool`: the staged list has to outlive `init()`
   // so the submit handler can read it, and `Staged` is used by the module-scope
@@ -1565,6 +1740,69 @@ function htmlModule(ctx: RenderCtx, components: readonly string[]): string {
       ]
     : [];
 
+  // The conversation rail, WIRED — the whole point of emitting it. The rail
+  // renders what its `conversations` property holds and reports what the user
+  // picked; swapping the thread is the host's job and nothing does it by itself
+  // (host-coordinates). Both recipe edges are here: `kai-conversation-select`
+  // loads a thread, `kai-new-chat` starts an empty one.
+  //
+  // NOTHING IS FABRICATED IN THE THREAD. `threads` starts EMPTY and fills with
+  // what the user actually says, so selecting a seeded row opens a blank chat
+  // rather than a conversation they never had — the rule `SAMPLE_AGENTIC_MESSAGE`
+  // states for the message list, applied to the list of lists. The conversation
+  // ROWS are placeholder chrome, marked as such, like `sampleSources`.
+  const conversationsSetupLines = conversations
+    ? [
+        `  const conversationsEl = document.getElementById('conversations') as KaiConversationsElement;`,
+        `  // Same upgrade rule as <kai-chat>: 'conversations' is an array, so it is a`,
+        `  // PROPERTY, and a property set before the element upgrades is dropped on upgrade.`,
+        `  await customElements.whenDefined('kai-conversations');`,
+        `  // The row shape, DERIVED from the property it is assigned to — it cannot`,
+        `  // drift out of step with the element the way a hand-written copy would.`,
+        `  type Conversation = KaiConversationsElement['conversations'][number];`,
+        `  // Replace this list with your own. Your store owns titles, grouping and order;`,
+        `  // the rail renders what it is given, in the order it is given.`,
+        `  const now = new Date().toISOString();`,
+        `  let conversationRows: Conversation[] = [`,
+        `    { id: 'c1', title: 'New chat', scope: { type: 'document' }, messageCount: 0, lastMessageAt: now, updatedAt: now },`,
+        `  ];`,
+        `  let activeId = conversationRows[0].id;`,
+        `  // The threads you have open, keyed by conversation id. It starts EMPTY on`,
+        `  // purpose: seeding it would put words in the user's mouth. Load a thread`,
+        `  // from your backend in the select handler below and this fills itself.`,
+        `  const threads: Record<string, KaiChatElement['messages']> = {};`,
+        `  // A NEW array per write — the array reference is what notifies.`,
+        `  const showConversations = () => {`,
+        `    conversationsEl.conversations = [...conversationRows];`,
+        `    conversationsEl.activeId = activeId;`,
+        `  };`,
+        `  showConversations();`,
+        ``,
+        `  conversationsEl.addEventListener('kai-conversation-select', (event: Event) => {`,
+        `    const { id } = (event as CustomEvent<{ id: string }>).detail;`,
+        `    // Keep what is on screen before switching away from it.`,
+        `    threads[activeId] = chat.messages ?? [];`,
+        `    activeId = id;`,
+        `    // ...and load the one picked. Fetch it here if your store is remote.`,
+        `    chat.messages = [...(threads[id] ?? [])];`,
+        `    showConversations();`,
+        `  });`,
+        `  conversationsEl.addEventListener('kai-new-chat', () => {`,
+        `    // The event carries no detail by design: it IS the whole signal.`,
+        `    threads[activeId] = chat.messages ?? [];`,
+        `    const at = new Date().toISOString();`,
+        `    activeId = \`c\${conversationRows.length + 1}\`;`,
+        `    conversationRows = [`,
+        `      { id: activeId, title: 'New chat', scope: { type: 'document' }, messageCount: 0, lastMessageAt: at, updatedAt: at },`,
+        `      ...conversationRows,`,
+        `    ];`,
+        `    chat.messages = [];`,
+        `    showConversations();`,
+        `  });`,
+        ``,
+      ]
+    : [];
+
   // Module scope, like vue/angular: the handler below closes over all three, and
   // `runTool` is a function declaration rather than something wedged into init().
   const modelLines = ctx.defaultModel
@@ -1596,6 +1834,9 @@ function htmlModule(ctx: RenderCtx, components: readonly string[]): string {
     'KaiChatElement',
     ...(hasSources ? ['KaiSourcesElement'] : []),
     ...(attachments ? ['KaiAttachmentsElement'] : []),
+    // Same rule again: only when the rail is really on this surface. It types the
+    // property assignments AND supplies the row type, so it is used twice over.
+    ...(conversations ? ['KaiConversationsElement'] : []),
   ].join(', ');
 
   /**
@@ -1652,6 +1893,7 @@ function htmlModule(ctx: RenderCtx, components: readonly string[]): string {
     ...seedLines,
     ...sourcesSetupLines,
     ...attachmentSetupLines,
+    ...conversationsSetupLines,
   ];
 
   // `Event`, not `CustomEvent`: addEventListener with a custom event name hands
@@ -1808,6 +2050,10 @@ function renderJsx(components: readonly string[], ctx: RenderCtx, framework: str
         `      {/* Replace sampleSources with your real data. */}`,
         `      <Sources sources={sampleSources} />`,
       );
+    } else if (slotPlacementFor(t)) {
+      // The catalog says where this one goes, and this target cannot put it
+      // there — so it says so, rather than emitting a layout nothing describes.
+      companionJsxLines.push(...railSiblingNote(t), `      <${toPascalCase(t)} />`);
     } else {
       companionJsxLines.push(`      {/* wire data props — see the component_reference MCP tool */}`);
       companionJsxLines.push(`      <${toPascalCase(t)} />`);
@@ -2149,11 +2395,16 @@ function renderVue(components: readonly string[], ctx: RenderCtx): string {
   // SCAF-14: also exclude workspace structural tags (handled by the workspace block below).
   const workspace = isWorkspace(components);
   const attachments = hasAttachments(components);
+  // Slotted companions are children of <kai-chat> (see `slottedChildMarkup`), so
+  // they leave the sibling loop the same way they do in the html target.
+  const slottedTags = new Set(slottedInChat(components).map((s) => s.tag));
+  const vueSlotted = (pad: string) => slottedChildMarkup(components, pad, { wired: false, ids: false });
   const standaloneCompanionTags = components.filter(
     (t) =>
       t !== 'kai-chat' &&
       !MESSAGE_EMBEDDED_TAGS.has(t) &&
       !WORKSPACE_STRUCTURAL_TAGS.has(t) &&
+      !slottedTags.has(t) &&
       !(attachments && ATTACHMENT_TAGS.has(t)),
   );
   const hasEmbedded = components.some((t) => MESSAGE_EMBEDDED_TAGS.has(t));
@@ -2309,7 +2560,9 @@ function renderVue(components: readonly string[], ctx: RenderCtx): string {
         `          suggestion-mode="submit"`,
         `          style="${p.chatFill}"`,
         `          @kai-submit="onSubmit"`,
-        `        ></kai-chat>`,
+        `        >`,
+        ...vueSlotted('          '),
+        `        </kai-chat>`,
         `      </kai-resizable-item>`,
         `      <kai-resizable-item min="280px">`,
         `        <!-- Replace src with your artifact URL or set .files for multi-file preview. -->`,
@@ -2327,7 +2580,9 @@ function renderVue(components: readonly string[], ctx: RenderCtx): string {
         `      suggestion-mode="submit"`,
         `      style="${p.chatFill}"`,
         `      @kai-submit="onSubmit"`,
-        `    ></kai-chat>`,
+        `    >`,
+        ...vueSlotted('      '),
+        `    </kai-chat>`,
         companions,
       ];
 
@@ -2399,11 +2654,16 @@ function renderSvelte(components: readonly string[], ctx: RenderCtx): string {
   // SCAF-14: also exclude workspace structural tags (handled by the workspace block below).
   const workspace = isWorkspace(components);
   const attachments = hasAttachments(components);
+  // Slotted companions are children of <kai-chat>, not siblings — same rule the
+  // html and vue targets follow, read from the same catalog record.
+  const slottedTags = new Set(slottedInChat(components).map((s) => s.tag));
+  const svelteSlotted = (pad: string) => slottedChildMarkup(components, pad, { wired: false, ids: false });
   const standaloneCompanionTags = components.filter(
     (t) =>
       t !== 'kai-chat' &&
       !MESSAGE_EMBEDDED_TAGS.has(t) &&
       !WORKSPACE_STRUCTURAL_TAGS.has(t) &&
+      !slottedTags.has(t) &&
       !(attachments && ATTACHMENT_TAGS.has(t)),
   );
   const hasEmbedded = components.some((t) => MESSAGE_EMBEDDED_TAGS.has(t));
@@ -2554,7 +2814,9 @@ function renderSvelte(components: readonly string[], ctx: RenderCtx): string {
         `  <!-- kai-resizable needs kai-resizable-item children to render panels. -->`,
         `  <kai-resizable orientation="horizontal" style="display:block;width:100%;height:100%">`,
         `    <kai-resizable-item size="40%" min="240px">`,
-        `      <kai-chat bind:this={chatEl} suggestion-mode="submit" style="${p.chatFill}" onkai-submit={onSubmit}></kai-chat>`,
+        `      <kai-chat bind:this={chatEl} suggestion-mode="submit" style="${p.chatFill}" onkai-submit={onSubmit}>`,
+        ...svelteSlotted('        '),
+        `      </kai-chat>`,
         `    </kai-resizable-item>`,
         `    <kai-resizable-item min="280px">`,
         `      <!-- Replace src with your artifact URL or set .files for multi-file preview. -->`,
@@ -2565,7 +2827,9 @@ function renderSvelte(components: readonly string[], ctx: RenderCtx): string {
         companionLines,
       ]
     : [
-        `  <kai-chat bind:this={chatEl} suggestion-mode="submit" style="${p.chatFill}" onkai-submit={onSubmit}></kai-chat>`,
+        `  <kai-chat bind:this={chatEl} suggestion-mode="submit" style="${p.chatFill}" onkai-submit={onSubmit}>`,
+        ...svelteSlotted('    '),
+        `  </kai-chat>`,
         companionLines,
       ];
 
@@ -2709,6 +2973,10 @@ function renderTanstackStart(components: readonly string[], ctx: RenderCtx): str
         `      {/* Replace sampleSources with your real data. */}`,
         `      <Sources sources={sampleSources} />`,
       );
+    } else if (slotPlacementFor(t)) {
+      // The catalog says where this one goes, and this target cannot put it
+      // there — so it says so, rather than emitting a layout nothing describes.
+      companionJsxLines.push(...railSiblingNote(t), `      <${toPascalCase(t)} />`);
     } else {
       companionJsxLines.push(`      {/* wire data props — see the component_reference MCP tool */}`);
       companionJsxLines.push(`      <${toPascalCase(t)} />`);
@@ -2961,11 +3229,15 @@ function renderAngular(components: readonly string[], ctx: RenderCtx): string {
 
   const workspace = isWorkspace(components);
   const attachments = hasAttachments(components);
+  // Slotted companions are children of <kai-chat> (see `chatTag`), so they leave
+  // the sibling loop the way the workspace and attachment pairs do.
+  const slottedTags = new Set(slottedInChat(components).map((s) => s.tag));
   const standaloneCompanionTags = components.filter(
     (t) =>
       t !== 'kai-chat' &&
       !MESSAGE_EMBEDDED_TAGS.has(t) &&
       !WORKSPACE_STRUCTURAL_TAGS.has(t) &&
+      !slottedTags.has(t) &&
       !(attachments && ATTACHMENT_TAGS.has(t)),
   );
   const hasEmbedded = components.some((t) => MESSAGE_EMBEDDED_TAGS.has(t));
@@ -3115,8 +3387,9 @@ function renderAngular(components: readonly string[], ctx: RenderCtx): string {
     ? [`      Object.assign(this.sourcesEl().nativeElement, { sources: this.sampleSources });`]
     : [];
 
-  const chatTag = (pad: string) =>
-    [
+  const chatTag = (pad: string) => {
+    const slotted = slottedChildMarkup(components, '  ', { wired: false, ids: false });
+    return [
       `<kai-chat`,
       `  #chat`,
       `  [messages]="messages()"`,
@@ -3125,8 +3398,9 @@ function renderAngular(components: readonly string[], ctx: RenderCtx): string {
       `  suggestion-mode="submit"`,
       `  style="${p.chatFill}"`,
       `  (kai-submit)="onSubmit($event)"`,
-      `></kai-chat>`,
+      ...(slotted.length === 0 ? [`></kai-chat>`] : [`>`, ...slotted, `</kai-chat>`]),
     ].map((l) => `${pad}${l}`);
+  };
 
   const templateBody = workspace
     ? [
@@ -3298,6 +3572,12 @@ function renderSolid(components: readonly string[], ctx: RenderCtx): string {
   );
   const hasSources = standaloneCompanionTags.includes('kai-sources');
   const hasVoice = standaloneCompanionTags.includes('kai-voice-input');
+  // The two above are the only companions this renderer draws. Anything else in
+  // the list reaches the emitted file as nothing at all, so it is named in the
+  // header rather than dropped in silence.
+  const unrenderedCompanions = standaloneCompanionTags.filter(
+    (t) => t !== 'kai-sources' && t !== 'kai-voice-input',
+  );
 
   // Every name here is referenced by the emitted tree below — `noUnusedLocals` is
   // on in a stock Solid app (`npm run build` runs `tsc` first), so an extra one
@@ -3593,6 +3873,23 @@ function renderSolid(components: readonly string[], ctx: RenderCtx): string {
   return [
     `// SolidJS + Vite — save as: src/App.tsx`,
     `//`,
+    // What this target DROPS, said out loud. It renders Solid components for the
+    // companions it knows (sources, voice input) and nothing at all for the rest,
+    // so a `components` list naming one of those used to produce a file with no
+    // trace of it — a silent drop, and the quiet half of the same defect the
+    // conversation rail had. Naming them is not a fix; it is the honest record
+    // until this target grows a branch for them.
+    ...(unrenderedCompanions.length > 0
+      ? [
+          `// NOT WIRED, and not rendered: ${unrenderedCompanions.join(', ')}.`,
+          `// You asked for ${unrenderedCompanions.length === 1 ? 'it' : 'them'} and this target has no branch for`,
+          `// ${unrenderedCompanions.length === 1 ? 'it' : 'them'} — see the note below on why this file renders Solid`,
+          `// components rather than <kai-*> elements. Compose the Solid component`,
+          `// yourself (ask the component_reference MCP tool for what it exports), or`,
+          `// scaffold the html target, which drives the custom elements directly.`,
+          `//`,
+        ]
+      : []),
     `// This target does NOT use the <kai-*> custom elements, and that is deliberate:`,
     `// the kit is AUTHORED in SolidJS, so a Solid app renders the real components`,
     `// with real props and real fine-grained reactivity. Going through the`,

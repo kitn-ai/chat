@@ -258,6 +258,27 @@ function invariantsFor(tag: string): TInvariant[] {
   return invariants.filter((i) => !i.appliesTo.tags || i.appliesTo.tags.includes(tag));
 }
 
+/**
+ * The recipe's nesting, as markup a reader can paste.
+ *
+ * `noteSep` is how much of the record to print: the appendix passes ' — ' and
+ * gets the WHY, an element lookup passes '' and gets only the shape, on the same
+ * split the wiring rows already use. A recipe with no `composition` prints
+ * nothing at all rather than "flat" — the field being absent means nobody
+ * decided, and a rendered "(none)" would turn a gap into a claim.
+ */
+function compositionLines(r: TSurfaceRecipe, noteSep: string): string[] {
+  if (!r.composition) return [];
+  return [
+    '- **Composition** — where the parts go (a slotted child, not a sibling):',
+    ...r.composition.map(
+      (c) =>
+        `  - \`<${c.child} slot="${c.slot}">\` goes INSIDE \`<${c.parent}>\`` +
+        (noteSep && c.note ? `${noteSep}${c.note}` : ''),
+    ),
+  ];
+}
+
 function recipesFor(tag: string): TSurfaceRecipe[] {
   return surfaceRecipes.filter((r) => r.ingredients.includes(tag));
 }
@@ -427,6 +448,13 @@ function catalogSectionLines(tag: string): string[] {
         `- **Ingredients:** ${r.ingredients.map((t) => `\`<${t}>\``).join(', ')}`,
         `- **Delivery:** ${r.targets.join(', ')} · archetype: ${r.archetypes.join(', ')}`,
         `- **Backend:** your own endpoint, read with \`${r.backend.reader}\` from \`@kitn.ai/ui/wire\``,
+        // WHERE the parts go. Printed per element and not only in the appendix,
+        // because this is the one fact a builder cannot infer from anything else
+        // on the page: the wiring rows say which event drives which property and
+        // are silent about nesting, so an element lookup that omitted this left
+        // the reader to guess between a child and a sibling. Short enough to
+        // repeat; the `note` (the WHY) stays in the appendix with the wiring notes.
+        ...compositionLines(r, ''),
         // Bare ids, deliberately. This row is a DEPENDENCY list, not a coverage
         // claim, and it can only ever be read a few lines below the full
         // `### Invariants` section in the same response, where each of these ids
@@ -477,6 +505,7 @@ function renderRecipeAppendix(): string[] {
       `- **Delivery:** ${r.targets.join(', ')} · archetype: ${r.archetypes.join(', ')}`,
       `- **Backend:** your own endpoint, read with \`${r.backend.reader}\` from \`@kitn.ai/ui/wire\``,
       `- **Invariants it leans on:** ${r.invariants.join(', ')}`,
+      ...compositionLines(r, ' — '),
       '- **Wiring** — event out of A, property into B, wired by the host:',
     );
     for (const w of r.wiring) {

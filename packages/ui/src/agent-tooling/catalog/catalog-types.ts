@@ -70,6 +70,34 @@ export const Invariant = z.object({
   examples: z.array(InvariantExample).default([]),
 });
 
+/**
+ * WHERE one element goes: `child` is slotted into `parent`'s named `slot`.
+ *
+ * Structured rather than prose, for the reason the wiring edges are: an emitter
+ * has to be able to READ the composition. The scaffolder emitted the rail as a
+ * sibling below the chat while `<kai-chat>` documented a `sidebar` slot whose
+ * description is "left column (your nav / conversation list)", and an agent
+ * building from the MCP could not answer which was intended from anything the
+ * MCP served — because nothing served it. A sentence in `intent` would not have
+ * fixed that: `intent` already said "chat with a conversations sidebar" while
+ * the emitter did the other thing.
+ *
+ * NOT resolvable by `lint:catalog-drift`. That lint's ground truth is
+ * derived.json, which carries props, events, methods, parts, composedFrom and
+ * tokens — no slots — so `child`/`parent` resolve as elements and the SLOT NAME
+ * resolves against nothing. element-meta.json has the slots; wiring them into
+ * the derived layer is the way to close it.
+ */
+export const CompositionPlacement = z.object({
+  /** the element that goes inside */
+  child: z.string(),
+  /** the element it goes inside of */
+  parent: z.string(),
+  /** the `slot` attribute the child carries */
+  slot: z.string(),
+  note: z.string().optional(),
+});
+
 /** One host-coordinates edge: this event on A sets this property on B. */
 export const WiringEdge = z.object({
   from: z.string(),
@@ -93,6 +121,13 @@ export const SurfaceRecipe = z.object({
   // went on printing "2 recipes ... resolved clean". The lint carries a readable
   // duplicate of this check so the failure is a message rather than a ZodError.
   wiring: z.array(WiringEdge).min(1),
+  /**
+   * Optional, and `.min(1)` when present: a recipe whose ingredients nest states
+   * where they nest, and a recipe of one element has nothing to say here. An
+   * empty array would be a third thing — a composition claim that claims
+   * nothing — so the schema refuses it.
+   */
+  composition: z.array(CompositionPlacement).min(1).optional(),
   invariants: z.array(z.string()).min(1),
   corpus: z.array(z.string()).min(1),
 });
@@ -186,6 +221,7 @@ export const DerivedCatalog = z.object({
   eventExceptions: z.array(EventException).min(1),
 });
 
+export type TCompositionPlacement = z.infer<typeof CompositionPlacement>;
 export type TInvariant = z.infer<typeof Invariant>;
 export type TInvariantExample = z.infer<typeof InvariantExample>;
 export type TSurfaceRecipe = z.infer<typeof SurfaceRecipe>;

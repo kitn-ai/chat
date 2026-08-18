@@ -10,6 +10,9 @@ import { chatRoutePreamble, defaultModelFor, CLIENT_MODEL_IDS } from '../route-e
 import {
   getArchetype, getIntegration, listArchetypes, listIntegrations, listSurfaceProbes,
 } from '../registry';
+// The catalog record, READ rather than restated: the composition assertions below
+// follow the recipe, so revising the decision revises the test with it.
+import { surfaceRecipes } from '../catalog/surfaces';
 import { Framework } from '../types';
 import type { Integration } from '../types';
 // The real encoders, used to prove WHY the fabricated sample seed had to go:
@@ -142,6 +145,96 @@ describe('scaffold', () => {
       expect(front, `${framework}: voice input dropped by the workspace branch`).toMatch(
         /<VoiceInput\b|<kai-voice-input/,
       );
+    }
+  });
+
+  // ── a companion the scaffolder emits is a companion it accounts for ───────
+  //
+  // The rail was emitted as a bare `<kai-conversations>` under a "wire data props"
+  // comment, and the main.ts beside it mentioned the tag zero times. A builder who
+  // pastes that gets a working chat next to an empty grey column, with no error and
+  // no clue. Wired, or declared unwired in words that name the property and the
+  // event — nothing in between.
+
+  it('does not emit a component it leaves unwired', async () => {
+    const out = await scaffold.handler({
+      components: ['kai-chat', 'kai-conversations'],
+      integration: 'mock',
+      placement: 'full-page',
+      framework: 'html',
+    });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+
+    expect(text).toMatch(/kai-conversations/); // it is in the markup
+    // ...so it must also be wired, or explicitly declared unwired
+    const wired =
+      /\.conversations\s*=/.test(text) &&
+      /kai-conversation-select/.test(text);
+    const declared = /NOT WIRED/.test(text);
+    expect(
+      wired || declared,
+      'kai-conversations is emitted with neither wiring nor a NOT WIRED notice',
+    ).toBe(true);
+  });
+
+  it('emits the composition the catalog states, not a different one', async () => {
+    const out = await scaffold.handler({
+      components: ['kai-chat', 'kai-conversations'],
+      integration: 'mock',
+      placement: 'full-page',
+      framework: 'html',
+    });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+
+    // The recipe is the authority. Read it rather than restating its answer here,
+    // so this test follows the catalog if the decision is ever revised.
+    //
+    // Read the STRUCTURED claim, not a substring of the whole record. A
+    // `JSON.stringify(recipe).includes('sidebar')` probe answers true today off
+    // the recipe's PROSE — `intent` opens "Full-screen chat with a conversations
+    // sidebar" — so it would report a composition the record never made, and
+    // would flip to "sibling" on a reword that changed no decision at all.
+    const recipe = surfaceRecipes.find((r) => r.id === 'workspace-chat');
+    expect(recipe, 'workspace-chat recipe is missing').toBeDefined();
+    const placement = recipe?.composition?.find((c) => c.child === 'kai-conversations');
+
+    if (placement) {
+      // slotted: the rail goes INSIDE its parent, carrying that slot name
+      expect(text).toMatch(new RegExp(`<${placement.child}[^>]*slot=["']${placement.slot}["']`));
+      // …and INSIDE means inside: the attribute alone is satisfied by a sibling
+      // that merely claims the slot, which renders nowhere.
+      const open = text.indexOf(`<${placement.parent} `);
+      const close = text.indexOf(`</${placement.parent}>`, open);
+      expect(open, `${placement.parent} is not in the markup`).toBeGreaterThan(-1);
+      expect(
+        text.slice(open, close),
+        `${placement.child} is not inside <${placement.parent}>`,
+      ).toMatch(new RegExp(`<${placement.child}\\b`));
+    } else {
+      // sibling: then it must NOT claim the slot
+      expect(text).not.toMatch(/slot=["']sidebar["']/);
+    }
+  });
+
+  it('every front end either wires the rail, declares it unwired, or does not draw it', async () => {
+    // The html target is the one the brief's two tests drive. This is the same
+    // rule over the other seven, and it is deliberately conditional on the tag
+    // being DRAWN: solid renders Solid components rather than <kai-*>, so it
+    // draws no rail at all — a fact worth stating rather than asserting around.
+    for (const framework of FRONTENDS_FOR_SURFACE) {
+      const out = await scaffold.handler({
+        components: ['kai-chat', 'kai-conversations'],
+        integration: 'mock',
+        placement: 'full-page',
+        framework,
+      });
+      const front = (out.content as { type: string; text: string }[])[0].text.split('=== (2)')[0];
+      const drawn = /<kai-conversations|<Conversations\b/.test(front);
+      if (!drawn) continue;
+      const wired = /\.conversations\s*=|conversations=\{|:conversations\.prop|\[conversations\]/.test(front) &&
+        /kai-conversation-select|onConversationSelect/.test(front);
+      const declared = front.includes('NOT WIRED');
+      expect(wired || declared, `${framework}: the rail is drawn with neither wiring nor a NOT WIRED notice`).toBe(true);
     }
   });
 

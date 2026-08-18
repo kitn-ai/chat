@@ -537,6 +537,21 @@ describe('component_reference does not overstate what the catalog enforces', () 
     for (const ingredient of recipe.ingredients) expect(section).toContain(ingredient);
   });
 
+  it('a recipe row says WHERE the parts go, which no other row on the page does', async () => {
+    // The question a builder could not answer from the MCP: is the rail a child
+    // of <kai-chat> or a sibling beside it? Ingredients, wiring and invariants
+    // are all silent on it — the wiring rows say which event drives which
+    // property and nothing about nesting — so an element lookup that omitted
+    // the composition left the reader to guess, and one did.
+    const placement = surfaceRecipes
+      .flatMap((r) => r.composition ?? [])
+      .find((c) => c.child === 'kai-conversations');
+    expect(placement, 'no composition record to render').toBeDefined();
+    const section = sectionOf(await textFor('kai-conversations'), 'Appears in surface recipes')!;
+    expect(section).toContain(`<${placement!.child} slot="${placement!.slot}">`);
+    expect(section).toContain(`INSIDE \`<${placement!.parent}>\``);
+  });
+
   it('the header summary counts BOTH kinds of gap, so a summary of it cannot invent coverage', async () => {
     // "3 of the 7 are enforced by NOTHING" is the quotable half, and a reader
     // compressing it emits "3 unenforced, 4 enforced" — while two of that four

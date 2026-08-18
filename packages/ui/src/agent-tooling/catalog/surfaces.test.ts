@@ -386,6 +386,59 @@ describe('surface recipe wiring, executed against the real elements', () => {
     drove('kai-artifact', 'kai-maximize-change', 'kai-resizable', 'maximizedIndex');
   });
 
+  // ── the COMPOSITION record, executed the same way ────────────────────────
+  //
+  // `composition` is an authored claim about where an element goes, and nothing
+  // resolves it: derived.json carries no slots, so `lint:catalog-drift` can
+  // check the two tags exist and can say nothing at all about the slot NAME. A
+  // record naming a slot that does not exist would read perfectly and render
+  // nothing, which is precisely the shape of defect the record was added to
+  // stop. So it is driven here instead — mounted the way the record describes
+  // and asserted through `assignedSlot`, which is the browser's own answer to
+  // "did the shell take this child".
+  const composed = new Set<string>();
+
+  it('the rail composes INSIDE kai-chat on the slot the recipe names', async () => {
+    for (const c of surfaceRecipes.flatMap((r) => r.composition ?? [])) {
+      const parent = document.createElement(c.parent) as ChatEl;
+      parent.messages = threads.c1;
+      const child = document.createElement(c.child) as ConvEl;
+      child.groups = groups;
+      child.conversations = conversations;
+      child.slot = c.slot;
+      parent.appendChild(child);
+      document.body.appendChild(parent);
+      await flush();
+
+      // POSITIVE CONTROL: the child really rendered, so an `assignedSlot` read
+      // below cannot be answering about an element that drew nothing.
+      expect(child.shadowRoot!.textContent, `${c.child} rendered nothing`).toContain('First thread');
+      expect(child.assignedSlot?.name, `<${c.parent}> has no "${c.slot}" slot to take <${c.child}>`).toBe(c.slot);
+
+      // NEGATIVE CONTROL: the attribute is what does it. Drop it and the shell
+      // does not put the child there — without this, a parent that swallowed
+      // every child into that region would pass the assertion above while the
+      // recipe's `slot` value was decorative.
+      child.removeAttribute('slot');
+      await flush();
+      expect(child.assignedSlot?.name).not.toBe(c.slot);
+
+      composed.add(`${c.child}@${c.parent}.${c.slot}`);
+      parent.remove();
+    }
+  });
+
+  it('every composition record in every recipe has been mounted above', () => {
+    // The sibling of the wiring-completeness test below, and for the same
+    // reason: a placement authored with no probe beside it is a claim nobody
+    // has ever seen hold.
+    const claimed = surfaceRecipes
+      .flatMap((r) => r.composition ?? [])
+      .map((c) => `${c.child}@${c.parent}.${c.slot}`);
+    expect(claimed.length).toBeGreaterThan(0);
+    for (const key of claimed) expect(composed.has(key), `composition never mounted: ${key}`).toBe(true);
+  });
+
   it('every wiring edge in every recipe has been driven above', () => {
     // The guard that keeps this honest as recipes grow: an edge authored with
     // no probe beside it fails here rather than shipping unverified.

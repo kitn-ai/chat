@@ -116,6 +116,29 @@ export const surfaceRecipes: TSurfaceRecipe[] = [
     targets: ['bundler'],
     ingredients: ['kai-chat', 'kai-conversations', 'kai-resizable', 'kai-artifact'],
     backend: { endpoint: 'consumer-owned', reader: 'readModelStream' },
+    // WHERE the parts go, which the wiring edges below never said. Until this
+    // field existed a builder could read the whole recipe, the whole element
+    // reference and the whole scaffold and still not know whether the rail was a
+    // child of the chat or a sibling beside it — and the two answers lay out
+    // differently, so it is not a detail anyone can defer. One agent building
+    // from the MCP said so in as many words and then guessed.
+    //
+    // Slotted, and the tree decided it rather than taste: `<kai-chat>` declares a
+    // `sidebar` slot whose own description is "Left column (your nav /
+    // conversation list). Fixed width; use compose-your-own for resizable", and
+    // this recipe's own corpus story — chat-slots.stories.tsx — composes exactly
+    // `<kai-conversations slot="sidebar">` inside `<kai-chat>`. Nothing in the
+    // tree composes them as siblings. A sibling rail is still a legal thing to
+    // build (that is what `compose-your-own` is for, and what you want if the
+    // rail must be resizable); it is not what this recipe is.
+    composition: [
+      {
+        child: 'kai-conversations',
+        parent: 'kai-chat',
+        slot: 'sidebar',
+        note: 'the rail is a light-DOM child of <kai-chat> carrying slot="sidebar", not a sibling: the shell owns the two-column layout, the collapse behaviour and the responsive breakpoint. Give it height (display:block;height:100%) and drive it through its own JS properties — being slotted changes where it renders, never how it is wired',
+      },
+    ],
     wiring: [
       {
         from: 'kai-conversations',
