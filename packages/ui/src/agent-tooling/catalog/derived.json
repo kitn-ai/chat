@@ -241,7 +241,9 @@
       ],
       "methods": [],
       "parts": [
-        "preview"
+        "preview",
+        "attachment",
+        "attachment-name"
       ],
       "composedFrom": [
         "Attachments",
@@ -2508,6 +2510,8 @@
         "content",
         "actions",
         "citations",
+        "attachment",
+        "attachment-name",
         "avatar"
       ],
       "composedFrom": [
