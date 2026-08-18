@@ -500,6 +500,16 @@ export function check({
     // A GAP, never an error: `kind: 'none'` is the honest record of something
     // nothing enforces, and failing on it would push authors to invent a path.
     if (e.kind === 'none') gaps.push(`invariant ${inv.id}: enforced by nothing${e.until ? ` (until ${e.until})` : ''}.`);
+    // `partial` IS A GAP TOO, and leaving it out made this line -- the loudest
+    // statement of coverage anywhere, because it prints in required CI -- report
+    // 3 gaps while 5 of 7 invariants were not fully enforced. `component_reference`
+    // had exactly this compression and it was fixed there; the louder voice kept
+    // it. A partial record's statement says WHICH half is uncovered, so the gap
+    // points at the statement rather than restating it here.
+    else if (inv.status === 'partial')
+      gaps.push(
+        `invariant ${inv.id}: PARTIAL — ${e.kind === 'test' ? e.paths.join(', ') : e.kind === 'lint' ? e.script : e.path} covers part of it; the statement says which half is uncovered.`,
+      );
     if (inv.appliesTo.tags)
       for (const t of inv.appliesTo.tags) {
         if (!tags.has(t)) errors.push(`invariant ${inv.id}: appliesTo tag ${t} is not a derived element.`);
@@ -851,6 +861,20 @@ function selfTest() {
     // The gap expectation (4th element) is the point of these. Asserting only
     // "no error" left the kind:'none' case green when `gaps.push` was deleted.
     ['kind none is a REPORTED GAP, not an error', { ...base }, null, 'invariant inv-ok: enforced by nothing'],
+    // `partial` is a gap as well: a guard covering half a statement is not
+    // coverage of the statement, and counting it as enforced is what made the
+    // CI line under-report by two.
+    [
+      'status partial is a REPORTED GAP even though a guard exists',
+      {
+        ...base,
+        invariants: [
+          { ...okInvariant, enforcedBy: { kind: 'lint', script: 'lint:silent-drops' }, status: 'partial' },
+        ],
+      },
+      null,
+      'invariant inv-ok: PARTIAL',
+    ],
     [
       'kind none with an `until` reports it in the gap',
       { ...base, invariants: [{ ...okInvariant, enforcedBy: { kind: 'none', until: 'issue #99' } }] },

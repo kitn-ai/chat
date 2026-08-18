@@ -1,9 +1,16 @@
 // The gates the EVALUATOR can run by itself, over an agent's emitted output.
 //
-// Three of the rubric's dimensions are objectively checkable from the output
-// text plus the catalog, so they are not left to judgement. Two more (does it
-// compile, does it register, does it stream) need real tooling and are supplied
-// from outside; see rubric.mjs.
+// `elements-exist` and `audit-clean` are objectively checkable from the output
+// text plus the catalog, so they are not left to judgement. The rest of the
+// mechanical dimensions -- does it compile, does it register, does it stream --
+// need real tooling and are supplied from outside.
+//
+// NO COUNTS HERE ON PURPOSE. This comment used to say "Three ... Two more" and
+// had them exactly backwards, in the file whose whole job is to stop a confident
+// claim being made without looking. The split is a fact `rubric.mjs` already
+// holds -- `DIMENSIONS.filter(d => d.runner === 'evaluator')` -- so the names go
+// here and the arithmetic stays where it can be derived. It is pinned by
+// `acceptance-eval.test.ts`, which asserts this list against `DIMENSIONS`.
 //
 // EVERY SCAN REPORTS WHAT IT LOOKED AT. A scan of zero files is not a pass — it
 // is a scan of zero files, and it says so, because "no hits" and "nothing was

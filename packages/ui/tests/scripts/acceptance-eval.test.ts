@@ -1048,6 +1048,15 @@ describe('the evaluator CLI', () => {
     expect(out).not.toContain('✗');
   });
 
+  // B3 — output-scan.mjs's header used to COUNT the two groups and had them
+  // transposed. The counts are gone; this pins the names it now states against
+  // the only place the fact lives.
+  it('the evaluator runs exactly the gates output-scan.mjs names, and no others', () => {
+    const mechanical = DIMENSIONS.filter((d) => d.gate === 'mechanical');
+    expect(mechanical.filter((d) => d.runner === 'evaluator').map((d) => d.id).sort()).toEqual(['audit-clean', 'elements-exist']);
+    expect(mechanical.filter((d) => d.runner === 'external').map((d) => d.id).sort()).toEqual(['compiles', 'registers', 'streams']);
+  });
+
   it('every mechanical dimension declares who runs it', () => {
     for (const d of DIMENSIONS.filter((x) => x.gate === 'mechanical')) {
       expect(['evaluator', 'external'], `${d.id} declares no runner`).toContain(d.runner);

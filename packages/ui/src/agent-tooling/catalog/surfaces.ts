@@ -29,31 +29,37 @@ import {
  * Audio Visualizers under src/components/, so a check scoped to src/elements/
  * alone would wrongly flag them).
  *
- * WHAT IS ENFORCED TODAY, in the present tense. THREE tiers, not two, and the
- * difference between the first two is the difference between "CI notices" and
- * "the title is true". Each row's tier is decided by which test in
- * surfaces.test.ts covers it, so read that file, not this list, if they drift.
+ * WHAT IS ENFORCED TODAY, in the present tense. Every claim below was measured
+ * by mutation in both directions, not reasoned from reading the guards.
  *
- *  1. RESOLVED AGAINST THE TREE — the rows whose title is a `Labs/Apps` story
- *     FILENAME. Test 2 reads those filenames off disk and requires each to be
- *     sorted `surface`, so renaming or deleting one fails, AND the title is
- *     genuinely checked against something that exists. Note the direction: it
- *     asserts every app file has a row, not that every `surface` row has a
- *     file, so an INVENTED extra `surface` row still passes.
- *  2. PINNED BY NAME, NOT RESOLVED — `Proofs`, `Chat Slots`, `Prompt Input
- *     Slots`, `Workspace Slots`. Test 3 asserts each of those exact titles is
- *     present and sorted `corpus`, so a misspelling or a deletion DOES fail CI.
- *     But the pin is a literal list inside the test, never a lookup against the
- *     tree: rename the story these name and both sides stay green, so a row
- *     here can name something that no longer exists. (That list is a copy of
- *     these four titles; changing one means changing both.)
- *  3. GENUINELY UNCHECKED — every remaining row. Misspell one or delete it and
- *     nothing in CI notices.
+ * EVERY ROW IS RESOLVED AGAINST THE TREE. `lint:catalog-drift` (required CI,
+ * needs no build) requires each title to match a Labs story title or a
+ * `Labs/Apps` story filename on disk. Misspell ANY row -- tier is irrelevant --
+ * and CI fails by name: `Settings` -> `Settingss` gives
+ * `inventory: "Settingss" matches no Labs story title or Labs/Apps story file in
+ * the tree.` That closes what an earlier version of this comment called
+ * "GENUINELY UNCHECKED", and the earlier text is worth remembering as a defect
+ * in its own right: it survived the guard landing and went on telling every
+ * maintainer that the coverage did not exist, which is how someone ends up
+ * rebuilding it.
  *
- * So Task 7's drift lint needs to RESOLVE tier 2 and tier 3 against the tree.
- * Tier 2 already has existence-and-sort coverage and does not need it rebuilt;
- * what it lacks is the resolution. Until that ships, treat tiers 2 and 3 as
- * reviewed prose rather than verified data.
+ * WHAT RESOLUTION DOES NOT COVER IS DELETION, because the check runs row -> tree
+ * and a deleted row asks nothing of the tree. The other direction is covered
+ * unevenly, and this is the part to read before deleting anything:
+ *
+ *  1. `surface` rows naming a `Labs/Apps` story FILE -- deletion FAILS
+ *     surfaces.test.ts, which reads those filenames off disk and requires each
+ *     to have a row sorted `surface`. Covered in both directions.
+ *  2. `Proofs`, `Chat Slots`, `Prompt Input Slots`, `Workspace Slots` --
+ *     deletion FAILS surfaces.test.ts, which asserts those four exact titles are
+ *     present and sorted `corpus`. That list is a literal copy of these four
+ *     titles living inside the test; changing one means changing both.
+ *  3. Every remaining row -- deletion PASSES everything. Measured: removing the
+ *     `Settings` row leaves both surfaces.test.ts and lint:catalog-drift green.
+ *     This is the one real gap, and the lint's own honesty item 8 states it.
+ *
+ * Each row's tier is decided by which test in surfaces.test.ts covers it, so
+ * read that file, not this list, if they drift.
  */
 export const inventory: TInventoryEntry[] = [
   { title: 'claude-code', sort: 'surface', note: 'Labs/App, end-to-end composition' },

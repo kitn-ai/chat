@@ -310,6 +310,10 @@ const EXPORT_NOTES = {
   './solid': { agent: true, what: 'The SolidJS entry with the server build wired up.' },
   './state': { agent: true, what: 'I/O-free helpers over `ChatMessage[]`: `createAssistantStream`, `appendTextPart`, `upsertToolPart`.' },
   './wire': { agent: true, what: 'The model-stream adapter: `readOpenAIStream` / `readAnthropicStream` / `readModelStream` parse provider SSE; `toOpenAIMessages` / `toAnthropicMessages` encode the thread back.' },
+  './diagnostics': {
+    agent: true,
+    what: 'Browser-only devtools surface: `installKaiDevtoolsHook()` (idempotent, SSR-safe, and already called for you by anything that registers the elements), `subscribeWireDiagnostics` to observe the wire, and `reportRequest` for the app to disclose what it actually sent. Subscription and types only — the producer side stays internal, so a consumer cannot forge events or switch on payload capture.',
+  },
   './provider': { agent: true, what: 'The remote-provider element bundle.' },
   './schemas': { agent: true, what: 'The generative-UI card schemas.' },
   './schemas/*': { agent: true, what: 'One card schema JSON file at a time.' },
@@ -624,7 +628,7 @@ ${pairs}`;
 
   return `# Invariants
 
-Seven rules. Every one of them has already broken a real consumer of this kit.
+${invariants.length} rules. Every one of them has already broken a real consumer of this kit.
 They are not style preferences and a reviewer will not catch them for you: most
 produce code that compiles, type-checks and renders nothing.
 
