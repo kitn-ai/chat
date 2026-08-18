@@ -479,18 +479,35 @@ describe('component_reference does not overstate what the catalog enforces', () 
     expect(line).toContain('script-tag');
   });
 
+  // Task 4 moved the long form (diagnosis + wrong/right examples) off every
+  // per-element lookup and onto the { name: 'invariants' } appendix, served
+  // once for the whole catalog instead of once per applicable element. These
+  // two probes now read that appendix — the fact (the pair, the symptom/cause)
+  // is unchanged, only where it is reachable moved, per the task's own
+  // "move it, don't delete it" rule.
   it('serves the wrong/right pairs, which are the part a weak model can pattern-match', async () => {
-    const text = await textFor('kai-chat');
+    const text = await textFor('invariants');
     const wrong = invariants.find((i) => i.id === 'host-coordinates')!.examples[0]!;
     expect(text).toContain(wrong.wrong);
     expect(text).toContain(wrong.right);
   });
 
   it('serves the diagnosis rows, symptom and cause', async () => {
-    const text = await textFor('kai-chat');
+    const text = await textFor('invariants');
     const d = invariants.find((i) => i.id === 'events-non-bubbling')!.diagnosis[0]!;
     expect(text).toContain(d.symptom);
     expect(text).toContain(d.cause);
+  });
+
+  it('a per-element lookup states the id and statement but points to the appendix, not the examples', async () => {
+    // The positive control for the dedup test: kai-chat's OWN response no
+    // longer carries host-coordinates' wrong/right pair inline — it carries
+    // the id, the statement, and a pointer to where the pair actually lives.
+    const text = await textFor('kai-chat');
+    const wrong = invariants.find((i) => i.id === 'host-coordinates')!.examples[0]!;
+    expect(text).toContain('host-coordinates');
+    expect(text).not.toContain(wrong.wrong);
+    expect(text).toMatch(/name: "invariants"/);
   });
 
   it('a recipe row carries the ingredients, so the membership is actionable', async () => {
@@ -582,5 +599,109 @@ describe('coverageSummary', () => {
     expect(sentence.length).toBeGreaterThan(0);
     const out = await reference.handler({ name: 'kai-chat' });
     expect((out.content as { text: string }[])[0].text).toContain(sentence);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Task 4 — stop repeating the universal records on every element
+//
+// Round 1 asserted a byte budget (<6000) that turned out to be a guess made
+// while drafting the plan, not a derived number: the seven invariant
+// statements alone are 5386 B and SHOULD stay inline (an element stating its
+// own invariants is the point of them), which made the budget unreachable
+// without deleting the thing the task exists to preserve. Round 2 replaces it
+// with a STRUCTURAL pair: the moved content is provably absent from a
+// per-element lookup AND provably present in its appendix. Absence alone would
+// pass on an appendix that silently lost content too — the presence half is
+// the positive control that proves the probe can see the thing it claims
+// moved. Both halves are derived from the catalog records themselves, so the
+// test follows the catalog rather than a restatement of it.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Mirrors `invariantsFor` in tools/reference.ts — do not guess the scoping rule. */
+function applies(inv: TInvariant, tag: string): boolean {
+  return !inv.appliesTo.tags || inv.appliesTo.tags.includes(tag);
+}
+
+describe('component_reference — Task 4: no repeated universal records', () => {
+  it('still states every invariant that applies to the element', async () => {
+    // The control that makes the absence assertions below meaningful: it
+    // proves ids are not silently gone, only the diagnosis/examples beneath
+    // them.
+    const out = await reference.handler({ name: 'kai-chat' });
+    const text = (out.content as { text: string }[])[0].text;
+    for (const inv of invariants.filter((i) => applies(i, 'kai-chat'))) {
+      expect(text, `invariant missing: ${inv.id}`).toMatch(inv.id);
+    }
+  });
+
+  it('an invariant diagnosis and its wrong/right examples are absent from a per-element lookup, and present once in the invariants appendix', async () => {
+    const perElement = await textFor({ name: 'kai-chat' });
+    const appendix = await textFor({ name: 'invariants' });
+
+    const applicable = invariants.filter((i) => applies(i, 'kai-chat'));
+    // The fixture is non-vacuous: kai-chat must actually carry diagnosis rows
+    // and examples for this to prove anything.
+    expect(applicable.some((i) => i.diagnosis.length > 0)).toBe(true);
+    expect(applicable.some((i) => i.examples.length > 0)).toBe(true);
+
+    for (const inv of applicable) {
+      for (const d of inv.diagnosis) {
+        expect(perElement, `${inv.id} diagnosis leaked inline: "${d.symptom}"`).not.toContain(d.symptom);
+        expect(perElement, `${inv.id} diagnosis leaked inline: "${d.cause}"`).not.toContain(d.cause);
+        expect(appendix, `${inv.id} diagnosis missing from appendix: "${d.symptom}"`).toContain(d.symptom);
+        expect(appendix, `${inv.id} diagnosis missing from appendix: "${d.cause}"`).toContain(d.cause);
+      }
+      for (const ex of inv.examples) {
+        expect(perElement, `${inv.id} wrong example leaked inline`).not.toContain(ex.wrong);
+        expect(perElement, `${inv.id} right example leaked inline`).not.toContain(ex.right);
+        expect(appendix, `${inv.id} wrong example missing from appendix`).toContain(ex.wrong);
+        expect(appendix, `${inv.id} right example missing from appendix`).toContain(ex.right);
+      }
+    }
+  });
+
+  it('a recipe wiring note is absent from a per-element lookup, and present once in the recipes appendix', async () => {
+    const perElement = await textFor({ name: 'kai-chat' });
+    const appendix = await textFor({ name: 'recipes' });
+
+    const recipesForKaiChat = surfaceRecipes.filter((r) => r.ingredients.includes('kai-chat'));
+    const notes = recipesForKaiChat.flatMap((r) => r.wiring.map((w) => w.note)).filter((n): n is string => !!n);
+    // Non-vacuous: kai-chat's recipes must actually carry notes.
+    expect(notes.length).toBeGreaterThan(0);
+
+    for (const note of notes) {
+      expect(perElement, `wiring note leaked inline: "${note}"`).not.toContain(note);
+      expect(appendix, `wiring note missing from appendix: "${note}"`).toContain(note);
+    }
+
+    // The edge itself (event out of A, property into B) is a compact fact, not
+    // bulk prose — it stays inline, unlike the note behind it.
+    for (const r of recipesForKaiChat) {
+      for (const w of r.wiring) {
+        expect(perElement).toContain(`fires \`${w.event}\` → host sets \`${w.to}.${w.property}\``);
+      }
+    }
+  });
+
+  it('regression ratchet: shared bytes between two elements stay in the same order of magnitude', async () => {
+    const a = (await reference.handler({ name: 'kai-chat' })).content as { text: string }[];
+    const b = (await reference.handler({ name: 'kai-conversations' })).content as { text: string }[];
+
+    const linesB = new Set(b[0].text.split('\n'));
+    const shared = a[0].text
+      .split('\n')
+      .filter((l) => l.trim().length > 0 && linesB.has(l));
+    const sharedBytes = shared.join('\n').length;
+
+    // NOT a target — no one derived 12000. This is a ratchet: it exists to catch
+    // gross re-duplication (e.g. someone re-inlining the appendix content, or a
+    // future invariant landing with its whole body pasted onto every element),
+    // not to enforce a budget. Measured when set, 2026-08-18, after task 4's
+    // invariant AND recipe-wiring dedup: 9223 bytes (down from a pre-task-4
+    // baseline of 18059). Headroom is deliberate: the seven invariant statements
+    // (5386 B) are meant to stay inline in full, so this number moves with the
+    // catalog's own prose, not with rendering choices.
+    expect(sharedBytes).toBeLessThan(12000);
   });
 });
