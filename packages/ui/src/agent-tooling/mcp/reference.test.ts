@@ -19,6 +19,35 @@ describe('component_reference', () => {
     expect(text).toMatch(/set in JavaScript|property/i); // the contract note
   });
 
+  it('opens with how to register the element, before any API surface', async () => {
+    const out = await reference.handler({ name: 'kai-chat' });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+
+    expect(text).toMatch(/### Getting the element/);
+    expect(text).toMatch(/import '@kitn\.ai\/ui\/elements'/);
+    // it must come BEFORE the props, or a reader who stops early still misses it
+    expect(text.indexOf('### Getting the element')).toBeLessThan(
+      text.indexOf('### Props (JavaScript properties)'),
+    );
+    // and it must name the silent failure, which is the whole reason this exists
+    expect(text).toMatch(/whenDefined/);
+  });
+
+  it('names the shipped TypeScript interface', async () => {
+    const out = await reference.handler({ name: 'kai-chat' });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+    expect(text).toMatch(/KaiChatElement/);
+  });
+
+  it('uses the real per-element entry, not the tag with kai- stripped', async () => {
+    // kai-conversations resolves to 'conversation-list'. Ten of eighty elements do
+    // not match the naive derivation, so this asserts the manifest is consulted.
+    const out = await reference.handler({ name: 'kai-conversations' });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+    expect(text).toMatch(/@kitn\.ai\/ui\/elements\/conversation-list/);
+    expect(text).not.toMatch(/@kitn\.ai\/ui\/elements\/conversations'/);
+  });
+
   it('lists all element tagNames when name is omitted', async () => {
     const out = await reference.handler({});
     const text = (out.content as { type: string; text: string }[])[0].text;

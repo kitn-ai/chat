@@ -236,6 +236,30 @@ export function listElements(): string[] {
     .sort();
 }
 
+// ── Per-element entry map ─────────────────────────────────────────────────────
+//
+// A STATIC import, not an fs read off resolveManifestPath's dual-context pattern:
+// element-manifest.json (unlike custom-elements.json) is never copied into dist/,
+// so an fs read relative to this module's own URL would resolve in the vitest/source
+// context and 404 in the bundled dist/mcp.es.js. A static import sidesteps the gap
+// entirely — Rollup inlines the JSON at build time, so the bundled bin carries the
+// data with no runtime file dependency. NAMED import (not the whole module), matching
+// the same tradeoff element-diagnostics.ts already made for this file: a default
+// import would pull `files` in too for 0 benefit here.
+import { tags as ELEMENT_ENTRY_TAGS } from '../../elements/element-manifest.json';
+
+/**
+ * The per-element entry basename for a tag, e.g. 'kai-chat' -> 'chat'.
+ *
+ * Read from element-manifest.json's `tags` map rather than derived by stripping
+ * the `kai-` prefix: TEN of the eighty elements do not match that derivation
+ * (`kai-conversations` -> `conversation-list`), so a derived path would emit a
+ * broken import for them.
+ */
+export function entryForTag(tag: string): string | undefined {
+  return (ELEMENT_ENTRY_TAGS as Record<string, string>)[tag];
+}
+
 // ── Which elements have anything to do with cards ────────────────────────────
 //
 // Two different populations, and conflating them would be the "attaches card

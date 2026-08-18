@@ -9,7 +9,14 @@ import {
 } from '@kitn.ai/ui/schemas';
 import type { CardSchemaName, ToolProvider } from '@kitn.ai/ui/schemas';
 import type { Tool } from './types';
-import { cardHostTags, cardTagForType, cardTypeForTag, getElement, listElements } from '../manifest';
+import {
+  cardHostTags,
+  cardTagForType,
+  cardTypeForTag,
+  entryForTag,
+  getElement,
+  listElements,
+} from '../manifest';
 import type { CemMember } from '../manifest';
 // The RAW literals, not listInvariants() / listSurfaceRecipes(). Those re-run a
 // zod parse over the whole catalog, and this is a per-lookup serving path called
@@ -454,6 +461,35 @@ function formatReference(tag: string, provider: ToolProvider): string {
   lines.push(`## <${tag}>`);
   if (el.description) {
     lines.push('', el.description.trim());
+  }
+
+  // ── Getting the element ────────────────────────────────────────────────────
+  // FIRST, above every other section. An element that never upgrades renders
+  // nothing and logs NOTHING: the property assigns and reads back fine, and
+  // whenDefined() never settles, so the listener is never attached. That symptom
+  // is also what props-not-attributes blames on a different cause, so a reader
+  // who has the invariants and not this line is steered to the wrong diagnosis.
+  const entry = entryForTag(tag);
+  const iface = el.name;
+  lines.push(
+    '',
+    '### Getting the element',
+    'Register it before you use it. If you skip this the element never upgrades: ' +
+      'nothing renders, **no error and no warning is logged**, a property you set ' +
+      'assigns and reads back correctly, and ' +
+      `\`customElements.whenDefined('${tag}')\` never resolves.`,
+    '',
+    '```ts',
+    "import '@kitn.ai/ui/elements';",
+    ...(entry ? [`import '@kitn.ai/ui/elements/${entry}'; // or just this one`] : []),
+    '```',
+  );
+  if (iface) {
+    lines.push(
+      '',
+      `TypeScript: \`import type { ${iface} } from '@kitn.ai/ui/elements';\` — ` +
+        'the element interface ships with the package; do not hand-roll a structural type.',
+    );
   }
 
   // ── Contract note ──────────────────────────────────────────────────────────
