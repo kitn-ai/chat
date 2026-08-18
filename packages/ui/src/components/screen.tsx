@@ -144,6 +144,11 @@ export function Screen(props: ScreenProps) {
         data-expanded={presence.state() === 'open' ? '' : undefined}
         data-closed={presence.state() === 'closed' ? '' : undefined}
         onKeyDown={onKeyDown}
+        // `outline-none` is DELIBERATE here and must stay: this is the
+        // `tabindex="-1"` screen container, focused programmatically on open so
+        // keyboard and screen-reader context follows the screen. It is not a
+        // tab stop, so a ring around the whole surface would be noise. Its
+        // interactive children carry their own.
         class={cn(
           'absolute inset-0 z-40 flex flex-col bg-background text-foreground outline-none',
           'animate-in fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none',

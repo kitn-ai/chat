@@ -17,6 +17,13 @@ function ScrollButton(props: ScrollButtonProps) {
       variant={props.variant ?? 'outline'}
       size={props.size ?? 'sm'}
       aria-label="Scroll to bottom"
+      // At the bottom of the thread this button is fully transparent and
+      // pointer-inert, but it stayed in the tab order — a keyboard user landed
+      // on a control they could not see, with a focus ring painted on nothing.
+      // Take it out of the tab order and hide it from assistive tech while it
+      // is invisible; both revert the moment it animates back in.
+      tabindex={isAtBottom() ? -1 : 0}
+      aria-hidden={isAtBottom() ? 'true' : undefined}
       class={cn(
         'h-10 w-10 rounded-full transition-all duration-150 ease-out',
         !isAtBottom()

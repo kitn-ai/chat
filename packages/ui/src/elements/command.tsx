@@ -174,7 +174,10 @@ defineWebComponent<Props, Events>('kai-command', {
           aria-controls={listboxId}
           value={query()}
           placeholder={(props.placeholder as string | undefined) ?? 'Search…'}
-          class="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none"
+          // No `focus-visible:outline-none` here. It used to suppress the base
+          // focus ring and put nothing in its place, so keyboard users had no
+          // indication of where they were in the palette.
+          class="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground"
           onInput={handleInput}
           onKeyDown={handleKeyDown}
         />

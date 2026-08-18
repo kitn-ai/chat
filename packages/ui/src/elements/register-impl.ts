@@ -4,6 +4,7 @@
 // there. This file is hand-maintained (the generator gen-element-api.mjs SKIPs
 // register.ts AND this file); keep the component import list here in sync.
 import { installKaiDevtoolsHook } from '../diagnostics/hook';
+import { emitElementRegistry } from './element-diagnostics';
 import './conversation-list';
 import './prompt-input';
 import './chat';
@@ -112,3 +113,24 @@ import './editable-label';
 // the SolidJS components directly never runs this file and must call
 // `installKaiDevtoolsHook()` itself -- see the docblock in ../diagnostics/index.
 installKaiDevtoolsHook();
+
+// One registry snapshot, right after the hook installs and therefore after every
+// element above has registered (import declarations are hoisted, so they all ran
+// before this line).
+//
+// WHY HERE AND NOT INSIDE THE HOOK. The hook lives in ../diagnostics, which is
+// its own rollup bundle and must stay free of any element import -- pulling the
+// manifest in there would drag element bytes into a consumer who only parses
+// streams. The dependency goes elements -> diagnostics, never back.
+//
+// WHY EMIT AT ALL WHEN A PANEL IS USUALLY NOT THERE YET. On the recording branch
+// the hook has already subscribed by this point, so this snapshot lands in the
+// history buffer and a panel attaching seconds later still sees the state at
+// load -- which is the state that answers the hydration question. On the dormant
+// branch `emitElementRegistry()` short-circuits on the active check and costs a
+// symbol read.
+//
+// A panel attaching mid-session with no history gets no snapshot from here and
+// should ask for a fresh one: `emitElementRegistry()` is exported from
+// @kitn.ai/ui/elements for exactly that.
+emitElementRegistry();

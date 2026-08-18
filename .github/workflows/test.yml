@@ -710,6 +710,40 @@ jobs:
       - name: Cross-origin e2e matrix
         run: pnpm --filter @kitn.ai/ui test:e2e
 
+      # Does a keyboard focus indicator actually PAINT inside a kai-* shadow
+      # root? Asserting classes proves nothing here: `@property` registration is
+      # document-global and ignored inside a shadow root, so every `--tw-*` is
+      # unset, the box-shadow shorthand behind `ring-*` is invalid at
+      # computed-value time and drops, and a control keeps a perfectly correct
+      # `focus-visible:ring-2` class while painting nothing. 29 of 39 focusable
+      # controls had NO focus indicator at all in a real consumer app.
+      #
+      # This runs against the BUILT bundle (needs the build above) in a bare
+      # harness with NO document-level Tailwind, because that is what a consumer
+      # app looks like. Storybook and the docs site both load Tailwind at
+      # document level, which registers the properties globally and makes every
+      # shadow-root ring paint -- which is exactly why this shipped unnoticed.
+      # The spec asserts that absence before it measures anything, so a harness
+      # that drifted back into Storybook's condition fails instead of going
+      # green over a broken kit. It also carries a negative and a positive
+      # control in the same run, bracketing the pixel differ from both sides.
+      # ~1min, no network.
+      - name: Focus-indicator paint guard (shadow-root rings, built bundle)
+        run: pnpm --filter @kitn.ai/ui run test:focus-ring
+
+      # Keyboard tab-stop behaviour for the hover-card, same shape as above:
+      # Storybook-free, own port, drives the BUILT bundle. Added by PR #284;
+      # this step is wired here deliberately BEFORE that branch merged, because
+      # the whole point of the change above is that a guard nobody wires into CI
+      # is worse than no guard -- the accessibility docs cited exactly such a
+      # script as proof for months while it ran nowhere. If this step fails with
+      # a missing config, PR #284 has not landed yet: that is a sequencing
+      # problem to resolve by merging it, NOT by deleting this step.
+      # Expects: packages/ui/playwright.hovercard.config.ts
+      #          packages/ui/tests/e2e/hover-card-tabstops.spec.ts
+      - name: Hover-card tab-stop guard (built bundle)
+        run: pnpm --filter @kitn.ai/ui exec playwright test --config playwright.hovercard.config.ts
+
   # The storybook browser project runs ~112 *.stories.tsx as chromium browser
   # tests (smoke render + play functions + axe a11y), split across 4 matrix jobs.
   # vitest runs each invocation through ONE long-lived chromium process, which

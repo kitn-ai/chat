@@ -10,7 +10,7 @@
 // one bit a reader actually needs: whether there was one at all.
 import { afterEach, describe, expect, it } from 'vitest';
 import { readOpenAIStream } from './read';
-import { subscribeWireDiagnostics, type WireDiagnosticEvent } from './diagnostics';
+import { subscribeWireDiagnostics, type KaiDiagnosticEvent, type WireDiagnosticEvent } from './diagnostics';
 
 const nullSink = () =>
   ({
@@ -44,7 +44,7 @@ afterEach(() => {
 
 describe('wire.open connection identity', () => {
   it('reports origin+path, hasQuery and contentType, and the query string appears NOWHERE', async () => {
-    const events: WireDiagnosticEvent[] = [];
+    const events: KaiDiagnosticEvent[] = [];
     off = subscribeWireDiagnostics((e) => events.push(e));
     await readOpenAIStream(
       respondFrom('https://gateway.example.com/v1/chat/completions?api_key=sk-live-SECRET&x=1', {
@@ -67,7 +67,7 @@ describe('wire.open connection identity', () => {
   });
 
   it('hasQuery is false, not absent, when the URL had no query string', async () => {
-    const events: WireDiagnosticEvent[] = [];
+    const events: KaiDiagnosticEvent[] = [];
     off = subscribeWireDiagnostics((e) => events.push(e));
     await readOpenAIStream(
       respondFrom('https://api.openai.com/v1/chat/completions', {
@@ -82,7 +82,7 @@ describe('wire.open connection identity', () => {
   });
 
   it('absent fields stay ABSENT for a non-Response source -- never invented', async () => {
-    const events: WireDiagnosticEvent[] = [];
+    const events: KaiDiagnosticEvent[] = [];
     off = subscribeWireDiagnostics((e) => events.push(e));
     const enc = new TextEncoder();
     const stream = new ReadableStream<Uint8Array>({
@@ -104,7 +104,7 @@ describe('wire.open connection identity', () => {
   });
 
   it('a Response with no URL omits url/hasQuery rather than reporting an empty string', async () => {
-    const events: WireDiagnosticEvent[] = [];
+    const events: KaiDiagnosticEvent[] = [];
     off = subscribeWireDiagnostics((e) => events.push(e));
     // A bare constructed Response reports `url: ''`. Reporting that verbatim
     // would read as "served from the origin root", which is a confident wrong
@@ -120,7 +120,7 @@ describe('wire.open connection identity', () => {
   });
 
   it('an unparseable URL is reported as absent rather than as a broken string', async () => {
-    const events: WireDiagnosticEvent[] = [];
+    const events: KaiDiagnosticEvent[] = [];
     off = subscribeWireDiagnostics((e) => events.push(e));
     await readOpenAIStream(respondFrom('not a url at all'), nullSink());
     const open = events.find((e) => e.type === 'wire.open') as any;

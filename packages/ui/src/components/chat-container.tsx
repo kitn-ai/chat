@@ -28,7 +28,10 @@ function ChatContainerRoot(props: ChatContainerRootProps) {
     <ChatContainerContext.Provider value={{ isAtBottom, scrollToBottom }}>
       <div
         ref={ref}
-        class={cn('flex flex-col overflow-y-auto', local.class)}
+        // `kai-focus-inset`: the log fills a clipping container, so the default
+        // focus outline (drawn outside the border box) was clipped away
+        // entirely — this region was tabbable with no visible indicator.
+        class={cn('flex flex-col overflow-y-auto kai-focus-inset', local.class)}
         role="log"
         // Keyboard users must be able to scroll the conversation even when no
         // message contains a focusable control (WCAG 2.1.1 — axe

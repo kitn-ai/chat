@@ -10,7 +10,7 @@
 // error the caller has always seen.
 import { afterEach, describe, expect, it } from 'vitest';
 import { readOpenAIStream } from './read';
-import { subscribeWireDiagnostics, type WireDiagnosticEvent } from './diagnostics';
+import { subscribeWireDiagnostics, type KaiDiagnosticEvent, type WireDiagnosticEvent } from './diagnostics';
 
 const nullSink = () =>
   ({
@@ -51,7 +51,7 @@ afterEach(() => {
 
 describe('wire.interrupted', () => {
   it('a stream that errors mid-read emits open → frame → interrupted, with counts', async () => {
-    const events: WireDiagnosticEvent[] = [];
+    const events: KaiDiagnosticEvent[] = [];
     off = subscribeWireDiagnostics((e) => events.push(e));
 
     const boom = new TypeError('network went away');
@@ -77,7 +77,7 @@ describe('wire.interrupted', () => {
   });
 
   it('an AbortError reports reason abort and errorName AbortError', async () => {
-    const events: WireDiagnosticEvent[] = [];
+    const events: KaiDiagnosticEvent[] = [];
     off = subscribeWireDiagnostics((e) => events.push(e));
 
     const aborted = new DOMException('The operation was aborted.', 'AbortError');
@@ -94,7 +94,7 @@ describe('wire.interrupted', () => {
   });
 
   it('an unidentifiable throw reports reason error rather than GUESSING abort', async () => {
-    const events: WireDiagnosticEvent[] = [];
+    const events: KaiDiagnosticEvent[] = [];
     off = subscribeWireDiagnostics((e) => events.push(e));
 
     const dying = dyingStream('a bare string, thrown by something rude');
@@ -111,7 +111,7 @@ describe('wire.interrupted', () => {
   });
 
   it('a normal read still ends in wire.close and emits NO interrupted event', async () => {
-    const events: WireDiagnosticEvent[] = [];
+    const events: KaiDiagnosticEvent[] = [];
     off = subscribeWireDiagnostics((e) => events.push(e));
     const body = [
       'data: {"choices":[{"index":0,"delta":{"content":"hi"},"finish_reason":"stop"}]}',
