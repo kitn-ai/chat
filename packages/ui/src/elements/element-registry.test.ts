@@ -19,6 +19,7 @@ import { subscribeWireDiagnostics, type KaiDiagnosticEvent } from '../wire/diagn
 import { emitElementRegistry } from './element-diagnostics';
 import type { ElementRegistryEvent } from './diagnostic-events';
 import manifest from './element-manifest.json';
+import { assertElementEventsVocabulary } from '../../tests/helpers/element-event-vocabulary';
 
 // Exactly two of the 79, so the partition has something on both sides.
 import './conversation-list';
@@ -31,7 +32,11 @@ beforeEach(() => {
   events = [];
   off = subscribeWireDiagnostics((e) => events.push(e));
 });
-afterEach(() => off?.());
+afterEach(() => {
+  off?.();
+  // THE ALLOWLIST, over every element event this suite emitted.
+  assertElementEventsVocabulary(events);
+});
 
 const snapshots = () =>
   events.filter((e): e is ElementRegistryEvent => e.type === 'element.registry');

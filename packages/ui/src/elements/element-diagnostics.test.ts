@@ -26,6 +26,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { subscribeWireDiagnostics, type KaiDiagnosticEvent } from '../wire/diagnostics';
 import { classifyAttributeValue } from './element-diagnostics';
 import type { ElementViolationEvent } from './diagnostic-events';
+import { assertElementEventsVocabulary } from '../../tests/helpers/element-event-vocabulary';
 import './conversation-list';
 import './agent-card';
 import './chat';
@@ -43,6 +44,9 @@ beforeEach(() => {
 afterEach(() => {
   off?.();
   document.body.innerHTML = '';
+  // THE ALLOWLIST, over every element event this suite emitted. See the helper:
+  // sentinel searching is a blocklist and misses leak shapes nobody named.
+  assertElementEventsVocabulary(events);
 });
 
 const violations = () =>

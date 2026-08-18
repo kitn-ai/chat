@@ -29,6 +29,7 @@ import type { ChatMessage } from '../elements/chat-types';
 import '../elements/conversation-list';
 import '../elements/agent-card';
 import { emitElementRegistry } from '../elements/element-diagnostics';
+import { assertElementEventsVocabulary } from '../../tests/helpers/element-event-vocabulary';
 
 const nullSink = () =>
   ({
@@ -457,10 +458,16 @@ function driveElements(): KaiDiagnosticEvent[] {
     // valid JSON holding a sentinel, and a long value whose LENGTH is reported.
     const card = document.createElement('kai-agent-card') as HTMLElement & Record<string, unknown>;
     document.body.appendChild(card);
-    card.setAttribute('status', E.attrText);
-    card.setAttribute('status', `[object Object]${E.attrText}`);
-    card.setAttribute('status', JSON.stringify({ [E.key]: E.agentLabel }));
-    card.setAttribute('status', `${E.agentLabel}-`.repeat(40));
+    // Every form of the vocabulary, so the allowlist check below is exercised
+    // across the whole closed set rather than one branch of it.
+    card.setAttribute('status', E.attrText); // string(len=N)
+    card.setAttribute('status', `[object Object]${E.attrText}`); // string(len=N)
+    card.setAttribute('status', JSON.stringify({ [E.key]: E.agentLabel })); // valid: no event
+    card.setAttribute('status', `${E.agentLabel}-`.repeat(40)); // string(len=N), long
+    card.setAttribute('status', '[object Object]'); // the bare marker
+    card.setAttribute('status', String([{ a: E.title }, { b: E.id }])); // [object Object] x 2
+    card.setAttribute('status', '42'); // json:number
+    card.setAttribute('status', ''); // empty-attribute
 
     // The registry snapshot, taken while the sentinel-bearing props are live on
     // a mounted element — so "it reports tags, not the state of the props"
@@ -581,5 +588,40 @@ describe('the payload boundary — element events', () => {
     const planted = JSON.stringify([{ type: 'element.violation', leaked: E.title }]);
     expect(planted).toContain(E.title);
     expect(JSON.stringify(driveElements())).not.toContain(E.title);
+  });
+
+  it('EVERY field of every element event comes from a closed vocabulary', () => {
+    // THE ASSERTION THAT ACTUALLY HOLDS THE LINE, and the reason the sentinel
+    // cases above are documentation rather than proof.
+    //
+    // Searching for sentinels is a BLOCKLIST: it catches a leak you thought to
+    // name, in the FORM you thought to name it. Mutating `classifyAttributeValue`
+    // to append a 12-character TAIL slice of the raw attribute leaks real
+    // consumer text on every violation — and of seven hostile inputs, SIX slid
+    // their tails straight past `toContain`. The search fired on exactly one:
+    // the input that happens to be a repetition of the sentinel token, so its
+    // tail contained a whole copy by luck. Head-anchoring the sentinels (the
+    // first repair) closes head slices and nothing else — tail, middle, case
+    // changes and any encoding all still walk past, because the set of leak
+    // shapes is open and a blocklist cannot cover an open set.
+    //
+    // So this inverts it. Every string an element event carries is a fixed
+    // literal, a shape from a closed vocabulary, or a NAME read out of a
+    // generated artifact. Membership catches every leak shape at once,
+    // including ones nobody has imagined, and depends on no sentinel design.
+    const events = driveElements();
+    const elements = events.filter((e) => e.type.startsWith('element.'));
+
+    // Non-vacuity, and it must be a real spread: a vocabulary check over one
+    // event, or over none, proves nothing.
+    expect(elements.length).toBeGreaterThan(3);
+    const previews = elements
+      .map((e) => (e as unknown as { valuePreview?: string }).valuePreview)
+      .filter((p): p is string => p !== undefined);
+    expect(previews.length).toBeGreaterThan(3);
+    // Several DIFFERENT forms of the vocabulary were exercised, not one repeated.
+    expect(new Set(previews).size).toBeGreaterThan(2);
+
+    assertElementEventsVocabulary(events);
   });
 });
