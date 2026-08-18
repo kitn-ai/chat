@@ -307,15 +307,27 @@ const MANIFEST_TAGS: string[] = Object.keys((manifest as { tags: Record<string, 
  * is the same answer, derived, over every tag.
  *
  * WHY THE MANIFEST AND NOT `element-meta.json`. The two generated artifacts
- * disagree -- 79 tags against 80 entries -- and the manifest is the one that is
- * RIGHT. `kai-remote` is in the meta file because `gen-element-api.mjs` scans
- * the `src/elements` directory listing, and absent from the manifest because
- * `gen-elements-manifest.mjs` reads the import list in `register-impl.ts`, which
- * does not import `remote.tsx`. Nothing in the tree does. So `<kai-remote>` is
- * never defined in any consumer app, and listing it here would report a
- * permanent, unfixable "not defined" against an element no app is missing. The
- * divergence is pinned by `element-nonscalar-sync.test.ts` and reported as a
- * separate defect; it is deliberately not papered over here.
+ * disagree -- 79 tags against 80 entries -- and the manifest is the one that
+ * answers THIS question. `kai-remote` is in the meta file because
+ * `gen-element-api.mjs` scans the `src/elements` directory listing, and absent
+ * from the manifest because `gen-elements-manifest.mjs` reads the import list in
+ * `register-impl.ts`, which does not import `remote.tsx`.
+ *
+ * AND THAT IS DELIBERATE, not a generator bug -- `vite.config.elements.ts:44-50`
+ * says so at the site: `<kai-remote>` mounts a sandboxed cross-origin iframe and
+ * is opt-in, reachable only through `@kitn.ai/ui/elements/remote` or the React
+ * `Remote` wrapper, and intentionally kept out of the register-all bundle. So
+ * the honest universe for "did the element bundle load" is the 79 that bundle
+ * registers. Listing `kai-remote` beside them would report a permanent "not
+ * defined" against an element almost no app is missing, and adding it to the
+ * manifest -- the obvious "fix" -- would hand an opt-in cross-origin iframe
+ * element to the autoloader's lazy-load set, which is a behaviour change wearing
+ * the costume of a data fix.
+ *
+ * The cost is stated rather than hidden: a consumer who HAS opted into
+ * `kai-remote` sees it in neither list. `element-artifact-divergence.test.ts`
+ * pins the divergence at exactly this one tag, so it stays a known exception and
+ * a NEW one fails.
  *
  * Returns the event it emitted, or `undefined` where there is no custom-element
  * registry (SSR) or nobody is listening.

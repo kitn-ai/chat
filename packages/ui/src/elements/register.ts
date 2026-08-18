@@ -38,6 +38,23 @@ export type { CodeHighlightingOptions } from '../primitives/highlighter';
 export { classifyTool } from '../components/tool-classify';
 export type { ToolKind } from '../components/tool-classify';
 
+// Element-layer diagnostics. `emitElementRegistry()` re-emits the which-elements-
+// are-defined snapshot on demand, for a panel that attached mid-session and so
+// missed the one register-impl emits at load. SSR-safe and a no-op with no
+// subscriber, so calling it unconditionally is fine.
+//
+// The event TYPES are re-exported here as well as from @kitn.ai/ui/diagnostics:
+// a consumer already importing the elements entry should not have to add a
+// second specifier to name the events it is handed.
+export { emitElementRegistry } from './element-diagnostics';
+export type {
+  ElementDiagnosticBase,
+  ElementDiagnosticEvent,
+  ElementRegistryEvent,
+  ElementViolationEvent,
+  ElementViolationKind,
+} from './diagnostic-events';
+
 // Imperative toast API — usable directly from the elements entry so consumers
 // who only import the web-components bundle still get `toast()`. The store is
 // SSR-safe (no DOM touched until the first toast is raised on the client).
