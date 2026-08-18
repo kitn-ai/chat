@@ -161,6 +161,16 @@ export interface StreamSummary {
   request?: RequestSummary;
   /** Parts the encoder did not put on the wire. */
   dropped: DroppedRow[];
+
+  // ── Absolute session bounds, for aggregates across streams ────────────
+  /** `t` of this stream's FIRST event. Absolute, unlike the per-row `atMs`,
+   *  because session wall time cannot be derived from relative offsets. */
+  startedAt?: number;
+  /** `t` of this stream's LAST event so far. */
+  lastAt?: number;
+  /** Correlates several streams into one logical turn, when the app reports it
+   *  (a tool loop is several streams and one trace). Absent is normal. */
+  traceId?: string;
 }
 
 export interface FoldResult {
@@ -216,6 +226,16 @@ export function foldStreams(events: readonly WireDiagnosticEvent[]): FoldResult 
       continue;
     }
     const s = summaryFor(e);
+
+    // Absolute bounds and the trace correlator, tracked for every event type so
+    // they do not depend on which events a given kit version emits.
+    const at = num(e.t);
+    if (at !== undefined) {
+      if (s.startedAt === undefined) s.startedAt = at;
+      s.lastAt = at;
+    }
+    const trace = str(field(e, 'traceId'));
+    if (trace) s.traceId = trace;
 
     switch (e.type) {
       case 'wire.open': {
@@ -616,21 +636,38 @@ export function findingsFor(s: StreamSummary): Finding[] {
 
   // ── Reasoning, so an empty thinking panel is explainable ─────────────
   const reasoning = s.parts.reasoning ?? 0;
-  out.push(
-    reasoning > 0
-      ? {
-          id: 'reasoning',
-          label: 'Reasoning',
-          verdict: 'ok',
-          statement: `${plural(reasoning, 'reasoning part')}.`,
-        }
-      : {
-          id: 'reasoning',
-          label: 'Reasoning',
-          verdict: 'na',
-          statement: 'No reasoning parts (this model may not emit any).',
-        },
-  );
+  const reasoningTokens = s.usage?.reasoningTokens ?? 0;
+  if (reasoning > 0) {
+    out.push({
+      id: 'reasoning',
+      label: 'Reasoning',
+      verdict: 'ok',
+      statement: `${plural(reasoning, 'reasoning part')}.`,
+    });
+  } else if (reasoningTokens > 0) {
+    // THE HIGHEST-VALUE MISMATCH IN THE TOOL. The provider billed for thinking
+    // and the reader produced none, which is what an empty thinking panel on a
+    // reasoning model looks like from the inside.
+    out.push({
+      id: 'reasoning',
+      label: 'Reasoning',
+      verdict: 'warn',
+      statement:
+        `Usage reports ${plural(reasoningTokens, 'reasoning token')}, but no reasoning part ` +
+        'arrived. The model did think; this reader may not read the field this provider ' +
+        'sends thinking in.',
+      detail:
+        'Reasoning is spelled several ways on the chat-completions wire, and a provider ' +
+        'this format does not have a branch for will bill for it and show nothing.',
+    });
+  } else {
+    out.push({
+      id: 'reasoning',
+      label: 'Reasoning',
+      verdict: 'na',
+      statement: 'No reasoning parts (this model may not emit any).',
+    });
+  }
 
   // ── Tool calls ───────────────────────────────────────────────────────
   const tools = s.parts.tool ?? 0;
