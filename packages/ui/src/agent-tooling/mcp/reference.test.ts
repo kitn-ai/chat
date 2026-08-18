@@ -6,6 +6,8 @@ import { BUILTIN_CARD_TAGS, cardSchemas, cardSchemaNames, cardTools } from '@kit
 import type { AnthropicToolDef, JsonSchemaToolDef, OpenAIToolDef } from '@kitn.ai/ui/schemas';
 import { reference } from './tools/reference';
 import { cardTagForType, cardHostTags } from './manifest';
+import { invariants } from '../catalog/invariants';
+import { surfaceRecipes } from '../catalog/surfaces';
 
 describe('component_reference', () => {
   it('returns kai-chat props + events', async () => {
@@ -309,5 +311,139 @@ describe('component_reference — exposed methods', () => {
     const item = elementMeta.find((e) => e.tag === 'kai-resizable-item');
     expect(item?.methods ?? []).toEqual([]);
     expect(methodsSection(await textFor({ name: 'kai-resizable-item' }))).toBeUndefined();
+  });
+});
+
+describe('component_reference serves the catalog', () => {
+  const textFor = async (name: string) => {
+    const out = await reference.handler({ name });
+    return (out.content as { type: string; text: string }[])[0].text;
+  };
+
+  it('kai-chat carries the reactivity invariant, statement included', async () => {
+    const text = await textFor('kai-chat');
+    expect(text).toContain('### Invariants');
+    expect(text).toContain('reactivity-two-halves');
+    expect(text).toContain('A new array reference NOTIFIES');
+  });
+
+  it('kai-conversations names the recipes it appears in', async () => {
+    const text = await textFor('kai-conversations');
+    expect(text).toContain('### Appears in surface recipes');
+    expect(text).toContain('workspace-chat');
+  });
+
+  it('an element in no recipe still gets universal invariants, and no fabricated membership', async () => {
+    const text = await textFor('kai-kbd');
+    expect(text).toContain('### Invariants');
+    expect(text).toContain('props-not-attributes'); // universal: applies to every element
+    expect(text).not.toContain('### Appears in surface recipes');
+  });
+});
+
+/**
+ * The rendering is the last place the catalog's honesty can be lost. Three of the
+ * seven records are enforced by NOTHING and two more by only half of what they
+ * say, so a section that prints seven bullets and no coverage would hand a
+ * harness exactly the overstatement this branch spent five rounds removing from
+ * the records themselves. These probes read the STATUS off the raw literals
+ * rather than restating it, so they follow a record that changes status.
+ */
+describe('component_reference does not overstate what the catalog enforces', () => {
+  const textFor = async (name: string) => {
+    const out = await reference.handler({ name });
+    return (out.content as { type: string; text: string }[])[0].text;
+  };
+
+  /** Sliced by heading so a match elsewhere in the reference cannot stand in for one here. */
+  const sectionOf = (text: string, heading: string): string | undefined => {
+    const start = text.indexOf(`### ${heading}`);
+    if (start === -1) return undefined;
+    const rest = text.slice(start + 4);
+    const next = rest.indexOf('\n### ');
+    return next === -1 ? rest : rest.slice(0, next);
+  };
+
+  /**
+   * The heading line for one invariant, not merely a line mentioning its id: a
+   * statement is free to name another record (props-not-attributes names
+   * reactivity-two-halves), and a probe that matched that line would be reading
+   * the coverage of the wrong invariant.
+   */
+  const rowFor = (section: string, id: string): string | undefined =>
+    section.split('\n').find((l) => l.startsWith(`#### ${id}`));
+
+  const openIds = invariants.filter((i) => i.status === 'open').map((i) => i.id);
+  const partialIds = invariants.filter((i) => i.status === 'partial').map((i) => i.id);
+
+  it('the fixture is the one this whole describe assumes: some records are NOT enforced', () => {
+    // Without this the probes below can pass by there being nothing to catch.
+    expect(openIds.length).toBeGreaterThan(0);
+    expect(partialIds.length).toBeGreaterThan(0);
+  });
+
+  it('every open invariant on kai-chat is rendered as enforced by nothing', async () => {
+    const section = sectionOf(await textFor('kai-chat'), 'Invariants')!;
+    expect(section).toBeDefined();
+    const missing = openIds.filter((id) => {
+      const line = rowFor(section, id);
+      return !line || !/not enforced/i.test(line);
+    });
+    expect(missing).toEqual([]);
+  });
+
+  it('every partial invariant on kai-chat is rendered as partial, not as covered', async () => {
+    const section = sectionOf(await textFor('kai-chat'), 'Invariants')!;
+    const missing = partialIds.filter((id) => {
+      const line = rowFor(section, id);
+      return !line || !/partially enforced/i.test(line);
+    });
+    expect(missing).toEqual([]);
+  });
+
+  it('an enforced invariant names the guard that enforces it — the positive control for the two above', async () => {
+    const section = sectionOf(await textFor('kai-chat'), 'Invariants')!;
+    const line = rowFor(section, 'events-non-bubbling')!;
+    expect(line).toBeDefined();
+    // Not "not enforced", not "partially enforced" — and it names its real guard.
+    expect(line).not.toMatch(/not enforced|partially enforced/i);
+    expect(line).toContain('src/elements/define.tsx');
+  });
+
+  it('upgrade-race is served with the delivery scope that makes it conditional', async () => {
+    // appliesTo.targets, not tags — so the tag filter alone would print it as if
+    // it held on every page. A bundler app reading it unqualified would either
+    // add whenDefined ceremony it does not need or distrust the section.
+    const section = sectionOf(await textFor('kai-chat'), 'Invariants')!;
+    const line = rowFor(section, 'upgrade-race')!;
+    expect(line).toContain('script-tag');
+  });
+
+  it('serves the wrong/right pairs, which are the part a weak model can pattern-match', async () => {
+    const text = await textFor('kai-chat');
+    const wrong = invariants.find((i) => i.id === 'host-coordinates')!.examples[0]!;
+    expect(text).toContain(wrong.wrong);
+    expect(text).toContain(wrong.right);
+  });
+
+  it('serves the diagnosis rows, symptom and cause', async () => {
+    const text = await textFor('kai-chat');
+    const d = invariants.find((i) => i.id === 'events-non-bubbling')!.diagnosis[0]!;
+    expect(text).toContain(d.symptom);
+    expect(text).toContain(d.cause);
+  });
+
+  it('a recipe row carries the ingredients, so the membership is actionable', async () => {
+    const section = sectionOf(await textFor('kai-conversations'), 'Appears in surface recipes')!;
+    expect(section).toBeDefined();
+    const recipe = surfaceRecipes.find((r) => r.id === 'workspace-chat')!;
+    for (const ingredient of recipe.ingredients) expect(section).toContain(ingredient);
+  });
+
+  it('an unknown tag gets no catalog sections at all', async () => {
+    // The absence probe with its positive control beside it: the same helper,
+    // the same headings, one tag that has them and one that must not.
+    expect(await textFor('kai-nonexistent')).not.toContain('### Invariants');
+    expect(await textFor('kai-chat')).toContain('### Invariants');
   });
 });
