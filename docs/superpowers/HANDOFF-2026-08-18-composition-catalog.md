@@ -4,8 +4,9 @@ Date: 2026-08-18
 Status: **BUILT. PR #288 open and unmerged.** Written to be handed to a fresh session with no prior context.
 Verified against `feat/composition-catalog` at `78a2bfc9` (42 commits ahead of `origin/main`).
 
-A separate session owns `docs/superpowers/HANDOFF-2026-08-13-*.md`, `docs/coupling-map.md` and root
-`CLAUDE.md`. This file is new and edits none of them.
+A separate session owns `docs/superpowers/HANDOFF-2026-08-13-*.md` and root `CLAUDE.md`. The same was said of
+`docs/coupling-map.md` and it did not hold up: no worktree had edits in flight and the file had not changed
+since 2026-08-15, so this branch edited it — see §7.
 
 ---
 
@@ -15,7 +16,12 @@ A separate session owns `docs/superpowers/HANDOFF-2026-08-13-*.md`, `docs/coupli
 what can be composed from this kit. That produced a design spec (#276) and an implementation plan (#277), both
 **merged to main**, and an implementation that is **PR #288, open**.
 
-Every gate is green on the merged tree. Measure them rather than trusting this line:
+**The gate is the required CI `test` job, not a list of commands copied into a handoff.** This section
+originally said "every gate is green" over the five commands below, and that was false: the `test` job was
+**red on `verify:pack`** the whole time — `src/agent-tooling/catalog/derived.json` had grown to 97.7 KiB,
+over that check's 64 KiB per-file ceiling, and was shipping to every consumer. A five-command list that
+omits the one failing check is how a red job reads as green, so run the job's steps, and treat any list
+here as a subset that rots:
 
 ```
 pnpm --filter @kitn.ai/ui run typecheck
@@ -23,7 +29,12 @@ pnpm --filter @kitn.ai/ui exec vitest run --project=unit
 pnpm --filter @kitn.ai/ui exec vitest run --project=emitted
 pnpm --filter @kitn.ai/ui run verify:generated
 pnpm --filter @kitn.ai/ui run lint:catalog-drift
+pnpm --filter @kitn.ai/ui run verify:scaffold
+pnpm --filter @kitn.ai/ui run verify:pack
 ```
+
+`verify:pack` is fixed (the file is excluded from the `files` array; nothing reads it at runtime, confirmed
+by driving the MCP out of an install of the tarball).
 
 ### What shipped
 
@@ -133,14 +144,18 @@ record that should have prevented it, ranked by how many findings each change wo
    elements. Shipped at full detail deliberately — every available trim drops a qualifier, and dropping
    qualifiers is how these claims became false. The first acceptance runs should settle it.
 
-## 7. Coupling-map rows to add (that file is owned elsewhere)
+## 7. Coupling-map rows — ADDED
 
-`package.json exports ↔ EXPORT_NOTES` (this one made the branch red on main until it was added) ·
-authored catalog records ↔ the tree, via `lint:catalog-drift` · `derived.json` ↔ its sources, via
-`verify:generated` · the `MessagePart` union ↔ `partConsumption` · the title-reader parity across two files ·
-`component_reference` ↔ `status`/`enforcedBy`/`wiring`. Two existing rows are stale: the one enumerating
-`verify:generated`'s artifacts omits `derived.json`, and item 16 calling `element-manifest.json` "the one
-derived artifact missing from `verify:generated`" was already false before this branch.
+`docs/coupling-map.md` is **not** owned elsewhere; that note was stale, and this branch has now edited it.
+Added: the shared consumer tsc projects · `codeUnits()` and its three consumers · authored catalog records ↔
+the tree, via `lint:catalog-drift` · `derived.json` ↔ its sources, via `verify:generated` · the `MessagePart`
+union ↔ `partConsumption` · `component_reference` ↔ `status`/`enforcedBy`/`wiring` · and a generated file
+growing past `verify:pack`'s per-file ceiling, which is what §1 was wrong about. Both stale rows are
+corrected: `derived.json` is now named in the `verify:generated` row, and item 16 is retracted in place —
+`element-manifest.json` has been covered since #265, which landed before that file's last edit.
+
+Still not added: `package.json exports ↔ EXPORT_NOTES` (this one made the branch red on main until it was
+added) and the title-reader parity across two files.
 
 ## 8. How this was built, and what it cost
 
