@@ -37,9 +37,17 @@ zero mentions of `@kitn.ai/ui/elements` and zero import statements across 62 KB 
 
 ## Decisions taken
 
-- **Framework: vanilla TS + Vite.** The kit is web-components-first; `kai-` tags are the contract,
-  so a bug found there is a bug for every framework. React exercises the wrapper layer — a genuinely
-  different surface, and its own later pass. Starting there means debugging two things at once.
+- **Framework: vanilla TS + Vite for rungs 1–2, reassess at rung 3.** The kit has exactly three
+  consumer surfaces: raw `kai-` tags (vanilla, Angular, Vue, Svelte), the generated React wrappers,
+  and direct Solid components. **Angular consumes raw `kai-` tags — the same surface as vanilla — so
+  it buys structure, not coverage**, while adding a layer that can make its own quirks look like kit
+  bugs. Vanilla keeps attribution unambiguous, which matters most while bug-hunting. Vite + TS also
+  resolves the `exports` map identically, and is the exact configuration `verify:consumer` already
+  pins, so it is the guarded path.
+  By rung 3 (workspace, routing, history) structure starts paying for itself. **Switch then, and
+  prefer React**, because the generated wrapper layer is code we could independently get wrong —
+  the one surface vanilla cannot reach. DI, routing and layouts are legitimate reasons to switch;
+  imports are not, since vanilla has them in full.
 - **Real providers, not mocks**, via the owner's OpenRouter key. A widget that fakes its stream does
   not prove the wire works.
 - **The `compiles` gate's not-applicable branch is deleted, not fixed.** Verification found it
@@ -83,13 +91,26 @@ bugs it finds, and leaves a working example behind.
 | 4 | Lovable-style builder | artifacts, preview panel |
 | 5 | Remote cards | generative UI, card envelopes, the untrusted-output boundary |
 
-Order is provisional; complexity is the ordering principle, not the exact list. The goal is coverage
-of every component family we ship, with a working demo of each and the bugs fixed along the way.
+**The ordering principle is component coverage, not how impressive the app is.** The voice rung
+exists for the visualizer and voice I/O; the artifacts rung for artifacts and the preview panel; the
+remote-cards rung for the generative-UI envelope and the untrusted-output boundary. **If a rung does
+not light up a component family we have not exercised, it does not earn a slot.** Order is otherwise
+provisional and complexity-ascending.
 
 **Each rung is done when:** the app runs against a real provider, it is checked in, and it builds in
 CI. Without the CI step, rung 4 silently breaks rung 1 and we are back to examples that used to work.
 
-**Frameworks other than vanilla come after the ladder**, as their own pass.
+**The ladder is complete when every component family has been driven by a real application** — not
+when we run out of app ideas. That is the exit condition, and it is what makes coverage the ordering
+principle rather than taste.
+
+## Working method
+
+One rung at a time: build, verify, fix, then the next. Because the work is deliberately sequential
+there is nothing to isolate, so **each iteration is a plain branch off `main` in the main checkout**,
+not a worktree. Worktrees are for concurrent writers; a fresh one costs three setup steps and has
+repeatedly failed in a way that reads like a broken checkout. Implementation is delegated and then
+independently verified, with verification scaled to the change rather than applied uniformly.
 
 ## Explicitly not doing
 
