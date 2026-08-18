@@ -147,6 +147,7 @@
     "!src/**/*.mdx",
     "!src/stories",
     "!src/wire/fixtures",
+    "!src/agent-tooling/catalog/derived.json",
     "!src/elements/logos",
     "!src/elements/card-media.jpg",
     "!src/elements/video-poster.jpg",
