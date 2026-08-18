@@ -4,10 +4,11 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BUILTIN_CARD_TAGS, cardSchemas, cardSchemaNames, cardTools } from '@kitn.ai/ui/schemas';
 import type { AnthropicToolDef, JsonSchemaToolDef, OpenAIToolDef } from '@kitn.ai/ui/schemas';
-import { reference } from './tools/reference';
+import { reference, coverageSummary } from './tools/reference';
 import { cardTagForType, cardHostTags } from './manifest';
 import { invariants } from '../catalog/invariants';
 import { surfaceRecipes } from '../catalog/surfaces';
+import type { TInvariant } from '../catalog/catalog-types';
 
 describe('component_reference', () => {
   it('returns kai-chat props + events', async () => {
@@ -440,10 +441,87 @@ describe('component_reference does not overstate what the catalog enforces', () 
     for (const ingredient of recipe.ingredients) expect(section).toContain(ingredient);
   });
 
+  it('the header summary counts BOTH kinds of gap, so a summary of it cannot invent coverage', async () => {
+    // "3 of the 7 are enforced by NOTHING" is the quotable half, and a reader
+    // compressing it emits "3 unenforced, 4 enforced" — while two of that four
+    // are partial. The line names both numerators so there is nothing to invent.
+    const section = sectionOf(await textFor('kai-chat'), 'Invariants')!;
+    expect(section).toContain(`${openIds.length} of the ${invariants.length} below`);
+    expect(section).toContain(`${partialIds.length} more by only half`);
+  });
+
   it('an unknown tag gets no catalog sections at all', async () => {
     // The absence probe with its positive control beside it: the same helper,
     // the same headings, one tag that has them and one that must not.
     expect(await textFor('kai-nonexistent')).not.toContain('### Invariants');
     expect(await textFor('kai-chat')).toContain('### Invariants');
+  });
+});
+
+/**
+ * The coverage sentence over count combinations the real catalog cannot instance
+ * — it has exactly one (3 open, 2 partial, 7 total) and would have to be mutated
+ * to show the others. Synthetic records instead, so the rule is pinned rather
+ * than today's arithmetic.
+ */
+describe('coverageSummary', () => {
+  const rec = (id: string, status: TInvariant['status']): TInvariant => ({
+    id,
+    statement: 's',
+    appliesTo: {},
+    enforcedBy: status === 'open' ? { kind: 'none' } : { kind: 'lint', script: 'lint:x' },
+    status,
+    diagnosis: [],
+    examples: [],
+  });
+
+  it('says nothing when every record is fully enforced', () => {
+    expect(coverageSummary([rec('a', 'enforced'), rec('b', 'enforced')])).toBe('');
+    expect(coverageSummary([])).toBe('');
+  });
+
+  it('names both gaps when both exist, each numerator moving on its own', () => {
+    const both = coverageSummary([
+      rec('a', 'open'),
+      rec('b', 'open'),
+      rec('c', 'partial'),
+      rec('d', 'enforced'),
+    ]);
+    expect(both).toContain('2 of the 4 below are enforced by NOTHING at all');
+    expect(both).toContain('1 more by only half of what it says');
+
+    // Move ONLY the partial count: the open clause must not follow it.
+    const morePartial = coverageSummary([
+      rec('a', 'open'),
+      rec('b', 'open'),
+      rec('c', 'partial'),
+      rec('d', 'partial'),
+    ]);
+    expect(morePartial).toContain('2 of the 4 below are enforced by NOTHING at all');
+    expect(morePartial).toContain('2 more by only half of what they say');
+  });
+
+  it('still reports partial coverage when nothing at all is unenforced', () => {
+    // The failure mode this guards: a `partial` record going silent because the
+    // sentence was keyed on the open count alone.
+    const only = coverageSummary([rec('a', 'partial'), rec('b', 'enforced'), rec('c', 'enforced')]);
+    expect(only).toContain('1 of the 3 below is enforced by only half of what it says');
+    expect(only).not.toContain('NOTHING');
+  });
+
+  it('reports an unenforced record with no partial one, and does not imply a second gap', () => {
+    const only = coverageSummary([rec('a', 'open'), rec('b', 'enforced')]);
+    expect(only).toContain('1 of the 2 below is enforced by NOTHING at all');
+    expect(only).not.toContain('half of what');
+  });
+
+  it('is what the served section actually uses — not a parallel implementation', async () => {
+    // Every catalog invariant applies to kai-chat, so the served sentence must be
+    // byte-identical to this call over the whole list. If the renderer ever grows
+    // its own copy of the arithmetic, this goes red instead of drifting.
+    const sentence = coverageSummary(invariants).trim();
+    expect(sentence.length).toBeGreaterThan(0);
+    const out = await reference.handler({ name: 'kai-chat' });
+    expect((out.content as { text: string }[])[0].text).toContain(sentence);
   });
 });

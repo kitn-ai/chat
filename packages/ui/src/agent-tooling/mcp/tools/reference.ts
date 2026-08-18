@@ -268,6 +268,12 @@ function recipesFor(tag: string): TSurfaceRecipe[] {
  */
 function coverageOf(inv: TInvariant): string {
   const by = inv.enforcedBy;
+  // `guard` is '' only for kind:'none', and that combination reaches neither the
+  // 'enforced' nor the 'partial' branch below: invariants.test.ts ("open ⟺
+  // enforcedBy.kind none") asserts the equivalence in BOTH directions, so a
+  // kind:'none' record is always status:'open'. Named here because a reader of
+  // this file alone cannot see what makes `enforced by ` with nothing after it
+  // unreachable.
   const guard =
     by.kind === 'test'
       ? `the kit's own tests (${by.paths.join(', ')})`
@@ -323,6 +329,45 @@ function exampleLines(examples: TInvariantExample[]): string[] {
 }
 
 /**
+ * The one sentence saying how much of this section is actually guarded.
+ *
+ * BOTH numerators are derived and both are needed. `open` alone was the first
+ * form of this line, and it is the more quotable half: "3 of the 7 below are
+ * enforced by NOTHING" compresses, in any reader summarising it, into "3
+ * unenforced, 4 enforced" — and two of that four are `partial`, covered on one
+ * half only. That is this repo's own compression-drops-the-qualifier failure,
+ * sitting in the sentence written to prevent it. Naming both counts leaves the
+ * compression nothing to invent.
+ *
+ * Returns '' when every applicable record is fully enforced, so the line can
+ * never outlive the gap it describes and become a comfortable falsehood.
+ *
+ * Exported for reference.test.ts, which drives all four count combinations over
+ * synthetic records — the real catalog can only instance one of them at a time.
+ */
+export function coverageSummary(applicable: TInvariant[]): string {
+  const open = applicable.filter((i) => i.status === 'open').length;
+  const partial = applicable.filter((i) => i.status === 'partial').length;
+  if (open === 0 && partial === 0) return '';
+
+  const total = applicable.length;
+  const half = (n: number) => `only half of what ${n === 1 ? 'it says' : 'they say'}`;
+  const clauses: string[] = [];
+
+  if (open > 0) {
+    clauses.push(`${open} of the ${total} below ${open === 1 ? 'is' : 'are'} enforced by NOTHING at all`);
+  }
+  if (partial > 0) {
+    clauses.push(
+      open > 0
+        ? `${partial} more by ${half(partial)}`
+        : `${partial} of the ${total} below ${partial === 1 ? 'is' : 'are'} enforced by ${half(partial)}`,
+    );
+  }
+  return ` ${clauses.join(', and ')}.`;
+}
+
+/**
  * `###` to match every other section heading in this file (see '### Props'),
  * `####` for the per-record blocks, matching the card contract's sub-headings.
  */
@@ -331,18 +376,12 @@ function catalogSectionLines(tag: string): string[] {
   const lines: string[] = [];
 
   if (applicable.length > 0) {
-    const open = applicable.filter((i) => i.status === 'open').length;
     lines.push(
       '',
       '### Invariants',
       'Rules that have already broken real consumers of this kit. Each block says what enforces ' +
         'it — read that line rather than assuming CI catches a violation, because nothing here ' +
-        'reads YOUR code.' +
-        // Derived, not asserted: if every record ever gains a guard this sentence
-        // disappears on its own instead of becoming a comfortable falsehood.
-        (open > 0
-          ? ` ${open} of the ${applicable.length} below ${open === 1 ? 'is' : 'are'} enforced by NOTHING at all.`
-          : ''),
+        'reads YOUR code.' + coverageSummary(applicable),
     );
 
     for (const inv of applicable) {
@@ -375,6 +414,12 @@ function catalogSectionLines(tag: string): string[] {
         `- **Ingredients:** ${r.ingredients.map((t) => `\`<${t}>\``).join(', ')}`,
         `- **Delivery:** ${r.targets.join(', ')} · archetype: ${r.archetypes.join(', ')}`,
         `- **Backend:** your own endpoint, read with \`${r.backend.reader}\` from \`@kitn.ai/ui/wire\``,
+        // Bare ids, deliberately. This row is a DEPENDENCY list, not a coverage
+        // claim, and it can only ever be read a few lines below the full
+        // `### Invariants` section in the same response, where each of these ids
+        // already carries its own coverage line. Repeating the status here would
+        // print it a second (and, with two recipes, a third) time per element for
+        // no fact a reader does not already have on the page.
         `- **Invariants it leans on:** ${r.invariants.join(', ')}`,
         '- **Wiring** — event out of A, property into B, wired by the host:',
       );
