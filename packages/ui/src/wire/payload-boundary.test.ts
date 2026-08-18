@@ -14,6 +14,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { readOpenAIStream } from './read';
 import { toOpenAIMessages } from './encode';
+import { reportRequest } from '../diagnostics/report-request';
 import {
   setWirePayloadCapture,
   subscribeWireDiagnostics,
@@ -42,6 +43,10 @@ const S = {
   // An IN-BAND error: the request succeeded and the stream itself carried the
   // failure. This is the one a developer chasing an empty turn is looking for.
   inBandError: 'SENTINEL-rate-limited-on-org-acme-prod',
+  // The app's own disclosure. A system prompt is the single most sensitive
+  // string an app owns -- it is the product -- so it belongs in this sweep.
+  systemPrompt: 'SENTINEL-you-are-acme-support-never-discuss-refunds',
+  toolDefinition: 'SENTINEL-internal-tool-lookup-customer-ssn',
 };
 
 const BODY = [
@@ -80,6 +85,16 @@ const THREAD: ChatMessage[] = [
   },
 ];
 
+/** What an app hands to `reportRequest`: the real body, system prompt and all. */
+const APP_BODY = {
+  model: 'anthropic/claude-sonnet-4.5',
+  messages: [
+    { role: 'system', content: S.systemPrompt },
+    { role: 'user', content: S.text },
+  ],
+  tools: [{ type: 'function', function: { name: S.toolDefinition } }],
+};
+
 /** A 200 whose stream carries the failure in-band. `wire.close` reports it. */
 const IN_BAND_ERROR_BODY = [
   `data: {"error":{"code":"rate_limit_exceeded","message":"${S.inBandError}"}}`,
@@ -89,13 +104,15 @@ const IN_BAND_ERROR_BODY = [
   '',
 ].join('\n');
 
-/** Everything a full session emits: an encode, a read, a transport failure, and
- *  an in-band one. All three terminal events, so the boundary is asserted over
- *  every path that can carry a provider's own error text. */
+/** Everything a full session emits: the app's own disclosure, an encode, a read,
+ *  a transport failure, and an in-band one. All three terminal events, so the
+ *  boundary is asserted over every path that can carry a provider's own error
+ *  text -- and over the one path that carries the APP's text. */
 async function driveEverything(): Promise<WireDiagnosticEvent[]> {
   const events: WireDiagnosticEvent[] = [];
   const off = subscribeWireDiagnostics((e) => events.push(e));
   try {
+    reportRequest(APP_BODY, { url: 'https://app.example.com/api/chat' });
     toOpenAIMessages(THREAD);
     await readOpenAIStream(new Response(BODY), nullSink());
     await readOpenAIStream(
@@ -293,6 +310,49 @@ describe('the payload boundary', () => {
     // EXACT, not an estimate: an estimate that looked like a measurement would
     // be worse than the absent field.
     expect(req.bytes).toBe(new TextEncoder().encode(JSON.stringify(body)).length);
+  });
+
+  it('OFF: app.request describes the system prompt without quoting it', async () => {
+    const events: WireDiagnosticEvent[] = [];
+    const off = subscribeWireDiagnostics((e) => events.push(e));
+    reportRequest(APP_BODY, { url: 'https://app.example.com/api/chat?key=sk-live-SECRET' });
+    off();
+
+    const e = events.find((ev) => ev.type === 'app.request') as any;
+    // The FINDING travels: there is one system message, on this route, for this
+    // model. The prompt's text -- an app's most sensitive string, since it IS
+    // the product -- does not, and neither does a tool definition's name.
+    expect(e.systemMessages).toBe(1);
+    expect(e.byRole).toEqual({ system: 1, user: 1 });
+    expect(e.tools).toBe(1);
+    expect(e.model).toBe('anthropic/claude-sonnet-4.5');
+    expect(e.url).toBe('https://app.example.com/api/chat');
+
+    const json = JSON.stringify(e);
+    expect(json).not.toContain(S.systemPrompt);
+    expect(json).not.toContain(S.toolDefinition);
+    expect(json).not.toContain(S.text);
+    expect(json).not.toContain('sk-live-SECRET');
+    expect('payload' in e).toBe(false);
+  });
+
+  it('ON: app.request carries the whole body, and only under .payload', async () => {
+    setWirePayloadCapture(true);
+    const events: WireDiagnosticEvent[] = [];
+    const off = subscribeWireDiagnostics((e) => events.push(e));
+    reportRequest(APP_BODY, { url: 'https://app.example.com/api/chat?key=sk-live-SECRET' });
+    off();
+
+    const e = events.find((ev) => ev.type === 'app.request') as any;
+    expect(e.payload.body).toBe(APP_BODY); // by reference, unmodified
+    expect(JSON.stringify(e.payload)).toContain(S.systemPrompt);
+
+    const { payload: _p, ...rest } = e;
+    expect(JSON.stringify(rest)).not.toContain(S.systemPrompt);
+    expect(JSON.stringify(rest)).not.toContain(S.toolDefinition);
+    // The credential is out even here: a query string is not conversation
+    // content, so the payload switch does not govern it.
+    expect(JSON.stringify(e)).not.toContain('sk-live-SECRET');
   });
 
   it('turning it back OFF stops the capture for the next read', async () => {
