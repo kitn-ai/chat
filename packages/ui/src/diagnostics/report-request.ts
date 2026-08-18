@@ -37,10 +37,24 @@ import {
 } from '../wire/diagnostics';
 
 export interface ReportRequestOptions {
-  /** The app's own id for the logical turn, so this request and the read that
-   *  answered it sit together. Same field and meaning as `ConsumeOptions.traceId`
-   *  and the encode options. Absent when not supplied -- there is NO timing
-   *  heuristic pairing a request with "the next stream that opens". */
+  /**
+   * The app's own id for the logical turn, so this request and the read that
+   * answered it sit together. Same field and meaning as `ConsumeOptions.traceId`
+   * and the encode options.
+   *
+   * ★ CORRELATION IS ENTIRELY YOURS, AND NOTHING WARNS. Omit it and the event
+   * is still emitted, still complete, and completely unattached: a panel shows
+   * a request that belongs to no turn, beside a response that belongs to no
+   * request, and nothing in the kit reports that as a problem because it is not
+   * one -- a request legitimately may be followed by no stream, by several, or
+   * by one from a different turn.
+   *
+   * There is NO timing heuristic pairing a request with "the next stream that
+   * opens", and that omission is deliberate: such a heuristic is right often
+   * enough to be trusted and wrong exactly when a session is tangled enough for
+   * someone to have opened the panel. Pass the same id to `reportRequest` and
+   * to the reader, and the halves join up; pass nothing and they do not.
+   */
   traceId?: string;
   /** The app's name for this call inside its trace (`'planner'`, `'retry-2'`). */
   label?: string;
@@ -128,24 +142,91 @@ function locationOf(url: string): { url?: string; hasQuery?: boolean } {
   }
 }
 
+/** Does this object DECLARE a JSON form? A plain object, an array, or anything
+ *  carrying its own `toJSON` -- which is the object stating what it serializes
+ *  to, and therefore an answer rather than a guess.
+ *
+ *  Deliberately NOT a duck-type on `.size` or `.length`: `{ size: 999999 }` is
+ *  ordinary data whose honest byte count is its JSON length, and reading that
+ *  field as a byte count is how a size field starts lying. */
+function declaresJsonForm(body: object): boolean {
+  try {
+    if (Array.isArray(body)) return true;
+    if (typeof (body as { toJSON?: unknown }).toJSON === 'function') return true;
+    const proto = Object.getPrototypeOf(body);
+    return proto === Object.prototype || proto === null;
+  } catch {
+    return false; // a Proxy with hostile traps declares nothing
+  }
+}
+
 /**
- * UTF-8 byte length of the body as JSON, or nothing.
+ * UTF-8 byte length of the body AS IT WILL BE SENT, or nothing.
  *
  * ONLY CALLED UNDER PAYLOAD CAPTURE, by the same ruling the encoder's byte
  * counts follow: measuring means materializing the whole body, and unlike a
  * one-off cost this recurs on every turn for as long as a subscriber is
  * attached. With payload on the body is being handed over anyway.
  *
- * `JSON.stringify` is not total -- a circular body, a BigInt, a throwing getter
- * -- and a diagnostic must never be the thing that breaks a request, so that
- * case omits the key rather than reporting a wrong number.
+ * ★ IT IS REPORTED ONLY WHEN IT CAN BE KNOWN EXACTLY. The trap this exists to
+ * avoid: `JSON.stringify` turns a `Blob`, a `FormData` and a `ReadableStream`
+ * all into `"{}"`, so a FormData carrying a 40 MB upload reported `bytes: 2`.
+ * That is literally "the byte length of the body as JSON" and it is read by
+ * every panel as "how big was this request" -- the confident-number class this
+ * stream refuses everywhere else, and worse than the em dash it replaces. A
+ * typed array was further out still: `Uint8Array(64)` stringifies to
+ * `{"0":0,"1":0,...}` and reported 439.
+ *
+ * Four cases can be answered exactly, and they are answered:
+ *
+ *   · a STRING -- it IS the body, so its encoded length is the number;
+ *   · anything DECLARING a JSON form (plain object, array, `toJSON`) -- that
+ *     declaration is what will be stringified onto the wire;
+ *   · a BLOB or FILE -- `size` is the byte length, known in O(1). Reporting it
+ *     is measurement, not estimation, and refusing would discard a true fact;
+ *   · an ARRAYBUFFER or a view over one -- `byteLength`, same reasoning.
+ *
+ * Everything else is OMITTED, which reads as "not reported" under the absence
+ * rule: `FormData` (whose real size needs the multipart boundary walked),
+ * `ReadableStream` (whose size is not knowable without consuming it, which
+ * would destroy the request), `URLSearchParams`, a `Map`, a class instance
+ * declaring nothing. A false negative here is safe; a confident wrong number is
+ * not.
+ *
+ * `JSON.stringify` is also not total -- a circular body, a BigInt, a throwing
+ * getter -- and a diagnostic must never be the thing that breaks a request, so
+ * that case omits the key too.
+ *
+ * Cross-realm caveat, stated rather than hidden: a `Blob` from another realm (an
+ * iframe) fails `instanceof` and is omitted. That is the safe direction, and
+ * duck-typing `.size` to fix it would re-open the `{ size: 999999 }` hole.
  */
 function bodyBytes(body: unknown): number | undefined {
   try {
-    const json = typeof body === 'string' ? body : JSON.stringify(body);
-    if (typeof json !== 'string') return undefined; // undefined, a function, a symbol
-    encoder ??= new TextEncoder();
-    return encoder.encode(json).length;
+    if (typeof body === 'string') {
+      encoder ??= new TextEncoder();
+      return encoder.encode(body).length;
+    }
+    if (typeof body !== 'object' || body === null) return undefined;
+
+    // Ordered: the JSON check runs FIRST so a plain object carrying a `size`
+    // field is measured as JSON rather than mistaken for a Blob.
+    if (declaresJsonForm(body)) {
+      const json = JSON.stringify(body);
+      if (typeof json !== 'string') return undefined;
+      encoder ??= new TextEncoder();
+      return encoder.encode(json).length;
+    }
+
+    // `instanceof`, guarded on the global existing at all, because these are not
+    // globals in every runtime the kit imports into.
+    if (typeof Blob !== 'undefined' && body instanceof Blob) return body.size;
+    if (typeof ArrayBuffer !== 'undefined') {
+      if (body instanceof ArrayBuffer) return body.byteLength;
+      if (ArrayBuffer.isView(body)) return body.byteLength;
+    }
+
+    return undefined; // no exactly-knowable size; say nothing rather than "2"
   } catch {
     return undefined;
   }

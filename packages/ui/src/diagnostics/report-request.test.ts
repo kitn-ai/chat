@@ -270,6 +270,87 @@ describe('reportRequest measurement gating', () => {
     expect(touched).not.toHaveBeenCalled();
   });
 
+  it('★ omits bytes for a body with NO JSON FORM, rather than reporting 2', () => {
+    // `JSON.stringify` turns each of these into `"{}"`, so the old code reported
+    // `bytes: 2` for a FormData carrying a 40 MB upload. Literally "the byte
+    // length of the body as JSON", and read by any panel as "how big was this
+    // request" -- the confident-number class this stream avoids everywhere else.
+    setWirePayloadCapture(true);
+
+    for (const [name, body] of [
+      ['FormData', (() => { const f = new FormData(); f.append('file', new Blob(['x'.repeat(1000)])); return f; })()],
+      ['ReadableStream', new ReadableStream()],
+      ['URLSearchParams', new URLSearchParams('a=b')],
+      ['a Map', new Map([['a', 1]])],
+    ] as Array<[string, unknown]>) {
+      listen();
+      reportRequest(body);
+      expect(`${name}: ${'bytes' in req()}`).toBe(`${name}: false`);
+    }
+  });
+
+  it('reports a Blob by its OWN size -- that is a measurement, not a guess', () => {
+    setWirePayloadCapture(true);
+    listen();
+    reportRequest(new Blob(['hello']));
+    // A Blob genuinely knows its byte length, exactly and in O(1). Reporting it
+    // is the same act as reporting a string's encoded length; refusing would
+    // discard a true fact. What is refused is the JSON length of a body that
+    // has no JSON form.
+    expect(req().bytes).toBe(5);
+  });
+
+  it('reports ArrayBuffer and typed-array bodies by byteLength', () => {
+    setWirePayloadCapture(true);
+    listen();
+    reportRequest(new Uint8Array(64));
+    expect(req().bytes).toBe(64);
+
+    listen();
+    reportRequest(new ArrayBuffer(128));
+    expect(req().bytes).toBe(128);
+  });
+
+  it('a plain object and a string still report exact bytes', () => {
+    setWirePayloadCapture(true);
+    listen();
+    reportRequest(BODY);
+    expect(req().bytes).toBe(new TextEncoder().encode(JSON.stringify(BODY)).length);
+
+    listen();
+    reportRequest('héllo');
+    // The string IS the body, so its own encoded length is the answer -- 6
+    // bytes for 5 characters.
+    expect(req().bytes).toBe(6);
+
+    listen();
+    reportRequest([{ role: 'user' }]);
+    expect(req().bytes).toBe(new TextEncoder().encode('[{"role":"user"}]').length);
+  });
+
+  it('honours a toJSON declaration, since that IS the body\'s wire form', () => {
+    setWirePayloadCapture(true);
+    class Envelope {
+      toJSON() {
+        return { messages: [{ role: 'user', content: 'hi' }] };
+      }
+    }
+    listen();
+    reportRequest(new Envelope());
+    expect(req().bytes).toBe(
+      new TextEncoder().encode(JSON.stringify(new Envelope())).length,
+    );
+  });
+
+  it('an object that merely HAS a size property is not mistaken for a Blob', () => {
+    setWirePayloadCapture(true);
+    listen();
+    // A plain object is JSON, so its JSON length is the honest answer -- the
+    // `size` field is just data and must not be read as a byte count.
+    reportRequest({ size: 999999 });
+    expect(req().bytes).toBe(new TextEncoder().encode('{"size":999999}').length);
+  });
+
   it('omits bytes for a circular body rather than reporting a wrong one', () => {
     setWirePayloadCapture(true);
     const circular: Record<string, unknown> = { messages: [] };
