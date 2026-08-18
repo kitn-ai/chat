@@ -24,6 +24,28 @@ const MIME = {
   '.map': 'application/json',
 };
 
+/**
+ * The suite drives `dist/`, so both inputs must exist. Whether dist is CURRENT
+ * is a separate and much sharper question, answered in the spec itself
+ * (`assertServedBundleIsFresh`) — it needs the browser's CSSOM to normalize
+ * away the bundler's re-minification, which Node cannot do.
+ */
+function assertInputsExist() {
+  const cssPath = path.join(PKG, 'src/elements/compiled.css');
+  if (!fs.existsSync(cssPath)) {
+    throw new Error(
+      `focus-ring harness: ${cssPath} is missing.\n` +
+        'Run:  pnpm --filter @kitn.ai/ui run build:css',
+    );
+  }
+  if (!fs.existsSync(path.join(PKG, 'dist'))) {
+    throw new Error(
+      'focus-ring harness: dist/ is missing — this suite drives the BUILT bundle.\n' +
+        'Run:  pnpm exec nx build ui',
+    );
+  }
+}
+
 const HARNESS = `<!doctype html>
 <html lang="en">
   <head>
@@ -66,6 +88,13 @@ const server = http.createServer((req, res) => {
   res.writeHead(404);
   res.end('not found');
 });
+
+try {
+  assertInputsExist();
+} catch (e) {
+  console.error(`\n${e.message}\n`);
+  process.exit(1);
+}
 
 server.listen(PORT, () => {
   console.log(`focus-ring harness on http://localhost:${PORT}/`);

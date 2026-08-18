@@ -1,6 +1,6 @@
 ---
 title: Accessibility
-description: AI/UI targets WCAG 2.1 Level AA — axe-core clean, keyboard-navigable, and safe for screen readers through Shadow DOM.
+description: AI/UI targets WCAG 2.1 Level AA — keyboard-navigable, focus indicators verified pixel-by-pixel in CI, and safe for screen readers through Shadow DOM.
 ---
 
 import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
@@ -98,12 +98,16 @@ If you override `--color-*` tokens, contrast checking is your responsibility. No
 
 ## Audit tooling
 
-One real-browser guard runs in the required CI job, against the **built** bundle in a page with no document-level Tailwind — that is, the way your app loads the kit, not the way Storybook does:
+Real-browser guards run in the required CI job, against the **built** bundle in a page with no document-level Tailwind — that is, the way your app loads the kit, not the way Storybook does:
 
 - **Focus-indicator paint guard** (`packages/ui/tests/e2e/focus-ring-paints.spec.ts`) — mounts every element from the generated manifest, walks every focusable control across shadow roots, and screenshots each one blurred and focused to assert the focus indicator changes real pixels. It also fails if any control is invisible yet still reachable by <kbd>Tab</kbd>. It asserts paint rather than CSS classes because a control can carry a perfectly correct `ring-2` class and paint nothing at all inside a shadow root.
 
 <Aside type="caution" title="What is NOT gated">
-There is **no axe-core rule sweep in CI**, and the kit does not currently pass one cleanly — a bare mount of all elements reports a small number of `button-name`, `label` and `role-img-alt` violations. Earlier versions of this page claimed an axe audit was "a condition of every release" and reported "zero violations at build time". That was not true: the script it named had no assertions, always exited zero, was wired into no workflow, and needed a server started by hand. It has been removed rather than left standing as false evidence. Treat contrast and rule conformance as something to verify in your own app.
+There is **no axe-core rule sweep in CI**, and the kit does not currently pass one cleanly. A bare mount of every element reports, under the `wcag2a / wcag2aa / wcag21a / wcag21aa` tags, three rules: `button-name` (3 nodes), `label` (1) and `role-img-alt` (1). Widening to axe's **best-practice** rules adds `empty-heading` — `<kai-settings-group>` renders its `<h3>` whether or not it has a label. Which rule set you run matters, so it is named here rather than implied.
+
+Earlier versions of this page claimed an axe audit was "a condition of every release" and reported "zero violations at build time". That was not true: the script it named had no assertions, always exited zero, was wired into no workflow, and needed a server started by hand. It has been removed rather than left standing as false evidence.
+
+Nor does anything check **contrast**, and the focus guard below deliberately cannot: it measures whether pixels *changed*, not whether the result is legible, so a focus ring painted in a colour nobody can see would pass it. Treat contrast and rule conformance as something to verify in your own app.
 </Aside>
 
 ## What integrators must do

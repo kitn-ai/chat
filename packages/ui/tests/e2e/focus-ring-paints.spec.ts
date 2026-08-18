@@ -138,6 +138,114 @@ async function assertDocumentHasNoTailwind(page: Page) {
   ).toEqual([]);
 }
 
+/** The CSS this suite's assertions are ultimately about, read from source. */
+const SOURCE_CSS = readFileSync(path.join(PKG, 'src/elements/compiled.css'), 'utf8');
+
+/**
+ * REFUSE TO MEASURE A STALE BUNDLE.
+ *
+ * This suite drives `dist/`, so it is only ever as true as the last build — and
+ * there is a specific trap here that has now bitten twice in this repo (PR
+ * #284's hover-card suite had the identical shape). `npm run build:elements`
+ * exits 0 while leaving `dist/register-impl-*.js` BYTE-IDENTICAL, and that file
+ * carries the injected element CSS. So you can revert the fix in
+ * `src/elements/compiled.css`, "rebuild", and watch this suite report a serene
+ * 38/38 against CSS that no longer exists in source. Nothing else in the repo
+ * compares dist against src; in CI only step ordering protects it, and step
+ * ordering is not an assertion.
+ *
+ * Name the cause precisely: `pnpm exec nx build ui` DOES rebuild correctly. The
+ * trap is the narrower `build:elements` target, not the NX cache.
+ *
+ * WHY A STRUCTURAL DIGEST rather than comparing the CSS text. The bundle's CSS
+ * is not a verbatim copy: Vite re-minifies it, rewriting values (`calc(1.5 / 1)`
+ * becomes `1.5`) and collapsing duplicate declarations, so byte equality is
+ * unattainable and sampling text slices false-positives. Measured: 8 of 231
+ * source slices are absent from a perfectly fresh dist. What minification does
+ * NOT change is structure. So both sides are parsed by the SAME browser CSSOM
+ * and reduced to an ordered list of rule preludes plus the set of property names
+ * each rule declares — immune to value rewriting and to declaration dedup, while
+ * still flipping the moment an `@supports` condition, a selector or a property
+ * appears or disappears. The `@supports` gate at the heart of this fix is a
+ * prelude, so reverting it is caught.
+ *
+ * Honest limit: a change to a property's VALUE alone (recolouring the ring
+ * without touching any selector or property name) would not move this digest.
+ */
+async function assertServedBundleIsFresh(page: Page) {
+  const result = await page.evaluate((srcCss: string) => {
+    const digestOf = (rules: CSSRuleList): string => {
+      const parts: string[] = [];
+      const walk = (list: CSSRuleList) => {
+        for (const r of Array.from(list) as any[]) {
+          const raw: string =
+            r.selectorText ?? r.conditionText ?? r.name ?? r.media?.mediaText ?? '';
+          // Minification differs only in punctuation spacing here
+          // (`in lab, red` vs `in lab,red`). Collapsing space AROUND punctuation
+          // normalizes that while preserving descendant combinators, which are
+          // spaces NOT adjacent to punctuation.
+          const prelude = raw
+            .replace(/\s*([,()])\s*/g, '$1')
+            .replace(/\s+/g, ' ')
+            .trim();
+          const props = r.style
+            ? [...new Set(Array.from(r.style) as string[])].sort().join(',')
+            : '';
+          // One entry per SELECTOR, not per rule: the minifier merges rules that
+          // share declarations (`.a{x}.b{x}` becomes `.a,.b{x}`), and flattening
+          // makes both forms produce the same entries.
+          for (const sel of prelude.split(',')) {
+            parts.push(`${r.type}|${sel}|${props}`);
+          }
+          if (r.cssRules) walk(r.cssRules);
+        }
+      };
+      walk(rules);
+      // Sorted multiset: also absorbs rule REORDERING by the minifier. Trades
+      // cascade-order sensitivity for freedom from false positives, which is the
+      // right trade for a freshness check.
+      return parts.sort().join('\n');
+    };
+
+    const host = document.createElement('kai-button');
+    document.getElementById('mounts')!.appendChild(host);
+    const root = (host as HTMLElement).shadowRoot;
+    if (!root) return { ok: false, reason: 'kai-button did not attach a shadow root' };
+    const served = Array.from(root.adoptedStyleSheets)
+      .map((s) => digestOf(s.cssRules))
+      .join('\n');
+    host.remove();
+    if (!served) return { ok: false, reason: 'no adopted stylesheet found in the shadow root' };
+
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(srcCss);
+    const fromSource = digestOf(sheet.cssRules);
+
+    if (served === fromSource) return { ok: true, reason: '' };
+    let i = 0;
+    while (i < Math.min(served.length, fromSource.length) && served[i] === fromSource[i]) i++;
+    return {
+      ok: false,
+      reason:
+        `first divergence at char ${i}\n` +
+        `  served (dist/): …${served.slice(Math.max(0, i - 70), i + 70)}…\n` +
+        `  source (src/) : …${fromSource.slice(Math.max(0, i - 70), i + 70)}…`,
+    };
+  }, SOURCE_CSS);
+
+  expect(
+    result.ok,
+    'THE SERVED BUNDLE IS STALE — dist/ does not match src/elements/compiled.css, so this suite ' +
+      'would be measuring CSS that is no longer in source and could report a green run over a ' +
+      'reverted fix.\n\n' +
+      `${result.reason}\n\n` +
+      'Rebuild with:  pnpm exec nx build ui\n' +
+      'NOT `npm run build:elements` — that target exits 0 while leaving dist/register-impl-*.js ' +
+      'untouched, which is exactly how a stale bundle survives a "successful" rebuild. ' +
+      '(`nx build ui` rebuilds correctly; the NX cache is not the problem.)',
+  ).toBe(true);
+}
+
 type Measurement = { changed: number; noise: number };
 
 /** Screenshot a padded region around `handle` blurred (twice) and focused, and count changed pixels. */
@@ -241,6 +349,9 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/');
   await page.waitForFunction(() => (window as any).__kaiReady === true, undefined, { timeout: 30_000 });
   await page.waitForTimeout(600);
+  // Before EVERY test, not once: no measurement in this file is allowed to run
+  // against a bundle that does not match source.
+  await assertServedBundleIsFresh(page);
 });
 
 test('the harness document contains no Tailwind (anti-vacuity precondition)', async ({ page }) => {
