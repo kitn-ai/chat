@@ -49,6 +49,7 @@ const CATALOG_DIR = join(ROOT, 'src/agent-tooling/catalog');
 const args = process.argv.slice(2);
 
 function fail(msg) {
+  completed = true;
   console.error(`✗ acceptance-pack: ${msg}`);
   process.exit(1);
 }
@@ -57,6 +58,34 @@ function arg(name) {
   const i = args.indexOf(name);
   return i === -1 ? undefined : args[i + 1];
 }
+
+/**
+ * `process.exit()` does not flush pending stdout writes, and stdout to a PIPE is
+ * async -- so the report branches printed nothing at all when run under
+ * execFileSync, while looking fine in a terminal. Flush first, then exit.
+ */
+async function exitAfterFlush(code) {
+  completed = true;
+  await new Promise((r) => process.stdout.write('', r));
+  process.exit(code);
+}
+
+/**
+ * A SILENT EXIT 0 MUST NEVER LOOK LIKE SUCCESS. With a persistent
+ * `uncaughtException` handler installed, a bug in this script's own async path
+ * rejects a promise, gets swallowed by that handler, and leaves the event loop
+ * to empty -- the process then exits 0 having printed nothing. That happened
+ * once, during this round, and it is exactly the failure mode this branch keeps
+ * finding. Every terminal path sets `completed`; anything else is a failure.
+ */
+let completed = false;
+process.on('exit', () => {
+  if (completed) return;
+  console.error(
+    '✗ acceptance-pack: the run ended without reaching a terminal path — it neither packed, listed, nor reported. Treat this as a failure, not an empty result.',
+  );
+  process.exitCode = process.exitCode || 1;
+});
 
 /** The authored catalog modules are TypeScript; bundle them once and import. */
 async function importCatalog() {
@@ -868,6 +897,14 @@ throw inside a **DOM event listener** — which is neither of the first two,
 because jsdom routes a listener's exception to its virtual console where no
 process-level handler sees it.
 
+Blame is assigned STRUCTURALLY, not by the clock. A timer a fragment schedules
+is owned by the case that scheduled it, however late it fires, because
+attributing by "which case was running when it landed" sends the reader to
+correct code — a 50ms timer, or a chain of nested 0ms ones, lands inside the
+next example's window. Rejections from a \`.then\` are the one route still
+attributed by arrival; they settle inside their own drain in practice, and this
+sentence is the residual rather than a claim that they cannot.
+
 The bound is time, not route. Each case is drained to quiescence, then the run
 settles for **${SETTLE_MS}ms** before the floor gives a verdict; a fault inside
 that window means **zero files written**. A fault later than it cannot be waited
@@ -1005,7 +1042,7 @@ const scenarios = catalog.listScenarios();
 
 if (args.includes('--list')) {
   for (const s of scenarios) console.log(`${s.id}  ${s.depth}`);
-  process.exit(0);
+  await exitAfterFlush(0);
 }
 
 const derived = JSON.parse(readFileSync(join(CATALOG_DIR, 'derived.json'), 'utf8'));
@@ -1040,7 +1077,7 @@ if (args.includes('--self-test')) {
     fail(`the pack's own positive controls failed:\n  - ${[...r.failed, ...needleFailed].join('\n  - ')}`);
   }
   console.log('✓ acceptance-pack: every planted fault was detected.');
-  process.exit(0);
+  await exitAfterFlush(0);
 }
 
 const invariants = catalog.listInvariants();
@@ -1049,7 +1086,7 @@ if (args.includes('--floor')) {
   console.log(formatFloor(floor));
   if (!floor.ok) fail(`${floor.errors.length} floor failure(s). The catalog's own recommended code does not run.`);
   console.log(`✓ acceptance-pack: floor clean — ${floor.results.length} examples executed.`);
-  process.exit(0);
+  await exitAfterFlush(0);
 }
 
 const id = arg('--scenario');
@@ -1321,6 +1358,7 @@ Scenario: ${scenario.id} — ${scenario.depth}.
 `,
 );
 
+completed = true;
 console.log(
   `acceptance-pack: packed ${scenario.id} into ${out} (agent/: ${elementPages.length} element pages + ${agentPages.length} guides; judge/: ${judgePages.length} reports + catalog.json)`,
 );

@@ -376,6 +376,7 @@ describe('acceptance pack', () => {
     expect(floorReport).toContain('DOM event listener');
     expect(floorReport).toMatch(/settles for \*\*\d+ms\*\*/);
     expect(floorReport).toContain('removes the\npack');
+    expect(floorReport).toContain('Blame is assigned STRUCTURALLY');
     // A4: the symbol check must report its own coverage, including any skip.
     expect(floorReport).toContain('## Import specifiers the pack names');
     for (const sym of ['Chat (react)', 'useKaiChat (react)', 'elementsReady (elements)', 'createAssistantStream (state)']) {
@@ -396,7 +397,8 @@ describe('acceptance pack', () => {
       'a right form that executes but violates its claim is reported failed',
       'a right form that throws LATE, inside a .then, is reported failed',
       'a throw inside a DOM EVENT LISTENER is reported failed (jsdom hides these in its virtual console)',
-      'a fault scheduled BEYOND the per-case drain is reported, and is not blamed on another example',
+      'a fault scheduled BEYOND the per-case drain is blamed on the case that SCHEDULED it, not on another example',
+      'a chain of nested 0ms timers outliving the drain is also blamed on its own case',
       'needle check: a needle whose other quote variant fires on a right form is reported',
       'needle check: a needle matches the same mistake spelled with double quotes',
       'an example with no harness is reported, not skipped',

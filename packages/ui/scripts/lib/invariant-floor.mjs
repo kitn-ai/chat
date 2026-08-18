@@ -75,18 +75,54 @@ function assert(cond, msg) {
 const FAULTS = [];
 let currentWindow = null;
 
-const record = (err) => {
-  FAULTS.push({ window: currentWindow, error: err && err.message ? err.message : String(err) });
+const record = (err, owner = currentWindow) => {
+  FAULTS.push({ window: owner, error: err && err.message ? err.message : String(err), consumed: false });
 };
-process.on('unhandledRejection', record);
+
+/**
+ * Timers a fragment schedules, OWNED by the case that scheduled them.
+ *
+ * Attribution by "which window was open when the fault landed" is attribution by
+ * clock, and the clock is the one thing a late fault is guaranteed to have moved
+ * past: a 50ms timer, or a chain of nested 0ms ones, lands inside the NEXT
+ * example's window and gets blamed on correct code. Wrapping the callback here
+ * makes ownership structural instead -- whoever scheduled it owns the throw,
+ * whenever it happens.
+ *
+ * Rejections from a `.then` are the one route still attributed by clock; they
+ * normally settle inside their own drain, and the residual is stated in the
+ * floor report rather than papered over.
+ */
+function ownedTimers(owner) {
+  const wrap = (fn) => (...a) => {
+    try {
+      return fn(...a);
+    } catch (err) {
+      record(err, owner);
+    }
+  };
+  return {
+    setTimeout: (fn, ms, ...a) => setTimeout(wrap(fn), ms, ...a),
+    setInterval: (fn, ms, ...a) => setInterval(wrap(fn), ms, ...a),
+    queueMicrotask: (fn) => queueMicrotask(wrap(fn)),
+  };
+}
+// ONE ARGUMENT ONLY. Node calls these listeners with a SECOND argument -- the
+// rejected promise, or the origin string -- and passing `record` directly meant
+// that argument landed in the `owner` slot, so a fault's window became a Promise
+// object and the sweep threw on `window.startsWith`. That rejection was then
+// swallowed by this very handler and the run HUNG, exiting 0 with no output.
+// Found by the hang; the `completed` guard in the packer exists so a silent
+// exit-0 can never look like success again.
+process.on('unhandledRejection', (reason) => record(reason));
 // A persistent `uncaughtException` handler stops Node crashing, which is the
 // point: a crash after the pack is on disk leaves a pack that looks written.
 // Nothing is swallowed -- every fault reaches the sink, and the sink is what
 // decides the exit code and whether the pack survives.
-process.on('uncaughtException', record);
+process.on('uncaughtException', (err) => record(err));
 
 const virtualConsole = new VirtualConsole();
-virtualConsole.on('jsdomError', record);
+virtualConsole.on('jsdomError', (err) => record(err));
 
 /** One jsdom realm, reused. Elements are created fresh per case. */
 const dom = new JSDOM('<!doctype html><html><body><div id="wrapper"></div></body></html>', { virtualConsole });
@@ -170,8 +206,13 @@ async function withAsyncFaultTrap(label, fn) {
   } finally {
     currentWindow = null;
   }
-  const mine = FAULTS.slice(mark);
+  // ONLY this window's own faults. Slicing by index alone claims whatever landed
+  // during the window, so a timer another case scheduled would fail an innocent
+  // one -- the same misattribution, moved rather than fixed. A fault with a
+  // different owner, or none, is left for the post-run sweep.
+  const mine = FAULTS.slice(mark).filter((f) => f.window === label);
   if (mine.length) {
+    for (const f of mine) f.consumed = true;
     throw new FloorAssertionError(
       `failed AFTER returning, in an async continuation: ${mine.map((f) => f.error).join('; ')}`,
     );
@@ -185,7 +226,7 @@ async function withAsyncFaultTrap(label, fn) {
  * all, and awaited so a synchronous rejection surfaces as a failure. What
  * happens after it returns is `withAsyncFaultTrap`'s job.
  */
-async function execute(code, bindings, { jsx = false } = {}) {
+async function execute(code, bindings, { jsx = false, owner = null } = {}) {
   const src = jsx
     ? esbuild.transformSync(code, { loader: 'jsx', jsx: 'transform', jsxFactory: '__h', jsxFragment: '__Fragment' })
         .code
@@ -196,8 +237,8 @@ async function execute(code, bindings, { jsx = false } = {}) {
     // fragment needs beyond this list is a binding the harness must name.
     URL,
     console,
-    setTimeout,
-    queueMicrotask,
+    // Before `...bindings`, so a harness can still override one deliberately.
+    ...ownedTimers(owner),
     ...bindings,
   });
   await vm.runInContext(`(async () => {\n${src}\n})()`, context, { timeout: 2000 });
@@ -748,8 +789,9 @@ export async function runFloor(invariants, helpers, { harnesses = HARNESSES } = 
         try {
           // The trap spans BOTH, because upgrade-race's `.then` only runs
           // during the check and a throw there would otherwise vanish.
-          await withAsyncFaultTrap(`${key}: ${c.label}`, async () => {
-            await execute(inv.examples[i].right, bindings, { jsx: harness.jsx });
+          const owner = `${key}: ${c.label}`;
+          await withAsyncFaultTrap(owner, async () => {
+            await execute(inv.examples[i].right, bindings, { jsx: harness.jsx, owner });
             await c.check(bindings, helpers);
           });
           row.cases.push({ label: c.label, status: 'passed' });
@@ -796,13 +838,21 @@ export async function runFloor(invariants, helpers, { harnesses = HARNESSES } = 
   // has been written. Bounded; the caller's exit guard covers anything later.
   await settle();
 
-  // A fault recorded with no window open belongs to no case. Blaming it on the
-  // next row -- what the per-case listeners used to do -- is worse than useless:
-  // it sends the reader to a correct example.
-  for (const f of FAULTS.slice(startMark).filter((x) => x.window === null)) {
-    errors.push(
-      `a fault arrived outside any measured window, so it cannot be attributed to a single example: ${f.error}. Something the catalog's code scheduled outran the per-case drain.`,
-    );
+  // Anything that landed after its own case's window closed. It still carries
+  // the case that SCHEDULED it, so it is reported against that case rather than
+  // against whichever example happened to be running -- sending a reader to
+  // correct code is worse than saying "this could not be attributed".
+  for (const f of FAULTS.slice(startMark).filter((x) => !x.consumed)) {
+    f.consumed = true;
+    if (f.window) {
+      errors.push(`${f.window}: failed after its case finished, in a continuation it scheduled: ${f.error}`);
+      const row = results.find((r) => f.window.startsWith(`${r.key}:`));
+      if (row) row.status = 'failed';
+    } else {
+      errors.push(
+        `a fault arrived outside any measured window and carries no owner, so it cannot be attributed to a single example: ${f.error}.`,
+      );
+    }
   }
 
   return { ok: errors.length === 0, results, errors, mark: FAULTS.length };
@@ -863,11 +913,21 @@ export async function selfTest(helpers) {
       examples: [{ wrong: 'x', right: "chat.addEventListener('kai-submit', () => { throw new Error('LISTENER BOOM'); });" }],
     },
     {
-      // Scheduled beyond the per-case drain but inside `settle()`: it belongs to
-      // no window, so it must surface as its own structural failure rather than
-      // as the next example's problem.
+      // Scheduled beyond the per-case drain but inside `settle()`.
       id: 'zz-beyond-drain',
       examples: [{ wrong: 'x', right: "setTimeout(() => { throw new Error('BEYOND DRAIN BOOM'); }, 120);" }],
+    },
+    {
+      // The shape review measured: nested 0ms timers outlive any fixed number of
+      // drain turns, and used to be blamed on the NEXT row.
+      id: 'zz-nested-timers',
+      examples: [
+        {
+          wrong: 'x',
+          right:
+            "setTimeout(() => setTimeout(() => setTimeout(() => setTimeout(() => setTimeout(() => setTimeout(() => { throw new Error('NESTED BOOM'); })))))); ",
+        },
+      ],
     },
     { id: 'zz-unharnessed', examples: [{ wrong: 'x', right: 'const ok = 1;' }] },
     { id: 'zz-no-cases', examples: [{ wrong: 'x', right: 'const ok = 1;' }] },
@@ -922,6 +982,10 @@ export async function selfTest(helpers) {
       stubs: [],
       cases: [{ label: 'schedules past the drain', bindings: () => ({}), check: () => {} }],
     },
+    'zz-nested-timers#0': {
+      stubs: [],
+      cases: [{ label: 'schedules a nested chain', bindings: () => ({}), check: () => {} }],
+    },
     'zz-no-cases#0': { stubs: [], cases: [] },
     'zz-good#0': freshArray,
     'zz-dangling#0': { stubs: [], cases: [{ label: 'never runs', bindings: () => ({}), check: () => {} }] },
@@ -942,9 +1006,14 @@ export async function selfTest(helpers) {
       status('zz-listener-throw#0') === 'failed' && errors.some((e) => e.includes('LISTENER BOOM')),
     ],
     [
-      'a fault scheduled BEYOND the per-case drain is reported, and is not blamed on another example',
-      errors.some((e) => e.includes('BEYOND DRAIN BOOM') && e.includes('outside any measured window')) &&
-        !results.some((r) => r.status === 'failed' && r.cases.some((c) => (c.error ?? '').includes('BEYOND DRAIN BOOM'))),
+      'a fault scheduled BEYOND the per-case drain is blamed on the case that SCHEDULED it, not on another example',
+      errors.some((e) => e.includes('BEYOND DRAIN BOOM') && e.startsWith('zz-beyond-drain#0')) &&
+        !errors.some((e) => e.includes('BEYOND DRAIN BOOM') && !e.startsWith('zz-beyond-drain#0')),
+    ],
+    [
+      'a chain of nested 0ms timers outliving the drain is also blamed on its own case',
+      errors.some((e) => e.includes('NESTED BOOM') && e.startsWith('zz-nested-timers#0')) &&
+        !errors.some((e) => e.includes('NESTED BOOM') && !e.startsWith('zz-nested-timers#0')),
     ],
     ['an example with no harness is reported, not skipped', status('zz-unharnessed#0') === 'no-harness'],
     ['a missing harness raises a structural error', errors.some((e) => e.includes('no harness for zz-unharnessed#0'))],
