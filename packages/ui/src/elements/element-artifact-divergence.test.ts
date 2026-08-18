@@ -132,9 +132,12 @@ describe('element-nonscalar.json — the ~2 KB of element-meta.json that ships',
       expect(isElementDiagnosticEvent({ type, t: 0 } as ElementDiagnosticEvent)).toBe(true);
     }
     // And the complement really is the complement — otherwise "not an element
-    // event" would not mean "a wire event".
+    // event" would not mean "a wire event". All THREE non-element prefixes,
+    // because that is the point of testing the closed set: the other side does
+    // not share one prefix and keeps gaining families.
     expect(isElementDiagnosticEvent({ type: 'wire.open', t: 0 } as never)).toBe(false);
     expect(isElementDiagnosticEvent({ type: 'encode.request', t: 0 } as never)).toBe(false);
+    expect(isElementDiagnosticEvent({ type: 'app.request', t: 0 } as never)).toBe(false);
   });
 
   it('covers the props the kai- contract is actually about', () => {

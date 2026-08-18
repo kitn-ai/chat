@@ -523,11 +523,13 @@ export type KaiDiagnosticEvent = WireDiagnosticEvent | ElementDiagnosticEvent;
  *   if (isElementDiagnosticEvent(e)) { … } else { e.streamId … }
  *
  * WHY THIS DIRECTION and not an `isWireDiagnosticEvent`. The element family is
- * CLOSED and small; the wire family is the one that keeps growing (`wire.*` and
- * `encode.*` today, and the inventory has `kit.warn` queued behind them). A
- * positive `wire.*` allowlist would silently start answering "not a wire event"
- * for each new family, which is the quiet wrong answer. Testing for the closed
- * set and taking the complement stays correct as the open set grows.
+ * CLOSED and small; the non-element side is the one that keeps growing, and it
+ * does not even share one prefix -- `wire.*`, `encode.*` and `app.*` are all in
+ * `WireDiagnosticEvent` today, with `kit.warn` queued in the inventory behind
+ * them. That is not a prediction: `encode.*` and `app.*` both arrived while this
+ * branch was open, so a positive `wire.*` allowlist written a fortnight ago
+ * would already be answering "not a wire event" for two live families. Testing
+ * the closed set and taking the complement stays correct as the open set grows.
  *
  * Exists because a panel, and every test in this repo that reads `streamId` or
  * `traceId` off "every event", needs exactly this one check now that two layers
