@@ -1,0 +1,120 @@
+# Design: the iteration ladder — make it work, then measure it
+
+Date: 2026-08-18
+Status: approved in brainstorming, not implemented.
+
+## Why this exists
+
+We built a measurement apparatus before having anything worth measuring. The composition catalog
+(#288) ships a scenario deck, a weighted rubric, a run ledger, a drift lint with 71 self-test cases
+and gates that fail closed — and no acceptance run has ever produced a number. Meanwhile the one
+real experiment we ran said the product's actual gaps were five missing lines of documentation.
+
+The owner has run this sequence to completion once before, on a different component library with a
+different harness: **build applications manually, find bugs, fix them, accumulate working examples —
+and only then add scenarios and grading to hunt edge cases.** The grading was foundational *because*
+the manual phase had already surfaced the real failures. This design reorders our work to match.
+
+The harness is not wrong. It is early. It gets parked, not deleted.
+
+## The evidence this design is built on
+
+One agent built a working chat app from `component_reference` output alone, in a sandbox with the
+kit's TypeScript source stripped out. It succeeded — 3/3 behavioural assertions, streaming verified
+as 38 strictly-increasing growth steps. Six things it got wrong:
+
+| Failure | Class |
+|---|---|
+| Missing `import '@kitn.ai/ui/elements'` — blank page, ZERO console errors, `whenDefined` hangs forever | missing one-liner |
+| Hand-rolled a structural type; `KaiChatElement`/`KaiConversationsElement` named nowhere | missing one-liner |
+| No event payload shapes on any of 9 events | missing one-liner |
+| Guessed at the required `scope` field | missing one-liner |
+| `scaffold` emitted a second component and wired nothing to it | composition |
+| Sidebar slot vs sibling — unanswerable from the MCP | composition |
+
+Four of six are one-liners. That ratio is what sets iteration 1's scope. Verified independently:
+zero mentions of `@kitn.ai/ui/elements` and zero import statements across 62 KB of both documents.
+
+## Decisions taken
+
+- **Framework: vanilla TS + Vite.** The kit is web-components-first; `kai-` tags are the contract,
+  so a bug found there is a bug for every framework. React exercises the wrapper layer — a genuinely
+  different surface, and its own later pass. Starting there means debugging two things at once.
+- **Real providers, not mocks**, via the owner's OpenRouter key. A widget that fakes its stream does
+  not prove the wire works.
+- **The `compiles` gate's not-applicable branch is deleted, not fixed.** Verification found it
+  unsound: an S1 run producing zero output files scored 8.93/10 and exited 0, where it previously
+  hard-failed, because an unlabelled code fence is indistinguishable from no code. The branch was
+  justified by S6/S7 (refusal and diagnosis scenarios) — which carry no external mechanical dimension
+  at all, so the benefit is unreachable while the cost lands on S1/S2/S4. Removing it is less code and
+  restores the hard error.
+
+## Iteration 1 — the one-liners
+
+Scope, all in `component_reference` and `scaffold`:
+
+1. A **`### Getting the element`** section at the top of every element document: the registration
+   import and the per-element path. This is the top-ranked finding; the failure is completely silent.
+2. The **TypeScript interface name** per element, derived from the tag by convention — generated,
+   never hand-typed.
+3. **Event payload shapes** on `### Events`, derived from the TS types. All nine events currently
+   carry prose and no shape.
+4. An **index / discovery affordance**. Today `name` has no enum and nothing answers "what exists".
+5. **Factor out the universal records** (~11 KB repeated across all 80 elements). The demo settled the
+   open question about payload size: the problem was never length, it was absence.
+6. **`scaffold` wires multi-component surfaces**, or emits an honest `NOT WIRED` comment naming the
+   property and listener it omitted.
+
+**Acceptance:** re-run the demo — same sandbox, source stripped, a fresh agent with no prior context —
+and items 1-4 must not recur. We hold the prior run as a baseline, so this is a real before/after
+rather than an impression. Contamination must be controlled: subagents inherit the project
+`CLAUDE.md`, which states four of the seven invariants, so the measuring agent must not receive it.
+
+## Iteration 2+ — the ladder
+
+Build real applications of increasing complexity. Each rung exercises a component family, fixes the
+bugs it finds, and leaves a working example behind.
+
+| Rung | Application | Exercises |
+|---|---|---|
+| 1 | Support widget | the smallest real surface: docked placement, submit, streaming |
+| 2 | Voice assistant | audio visualizer, voice input/output |
+| 3 | Workspace | conversation history, sidebar composition, thread switching |
+| 4 | Lovable-style builder | artifacts, preview panel |
+| 5 | Remote cards | generative UI, card envelopes, the untrusted-output boundary |
+
+Order is provisional; complexity is the ordering principle, not the exact list. The goal is coverage
+of every component family we ship, with a working demo of each and the bugs fixed along the way.
+
+**Each rung is done when:** the app runs against a real provider, it is checked in, and it builds in
+CI. Without the CI step, rung 4 silently breaks rung 1 and we are back to examples that used to work.
+
+**Frameworks other than vanilla come after the ladder**, as their own pass.
+
+## Explicitly not doing
+
+- **No stripping mechanism.** Removing a component from a working app needs a dependency graph nobody
+  maintains, and there is no evidence it is needed. Revisit only if dogfooding demands it.
+- **No *additional* example corpus.** Four already exist — 8 framework starters, 2 demos, 4 app-clone
+  Labs stories, 116 docs pages. The ladder does leave a working app behind at every rung, and those
+  apps ARE the archetype examples — but they land in ONE home, absorbing or replacing what overlaps,
+  never alongside it. Deciding that home is the first task of the iteration-2 plan, not a new build.
+  A fifth parallel corpus is a liability; a consolidated one is the point.
+- **No acceptance runs, no tier delta.** Parked until the ladder has produced something worth grading.
+- **`registers` and `streams` stay unimplemented.**
+
+## Scope of the first implementation plan
+
+This spec covers iteration 1 **and** the shape of the ladder, because the ladder is what makes
+iteration 1 the right scope. Only **iteration 1 goes into the first implementation plan.** Each rung
+of the ladder is its own spec → plan → build → evaluate cycle, written when the previous rung's
+findings are in hand. Planning rung 3 before rung 1 has run would repeat the error this design exists
+to correct.
+
+## Risks
+
+- **The ladder finds component bugs, not documentation bugs.** That is a feature — it is what the
+  manual phase is for — but it will make iterations 2+ take longer than they look.
+- **Real providers cost money and introduce flake.** Rung acceptance must not depend on a live model
+  in CI; record fixtures from real runs and replay those in CI.
+- **Examples rot.** Mitigated only by the CI build step, which is therefore not optional.
