@@ -62,7 +62,13 @@ import type {
   ElementViolationKind,
 } from './diagnostic-events';
 import NON_SCALAR from './element-nonscalar.json';
-import manifest from './element-manifest.json';
+// NAMED import, and it is worth 2.2 KB. `element-manifest.json` holds two maps:
+// `tags` (tag -> module) and `files` (module -> tags), the reverse index the
+// elements build uses to pick its entry points. Only `tags` is wanted here, and
+// a DEFAULT import inlines both into the register-all bundle -- measured at
+// +2224 bytes raw / +624 gzip for a map this file never reads. Rollup emits a
+// named export per top-level JSON key, so naming `tags` lets `files` be shaken.
+import { tags as MANIFEST_TAG_MAP } from './element-manifest.json';
 
 /** tag -> the names of its props that CANNOT be carried by an attribute.
  *
@@ -326,7 +332,7 @@ export function installElementDiagnostics(tag: string, proto: object): void {
 
 /** Every tag the manifest knows about. See `emitElementRegistry` for why this
  *  is the manifest and not `element-meta.json`. */
-const MANIFEST_TAGS: string[] = Object.keys((manifest as { tags: Record<string, string> }).tags);
+const MANIFEST_TAGS: string[] = Object.keys(MANIFEST_TAG_MAP as Record<string, string>);
 
 /**
  * Snapshot which `kai-*` elements are defined in THIS realm, and emit it.
