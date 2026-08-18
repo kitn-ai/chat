@@ -51,8 +51,9 @@ export const NEEDLES = {
   'untrusted-model-output#0': '.innerHTML = part.',
   // The UNGUARDED window.open: the right form is `'_blank', 'noopener,noreferrer')`,
   // so the closing paren straight after `'_blank'` is exactly the missing-hardening
-  // signature, and it does not depend on the variable name.
-  'untrusted-model-output#1': "'_blank');",
+  // signature, and it does not depend on the variable name. No trailing `;`:
+  // review measured `window.open(card.url, "_blank")` missing on that alone.
+  'untrusted-model-output#1': "'_blank')",
   // An href taking a model URL with no check: `.url}>` closes the attribute
   // immediately, where the right form continues into `rel=`.
   'untrusted-model-output#2': '.url}>',
@@ -71,8 +72,27 @@ export const NEEDLES = {
 };
 
 /**
- * Both properties, checked against the real records. Returns a list of problems;
- * empty means clean.
+ * QUOTE STYLE IS NOT PART OF THE MISTAKE. Every needle above is written with
+ * single quotes because the catalog's examples are, but a formatter that prefers
+ * double quotes turns `setAttribute('messages'` into `setAttribute("messages"`
+ * and the search goes quiet on identical code. Review measured that: four of the
+ * quoted needles missed every double-quoted re-spelling of their own mistake.
+ *
+ * So a needle MATCHES in either quote style. `variantsOf` is the one derivation
+ * of that, shared by the verifier, the page and the test, because the page must
+ * print exactly what the verifier proved safe.
+ *
+ * WIDENING A NEEDLE IS HOW A FALSE POSITIVE GETS IN, so `verifyNeedles` checks
+ * EVERY variant against EVERY right form, not just the authored one.
+ */
+export function variantsOf(needle) {
+  if (!needle.includes("'") && !needle.includes('"')) return [needle];
+  return [...new Set([needle.replace(/"/g, "'"), needle.replace(/'/g, '"')])];
+}
+
+/**
+ * Both properties, checked against the real records, across every quote variant.
+ * Returns a list of problems; empty means clean.
  */
 export function verifyNeedles(invariants, needles = NEEDLES) {
   const problems = [];
@@ -88,14 +108,20 @@ export function verifyNeedles(invariants, needles = NEEDLES) {
         continue;
       }
       seen.add(key);
-      if (!inv.examples[i].wrong.includes(needle)) {
+      const variants = variantsOf(needle);
+      // At least one variant must match the wrong form -- the authored one, in
+      // practice. Requiring ALL of them would be wrong: the double-quoted
+      // variant is for output the catalog does not contain.
+      if (!variants.some((v) => inv.examples[i].wrong.includes(v))) {
         problems.push(`${key}: the needle ${JSON.stringify(needle)} does not appear in its own wrong form.`);
       }
       for (const r of allRights) {
-        if (r.right.includes(needle)) {
-          problems.push(
-            `${key}: the needle ${JSON.stringify(needle)} FIRES ON A RIGHT FORM (${r.id}). A checklist item that flags correct output is worse than a missing one.`,
-          );
+        for (const v of variants) {
+          if (r.right.includes(v)) {
+            problems.push(
+              `${key}: the needle variant ${JSON.stringify(v)} FIRES ON A RIGHT FORM (${r.id}). A checklist item that flags correct output is worse than a missing one.`,
+            );
+          }
         }
       }
     }
@@ -123,6 +149,19 @@ export function selfTestNeedles() {
   results.push([
     'a needle that fires on a right form is reported',
     verifyNeedles(probe, { 'zz#0': 'part.' }).some((p) => p.includes('FIRES ON A RIGHT FORM')),
+  ]);
+  // The widening itself is checked: a needle whose OTHER quote variant collides
+  // with a right form must be rejected, or quote-agnosticism is how a false
+  // positive gets in.
+  results.push([
+    'a needle whose other quote variant fires on a right form is reported',
+    verifyNeedles([{ id: 'zz', examples: [{ wrong: "f('a')", right: 'f("a")' }] }], { 'zz#0': "f('a')" }).some((p) =>
+      p.includes('FIRES ON A RIGHT FORM'),
+    ),
+  ]);
+  results.push([
+    'a needle matches the same mistake spelled with double quotes',
+    variantsOf("setAttribute('messages'").includes('setAttribute("messages"'),
   ]);
   results.push(['a dangling needle is reported', verifyNeedles(probe, { 'zz#0': '.innerHTML', 'zz#9': 'x' }).some((p) => p.includes('dangling needle zz#9'))]);
   results.push(['a sound needle is accepted', verifyNeedles(probe, { 'zz#0': '.innerHTML = part.' }).length === 0]);

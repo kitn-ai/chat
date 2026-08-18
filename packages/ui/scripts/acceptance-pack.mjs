@@ -41,8 +41,8 @@ import { join, resolve, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as esbuild from 'esbuild';
-import { runFloor, formatFloor, selfTest, assertArtifactsAgree } from './lib/invariant-floor.mjs';
-import { NEEDLES, verifyNeedles, selfTestNeedles } from './lib/audit-needles.mjs';
+import { runFloor, formatFloor, selfTest, assertArtifactsAgree, faultsSince, SETTLE_MS } from './lib/invariant-floor.mjs';
+import { NEEDLES, verifyNeedles, selfTestNeedles, variantsOf } from './lib/audit-needles.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CATALOG_DIR = join(ROOT, 'src/agent-tooling/catalog');
@@ -278,9 +278,9 @@ land before the element upgrades and be lost. Wait for the registry:
 
 ${fence("await customElements.whenDefined('kai-chat');\nchat.messages = messages;", 'js')}
 
-\`@kitn.ai/ui/elements\` also exports \`elementsReady\`, a promise that resolves
-once every element is registered — await that instead if you are setting
-properties on several elements at once. See \`upgrade-race\` in INVARIANTS.md.
+\`elementsReady\` from \`@kitn.ai/ui/elements\` is a promise that resolves once
+every element is registered — await that instead if you are setting properties
+on several elements at once. See \`upgrade-race\` in INVARIANTS.md.
 
 ## No build step: a script tag
 
@@ -537,9 +537,9 @@ function renderSelfAudit({ selfAuditItems, derived }) {
     .map(
       (it, n) => `### ${n + 1}. \`${it.invariant}\`
 
-Search your output for:
+Search your output for ${it.variants.length > 1 ? '**either** of these' : 'this'}:
 
-${fence(it.needle, 'text')}
+${fence(it.variants.join('\n'), 'text')}
 
 **Expected hits: 0.** The full mistake it comes from:
 
@@ -561,15 +561,30 @@ Two kinds of check. Both are mechanical: do not reason about whether your code
 
 Each item is a string that must not appear in what you produced. Every one has
 been machine-checked against this catalog: it appears in the mistake it comes
-from, and in **none** of the recommended forms — so a hit is a real finding, not
-a style opinion.
+from, and in **none** of the recommended forms — in either quote style — so a hit
+is a real finding, not a style opinion. Where an item lists two strings they are
+the same needle spelled with single and with double quotes; **check both**.
 
-Recall varies by item, and that is deliberate. Some needles catch the whole class
-however you spelled the variables (\`.messages.push(\`, \`'_blank');\`,
-\`'data: '\`). Others stay close to the original line because the mistake shares
-its API with legitimate uses — \`setTimeout\` and \`DOMContentLoaded\` are fine
-for other things — and a needle that flags correct code is worse than a narrow
-one. **Zero hits does not mean correct; a hit means definitely wrong.**
+Recall varies by item, and here is exactly how far it goes, because an
+over-promise would be worse than a gap:
+
+- \`.messages.push(\`, \`.parts.push(\`, \`.url}>\` and \`chat.conversations\`
+  catch the mistake **however you spelled the quotes and the surrounding
+  variables**.
+- \`setAttribute('messages'\`, \`'_blank')\`, \`'data: '\`,
+  \`document.addEventListener('kai-\` catch it in **either quote style**, but
+  depend on the argument being written as a literal — a variable in that
+  position slips past.
+- \`setTimeout(() => { chat.\` and \`'DOMContentLoaded', () => { chat.\` are
+  **near-verbatim on purpose**. Both APIs are perfectly legitimate for other
+  work, so nothing shorter separates the mistake from correct code, and a needle
+  that flags correct code is worse than a narrow one. Reformat the line and
+  these go quiet.
+- None of them survive a rewrite into a template literal or a differently-named
+  receiver on the left of an assignment.
+
+**Zero hits does not mean correct; a hit means definitely wrong.** Part 2 is the
+half that does not depend on spelling.
 
 ${items}
 
@@ -802,7 +817,7 @@ before treating a green floor as a statement about the shipped components.
 `;
 }
 
-function renderFloorReport(floor) {
+function renderFloorReport(floor, specifiers) {
   const stubbed = floor.results.filter((r) => r.stubs.length);
   return `# Floor stage report
 
@@ -844,6 +859,31 @@ ${
         .map((r) => r.key)
         .join(', ')}._`
 }
+
+## Async faults: what is covered, and where the bound is
+
+A fragment can fail after it returns three ways, and all three are trapped: an
+unhandled rejection from a \`.then\`, an uncaught exception from a timer, and a
+throw inside a **DOM event listener** — which is neither of the first two,
+because jsdom routes a listener's exception to its virtual console where no
+process-level handler sees it.
+
+The bound is time, not route. Each case is drained to quiescence, then the run
+settles for **${SETTLE_MS}ms** before the floor gives a verdict; a fault inside
+that window means **zero files written**. A fault later than it cannot be waited
+for, so it is handled the other way round: a process-exit guard **removes the
+pack** and exits non-zero, because a pack on disk must never outlive a run that
+failed.
+
+## Import specifiers the pack names
+
+${specifiers.checked.length ? specifiers.checked.map((c) => `- \`${c}\``).join('\n') : '_None._'}
+
+${
+  specifiers.unchecked.length
+    ? `**UNCHECKED — read this as a gap, not as a pass:**\n\n${specifiers.unchecked.map((u) => `- ${u}`).join('\n')}`
+    : '_Every symbol named above was resolved against its source barrel; nothing was skipped._'
+}
 `;
 }
 
@@ -863,8 +903,32 @@ ${
  * subpath from the text rather than listing subpaths means a note naming a new
  * one is covered the day it is written.
  */
+/**
+ * Where each published subpath's SOURCE barrel lives, so the symbol half of the
+ * check can resolve it. Not `src/<sub>/index.ts` by convention: review found
+ * that convention silently skipping five subpaths -- react, elements, solid,
+ * provider, autoloader -- which is to say `Chat`, `useKaiChat` and
+ * `elementsReady`, exactly what S1 and S5 lean on. A silent `continue` is the
+ * shape this branch has spent the week deleting, so anything not resolved here
+ * is REPORTED as unchecked rather than passed over.
+ */
+const SUBPATH_SOURCES = {
+  '.': 'src/index.ts',
+  elements: 'src/elements/register.ts',
+  solid: 'src/solid.ts',
+  state: 'src/state/index.ts',
+  wire: 'src/wire/index.ts',
+  schemas: 'src/schemas/index.ts',
+  react: 'frameworks/react/index.tsx',
+  provider: 'src/remote/provider.ts',
+  autoloader: 'src/elements/autoloader.ts',
+};
+
+const specOf = (sub) => (sub === '.' ? '@kitn.ai/ui' : `@kitn.ai/ui/${sub}`);
+
 function verifySpecifiers(text, pkg, readSource) {
   const problems = [];
+  const unchecked = [];
   const keys = new Set(Object.keys(pkg.exports ?? {}));
   const resolves = (spec) => {
     const sub = spec === '@kitn.ai/ui' ? '.' : `.${spec.slice('@kitn.ai/ui'.length)}`;
@@ -879,27 +943,57 @@ function verifySpecifiers(text, pkg, readSource) {
     if (!resolves(spec)) problems.push(`the pack names ${spec}, which is not in the package exports map.`);
   }
 
-  // `import { a, b } from '@kitn.ai/ui/x'` and the prose form `Name from '@kitn.ai/ui/x'`.
+  // `import { a, b } from '@kitn.ai/ui/x'` and the prose form `Name from '@kitn.ai/ui/x'`,
+  // plus the bare-package forms for the Solid entry.
   const named = [
-    ...text.matchAll(/import\s*\{([^}]*)\}\s*from\s*['"]@kitn\.ai\/ui\/([a-z]+)['"]/g),
-  ].flatMap((m) => m[1].split(',').map((n) => [n.trim(), m[2]]));
+    ...text.matchAll(/import\s*\{([^}]*)\}\s*from\s*['"]@kitn\.ai\/ui(?:\/([a-z]+))?['"]/g),
+  ].flatMap((m) => m[1].split(',').map((n) => [n.trim(), m[2] ?? '.']));
   named.push(
-    ...[...text.matchAll(/([A-Za-z_$][\w$]*)\s+from\s+['"]@kitn\.ai\/ui\/([a-z]+)['"]/g)].map((m) => [m[1], m[2]]),
+    ...[...text.matchAll(/([A-Za-z_$][\w$]*)\s+from\s+['"]@kitn\.ai\/ui(?:\/([a-z]+))?['"]/g)].map((m) => [
+      m[1],
+      m[2] ?? '.',
+    ]),
+  );
+  // The markdown prose form: BOTH the symbol and the specifier in backticks.
+  // Requiring backticks on the symbol too is what keeps this from resolving
+  // ordinary English -- "exported from `@kitn.ai/ui`" would otherwise be read as
+  // a symbol named `exported` and reported as a missing export.
+  named.push(
+    ...[...text.matchAll(/`([A-Za-z_$][\w$]*)`\s+from\s+`@kitn\.ai\/ui(?:\/([a-z]+))?`/g)].map((m) => [
+      m[1],
+      m[2] ?? '.',
+    ]),
   );
 
   const sourceCache = new Map();
   for (const [name, sub] of named) {
     if (!name) continue;
-    if (!sourceCache.has(sub)) sourceCache.set(sub, readSource(sub));
+    const rel = SUBPATH_SOURCES[sub];
+    if (!rel) {
+      // LOUD, not skipped. This is the honest state of the check, and it is
+      // printed and written into the floor report.
+      const note = `${specOf(sub)} — no source barrel is mapped, so \`${name}\` was NOT checked`;
+      if (!unchecked.includes(note)) unchecked.push(note);
+      continue;
+    }
+    if (!sourceCache.has(sub)) sourceCache.set(sub, readSource(rel));
     const src = sourceCache.get(sub);
-    if (src === undefined) continue; // no readable source index for this subpath
-    if (!new RegExp(`export (?:\\{[^}]*\\b${name}\\b[^}]*\\}|(?:const|function|class) ${name}\\b)`).test(src)) {
-      problems.push(
-        `the pack recommends \`${name}\` from '@kitn.ai/ui/${sub}', but src/${sub}/index.ts does not export it.`,
-      );
+    if (src === undefined) {
+      const note = `${specOf(sub)} — ${rel} is unreadable, so \`${name}\` was NOT checked`;
+      if (!unchecked.includes(note)) unchecked.push(note);
+      continue;
+    }
+    // `export type { … }` counts. It did not until the markdown-prose pattern
+    // above started finding real type names in element-meta descriptions, and
+    // four correctly-exported card types were reported missing -- a widening
+    // that immediately exposed a hole in the narrower check beside it.
+    if (
+      !new RegExp(`export (?:type )?(?:\\{[^}]*\\b${name}\\b[^}]*\\}|(?:const|function|class|type|interface) ${name}\\b)`, 's').test(src)
+    ) {
+      problems.push(`the pack recommends \`${name}\` from \`${specOf(sub)}\`, but ${rel} does not export it.`);
     }
   }
-  return problems;
+  return { problems, unchecked, checked: [...new Set(named.map(([n, s]) => `${n} (${s})`))].sort() };
 }
 
 // ---------------------------------------------------------------------------
@@ -928,9 +1022,9 @@ const helpers = {
   exportsKeys: Object.keys(pkg.exports ?? {}),
 };
 
-const readSubpathSource = (sub) => {
+const readSubpathSource = (relPath) => {
   try {
-    return readFileSync(join(ROOT, 'src', sub, 'index.ts'), 'utf8');
+    return readFileSync(join(ROOT, relPath), 'utf8');
   } catch {
     return undefined;
   }
@@ -1056,6 +1150,7 @@ const selfAuditItems = invariants.flatMap((inv) =>
     invariant: inv.id,
     index,
     needle: NEEDLES[`${inv.id}#${index}`],
+    variants: variantsOf(NEEDLES[`${inv.id}#${index}`]),
     search: ex.wrong,
     replaceWith: ex.right,
     rule: inv.statement,
@@ -1114,7 +1209,6 @@ addAgent('INVENTORY.md', renderInventory({ inventory }));
 addAgent('FABRICATED.md', renderFabricated());
 
 addJudge('JUDGE.md', renderJudge({ scenario, invariants, recipes, kitVersion, floor }));
-addJudge('FLOOR.md', renderFloorReport(floor));
 
 // --- cross-check the rendered text, BEFORE writing --------------------------
 
@@ -1127,12 +1221,13 @@ for (const page of [...agentPages, ...elementPages]) {
 
 const agentText = [...agentPages, ...elementPages].map((p) => p.body).join('\n');
 
-const specifierProblems = verifySpecifiers(agentText, pkg, readSubpathSource);
-if (specifierProblems.length) {
+const specifiers = verifySpecifiers(agentText, pkg, readSubpathSource);
+if (specifiers.problems.length) {
   fail(
-    `the pack names import specifiers that do not resolve, so nothing was written:\n  - ${specifierProblems.join('\n  - ')}`,
+    `the pack names import specifiers that do not resolve, so nothing was written:\n  - ${specifiers.problems.join('\n  - ')}`,
   );
 }
+for (const note of specifiers.unchecked) console.warn(`⚠ acceptance-pack: UNCHECKED specifier — ${note}`);
 
 for (const s of scenarios) {
   for (const line of s.scoring) {
@@ -1142,11 +1237,38 @@ for (const s of scenarios) {
   }
 }
 
+// The floor report is rendered last so it can carry the specifier check's own
+// coverage, including what it could NOT check.
+addJudge('FLOOR.md', renderFloorReport(floor, specifiers));
+
 // --- write ------------------------------------------------------------------
+
+// THE LATE-FAULT GUARD. `settle()` inside runFloor covers faults scheduled
+// within SETTLE_MS; anything later than that would previously land AFTER the
+// pack was on disk, leaving a complete pack that claims success while the
+// process dies. There is no bound that makes "later" impossible, so the write
+// decision is made robust instead: if any fault is recorded after the floor's
+// verdict, the pack is REMOVED and the run exits 1.
+let writtenRoot;
+const floorMark = floor.mark;
+process.on('exit', () => {
+  const late = faultsSince(floorMark);
+  if (!late.length) return;
+  if (writtenRoot) rmSync(writtenRoot, { recursive: true, force: true });
+  console.error(
+    `✗ acceptance-pack: ${late.length} fault(s) arrived after the floor's verdict — ${late
+      .map((f) => f.error)
+      .join('; ')}. ${
+      writtenRoot ? `The pack at ${writtenRoot} was REMOVED` : 'Nothing was written'
+    }: a pack on disk must never outlive a run that failed.`,
+  );
+  process.exitCode = 1;
+});
 
 const agentDir = join(out, 'agent');
 const judgeDir = join(out, 'judge');
 mkdirSync(join(agentDir, 'elements'), { recursive: true });
+writtenRoot = out;
 mkdirSync(judgeDir, { recursive: true });
 
 const write = (dir, name, body) => writeFileSync(join(dir, name), body.endsWith('\n') ? body : body + '\n');

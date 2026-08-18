@@ -6,7 +6,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { listInvariants } from '../../src/agent-tooling/catalog/invariants';
 import { listScenarios } from '../../src/agent-tooling/catalog/scenarios';
 import { listSurfaceRecipes } from '../../src/agent-tooling/catalog/surfaces';
-import { NEEDLES } from '../../scripts/lib/audit-needles.mjs';
+import { NEEDLES, variantsOf } from '../../scripts/lib/audit-needles.mjs';
 
 const PKG = join(__dirname, '..', '..');
 const SCRIPT = join(PKG, 'scripts/acceptance-pack.mjs');
@@ -278,10 +278,21 @@ describe('acceptance pack', () => {
         const needle = (NEEDLES as Record<string, string>)[`${inv.id}#${i}`];
         expect(needle, `no needle for ${inv.id}#${i}`).toBeDefined();
         expect(inv.examples[i].wrong, `${inv.id}#${i}: needle absent from its own wrong form`).toContain(needle);
-        for (const right of allRights) {
-          expect(right.includes(needle), `${inv.id}#${i}: needle ${needle} fires on a right form`).toBe(false);
+        // EVERY quote variant, not just the authored one: quote-agnosticism is a
+        // widening, and a widening is how a false positive gets in.
+        const variants = (variantsOf as (n: string) => string[])(needle);
+        expect(variants.length).toBeGreaterThan(0);
+        for (const v of variants) {
+          for (const right of allRights) {
+            expect(right.includes(v), `${inv.id}#${i}: needle variant ${v} fires on a right form`).toBe(false);
+          }
+          expect(audit, `${inv.id}#${i}: needle variant ${v} not in the page`).toContain(v);
         }
-        expect(audit, `${inv.id}#${i}: needle not in the page`).toContain(needle);
+        // A quoted needle must offer both spellings, or a double-quote formatter
+        // silences it on identical code.
+        if (needle.includes("'")) {
+          expect(variants, `${inv.id}#${i}: no double-quote variant`).toContain(needle.replace(/'/g, '"'));
+        }
         checked++;
       }
     }
@@ -361,6 +372,16 @@ describe('acceptance pack', () => {
     const floorReport = readFileSync(join(judge, 'FLOOR.md'), 'utf8');
     expect(floorReport).toMatch(/no example ran\s+against a real registered/);
     expect(floorReport).toContain('Every row declares at least one stand-in.');
+    // The three async-fault routes, and the bound, stated rather than implied.
+    expect(floorReport).toContain('DOM event listener');
+    expect(floorReport).toMatch(/settles for \*\*\d+ms\*\*/);
+    expect(floorReport).toContain('removes the\npack');
+    // A4: the symbol check must report its own coverage, including any skip.
+    expect(floorReport).toContain('## Import specifiers the pack names');
+    for (const sym of ['Chat (react)', 'useKaiChat (react)', 'elementsReady (elements)', 'createAssistantStream (state)']) {
+      expect(floorReport, `${sym} is not reported as checked`).toContain(sym);
+    }
+    expect(floorReport).toMatch(/nothing was skipped|UNCHECKED — read this as a gap/);
     // JUDGE.md must not overclaim either.
     expect(readFileSync(join(judge, 'JUDGE.md'), 'utf8')).toContain('executed against the stand-ins');
   });
@@ -374,6 +395,10 @@ describe('acceptance pack', () => {
       'a right form that throws is reported failed',
       'a right form that executes but violates its claim is reported failed',
       'a right form that throws LATE, inside a .then, is reported failed',
+      'a throw inside a DOM EVENT LISTENER is reported failed (jsdom hides these in its virtual console)',
+      'a fault scheduled BEYOND the per-case drain is reported, and is not blamed on another example',
+      'needle check: a needle whose other quote variant fires on a right form is reported',
+      'needle check: a needle matches the same mistake spelled with double quotes',
       'an example with no harness is reported, not skipped',
       'a missing harness raises a structural error',
       'a harness with an EMPTY case list is reported, not passed',

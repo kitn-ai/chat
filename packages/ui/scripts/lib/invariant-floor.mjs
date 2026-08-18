@@ -44,7 +44,7 @@
 // Where a stand-in is the SUBJECT of the claim, the harness carries a
 // `corroborate` step that checks the real thing by another route.
 import vm from 'node:vm';
-import { JSDOM } from 'jsdom';
+import { JSDOM, VirtualConsole } from 'jsdom';
 import * as esbuild from 'esbuild';
 
 class FloorAssertionError extends Error {}
@@ -53,9 +53,62 @@ function assert(cond, msg) {
   if (!cond) throw new FloorAssertionError(msg);
 }
 
+// ---------------------------------------------------------------------------
+// THE FAULT SINK -- one, for the whole process
+// ---------------------------------------------------------------------------
+//
+// THREE SOURCES, and the third was missing until review found it. A fragment
+// can fail after it returns in a `.then` (an unhandled rejection), in a timer
+// (an uncaught exception) -- and inside a DOM EVENT LISTENER, which is neither:
+// jsdom catches a listener's exception and routes it to its VIRTUAL CONSOLE, so
+// no process-level handler ever sees it. `events-non-bubbling#0`'s right form
+// IS a listener, so that hole sat on the live path, and the floor printed PASS
+// over a listener that threw.
+//
+// ONE SINK, INSTALLED ONCE, rather than listeners added and removed per case.
+// Per-case listeners meant a fault arriving between two windows was blamed on
+// whichever window happened to be open next -- a chain of five nested 0ms
+// timers outlived the drain and was attributed to the NEXT example. Faults now
+// carry the window that was open when they were RECORDED, `null` means no
+// window was open, and an unattributed fault is reported as its own structural
+// failure rather than folded into an innocent row.
+const FAULTS = [];
+let currentWindow = null;
+
+const record = (err) => {
+  FAULTS.push({ window: currentWindow, error: err && err.message ? err.message : String(err) });
+};
+process.on('unhandledRejection', record);
+// A persistent `uncaughtException` handler stops Node crashing, which is the
+// point: a crash after the pack is on disk leaves a pack that looks written.
+// Nothing is swallowed -- every fault reaches the sink, and the sink is what
+// decides the exit code and whether the pack survives.
+process.on('uncaughtException', record);
+
+const virtualConsole = new VirtualConsole();
+virtualConsole.on('jsdomError', record);
+
 /** One jsdom realm, reused. Elements are created fresh per case. */
-const dom = new JSDOM('<!doctype html><html><body><div id="wrapper"></div></body></html>');
+const dom = new JSDOM('<!doctype html><html><body><div id="wrapper"></div></body></html>', { virtualConsole });
 const W = dom.window;
+
+/** How many faults have been seen so far — the caller's acknowledgement mark. */
+export const faultCount = () => FAULTS.length;
+/** Everything recorded after `mark`, for the late-fault guard. */
+export const faultsSince = (mark) => FAULTS.slice(mark);
+
+/**
+ * Wall-clock settle, for faults scheduled further out than the per-case drain
+ * reaches. Bounded and stated rather than open-ended: `SETTLE_MS` is the window
+ * inside which a late fault still results in ZERO files written. Anything later
+ * than this is caught by the process-exit guard instead, which removes the pack
+ * rather than leaving one that claims success.
+ */
+export const SETTLE_MS = 250;
+export async function settle(ms = SETTLE_MS) {
+  const until = Date.now() + ms;
+  while (Date.now() < until) await new Promise((r) => setTimeout(r, 10));
+}
 
 /**
  * A stand-in for a registered `kai-*` element: a real custom element in a real
@@ -87,33 +140,40 @@ function deferred() {
   return { promise, resolve };
 }
 
+// The drain is bounded, and the bound is stated because it is the honest limit
+// of per-case attribution: turns are pumped until QUIET_TURNS consecutive turns
+// record nothing new, up to MAX_TURNS. A chain of nested 0ms timers therefore
+// completes inside its own window instead of surfacing in the next one; a fault
+// scheduled beyond it is handled by `settle()` and, past that, by the caller's
+// exit guard.
+const MIN_TURNS = 4;
+const QUIET_TURNS = 3;
+const MAX_TURNS = 40;
+
 /**
- * Run `fn`, then drain, and fail if anything went wrong ASYNCHRONOUSLY -- in a
- * `.then`, a timer or an event listener -- after the awaited work resolved.
- * Rejections raised inside the vm realm surface on this process (same isolate),
- * which is measured, not assumed: `--self-test` plants a late throw and requires
- * it to be reported.
+ * Run `fn` under `label`, drain to quiescence, and fail if anything went wrong
+ * ASYNCHRONOUSLY -- in a `.then`, in a timer, or inside a DOM event listener --
+ * after the awaited work resolved. All three routes are measured, not assumed:
+ * `--self-test` plants one of each and requires each to be reported.
  */
-async function withAsyncFaultTrap(fn) {
-  const faults = [];
-  const onRejection = (reason) => faults.push(reason);
-  const onUncaught = (err) => faults.push(err);
-  process.on('unhandledRejection', onRejection);
-  process.on('uncaughtException', onUncaught);
+async function withAsyncFaultTrap(label, fn) {
+  const mark = FAULTS.length;
+  currentWindow = label;
   try {
     await fn();
-    // Microtasks, 0ms timers, and Node's own unhandled-rejection detection all
-    // need a turn before "nothing went wrong" is a statement about anything.
-    for (let i = 0; i < 4; i++) await new Promise((r) => setTimeout(r, 0));
+    let quiet = 0;
+    for (let i = 0; i < MAX_TURNS && (i < MIN_TURNS || quiet < QUIET_TURNS); i++) {
+      const before = FAULTS.length;
+      await new Promise((r) => setTimeout(r, 0));
+      quiet = FAULTS.length === before ? quiet + 1 : 0;
+    }
   } finally {
-    process.off('unhandledRejection', onRejection);
-    process.off('uncaughtException', onUncaught);
+    currentWindow = null;
   }
-  if (faults.length) {
+  const mine = FAULTS.slice(mark);
+  if (mine.length) {
     throw new FloorAssertionError(
-      `failed AFTER returning, in an async continuation: ${faults
-        .map((f) => (f && f.message ? f.message : String(f)))
-        .join('; ')}`,
+      `failed AFTER returning, in an async continuation: ${mine.map((f) => f.error).join('; ')}`,
     );
   }
 }
@@ -652,6 +712,7 @@ const describeExample = (inv, i) => {
  * per example. Nothing is skipped and nothing is silently tolerated.
  */
 export async function runFloor(invariants, helpers, { harnesses = HARNESSES } = {}) {
+  const startMark = FAULTS.length;
   const errors = [];
   const results = [];
   const seen = new Set();
@@ -687,7 +748,7 @@ export async function runFloor(invariants, helpers, { harnesses = HARNESSES } = 
         try {
           // The trap spans BOTH, because upgrade-race's `.then` only runs
           // during the check and a throw there would otherwise vanish.
-          await withAsyncFaultTrap(async () => {
+          await withAsyncFaultTrap(`${key}: ${c.label}`, async () => {
             await execute(inv.examples[i].right, bindings, { jsx: harness.jsx });
             await c.check(bindings, helpers);
           });
@@ -730,7 +791,21 @@ export async function runFloor(invariants, helpers, { harnesses = HARNESSES } = 
     }
   }
 
-  return { ok: errors.length === 0, results, errors };
+  // Settle past the per-case drain before declaring the floor clean, so a fault
+  // scheduled further out still lands INSIDE the run rather than after the pack
+  // has been written. Bounded; the caller's exit guard covers anything later.
+  await settle();
+
+  // A fault recorded with no window open belongs to no case. Blaming it on the
+  // next row -- what the per-case listeners used to do -- is worse than useless:
+  // it sends the reader to a correct example.
+  for (const f of FAULTS.slice(startMark).filter((x) => x.window === null)) {
+    errors.push(
+      `a fault arrived outside any measured window, so it cannot be attributed to a single example: ${f.error}. Something the catalog's code scheduled outran the per-case drain.`,
+    );
+  }
+
+  return { ok: errors.length === 0, results, errors, mark: FAULTS.length };
 }
 
 export function formatFloor({ results, errors }) {
@@ -780,6 +855,20 @@ export async function selfTest(helpers) {
         },
       ],
     },
+    {
+      // jsdom routes a listener's exception to its virtual console, so neither
+      // uncaughtException nor unhandledRejection sees it. This probe is the one
+      // that would have caught the hole review found.
+      id: 'zz-listener-throw',
+      examples: [{ wrong: 'x', right: "chat.addEventListener('kai-submit', () => { throw new Error('LISTENER BOOM'); });" }],
+    },
+    {
+      // Scheduled beyond the per-case drain but inside `settle()`: it belongs to
+      // no window, so it must surface as its own structural failure rather than
+      // as the next example's problem.
+      id: 'zz-beyond-drain',
+      examples: [{ wrong: 'x', right: "setTimeout(() => { throw new Error('BEYOND DRAIN BOOM'); }, 120);" }],
+    },
     { id: 'zz-unharnessed', examples: [{ wrong: 'x', right: 'const ok = 1;' }] },
     { id: 'zz-no-cases', examples: [{ wrong: 'x', right: 'const ok = 1;' }] },
     { id: 'zz-good', examples: [{ wrong: 'x', right: 'chat.messages = [...messages];' }] },
@@ -814,6 +903,25 @@ export async function selfTest(helpers) {
         },
       ],
     },
+    'zz-listener-throw#0': {
+      stubs: [],
+      cases: [
+        {
+          label: 'a throw inside a DOM listener must not vanish into the virtual console',
+          bindings() {
+            const { el } = standInElement();
+            return { chat: el, __el: el };
+          },
+          check(b) {
+            b.__el.dispatchEvent(new W.CustomEvent('kai-submit', { detail: {}, bubbles: false, composed: false }));
+          },
+        },
+      ],
+    },
+    'zz-beyond-drain#0': {
+      stubs: [],
+      cases: [{ label: 'schedules past the drain', bindings: () => ({}), check: () => {} }],
+    },
     'zz-no-cases#0': { stubs: [], cases: [] },
     'zz-good#0': freshArray,
     'zz-dangling#0': { stubs: [], cases: [{ label: 'never runs', bindings: () => ({}), check: () => {} }] },
@@ -828,6 +936,15 @@ export async function selfTest(helpers) {
     [
       'a right form that throws LATE, inside a .then, is reported failed',
       status('zz-late-throw#0') === 'failed' && errors.some((e) => e.includes('LATE BOOM')),
+    ],
+    [
+      'a throw inside a DOM EVENT LISTENER is reported failed (jsdom hides these in its virtual console)',
+      status('zz-listener-throw#0') === 'failed' && errors.some((e) => e.includes('LISTENER BOOM')),
+    ],
+    [
+      'a fault scheduled BEYOND the per-case drain is reported, and is not blamed on another example',
+      errors.some((e) => e.includes('BEYOND DRAIN BOOM') && e.includes('outside any measured window')) &&
+        !results.some((r) => r.status === 'failed' && r.cases.some((c) => (c.error ?? '').includes('BEYOND DRAIN BOOM'))),
     ],
     ['an example with no harness is reported, not skipped', status('zz-unharnessed#0') === 'no-harness'],
     ['a missing harness raises a structural error', errors.some((e) => e.includes('no harness for zz-unharnessed#0'))],
