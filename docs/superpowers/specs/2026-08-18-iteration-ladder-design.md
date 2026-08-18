@@ -132,6 +132,54 @@ of the ladder is its own spec → plan → build → evaluate cycle, written whe
 findings are in hand. Planning rung 3 before rung 1 has run would repeat the error this design exists
 to correct.
 
+## Candidate iterations — logged, not scheduled
+
+Both found while doing other work. Each is small, independently verifiable, and does not belong in
+iteration 1. Neither should be started without being scheduled deliberately.
+
+### A. The MCP does not validate its arguments
+
+The tool schema declares `additionalProperties: false` and **does not enforce it**. A wrong argument
+key silently returns the 80-element index instead of an error. Confirmed independently twice, and on
+2026-08-18 it cost a real agent a debugging cycle: a verification probe passed `element` instead of
+`name`, got plausible output back for two different elements, and only noticed because the two
+answers were byte-identical. This is decide-loudly broken on the MCP's own surface — the tool that
+exists to make agents fluent returns a confidently wrong answer to a typo.
+
+Bundle with its sibling: `npx @kitn.ai/ui --version` starts a JSON-RPC server and **hangs on a pipe**,
+because `bin/mcp.js` never reads `argv`. Those are the flags someone reaches for when an MCP config
+is broken, so the failure lands on people already debugging.
+
+**Verify by:** driving the built bundle over stdio with a wrong key and asserting a refusal, plus a
+positive control that the right key still answers. Watch the refusal fail before trusting it.
+
+### B. The package ships 2.83 MiB of unreachable TypeScript source
+
+Measured 2026-08-18 from a real `npm pack`: 12.15 MiB unpacked against `verify:pack`'s 12.50 MiB
+ceiling — **97%**. `dist/` is 8.32 MiB across 525 files; `src/` is 3.40 MiB across 326, of which
+**131 `.ts` + 177 `.tsx` = 2.83 MiB that no consumer can reach**:
+
+- **zero source maps in `dist/`**, so it is not shipped for debugging — the usual justification;
+- the `exports` map reaches exactly two files under `src/` (`element-meta.json`, `icon-names.json`);
+- `verify:dts` already asserts all emitted declarations reference nothing outside `dist/`;
+- demonstrated, not inferred — the demo sandbox deleted every `.ts`/`.tsx`/`.css` from the installed
+  `src/` and both module resolution and the MCP worked.
+
+Same class as the `derived.json` fix: shipped because `files` says `"src"`, not because anything
+needs it. Removing it takes the package from 97% of the ceiling to roughly 75%.
+
+**Check first:** whether anything outside `dist/` references `src/elements/element-types.d.ts`
+(262 KiB). `verify:dts` is scoped to emitted declarations, so it does not answer this — confirm it
+directly rather than inferring from that guard.
+
+**Verify by:** the same method that verified the `derived.json` removal — pack, confirm absence,
+install the tarball into a throwaway app, and drive the MCP and a real import through it. Grep is not
+sufficient evidence here; execution is.
+
+Separately and not part of B: `dist/` carries two Solid chunks at 754 KiB and 656 KiB. Multiple entry
+points each bundling the component set is expected, but 1.4 MiB across two looks like duplication
+rather than necessity. That is its own investigation, not a packaging fix.
+
 ## Risks
 
 - **The ladder finds component bugs, not documentation bugs.** That is a feature — it is what the
