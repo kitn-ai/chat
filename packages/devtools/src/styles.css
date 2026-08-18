@@ -1,0 +1,34 @@
+/* The panel's stylesheet, compiled to compiled.css and adopted into the
+   <kai-devtools> shadow root. Mirrors the kit's own src/elements/styles.css,
+   because the panel renders the kit's Solid primitives and those are
+   Tailwind-classed: without this they render structurally correct and
+   completely unstyled.
+   Wired as `prebuild`, so a bare `build` cannot emit an unstyled panel. */
+@import "tailwindcss";
+@import "tw-animate-css";
+/* THE KIT'S OWN TOKENS, so the panel inherits the palette and the light/dark
+   handling by construction rather than by hand-picked hex values. This is the
+   Tailwind-v4 SOURCE form, which is correct precisely because we run Tailwind
+   over it here; theme.tokens.css is the compiled form for apps that do not. */
+@import "@kitn.ai/ui/theme.css";
+@plugin "@tailwindcss/typography";
+
+/* Scan BOTH sides: this package's sources, and the kit's, because the class
+   strings that need compiling live inside the primitives we render. */
+@source "./";
+@source "../../ui/src";
+
+@layer base {
+  :host {
+    display: block;
+    font-family: var(--kai-font-base, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif);
+    letter-spacing: var(--kai-tracking, normal);
+  }
+  code, kbd, samp, pre {
+    font-family: var(--kai-font-code, ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace);
+  }
+  * { border-color: var(--color-border); }
+
+  :host { color-scheme: light; }
+  .dark { color-scheme: dark; }
+}

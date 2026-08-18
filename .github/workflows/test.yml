@@ -642,6 +642,26 @@ jobs:
       # a starter once downgraded the HOISTED @types/node 26 -> 22 across the
       # whole workspace under node-linker=hoisted, and timed out an unrelated
       # project. ~6s total.
+      # @kitn.ai/devtools -- the kai-devtools panel. Ships OUTSIDE @kitn.ai/ui,
+      # so nothing in the kit's own build or suite covers it, and this job
+      # enumerates packages rather than using run-many: without these three
+      # steps the package has no CI at all.
+      #
+      # Build first, and read the exit code of each: `typecheck` is the one that
+      # catches CONTRACT DRIFT, because src/contract.ts pins the panel's local
+      # re-declarations of the hook and event types against the kit's real ones
+      # at type level. If the kit renames a field, this goes red naming the
+      # contract instead of the panel silently reading undefined in production.
+      # ~5s total, no network.
+      - name: devtools build (the self-contained CDN bundle)
+        run: pnpm --filter @kitn.ai/devtools run build
+
+      - name: devtools typecheck (also fails on kit contract drift)
+        run: pnpm --filter @kitn.ai/devtools run typecheck
+
+      - name: devtools tests (foldStreams + panel entry behaviour)
+        run: pnpm --filter @kitn.ai/devtools run test
+
       - name: create-kai build (bundles templates + the shared catalogs)
         run: pnpm --filter create-kai run build
 
