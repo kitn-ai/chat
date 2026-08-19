@@ -75,6 +75,22 @@ importers:
         specifier: ^23.0.1
         version: 23.0.1(@vue/compiler-sfc@3.5.39)(svelte@5.56.4)
 
+  examples/apps/support-widget:
+    dependencies:
+      '@kitn.ai/ui':
+        specifier: workspace:*
+        version: link:../../../packages/ui
+    devDependencies:
+      '@types/node':
+        specifier: ^22.19.21
+        version: 22.20.0
+      typescript:
+        specifier: ~5.7.2
+        version: 5.7.3
+      vite:
+        specifier: ^6.0.0
+        version: 6.4.3(@types/node@22.20.0)(jiti@2.7.0)(less@4.2.0)(lightningcss@1.32.0)(sass@1.99.0)(terser@5.31.6)(yaml@2.9.0)
+
   examples/internal/openrouter-spike:
     dependencies:
       '@kitn.ai/ui':

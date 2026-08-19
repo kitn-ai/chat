@@ -8,6 +8,10 @@ packages:
   - 'examples/starters/angular'
   - 'examples/starters/solid'
   - 'examples/internal/openrouter-spike'
+  # examples/apps/* — the iteration ladder's corpus of real applications. Listed
+  # one by one like the starters above, and `verify:starters` cross-checks that
+  # every app declaring `workspace:*` appears here.
+  - 'examples/apps/support-widget'
 # nextjs + tanstack-start stay standalone `file:` consumers (not workspace members).
 # demos/* are not workspace members. internal/* generally are not either — the
 # openrouter-spike is enumerated explicitly because it needs `workspace:*` linkage

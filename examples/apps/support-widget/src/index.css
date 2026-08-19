@@ -1,0 +1,262 @@
+/* Two sections: the host product page, then the widget.
+   Nothing here reaches inside the chat — `<kai-chat>` renders into a shadow root
+   and is styled through its own props and the kit's tokens, never by piercing it. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
+  color: #16181d;
+  background: #fbfbfd;
+  line-height: 1.55;
+}
+
+/* ── the host page ─────────────────────────────────────────────────────────── */
+
+.site-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  padding: 1.25rem clamp(1.25rem, 5vw, 4rem);
+  border-bottom: 1px solid #e6e6ee;
+  background: #fff;
+}
+
+.wordmark {
+  font-size: 1.25rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: inherit;
+  text-decoration: none;
+}
+
+.site-header nav {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.site-header a {
+  color: #4a4d59;
+  text-decoration: none;
+}
+
+.site-header a:hover {
+  color: #16181d;
+}
+
+main {
+  max-width: 62rem;
+  margin: 0 auto;
+  padding: clamp(2rem, 6vw, 4.5rem) clamp(1.25rem, 5vw, 2rem) 6rem;
+}
+
+.hero h1 {
+  margin: 0 0 0.75rem;
+  font-size: clamp(2rem, 5vw, 3rem);
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.hero p {
+  max-width: 46ch;
+  margin: 0 0 1.75rem;
+  color: #4a4d59;
+  font-size: 1.0625rem;
+}
+
+.cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.button {
+  display: inline-block;
+  padding: 0.6rem 1.15rem;
+  border: 1px solid #d8d8e2;
+  border-radius: 8px;
+  background: #fff;
+  color: #16181d;
+  font-weight: 550;
+  text-decoration: none;
+}
+
+.button.primary {
+  border-color: #16181d;
+  background: #16181d;
+  color: #fff;
+}
+
+.plans {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  margin: 4rem 0;
+}
+
+.plan {
+  padding: 1.5rem;
+  border: 1px solid #e6e6ee;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.plan.featured {
+  border-color: #16181d;
+  box-shadow: 0 8px 24px rgb(22 24 29 / 8%);
+}
+
+.plan h2 {
+  margin: 0;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6b6f7d;
+}
+
+.price {
+  margin: 0.35rem 0 0.75rem;
+  font-size: 1.9rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.price span {
+  font-size: 0.95rem;
+  font-weight: 450;
+  color: #6b6f7d;
+}
+
+.plan p:last-child {
+  margin: 0;
+  color: #4a4d59;
+}
+
+.faq h2 {
+  font-size: 1.35rem;
+  letter-spacing: -0.02em;
+}
+
+.faq dt {
+  margin-top: 1.25rem;
+  font-weight: 600;
+}
+
+.faq dd {
+  margin: 0.25rem 0 0;
+  color: #4a4d59;
+}
+
+.site-footer {
+  padding: 2rem clamp(1.25rem, 5vw, 4rem) 8rem;
+  border-top: 1px solid #e6e6ee;
+  color: #6b6f7d;
+  font-size: 0.9rem;
+}
+
+/* ── the widget ────────────────────────────────────────────────────────────── */
+
+.launcher {
+  position: fixed;
+  bottom: 1.5rem;
+  inset-inline-end: 1.5rem;
+  z-index: 1001; /* above the panel, so it stays clickable as the close control */
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 1.1rem;
+  border: 0;
+  border-radius: 999px;
+  background: #16181d;
+  color: #fff;
+  font: inherit;
+  font-weight: 550;
+  cursor: pointer;
+  box-shadow: 0 10px 26px rgb(22 24 29 / 24%);
+}
+
+.launcher svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* One button, two icons: the open state shows the close glyph. */
+.launcher .launcher-close,
+.launcher[aria-expanded='true'] .launcher-open {
+  display: none;
+}
+
+.launcher[aria-expanded='true'] .launcher-close {
+  display: block;
+}
+
+.launcher[aria-expanded='true'] .launcher-label {
+  display: none;
+}
+
+/*
+ * THE DOCKED PLACEMENT, copied from the kai MCP scaffolder's
+ * `placementStyle('docked-widget')` (packages/ui/src/agent-tooling/mcp/tools/scaffold.ts):
+ *
+ *   position: fixed; bottom: 1.5rem; inset-inline-end: 1.5rem; width: 380px;
+ *   height: 600px; max-height: calc(100dvh - 3rem); border-radius: 16px;
+ *   overflow: hidden; box-shadow: 0 12px 32px var(--kai-shadow-color, …);
+ *   display: flex; flex-direction: column; z-index: 1000;
+ *
+ * Two deliberate departures, both because this is a launcher-toggled widget and
+ * the scaffold output is a bare always-open panel:
+ *   · the bottom offset clears the launcher rather than sitting under it;
+ *   · a narrow-viewport rule, below, so a phone gets the whole screen instead of
+ *     a 380px box hanging off the edge.
+ * The chat itself fills the panel with the scaffolder's `chatFill` verbatim.
+ */
+.support-panel {
+  position: fixed;
+  bottom: 5.5rem;
+  inset-inline-end: 1.5rem;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  width: 380px;
+  height: 600px;
+  max-height: calc(100dvh - 8rem);
+  overflow: hidden;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 12px 32px var(--kai-shadow-color, rgb(0 0 0 / 18%));
+}
+
+/* `hidden` has to win over `display: flex`; the attribute selector out-specifies
+   the class rule above, so no `!important` is needed. */
+.support-panel[hidden] {
+  display: none;
+}
+
+#support-chat {
+  flex: 1;
+  min-height: 0;
+}
+
+@media (width <= 480px) {
+  .support-panel {
+    inset-inline: 0.75rem;
+    bottom: 5rem;
+    width: auto;
+    max-height: calc(100dvh - 7rem);
+  }
+}
