@@ -671,6 +671,37 @@ export interface KaiDialogElement extends HTMLElement {
   focus(options?: FocusOptions): void;
 }
 
+export interface KaiDockElement extends HTMLElement {
+  /** Color mode (`auto` follows prefers-color-scheme). */
+  theme?: "light" | "dark" | "auto";
+  /** Drive/observe open state (Shoelace-style: settable + reflected to the `open` attribute; the element still self-manages on the launcher and Escape). Set `el.open = true`, or `<kai-dock open>`; listen for `kai-open-change`. */
+  open?: boolean;
+  /** Initial open state on mount (uncontrolled seed). */
+  defaultOpen?: boolean;
+  /** Which corner the dock sits in. Logical, so `-end` follows the writing direction and an RTL page docks on the left. Attribute: `position`. */
+  position?: "bottom-end" | "bottom-start" | "top-end" | "top-start";
+  /** The widget's NAME. Derives the panel's accessible name and both launcher names (`Open ${label}` / `Close ${label}`). Defaults to `Chat`. */
+  label?: string;
+  /** i18n override for the launcher's name while closed (default `Open ${label}`). */
+  openLabel?: string;
+  /** i18n override for the launcher's name while open (default `Close ${label}`). */
+  closeLabel?: string;
+  /** Show the unread dot. YOURS: it renders only while closed, and the dock never writes it back. Clear it in your `kai-open-change` handler. */
+  unread?: boolean;
+  /** Disable the launcher; `show()` and `toggle()` are gated on it. */
+  disabled?: boolean;
+  /** Where focus lands on open: `content` (default, the first element you slotted), `panel`, or `none`. Attribute: `focus-on-open`. */
+  focusOnOpen?: "content" | "panel" | "none";
+  /** Open it programmatically (no-op while disabled). */
+  show(): void;
+  /** Close it programmatically. */
+  hide(): void;
+  /** Flip the open state (closes while disabled). */
+  toggle(): void;
+  /** Move focus to the panel while open, or to the launcher while closed. */
+  focus(options?: FocusOptions): void;
+}
+
 export interface KaiEditableLabelElement extends HTMLElement {
   /** Color mode (`auto` follows prefers-color-scheme). */
   theme?: "light" | "dark" | "auto";
@@ -1734,6 +1765,7 @@ declare global {
     'kai-context': KaiContextElement;
     'kai-conversations': KaiConversationsElement;
     'kai-dialog': KaiDialogElement;
+    'kai-dock': KaiDockElement;
     'kai-editable-label': KaiEditableLabelElement;
     'kai-embed': KaiEmbedElement;
     'kai-empty': KaiEmptyElement;
@@ -1832,6 +1864,7 @@ declare module 'react' {
       'kai-context': KaiElementJsxProps;
       'kai-conversations': KaiElementJsxProps;
       'kai-dialog': KaiElementJsxProps;
+      'kai-dock': KaiElementJsxProps;
       'kai-editable-label': KaiElementJsxProps;
       'kai-embed': KaiElementJsxProps;
       'kai-empty': KaiElementJsxProps;
@@ -2330,6 +2363,29 @@ export interface KaiDialogElementProps {
   open?: boolean;
   /** Initial open state on mount (uncontrolled seed). */
   defaultOpen?: boolean;
+}
+
+export interface KaiDockElementProps {
+  /** Color mode (`auto` follows prefers-color-scheme). */
+  theme?: "light" | "dark" | "auto";
+  /** Drive/observe open state (Shoelace-style: settable + reflected to the `open` attribute; the element still self-manages on the launcher and Escape). Set `el.open = true`, or `<kai-dock open>`; listen for `kai-open-change`. */
+  open?: boolean;
+  /** Initial open state on mount (uncontrolled seed). */
+  defaultOpen?: boolean;
+  /** Which corner the dock sits in. Logical, so `-end` follows the writing direction and an RTL page docks on the left. Attribute: `position`. */
+  position?: "bottom-end" | "bottom-start" | "top-end" | "top-start";
+  /** The widget's NAME. Derives the panel's accessible name and both launcher names (`Open ${label}` / `Close ${label}`). Defaults to `Chat`. */
+  label?: string;
+  /** i18n override for the launcher's name while closed (default `Open ${label}`). */
+  openLabel?: string;
+  /** i18n override for the launcher's name while open (default `Close ${label}`). */
+  closeLabel?: string;
+  /** Show the unread dot. YOURS: it renders only while closed, and the dock never writes it back. Clear it in your `kai-open-change` handler. */
+  unread?: boolean;
+  /** Disable the launcher; `show()` and `toggle()` are gated on it. */
+  disabled?: boolean;
+  /** Where focus lands on open: `content` (default, the first element you slotted), `panel`, or `none`. Attribute: `focus-on-open`. */
+  focusOnOpen?: "content" | "panel" | "none";
 }
 
 export interface KaiEditableLabelElementProps {
@@ -3384,6 +3440,11 @@ export interface KaiDialogElementEvents {
   onKaiOpenChange?: (event: CustomEvent<{ open: boolean }>) => void;
 }
 
+export interface KaiDockElementEvents {
+  /** The dock opened or closed (the launcher, Escape, a driven `open`, or a method). */
+  onKaiOpenChange?: (event: CustomEvent<{ open: boolean }>) => void;
+}
+
 export interface KaiEditableLabelElementEvents {
   /** Edit was cancelled (Esc); the text is restored. */
   onKaiCancel?: (event: CustomEvent<Record<string, never>>) => void;
@@ -3795,6 +3856,8 @@ declare module 'vue' {
     KaiConversations: KaiVueElement<KaiConversationsElementProps, KaiConversationsElementEvents>;
     'kai-dialog': KaiVueElement<KaiDialogElementProps, KaiDialogElementEvents>;
     KaiDialog: KaiVueElement<KaiDialogElementProps, KaiDialogElementEvents>;
+    'kai-dock': KaiVueElement<KaiDockElementProps, KaiDockElementEvents>;
+    KaiDock: KaiVueElement<KaiDockElementProps, KaiDockElementEvents>;
     'kai-editable-label': KaiVueElement<KaiEditableLabelElementProps, KaiEditableLabelElementEvents>;
     KaiEditableLabel: KaiVueElement<KaiEditableLabelElementProps, KaiEditableLabelElementEvents>;
     'kai-embed': KaiVueElement<KaiEmbedElementProps, KaiEmbedElementEvents>;

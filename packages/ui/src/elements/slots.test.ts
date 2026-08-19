@@ -803,6 +803,7 @@ describe('ELEMENT_COMPOSITION registry (single source of truth the build extract
       'kai-context',
       'kai-conversations',
       'kai-dialog',
+      'kai-dock',
       'kai-editable-label',
       'kai-empty',
       'kai-file-tree',

@@ -3,7 +3,7 @@
 
 # @kitn.ai/ui
 
-> Framework-agnostic, Shadow-DOM web components for building AI chat interfaces — works in React, Vue, Angular, Svelte, or plain HTML. 80 custom elements, every one prefixed `kai-` (e.g. `<kai-chat>`, `<kai-artifact>`): streaming responses, markdown + code rendering, reasoning/tool panels, attachments, conversation sidebar, voice input. Zero framework dependency for consumers; the SolidJS runtime it is authored in is bundled in, so the host needs nothing.
+> Framework-agnostic, Shadow-DOM web components for building AI chat interfaces — works in React, Vue, Angular, Svelte, or plain HTML. 81 custom elements, every one prefixed `kai-` (e.g. `<kai-chat>`, `<kai-artifact>`): streaming responses, markdown + code rendering, reasoning/tool panels, attachments, conversation sidebar, voice input. Zero framework dependency for consumers; the SolidJS runtime it is authored in is bundled in, so the host needs nothing.
 
 ## Install
 
@@ -37,7 +37,7 @@ Drop an element into any framework (React, Vue, plain HTML). Data in via JS prop
 - `<kai-prompt-input>` — standalone composer with send button.
 
 **Layer 2 — composable primitives** (`import { … } from '@kitn.ai/ui'`):
-All 80 elements are also exported individually. Use them for custom layouts or features `<kai-chat>` does not expose (ChainOfThought, FeedbackBar, ThinkingBar, VoiceInput, …). Your bundler tree-shakes the rest.
+All 81 elements are also exported individually. Use them for custom layouts or features `<kai-chat>` does not expose (ChainOfThought, FeedbackBar, ThinkingBar, VoiceInput, …). Your bundler tree-shakes the rest.
 
 ## Key rules for the web components
 
@@ -151,7 +151,7 @@ For Tailwind builds: `@import "@kitn.ai/ui/theme.css"` in your CSS.
 
 ## Docs
 
-- Full element reference (all 80 elements, every prop/event): ./llms-full.txt — https://kitn.dev/llms-full.txt
+- Full element reference (all 81 elements, every prop/event): ./llms-full.txt — https://kitn.dev/llms-full.txt
 - Machine-readable Custom Elements Manifest: https://unpkg.com/@kitn.ai/ui/dist/custom-elements.json
 - Working examples: https://github.com/kitn-ai/ui/tree/main/examples
 - Storybook: https://storybook.kitn.dev
@@ -248,7 +248,7 @@ The same reassign rule applies to every array/object property (`models`, `contex
 
 ---
 
-## Element reference (80 elements, generated from custom-elements.json)
+## Element reference (81 elements, generated from custom-elements.json)
 
 Every element also accepts the `theme` attribute. Array/object properties are marked with a `—` attribute: they must be set as JS properties.
 
@@ -1062,6 +1062,57 @@ _No events._
 | `::part(body)` | The scrolling content region (the default slot). — `kai-dialog::part(body) { padding: 1.25rem }` |
 | `::part(header)` | Optional title region at the top of the panel. |
 | `::part(footer)` | Optional actions region at the bottom of the panel. |
+
+---
+
+### `kai-dock` / `Dock`
+
+**Properties** (every element also accepts `theme="light|dark|auto"`; only scalar props work as HTML attributes):
+
+| Property | Attribute | Type | Description |
+|---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
+| `open` | `open` | `undefined \| false \| true` | Drive/observe open state (Shoelace-style: settable + reflected to the `open` attribute; the element still self-manages on the launcher and Escape). Set `el.open = true`, or `<kai-dock open>`; listen for `kai-open-change`. |
+| `defaultOpen` | `default-open` | `undefined \| false \| true` | Initial open state on mount (uncontrolled seed). |
+| `position` | `position` | `undefined \| "bottom-end" \| "bottom-start" \| "top-end" \| "top-start"` | Which corner the dock sits in. Logical, so `-end` follows the writing direction and an RTL page docks on the left. Attribute: `position`. |
+| `label` | `label` | `undefined \| string` | The widget's NAME. Derives the panel's accessible name and both launcher names (`Open ${label}` / `Close ${label}`). Defaults to `Chat`. |
+| `openLabel` | `open-label` | `undefined \| string` | i18n override for the launcher's name while closed (default `Open ${label}`). |
+| `closeLabel` | `close-label` | `undefined \| string` | i18n override for the launcher's name while open (default `Close ${label}`). |
+| `unread` | `unread` | `undefined \| false \| true` | Show the unread dot. YOURS: it renders only while closed, and the dock never writes it back. Clear it in your `kai-open-change` handler. |
+| `disabled` | `disabled` | `undefined \| false \| true` | Disable the launcher; `show()` and `toggle()` are gated on it. |
+| `focusOnOpen` | `focus-on-open` | `undefined \| "content" \| "panel" \| "none"` | Where focus lands on open: `content` (default, the first element you slotted), `panel`, or `none`. Attribute: `focus-on-open`. |
+
+**Events** (non-bubbling `CustomEvent`s — listen directly on the element):
+
+| Event | `detail` type | Description |
+|---|---|---|
+| `kai-open-change` | `CustomEvent<{ open: false \| true }>` | The dock opened or closed (the launcher, Escape, a driven `open`, or a method). |
+
+**Methods** (call on the element instance: `document.querySelector('kai-dock').show()`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `show` | `(): void` | Open it programmatically (no-op while disabled). |
+| `hide` | `(): void` | Close it programmatically. |
+| `toggle` | `(): void` | Flip the open state (closes while disabled). |
+| `focus` | `(options?: FocusOptions): void` | Move focus to the panel while open, or to the launcher while closed. |
+
+**Slots** (project your own markup via `slot="name"` on a light-DOM child):
+
+| Slot | Mode | Description |
+|---|---|---|
+| _(default)_ | inject | The panel body, the same region as `slot="panel"`. |
+| `panel` | replace | The panel body. ANY element: a `<kai-chat>`, a form, your own component. The dock never reads or types it, and the default slot is the same region. |
+| `launcher` | inject | Content inside the built-in button while CLOSED; defaults to a chat glyph. Text works as well as an icon: the button keeps its height and grows sideways into a pill, so a label like "Support" is not clipped. The BUTTON is never slotted away, because it owns aria-expanded, aria-controls, the toggle wiring and the focus return. |
+| `launcher-open` | inject | Content inside the button while OPEN; defaults to a ✕. Fill only `launcher` and that glyph stays while open rather than morphing into a built-in that clashes with it. |
+
+**Styleable parts** (restyle from outside via `kai-dock::part(name)`):
+
+| Part | Description |
+|---|---|
+| `::part(launcher)` | The launcher button pinned to the corner: a disc by default, a pill once you slot a text label. Restyle its surface or shadow; --kai-dock-launcher-size sets its height and its minimum width. — `kai-dock::part(launcher) { background: var(--color-info) }` |
+| `::part(badge)` | The unread dot on the launcher, rendered only while closed and only when `unread` is set. Restyle its color or size. — `kai-dock::part(badge) { background: var(--color-success) }` |
+| `::part(panel)` | The panel body. ANY element: a `<kai-chat>`, a form, your own component. The dock never reads or types it, and the default slot is the same region. |
 
 ---
 

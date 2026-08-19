@@ -662,6 +662,36 @@ export const Dialog = /*#__PURE__*/ createWebComponent<DialogProps>(
   () => import('@kitn.ai/ui/elements/dialog'),
 );
 
+export interface DockProps extends WebComponentProps {
+  /** Drive/observe open state (Shoelace-style: settable + reflected to the `open` attribute; the element still self-manages on the launcher and Escape). Set `el.open = true`, or `<kai-dock open>`; listen for `kai-open-change`. */
+  open?: boolean;
+  /** Initial open state on mount (uncontrolled seed). */
+  defaultOpen?: boolean;
+  /** Which corner the dock sits in. Logical, so `-end` follows the writing direction and an RTL page docks on the left. Attribute: `position`. */
+  position?: "bottom-end" | "bottom-start" | "top-end" | "top-start";
+  /** The widget's NAME. Derives the panel's accessible name and both launcher names (`Open ${label}` / `Close ${label}`). Defaults to `Chat`. */
+  label?: string;
+  /** i18n override for the launcher's name while closed (default `Open ${label}`). */
+  openLabel?: string;
+  /** i18n override for the launcher's name while open (default `Close ${label}`). */
+  closeLabel?: string;
+  /** Show the unread dot. YOURS: it renders only while closed, and the dock never writes it back. Clear it in your `kai-open-change` handler. */
+  unread?: boolean;
+  /** Disable the launcher; `show()` and `toggle()` are gated on it. */
+  disabled?: boolean;
+  /** Where focus lands on open: `content` (default, the first element you slotted), `panel`, or `none`. Attribute: `focus-on-open`. */
+  focusOnOpen?: "content" | "panel" | "none";
+  /** The dock opened or closed (the launcher, Escape, a driven `open`, or a method). */
+  onOpenChange?: (event: CustomEvent<{ open: boolean }>) => void;
+}
+
+export const Dock = /*#__PURE__*/ createWebComponent<DockProps>(
+  'kai-dock',
+  ["theme","open","defaultOpen","position","label","openLabel","closeLabel","unread","disabled","focusOnOpen"],
+  { onOpenChange: 'kai-open-change' },
+  () => import('@kitn.ai/ui/elements/dock'),
+);
+
 export interface EditableLabelProps extends WebComponentProps {
   /** The label text. Settable and reflected to the `value` attribute. Read `el.value` for live state. */
   value?: string;

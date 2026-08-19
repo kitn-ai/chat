@@ -75,6 +75,7 @@
     "kai-pane-group": "pane-group",
     "kai-agent-card": "agent-card",
     "kai-dialog": "dialog",
+    "kai-dock": "dock",
     "kai-input": "input",
     "kai-search": "search",
     "kai-kbd": "kbd",
@@ -301,6 +302,9 @@
     ],
     "dialog": [
       "kai-dialog"
+    ],
+    "dock": [
+      "kai-dock"
     ],
     "input": [
       "kai-input"

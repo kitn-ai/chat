@@ -91,6 +91,7 @@ import './pane';
 import './pane-group';
 import './agent-card';
 import './dialog';
+import './dock';
 // Input & search field family
 import './input';
 import './search';
