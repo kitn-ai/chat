@@ -64,6 +64,49 @@ pnpm --filter @kitn.ai/ui run verify:starters
 pnpm --filter @kitn.ai/ui run lint:catalog-drift
 ```
 
+## The MCP-only rebuild (rung 1's measurement counterpart)
+
+Owner-approved 2026-08-19. Question under test: after iteration 1's fixes, can an outsider
+build the docked-widget composition from the kit's front door alone? Method: rebuild the same
+app in a clean room, diff against the insider reference, file divergences as teaching gaps.
+
+**Contamination control — every channel to the builder's context, enumerated (lesson #16):**
+- cwd is a sandbox OUTSIDE this repo → no project `CLAUDE.md`.
+- `CLAUDE_CONFIG_DIR` points at a throwaway config dir → no user memory, no skills, no global
+  `CLAUDE.md`. (The prior demo leaked four of seven invariants through inherited instructions;
+  this cuts that channel, not just documents it.)
+- The kit arrives as an installed TARBALL from a fresh `npm pack`; `verify:fresh` gates the
+  build that gets packed (guard #1's designed purpose — the original demo measured a 15h-stale
+  dist and was voided).
+- The MCP server is the tarball's own bin over stdio, never `npx` against the npm registry
+  (which would fetch the published version, not the merged one).
+- The task prompt (verbatim below) states product requirements only — no element names, no
+  event names, no import paths, no API names. It may name the package and the MCP, which a
+  real consumer knows. Residual bias to state in the result: the prompt says a mock facility
+  exists (a consumer might not know that), and the builder model (opus) matches the reference
+  builder so the seat, not the model, is compared.
+
+**The builder's task prompt, verbatim:**
+
+> Build a small web app: a customer-support chat widget docked on a product page.
+> Requirements: a fake product landing page; a floating launcher button in a corner that
+> opens/closes a chat panel; the visitor types a message and submits; the reply STREAMS in
+> incrementally; multiple turns work and earlier turns stay intact. Vanilla TypeScript + Vite,
+> no framework. Use the `@kitn.ai/ui` package already installed in this directory — it ships
+> web components for chat UIs. Its `kai` MCP server is configured for you: use it to learn
+> what the package provides and how to use it. Replies should come from a local dev endpoint
+> that streams a mocked response; the package ships facilities for mocking — discover them.
+> Do not fetch any remote docs or read the package's source on npm/GitHub; work from the MCP
+> and what is installed. When done: the app must build (`npm run build`) and run
+> (`npm run dev`), and write NOTES.md recording every question you could not answer from the
+> MCP and where you had to guess.
+
+**Diff protocol:** a separate comparer agent reads both apps and classifies each divergence:
+teaching gap (the MCP/docs never say it) · builder error (taught but missed) · acceptable
+variation. NOTES.md's own list is first-class input. Gaps are filed as candidates for
+iteration 3, with the four one-liner classes from the original demo checked explicitly:
+registration import, TS interface names, event payload shapes, discovery/index.
+
 ## Run ledger
 
 - Tasks 1–3 (W1, one stream): delivered complete on first report; verified PASS by an
