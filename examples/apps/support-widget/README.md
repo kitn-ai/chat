@@ -77,6 +77,20 @@ the owner's live-provider validation happened outside this conversation and are
 recorded in the run ledger of
 [`docs/superpowers/plans/2026-08-19-rung-1-support-widget.md`](../../../docs/superpowers/plans/2026-08-19-rung-1-support-widget.md).
 
+Read it as an INSIDER build. The implementer was pointed straight at repo
+internals — the vanilla starter, the openrouter-spike's proxy, the scaffolder's
+`docked-widget` placement CSS, the repo's own contract docs — as the conversation
+below shows. So this is the verified reference implementation of the
+docked-widget composition, and evidence that the components compose. It is
+deliberately NOT evidence of what the kit's MCP and public docs teach somebody
+who has never seen this repository.
+
+That measurement is a separate exercise: an MCP-only rebuild, where a fresh agent
+in a sandbox gets the installed package and the `kai` MCP and nothing else, and
+its output is diffed against this reference. Every divergence is filed as a
+teaching gap. Ladder policy is that app code goes through the front door only
+from later rungs; repo plumbing stays insider.
+
 ### The generated brief (`.superpowers/sdd/2026-08-19-rung-1/task-1-brief.md`, gitignored)
 
 ````markdown
