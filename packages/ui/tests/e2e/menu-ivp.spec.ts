@@ -142,7 +142,28 @@ test.describe('kai-menu web component IVP', () => {
     await expect(page.getByText('Actions', { exact: true })).toBeVisible();
     await expect(page.getByRole('menuitem', { name: /Add files or photos/ })).toBeVisible();
     await expect(page.getByRole('menuitem', { name: /Add from GitHub/ })).toBeVisible();
-    await expect(page.getByText('⌘U')).toBeVisible();
+
+    // The shortcut, asserted STRUCTURALLY. <kai-menu> renders `shortcut: 'Mod+U'`
+    // through <Kbd>, which emits one `part="key"` cap PER TOKEN with a separator
+    // between them — so no single element has the text "⌘U", which is why the old
+    // flattened `getByText('⌘U')` assertion here went stale while the identical one
+    // at the top of this file stayed green (that story hard-codes a literal ⌘U span
+    // and never touches Kbd). Going through the exposed parts asserts the caps the
+    // component actually contracts to render, rather than a concatenation that
+    // re-breaks on the next markup change.
+    //
+    // The MODIFIER GLYPH IS DERIVED, NOT TYPED: `Mod` resolves at render time from
+    // navigator.platform — ⌘ on mac, `Ctrl` everywhere else — so hard-coding ⌘ here
+    // would pass on a developer's mac and fail on CI's Linux runner. Ask the browser
+    // under test the same question the component asks.
+    const isMac = await page.evaluate(() => {
+      const nav = navigator as Navigator & { userAgentData?: { platform?: string } };
+      return /mac/i.test(nav.userAgentData?.platform ?? nav.platform ?? '');
+    });
+    const shortcut = page.getByRole('menuitem', { name: /Add files or photos/ })
+      .locator('[part="shortcut"]');
+    await expect(shortcut).toBeVisible();
+    await expect(shortcut.locator('[part="key"]')).toHaveText([isMac ? '⌘' : 'Ctrl', 'U']);
 
     // Checkbox item starts checked.
     const webSearch = page.getByRole('menuitemcheckbox', { name: /Web search/ });
