@@ -92,14 +92,38 @@ const DATED = /^(\d{4}-\d{2}-\d{2})-/;
 
 // A comparison against a number, in either direction and either notation.
 const COMPARISON = /(?:[<>]=?|[≤≥])\s*~?\s*\d/;
-// A budget phrase near a number, in BOTH orders -- "under 6000 bytes" and "the
-// 12.5 MiB ceiling" are the same claim, and only having the first cost this
-// guard a self-test case. `\b` on every word so `unlimited` and `delimiter` do
-// not read as `limit`. The trailing form takes only the NOUNS: a number
-// followed by "under" is ordinary English.
-const BUDGET_BEFORE =
-  /\b(?:budget|ceiling|cap|quota|threshold|limit|at most|no more than|fewer than|less than|greater than|under|below|beneath|over|above|beyond|within|max|maximum|min|minimum)\b[^.]{0,40}?\d/i;
-const BUDGET_AFTER = /\d[^.]{0,40}?\b(?:budget|ceiling|cap|quota|threshold|limit)\b/i;
+// A budget phrase with a number IN THE BUDGET POSITION, in BOTH orders --
+// "under 6000 bytes" and "the 12.5 MiB ceiling" are the same claim, and only
+// having the first cost this guard a self-test case. `\b` on every word so
+// `unlimited` and `delimiter` do not read as `limit`. The trailing form takes
+// only the NOUNS: a number followed by "under" is ordinary English.
+//
+// ADJACENCY IS THE WHOLE PRECISION STORY, and it was learned the expensive way.
+// Both patterns used to allow up to 40 arbitrary non-period characters between
+// the budget word and the digit, which is not "near" -- it is most of a
+// sentence. On this guard's FIRST LIVE FIRING it turned required CI red on
+//
+//   Owner-approved 2026-08-19. Question under test: after iteration 1's fixes
+//
+// matching `under test: after iteration 1`: a budget word and a digit with 23
+// characters of unrelated prose in between, and no threshold anywhere on the
+// line. A guard that cries wolf on its debut is worse than no guard, because the
+// next red gets waived on sight.
+//
+// So only whitespace and a CLOSED SET of qualifiers may sit between the word and
+// the number ("under the 12.5", "a maximum of 10", "under roughly 200 KB"), and
+// on the trailing side the number may be followed by at most one unit word
+// ("12.5 MiB ceiling", "3 second budget"). Prose cannot sneak through a closed
+// list, which is the property the character budget never had.
+const BUDGET_QUALIFIER = '(?:\\s+(?:the|a|an|of|about|roughly|approximately|around|some|just|only|say|to)\\b)*';
+const BUDGET_BEFORE = new RegExp(
+  '\\b(?:budget|ceiling|cap|quota|threshold|limit|at most|no more than|fewer than|less than|' +
+    'greater than|under|below|beneath|over|above|beyond|within|max|maximum|min|minimum)\\b' +
+    BUDGET_QUALIFIER +
+    '\\s*(?:~|≈)?\\s*\\d',
+  'i',
+);
+const BUDGET_AFTER = /\d[\d.,]*\s*(?:[A-Za-z%]+\s+)?(?:budget|ceiling|cap|quota|threshold|limit)\b/i;
 
 const BACKTICK_COMMAND = /`[^`]*\w[^`]*`/;
 const RATCHET = /ratchet, not a target/;
@@ -189,6 +213,25 @@ const CASES = [
     text: 'The transport is unlimited in the 2 directions it multiplexes.' },
   { name: 'a section reference is not a threshold', expect: false,
     text: 'See docs/coupling-map.md 4 for the derived lists.' },
+  // -- THE FALSE POSITIVE THIS GUARD'S FIRST LIVE FIRING PRODUCED --
+  // A budget WORD and a digit in the same sentence, with neither related to the
+  // other. These are the regression cases: a guard that is loud about nothing
+  // gets its next real finding waived on sight.
+  { name: 'the exact line that turned CI red: "under test" + a later digit', expect: false,
+    text: "Owner-approved 2026-08-19. Question under test: after iteration 1's fixes, can an outsider" },
+  { name: 'its minimal reduction, so the case survives the doc being edited', expect: false,
+    text: 'Question under test: after iteration 1 fixes' },
+  { name: '"under review" with a numbered iteration later in the line', expect: false,
+    text: 'The work is under review; iteration 2 lands Friday.' },
+  // -- and the other direction: adjacency must not have cost real detection --
+  { name: 'STILL FIRES: a bare byte budget, the number adjacent', expect: true,
+    text: 'The generated file must stay under 6000 bytes.' },
+  { name: 'STILL FIRES: an article between the word and the number', expect: true,
+    text: 'Total unpacked size must stay under the 12.5 MiB ceiling.' },
+  { name: 'STILL FIRES: a hedge between the word and the number', expect: true,
+    text: 'Keep it under roughly 200 KB.' },
+  { name: 'STILL FIRES: "a maximum of 10"', expect: true,
+    text: 'A maximum of 10 retries before it gives up.' },
 ];
 
 // Imported for its analyzers (a test, or a probe) rather than invoked? Then
