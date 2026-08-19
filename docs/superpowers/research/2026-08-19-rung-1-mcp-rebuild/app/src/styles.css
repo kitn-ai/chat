@@ -1,0 +1,556 @@
+/* ───────────────────────────────────────────────────────────────────────────
+   Aurora demo page + support-widget dock.
+
+   The `--kai-*` block below is the brand override emitted by the kai MCP
+   `theme` tool for #0f766e. Those custom properties pierce the shadow DOM of
+   every kai-* element via var() fallback chains, so setting them on :root
+   rebrands the whole widget. The compiled token defaults they fall back to are
+   imported from '@kitn.ai/ui/theme.tokens.css' in src/main.ts.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --kai-color-primary: #0f766e;
+  --kai-color-primary-foreground: #ffffff;
+  --kai-color-ring: #0f766e;
+  --kai-color-accent: #e2efee;
+  --kai-color-accent-foreground: #000000;
+
+  /* page tokens (mine, not the kit's) */
+  --ink: #0b1220;
+  --ink-soft: #4b5563;
+  --line: #e5e7eb;
+  --paper: #ffffff;
+  --paper-tint: #f6f8f8;
+  --brand: #0f766e;
+  --radius: 14px;
+  --shadow-lg: 0 12px 32px rgb(11 18 32 / 14%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--paper);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.5em;
+}
+
+a {
+  color: inherit;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ── header ──────────────────────────────────────────────────────────────── */
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  padding: 0.9rem clamp(1rem, 5vw, 4rem);
+  background: rgb(255 255 255 / 82%);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-weight: 700;
+  font-size: 1.1rem;
+  letter-spacing: -0.03em;
+  text-decoration: none;
+}
+
+.brand-mark {
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 999px;
+  background: radial-gradient(circle at 32% 30%, #fbe7a1, var(--brand) 72%);
+}
+
+.site-nav {
+  display: flex;
+  gap: 1.5rem;
+  margin-inline-end: auto;
+  font-size: 0.94rem;
+  color: var(--ink-soft);
+}
+
+.site-nav a {
+  text-decoration: none;
+}
+
+.site-nav a:hover {
+  color: var(--brand);
+}
+
+@media (max-width: 720px) {
+  .site-nav {
+    display: none;
+  }
+
+  .site-header {
+    justify-content: space-between;
+  }
+}
+
+/* ── buttons ─────────────────────────────────────────────────────────────── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.7rem 1.25rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.95rem;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 120ms ease, background-color 120ms ease;
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn-primary {
+  background: var(--brand);
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: #115e57;
+}
+
+.btn-ghost {
+  border-color: var(--line);
+  background: var(--paper);
+}
+
+.btn-ghost:hover {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+
+.btn-sm {
+  padding: 0.5rem 0.95rem;
+  font-size: 0.88rem;
+}
+
+.btn-block {
+  width: 100%;
+}
+
+/* ── sections ────────────────────────────────────────────────────────────── */
+
+main {
+  max-width: 1120px;
+  margin-inline: auto;
+  padding: 0 clamp(1rem, 5vw, 2rem);
+}
+
+section {
+  padding: clamp(3rem, 8vw, 6rem) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+section:last-of-type {
+  border-bottom: 0;
+}
+
+section > h2 {
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  max-width: 22ch;
+  margin-bottom: 2rem;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 3rem;
+  align-items: center;
+}
+
+@media (max-width: 860px) {
+  .hero {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-art {
+    display: none;
+  }
+}
+
+.eyebrow {
+  display: inline-block;
+  margin: 0 0 1rem;
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  background: var(--kai-color-accent);
+  color: #0b4f49;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.hero h1 {
+  font-size: clamp(2.2rem, 6vw, 3.6rem);
+}
+
+.lede {
+  font-size: clamp(1.02rem, 1.6vw, 1.2rem);
+  color: var(--ink-soft);
+  max-width: 46ch;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 2rem 0 1rem;
+}
+
+.hero-note {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--ink-soft);
+}
+
+/* a lamp, drawn in CSS, because a demo page needs something to look at */
+.hero-art {
+  display: grid;
+  place-items: center;
+  min-height: 340px;
+}
+
+.lamp {
+  position: relative;
+  width: 220px;
+  height: 300px;
+}
+
+.lamp-glow {
+  position: absolute;
+  inset-inline-start: -30px;
+  top: 42px;
+  width: 240px;
+  height: 240px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgb(251 231 161 / 85%), transparent 68%);
+  filter: blur(4px);
+}
+
+.lamp-head {
+  position: absolute;
+  inset-inline-start: 12px;
+  top: 26px;
+  width: 150px;
+  height: 26px;
+  border-radius: 999px 999px 6px 6px;
+  background: linear-gradient(160deg, #1f2937, #0b1220);
+  transform: rotate(-12deg);
+}
+
+.lamp-arm {
+  position: absolute;
+  inset-inline-start: 140px;
+  top: 34px;
+  width: 8px;
+  height: 220px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #374151, #0b1220);
+}
+
+.lamp-base {
+  position: absolute;
+  inset-inline-start: 92px;
+  bottom: 8px;
+  width: 108px;
+  height: 14px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #374151, #0b1220);
+}
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.25rem;
+}
+
+.card {
+  padding: 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper-tint);
+}
+
+.card h3 {
+  font-size: 1.08rem;
+}
+
+.card p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+}
+
+.spec-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 0 2.5rem;
+  margin: 0;
+}
+
+.spec-list > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.spec-list dt {
+  font-weight: 600;
+}
+
+.spec-list dd {
+  margin: 0;
+  color: var(--ink-soft);
+  text-align: end;
+}
+
+.pricing {
+  display: grid;
+  place-items: center;
+}
+
+.price-card {
+  width: min(420px, 100%);
+  padding: 2rem;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+}
+
+.price-card h2 {
+  margin-bottom: 0.25rem;
+  font-size: 1.35rem;
+}
+
+.price {
+  margin: 0 0 1.25rem;
+  font-size: 2.6rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.price-card ul {
+  margin: 0 0 1.5rem;
+  padding: 0;
+  list-style: none;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+  text-align: start;
+}
+
+.price-card li {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.price-note {
+  margin: 0.9rem 0 0;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+}
+
+.faq details {
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.faq summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.faq p {
+  margin: 0.6rem 0 0;
+  color: var(--ink-soft);
+  max-width: 62ch;
+}
+
+.site-footer {
+  padding: 2.5rem clamp(1rem, 5vw, 4rem) 7rem;
+  border-top: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 0.86rem;
+}
+
+/* ── docked support widget ───────────────────────────────────────────────── */
+
+.kai-dock {
+  position: fixed;
+  inset-block-end: 1.5rem;
+  inset-inline-end: 1.5rem;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.85rem;
+  pointer-events: none;
+}
+
+.kai-dock > * {
+  pointer-events: auto;
+}
+
+.kai-panel {
+  display: flex;
+  flex-direction: column;
+  width: 380px;
+  height: 600px;
+  max-width: calc(100vw - 3rem);
+  max-height: calc(100dvh - 7.5rem);
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--paper);
+  box-shadow: 0 12px 32px var(--kai-shadow-color, rgb(0 0 0 / 18%));
+
+  /* closed state — the panel stays in the DOM so the thread survives a toggle */
+  opacity: 0;
+  transform: translateY(12px) scale(0.98);
+  transform-origin: bottom right;
+  visibility: hidden;
+  transition: opacity 160ms ease, transform 160ms ease, visibility 0s linear 160ms;
+}
+
+.kai-panel.is-open {
+  opacity: 1;
+  transform: none;
+  visibility: visible;
+  transition: opacity 160ms ease, transform 160ms ease, visibility 0s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kai-panel {
+    transition: none;
+  }
+}
+
+#support-chat {
+  flex: 1;
+  min-height: 0;
+}
+
+.kai-launcher {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--kai-color-primary, #0f766e);
+  color: var(--kai-color-primary-foreground, #fff);
+  box-shadow: 0 8px 24px rgb(15 118 110 / 38%);
+  cursor: pointer;
+  transition: transform 140ms ease, box-shadow 140ms ease;
+}
+
+.kai-launcher:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgb(15 118 110 / 45%);
+}
+
+.kai-launcher:focus-visible {
+  outline: 3px solid var(--kai-color-ring, #0f766e);
+  outline-offset: 3px;
+}
+
+.kai-launcher-icon {
+  grid-area: 1 / 1;
+  display: grid;
+  place-items: center;
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.kai-launcher-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.kai-launcher-close {
+  opacity: 0;
+  transform: rotate(-90deg) scale(0.7);
+}
+
+.kai-launcher[aria-expanded="true"] .kai-launcher-open {
+  opacity: 0;
+  transform: rotate(90deg) scale(0.7);
+}
+
+.kai-launcher[aria-expanded="true"] .kai-launcher-close {
+  opacity: 1;
+  transform: none;
+}
+
+/* unread dot, shown when a reply lands while the panel is closed */
+.kai-launcher[data-unread="true"]::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  inset-inline-end: 4px;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: #f97316;
+  border: 2px solid var(--paper);
+}
+
+@media (max-width: 480px) {
+  .kai-dock {
+    inset-inline: 0.75rem;
+    inset-block-end: 0.75rem;
+  }
+
+  .kai-panel {
+    width: 100%;
+    max-height: calc(100dvh - 6rem);
+  }
+}

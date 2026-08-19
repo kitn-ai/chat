@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Aurora Lamp — light that knows when you're working</title>
+    <meta
+      name="description"
+      content="The Aurora desk lamp tunes its colour temperature to your calendar, your daylight and your eyes."
+    />
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <!-- ─────────────────────────── fake product landing page ─────────────── -->
+    <header class="site-header">
+      <a class="brand" href="#top">
+        <span class="brand-mark" aria-hidden="true"></span>
+        Aurora
+      </a>
+      <nav class="site-nav">
+        <a href="#features">Features</a>
+        <a href="#specs">Specs</a>
+        <a href="#pricing">Pricing</a>
+        <a href="#faq">FAQ</a>
+      </nav>
+      <a class="btn btn-primary btn-sm" href="#pricing">Buy — $189</a>
+    </header>
+
+    <main id="top">
+      <section id="hero" class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">New · Aurora Lamp 2</p>
+          <h1>Light that knows when you're working.</h1>
+          <p class="lede">
+            Aurora reads the daylight in your room and the shape of your day, then shifts
+            its colour temperature so your eyes never have to argue with the sun.
+          </p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="#pricing">Buy — $189</a>
+            <a class="btn btn-ghost" href="#features">See how it works</a>
+          </div>
+          <p class="hero-note">Free returns for 60 days · Ships in 2–3 business days</p>
+        </div>
+        <div class="hero-art" aria-hidden="true">
+          <div class="lamp">
+            <div class="lamp-glow"></div>
+            <div class="lamp-head"></div>
+            <div class="lamp-arm"></div>
+            <div class="lamp-base"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="features" class="features">
+        <h2>Three things it does that a lamp shouldn't be able to do</h2>
+        <div class="feature-grid">
+          <article class="card">
+            <h3>Daylight matching</h3>
+            <p>
+              An ambient sensor samples the room 40 times a second and blends the LED
+              array to match — 2200K at dusk, 5600K at noon, no visible step between.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Calendar aware</h3>
+            <p>
+              Connect a calendar and Aurora warms up ten minutes before your last meeting
+              ends, so the room is already winding down when you are.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Actually silent</h3>
+            <p>
+              Passive cooling and a driver that doesn't whine at low brightness. No fan,
+              no coil buzz, no flicker at any dimming level.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section id="specs" class="specs">
+        <h2>Specifications</h2>
+        <dl class="spec-list">
+          <div><dt>Colour temperature</dt><dd>2200K – 6500K, continuously variable</dd></div>
+          <div><dt>Brightness</dt><dd>60 – 1100 lumens, flicker-free to 0.1%</dd></div>
+          <div><dt>Colour accuracy</dt><dd>CRI 97, R9 &gt; 90</dd></div>
+          <div><dt>Power</dt><dd>USB-C PD, 18W max, 2m braided cable</dd></div>
+          <div><dt>Materials</dt><dd>Anodised aluminium, recycled zinc base</dd></div>
+          <div><dt>Reach</dt><dd>54cm arm, 340° rotation at the head</dd></div>
+        </dl>
+      </section>
+
+      <section id="pricing" class="pricing">
+        <div class="price-card">
+          <h2>Aurora Lamp 2</h2>
+          <p class="price">$189</p>
+          <ul>
+            <li>Lamp, USB-C PD adapter, 2m cable</li>
+            <li>60-day returns, 3-year warranty</li>
+            <li>Free firmware updates for the life of the lamp</li>
+          </ul>
+          <a class="btn btn-primary btn-block" href="#pricing">Add to cart</a>
+          <p class="price-note">Ships from Rotterdam and Denver.</p>
+        </div>
+      </section>
+
+      <section id="faq" class="faq">
+        <h2>Questions people actually ask</h2>
+        <details>
+          <summary>Does it need the app to work?</summary>
+          <p>
+            No. Everything on the lamp — dimming, warmth, the daylight sensor — works
+            with the dial alone. The app only adds calendar sync and schedules.
+          </p>
+        </details>
+        <details>
+          <summary>Can I mount it to a desk edge?</summary>
+          <p>A clamp mount is included in the box and fits desktops up to 62mm thick.</p>
+        </details>
+        <details>
+          <summary>What if it arrives damaged?</summary>
+          <p>
+            Tell support within 60 days and a replacement ships the same day, before the
+            damaged one goes back.
+          </p>
+        </details>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>© 2026 Aurora Lighting BV — a fictional company for a demo page.</p>
+    </footer>
+
+    <!-- ─────────────────────────── docked support widget ─────────────────── -->
+    <!--
+      The launcher and the panel are siblings in a fixed-position dock. The panel is
+      never removed from the DOM when closed (it is hidden with CSS + `inert`), so the
+      <kai-chat> element keeps its rendered thread and earlier turns survive an
+      open/close cycle. `messages` itself lives in src/main.ts either way.
+    -->
+    <div class="kai-dock">
+      <section
+        id="support-panel"
+        class="kai-panel"
+        role="dialog"
+        aria-label="Aurora support chat"
+        aria-modal="false"
+        inert
+      >
+        <kai-chat
+          id="support-chat"
+          chat-title="Aurora Support"
+          placeholder="Ask about shipping, returns, setup…"
+          suggestion-mode="submit"
+          prose-size="sm"
+          theme="light"
+        ></kai-chat>
+      </section>
+
+      <button
+        id="support-launcher"
+        class="kai-launcher"
+        type="button"
+        aria-expanded="false"
+        aria-controls="support-panel"
+      >
+        <span class="kai-launcher-icon kai-launcher-open" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+          </svg>
+        </span>
+        <span class="kai-launcher-icon kai-launcher-close" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 6 6 18M6 6l12 12" />
+          </svg>
+        </span>
+        <span class="sr-only" id="support-launcher-label">Open support chat</span>
+      </button>
+    </div>
+
+    <!--
+      The logic is a real module, not an inline script: tsconfig.json is scoped to
+      src/ + server/, so anything inline would be type-checked by nothing at all.
+    -->
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

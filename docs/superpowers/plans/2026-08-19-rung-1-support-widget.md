@@ -101,6 +101,26 @@ app in a clean room, diff against the insider reference, file divergences as tea
 > (`npm run dev`), and write NOTES.md recording every question you could not answer from the
 > MCP and where you had to guess.
 
+**Protocol amendments from the harness rehearsal (2026-08-19):**
+- `--bare` breaks auth on this box (it refuses OAuth/keychain); substituted
+  `--setting-sources ""` + `--disable-slash-commands` + the throwaway `CLAUDE_CONFIG_DIR`,
+  which together cover the same channels. Rehearsed: the builder confirmed a clean context.
+- The owner's OAuth credential is copied to a 0600 file under the throwaway config dir for the
+  run and trap-deleted on exit; disclosed to the owner before launch.
+- **The tarball itself is a teaching channel**: it ships README.md, llms.txt, llms-full.txt and
+  326 source files, from which three of the four watched one-liner classes are answerable
+  without any MCP call. The sandbox's INSTALLED copy is stripped (src TS/TSX/CSS deleted
+  keeping the exports-reachable JSON; README/llms removed) to match the original demo's
+  conditions. Bias direction: this makes the run STRICTER than a real consumer's, so every
+  found gap is checked against README/llms by the comparer before being filed as a product
+  defect. The MCP positive control and module-resolution probes re-run post-strip.
+- Residual channels, stated: `Bash(ls *)`/`Bash(cat *)` under dontAsk lets the builder read
+  outside its cwd (ops files moved to a sibling dir to shrink the surface; the transcript makes
+  any snooping auditable). `--max-turns 200` accepted-but-undocumented on CLI 2.1.235.
+- Recorded in passing, unfixed (candidate A confirmed empirically): a wrong argument key to a
+  kai MCP tool returns the 80-element index with no error; `additionalProperties: false` is
+  declared and not enforced.
+
 **Diff protocol:** a separate comparer agent reads both apps and classifies each divergence:
 teaching gap (the MCP/docs never say it) · builder error (taught but missed) · acceptable
 variation. NOTES.md's own list is first-class input. Gaps are filed as candidates for
@@ -124,3 +144,15 @@ registration import, TS interface names, event payload shapes, discovery/index.
 - Committed 48e2c6c1 + 7a5f530e.
 - Task 6: owner validated the app live on 2026-08-19 against BOTH the mock service and a real
   OpenRouter provider. The wire path and encode path work against a live model.
+- **The MCP-only rebuild ran 2026-08-19** (79 turns, 830s, $5.60, 7 MCP calls): a clean-room
+  agent produced a working, independently-verified widget from the MCP alone. **Iteration 1
+  passed its held-open acceptance measurement** — all four watched one-liner classes answered
+  and used correctly on first pass; none of the original demo's failures recurred (two were
+  not exercisable at this rung, re-measure at rung 3). Full analysis:
+  `docs/superpowers/research/2026-08-19-rung-1-mcp-rebuild/findings.md`. Headline new
+  findings: an S1 error-path defect taught by the scaffold's own emitted comment (abort's
+  reason is discarded on text-only turns → blank assistant bubble), the `loading`/reflected-
+  boolean read-back defect (mechanism traced; `kai-switch` fixed the pattern, nobody
+  generalized it), the missing launcher/dock affordance (both insider and outsider hand-rolled
+  it), and the stream-lifecycle teaching hole (every costly gap was in state/wire, where
+  component_reference has no answer surface).
