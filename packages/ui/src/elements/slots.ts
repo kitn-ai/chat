@@ -506,6 +506,18 @@ export const PROMPT_DOCK_PARTS: PartDef[] = [
   },
 ];
 
+/** Slots + styleable `::part`s of `<kai-dock>` (the floating corner launcher — not
+ *  `<kai-prompt-dock>`, which is an in-flow tray around a prompt input). */
+export const DOCK_SLOTS: SlotDef[] = [
+  { name: 'panel',         mode: 'replace', part: true, doc: 'The panel body. ANY element: a `<kai-chat>`, a form, your own component. The dock never reads or types it, and the default slot is the same region.' },
+  { name: 'launcher',      mode: 'inject',  doc: 'Content inside the built-in button while CLOSED; defaults to a chat glyph. Text works as well as an icon: the button keeps its height and grows sideways into a pill, so a label like "Support" is not clipped. The BUTTON is never slotted away, because it owns aria-expanded, aria-controls, the toggle wiring and the focus return.' },
+  { name: 'launcher-open', mode: 'inject',  doc: 'Content inside the button while OPEN; defaults to a ✕. Fill only `launcher` and that glyph stays while open rather than morphing into a built-in that clashes with it.' },
+];
+export const DOCK_PARTS: PartDef[] = [
+  { name: 'launcher', doc: 'The launcher button pinned to the corner: a disc by default, a pill once you slot a text label. Restyle its surface or shadow; --kai-dock-launcher-size sets its height and its minimum width.', recipe: 'kai-dock::part(launcher) { background: var(--color-info) }' },
+  { name: 'badge', doc: 'The unread dot on the launcher, rendered only while closed and only when `unread` is set. Restyle its color or size.', recipe: 'kai-dock::part(badge) { background: var(--color-success) }' },
+];
+
 /** Styleable `::part`s of `<kai-segmented>`. */
 export const SEGMENTED_PARTS: PartDef[] = [
   { name: 'track', doc: 'The segmented track (the pill container holding the segments). Restyle its background, radius, or padding.', recipe: 'kai-segmented::part(track) { border-radius: 9999px }' },
@@ -696,6 +708,7 @@ export const ELEMENT_COMPOSITION: Record<string, ElementComposition> = {
   'kai-pane-group': { parts: PANE_GROUP_PARTS, children: 'Content shown for every tab. Use it INSTEAD of the per-tab `slot="<tab id>"` seams when you swap the content yourself.' },
   'kai-agent-card': { parts: AGENT_CARD_PARTS },
   'kai-dialog': { slots: DIALOG_SLOTS, parts: DIALOG_PARTS, children: 'The dialog body, between the `header` and `footer` slots.' },
+  'kai-dock': { slots: DOCK_SLOTS, parts: DOCK_PARTS, children: 'The panel body, the same region as `slot="panel"`.' },
   'kai-input': { slots: INPUT_SLOTS, parts: INPUT_PARTS },
   'kai-search': { parts: SEARCH_PARTS },
   'kai-kbd': { parts: KBD_PARTS, children: 'Literal key text, when you are not using the `keys` prop to render key caps.' },

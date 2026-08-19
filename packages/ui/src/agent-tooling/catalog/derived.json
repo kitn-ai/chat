@@ -1586,6 +1586,91 @@
       "tokens": []
     },
     {
+      "tag": "kai-dock",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "open",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "defaultOpen",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "position",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "label",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "openLabel",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "closeLabel",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "unread",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "disabled",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "focusOnOpen",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-open-change"
+      ],
+      "methods": [
+        "show",
+        "hide",
+        "toggle",
+        "focus"
+      ],
+      "parts": [
+        "launcher",
+        "badge",
+        "panel"
+      ],
+      "composedFrom": [
+        "Dock",
+        "DockCloseGlyph",
+        "DockLauncherGlyph"
+      ],
+      "tokens": []
+    },
+    {
       "tag": "kai-editable-label",
       "props": [
         {

@@ -69,6 +69,8 @@ export { EditableLabel } from './ui/editable-label';
 export type { EditableLabelProps } from './ui/editable-label';
 export { Dialog } from './ui/dialog';
 export type { DialogProps, DialogController } from './ui/dialog';
+export { Dock, DockLauncherGlyph, DockCloseGlyph } from './ui/dock';
+export type { DockProps, DockController, DockPosition, DockFocusOnOpen } from './ui/dock';
 export { Popover } from './ui/popover';
 export type { PopoverProps, PopoverController } from './ui/popover';
 export { Nav } from './ui/nav';

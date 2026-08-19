@@ -821,6 +821,47 @@ jobs:
       - name: Hover-card tab-stop guard (built bundle)
         run: pnpm --filter @kitn.ai/ui exec playwright test --config playwright.hovercard.config.ts
 
+      # The <kai-command> palette: filtering, roving activeId, and which row
+      # Enter actually selects. It had a full Playwright suite and an npm script
+      # (`test:command-ivp`) that NOTHING invoked -- the same "a guard nobody
+      # wires into CI is worse than no guard" hole the two steps above were
+      # written to close, except this one already had the guard.
+      #
+      # UNLIKE the two steps above, this one DOES need Storybook: the spec drives
+      # the real story same-origin on :6006, and the config boots it itself
+      # (`reuseExistingServer`, 120s ceiling). That is deliberate for this
+      # element rather than an oversight to fix -- what is under test is command
+      # filtering and keyboard selection, which the story exercises directly,
+      # not shadow-root PAINT, which is the specific thing Storybook's
+      # document-level Tailwind would mask and which is why the focus-ring and
+      # hover-card guards run bare. Cold (no server up, Playwright booting its
+      # own) the whole step measured 17.4s locally; warm, under 5s.
+      #
+      - name: Command-palette IVP (kai-command, storybook)
+        run: pnpm --filter @kitn.ai/ui run test:command-ivp
+
+      # <kai-menu> and the Solid cascading-menu primitives under it: submenu
+      # open-on-hover, ArrowRight/ArrowLeft traversal into and out of a sub, the
+      # in-place checkbox toggle, and which id `kai-select` actually carries.
+      # Same story as the step above — a full suite plus a `test:menu-ivp` script
+      # that nothing invoked.
+      #
+      # Storybook-dependent for the same reason and with the same justification:
+      # what is under test is keyboard navigation and SELECTION, which the story
+      # exercises directly, not shadow-root paint, which is the one thing
+      # Storybook's document-level Tailwind would mask (that is why the focus-ring
+      # and hover-card guards run bare instead). ~30s cold, ~10s warm.
+      #
+      # It was RED when first run — 6/7, on a stale assertion rather than a
+      # product defect: it expected `getByText('⌘U')`, but <kai-menu> renders
+      # shortcuts through <Kbd>, which emits one `part="key"` cap per token, so no
+      # single element carries that text. The repaired assertion walks the parts
+      # and DERIVES the modifier glyph from the browser under test, because `Mod`
+      # resolves to ⌘ on mac and `Ctrl` on this Linux runner -- hard-coding the mac
+      # glyph would have been green on every developer's machine and red here.
+      - name: Menu IVP (kai-menu + cascading primitives, storybook)
+        run: pnpm --filter @kitn.ai/ui run test:menu-ivp
+
   # The storybook browser project runs ~112 *.stories.tsx as chromium browser
   # tests (smoke render + play functions + axe a11y), split across 4 matrix jobs.
   # vitest runs each invocation through ONE long-lived chromium process, which

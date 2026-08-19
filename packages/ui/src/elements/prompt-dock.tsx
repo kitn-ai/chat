@@ -23,7 +23,8 @@ type SlotName = (typeof SLOT_NAMES)[number];
 
 /**
  * `<kai-prompt-dock>` — a recessed tray that frames a prompt input and can extend
- * with optional "lip" regions above and/or below it. The input is the raised card
+ * with optional "lip" regions above and/or below it. It sits in the page flow and
+ * launches nothing; the floating corner launcher is `<kai-dock>`. The input is the raised card
  * that floats on the tray; the lips sit in a slightly darker recessed band sharing
  * the tray's rounding, so the whole thing reads as one cohesive control.
  *
