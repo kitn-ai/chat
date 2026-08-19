@@ -84,6 +84,180 @@ describe('createAssistantStream', () => {
     expect(tool.errorText).toBeUndefined();
   });
 
+  /* ── abort() must not DISCARD its reason ─────────────────────────────────
+   * The headline case is the one with no tool part at all: a text-only turn,
+   * which is every turn of a text-only support widget. `abort(reason)` used to
+   * map over `parts` looking for a tool to stamp, find none, and drop the
+   * string on the floor -- so a failed request rendered an EMPTY assistant
+   * bubble while the consumer believed it had reported the failure. That is a
+   * silent drop on the error path. The reason now lands in the thread. */
+
+  it('abort(reason) on a TEXT-ONLY turn puts the reason in the thread instead of dropping it', () => {
+    const sink = makeSink();
+    const s = createAssistantStream(sink.set, { id: 'a1' });
+    s.abort('Support is unavailable (HTTP 502).');
+    const parts = sink.get()[0].parts;
+    expect(parts).toEqual([{ type: 'text', text: 'Support is unavailable (HTTP 502).' }]);
+  });
+
+  it('abort(reason) keeps the partial text and does NOT glue the reason onto it', () => {
+    const sink = makeSink();
+    const s = createAssistantStream(sink.set, { id: 'a1' });
+    s.appendText('Let me check that');
+    s.abort('Connection lost.');
+    const parts = sink.get()[0].parts;
+    // Two parts, not one concatenated blob: the model's half-sentence stays the
+    // model's, and the failure reads as its own thing.
+    expect(parts).toEqual([
+      { type: 'text', text: 'Let me check that' },
+      { type: 'text', text: 'Connection lost.' },
+    ]);
+  });
+
+  it('abort(reason) does NOT double-stamp: an in-flight tool carries the reason, no text part is added', () => {
+    const sink = makeSink();
+    const s = createAssistantStream(sink.set, { id: 'a1' });
+    s.appendText('Searching. ');
+    s.upsertTool('t1', { type: 'search', state: 'input-streaming' });
+    s.abort('network down');
+    const parts = sink.get()[0].parts;
+    expect(parts.map((p) => p.type)).toEqual(['text', 'tool']);
+    const tool = (parts[1] as { tool: { state: string; errorText?: string } }).tool;
+    expect(tool.state).toBe('output-error');
+    expect(tool.errorText).toBe('network down');
+  });
+
+  it('abort(reason) surfaces the reason when every tool part has ALREADY settled', () => {
+    const sink = makeSink();
+    const s = createAssistantStream(sink.set, { id: 'a1' });
+    s.upsertTool('t1', { type: 'search', state: 'output-available', output: { hits: 1 } });
+    s.abort('The answer never arrived.');
+    const parts = sink.get()[0].parts;
+    // The finished tool panel is left alone -- it did finish -- but the turn
+    // still failed, and nothing on the message was able to say so.
+    expect(parts.map((p) => p.type)).toEqual(['tool', 'text']);
+    expect((parts[0] as { tool: { state: string } }).tool.state).toBe('output-available');
+    expect(parts[1]).toEqual({ type: 'text', text: 'The answer never arrived.' });
+  });
+
+  it('abort() with NO reason appends nothing: there is no reason to discard', () => {
+    const sink = makeSink();
+    const s = createAssistantStream(sink.set, { id: 'a1' });
+    s.appendText('partial');
+    s.abort();
+    expect(sink.get()[0].parts).toEqual([{ type: 'text', text: 'partial' }]);
+  });
+
+  it('abort() with an EMPTY reason appends nothing', () => {
+    const sink = makeSink();
+    const s = createAssistantStream(sink.set, { id: 'a1' });
+    s.abort('');
+    expect(sink.get()[0].parts).toEqual([]);
+  });
+
+  /* A WHITESPACE-ONLY reason is the same nothing as an empty one, and it is not
+   * hypothetical: the emitted scaffold passes `err.message`, and an Error can
+   * carry '' or ' '. Appending it would produce an INVISIBLE text part -- a
+   * blank bubble that now also claims a part exists, which is worse than the
+   * defect this whole change is about. */
+  it('abort() with a WHITESPACE-ONLY reason appends nothing', () => {
+    const sink = makeSink();
+    const s = createAssistantStream(sink.set, { id: 'a1' });
+    s.abort('   \n\t ');
+    expect(sink.get()[0].parts).toEqual([]);
+  });
+
+  it('abort(reason) trims the reason it puts in the thread and on a tool', () => {
+    const sink = makeSink();
+    const s = createAssistantStream(sink.set, { id: 'a1' });
+    s.abort('  Connection lost.\n');
+    expect(sink.get()[0].parts).toEqual([{ type: 'text', text: 'Connection lost.' }]);
+
+    const sink2 = makeSink();
+    const s2 = createAssistantStream(sink2.set, { id: 'a2' });
+    s2.upsertTool('t1', { type: 'search', state: 'input-streaming' });
+    s2.abort('  network down\n');
+    const tool = (sink2.get()[0].parts[0] as { tool: { errorText?: string } }).tool;
+    expect(tool.errorText).toBe('network down');
+  });
+
+  it('abort() with a whitespace-only reason stamps a tool with errorText undefined, not blank', () => {
+    const sink = makeSink();
+    const s = createAssistantStream(sink.set, { id: 'a1' });
+    s.upsertTool('t1', { type: 'search', state: 'input-streaming' });
+    s.abort('  ');
+    const tool = (sink.get()[0].parts[0] as { tool: { state: string; errorText?: string } }).tool;
+    expect(tool.state).toBe('output-error');
+    expect(tool.errorText).toBeUndefined();
+  });
+
+  /* A tool that already FAILED on its own knows more than the turn-level reason
+   * does. "search index offline" is the answer to what went wrong; "Connection
+   * lost." is the generic outer symptom. Overwriting the specific with the
+   * generic loses the only information anyone can act on, so a tool already
+   * showing its own error keeps it -- and still counts as carrying the failure,
+   * because the reader can see A failure on that part. */
+  it('abort(reason) does not overwrite a tool that already reported its OWN error', () => {
+    const sink = makeSink();
+    const s = createAssistantStream(sink.set, { id: 'a1' });
+    s.upsertTool('t1', { type: 'search', state: 'output-error', errorText: 'search index offline' });
+    s.abort('Connection lost.');
+    const parts = sink.get()[0].parts;
+    expect(parts.map((p) => p.type)).toEqual(['tool']);
+    const tool = (parts[0] as { tool: { state: string; errorText?: string } }).tool;
+    expect(tool.state).toBe('output-error');
+    expect(tool.errorText).toBe('search index offline');
+  });
+
+  it('abort(reason) DOES fill in a tool that is output-error with no errorText', () => {
+    const sink = makeSink();
+    const s = createAssistantStream(sink.set, { id: 'a1' });
+    s.upsertTool('t1', { type: 'search', state: 'output-error' });
+    s.abort('Connection lost.');
+    const parts = sink.get()[0].parts;
+    // An error panel with nothing in it says no more than a blank bubble does.
+    expect(parts.map((p) => p.type)).toEqual(['tool']);
+    expect((parts[0] as { tool: { errorText?: string } }).tool.errorText).toBe('Connection lost.');
+  });
+
+  it('abort(reason) stamps the in-flight tool and leaves the already-errored one alone', () => {
+    const sink = makeSink();
+    const s = createAssistantStream(sink.set, { id: 'a1' });
+    s.upsertTool('t1', { type: 'search', state: 'output-error', errorText: 'search index offline' });
+    s.upsertTool('t2', { type: 'fetch', state: 'input-streaming' });
+    s.abort('Connection lost.');
+    const parts = sink.get()[0].parts;
+    expect(parts.map((p) => p.type)).toEqual(['tool', 'tool']);
+    expect((parts[0] as { tool: { errorText?: string } }).tool.errorText).toBe('search index offline');
+    expect((parts[1] as { tool: { errorText?: string } }).tool.errorText).toBe('Connection lost.');
+  });
+
+  it('abort(reason) after done() is a no-op: a settled message is never rewritten', () => {
+    const sink = makeSink();
+    const s = createAssistantStream(sink.set, { id: 'a1' });
+    s.appendText('all done');
+    s.done();
+    s.abort('too late to complain');
+    expect(sink.get()[0].parts).toEqual([{ type: 'text', text: 'all done' }]);
+  });
+
+  it('a second abort(reason) does not append the reason twice', () => {
+    const sink = makeSink();
+    const s = createAssistantStream(sink.set, { id: 'a1' });
+    s.abort('gone');
+    s.abort('gone');
+    expect(sink.get()[0].parts).toEqual([{ type: 'text', text: 'gone' }]);
+  });
+
+  it('abort(reason) through onStreamSettled reaches the thread too', () => {
+    const sink = makeSink();
+    let settled = 0;
+    const s = onStreamSettled(createAssistantStream(sink.set, { id: 'a1' }), () => { settled++; });
+    s.abort('wrapped failure');
+    expect(sink.get()[0].parts).toEqual([{ type: 'text', text: 'wrapped failure' }]);
+    expect(settled).toBe(1);
+  });
+
   it('opens a new text part after a tool call', () => {
     const messages: ChatMessage[] = [];
     const set: SetMessages = (fn) => { messages.splice(0, messages.length, ...fn(messages)); };

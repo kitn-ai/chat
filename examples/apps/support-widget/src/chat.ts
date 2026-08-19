@@ -101,10 +101,17 @@ export function createSupportChat(chat: ChatElement): SupportChat {
       stream.done();
     } catch (error) {
       // DECIDE LOUDLY. A support widget that swallows a failed turn leaves the
-      // user staring at a spinner that already stopped; the failure goes into
-      // the thread where they can see it, and `done()` settles `loading`.
-      stream.appendText(`**Sorry — that message did not go through.**\n\n${errorText(error)}`);
-      stream.done();
+      // user staring at a spinner that already stopped, so the failure goes into
+      // the thread where they can see it.
+      //
+      // ONE CALL, not `appendText` + `done`. `abort(reason)` settles the turn
+      // AND puts the reason in the thread when no part can carry it, which on a
+      // text-only widget is always. The mechanism differs where it matters:
+      // `appendText` MERGES into a trailing text part, so a turn that died
+      // mid-sentence glued this apology onto the model's half-finished line and
+      // it read as the model saying it. `abort` appends its reason as its OWN
+      // part, which is the whole reason it does not reuse `appendText`.
+      stream.abort(`**Sorry — that message did not go through.**\n\n${errorText(error)}`);
     }
   }
 
