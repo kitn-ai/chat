@@ -285,10 +285,6 @@ const EXEMPT: Record<string, { kind: 'story-only' | 'nothing'; reason: string }>
     kind: 'story-only',
     reason: 'rendered by seven showcase stories; no test asserts fallback initials, image failure, or size. Grep hits on "avatar" in the thread/message suites are a DIFFERENT component.',
   },
-  'kai-dialog': {
-    kind: 'story-only',
-    reason: 'story-only (split-workspace); no behavioural test. show()/hide() and the focus trap are typed in element-methods-typed.test.ts as a tsc string fixture, which never mounts anything.',
-  },
   'kai-empty': {
     kind: 'story-only',
     reason: 'story-only (chat-slots); no behavioural test. It read as covered until this analyzer learned to strip comments — its only test-file hits are a `<kai-empty>` in a doc comment in slot-registry-coverage.test.ts and a registry fixture string in slots.test.ts.',
@@ -315,10 +311,6 @@ const EXEMPT: Record<string, { kind: 'story-only' | 'nothing'; reason: string }>
   },
 
   // ---- nothing: no test, no element story.
-  'kai-code-block': {
-    kind: 'nothing',
-    reason: 'no test, no element story. Its only mention anywhere is a comment in the react prop table. Highlighting, language selection and the copy control are all unexercised at the element level.',
-  },
   'kai-pane': {
     kind: 'nothing',
     reason: 'no test, no element story; the only hits are slots.test.ts registry fixtures. Sizing and collapse are unexercised.',
