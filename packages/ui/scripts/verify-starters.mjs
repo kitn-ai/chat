@@ -13,6 +13,27 @@
 // `streamFakeReply` replaced by the kit's shared `createMockResponder()`) that
 // touched every composed-workspace starter with no automated check behind it.
 //
+// TWO CORPORA, ONE CLASSIFIER
+// ---------------------------
+// `examples/apps/*` is the iteration ladder's corpus: whole applications built
+// with the kit rather than one minimal template per framework (see
+// docs/superpowers/plans/2026-08-19-rung-1-support-widget.md, "Rulings"). They
+// are covered here rather than by a second script because there is nothing
+// starter-SPECIFIC about the check: it builds a package and typechecks it. A
+// second copy of this file would be a second place for the tier rules, the
+// workspace cross-check and the CI flag refusal to drift.
+//
+// Both directories are walked by the SAME loop with the SAME hard-fail
+// semantics, and neither may be empty or missing — an app corpus that quietly
+// contains nothing while the summary line says everything passed is this file's
+// oldest recurring defect, one directory over.
+//
+// The two are told apart only by the noun in an error message and by the
+// relative path used to identify an entry. Names can collide across corpora
+// (`examples/starters/react` and a future `examples/apps/react` are different
+// packages), so the IDENTITY of an entry is its repo-relative path; `--only`
+// still takes a bare name and refuses one that is ambiguous rather than picking.
+//
 // WHAT IT PROVES, AND WHAT IT DOES NOT
 // ------------------------------------
 // It runs each starter's REAL `build` — the same command a user runs — and,
@@ -78,23 +99,27 @@
 // test.yml is for. If you need a trustworthy figure, re-measure on an idle
 // machine rather than trusting this block.
 //
-// Even at the ceiling this is ~1.5 min against a 30-minute job budget, which is
-// why the guard covers all eight rather than only the six that need no install.
-// The partial version was cheap to avoid, so it was not worth the dishonesty.
+// Even at the ceiling that is ~1.5 min against a 30-minute job budget, which is
+// why the guard covers EVERY starter rather than only the linked ones that need
+// no install. The partial version was cheap to avoid, so it was not worth the
+// dishonesty. The apps corpus is linked-tier and adds a build apiece; the run
+// prints its own per-corpus counts and timings, so read those rather than this
+// block, which is a measurement of one afternoon and not a roster.
 //
 // Usage:
-//   node scripts/verify-starters.mjs               all starters (what CI runs)
+//   node scripts/verify-starters.mjs               everything (what CI runs)
 //   node scripts/verify-starters.mjs --linked-only skip the npm-ci tier (local, offline)
 //   node scripts/verify-starters.mjs --only=react,vue   iterate on a few (local)
+//   node scripts/verify-starters.mjs --only=examples/apps/support-widget  (qualified)
 //   node scripts/verify-starters.mjs --fresh       re-run `npm ci` even if node_modules exists
 //
 // `--linked-only` and `--only` are REFUSED when $CI is set. They are local
-// conveniences, and a guard named for eight starters that silently covers three
-// is the exact failure this repo keeps paying for.
+// conveniences, and a guard that claims a corpus while silently covering a third
+// of it is the exact failure this repo keeps paying for.
 //
-// Needs `nx build ui` first: every starter resolves `@kitn.ai/ui` to this
+// Needs `nx build ui` first: every starter and app resolves `@kitn.ai/ui` to this
 // package's compiled `dist/`, so an unbuilt tree is a hard error rather than a
-// wall of confusing per-starter resolution failures.
+// wall of confusing per-example resolution failures.
 
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -103,7 +128,13 @@ import { fileURLToPath } from 'node:url';
 
 const UI_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const REPO_ROOT = resolve(UI_ROOT, '../..');
-const STARTERS_DIR = resolve(REPO_ROOT, 'examples/starters');
+
+// The two corpora this guard walks. `noun` is only ever used in prose; `rel` is
+// what identifies an entry, because names can collide across the two.
+const CORPORA = [
+  { noun: 'starter', rel: 'examples/starters' },
+  { noun: 'app', rel: 'examples/apps' },
+].map((c) => ({ ...c, dir: resolve(REPO_ROOT, c.rel) }));
 
 const NAME = 'verify-starters';
 const fail = (msg) => {
@@ -142,12 +173,21 @@ if (process.env.CI) {
 if (!existsSync(resolve(UI_ROOT, 'dist/kai.es.js'))) {
   fail(
     `packages/ui/dist/kai.es.js is missing — the kit is not built.\n` +
-      `  Every starter resolves @kitn.ai/ui to this package's compiled dist/, so all\n` +
-      `  eight would fail with confusing module-resolution errors.\n\n` +
+      `  Every starter and app resolves @kitn.ai/ui to this package's compiled dist/, so\n` +
+      `  all of them would fail with confusing module-resolution errors.\n\n` +
       `  Run:  pnpm exec nx build ui`,
   );
 }
-if (!existsSync(STARTERS_DIR)) fail(`no starters directory at ${STARTERS_DIR}`);
+for (const corpus of CORPORA) {
+  if (!existsSync(corpus.dir)) {
+    fail(
+      `no ${corpus.noun} directory at ${corpus.rel}.\n` +
+        `  This guard's summary line claims to cover it, so a missing corpus is a failure\n` +
+        `  rather than a skip. Restore the directory, or delete it from CORPORA in this file\n` +
+        `  so the claim shrinks with the coverage.`,
+    );
+  }
+}
 
 // ---- which specifiers count as which tier -----------------------------------
 //
@@ -165,112 +205,129 @@ const BUILD_TYPECHECKS = [/\btsc\b/, /\bvue-tsc\b/, /\bsvelte-check\b/, /\bng bu
 
 // ---- read pnpm-workspace.yaml (membership, for the cross-check) -------------
 const workspaceYaml = readFileSync(resolve(REPO_ROOT, 'pnpm-workspace.yaml'), 'utf8');
+// Repo-relative paths, not bare names: `examples/starters/react` and a future
+// `examples/apps/react` are two different packages and the membership answer for
+// one says nothing about the other.
 const workspaceMembers = new Set(
   workspaceYaml
     .split('\n')
     .map((l) => l.trim())
     .filter((l) => l.startsWith('- '))
     .map((l) => l.slice(2).trim().replace(/^['"]|['"]$/g, ''))
-    .filter((p) => p.startsWith('examples/starters/'))
-    .map((p) => p.slice('examples/starters/'.length)),
+    .filter((p) => CORPORA.some((c) => p.startsWith(`${c.rel}/`))),
 );
 
 // ---- enumerate + classify ---------------------------------------------------
 const problems = [];
 const starters = [];
 
-for (const name of readdirSync(STARTERS_DIR).sort()) {
-  const dir = join(STARTERS_DIR, name);
-  if (!statSync(dir).isDirectory()) continue;
+for (const corpus of CORPORA) {
+  const found = [];
 
-  const pkgPath = join(dir, 'package.json');
-  if (!existsSync(pkgPath)) {
-    problems.push(`${name}: no package.json — is this a starter? Nothing can build it.`);
-    continue;
-  }
+  for (const name of readdirSync(corpus.dir).sort()) {
+    const dir = join(corpus.dir, name);
+    if (!statSync(dir).isDirectory()) continue;
 
-  let pkg;
-  try {
-    pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
-  } catch (err) {
-    problems.push(`${name}: package.json is not valid JSON (${err.message})`);
-    continue;
-  }
+    const rel = `${corpus.rel}/${name}`;
+    const noun = corpus.noun;
 
-  const spec = pkg.dependencies?.['@kitn.ai/ui'];
-  if (!spec) {
-    problems.push(
-      `${name}: no "@kitn.ai/ui" in dependencies. A starter that does not depend on the kit\n` +
-        `    cannot demonstrate it, and this guard has no idea how to install it.`,
-    );
-    continue;
-  }
+    const pkgPath = join(dir, 'package.json');
+    if (!existsSync(pkgPath)) {
+      problems.push(`${rel}: no package.json — is this a ${noun}? Nothing can build it.`);
+      continue;
+    }
 
-  let tier;
-  if (spec === 'workspace:*') tier = TIER_LINKED;
-  else if (spec.startsWith('file:')) tier = TIER_STANDALONE;
-  else {
-    problems.push(
-      `${name}: unrecognised @kitn.ai/ui specifier "${spec}".\n` +
-        `    Expected "workspace:*" (pnpm workspace member) or "file:..." (standalone npm\n` +
-        `    consumer). A published range would test npm's copy, not this working tree.`,
-    );
-    continue;
-  }
+    let pkg;
+    try {
+      pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+    } catch (err) {
+      problems.push(`${rel}: package.json is not valid JSON (${err.message})`);
+      continue;
+    }
 
-  // Tier and workspace membership are two records of one fact. Disagreement is a
-  // dangling link at install time, which surfaces as a baffling runtime error.
-  const isMember = workspaceMembers.has(name);
-  if (tier === TIER_LINKED && !isMember) {
-    problems.push(
-      `${name}: declares "workspace:*" but is NOT listed in pnpm-workspace.yaml.\n` +
-        `    pnpm will not link it; the dependency dangles. Add 'examples/starters/${name}'\n` +
-        `    to pnpm-workspace.yaml, or switch the dep to "file:../../../packages/ui".`,
-    );
-    continue;
-  }
-  if (tier === TIER_STANDALONE && isMember) {
-    problems.push(
-      `${name}: uses "${spec}" but IS listed in pnpm-workspace.yaml.\n` +
-        `    Pick one: a workspace member uses "workspace:*", a standalone consumer is not\n` +
-        `    listed in that file.`,
-    );
-    continue;
-  }
-
-  const scripts = pkg.scripts ?? {};
-  if (!scripts.build) {
-    problems.push(`${name}: no "build" script. There is nothing for this guard to run.`);
-    continue;
-  }
-
-  const buildTypechecks = BUILD_TYPECHECKS.some((re) => re.test(scripts.build));
-  const toRun = ['build'];
-  if (!buildTypechecks) {
-    if (!scripts.typecheck) {
+    const spec = pkg.dependencies?.['@kitn.ai/ui'];
+    if (!spec) {
       problems.push(
-        `${name}: "build" (${scripts.build}) does not reach a typechecker, and there is no\n` +
-          `    "typecheck" script to make up for it. This starter's types would be checked by\n` +
-          `    nobody — it would bundle happily with broken types and ship that way.`,
+        `${rel}: no "@kitn.ai/ui" in dependencies. A ${noun} that does not depend on the kit\n` +
+          `    cannot demonstrate it, and this guard has no idea how to install it.`,
       );
       continue;
     }
-    toRun.push('typecheck');
+
+    let tier;
+    if (spec === 'workspace:*') tier = TIER_LINKED;
+    else if (spec.startsWith('file:')) tier = TIER_STANDALONE;
+    else {
+      problems.push(
+        `${rel}: unrecognised @kitn.ai/ui specifier "${spec}".\n` +
+          `    Expected "workspace:*" (pnpm workspace member) or "file:..." (standalone npm\n` +
+          `    consumer). A published range would test npm's copy, not this working tree.`,
+      );
+      continue;
+    }
+
+    // Tier and workspace membership are two records of one fact. Disagreement is a
+    // dangling link at install time, which surfaces as a baffling runtime error.
+    const isMember = workspaceMembers.has(rel);
+    if (tier === TIER_LINKED && !isMember) {
+      problems.push(
+        `${rel}: declares "workspace:*" but is NOT listed in pnpm-workspace.yaml.\n` +
+          `    pnpm will not link it; the dependency dangles. Add '${rel}'\n` +
+          `    to pnpm-workspace.yaml, or switch the dep to "file:../../../packages/ui".`,
+      );
+      continue;
+    }
+    if (tier === TIER_STANDALONE && isMember) {
+      problems.push(
+        `${rel}: uses "${spec}" but IS listed in pnpm-workspace.yaml.\n` +
+          `    Pick one: a workspace member uses "workspace:*", a standalone consumer is not\n` +
+          `    listed in that file.`,
+      );
+      continue;
+    }
+
+    const scripts = pkg.scripts ?? {};
+    if (!scripts.build) {
+      problems.push(`${rel}: no "build" script. There is nothing for this guard to run.`);
+      continue;
+    }
+
+    const buildTypechecks = BUILD_TYPECHECKS.some((re) => re.test(scripts.build));
+    const toRun = ['build'];
+    if (!buildTypechecks) {
+      if (!scripts.typecheck) {
+        problems.push(
+          `${rel}: "build" (${scripts.build}) does not reach a typechecker, and there is no\n` +
+            `    "typecheck" script to make up for it. This ${noun}'s types would be checked by\n` +
+            `    nobody — it would bundle happily with broken types and ship that way.`,
+        );
+        continue;
+      }
+      toRun.push('typecheck');
+    }
+
+    found.push({ name, rel, noun, dir, tier, spec, scripts: toRun, buildTypechecks, pkg });
   }
 
-  starters.push({ name, dir, tier, spec, scripts: toRun, buildTypechecks, pkg });
+  // A corpus that classified NOTHING is a failure even when the directory is
+  // there — an empty examples/apps/ would otherwise read as green while the
+  // summary line kept counting a corpus it never touched.
+  if (found.length === 0 && problems.length === 0) {
+    fail(
+      `found no ${corpus.noun}s under ${corpus.rel}. Zero checked must not read as green.`,
+    );
+  }
+  starters.push(...found);
 }
 
 if (problems.length > 0) {
   fail(
-    `${problems.length} starter${problems.length > 1 ? 's are' : ' is'} not in a shape this guard can check.\n` +
-      `  These are FAILURES, not skips — an unclassifiable starter is exactly how coverage\n` +
+    `${problems.length} example${problems.length > 1 ? 's are' : ' is'} not in a shape this guard can check.\n` +
+      `  These are FAILURES, not skips — an unclassifiable starter or app is exactly how coverage\n` +
       `  silently shrinks while the summary keeps saying everything passed.\n\n` +
       problems.map((p) => `  ✗ ${p}`).join('\n\n'),
   );
 }
-
-if (starters.length === 0) fail(`found no starters under ${STARTERS_DIR}. Zero checked must not read as green.`);
 
 // ---- structural: a Solid starter imports the kit from "./solid" -------------
 //
@@ -353,7 +410,7 @@ const entryProblems = [];
 for (const s of solidStarters) {
   const files = walkSources(s.dir);
   if (files.length === 0) {
-    entryProblems.push(`${s.name}: is a Solid starter but has no scannable source files. Nothing was checked.`);
+    entryProblems.push(`${s.rel}: is a Solid ${s.noun} but has no scannable source files. Nothing was checked.`);
     continue;
   }
 
@@ -378,7 +435,7 @@ for (const s of solidStarters) {
 
   if (rootHits.length > 0) {
     entryProblems.push(
-      `${s.name}: imports the kit from the ROOT entry "${KIT}" at ${rootHits.length} site(s):\n` +
+      `${s.rel}: imports the kit from the ROOT entry "${KIT}" at ${rootHits.length} site(s):\n` +
         rootHits.map((h) => `      ${h}`).join('\n') +
         `\n    A Solid app must import from "${SOLID_ENTRY}", the complete SolidJS surface.\n` +
         `    This BUILDS today only because "./solid" is a strict superset and these symbols\n` +
@@ -387,7 +444,7 @@ for (const s of solidStarters) {
   }
   if (solidHits === 0) {
     entryProblems.push(
-      `${s.name}: never imports "${SOLID_ENTRY}". A Solid starter that touches the kit from\n` +
+      `${s.rel}: never imports "${SOLID_ENTRY}". A Solid ${s.noun} that touches the kit from\n` +
         `    nowhere, or only through the framework-neutral subpaths, is not demonstrating the\n` +
         `    Solid surface — and this check would pass over it having asserted nothing.`,
     );
@@ -415,21 +472,47 @@ let selected = starters;
 const skipped = [];
 
 if (ONLY !== null) {
-  const wanted = new Set(
-    ONLY.split(',')
-      .map((s) => s.trim())
-      .filter(Boolean),
-  );
-  const unknown = [...wanted].filter((w) => !starters.some((s) => s.name === w));
+  // A bare name still works, because that is what everyone types. It selects the
+  // one entry with that name; if two corpora both hold one, the bare name is
+  // REFUSED rather than resolved to a guess — pass the repo-relative path.
+  const wanted = ONLY.split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const chosen = new Set();
+  const unknown = [];
+  const ambiguous = [];
+  for (const w of wanted) {
+    const byRel = starters.filter((s) => s.rel === w);
+    const hits = byRel.length > 0 ? byRel : starters.filter((s) => s.name === w);
+    if (hits.length === 0) unknown.push(w);
+    else if (hits.length > 1) ambiguous.push({ w, hits });
+    else chosen.add(hits[0].rel);
+  }
   if (unknown.length > 0)
-    fail(`--only named starter(s) that do not exist: ${unknown.join(', ')}\n  Known: ${starters.map((s) => s.name).join(', ')}`);
-  selected = starters.filter((s) => wanted.has(s.name));
-  for (const s of starters) if (!wanted.has(s.name)) skipped.push({ ...s, why: '--only' });
+    fail(
+      `--only named example(s) that do not exist: ${unknown.join(', ')}\n` +
+        `  Known: ${starters.map((s) => s.rel).join(', ')}`,
+    );
+  if (ambiguous.length > 0)
+    fail(
+      ambiguous
+        .map(
+          (a) =>
+            `--only "${a.w}" is ambiguous — ${a.hits.length} examples share that name:\n` +
+            a.hits.map((h) => `    ${h.rel}`).join('\n') +
+            `\n  Name the one you meant by its repo-relative path.`,
+        )
+        .join('\n\n'),
+    );
+
+  selected = starters.filter((s) => chosen.has(s.rel));
+  for (const s of starters) if (!chosen.has(s.rel)) skipped.push({ ...s, why: '--only' });
 }
 if (LINKED_ONLY) {
   selected = selected.filter((s) => s.tier === TIER_LINKED);
   for (const s of starters)
-    if (s.tier === TIER_STANDALONE && !skipped.some((k) => k.name === s.name))
+    if (s.tier === TIER_STANDALONE && !skipped.some((k) => k.rel === s.rel))
       skipped.push({ ...s, why: '--linked-only' });
 }
 
@@ -446,11 +529,19 @@ const run = (cmd, args, cwd) => {
   };
 };
 
-console.log(`\n${NAME}: ${selected.length} of ${totalFound} starter(s) under examples/starters/\n`);
+// The counts are per corpus as well as overall, because "8 of 9" hides which
+// corpus the missing one was in — and the app corpus is the young one.
+const countsByCorpus = CORPORA.map(
+  (c) =>
+    `${selected.filter((s) => s.rel.startsWith(`${c.rel}/`)).length}/${
+      starters.filter((s) => s.rel.startsWith(`${c.rel}/`)).length
+    } under ${c.rel}/`,
+).join(', ');
+console.log(`\n${NAME}: ${selected.length} of ${totalFound} example(s) — ${countsByCorpus}\n`);
 
 const results = [];
 for (const s of selected) {
-  const label = `${s.name} [${s.tier.toLowerCase()}]`;
+  const label = `${s.rel} [${s.tier.toLowerCase()}]`;
 
   // STANDALONE tier: its deps are not part of the pnpm workspace, so they are
   // not on disk from the root install.
@@ -502,20 +593,20 @@ for (const r of results) {
   const mark = r.ok ? '✓' : '✗';
   const how = r.ok ? r.scripts.join(' + ') : `FAILED at ${r.phase}`;
   console.log(
-    `  ${mark} ${r.name.padEnd(16)} ${r.tier.padEnd(11)} ${String(r.seconds).padStart(3)}s  ${how}` +
+    `  ${mark} ${r.rel.padEnd(34)} ${r.tier.padEnd(11)} ${String(r.seconds).padStart(3)}s  ${how}` +
       (r.ok && !r.buildTypechecks ? '   (build does not typecheck — typecheck run separately)' : ''),
   );
 }
 for (const s of skipped) {
-  console.log(`  – ${s.name.padEnd(16)} ${s.tier.padEnd(11)}   —  SKIPPED by ${s.why}`);
+  console.log(`  – ${s.rel.padEnd(34)} ${s.tier.padEnd(11)}   —  SKIPPED by ${s.why}`);
 }
 
 const broken = results.filter((r) => !r.ok);
 
 if (skipped.length > 0) {
   console.log(
-    `\n  PARTIAL COVERAGE: ${selected.length} of ${totalFound} starters checked. ` +
-      `${skipped.length} skipped (${skipped.map((s) => s.name).join(', ')}).` +
+    `\n  PARTIAL COVERAGE: ${selected.length} of ${totalFound} examples checked. ` +
+      `${skipped.length} skipped (${skipped.map((s) => s.rel).join(', ')}).` +
       `\n  Run without --only/--linked-only for the full set. CI refuses those flags.`,
   );
 }
@@ -524,7 +615,7 @@ if (broken.length > 0) {
   const detail = broken
     .map(
       (r) =>
-        `  ✗ ${r.name} (${r.tier.toLowerCase()}, examples/starters/${r.name})\n` +
+        `  ✗ ${r.name} (${r.tier.toLowerCase()}, ${r.rel})\n` +
         `    ${r.phase} exited ${r.status}${r.error ? ` (${r.error.message})` : ''}\n\n` +
         r.output
           .trimEnd()
@@ -536,17 +627,18 @@ if (broken.length > 0) {
     .join('\n\n');
 
   fail(
-    `${broken.length} of ${selected.length} starter(s) do not build.\n\n` +
-      `  These are the templates create-kai scaffolds from, so this breakage reaches\n` +
-      `  every newly scaffolded project, not just examples/.\n\n` +
+    `${broken.length} of ${selected.length} example(s) do not build.\n\n` +
+      `  The starters are the templates create-kai scaffolds from, so breakage there reaches\n` +
+      `  every newly scaffolded project, not just examples/. The apps are the iteration\n` +
+      `  ladder's corpus — a broken one is a rung that no longer runs.\n\n` +
       `  Reproduce a single one with:\n` +
-      `    cd examples/starters/${broken[0].name} && npm run ${broken[0].phase.replace('npm run ', '') || 'build'}\n\n` +
+      `    cd ${broken[0].rel} && npm run ${broken[0].phase.replace('npm run ', '') || 'build'}\n\n` +
       detail,
   );
 }
 
 console.log(
-  `\n✓ ${NAME} — ${results.length} of ${totalFound} starter(s) build clean` +
+  `\n✓ ${NAME} — ${results.length} of ${totalFound} example(s) build clean (${countsByCorpus})` +
     (skipped.length > 0 ? ` (${skipped.length} SKIPPED — see above)` : ' (all of them)') +
     `.\n`,
 );

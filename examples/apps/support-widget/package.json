@@ -1,0 +1,21 @@
+{
+  "name": "@kitn.ai/ui-app-support-widget",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Rung 1 of the iteration ladder: a docked support chat widget on a product page. Mock responder by default, OpenRouter when a key is present.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b --pretty false"
+  },
+  "dependencies": {
+    "@kitn.ai/ui": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.21",
+    "typescript": "~5.7.2",
+    "vite": "^6.0.0"
+  }
+}

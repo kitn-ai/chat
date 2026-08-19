@@ -586,33 +586,40 @@ jobs:
           key: starters-npm-${{ hashFiles('examples/starters/*/package-lock.json') }}
           restore-keys: starters-npm-
 
-      # Builds all EIGHT starter apps in examples/starters/ with the command a
-      # user actually runs, and typechecks the ones whose build does not (only
-      # tanstack-start: `vite build` alone never reaches tsc).
+      # Builds TWO corpora with the command a user actually runs, and typechecks
+      # the ones whose build does not reach tsc on its own (tanstack-start:
+      # `vite build` alone never does):
+      #   examples/starters/  one minimal starter per framework -- the templates
+      #                       `create-kai` scaffolds from.
+      #   examples/apps/      the iteration ladder's whole applications, built
+      #                       with the kit rather than templating it.
       #
       # Until this step nothing in CI touched the starters at all -- they were
       # covered by code review only, which is how a five-starter refactor landed
-      # with nothing behind it. They are also the templates `create-kai`
-      # scaffolds from, so a starter that stops compiling ships into every new
-      # scaffolded project, and the person who finds out is a new user.
+      # with nothing behind it. A starter that stops compiling ships into every
+      # new scaffolded project, and the person who finds out is a new user; a
+      # ladder app that stops compiling is a rung that no longer runs.
       #
-      # The roster is DERIVED from the directory and each app's own dependency on
-      # the kit -- `workspace:*` (linked, no install needed) vs `file:` (needs
-      # npm ci) -- cross-checked against pnpm-workspace.yaml. There is no
-      # hand-written list, and an unclassifiable starter is a hard failure rather
-      # than a silent skip, so a ninth starter cannot fall outside the guard
-      # while the summary keeps claiming full coverage. The script also REFUSES
-      # its own --only/--linked-only scoping flags when $CI is set, so nobody can
-      # trim coverage here to save a minute.
+      # The roster is DERIVED from those directories and each package's own
+      # dependency on the kit -- `workspace:*` (linked, no install needed) vs
+      # `file:` (needs npm ci) -- cross-checked against pnpm-workspace.yaml.
+      # There is no hand-written list and no count typed anywhere; the run PRINTS
+      # what it covered, per corpus, so read that rather than a figure here. An
+      # unclassifiable package is a hard failure rather than a silent skip, and so
+      # is a corpus that is missing or empty, so nothing can fall outside the
+      # guard while the summary keeps claiming full coverage. The script also
+      # REFUSES its own --only/--linked-only scoping flags when $CI is set, so
+      # nobody can trim coverage here to save a minute.
       #
       # Budget ~1.5 min, and treat that as a CEILING rather than a baseline: one
-      # full cold run measured 1m28s wall (~33s for the six linked builds, ~56s
-      # for the two standalone including npm ci), but it was taken on a box at
-      # load average 17.6 with a warm ~/.npm cache. Needs the build above -- every starter resolves
+      # full cold run measured 1m28s wall (~33s for the linked builds, ~56s for
+      # the two standalone including npm ci), on a box at load average 17.6 with a
+      # warm ~/.npm cache and before the apps corpus existed -- each linked app
+      # adds a build apiece. Needs the build above -- everything here resolves
       # @kitn.ai/ui to the compiled dist/. This is the COMPILE floor: it cannot
       # see runtime contract failures (wrong tag, array set as an attribute),
       # which is what verify:consumer and /consumer-regression are for.
-      - name: Starter apps build (all 8, the create-kai templates)
+      - name: Starters + ladder apps build (roster derived by verify-starters)
         run: pnpm --filter @kitn.ai/ui run verify:starters
 
       # Compiles every fenced code block in apps/docs against the SHIPPED API --

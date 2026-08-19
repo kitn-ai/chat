@@ -1,7 +1,8 @@
 # Examples
 
 Runnable starters that consume `@kitn.ai/ui` the way a real app does. The five in
-the starter set are the canonical reference; a few older demos live below them.
+the starter set are the canonical reference; `apps/` holds the ladder's real
+applications; a few older demos live below them.
 
 ## Starter set: hand-composed chat workspaces
 
@@ -68,6 +69,26 @@ Each example's own `README.md` documents the per-framework web-component rules
 listening for non-bubbling `kai-*` events, keeping the composer uncontrolled).
 `starters/react/` is the reference the others mirror.
 
+## Applications
+
+`apps/` is the iteration ladder's corpus: whole applications built with the kit,
+one per rung, each one a thing you could hand someone rather than a tour of the
+parts. They are pnpm-workspace members on `"@kitn.ai/ui": "workspace:*"` like the
+starters, and `verify:starters` derives its roster from both directories, so CI
+builds and typechecks every app the day it lands.
+
+| Directory | Rung | What it is |
+|---|---|---|
+| `apps/support-widget/` | 1 | A docked support chat on a product page: launcher, panel, streaming replies, no history. Vanilla TS + Vite. Mock frames with no key, OpenRouter with one, and the same client path either way. |
+
+```bash
+pnpm build:ui                                        # once
+pnpm --filter @kitn.ai/ui-app-support-widget dev     # http://localhost:5178
+```
+
+Each app's own `README.md` has the rest — how the turn works, what it needs to
+run for real, and what it deliberately leaves out.
+
 ## Other examples
 
 These predate the starter-set refresh and consume the kit their own way.
@@ -76,26 +97,28 @@ These predate the starter-set refresh and consume the kit their own way.
 
 - **`demos/composable/`**: the full roster of individual elements plus the
   batteries-included `<kai-chat>`, as a plain HTML page.
-- **`demos/widget/`**: a floating chat widget.
 
-Both are ES-module web-component pages: they must be **served over HTTP** (opening
-them as a `file://` page fails, because browsers block ES-module loading from a
-`null` origin, so nothing registers and you get empty boxes). Serve the **repo
-root**:
+It is an ES-module web-component page: it must be **served over HTTP** (opening it
+as a `file://` page fails, because browsers block ES-module loading from a `null`
+origin, so nothing registers and you get empty boxes). Serve the **repo root**:
 
 ```bash
 pnpm build:ui                            # once, to produce packages/ui/dist/
 pnpm --filter @kitn.ai/ui run examples   # serves the repo root on http://localhost:8000
 ```
 
-Then open `http://localhost:8000/examples/demos/composable/index.html` or
-`.../examples/demos/widget/index.html`.
+Then open `http://localhost:8000/examples/demos/composable/index.html`.
 
-`demos/composable/` loads the local build at `packages/ui/dist/kai.es.js`, so
-build the kit first and rebuild after you change it. `demos/widget/` pulls the
-published package from unpkg instead, so it needs a network connection but no
-build. Any static server rooted at the repo works as well (`npx serve .`); adjust
-the port to whatever it prints.
+It loads the local build at `packages/ui/dist/kai.es.js`, so build the kit first
+and rebuild after you change it. Any static server rooted at the repo works as
+well (`npx serve .`); adjust the port to whatever it prints.
+
+`demos/widget/` is gone. It was the same docked-widget shape as
+`apps/support-widget/`, but loaded off unpkg with hand-rolled canned replies and
+outside every CI guard, so the real app replaces it. What went with it and has no
+home yet: the no-build CDN path, `configureCodeHighlighting()` loading a Shiki
+grammar on demand, attachments folded onto the user turn, and canned reasoning +
+tool parts.
 
 ### Framework and meta-framework apps
 

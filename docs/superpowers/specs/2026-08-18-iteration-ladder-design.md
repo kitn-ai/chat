@@ -106,6 +106,22 @@ principle rather than taste.
 
 ## Working method
 
+**App code goes through the front door; repo plumbing stays insider** (owner ruling, 2026-08-19,
+after reviewing rung 1's provenance): the agent that writes a ladder app's application code gets
+the kai MCP, the published docs and our own skills — never repo internals — so every rung
+dogfoods the surface consumers actually get, and its stumbles are teaching gaps to file. CI
+wiring, workspace plumbing and verification stay insider. Rung 1 predates this rule: it is the
+insider-built REFERENCE implementation, and its measurement counterpart is an MCP-only rebuild
+in a contamination-controlled sandbox, diffed against it. (Contamination control per the
+recorded lesson: subagents inherit the project CLAUDE.md, which states four of the seven
+invariants — the builder must run outside this repo's context, against the installed tarball,
+with `verify:fresh` gating the build that gets packed.)
+
+**Every ladder app's README records its own build provenance** (owner policy, 2026-08-19): the
+prompt used to build it — and when it took more than one prompt, the entire conversation,
+verbatim, including the generated brief. The apps are the corpus for measuring what the kit
+teaches, so the instruction stream that produced them is part of the artifact.
+
 One rung at a time: build, verify, fix, then the next. Because the work is deliberately sequential
 there is nothing to isolate, so **each iteration is a plain branch off `main` in the main checkout**,
 not a worktree. Worktrees are for concurrent writers; a fresh one costs three setup steps and has
