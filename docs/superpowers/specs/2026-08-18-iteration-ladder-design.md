@@ -106,6 +106,11 @@ principle rather than taste.
 
 ## Working method
 
+**Every ladder app's README records its own build provenance** (owner policy, 2026-08-19): the
+prompt used to build it — and when it took more than one prompt, the entire conversation,
+verbatim, including the generated brief. The apps are the corpus for measuring what the kit
+teaches, so the instruction stream that produced them is part of the artifact.
+
 One rung at a time: build, verify, fix, then the next. Because the work is deliberately sequential
 there is nothing to isolate, so **each iteration is a plain branch off `main` in the main checkout**,
 not a worktree. Worktrees are for concurrent writers; a fresh one costs three setup steps and has
