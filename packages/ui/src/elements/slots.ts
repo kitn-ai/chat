@@ -556,6 +556,13 @@ export const AGENT_CARD_PARTS: PartDef[] = [
   { name: 'menu', doc: 'The trailing overflow ("...") menu button.', recipe: 'kai-agent-card::part(menu) { opacity: 1 }' },
 ];
 
+/** Styleable `::part`s of `<kai-code-block>` (one syntax-highlighted code block).
+ *  The code region itself is not a part — it is rebuilt when the highlight lands,
+ *  and its look is owned by the Shiki theme (`code-theme`). */
+export const CODE_BLOCK_PARTS: PartDef[] = [
+  { name: 'copy', doc: 'The copy-to-clipboard button in the header row. Hide it with `copy="false"` rather than CSS.', recipe: 'kai-code-block::part(copy) { color: var(--color-primary) }' },
+];
+
 /** Slots + styleable `::part`s of `<kai-dialog>` (the centered modal). */
 export const DIALOG_SLOTS: SlotDef[] = [
   { name: 'header', mode: 'inject', part: true, doc: 'Optional title region at the top of the panel.' },
@@ -719,6 +726,7 @@ export const ELEMENT_COMPOSITION: Record<string, ElementComposition> = {
   'kai-resizable': { children: 'The `<kai-resizable-item>` panels, in order. Dividers are inserted between them.' },
   'kai-resizable-item': { children: 'This panel\'s content.' },
   'kai-tooltip': { children: 'The TRIGGER the tooltip describes. The tip text is the `text` prop.' },
+  'kai-code-block': { parts: CODE_BLOCK_PARTS },
   'kai-audio-visualizer': { parts: AUDIO_VISUALIZER_PARTS },
 };
 

@@ -2188,6 +2188,15 @@
         "displayType": "undefined | false | true"
       },
       {
+        "name": "copy",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Show the copy button. **Defaults to ON**, because this element is documented as shipping one. Opt out with `copy=\"false\"` or `el.copy = false`.",
+        "default": "true",
+        "displayType": "undefined | false | true"
+      },
+      {
         "name": "proseSize",
         "type": "undefined | \"xs\" | \"sm\" | \"base\" | \"lg\"",
         "optional": true,
@@ -2213,6 +2222,13 @@
     ],
     "tokens": [
       "--color-code-foreground"
+    ],
+    "parts": [
+      {
+        "name": "copy",
+        "doc": "The copy-to-clipboard button in the header row. Hide it with `copy=\"false\"` rather than CSS.",
+        "recipe": "kai-code-block::part(copy) { color: var(--color-primary) }"
+      }
     ]
   },
   {
@@ -3046,6 +3062,15 @@
         "scalar": true,
         "description": "Initial open state on mount (uncontrolled seed).",
         "displayType": "undefined | false | true"
+      },
+      {
+        "name": "label",
+        "type": "undefined | string",
+        "optional": true,
+        "scalar": true,
+        "description": "Accessible name for the modal, used when no `header` slot is projected: `<kai-dialog label=\"Delete workspace\">`. A projected `header` WINS over this (it becomes `aria-labelledby`), because ARIA resolves `aria-labelledby` ahead of `aria-label` and the visible heading is the name both a sighted and a screen-reader user can be talked through. Defaults to `Dialog` so a modal is never nameless.",
+        "default": "DEFAULT_LABEL",
+        "displayType": "undefined | string"
       }
     ],
     "events": [

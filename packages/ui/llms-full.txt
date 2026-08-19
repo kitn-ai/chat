@@ -797,9 +797,16 @@ _No events._
 | `language` | `language` | `undefined \| string` | Language grammar (e.g. `js`, `python`). Defaults to `tsx`. |
 | `codeTheme` | `code-theme` | `undefined \| string` | Shiki theme name. |
 | `codeHighlight` | `code-highlight` | `undefined \| false \| true` | Disable syntax highlighting (renders plain text, no Shiki). |
+| `copy` | `copy` | `undefined \| false \| true` | Show the copy button. **Defaults to ON**, because this element is documented as shipping one. Opt out with `copy="false"` or `el.copy = false`. |
 | `proseSize` | `prose-size` | `undefined \| "xs" \| "sm" \| "base" \| "lg"` | Code text sizing. |
 
 _No events._
+
+**Styleable parts** (restyle from outside via `kai-code-block::part(name)`):
+
+| Part | Description |
+|---|---|
+| `::part(copy)` | The copy-to-clipboard button in the header row. Hide it with `copy="false"` rather than CSS. — `kai-code-block::part(copy) { color: var(--color-primary) }` |
 
 ---
 
@@ -1029,6 +1036,7 @@ _No events._
 | `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `open` | `open` | `undefined \| false \| true` | Drive/observe open state (Shoelace-style: settable + reflected to the `open` attribute; the element still self-manages on Escape/backdrop). Set `el.open = true`, or `<kai-dialog open>`; listen for `kai-open-change`. |
 | `defaultOpen` | `default-open` | `undefined \| false \| true` | Initial open state on mount (uncontrolled seed). |
+| `label` | `label` | `undefined \| string` | Accessible name for the modal, used when no `header` slot is projected: `<kai-dialog label="Delete workspace">`. A projected `header` WINS over this (it becomes `aria-labelledby`), because ARIA resolves `aria-labelledby` ahead of `aria-label` and the visible heading is the name both a sighted and a screen-reader user can be talked through. Defaults to `Dialog` so a modal is never nameless. |
 
 **Events** (non-bubbling `CustomEvent`s — listen directly on the element):
 

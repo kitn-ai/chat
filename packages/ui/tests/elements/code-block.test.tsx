@@ -30,10 +30,12 @@
  * sleeping a guessed interval.
  */
 import { afterEach, describe, expect, test, vi } from 'vitest';
+import { render } from '@solidjs/testing-library';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import '../../src/elements/code-block';
+import { CodeBlock, CodeBlockCode } from '../../src/components/code-block';
 
 const pkgRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -287,81 +289,228 @@ describe('language routing', () => {
 // ---------------------------------------------------------------------------
 
 describe('the copy control', () => {
-  test('THE ELEMENT SHIPS NO COPY AFFORDANCE — the honest current state', async () => {
-    // Recorded as a fact rather than left implicit, so the `test.fails` below cannot
-    // be read as a flaky selector. There is no button, no `[part]`, and no exposed
-    // method anywhere in the element's shadow root.
+  /** A clipboard jsdom does not provide. Returns the spy so a test can read the call. */
+  function stubClipboard() {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    return writeText;
+  }
+
+  const copyButton = (el: CodeBlock) => shadow(el).querySelector('[part="copy"]') as HTMLButtonElement | null;
+
+  test('the element ships the copy button its docs promise', async () => {
+    // WAS A REAL, CONSUMER-FACING DEFECT: the promise and the element disagreed, and
+    // the promise is the half that gets published.
+    //
+    //   · src/elements/code-block.tsx, the facade's own doc comment:
+    //       "`<kai-code-block>` — one syntax-highlighted code block (with a copy button)."
+    //   · docs/web-components.md (generated, and the file the docs site renders):
+    //       "A single syntax-highlighted code block with a copy button."
+    //
+    // The facade rendered `<CodeBlock><CodeBlockCode/></CodeBlock>` and nothing else.
+    // `CodeBlockGroup` — the flex row the button belongs in — existed and was used only
+    // by a STORY, which supplied its own button. So the copy button was real in the
+    // Solid layer's showcase and absent from the element every consumer is told to use.
     const el = create({ code: 'const x = 1', language: 'ts' });
     document.body.appendChild(el);
     await until(() => shikiPre(el) !== null, 'shiki markup');
 
-    expect(shadow(el).querySelectorAll('button')).toHaveLength(0);
-    expect(shadow(el).querySelector('[part]')).toBeNull();
-    expect((el as Record<string, unknown>).copy).toBeUndefined();
+    const copy = copyButton(el)!;
+    expect(copy, 'kai-code-block must render the copy button its docs promise').not.toBeNull();
+    expect(copy.tagName).toBe('BUTTON');
+    expect(copy.getAttribute('type'), 'never a submit button inside a consumer form').toBe('button');
+    expect(copy.getAttribute('aria-label')).toBe('Copy code');
   });
 
-  test.fails(
-    'KNOWN DEFECT — the docs promise a copy button that the element does not render',
-    async () => {
-      // A REAL, CONSUMER-FACING DEFECT: the promise and the element disagree, and the
-      // promise is the half that gets published.
-      //
-      //   · src/elements/code-block.tsx, the facade's own doc comment:
-      //       "`<kai-code-block>` — one syntax-highlighted code block (with a copy
-      //        button)."
-      //   · docs/web-components.md (generated, and the file the docs site renders):
-      //       "A single syntax-highlighted code block with a copy button."
-      //
-      // The facade renders `<CodeBlock><CodeBlockCode/></CodeBlock>` and nothing else.
-      // `CodeBlockGroup` — the flex row the copy button is meant to live in — exists
-      // in `src/components/code-block.tsx` and is used only by a STORY, which supplies
-      // its own `<Button aria-label="Copy code">`. So the copy button is real in the
-      // Solid layer's showcase and absent from the element every consumer is told to
-      // use.
-      //
-      // Marked `test.fails` so the suite stays green while the gap stays loud. The
-      // assertion below is the shape the fix should satisfy; the clipboard behaviour
-      // it would need (writeText receives the RAW `code`, never the highlighted HTML)
-      // is asserted in the test after this one, which is skipped for the same reason.
-      const el = create({ code: 'const x = 1', language: 'ts' });
-      document.body.appendChild(el);
-      await until(() => shikiPre(el) !== null, 'shiki markup');
-      const copy = shadow(el).querySelector('button');
-      expect(copy, 'kai-code-block must render the copy button its docs promise').not.toBeNull();
-    },
-  );
-
-  test.skip('WHEN THE COPY BUTTON LANDS: it must write the RAW code, not the highlighted HTML', async () => {
-    // Skipped rather than deleted, because it is the assertion that makes the fix
-    // above correct rather than merely present. By the time a copy button exists the
-    // source has already been through shiki, so the tempting implementation —
-    // reading the rendered region — copies either `<span>`-laden HTML or a text
-    // reconstruction, and the reconstruction is where trailing whitespace and line
-    // endings quietly change. The clipboard must get the `code` property verbatim.
-    const CODE = 'const x = 1;\n\tconst y = 2;\n';
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+  test('it writes the RAW code, not the highlighted HTML', async () => {
+    // THE assertion that makes the button correct rather than merely present. By the
+    // time it is clicked the source has been through shiki, so the tempting
+    // implementation — reading the rendered region — copies either `<span>`-laden HTML
+    // or a text reconstruction, and the reconstruction is where trailing whitespace and
+    // line endings quietly change. The clipboard gets the `code` property verbatim.
+    //
+    // The fixture is chosen to catch exactly that: a tab, a blank line, and a trailing
+    // newline all survive a round trip through `textContent` unevenly.
+    const CODE = 'const x = 1;\n\n\tconst y = 2;\n';
+    const writeText = stubClipboard();
 
     const el = create({ code: CODE, language: 'ts' });
     document.body.appendChild(el);
     await until(() => shikiPre(el) !== null, 'shiki markup');
 
-    (shadow(el).querySelector('button') as HTMLButtonElement).click();
+    copyButton(el)!.click();
     await flush();
 
     expect(writeText).toHaveBeenCalledTimes(1);
     expect(writeText.mock.calls[0][0]).toBe(CODE);
     expect(writeText.mock.calls[0][0]).not.toContain('<span');
+    // Belt and braces on the thing that would silently differ: the rendered text is
+    // NOT what was copied, and asserting that keeps the test honest if shiki's
+    // whitespace handling ever changes.
+    expect(writeText.mock.calls[0][0]).toBe(el.code);
   });
 
-  test('the two promises are really in the tree, exactly as quoted above', () => {
-    // The quotes in the comment above are the evidence for the defect, so they are
-    // read from the files rather than trusted. If someone fixes the DOCS instead of
-    // the element, this fails and the `test.fails` above starts lying — which is the
-    // right time to revisit both.
+  test('it copies the CURRENT code after the property changes', async () => {
+    // A stale closure over the initial `code` is the natural way to get this wrong,
+    // and streaming replaces the property.
+    const writeText = stubClipboard();
+    const el = create({ code: 'first', language: 'ts' });
+    document.body.appendChild(el);
+    await flush();
+
+    el.code = 'second';
+    await flush();
+    copyButton(el)!.click();
+    await flush();
+
+    expect(writeText.mock.calls[0][0]).toBe('second');
+  });
+
+  test('the copied state shows, then reverts on its own', async () => {
+    // The affordance is only honest if it goes back: a button stuck on "Copied" tells
+    // the next copy nothing happened.
+    stubClipboard();
+    vi.useFakeTimers();
+    try {
+      // Highlighting off so nothing async races the fake clock.
+      const el = create({ code: 'const x = 1', language: 'ts', codeHighlight: false });
+      document.body.appendChild(el);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const copy = copyButton(el)!;
+      expect(copy.getAttribute('aria-label')).toBe('Copy code');
+
+      copy.click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(copyButton(el)!.getAttribute('aria-label'), 'the press must be acknowledged').toBe('Copied');
+
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(copyButton(el)!.getAttribute('aria-label'), 'and it must revert').toBe('Copy code');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('the button is ALWAYS visible — never hover-gated', async () => {
+    // A hover-only affordance fails touch outright and is undiscoverable everywhere
+    // else. jsdom has no hover, so this pins the STRUCTURE that would implement one:
+    // no opacity-0 / invisible / group-hover utility on the button or any ancestor
+    // between it and the shadow root.
+    const el = create({ code: 'const x = 1', language: 'ts' });
+    document.body.appendChild(el);
+    await until(() => shikiPre(el) !== null, 'shiki markup');
+
+    // Asserted FIRST: with no button the walk below has nothing to iterate and the
+    // empty offender list passes while checking nothing.
+    expect(copyButton(el), 'the scan is not vacuous').not.toBeNull();
+
+    const offenders: string[] = [];
+    for (let n: Element | null = copyButton(el); n; n = n.parentElement) {
+      for (const c of n.classList) {
+        if (/^(opacity-0|invisible)$/.test(c) || c.startsWith('group-hover:') || c.startsWith('hover:opacity')) {
+          offenders.push(`${n.tagName.toLowerCase()}.${c}`);
+        }
+      }
+    }
+    expect(offenders, 'the copy button must not be revealed on hover').toEqual([]);
+  });
+
+  test('the button sits in a header row, not over the code', async () => {
+    const el = create({ code: 'const x = 1', language: 'ts' });
+    document.body.appendChild(el);
+    await until(() => shikiPre(el) !== null, 'shiki markup');
+    // Asserted FIRST: `contains(null)` is false, so without this the assertion below
+    // is satisfied most comfortably by there being no button at all.
+    expect(copyButton(el), 'the check is not vacuous').not.toBeNull();
+    // It must not be inside the scrollable code region — that region scrolls
+    // horizontally and would carry the button off-screen with the code.
+    expect(region(el).contains(copyButton(el))).toBe(false);
+  });
+
+  test('`copy={false}` and `copy="false"` each remove it — the facade default is ON', async () => {
+    // The facade defaults ON because the docs and the JSDoc promise the button; a
+    // default-off element would make the published docs true only for consumers who
+    // read the fine print. Opting out is the standard boolean mechanics.
+    const off = create({ code: 'const x = 1', language: 'ts', copy: false });
+    document.body.appendChild(off);
+    await until(() => shikiPre(off) !== null, 'shiki markup');
+    expect(copyButton(off)).toBeNull();
+    expect(shadow(off).querySelectorAll('button')).toHaveLength(0);
+
+    document.body.insertAdjacentHTML('beforeend', '<kai-code-block id="attr" language="ts" copy="false"></kai-code-block>');
+    const attr = document.getElementById('attr') as CodeBlock;
+    attr.code = 'const x = 1';
+    await until(() => shikiPre(attr) !== null, 'shiki markup');
+    expect(copyButton(attr)).toBeNull();
+
+    // Paired over the same shapes: the default really does render one, so "no button"
+    // is not passing because the button never renders in this harness.
+    const on = create({ code: 'const x = 1', language: 'ts' });
+    document.body.appendChild(on);
+    await until(() => shikiPre(on) !== null, 'shiki markup');
+    expect(copyButton(on)).not.toBeNull();
+  });
+
+  test('turning `copy` off and on again at runtime follows', async () => {
+    const el = create({ code: 'const x = 1', language: 'ts' });
+    document.body.appendChild(el);
+    await flush();
+    expect(copyButton(el)).not.toBeNull();
+
+    el.copy = false;
+    await flush();
+    expect(copyButton(el)).toBeNull();
+
+    el.copy = true;
+    await flush();
+    expect(copyButton(el)).not.toBeNull();
+  });
+
+  test('the docs promises are really in the tree, exactly as quoted above', () => {
+    // The quotes in the comment above are the evidence, so they are read from the
+    // files rather than trusted. The RULING was to make the element true to the docs
+    // rather than the docs true to the element, so these strings must stay put —
+    // if someone edits the docs instead, this fails and says so.
     const facade = readFileSync(resolve(pkgRoot, 'src/elements/code-block.tsx'), 'utf8');
     expect(facade).toContain('(with a copy button)');
     const docs = readFileSync(resolve(pkgRoot, '../../docs/web-components.md'), 'utf8');
     expect(docs).toContain('code block with a copy button');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The blast radius: the two OTHER surfaces that share this component
+// ---------------------------------------------------------------------------
+
+describe('markdown and artifact are unchanged — the Solid default is OFF', () => {
+  // `CodeBlock` is shared by three surfaces: markdown.tsx (every fenced block in every
+  // assistant message), artifact.tsx (the code panel), and this element. Only the
+  // ELEMENT was promised a copy button, so the Solid-layer default stays OFF and the
+  // facade opts in. Getting that backwards would silently add a button to every code
+  // block in every message — a kit-wide visible change riding along on a bug fix.
+
+  test('a bare <CodeBlock> renders no copy button', () => {
+    const { container } = render(() => (
+      <CodeBlock class="my-4">
+        <CodeBlockCode code="const x = 1" language="ts" />
+      </CodeBlock>
+    ));
+    expect(container.querySelectorAll('button')).toHaveLength(0);
+    expect(container.querySelector('[part="copy"]')).toBeNull();
+  });
+
+  test.each([
+    ['markdown.tsx', 'src/components/markdown.tsx'],
+    ['artifact.tsx', 'src/components/artifact.tsx'],
+  ])('%s does not opt in to `copy`', (_name, file) => {
+    // Behaviour is pinned above; this pins the CALL SITES, which is what would have to
+    // change for the behaviour to. Reading the source is the honest check here: both
+    // files render CodeBlock deep inside components with their own heavy setup, and a
+    // full render test of each would be asserting their scaffolding, not this.
+    const source = readFileSync(resolve(pkgRoot, file), 'utf8');
+    expect(source, `${file} must really render a CodeBlock, or this pin is vacuous`).toMatch(/<CodeBlock[\s>]/);
+    for (const m of source.matchAll(/<CodeBlock\b([^>]*)>/g)) {
+      expect(m[1], `${file} must not enable the copy button`).not.toMatch(/\bcopy\b/);
+    }
   });
 });

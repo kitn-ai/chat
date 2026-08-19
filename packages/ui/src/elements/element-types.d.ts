@@ -516,6 +516,8 @@ export interface KaiCodeBlockElement extends HTMLElement {
   codeTheme?: string;
   /** Disable syntax highlighting (renders plain text, no Shiki). */
   codeHighlight?: boolean;
+  /** Show the copy button. **Defaults to ON**, because this element is documented as shipping one. Opt out with `copy="false"` or `el.copy = false`. */
+  copy?: boolean;
   /** Code text sizing. */
   proseSize?: "xs" | "sm" | "base" | "lg";
 }
@@ -661,6 +663,8 @@ export interface KaiDialogElement extends HTMLElement {
   open?: boolean;
   /** Initial open state on mount (uncontrolled seed). */
   defaultOpen?: boolean;
+  /** Accessible name for the modal, used when no `header` slot is projected: `<kai-dialog label="Delete workspace">`. A projected `header` WINS over this (it becomes `aria-labelledby`), because ARIA resolves `aria-labelledby` ahead of `aria-label` and the visible heading is the name both a sighted and a screen-reader user can be talked through. Defaults to `Dialog` so a modal is never nameless. */
+  label?: string;
   /** Open it programmatically (no-op while disabled). */
   show(): void;
   /** Close it programmatically. */
@@ -2258,6 +2262,8 @@ export interface KaiCodeBlockElementProps {
   codeTheme?: string;
   /** Disable syntax highlighting (renders plain text, no Shiki). */
   codeHighlight?: boolean;
+  /** Show the copy button. **Defaults to ON**, because this element is documented as shipping one. Opt out with `copy="false"` or `el.copy = false`. */
+  copy?: boolean;
   /** Code text sizing. */
   proseSize?: "xs" | "sm" | "base" | "lg";
 }
@@ -2363,6 +2369,8 @@ export interface KaiDialogElementProps {
   open?: boolean;
   /** Initial open state on mount (uncontrolled seed). */
   defaultOpen?: boolean;
+  /** Accessible name for the modal, used when no `header` slot is projected: `<kai-dialog label="Delete workspace">`. A projected `header` WINS over this (it becomes `aria-labelledby`), because ARIA resolves `aria-labelledby` ahead of `aria-label` and the visible heading is the name both a sighted and a screen-reader user can be talked through. Defaults to `Dialog` so a modal is never nameless. */
+  label?: string;
 }
 
 export interface KaiDockElementProps {

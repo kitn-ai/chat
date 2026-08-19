@@ -458,44 +458,71 @@ describe('declarative HTML — the 13-facade bug class', () => {
     expect(expanded(el)).toBe(true);
   });
 
-  test.fails(
-    'KNOWN DEFECT — <kai-tool open> is IGNORED when `tool` arrives after connect',
-    async () => {
-      // THIS IS A REAL DEFECT IN THE SHIPPED ELEMENT, not a test artefact, and it is
-      // the 13-facade bug class resurfacing in a facade that gates its subtree.
-      //
-      // kai-tool renders `<Show when={props.tool}>`, so with no `tool` yet there is no
-      // Collapsible, no controller, and `wireDisclosure`'s `let api` is still
-      // undefined when its effects first run. `getApi()` is a plain closure over that
-      // variable, NOT a signal — so when the controller finally arrives, nothing
-      // re-runs. A bare `open` attribute never changes `props.open`, so the inward
-      // effect has no second chance either.
-      //
-      // It matters because `tool` is an OBJECT prop and therefore cannot be written in
-      // markup: markup-then-assign is the only sequence a consumer of the HTML
-      // spelling can use. Measured orderings — `open` honoured only in the first:
-      //   seed `tool`, then connect ........................ OPEN   (the test above)
-      //   connect, then `open` attr, then `tool` ........... closed
-      //   <kai-tool open> in markup, then `tool` ........... closed
-      //   <kai-tool open="true"> in markup, then `tool` .... closed, and `el.open` reads TRUE
-      //   `el.open = true`, then `el.tool = …` ............. closed
-      //
-      // The `open="true"` row is the loudest: the property reads back `true` while the
-      // panel is collapsed, so the element's own answer to "am I open" disagrees with
-      // what it drew. (Setting `el.open` AFTER `tool` does work — that path re-runs
-      // the effect — which is why every other disclosure test in this file is green.)
-      //
-      // Marked `test.fails` so the suite stays green while the defect stays loud. The
-      // likely fix is to make the controller reactive (a signal, as `Tool` itself
-      // already does internally with `createSignal<CollapsibleController>()`) rather
-      // than a bare `let`, so wireDisclosure's effects re-run when it lands.
-      document.body.innerHTML = '<kai-tool open></kai-tool>';
+  // FIXED — was a real defect, and it was the 13-facade bug class resurfacing in a
+  // facade that gates its own subtree.
+  //
+  // kai-tool renders `<Show when={props.tool}>`, so with no `tool` yet there is no
+  // Collapsible, no controller, and `wireDisclosure`'s `api` was still undefined when
+  // its effects first ran. The getter it was handed closed over a bare `let`, NOT a
+  // signal — so when the controller finally arrived, nothing re-ran. A bare `open`
+  // attribute never changes `props.open`, so the inward effect had no second chance
+  // either.
+  //
+  // It mattered because `tool` is an OBJECT prop and therefore cannot be written in
+  // markup: markup-then-assign is the only sequence a consumer of the HTML spelling
+  // has. Every ordering below was measured RED before the fix except the first, and
+  // the `open="true"` row was the loudest — `el.open` read back `true` while the panel
+  // was collapsed, so the element's own answer to "am I open" disagreed with what it
+  // drew. (Setting `el.open` AFTER `tool` always worked, because that path re-runs the
+  // effect, which is why nothing else in this file ever noticed.)
+  //
+  // The fix is one line of reactivity in the facade: the controller is a signal now,
+  // exactly as `Tool` already does internally, so wireDisclosure's effects re-run when
+  // it lands. Each ordering is a row rather than a sentence, because the bug lived in
+  // the ORDERING and a single case would have kept most of it.
+  test.each([
+    ['connect, then the `open` attribute, then `tool`', async (el: Tool) => {
+      document.body.appendChild(el);
+      await flush();
+      el.setAttribute('open', '');
+      el.tool = part({ state: 'output-available', output: { ok: true } });
+    }],
+    ['`el.open = true`, then `el.tool = …`', async (el: Tool) => {
+      document.body.appendChild(el);
+      await flush();
+      el.open = true;
+      el.tool = part({ state: 'output-available', output: { ok: true } });
+    }],
+  ])('<kai-tool> honours `open` when set BEFORE the tool — %s', async (_name, drive) => {
+    const el = document.createElement('kai-tool') as Tool;
+    await drive(el);
+    await flush();
+    expect(expanded(el)).toBe(true);
+    expect(el.open, 'the property and the rendering must agree').toBe(true);
+  });
+
+  test.each(['<kai-tool open></kai-tool>', '<kai-tool open="true"></kai-tool>'])(
+    '%s in markup is open once `tool` is assigned',
+    async (markup) => {
+      document.body.innerHTML = markup;
       const el = document.querySelector('kai-tool') as Tool;
       el.tool = part({ state: 'output-available', output: { ok: true } });
       await flush();
       expect(expanded(el)).toBe(true);
+      expect(el.open, 'the property and the rendering must agree').toBe(true);
     },
   );
+
+  test('a tool that arrives LATE still lands closed when nothing asked for open', async () => {
+    // The pair for the four rows above. Without it, "the panel is open" could be
+    // passing because a late-arriving controller now opens unconditionally.
+    document.body.innerHTML = '<kai-tool></kai-tool>';
+    const el = document.querySelector('kai-tool') as Tool;
+    el.tool = part({ state: 'output-available', output: { ok: true } });
+    await flush();
+    expect(expanded(el)).toBe(false);
+    expect(el.hasAttribute('open')).toBe(false);
+  });
 
   test('<kai-tool default-open> is open', async () => {
     document.body.innerHTML = '<kai-tool default-open></kai-tool>';
@@ -561,21 +588,32 @@ describe('reflected boolean read-back', () => {
     expect(el.open).toBe(true);
   });
 
-  test('`disabled` and `defaultOpen` are FLAG props, not reflected ones', async () => {
-    // Stated because the read-back contract above deliberately does NOT extend to
-    // them: kai-tool reflects only `open`. A bare `disabled` attribute is parsed by
-    // component-register to `undefined`, and `flag()` — not the property — is what
-    // the facade reads. Asserting a `true` read-back here would be asserting a
-    // behaviour the element does not claim; asserting the BEHAVIOUR is the honest
-    // version, and the `disabled` group below does exactly that.
+  test('a bare `disabled` attribute reads back as true, not undefined', async () => {
     const el = document.createElement('kai-tool') as Tool;
     el.setAttribute('disabled', '');
-    el.setAttribute('default-open', '');
     el.tool = part({ state: 'output-available' });
     document.body.appendChild(el);
     await flush();
-    expect(el.hasAttribute('open'), 'default-open still drives the OPEN state').toBe(true);
+    expect(el.disabled).toBe(true);
+  });
+
+  test('`defaultOpen` is a FLAG prop, NOT a reflected one — stated, not assumed', async () => {
+    // kai-tool reflects `open` and `disabled`; `defaultOpen` is deliberately neither.
+    // It is a one-shot seed read at render time through `flag()`, so there is nothing
+    // for a reflection to keep in sync and a read-back contract would be inventing
+    // one. What IS asserted is the behaviour the seed exists for.
+    //
+    // (kai-dock DOES reflect `defaultOpen`. That divergence is real and it is not
+    // swept here — `reflected-boolean-coverage.test.ts` owns the class.)
+    const el = document.createElement('kai-tool') as Tool;
+    el.setAttribute('default-open', '');
+    el.setAttribute('disabled', '');
+    el.tool = part({ state: 'output-available' });
+    document.body.appendChild(el);
+    await flush();
+    expect(el.hasAttribute('open'), 'default-open drives the OPEN state').toBe(true);
     expect(expanded(el)).toBe(true);
+    expect(trigger(el).disabled, 'and disabled still gates the trigger alongside it').toBe(true);
   });
 });
 
@@ -615,31 +653,46 @@ describe('`disabled` gates the trigger, not the methods', () => {
     expect(expanded(el)).toBe(true);
   });
 
-  test.fails(
-    'KNOWN DEFECT — setAttribute("disabled") at RUNTIME is ignored (kai-dock handles it)',
-    async () => {
-      // A REAL, if narrow, defect. `flag('disabled')` reads `props.disabled` (reactive)
-      // and falls back to `element.hasAttribute('disabled')` (NOT reactive). A bare
-      // attribute added after mount is parsed by component-register to `undefined`, so
-      // the prop never changes and nothing re-renders — and a later unrelated re-render
-      // does not pick it up either, because the memo over `props.disabled` has no
-      // reason to recompute.
-      //
-      // kai-dock does not have this problem, and the difference is one line: it calls
-      // `reflectFlag('disabled')`, whose coercing setter resolves the `undefined`
-      // write-back back through `resolveFlag` to `true`. kai-tool reflects only
-      // `open`. So the same consumer gesture works on one kai disclosure and silently
-      // does nothing on another — and `flag()`'s own doc comment advertises
-      // `<el disabled>` as a supported spelling without saying it is parse-time only.
-      //
-      // The working spellings are covered by the two tests above; this is marked
-      // `test.fails` so the suite stays green while the gap stays loud.
-      const el = await mount(part({ state: 'output-available' }));
-      el.setAttribute('disabled', '');
-      await flush();
-      expect(trigger(el).disabled).toBe(true);
-    },
-  );
+  test('setAttribute("disabled") at RUNTIME gates the trigger, and removing it restores', async () => {
+    // FIXED — was a real, if narrow, defect. `flag('disabled')` reads `props.disabled`
+    // (reactive) and falls back to `element.hasAttribute('disabled')` (NOT reactive).
+    // A bare attribute added after mount is parsed by component-register to
+    // `undefined`, so the prop never changed and nothing re-rendered; a later unrelated
+    // re-render did not pick it up either, because the memo over `props.disabled` had
+    // no reason to recompute.
+    //
+    // kai-dock never had the problem, and the difference was one line: it calls
+    // `reflectFlag('disabled')`, whose coercing setter resolves the `undefined`
+    // write-back back through `resolveFlag` to `true`. kai-tool now does the same. The
+    // same consumer gesture used to work on one kai disclosure and silently do nothing
+    // on another, while `flag()`'s own doc comment advertises `<el disabled>` as a
+    // supported spelling without saying it was parse-time only.
+    const el = await mount(part({ state: 'output-available' }));
+    el.setAttribute('disabled', '');
+    await flush();
+    expect(trigger(el).disabled).toBe(true);
+    expect(el.disabled, 'the reflected prop reads back what the attribute says').toBe(true);
+
+    // Paired: removal is the direction that used to "work" by doing nothing, so it
+    // proves the new wiring is live in both directions rather than stuck ON.
+    el.removeAttribute('disabled');
+    await flush();
+    expect(trigger(el).disabled).toBe(false);
+    expect(el.disabled).toBe(false);
+  });
+
+  test('`disabled` reflects OUT too — the property writes the attribute', async () => {
+    const el = await mount(part({ state: 'output-available' }));
+    el.disabled = true;
+    await flush();
+    expect(el.hasAttribute('disabled')).toBe(true);
+    expect(el.disabled).toBe(true);
+
+    el.disabled = false;
+    await flush();
+    expect(el.hasAttribute('disabled')).toBe(false);
+    expect(el.disabled).toBe(false);
+  });
 
   test('hide() still works while disabled — closing is never gated', async () => {
     const el = await mount(part({ state: 'output-available' }));

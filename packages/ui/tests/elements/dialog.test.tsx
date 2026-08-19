@@ -644,29 +644,121 @@ describe('accessibility', () => {
     expect(slot.assignedElements()).toEqual([el.querySelector('[slot="header"]')]);
   });
 
-  test.fails(
-    'KNOWN DEFECT — a header-less <kai-dialog> is a role=dialog with NO accessible name',
-    async () => {
-      // A REAL DEFECT, and an axe-reportable one (`aria-dialog-name`): with no
-      // `header` slot the panel gets neither `aria-labelledby` nor `aria-label`, and
-      // the facade exposes NO prop that could supply one — kai-dialog declares only
-      // `open` and `defaultOpen`. The underlying `Dialog` primitive does accept an
-      // `aria-label` prop, but the facade never forwards it, and an `aria-label` on
-      // the HOST cannot name a `role="dialog"` that lives inside the shadow root.
-      //
-      // kai-dock, the sibling surface, has a `label` prop and derives all three of
-      // its names from it, so the gap is not a house style — it is missing wiring.
-      //
-      // Marked `test.fails` so the suite stays green while the defect stays loud. The
-      // assertion below is the shape the fix should satisfy.
-      const el = await mount('<p>Are you sure?</p>');
-      el.show();
-      await flush();
-      const p = panel(el)!;
-      const named = p.hasAttribute('aria-labelledby') || !!p.getAttribute('aria-label');
-      expect(named, 'a modal dialog must have an accessible name').toBe(true);
-    },
-  );
+  test('a header-less dialog is still NAMED — the default fills in', async () => {
+    // FIXED — this was a real, axe-reportable defect (`aria-dialog-name`): with no
+    // `header` slot the panel got neither `aria-labelledby` nor `aria-label`, and the
+    // facade exposed no prop that could supply one. The `Dialog` primitive already
+    // accepted an `aria-label`; nothing forwarded it, and an `aria-label` on the HOST
+    // cannot name a `role="dialog"` living inside the shadow root.
+    //
+    // The default is deliberately generic. A screen reader announcing "Dialog, dialog"
+    // is redundant; an UNNAMED dialog is a WCAG failure, and between the two the
+    // redundant one is strictly better and is what Shoelace/WebAwesome ship. It is
+    // also the honest default: the kit cannot know what this modal is about, and
+    // inventing something specific would be worse than saying nothing extra.
+    const el = await mount('<p>Are you sure?</p>');
+    el.show();
+    await flush();
+    const p = panel(el)!;
+    expect(p.hasAttribute('aria-labelledby'), 'no header, so no labelledby').toBe(false);
+    expect(p.getAttribute('aria-label')).toBe('Dialog');
+  });
+
+  test('`label` names the dialog, as a property and as an attribute', async () => {
+    const el = await mount('<p>Are you sure?</p>');
+    el.label = 'Delete workspace';
+    el.show();
+    await flush();
+    expect(panel(el)!.getAttribute('aria-label')).toBe('Delete workspace');
+
+    el.hide();
+    await flush();
+    el.removeAttribute('label');
+    el.label = undefined;
+    el.setAttribute('label', 'Broadcast a message');
+    el.show();
+    await flush();
+    expect(panel(el)!.getAttribute('aria-label')).toBe('Broadcast a message');
+  });
+
+  test.each([
+    ['the attribute is REMOVED', (el: Dialog) => el.removeAttribute('label')],
+    ['the property is set to undefined', (el: Dialog) => { el.label = undefined; }],
+    ['the property is set to an EMPTY string', (el: Dialog) => { el.label = ''; }],
+    ['the property is set to whitespace', (el: Dialog) => { el.label = '   '; }],
+  ])('clearing the label falls back to the default rather than going nameless — %s', async (_name, clear) => {
+    // THESE ROUTES ARE WHY THE FALLBACK IS NOT BELT-AND-BRACES OVER THE DECLARED
+    // DEFAULT, and the group exists because a mutation run caught the gap: deleting
+    // the coalesce from the facade changed NOTHING in this file, because every test
+    // that touched `label` set it to something. The declared default is a SEED, not a
+    // floor — component-register writes the prop back as `null` when the attribute is
+    // removed and does not restore it — so without the coalesce a consumer who cleared
+    // the label landed straight back on the nameless dialog this fix exists to
+    // eliminate.
+    //
+    // The empty and whitespace rows are the same hazard by a different door: `??` does
+    // not catch `''`, so an explicit empty name would have produced `aria-label=""`,
+    // which is a `role="dialog"` with no accessible name wearing the attribute that
+    // was supposed to prevent one.
+    const el = await mount('<p>body</p>');
+    el.setAttribute('label', 'Temporarily named');
+    el.show();
+    await flush();
+    expect(panel(el)!.getAttribute('aria-label')).toBe('Temporarily named');
+
+    clear(el);
+    await flush();
+    expect(panel(el)!.getAttribute('aria-label'), 'a modal must never lose its name').toBe('Dialog');
+  });
+
+  test('`label` follows a live change while the dialog is open', async () => {
+    const el = await mount('<p>body</p>');
+    el.show();
+    await flush();
+    expect(panel(el)!.getAttribute('aria-label')).toBe('Dialog');
+
+    el.setAttribute('label', 'Renamed mid-flight');
+    await flush();
+    expect(panel(el)!.getAttribute('aria-label')).toBe('Renamed mid-flight');
+  });
+
+  test('A HEADER SLOT WINS over `label` — aria-labelledby, and no competing aria-label', async () => {
+    // THE PRECEDENCE DECISION, and it is not arbitrary: ARIA itself resolves
+    // aria-labelledby ahead of aria-label, so emitting both would leave the DOM
+    // stating one name and the AT announcing another. The visible heading is also the
+    // one a sighted and a screen-reader user can be talked through together, which is
+    // the whole reason the header slot exists.
+    //
+    // kai-dock is the precedent for the `label` PROP (a scalar name the element
+    // derives its ARIA from); it has no header slot, so it never had to rank the two.
+    // This element does, and the visible text wins.
+    const el = await mount('<h2 slot="header">Broadcast a message</h2><p>body</p>');
+    el.label = 'Ignored because there is a header';
+    el.show();
+    await flush();
+
+    const p = panel(el)!;
+    expect(p.getAttribute('aria-labelledby')).toBeTruthy();
+    expect(p.hasAttribute('aria-label'), 'two names is worse than one').toBe(false);
+    expect(shadow(el).getElementById(p.getAttribute('aria-labelledby')!)!.getAttribute('part')).toBe('header');
+  });
+
+  test('removing the header LATER hands naming back to `label`', async () => {
+    // The transition, because the MutationObserver that tracks the header slot is the
+    // thing that has to move the naming with it. A dialog that lost its heading and
+    // kept a dangling aria-labelledby would be nameless again, silently.
+    const el = await mount('<h2 slot="header">Broadcast</h2><p>body</p>');
+    el.label = 'Fallback name';
+    el.show();
+    await flush();
+    expect(panel(el)!.getAttribute('aria-labelledby')).toBeTruthy();
+
+    el.querySelector('[slot="header"]')!.remove();
+    await flush();
+    const p = panel(el)!;
+    expect(p.hasAttribute('aria-labelledby')).toBe(false);
+    expect(p.getAttribute('aria-label')).toBe('Fallback name');
+  });
 
   test('header and footer chrome render ONLY when something is slotted for them', async () => {
     // An empty bordered region above an unheaded dialog is the failure this avoids.
