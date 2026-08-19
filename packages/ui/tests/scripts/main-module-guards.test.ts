@@ -45,11 +45,24 @@ import { fileURLToPath } from 'node:url';
  *
  * WHY THE GUARD LIST IS EXTRACTED AND NOT RESTATED. Naming the scripts here would make
  * the fourth one — added next month, copied from one of these three — invisible. The
- * walk finds every `.mjs`/`.js` in the repo and the extractor finds every `if (…)`
- * whose condition mentions both `import.meta.url` and `process.argv[1]`, so a new
- * script is covered the day it lands. `covers every script that looks like it has a
- * guard` below is what keeps the extractor honest: if it silently stops matching, that
- * assertion goes red rather than this file passing over an empty list.
+ * walk finds every `.mjs`/`.js` in the repo and the extractor finds every `if (…)` and
+ * every `const`/`let`/`var` initializer whose text mentions both `import.meta.url` and
+ * `process.argv[1]`, so a new script is covered the day it lands. `covers every script
+ * that looks like it has a guard` below is what keeps the extractor honest: if it
+ * silently stops matching, that assertion goes red rather than this file passing over
+ * an empty list.
+ *
+ * IT HAS NOW DONE EXACTLY THAT, WHICH IS WHY THE DECLARATION FORM IS READ TOO. The
+ * extractor originally looked only at `if (…)` conditions, so a guard FACTORED INTO A
+ * NAMED CONST — `const IS_MAIN = …;` used by an `if (IS_MAIN)` further down — was
+ * invisible: the `if` mentions neither token and the declaration was never read. The
+ * script then counted as "looks guarded" with no guard extracted, and the coverage
+ * assertion went red naming it, which is the tripwire working. Two scripts landed in
+ * that shape at once (`lint-gate-parity.mjs`, `lint-threshold-derivation.mjs`), and it
+ * is not peculiar to them — `INVOKED_DIRECTLY` in a scratch copy of another lint is a
+ * third. Factoring the condition out is GOOD practice when three `if`s share it, so the
+ * right fix was to widen the extractor rather than to make the scripts repeat
+ * themselves. The population did not change and nothing was filtered out of discovery.
  *
  * WHY THE WALK IS ANCHORED AT THE REPO ROOT AND NOT AT `packages/ui`. It used to be
  * anchored at the package, which made the check's NAME broader than its POPULATION: a
@@ -114,14 +127,30 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
+/** A guard condition is any expression naming BOTH halves of the comparison. */
+const mentionsBothTokens = (text: string): boolean =>
+  text.includes('import.meta.url') && text.includes('process.argv[1]');
+
 /**
- * Pull the condition text out of every `if (…)` that mentions both tokens.
+ * Pull the condition text out of every `if (…)` — and every `const`/`let`/`var`
+ * initializer — that mentions both tokens.
  *
- * The paren matcher is naive about parens inside string literals. That is a deliberate
- * limit, not an oversight: none of the guards in this package contain one, and if a
- * future guard does, the extracted text is malformed and the fixture below fails to
- * PARSE — a loud SyntaxError, not a quiet skip. The failure mode of the shortcut is the
- * opposite of the failure mode this file exists to catch.
+ * BOTH FORMS, because the guard is the EXPRESSION and not the statement wrapped around
+ * it. A script that writes the comparison straight into an `if` and one that binds it to
+ * `IS_MAIN` first are running identical code with identical exposure to the
+ * percent-encoding defect; reading only the first would leave the second scanned, listed
+ * as "looks guarded", and never evaluated. See the docblock at the top for the two
+ * scripts that landed in that shape.
+ *
+ * Both matchers are naive about their terminator inside string literals — the paren
+ * matcher about `(`/`)`, the declaration matcher about `;`. That is a deliberate limit,
+ * not an oversight: no guard in this repo contains one, and if a future guard does, the
+ * extracted text is malformed and the fixture below fails to PARSE — a loud SyntaxError,
+ * not a quiet skip. The failure mode of the shortcut is the opposite of the failure mode
+ * this file exists to catch.
+ *
+ * A script carrying the condition BOTH ways yields two entries. That is correct and not
+ * a bug: each is evaluated, and each must be true.
  */
 function extractGuardConditions(source: string): string[] {
   const found: string[] = [];
@@ -140,10 +169,18 @@ function extractGuardConditions(source: string): string[] {
     }
     if (end === -1) continue;
     const condition = source.slice(open + 1, end);
-    if (condition.includes('import.meta.url') && condition.includes('process.argv[1]')) {
+    if (mentionsBothTokens(condition)) {
       found.push(condition.trim());
     }
   }
+
+  const declRe = /\b(?:const|let|var)\s+[A-Za-z_$][\w$]*\s*=\s*([^;]+);/g;
+  while ((match = declRe.exec(source)) !== null) {
+    if (mentionsBothTokens(match[1])) {
+      found.push(match[1].trim());
+    }
+  }
+
   return found;
 }
 
