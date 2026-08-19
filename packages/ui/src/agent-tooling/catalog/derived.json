@@ -1155,6 +1155,12 @@
           "fn": false
         },
         {
+          "name": "copy",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
           "name": "proseSize",
           "scalar": true,
           "optional": true,
@@ -1163,7 +1169,9 @@
       ],
       "events": [],
       "methods": [],
-      "parts": [],
+      "parts": [
+        "copy"
+      ],
       "composedFrom": [
         "CodeBlock",
         "CodeBlockCode"
@@ -1559,6 +1567,12 @@
         },
         {
           "name": "defaultOpen",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "label",
           "scalar": true,
           "optional": true,
           "fn": false

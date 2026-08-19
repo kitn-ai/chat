@@ -662,7 +662,16 @@ No events.
 | `language` | `language` | `undefined | string` | — | Language grammar (e.g. `js`, `python`). Defaults to `tsx`. |
 | `codeTheme` | `code-theme` | `undefined | string` | `'github-dark-dimmed'` | Shiki theme name. |
 | `codeHighlight` | `code-highlight` | `undefined | false | true` | `true` | Disable syntax highlighting (renders plain text, no Shiki). |
+| `copy` | `copy` | `undefined | false | true` | `true` | Show the copy button. **Defaults to ON**, because this element is documented as shipping one. Opt out with `copy="false"` or `el.copy = false`. |
 | `proseSize` | `prose-size` | `undefined | "xs" | "sm" | "base" | "lg"` | `'sm'` | Code text sizing. |
+
+#### Styleable parts
+
+Restyle from outside the Shadow DOM via `kai-code-block::part(name)`.
+
+| Part | Description |
+|------|-------------|
+| `::part(copy)` | The copy-to-clipboard button in the header row. Hide it with `copy="false"` rather than CSS. <br>`kai-code-block::part(copy) { color: var(--color-primary) }` |
 
 #### Composed from
 

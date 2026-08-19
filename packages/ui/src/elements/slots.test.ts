@@ -799,6 +799,7 @@ describe('ELEMENT_COMPOSITION registry (single source of truth the build extract
       'kai-card',
       'kai-chat',
       'kai-coachmark',
+      'kai-code-block',
       'kai-command',
       'kai-context',
       'kai-conversations',

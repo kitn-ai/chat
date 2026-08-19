@@ -44,7 +44,7 @@
  * THOSE CHECKS ALREADY EARNED THEIR KEEP, twice, on the first run of this file:
  *   • the analyzer counted `<kai-dialog>` inside a COMMENT as construction, so it
  *     reported an untested element as tested — the very mistake it was written to
- *     stop. Hence `stripComments`. Fixing it exposed a NINETEENTH uncovered element,
+ *     stop. Hence `stripNonCode`. Fixing it exposed a NINETEENTH uncovered element,
  *     `kai-empty`, whose only test-file hits are a doc comment and a fixture string.
  *   • the guard scanned ITSELF, and its deliberately construction-shaped fixtures
  *     credited three of the elements it exempts. The stale-exemption test is what
@@ -103,19 +103,151 @@ function testFiles(): string[] {
 }
 
 /**
- * Blank out `//` and block comments, preserving offsets so nothing else shifts.
+ * Blank the two syntaxes where a tag is TEXT rather than code — comments and regex
+ * literals — preserving offsets so nothing else shifts.
  *
- * Needed because prose is where tags get MENTIONED: `// <kai-dialog> traps Tab, this
- * must not` sits in a neighbouring suite today and would otherwise be credited as
- * construction of kai-dialog — the exact overcounting this guard exists to reject,
- * committed by the guard itself. String CONTENTS are deliberately kept: the primary
- * construction shape, `createElement('kai-x')`, IS a string literal, so blanking them
- * would blind the analyzer to the thing it is looking for.
+ * COMMENTS, because prose is where tags get MENTIONED: `// <kai-dialog> traps Tab,
+ * this must not` sits in a neighbouring suite today and would otherwise be credited
+ * as construction of kai-dialog — the exact overcounting this guard exists to reject,
+ * committed by the guard itself.
+ *
+ * REGEX LITERALS, for the same reason and at a higher cost. `kai-tool` — a core
+ * agentic element rendering model-controlled arguments — was reported COVERED for
+ * months on the strength of `scaffold.test.ts` asserting the scaffolder does NOT emit
+ * it: `expect(text).not.toMatch(/<kai-tool><\/kai-tool>/)`. A tag inside a regex
+ * literal, in a NEGATIVE assertion, credited as construction. It never reached the
+ * punch list, so it was not even a known gap. Comments were the syntax someone
+ * thought of; this is the one they did not.
+ *
+ * STRINGS come back TWO WAYS, because the two construction shapes want opposite
+ * treatments and asking one question of one text is what let the second hole through.
+ * `createElement('kai-x')` IS a string literal, so `code` keeps string contents. JSX
+ * is code and can NEVER be inside a string, so `codeNoStrings` blanks them — which is
+ * what stops a test NAME (`it('… does NOT emit bare <kai-tool> …')`) from counting as
+ * a `<kai-tool>` element. `reflected-boolean-coverage.test.ts` splits its own scans
+ * the same way and for the same reason. Both views come out of ONE traversal: the
+ * scanner already knows where the strings are, and stripping the corpus twice was
+ * measurable.
+ *
+ * Comments go first. Doing it the other way round lets an apostrophe in prose
+ * (`// don't do this`) open a string state that swallows real code after it.
  */
-export function stripComments(source: string): string {
-  return source
+export interface StrippedSource {
+  /** Comments and regex literals blanked; string CONTENTS kept. */
+  code: string;
+  /** The same, with string contents blanked too. */
+  codeNoStrings: string;
+}
+
+export function stripNonCode(source: string): StrippedSource {
+  const withoutComments = source
     .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
     .replace(/(^|[^:\\])\/\/[^\n]*/g, (m, lead: string) => lead + ' '.repeat(m.length - lead.length));
+  return blankRegexLiterals(withoutComments);
+}
+
+/**
+ * The positions where a `/` cannot possibly be division, so it must open a regex.
+ *
+ * `tail` is the last few NON-WHITESPACE characters emitted so far, carried along by
+ * the scanner. Deriving it there rather than re-scanning the output is not a
+ * micro-optimisation: the first version asked `out.replace(/\s+$/, '')` at every
+ * slash in every file, which is O(n²) over the corpus and took the suite from under a
+ * second to past a two-minute timeout. A guard nobody can afford to run is a guard
+ * nobody runs.
+ *
+ * DELIBERATELY INCOMPLETE, and that is the safe direction. Every token here is one
+ * after which JavaScript syntactically forbids a binary operator, so treating the
+ * slash as a regex cannot misread arithmetic. Omitted on purpose are the ambiguous
+ * starts — after `)`, `]`, an identifier, a number, or at the head of a statement —
+ * where telling a regex from a division needs a real parser. Missing one of those
+ * leaves a tag credited that should not be, which is the SAME failure the guard
+ * already had; guessing wrong on one of them would blank live code and hide
+ * construction that is really there, which is a NEW and worse failure. The uncovered
+ * positions are all shapes nobody writes a tag-matching regex in.
+ */
+function canStartRegex(tail: string): boolean {
+  if (tail === '') return false;
+  if (tail.endsWith('=>')) return true;
+  if (/[(,=[:!&|?]$/.test(tail)) return true;
+  return /(?:^|[^\w$])return$/.test(tail);
+}
+
+/**
+ * Index of the closing `/` of the regex literal starting at `start`, or -1.
+ *
+ * Honours `\` escapes and `[...]` classes (where an unescaped `/` is literal), and
+ * gives up at a newline because a regex literal cannot span one — which is what keeps
+ * a misjudged slash from blanking the rest of a file.
+ */
+function regexEnd(source: string, start: number): number {
+  let i = start + 1;
+  let inClass = false;
+  while (i < source.length) {
+    const c = source[i];
+    if (c === '\n') return -1;
+    if (c === '\\') { i += 2; continue; }
+    if (inClass) { if (c === ']') inClass = false; i++; continue; }
+    if (c === '[') { inClass = true; i++; continue; }
+    if (c === '/') return i;
+    i++;
+  }
+  return -1;
+}
+
+/**
+ * Blank every regex literal, and emit the two string views, in ONE traversal.
+ *
+ * Offsets are preserved throughout (everything blanked becomes spaces), so a future
+ * caller wanting line numbers can still have them.
+ */
+function blankRegexLiterals(source: string): StrippedSource {
+  const out: string[] = [];
+  const bare: string[] = [];
+  /** The last few non-whitespace characters emitted — see `canStartRegex`. */
+  let tail = '';
+  /** Keep in `code`; blank in `codeNoStrings` unless `keepBare`. */
+  const emit = (s: string, keepBare = true) => {
+    out.push(s);
+    bare.push(keepBare ? s : s.replace(/[^\n]/g, ' '));
+    const solid = s.replace(/\s+/g, '');
+    if (solid) tail = (tail + solid).slice(-8);
+  };
+
+  let i = 0;
+  let quote: string | null = null;
+  while (i < source.length) {
+    const c = source[i];
+    if (quote) {
+      // The closing quote is kept in BOTH views (it is punctuation, not content), so
+      // an empty string still reads as `''` rather than vanishing.
+      if (c === '\\') { emit(source.slice(i, i + 2), false); i += 2; continue; }
+      if (c === quote) { quote = null; emit(c); i++; continue; }
+      emit(c, false);
+      i++;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === '`') { quote = c; emit(c); i++; continue; }
+    // `//` and `/*` are already gone, but guard anyway: neither can open a regex, and
+    // a URL's `://` reaches here intact for exactly that reason.
+    if (c === '/' && source[i + 1] !== '/' && source[i + 1] !== '*' && canStartRegex(tail)) {
+      const end = regexEnd(source, i);
+      if (end !== -1) {
+        const blank = ' '.repeat(end - i + 1);
+        out.push(blank);
+        bare.push(blank);
+        // A blanked regex is still a VALUE, so a slash after it is division. Standing
+        // in a `)` keeps that true without leaking the literal's own characters into
+        // the token history.
+        tail = (tail + ')').slice(-8);
+        i = end + 1;
+        continue;
+      }
+    }
+    emit(c);
+    i++;
+  }
+  return { code: out.join(''), codeNoStrings: bare.join('') };
 }
 
 /* --------------------------------------------------------------- the analyzers */
@@ -174,7 +306,7 @@ function valueModules(file: string, source: string): Set<string> {
  * uncovered list, so that bug would have hidden a real gap behind a real gap.
  */
 export function constructsTag(source: string, tag: string): boolean {
-  return constructsIn(stripComments(source), tag);
+  return constructsIn(stripNonCode(source), tag);
 }
 
 /**
@@ -182,11 +314,15 @@ export function constructsTag(source: string, tag: string): boolean {
  * asks 79 questions of every one of ~300 files, and stripping inside the predicate
  * re-stripped each file 79 times — measurably, 2.3s of the run against a 5000ms
  * per-test budget. Stripping once per file puts it back under a second.
+ *
+ * The two shapes read DIFFERENT views, which is the whole of the string-literal fix:
+ * `createElement('kai-x')` needs string contents, JSX cannot legally be inside a
+ * string and so reads the view where strings are blanked.
  */
-function constructsIn(code: string, tag: string): boolean {
+function constructsIn(stripped: StrippedSource, tag: string): boolean {
   const t = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`createElement\\s*(?:<[^>]*>)?\\s*\\(\\s*['"\`]${t}['"\`]`).test(code)
-    || new RegExp(`<${t}[\\s/>]`).test(code);
+  return new RegExp(`createElement\\s*(?:<[^>]*>)?\\s*\\(\\s*['"\`]${t}['"\`]`).test(stripped.code)
+    || new RegExp(`<${t}[\\s/>]`).test(stripped.codeNoStrings);
 }
 
 /* ------------------------------------------------------- tag -> facade -> Solid */
@@ -244,7 +380,7 @@ type Verdict = { covered: boolean; by: string[] };
 function scan(): Map<string, Verdict> {
   const files = testFiles().map((file) => {
     const source = readFileSync(file, 'utf8');
-    return { file, code: stripComments(source), modules: valueModules(file, source) };
+    return { file, stripped: stripNonCode(source), modules: valueModules(file, source) };
   });
   const verdicts = new Map<string, Verdict>();
   for (const tag of TAGS) {
@@ -254,7 +390,7 @@ function scan(): Map<string, Verdict> {
     for (const f of files) {
       const rel = f.file.slice(PKG.length + 1);
       if (facade && f.modules.has(facade)) by.push(`${rel} (imports the facade)`);
-      else if (constructsIn(f.code, tag)) by.push(`${rel} (constructs <${tag}>)`);
+      else if (constructsIn(f.stripped, tag)) by.push(`${rel} (constructs <${tag}>)`);
       else if ([...solid].some((m) => f.modules.has(m))) by.push(`${rel} (tests the Solid component)`);
     }
     verdicts.set(tag, { covered: by.length > 0, by });
@@ -285,10 +421,6 @@ const EXEMPT: Record<string, { kind: 'story-only' | 'nothing'; reason: string }>
     kind: 'story-only',
     reason: 'rendered by seven showcase stories; no test asserts fallback initials, image failure, or size. Grep hits on "avatar" in the thread/message suites are a DIFFERENT component.',
   },
-  'kai-dialog': {
-    kind: 'story-only',
-    reason: 'story-only (split-workspace); no behavioural test. show()/hide() and the focus trap are typed in element-methods-typed.test.ts as a tsc string fixture, which never mounts anything.',
-  },
   'kai-empty': {
     kind: 'story-only',
     reason: 'story-only (chat-slots); no behavioural test. It read as covered until this analyzer learned to strip comments — its only test-file hits are a `<kai-empty>` in a doc comment in slot-registry-coverage.test.ts and a registry fixture string in slots.test.ts.',
@@ -315,10 +447,6 @@ const EXEMPT: Record<string, { kind: 'story-only' | 'nothing'; reason: string }>
   },
 
   // ---- nothing: no test, no element story.
-  'kai-code-block': {
-    kind: 'nothing',
-    reason: 'no test, no element story. Its only mention anywhere is a comment in the react prop table. Highlighting, language selection and the copy control are all unexercised at the element level.',
-  },
   'kai-pane': {
     kind: 'nothing',
     reason: 'no test, no element story; the only hits are slots.test.ts registry fixtures. Sizing and collapse are unexercised.',
@@ -409,7 +537,7 @@ describe('element coverage', () => {
     // The delimiter case: a longer tag must not be credited to its prefix.
     expect(constructsTag(`const el = document.createElement('kai-pane-group');`, 'kai-pane')).toBe(false);
     // The comment case, in both syntaxes. This one was a real bug in THIS analyzer,
-    // not a hypothetical: before stripComments it credited the line above.
+    // not a hypothetical: before comments were stripped it credited the line above.
     expect(constructsTag(`/* renders <kai-image> in the story */`, 'kai-image')).toBe(false);
     expect(constructsTag(`// document.createElement('kai-notice')`, 'kai-notice')).toBe(false);
     // ...and the stripper must not eat code after a URL, which is what a naive
@@ -417,6 +545,89 @@ describe('element coverage', () => {
     expect(constructsTag(`const doc = 'https://ui.kitn.ai'; el = document.createElement('kai-notice');`, 'kai-notice')).toBe(true);
     // A type-only import is not coverage.
     expect(importsOf(`import type { DockProps } from '../../src/elements/dock';`)[0].typeOnly).toBe(true);
+  });
+
+  it('rejects tags inside REGEX LITERALS — the hole that hid kai-tool', () => {
+    // NOT hypothetical, and not a near miss: this analyzer reported `kai-tool` — a
+    // core agentic element rendering model-controlled arguments — as COVERED, on the
+    // strength of `src/agent-tooling/mcp/scaffold.test.ts` asserting that the
+    // scaffolder does NOT emit the tag:
+    //
+    //     expect(text).not.toMatch(/<kai-tool\s*>/);
+    //
+    // A tag inside a regex literal in a NEGATIVE assertion, credited as construction.
+    // So the one element in the manifest with the worst consequence for going
+    // untested never even reached the punch list, and the guard's own headline claim
+    // — "the analyzer never trusts a tag's TEXT" — was false for a whole syntax.
+    // It is the same class as the comment bug that `stripNonCode` was written for:
+    // a place where the tag is TEXT rather than code.
+    // The first line is the real one, copied from scaffold.test.ts verbatim.
+    for (const tag of ['kai-tool', 'kai-reasoning']) {
+      expect(constructsTag(`expect(text).not.toMatch(/<${tag}><\\/${tag}>/);`, tag), `${tag} in a regex arg`).toBe(false);
+      expect(constructsTag(`const re = /<${tag}><\\/${tag}>/g;`, tag), `${tag} in an assigned regex`).toBe(false);
+      expect(constructsTag(`if (!/<${tag}[\\s/>]/.test(src)) fail();`, tag), `${tag} in a negated regex`).toBe(false);
+      expect(constructsTag(`const shapes = [/<${tag}>/, /x/];`, tag), `${tag} in a regex inside an array`).toBe(false);
+    }
+
+    // …and the stripper must not eat DIVISION, which is the thing a naive
+    // "blank from / to /" rule destroys. Both halves matter: the construction after
+    // the division still has to be seen.
+    expect(
+      constructsTag(`const half = width / 2; const el = document.createElement('kai-pane');`, 'kai-pane'),
+      'a division must not swallow the code after it',
+    ).toBe(true);
+    expect(
+      constructsTag(`const r = (a / b) / c; render(() => <kai-chat />);`, 'kai-chat'),
+      'chained division must not swallow the JSX after it',
+    ).toBe(true);
+    // A URL in a string is a `:` followed by `//`, which is a comment opener and can
+    // never begin a regex literal. It survived comment stripping for the same reason;
+    // it has to survive this too.
+    expect(
+      constructsTag(`const doc = 'https://ui.kitn.ai'; el = document.createElement('kai-notice');`, 'kai-notice'),
+      'a URL must not start a phantom regex',
+    ).toBe(true);
+    // A path string is not a regex either, even though it is full of slashes.
+    expect(
+      constructsTag(`const p = join(PKG, '/src/elements'); el = document.createElement('kai-badge');`, 'kai-badge'),
+      'a path literal must not start a phantom regex',
+    ).toBe(true);
+  });
+
+  it('rejects a tag inside a STRING that is not a createElement call — the second half', () => {
+    // Blanking regex literals was not enough, and finding out why is the useful part.
+    // With the regex hole closed, `kai-tool` was STILL credited — by the TEST NAME two
+    // lines above the regex in the same file:
+    //
+    //     it('SCAF-9: agentic (html) does NOT emit bare <kai-tool> or <kai-reasoning> siblings', …)
+    //
+    // Prose in a string literal, and the JSX pattern `<kai-x[\s/>]` matches it happily
+    // because this analyzer deliberately KEEPS string contents — it has to, since
+    // `createElement('kai-x')` IS a string literal. So the two construction shapes want
+    // opposite treatments, and the fix is to stop asking one question of one text:
+    // `createElement` is matched with strings KEPT, JSX with string contents BLANKED.
+    // `reflected-boolean-coverage.test.ts` splits its own scans the same way and for
+    // the same reason.
+    //
+    // Note what this does NOT rely on: nothing here inspects whether the string is a
+    // test name, an argument to `it`, or anything else about its context. JSX is code
+    // and can never be inside a string; that is the whole rule.
+    expect(constructsTag(
+      `it('SCAF-9: agentic (html) does NOT emit bare <kai-tool> or <kai-reasoning> siblings', run);`,
+      'kai-tool',
+    ), 'a tag in a test NAME is not construction').toBe(false);
+    expect(constructsTag(`const doc = "renders a <kai-dialog> over the page";`, 'kai-dialog')).toBe(false);
+    expect(constructsTag('const tpl = `<kai-chat messages={m}></kai-chat>`;', 'kai-chat'),
+      'a template literal is emitted TEXT, not this tree\'s JSX').toBe(false);
+    expect(constructsTag(`host.innerHTML = '<kai-segmented></kai-segmented>';`, 'kai-segmented')).toBe(false);
+
+    // THE COMPLEMENT, and it is the one that makes the split delicate: the primary
+    // construction shape lives inside a string and must survive.
+    expect(constructsTag(`const el = document.createElement('kai-dock') as Dock;`, 'kai-dock')).toBe(true);
+    expect(constructsTag(`document.createElement<HTMLElement>("kai-pane")`, 'kai-pane')).toBe(true);
+    expect(constructsTag('document.createElement(`kai-badge`)', 'kai-badge')).toBe(true);
+    // …and real JSX, which is code and therefore untouched by string blanking.
+    expect(constructsTag(`render(() => <kai-chat messages={m} />);`, 'kai-chat')).toBe(true);
   });
 
   it('accepts real construction', () => {

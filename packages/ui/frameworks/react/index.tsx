@@ -471,13 +471,15 @@ export interface CodeBlockProps extends WebComponentProps {
   codeTheme?: string;
   /** Disable syntax highlighting (renders plain text, no Shiki). */
   codeHighlight?: boolean;
+  /** Show the copy button. **Defaults to ON**, because this element is documented as shipping one. Opt out with `copy="false"` or `el.copy = false`. */
+  copy?: boolean;
   /** Code text sizing. */
   proseSize?: "xs" | "sm" | "base" | "lg";
 }
 
 export const CodeBlock = /*#__PURE__*/ createWebComponent<CodeBlockProps>(
   'kai-code-block',
-  ["theme","code","language","codeTheme","codeHighlight","proseSize"],
+  ["theme","code","language","codeTheme","codeHighlight","copy","proseSize"],
   {  },
   () => import('@kitn.ai/ui/elements/code-block'),
 );
@@ -651,13 +653,15 @@ export interface DialogProps extends WebComponentProps {
   open?: boolean;
   /** Initial open state on mount (uncontrolled seed). */
   defaultOpen?: boolean;
+  /** Accessible name for the modal, used when no `header` slot is projected: `<kai-dialog label="Delete workspace">`. A projected `header` WINS over this (it becomes `aria-labelledby`), because ARIA resolves `aria-labelledby` ahead of `aria-label` and the visible heading is the name both a sighted and a screen-reader user can be talked through. Defaults to `Dialog` so a modal is never nameless. */
+  label?: string;
   /** The dialog opened or closed (Escape, backdrop click, a driven `open`, or a method). */
   onOpenChange?: (event: CustomEvent<{ open: boolean }>) => void;
 }
 
 export const Dialog = /*#__PURE__*/ createWebComponent<DialogProps>(
   'kai-dialog',
-  ["theme","open","defaultOpen"],
+  ["theme","open","defaultOpen","label"],
   { onOpenChange: 'kai-open-change' },
   () => import('@kitn.ai/ui/elements/dialog'),
 );
