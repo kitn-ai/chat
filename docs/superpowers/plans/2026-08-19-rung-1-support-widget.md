@@ -78,4 +78,6 @@ pnpm --filter @kitn.ai/ui run lint:catalog-drift
   that rot. Gate-parity green throughout.
 - Guards dogfooded: writer-lock claims on every dispatch (zero conflicts), briefs generated
   from the template, this plan is the first document in lint:thresholds scope (green).
-- Committed 48e2c6c1 + 7a5f530e. Task 6 (real-provider validation) pending the owner's key.
+- Committed 48e2c6c1 + 7a5f530e.
+- Task 6: owner validated the app live on 2026-08-19 against BOTH the mock service and a real
+  OpenRouter provider. The wire path and encode path work against a live model.
