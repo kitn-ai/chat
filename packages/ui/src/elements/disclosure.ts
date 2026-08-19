@@ -37,22 +37,23 @@ export function wireDisclosure<E extends { 'kai-open-change': { open: boolean } 
   getApi: () => OpenController | undefined,
   openProp: () => unknown,
 ): void {
-  const { element, dispatch, flag, expose } = ctx;
+  const { element, dispatch, flag, reflectFlag, expose } = ctx;
   let prev: boolean | undefined;
-
-  // Reflect internal open → the `[open]` host attribute + fire kai-open-change.
-  createEffect(() => {
-    const api = getApi();
-    if (!api) return;
-    const o = api.open();
-    element.toggleAttribute('open', o);
-    if (prev !== undefined && prev !== o) dispatch('kai-open-change', { open: o } as E['kai-open-change']);
-    prev = o;
-  });
 
   // External `open` prop/attr → drive internal state. Only when the consumer has
   // EXPLICITLY set it (so a defaultOpen seed survives mount); the equality guard
-  // keeps the reflect above from looping back through the prop.
+  // keeps the reflect below from looping back through the prop.
+  //
+  // THIS RUNS FIRST, AND THE ORDER IS THE FIX FOR A REAL DEFECT. It used to run
+  // second, after the outward reflection — which on the very first pass read a
+  // controller still in its default CLOSED state and called
+  // `toggleAttribute('open', false)`, DELETING the author's attribute before anything
+  // had read it. This effect then saw no attribute and a prop that
+  // component-register had parsed to `undefined`, concluded nothing was asked for,
+  // and left the element shut. Net result: `<kai-reasoning open>` — the plain HTML
+  // spelling the `open` prop's own doc advertises — never opened; only `default-open`
+  // did. Reading intent IN before reflecting state OUT is what makes the author's
+  // attribute survive long enough to mean something.
   createEffect(() => {
     const api = getApi();
     if (!api) return;
@@ -60,6 +61,27 @@ export function wireDisclosure<E extends { 'kai-open-change': { open: boolean } 
     if (!explicit) return;
     const desired = flag('open');
     if (desired !== untrack(api.open)) api.setOpen(desired);
+  });
+
+  // Reflect internal open → the `[open]` host attribute.
+  //
+  // Through `reflectFlag`, whose SOURCE is the controller rather than the prop — this
+  // element's truth is its internal open signal, not `props.open`. It also installs
+  // the read-back accessor, which this wiring needed and did not have: `el.open = true`
+  // used to leave `el.open === undefined`, exactly as `kai-chat`'s `loading` did
+  // (findings G-05). Returning `undefined` before the primitive has handed its
+  // controller up leaves the author's `<el open>` attribute alone.
+  reflectFlag('open', () => getApi()?.open());
+
+  // kai-open-change, fired once per change. Separate from the reflection above
+  // because it is a notification, not a reflection; both run in the same batch, so
+  // splitting them changes nothing observable about the ordering.
+  createEffect(() => {
+    const api = getApi();
+    if (!api) return;
+    const o = api.open();
+    if (prev !== undefined && prev !== o) dispatch('kai-open-change', { open: o } as E['kai-open-change']);
+    prev = o;
   });
 
   expose({

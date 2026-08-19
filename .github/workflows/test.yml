@@ -773,7 +773,12 @@ jobs:
       - name: React adapter tests
         run: pnpm --filter @kitn.ai/ui test:react
 
+      # Capped because this step has been observed stalling until the job's own
+      # 30-minute timeout — three times — with nothing after it ever running. A
+      # download+apt step that has not finished in five minutes is hung, not slow,
+      # so fail here rather than burning the whole job budget on it.
       - name: Install Playwright browser
+        timeout-minutes: 5
         run: npx playwright install --with-deps chromium
 
       # Small, focused, retried-internally cross-origin postMessage SECURITY
@@ -847,7 +852,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Same cap, same reason as the `test` job's copy of this step above.
       - name: Install Playwright browser
+        timeout-minutes: 5
         run: npx playwright install --with-deps chromium
 
       - name: Build (element bundle + provider subpath)
