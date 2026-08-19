@@ -5882,6 +5882,7 @@ Do NOT rewrite the existing findings. They are the measured record.
 
 - [ ] **Step 9: Verify the spike**
 
+<!-- gate-list: partial -- historical record, predates lint:gate-parity -->
 ```bash
 pnpm exec nx build ui
 pnpm --filter @kitn.ai/ui-example-openrouter-spike test
@@ -5921,6 +5922,7 @@ partial-arguments trays are gone: all three are message parts now."
 
 - [ ] **Step 1: Full green gate**
 
+<!-- gate-list: partial -- historical record, predates lint:gate-parity -->
 ```bash
 pnpm exec nx typecheck ui
 pnpm --filter @kitn.ai/ui exec vitest run --project=unit

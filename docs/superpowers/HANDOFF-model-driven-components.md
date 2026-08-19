@@ -663,6 +663,7 @@ which is why the setup count is not a constant either.
 **Every guard here was watched failing before being trusted.** If you add a 27th, do the same or do
 not bother.
 
+<!-- gate-list: partial -- historical record, predates lint:gate-parity -->
 | # | step | catches | notes |
 | --- | --- | --- | --- |
 | 1 | model-spend audit | any workflow line that could reach a live model | deny-by-default over every workflow file; 6 rules, each self-tested against a known-bad and a known-good sample BEFORE the scan proceeds |

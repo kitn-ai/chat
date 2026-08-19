@@ -23,6 +23,7 @@ over that check's 64 KiB per-file ceiling, and was shipping to every consumer. A
 omits the one failing check is how a red job reads as green, so run the job's steps, and treat any list
 here as a subset that rots:
 
+<!-- gate-list: partial -- historical record, predates lint:gate-parity -->
 ```
 pnpm --filter @kitn.ai/ui run typecheck
 pnpm --filter @kitn.ai/ui exec vitest run --project=unit

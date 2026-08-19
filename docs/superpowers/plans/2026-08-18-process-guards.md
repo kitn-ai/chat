@@ -49,6 +49,20 @@ touch `packages/ui/package.json`; 2 and 5 share a worker because both touch `tes
 - **Not mechanized, stated so it is not mistaken for covered:** asserting something without
   looking it up. Briefs state it; nothing enforces it.
 
+## Run ledger (kept honest, errors included)
+
+- Guard 1 verified PASS (independent verifier, own fixtures + mutants; confirmed the stale
+  verdict on this checkout is a true positive). Four nits sent back to its worker.
+- Guard 4 verified PASS (sentinel proof of run-time template read; 8/8 constraints both roles).
+- Guard 3 verified FAIL: D1 path-form blindness (absolute vs relative → false no-overlap),
+  D2 lost update under parallel claims (7/8 trials silently erased a live claim). Fix looped
+  to its original worker.
+- **Supervisor coordination error #1 (2026-08-18):** the D1/D2 fix brief was first sent to the
+  WRONG worker — the guard-1 agent, whose brief forbids touching that file. Caught by the
+  supervisor on the next action, stand-down sent, fix re-routed to the owning worker, branch
+  checkpointed so the untracked file could not be lost. This is exactly the class guard 3
+  exists to mechanize; logged for the baseline comparison.
+
 ## Verification
 
 Each worker's report is a request for verification, not a completion. An independent verifier

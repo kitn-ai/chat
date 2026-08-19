@@ -5003,6 +5003,7 @@ Expected: all specs pass. Review every screenshot yourself before reporting. Zoo
 
 - [ ] **Step 3: Full gate**
 
+<!-- gate-list: partial -- historical record, predates lint:gate-parity -->
 ```bash
 nx typecheck ui
 pnpm --filter @kitn.ai/ui exec vitest run --project=unit

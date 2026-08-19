@@ -487,6 +487,7 @@ Keep the `googleapis/release-please-action@v4` step unchanged (it reads the root
 
 - [ ] **Step 6: Validate the workflow YAML + a final green gate locally**
 
+<!-- gate-list: partial -- historical record, predates lint:gate-parity -->
 ```bash
 cd /Users/home/Projects/kitn-ai/kitn-chat
 for f in .github/workflows/*.yml; do node -e "require('js-yaml')" 2>/dev/null && npx --yes js-yaml "$f" >/dev/null && echo "OK $f"; done
