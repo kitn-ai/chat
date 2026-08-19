@@ -129,9 +129,16 @@ defineWebComponent<GroupProps, GroupEvents>('kai-resizable', {
         min: el.getAttribute('min') ?? undefined,
         max: el.getAttribute('max') ?? undefined,
         locked: el.hasAttribute('locked') && el.getAttribute('locked') !== 'false',
-        // Honour both the `hidden` boolean attribute and the IDL property — Solid
-        // (and direct `el.hidden = true`) set the property, which doesn't reflect
-        // to the attribute on a custom element.
+        // Honour both the `hidden` attribute and the property, because on THIS element
+        // they are two independent halves of the state and either can be the only one
+        // set. Not a fact about custom elements in general — a custom element that does
+        // not declare a `hidden` prop keeps the native reflecting accessor. It is a fact
+        // about this one: `<kai-resizable-item>` declares `hidden: false`, so
+        // component-register owns the property and nothing reflects. Measured:
+        // `el.hidden = true` writes no attribute, and after maximize writes the
+        // attribute `el.hidden` reads `undefined`. This union is what absorbs that, and
+        // it is why `hidden` is exempt from the reflectFlag migration rather than broken
+        // by it — see reflectItemConfig's doc below.
         hidden: el.hidden || (el.hasAttribute('hidden') && el.getAttribute('hidden') !== 'false'),
         collapsed,
       };
@@ -543,10 +550,22 @@ defineWebComponent<GroupProps, GroupEvents>('kai-resizable', {
  * *properties* — `el.size = "280px"` — but component-register only mirrors
  * attribute→property, never the reverse, so a property-set size never becomes an
  * attribute and the parent silently falls back to a flexible split. This is the
- * exact class of bug the `collapsed` reflection already fixed; extended here to
- * `size`/`min`/`max` (strings) and `locked` (boolean). `hidden` is deliberately
- * NOT reflected — native `el.hidden` reflects to the attribute on its own and the
- * parent honours the `hidden` property directly (and maximize drives `hidden`).
+ * exact class of bug the `collapsed` reflection already fixed; handled here for
+ * `size`/`min`/`max` (the STRINGS). The booleans — `collapsed` and `locked` — go
+ * through `reflectFlag` in the facade body instead, which reflects AND keeps the
+ * property readable; see WebComponentContext.reflectFlag.
+ *
+ * `hidden` is deliberately NOT reflected, and NOT because it is already fine — it is
+ * split exactly like the others, and measurably so: `el.hidden = true` leaves no
+ * attribute (a plain `<div>` gets one), and after maximize writes the attribute
+ * `el.hidden` reads `undefined`. Declaring `hidden: false` is what does it — it makes
+ * `hidden` a component-register prop, whose non-reflecting accessor shadows the native
+ * reflecting one. What makes the split HARMLESS here is that both readers take the
+ * union, `el.hidden || el.hasAttribute('hidden')`, so neither half can be missed.
+ * Routing it through `reflectFlag` would put a second writer on an attribute the
+ * maximize/restore path already owns, so it is a behaviour decision of its own rather
+ * than part of the read-back fix. See the exemption in
+ * tests/elements/reflected-boolean-coverage.test.ts.
  *
  * Durability (don't fight drags): the parent WRITES `size` back to the live percent
  * during a drag (`persistSizes` → `setAttribute('size', …)`), and that attribute
@@ -568,7 +587,6 @@ defineWebComponent<GroupProps, GroupEvents>('kai-resizable', {
 export function reflectItemConfig(
   element: HTMLElement,
   props: { readonly size?: string; readonly min?: string; readonly max?: string },
-  flag: (name: string) => boolean,
 ) {
   const norm = (v: unknown): string | null => (v == null || v === '' ? null : String(v));
   const reflectString = (name: 'size' | 'min' | 'max') => {
@@ -591,11 +609,11 @@ export function reflectItemConfig(
   reflectString('size');
   reflectString('min');
   reflectString('max');
-  // Boolean: mirror the `collapsed`/`loading` precedent — a bare `locked` attribute
-  // and the IDL property are both honoured via `flag`. The parent also writes
-  // `locked` during maximize/restore; because `flag` re-derives from that same
-  // attribute state, the reflection stays self-consistent (no fight).
-  createEffect(() => { element.toggleAttribute('locked', flag('locked')); });
+  // `locked` used to be reflected here too. It is a BOOLEAN, so it now goes through
+  // `reflectFlag` in the facade body next to `collapsed` — a boolean reflected with a
+  // bare `toggleAttribute` reads back `undefined` (see WebComponentContext.reflectFlag),
+  // and `reflectFlag` is only reachable from the facade's context. What is left here is
+  // the string props, which is this helper's real subject: the drag-durability guard.
 }
 
 interface ItemProps extends Record<string, unknown> {
@@ -633,23 +651,32 @@ defineWebComponent<ItemProps>('kai-resizable-item', {
   locked: false,
   hidden: false,
   collapsed: false,
-}, (props, { element, flag }) => {
+}, (props, { element, reflectFlag }) => {
   // Reflect the reactive `collapsed` prop to the `collapsed` ATTRIBUTE the parent
   // <kai-resizable> reads (and observes). This is what makes a bare JSX boolean
   // collapse the panel at INITIAL render from any framework: component-register
   // parses `<kai-resizable-item collapsed>` to `undefined` (not `true`), and a JSX
-  // boolean sets neither `hidden` nor the IDL property — so `flag('collapsed')`
-  // (which also honours the attribute) is the reliable source, and toggleAttribute
-  // mirrors it back so the parent's readItems()/MutationObserver lay it out. Same
-  // pattern as <kai-chat>'s `loading` reflection. We touch only `collapsed`, never
-  // `hidden`, so the back-compat hidden path and maximize (which drive `hidden`)
-  // are untouched.
-  createEffect(() => { element.toggleAttribute('collapsed', flag('collapsed')); });
-  // Reflect the other config props (`size`/`min`/`max`/`locked`) property→attribute
-  // for the SAME reason — a framework that sets them as DOM properties (React et al.)
-  // would otherwise be invisible to the parent. See reflectItemConfig for the
+  // boolean sets neither `hidden` nor the IDL property — so the flag resolution
+  // (which also honours the attribute) is the reliable source, and the attribute is
+  // mirrored back so the parent's readItems()/MutationObserver lay it out. Same
+  // pattern as <kai-chat>'s `loading` reflection, and now literally the same code:
+  // `reflectFlag` also makes `el.collapsed` READ BACK, which a hand-rolled
+  // toggleAttribute effect does not (WebComponentContext.reflectFlag).
+  //
+  // We touch only `collapsed` and `locked`, never `hidden`, so the back-compat hidden
+  // path and maximize (which drive `hidden`) are untouched — see the named exemption
+  // in tests/elements/reflected-boolean-coverage.test.ts for why `hidden` is a
+  // separate decision rather than an oversight.
+  reflectFlag('collapsed');
+  // `locked` is the parent's other boolean input; the parent also writes it during
+  // maximize/restore, and because the flag resolution re-derives from that same
+  // attribute state the reflection stays self-consistent (no fight).
+  reflectFlag('locked');
+  // Reflect the STRING config props (`size`/`min`/`max`) property→attribute for the
+  // SAME reason — a framework that sets them as DOM properties (React et al.) would
+  // otherwise be invisible to the parent. See reflectItemConfig for the
   // drag-durability guard on `size`.
-  reflectItemConfig(element, props, flag);
+  reflectItemConfig(element, props);
   return (
   <>
     {/* The item host fills the panel's single grid cell (the panel stretches it on

@@ -116,6 +116,56 @@ export interface AssistantStream {
    * assignability already holds. Measurements and the trade: boundary point 2. */
   addFile(attachment: AttachmentData): AssistantStream;
   done(): void;
+  /** Settles the turn as FAILED and puts `reason` where the reader can find it.
+   *
+   *  WHERE THE REASON LANDS, in order:
+   *  1. every tool part that has NOT produced a result flips to `output-error`
+   *     with `errorText: reason`, so no panel spins forever. A tool ALREADY in
+   *     `output-error` with its own non-empty `errorText` is left exactly as it
+   *     is: "search index offline" is the answer to what went wrong and
+   *     "Connection lost." is the generic outer symptom, so overwriting the
+   *     specific with the generic loses the only actionable thing on the
+   *     message. It still counts as carrying the failure. A tool in
+   *     `output-error` with NO text does get filled in — an error panel with
+   *     nothing in it says no more than a blank bubble does.
+   *  2. if no part was able to carry it, the reason is APPENDED as its own text
+   *     part.
+   *
+   *  Never both — a turn does not report the same failure twice.
+   *
+   *  "Where the reader can FIND it" is deliberate, and rule 1 and rule 2 are not
+   *  equally loud. Rule 2 is text in the thread: read without any interaction.
+   *  Rule 1 is a tool panel, which renders COLLAPSED — the header shows an error
+   *  icon and a badge, so the failure is unmissable, but the `errorText` itself
+   *  is one click away. That is the right default for a failed tool inside an
+   *  otherwise readable answer, and it is why rule 2 exists rather than always
+   *  stamping the panel and calling it reported.
+   *
+   *  Rule 2 is the whole point and it used to be missing. `abort` only ever did
+   *  rule 1, so a TEXT-ONLY turn — every turn of a text-only support widget —
+   *  had nothing to stamp: the string was discarded and a failed request
+   *  rendered an EMPTY assistant bubble, while the consumer that passed a
+   *  perfectly good sentence believed it had reported the failure. That is the
+   *  repo's "decide loudly" rule broken on the one path where being quiet is
+   *  worst, and it shipped because the discard is invisible from the call site.
+   *
+   *  It is a NEW part, never a merge onto the trailing text: gluing "Connection
+   *  lost." onto the model's half-finished sentence reads as the model saying
+   *  it. Text that already streamed stays exactly where it is.
+   *
+   *  The reason is TRIMMED, and `abort()` with no reason — or one that is empty
+   *  or all whitespace — appends nothing: there is no reason to discard, and the
+   *  kit will not invent copy the consumer did not write. Rule 1 still runs,
+   *  with `errorText: undefined`. Whitespace is not a pedantic case here: the
+   *  scaffold hands over `err.message`, and an `Error` is free to carry `''`,
+   *  which would otherwise render an INVISIBLE text part — a blank bubble that
+   *  also claims to have said something.
+   *
+   *  Settled is settled: after `done()` or a first `abort()`, this is a no-op
+   *  like every other mutator, so the reason cannot be appended twice.
+   *
+   *  The reason is CONSUMER-facing text and is rendered as markdown like any
+   *  other text part. Pass a sentence a visitor can read, not a stack trace. */
   abort(reason?: string): void;
 }
 
@@ -151,10 +201,27 @@ export function createAssistantStream(
     addFile(attachment) { mutate((p) => [...p, { type: 'file', attachment }]); return stream; },
     done() { settled = true; },
     abort(reason) {
-      mutate((p) => p.map((part) =>
-        part.type === 'tool' && part.tool.state !== 'output-available'
-          ? { ...part, tool: { ...part.tool, state: 'output-error' as const, errorText: reason } }
-          : part));
+      // Whitespace-only is the same nothing as empty. `err.message` on a thrown
+      // Error is free to be either, and appending it would render an INVISIBLE
+      // text part -- a blank bubble that also claims to have said something.
+      const text = reason?.trim() || undefined;
+      mutate((p) => {
+        let carried = false;
+        const next = p.map((part) => {
+          if (part.type !== 'tool' || part.tool.state === 'output-available') return part;
+          // Already showing its own, more specific failure: keep it, and count
+          // it as carrying. See the note above `abort`.
+          if (part.tool.state === 'output-error' && part.tool.errorText?.trim()) {
+            carried = true;
+            return part;
+          }
+          carried = true;
+          return { ...part, tool: { ...part.tool, state: 'output-error' as const, errorText: text } };
+        });
+        // The reason has to land SOMEWHERE. See the note above `abort`.
+        if (carried || !text) return next;
+        return [...next, { type: 'text', text }];
+      });
       settled = true;
     },
   };

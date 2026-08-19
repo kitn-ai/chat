@@ -173,3 +173,13 @@ Task: append a section to examples/apps/support-widget/README.md (your file, cla
 
 Formatting: keep the existing README content untouched above it; fenced blocks with four-backtick fences if any message contains triple backticks (check — your dispatch did contain code-ish content). Sanity after: the file renders as valid markdown (no broken fences — count them), and `npm run build` in the app dir still green (README isn't compiled, but run it anyway as the cheap regression). Report briefly: DONE/FILES/VERIFY.
 ````
+
+### Post-build maintenance
+
+Changes made to this app after the build above, one line each. Maintenance edits
+carry no prompt transcript — the policy covers how the app was BUILT.
+
+- **2026-08-19** — error path simplified to the one-call `stream.abort(reason)`
+  pattern (same user-facing copy) after the rung-1 findings iteration fixed
+  `abort` to put its reason in the thread; the previous `appendText` version
+  merged the apology into the model's half-streamed sentence.

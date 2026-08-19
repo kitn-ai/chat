@@ -2834,7 +2834,7 @@ describe('real-backend scaffolds send what the panel needs and survive a failure
     );
     expect(code, `${framework}: no catch`).toMatch(/^\s*\} catch \(err\) \{$/m);
     expect(code, `${framework}: never aborts`).toContain(
-      "stream.abort(err instanceof Error ? err.message : 'Request failed');",
+      "stream.abort(err instanceof Error && err.message ? err.message : 'Request failed');",
     );
     // abort() lives INSIDE the catch, ahead of the finally: done() on its own
     // settles the message but leaves an in-flight tool panel on input-available.
@@ -2843,6 +2843,42 @@ describe('real-backend scaffolds send what the panel needs and survive a failure
     const abortAt = code.indexOf('stream.abort(');
     expect(abortAt, `${framework}: abort outside the catch`).toBeGreaterThan(catchAt);
     expect(abortAt, `${framework}: abort after the finally`).toBeLessThan(finallyAt);
+
+    /* The comment above this call is the ENTIRE documentation of the stream
+     * lifecycle most consumers ever read — `createAssistantStream`, `done`,
+     * `abort` and `onStreamSettled` appear in no shipped doc. It used to open
+     * "Without this a bad key is a permanently blank assistant bubble" and then
+     * describe only the tool-panel half, so a reader building a TEXT-ONLY chat
+     * took the promise and not the qualifier. abort() kept only the qualifier:
+     * it stamped in-flight tool parts and dropped the reason on a turn that had
+     * none, which is exactly the blank bubble the sentence promised to prevent.
+     * `AssistantStream.abort` (src/state/stream.ts) now appends the reason as a
+     * text part when nothing else can carry it; these two pins keep the emitted
+     * comment describing that, instead of drifting back to a promise the kit
+     * does not keep. */
+    expect(code, `${framework}: comment never says where the reason goes on a text-only turn`)
+      .toContain('text-only turn, which has no panel to carry it');
+    expect(code, `${framework}: comment hides that the reason is rendered to the user`)
+      .toContain('The reason is SHOWN TO THE USER');
+
+    /* THE LAST QUIET PATH, pinned by EVALUATING the emitted expression rather
+     * than by reading it. `err instanceof Error ? err.message : 'Request failed'`
+     * is true for `new Error('')` and yields '', so the fallback never fires and
+     * abort() gets nothing to show -- the exact blank bubble the comment above it
+     * promises to prevent, reached through the one shape nobody tests by hand.
+     * An empty-message Error is ordinary: `throw new Error()`, a rethrown
+     * `AbortError`, a wrapper that forgot its message.
+     *
+     * Asserting the literal (above) only proves the text; running it proves the
+     * behavior, and it is the EMITTED string that runs, so this cannot pass on a
+     * restatement that drifted from what is emitted. */
+    const expr = code.match(/stream\.abort\((.+)\);/)?.[1];
+    expect(expr, `${framework}: no stream.abort(...) argument to evaluate`).toBeTruthy();
+    const reasonFor = new Function('err', `return (${expr});`) as (err: unknown) => string;
+    expect(reasonFor(new Error('boom')), `${framework}: loses a real message`).toBe('boom');
+    expect(reasonFor(new Error('')), `${framework}: empty-message Error aborts with nothing`)
+      .toBe('Request failed');
+    expect(reasonFor('a bare string throw'), `${framework}: non-Error throw`).toBe('Request failed');
   });
 
   /**
@@ -2865,7 +2901,7 @@ describe('real-backend scaffolds send what the panel needs and survive a failure
     );
     expect(code).toMatch(/^\s*\} catch \(err\) \{$/m);
     expect(code).toContain(
-      "stream.abort(err instanceof Error ? err.message : 'Request failed');",
+      "stream.abort(err instanceof Error && err.message ? err.message : 'Request failed');",
     );
     expect(code).toContain('stream.done();');
     const catchAt = code.indexOf('} catch (err) {');

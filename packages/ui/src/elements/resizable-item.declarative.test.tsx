@@ -24,19 +24,17 @@ function setup() {
   const [size, setSize] = createSignal<string | undefined>(undefined);
   const [min, setMin] = createSignal<string | undefined>(undefined);
   const [max, setMax] = createSignal<string | undefined>(undefined);
-  const [locked, setLocked] = createSignal(false);
   const props = {
     get size() { return size(); },
     get min() { return min(); },
     get max() { return max(); },
   };
-  const flag = (name: string) => (name === 'locked' ? locked() : false);
   function Harness(): JSX.Element {
-    reflectItemConfig(el, props, flag);
+    reflectItemConfig(el, props);
     return null as unknown as JSX.Element;
   }
   render(() => <Harness />);
-  return { el, setSize, setMin, setMax, setLocked };
+  return { el, setSize, setMin, setMax };
 }
 
 describe('reflectItemConfig (property → attribute reflection)', () => {
@@ -65,18 +63,13 @@ describe('reflectItemConfig (property → attribute reflection)', () => {
     expect(el.getAttribute('size')).toBeNull();
   });
 
-  it('reflects the locked boolean property to a bare attribute (and clears it)', async () => {
-    const { el, setLocked } = setup();
-    expect(el.hasAttribute('locked')).toBe(false);
-
-    setLocked(true);
-    await tick();
-    expect(el.hasAttribute('locked')).toBe(true);
-
-    setLocked(false);
-    await tick();
-    expect(el.hasAttribute('locked')).toBe(false);
-  });
+  // `locked` USED to be reflected by this helper and was covered here. It moved to
+  // `reflectFlag('locked')` in the facade body, because a boolean reflected with a
+  // bare `toggleAttribute` reads back `undefined` and `reflectFlag` is the one place
+  // that fixes both halves at once. Its coverage moved UP, not away, and got stronger:
+  // `tests/elements/reflected-boolean-readback.test.tsx` drives `locked` on a real
+  // mounted `<kai-resizable-item>` and asserts the attribute AND the property, which
+  // this helper-level harness (an unconnected element, a stubbed `flag`) could not.
 
   it('does not stomp a dragged size when a re-render re-asserts the declared size', async () => {
     const { el, setSize } = setup();

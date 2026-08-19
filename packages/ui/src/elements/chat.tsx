@@ -1,4 +1,4 @@
-import { createEffect, createSignal, onCleanup, onMount } from 'solid-js';
+import { createSignal, onCleanup, onMount } from 'solid-js';
 import { defineWebComponent } from './define';
 import { CHAT_SLOTS, readSlots } from './slots';
 import { ChatThread, type ChatThreadProps, type ChatThreadContextUsage, type ChatThreadController } from '../components/chat-thread';
@@ -99,7 +99,7 @@ defineWebComponent<Props, Events>('kai-chat', {
   models: undefined, currentModel: undefined, context: undefined, scrollButton: true,
   search: false, voice: false, triggers: undefined, kindIcons: undefined,
   actionsReveal: 'always', cardTypes: undefined, cardSchemas: undefined, accept: undefined,
-}, (props, { dispatch, flag, element, expose }) => {
+}, (props, { dispatch, flag, reflectFlag, element, expose }) => {
   // `messages` is an untyped boundary: a consumer can hand it anything at
   // runtime (a pre-0.20.0 `{ id, role, content }` array, in particular). Skip
   // the invalid entries rather than let `groupMessageParts` throw deep inside a
@@ -120,7 +120,10 @@ defineWebComponent<Props, Events>('kai-chat', {
 
   // Reflect streaming state to a host attribute so slotted composer/notice CSS
   // can react without reading internals (e.g. :host([loading]) ::slotted(...)).
-  createEffect(() => { element.toggleAttribute('loading', flag('loading')); });
+  // reflectFlag, not a hand-rolled toggleAttribute effect: the reflection is what
+  // makes the property read back `undefined`, so the two belong in one call. See
+  // WebComponentContext.reflectFlag.
+  reflectFlag('loading');
 
   // Imperative method API — forward the chat-thread controller onto the host
   // (focus the composer, clear it, send programmatically, scroll the thread).

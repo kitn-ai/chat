@@ -2,7 +2,7 @@ import { customElement } from 'solid-element';
 import { ChatConfig } from '../primitives/chat-config';
 import { ELEMENT_CSS } from './css';
 import { elementDiagnosticsWanted, installElementDiagnostics } from './element-diagnostics';
-import { createSignal, onCleanup, Show, type JSX } from 'solid-js';
+import { createEffect, createSignal, onCleanup, Show, type JSX } from 'solid-js';
 
 /**
  * Shared constructable stylesheet, built once and adopted by every element's
@@ -79,6 +79,33 @@ export interface WebComponentContext<E = Record<string, unknown>> {
    * convention). Methods are attached when the facade renders (on element upgrade).
    */
   expose: (methods: Record<string, (...args: never[]) => unknown>) => void;
+  /**
+   * Reflect a boolean prop to its host attribute AND make that prop read back what
+   * was set. Use this instead of hand-rolling
+   * `createEffect(() => element.toggleAttribute('x', flag('x')))`.
+   *
+   * WHY IT IS ONE CALL AND NOT TWO. The reflection is what BREAKS the read-back, so
+   * the fix has to be attached to it or it gets forgotten — and it was, three times.
+   * `toggleAttribute(name, true)` sets the attribute to the EMPTY STRING;
+   * component-register's `attributeChangedCallback` then writes the prop back as
+   * `this[name] = parseAttributeValue("")`, and `parseAttributeValue` returns
+   * `undefined` for the empty string. So a reflected flag became write-only:
+   * `el.loading = true` left `el.loading === undefined` while `[loading]` was on the
+   * host. The element kept BEHAVING correctly, because `flag()` reads the attribute —
+   * which is precisely why nobody noticed until a consumer tried to read the property
+   * back (findings G-05).
+   *
+   * What this installs is an instance-level wrapper around the accessor
+   * component-register already created, coercing every incoming value through the
+   * same `flag()` policy (`resolveFlag`) — so the `undefined` write-back resolves to
+   * the attribute that caused it, and the property and the attribute can no longer
+   * disagree. It delegates to the underlying setter, so reactivity is untouched.
+   *
+   * `source` overrides where the ON/OFF value comes from, for an element whose truth
+   * is an internal controller rather than the prop (see `wireDisclosure`). Returning
+   * `undefined` from it means "not ready, leave the attribute alone".
+   */
+  reflectFlag: (name: string, source?: () => boolean | undefined) => void;
   /**
    * Whether the element should currently render its dark-mode look --
    * exactly the SAME resolved value that already drives the `.dark` class
@@ -251,6 +278,76 @@ function defineWithNonReflectingProps<T>(
   }
 }
 
+/**
+ * Marks a setter as one of ours, so the wrap is idempotent WITHOUT being permanent.
+ *
+ * The mark goes on the setter function rather than on the element, and that is the
+ * whole subtlety: component-register installs a FRESH instance accessor from
+ * `initializeProps` on every (re)connect after a release, which throws our wrapper
+ * away. An element-level "already done" flag would then skip re-wrapping and the
+ * property would quietly go write-only again on the second mount. An unmarked setter
+ * is by definition a new one, so it gets wrapped again.
+ */
+const FLAG_READ_BACK = Symbol('kai-flag-read-back');
+
+/**
+ * Wrap the instance accessor component-register created for `name` so every value
+ * written to it — a consumer's assignment, or the `undefined` write-back that
+ * `attributeChangedCallback` performs after a `toggleAttribute` — is resolved through
+ * the same policy `flag()` uses.
+ *
+ * TIMING. This must run from the facade body, i.e. during `connectedCallback` AFTER
+ * `initializeProps`, and that is not a detail: `initializeProps` harvests any value
+ * set on the element BEFORE upgrade (`value = element[key]`) and only then installs
+ * the accessor. Wrapping earlier (on the prototype, the way `installNonReflectingProps`
+ * does) would be shadowed by that accessor and would also sit in front of the harvest —
+ * the same class of defect `define-upgrade-ordering.test.tsx` pins for attributes.
+ */
+function installFlagReadBack(element: HTMLElement, name: string, attribute: string): void {
+  const inner = Object.getOwnPropertyDescriptor(element, name);
+  if (!inner?.get || !inner.set) {
+    // Reached only if `name` is not a declared prop of this element — a typo, or a
+    // facade reflecting something it never declared. Warn rather than no-op silently;
+    // a silent skip here would look exactly like a working read-back.
+    console.warn(
+      `reflectFlag("${name}"): no such declared prop on <${element.localName}> — ` +
+      `the attribute will still reflect, but the property will not read back.`,
+    );
+    return;
+  }
+  const { get, set } = inner;
+  if ((set as { [FLAG_READ_BACK]?: true })[FLAG_READ_BACK]) return;
+
+  const wrapped = function (this: HTMLElement, value: unknown) {
+    set.call(this, resolveFlag(this, value, attribute));
+  } as ((value: unknown) => void) & { [FLAG_READ_BACK]?: true };
+  wrapped[FLAG_READ_BACK] = true;
+
+  Object.defineProperty(element, name, {
+    get,
+    set: wrapped,
+    enumerable: inner.enumerable ?? true,
+    configurable: true,
+  });
+
+  // Seed, but ONLY upwards. The value sitting in the prop store right now may already
+  // be the broken one: `<el loading>` parses to `undefined` in `initializeProps`
+  // exactly as it does in the write-back, so without this the bare-attribute case
+  // would still read back `undefined` until something else wrote to the prop.
+  //
+  // WHY NOT SEED `false` TOO. Writing `false` over an `undefined` would look tidier
+  // and is wrong: for props declared with an `undefined` default, `undefined` MEANS
+  // "the consumer has not set this", and at least one caller depends on telling that
+  // apart from an explicit `false` — `wireDisclosure` seeds from `defaultOpen` only
+  // while `open` is unset, so a blanket `false` seed would clobber
+  // `<el default-open>` on every mount. Promoting only a present attribute to `true`
+  // fixes the read-back without inventing an opinion the author never expressed.
+  const current = get.call(element);
+  if (typeof current !== 'boolean' && resolveFlag(element, current, attribute)) {
+    wrapped.call(element, true);
+  }
+}
+
 /** Underlying flag resolution; see `WebComponentContext.flag`. */
 function resolveFlag(element: HTMLElement, value: unknown, attribute: string): boolean {
   if (value === true) return true;
@@ -343,6 +440,21 @@ export function defineWebComponent<P extends Record<string, unknown>, E = Record
     const flag = (name: string) =>
       resolveFlag(element, (props as Record<string, unknown>)[name], toAttr(name));
 
+    // Reflect a boolean prop to its attribute and keep the property readable. See
+    // WebComponentContext.reflectFlag for the defect this exists to close.
+    const reflectFlag: WebComponentContext<E>['reflectFlag'] = (name, source) => {
+      const attribute = toAttr(name);
+      installFlagReadBack(element, name, attribute);
+      createEffect(() => {
+        const on = source ? source() : flag(name);
+        // `undefined` means the caller's source is not ready yet (a controller a
+        // primitive has not handed up). Leave the author's attribute alone rather
+        // than writing a guessed OFF over it.
+        if (on === undefined) return;
+        element.toggleAttribute(attribute, on);
+      });
+    };
+
     // Attach imperative methods onto the host instance. See WebComponentContext.expose.
     // Uses defineProperty so a method can shadow an inherited getter-only accessor
     // (e.g. `focus`/`blur`) which a plain assignment would throw on. A method name
@@ -395,7 +507,14 @@ export function defineWebComponent<P extends Record<string, unknown>, E = Record
         <div classList={{ dark: isDark() }} style={{ display: 'contents', color: 'var(--color-foreground)' }}>
           <div ref={portalNode} />
           <ChatConfig portalMount={portalNode}>
-            {Facade(props as unknown as P, { element, dispatch, flag, expose, dark: isDark })}
+            {Facade(props as unknown as P, {
+              element,
+              dispatch,
+              flag,
+              reflectFlag,
+              expose,
+              dark: isDark,
+            })}
           </ChatConfig>
         </div>
       </>
