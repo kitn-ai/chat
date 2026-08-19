@@ -1790,6 +1790,7 @@ Expected: PASS, including all pre-existing tests.
 
 Run, in order, reporting each real exit code:
 
+<!-- gate-list: partial -- historical record, predates lint:gate-parity -->
 ```bash
 pnpm --filter @kitn.ai/ui run typecheck
 pnpm --filter @kitn.ai/ui exec vitest run --project=unit

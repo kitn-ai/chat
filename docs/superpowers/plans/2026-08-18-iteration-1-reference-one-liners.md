@@ -511,6 +511,7 @@ git commit -m "fix(scaffold): wire every component it emits, or say plainly that
 
 - [ ] **Full gate set** — each run separately, `verify:generated` never alongside a vitest run:
 
+<!-- gate-list: partial -- historical record, predates lint:gate-parity -->
 ```bash
 pnpm --filter @kitn.ai/ui run typecheck
 pnpm --filter @kitn.ai/ui exec vitest run --project=unit

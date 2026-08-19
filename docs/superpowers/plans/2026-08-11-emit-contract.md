@@ -294,6 +294,7 @@ T3.1 / T3.2 / T3.3 / T3.4 have disjoint file sets and run in parallel.
 
 The repo's dominant defect is checks that pass while covering nothing, and today alone produced three instances (§5.6's tool-panel echo, its structurally-blind control, §5.11's field-name-on-one-wire spec). Each guard below therefore states the **specific blind spot it must not have**.
 
+<!-- gate-list: partial -- historical record, predates lint:gate-parity -->
 | guard | catches | how to make it fail FIRST | the blind spot it must not have |
 |---|---|---|---|
 | **`verify:schemas`** (new) | a schema unreachable through the public exports map | Run it on `7eb02de` **before** T1.1: it must report **11 unresolvable**, each by name. Then after green, delete `"./schemas/*"` and confirm it names those 11 and not the JS entry. | A guard that stats `dist/schemas/` proves nothing. It must resolve `@kitn.ai/ui/schemas/confirm.schema.json` **from a temp package outside the repo**, symlink-installed, in `bundler` *and* `nodenext` (`ts.resolveModuleName` **with the containing file's implied mode**, without the mode it goes green on a broken package, exactly as `verify-dts-boundaries.mjs`'s header warns). The expected count must be `readdirSync(card-schemas).length`, derived: a hardcoded `11` passes forever after someone adds a 12th. |

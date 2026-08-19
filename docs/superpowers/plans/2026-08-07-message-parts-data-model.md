@@ -1217,6 +1217,7 @@ git commit -m "test(state): guard Anthropic round-trip fidelity of raw payloads"
 
 - [ ] **Step 1: Full green gate**
 
+<!-- gate-list: partial -- historical record, predates lint:gate-parity -->
 ```bash
 nx typecheck ui
 pnpm --filter @kitn.ai/ui exec vitest run --project=unit

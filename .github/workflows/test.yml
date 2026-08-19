@@ -218,6 +218,71 @@ jobs:
       - name: pack --json parse guard (one parser, both npm shapes)
         run: pnpm --filter @kitn.ai/ui run lint:pack-parse
 
+      # Does a document that ENUMERATES the merge gate still match this job?
+      # A handoff said "every gate is green" over a five-command list while this
+      # job was red on `verify:pack`, which was not one of the five --
+      # derived.json had grown past that check's per-file ceiling and was
+      # shipping to every consumer. A list somebody typed once is not the job.
+      #
+      # The source of truth is the steps BELOW AND ABOVE THIS ONE: the guard
+      # parses this file, scopes to the `test` job, and canonicalizes every
+      # step's command to a stable identifier by RULE -- there is no hand-typed
+      # list of the steps anywhere in it, so adding a step of a known shape needs
+      # no edit there, and an UNRECOGNISED shape is a hard failure naming the
+      # step rather than a silent omission from the gate set.
+      #
+      # The doc side is a parsed directive and not prose, for the reason
+      # lint-silent-drops gives and which is not hypothetical here: the document
+      # this guard is built from already carried a paragraph saying its list was
+      # incomplete, so a rule honouring prose would have passed the exact text
+      # that was wrong. A block marked `gate-list: complete` must equal this
+      # job's gate set both directions; one labelled `partial` is skipped; and an
+      # UNMARKED block that looks like a gate list is a hard failure until
+      # somebody chooses. That last rule is the teeth -- the historical failure
+      # was an unmarked partial list read as complete, and only forcing the
+      # choice catches it.
+      #
+      # It cannot pass vacuously: it refuses to run at all if the extractor finds
+      # implausibly few steps, because a near-empty gate set is a set every
+      # documented list matches. `--self-test` plants each fault (a complete
+      # block missing a gate, one carrying a non-gate, an unmarked suspect, an
+      # unrecognised step shape) and watches it fire first.
+      #
+      # Parses this file and markdown, reads no dist/, needs no install, so it is
+      # a seam anyone can grab to watch it fail
+      # (`node packages/ui/scripts/lint-gate-parity.mjs`; `--list` prints the
+      # gate set). ~1s.
+      - name: Documented-gate parity guard (a doc gate list equals this job)
+        run: pnpm --filter @kitn.ai/ui run lint:gate-parity
+
+      # A numeric threshold with no derivation is a guess wearing a number, and
+      # everything downstream treats it as a measurement. A `< 6000` byte budget
+      # was invented while a plan was being drafted, survived into an
+      # implementer's brief, and was stopped only because that implementer
+      # declined to weaken an assertion to meet it. Nothing produced the number;
+      # it read like evidence because it had a digit in it.
+      #
+      # So a threshold line in a NEW plan or spec must name where its number
+      # comes from: a backticked producing command, the phrase `ratchet, not a
+      # target`, or a written waiver. Any of the three; none of them is not.
+      # Scope is DERIVED from the `YYYY-MM-DD-` filename prefix against a cutoff,
+      # so the historical plans stay a record rather than a backlog -- rewriting
+      # them to satisfy a linter is the failure mode lint-cdn-pins documents.
+      #
+      # UNLIKE lint-cdn-pins and LIKE the object-URL guard, AN EMPTY SCOPE IS A
+      # PASS, and it is loud about it: the run prints the file count and the
+      # cutoff, so "0 findings" can never be read as "the plans were checked". On
+      # the day this landed the scope is empty by construction. What stops that
+      # being vacuous is `--self-test`, which asserts the analyzer still detects
+      # on known-bad and known-good lines and still scopes correctly; a MISSING
+      # plans/ or specs/ directory, and a file in them this cannot date, are both
+      # hard failures rather than silent skips.
+      #
+      # Reads markdown only -- no install, no build, no network. <1s
+      # (`node packages/ui/scripts/lint-threshold-derivation.mjs`).
+      - name: Threshold derivation guard (no number without a producer)
+        run: pnpm --filter @kitn.ai/ui run lint:thresholds
+
       - name: Build (element bundle + provider subpath)
         run: pnpm exec nx build ui
 
