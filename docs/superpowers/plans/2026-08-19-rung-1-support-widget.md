@@ -66,4 +66,16 @@ pnpm --filter @kitn.ai/ui run lint:catalog-drift
 
 ## Run ledger
 
-- (starts when the branch opens)
+- Tasks 1–3 (W1, one stream): delivered complete on first report; verified PASS by an
+  independent browser IVP on all ten acceptance points (streaming sampled strictly increasing,
+  multi-turn integrity byte-identical, shadow isolation, endpoint contract, five watched-red
+  roster probes independently reproduced, forced-500 loud). Zero fix rounds.
+- Task 4 (W2): delivered complete on first report. Two judgment calls made correctly without
+  supervision: refused to add a build-step app to the script-tag scenario's corpus (cited
+  evidence would become false), and recorded the deleted demo's unique coverage loudly in
+  examples/README.md. Zero fix rounds.
+- Supervisor follow-up: stale "all 8" CI step name caught by W2, fixed by W1 without counts
+  that rot. Gate-parity green throughout.
+- Guards dogfooded: writer-lock claims on every dispatch (zero conflicts), briefs generated
+  from the template, this plan is the first document in lint:thresholds scope (green).
+- Committed 48e2c6c1 + 7a5f530e. Task 6 (real-provider validation) pending the owner's key.
