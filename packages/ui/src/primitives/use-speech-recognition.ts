@@ -51,6 +51,14 @@ export interface SpeechRecognitionStartOptions {
   lang?: string;
   /** Called with each interim (non-final) transcript when `interim` is enabled. */
   onInterim?: (text: string) => void;
+  /**
+   * Called when the recognition session hits a runtime error (`recognition.onerror`),
+   * with the platform's error code (`network`, `not-allowed`, `no-speech`, ...) and a
+   * human-readable message. The session still ends through `onend`, so `start()` still
+   * resolves (with whatever text was captured before the error). Without this callback
+   * a runtime failure is invisible: the `error` signal is state, not a notification.
+   */
+  onError?: (error: string, message: string) => void;
 }
 
 /**
@@ -102,7 +110,10 @@ export function useSpeechRecognition(options: UseSpeechRecognitionOptions = {}) 
       };
 
       recognition.onerror = (event) => {
-        setError(event.error ?? 'Speech recognition error');
+        const code = event.error ?? 'unknown';
+        const message = `Speech recognition error: ${code}`;
+        setError(message);
+        opts.onError?.(code, message);
       };
 
       recognition.onend = () => {

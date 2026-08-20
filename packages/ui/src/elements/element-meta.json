@@ -8903,6 +8903,12 @@
         "detail": "{ text: string }",
         "description": "Final transcript: the `transcribe` property resolved, OR native `SpeechRecognition` produced final text (no `transcribe` set).",
         "displayDetail": "{ text: string }"
+      },
+      {
+        "name": "kai-voice-error",
+        "detail": "{ source: \"recognition\"; error: string; message: string }",
+        "description": "A voice session failed, so no failure is ever silent. `detail.source` names the failing side (`recognition` on `<kai-voice-input>`, `synthesis` on `<kai-voice-output>`), `detail.error` carries the platform error code, the thrown exception's name, or `no-result` when recognition ended with no error and no text (the user said nothing), and `detail.message` is human-readable. Deliberate cancellation does not fire.",
+        "displayDetail": "{ source: \"recognition\"; error: string; message: string }"
       }
     ],
     "methods": [
@@ -8983,7 +8989,7 @@
       {
         "name": "kai-speaking-change",
         "detail": "{ speaking: false | true }",
-        "description": "Playback started or stopped. Drive your own UI in sync. Fires on real transitions only (manual click and programmatic speak()/stop()), never on mount.",
+        "description": "Playback started or stopped. Drive your own UI in sync. `speaking: true` fires when audio actually starts (utterance.onstart natively; audio playback beginning on the `synthesize` path), not when speak() is called; earlier releases fired it optimistically inside speak() itself. Fires on real transitions only (manual click and programmatic speak()/stop()), never on mount.",
         "displayDetail": "{ speaking: false | true }"
       },
       {
@@ -8991,6 +8997,12 @@
         "detail": "{ blob: Blob }",
         "description": "The model path (`synthesize`) resolved audio: the raw `Blob` before playback.",
         "displayDetail": "{ blob: Blob }"
+      },
+      {
+        "name": "kai-voice-error",
+        "detail": "{ source: \"synthesis\"; error: string; message: string }",
+        "description": "A voice session failed, so no failure is ever silent. `detail.source` names the failing side (`recognition` on `<kai-voice-input>`, `synthesis` on `<kai-voice-output>`), `detail.error` carries the platform error code, the thrown exception's name, or `no-result` when recognition ended with no error and no text (the user said nothing), and `detail.message` is human-readable. Deliberate cancellation does not fire.",
+        "displayDetail": "{ source: \"synthesis\"; error: string; message: string }"
       }
     ],
     "methods": [

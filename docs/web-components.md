@@ -1171,6 +1171,7 @@ A drag-and-drop / click-to-pick file upload dropzone.
 | `kai-recording-change` | `{ recording: false | true }` | Recording started or stopped. Lets the host drive its own UI (waveform, push-to-talk indicator) in sync with the mic. Fires on real transitions only (manual click and programmatic start()/stop()), never on mount. |
 | `kai-transcript-interim` | `{ text: string }` | Live partial transcript during native recognition (only when `interim` is set). Fires repeatedly before the final `kai-transcription`. |
 | `kai-transcription` | `{ text: string }` | Final transcript: the `transcribe` property resolved, OR native `SpeechRecognition` produced final text (no `transcribe` set). |
+| `kai-voice-error` | `{ source: "recognition"; error: string; message: string }` | A voice session failed, so no failure is ever silent. `detail.source` names the failing side (`recognition` on `<kai-voice-input>`, `synthesis` on `<kai-voice-output>`), `detail.error` carries the platform error code, the thrown exception's name, or `no-result` when recognition ended with no error and no text (the user said nothing), and `detail.message` is human-readable. Deliberate cancellation does not fire. |
 
 #### Methods
 

@@ -4985,7 +4985,15 @@ function cannotHostWarning(integration: Integration, route: RouteChoice, framewo
     // and reaches localhost, so the page can call it. That advice was emitted
     // identically for every integration because nothing read the flag that
     // distinguishes them.
-    ...(integration.keyExposure === 'frontend-safe'
+    ...(integration.id === 'mock'
+      ? [
+          // For mock the honest first option is to do nothing: the block is
+          // already labelled OPTIONAL, and "call it directly" would be advice
+          // about an upstream that does not exist.
+          `#   • or ignore it: the front end above already streams the mock locally, so`,
+          `#     nothing in this scaffold needs the route to run.`,
+        ]
+      : integration.keyExposure === 'frontend-safe'
       ? [
           `#   • or drop the route entirely: this integration needs no server hop — see the`,
           `#     run note — so the page may call it directly (CORS applies).`,
@@ -4998,7 +5006,10 @@ function cannotHostWarning(integration: Integration, route: RouteChoice, framewo
           `#     /api/chat to it, or point the fetch at http://localhost:8000/api/chat.`,
         ]
       : [`#   • or run it where it belongs: framework: "${route.framework}".`]),
-    `#   • or use integration: "mock" for a zero-config local stream (no backend, no key).`,
+    // Not emitted for mock itself: "use mock" is where the reader already is.
+    ...(integration.id === 'mock'
+      ? []
+      : [`#   • or use integration: "mock" for a zero-config local stream (no backend, no key).`]),
   ];
   return [
     `#`,
@@ -5219,7 +5230,11 @@ function compose(
     audience,
   });
   const isMock = integration.id === 'mock';
-  const route = isMock ? undefined : chooseRoute(integration, framework);
+  // `mock` takes the same path as every real integration (G-04): its webRoute
+  // streams createMockResponder() frames and the adapters wrap it per framework.
+  // What stays special is the CLAIM, made in the preface below: the front end
+  // streams locally, so this is the one block (2) nothing in the app requires.
+  const route = chooseRoute(integration, framework);
 
   const header = [
     `# AI/UI scaffold — ${preset ? preset.title : surfaceLabel(components)} × ${integration.title}`,
@@ -5235,13 +5250,24 @@ function compose(
 
   const block2Parts: string[] = [`=== (2) BACKEND ROUTE ===`, ``];
   if (isMock) {
-    // The mock integration has no backend — the front-end streams locally.
+    // The claim that keeps the zero-config story honest, made BEFORE the code:
+    // the front end above never fetches, so this route is the one block (2)
+    // nothing in the emitted app requires. It exists because two clean-room
+    // builds in a row (rung-2 finding G-04) were asked for "a local dev endpoint
+    // that streams a mocked response" and found prose here where every real
+    // integration ships code.
     block2Parts.push(
-      `# No backend or API key needed — replies stream locally for preview (see the`,
-      `# front-end onSubmit above). Swap \`integration\` for a real provider (openrouter,`,
-      `# ollama, vercel-ai-sdk, …) when ready, and this block becomes its route handler.`,
+      `# OPTIONAL — the front end above streams its reply locally, so this scaffold`,
+      `# RUNS with no backend and no key. The route below is the mock's server half:`,
+      `# the same createMockResponder() frames served over HTTP, so you can stand up`,
+      `# the real /api/chat seam before any provider exists. To use it, swap the`,
+      `# onSubmit's \`const res = mockResponse(value);\` for a request to /api/chat and`,
+      `# hand its response body to the same reader. Going live later then means`,
+      `# editing THIS file only — replace the responder with a provider call, or`,
+      `# re-scaffold with a real integration and this block becomes its route.`,
     );
-  } else if (route) {
+  }
+  if (route) {
     if (!route.exact) {
       block2Parts.push(
         `# Note: ${integration.title} has no route for "${framework}". Emitting its native`,

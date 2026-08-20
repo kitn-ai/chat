@@ -118,7 +118,6 @@ async function init(): Promise<void> {
   let inFlight: AbortController | null = null;
   let bandsTimer = 0;
   let speakWatchdog = 0;
-  let noResultTimer = 0;
   let lastQuestion = { text: '', at: 0 };
 
   const setMessages = (updater: (prev: ChatMessage[]) => ChatMessage[]): void => {
@@ -309,13 +308,12 @@ async function init(): Promise<void> {
     // If `kai-speaking-change` never confirms, we would sit in "Speaking"
     // forever with silence. Say so instead of pretending.
     //
-    // Armed BEFORE speak(), deliberately: <kai-voice-output> sets its speaking
-    // signal optimistically inside speak() itself (not on utterance.onstart),
-    // so `kai-speaking-change {speaking:true}` fires synchronously DURING the
-    // speak() call. Armed after, that confirmation had already passed and the
-    // watchdog could only ever be cleared by speech ENDING — every reply
-    // longer than 2.5 s tripped it mid-playback (W4 symptom 3). KIT GAP,
-    // banked: `speaking:true` means "speak() was called", not "audio started".
+    // Armed BEFORE speak(): since the W8 kit fix, `kai-speaking-change
+    // {speaking:true}` fires on utterance.onstart — audio actually started —
+    // so the genuine confirmation arrives after arming and disarms the
+    // watchdog. The watchdog now only fires for the case it was written for:
+    // an engine that accepts speak() and never starts. A synthesis that fails
+    // outright reports through `kai-voice-error` below instead.
     window.clearTimeout(speakWatchdog);
     speakWatchdog = window.setTimeout(() => {
       if (phase !== 'speaking') return;
@@ -397,7 +395,6 @@ async function init(): Promise<void> {
 
   on<{ recording: boolean }>(voiceIn, 'kai-recording-change', ({ recording }) => {
     if (recording) {
-      window.clearTimeout(noResultTimer);
       clearError();
       showCaption('', 'idle');
       setPhase('listening');
@@ -411,34 +408,39 @@ async function init(): Promise<void> {
     // Only fall back to idle if nothing else has taken over — the final
     // transcript may already have moved us to "thinking".
     if (phase === 'listening') setPhase('idle');
-    // KIT GAP (banked as G-12's input-side sibling): <kai-voice-input> emits
-    // no error event, and a recognition session that fails at runtime — or
-    // simply hears nothing — ends in TOTAL silence: no kai-transcription, not
-    // even an empty one, so the empty-text branch below is unreachable on the
-    // native path (measured live: W4 symptom 1). Until the kit exposes a
-    // kai-voice-error / no-result signal, infer it: recording ended and no
-    // final transcript landed shortly after means nothing was recognised.
-    window.clearTimeout(noResultTimer);
-    noResultTimer = window.setTimeout(() => {
-      // A final transcript moved us to "thinking", or a new hold is already
-      // listening — in either case there is nothing to report.
-      if (phase !== 'idle') return;
-      showCaption(NO_RESULT_NOTE, 'note');
-    }, 600);
   });
+
+  // Every way a recognition session can fail now reports here (the kit's W8
+  // fix; this replaced a timing heuristic that inferred "no result" from
+  // recording ending with no transcript within 600 ms — W4 symptom 1).
+  on<{ source: 'recognition'; error: string; message: string }>(
+    voiceIn,
+    'kai-voice-error',
+    ({ error, message }) => {
+      // `aborted` is the session being cancelled on purpose (letting go of
+      // push-to-talk before recognition settles): nothing to report.
+      if (error === 'aborted') return;
+      if (phase === 'listening') setPhase('idle');
+      // Hearing nothing is not a failure — it gets the gentle caption, not the
+      // error notice. `no-result` is the kit's clean-end-no-text signal;
+      // `no-speech` is the platform's own code for the same experience.
+      if (error === 'no-result' || error === 'no-speech') {
+        showCaption(NO_RESULT_NOTE, 'note');
+        return;
+      }
+      showError(`Speech recognition failed (${error}): ${message}`);
+    },
+  );
 
   on<{ text: string }>(voiceIn, 'kai-transcript-interim', ({ text }) => {
     if (phase === 'listening') showCaption(text, 'interim');
   });
 
   on<{ text: string }>(voiceIn, 'kai-transcription', ({ text }) => {
-    window.clearTimeout(noResultTimer);
+    // The kit's contract is that kai-transcription carries final text; an
+    // empty session reports as kai-voice-error {error: 'no-result'} instead.
     const question = text.trim();
-    if (!question) {
-      showCaption(NO_RESULT_NOTE, 'note');
-      if (phase === 'listening') setPhase('idle');
-      return;
-    }
+    if (!question) return;
     // A recogniser that emits two final results for one utterance would
     // otherwise post the same question twice.
     const now = performance.now();
@@ -460,14 +462,30 @@ async function init(): Promise<void> {
   });
 
   on<{ speaking: boolean }>(voiceOut, 'kai-speaking-change', ({ speaking }) => {
-    // The watchdog is armed before speak() is called (see speakReply), so any
-    // speaking:true — including the synchronous one fired inside speak() —
-    // arrives after arming and disarms it. speaking:false disarms it too:
-    // speech that has already ended has nothing left to watch.
+    // speaking:true means audio actually started (utterance.onstart, since the
+    // W8 kit fix), and the watchdog was armed before speak() (see speakReply),
+    // so the confirmation always arrives after arming and disarms it.
+    // speaking:false disarms it too: speech that has already ended has nothing
+    // left to watch.
     window.clearTimeout(speakWatchdog);
     if (speaking) setPhase('speaking');
     else if (phase === 'speaking') setPhase('idle');
   });
+
+  // Synthesis failing outright (e.g. `not-allowed`) used to vanish: the kit
+  // fired speaking:false, which cleared the watchdog, and no message ever
+  // appeared (W4 symptom 3's silent path). Now the failure names itself.
+  on<{ source: 'synthesis'; error: string; message: string }>(
+    voiceOut,
+    'kai-voice-error',
+    ({ error, message }) => {
+      window.clearTimeout(speakWatchdog);
+      if (phase === 'speaking') setPhase('idle');
+      showError(
+        `Speech synthesis failed (${error}): ${message} The text is in the transcript; use "Replay answer" to try again.`,
+      );
+    },
+  );
 
   /* -------------------------------------------------------- host -> element */
 

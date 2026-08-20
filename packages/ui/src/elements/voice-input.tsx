@@ -39,6 +39,13 @@ interface Events {
    *  push-to-talk indicator) in sync with the mic. Fires on real transitions
    *  only (manual click and programmatic start()/stop()), never on mount. */
   'kai-recording-change': { recording: boolean };
+  /** A voice session failed, so no failure is ever silent. `detail.source` names
+   *  the failing side (`recognition` on `<kai-voice-input>`, `synthesis` on
+   *  `<kai-voice-output>`), `detail.error` carries the platform error code, the
+   *  thrown exception's name, or `no-result` when recognition ended with no error
+   *  and no text (the user said nothing), and `detail.message` is human-readable.
+   *  Deliberate cancellation does not fire. */
+  'kai-voice-error': { source: 'recognition'; error: string; message: string };
 }
 
 /**
@@ -47,8 +54,9 @@ interface Events {
  * `SpeechRecognition` (Chrome/Safari; no Firefox — and cloud-based in Chrome).
  * Set `el.transcribe` to route audio through your own async transcriber instead.
  * Where neither is available it records the blob and emits `kai-audio-captured`
- * with no text. Also emits `kai-transcription` (final text) and, with `interim`,
- * `kai-transcript-interim` (live partials).
+ * with no text. Also emits `kai-transcription` (final text), `kai-voice-error`
+ * (a failed or empty session) and, with `interim`, `kai-transcript-interim`
+ * (live partials).
  */
 defineWebComponent<Props, Events>('kai-voice-input', {
   transcribe: undefined,
@@ -85,6 +93,7 @@ defineWebComponent<Props, Events>('kai-voice-input', {
       onTranscription={(text) => dispatch('kai-transcription', { text })}
       onInterim={(text) => dispatch('kai-transcript-interim', { text })}
       onRecordingChange={(recording) => dispatch('kai-recording-change', { recording })}
+      onError={(detail) => dispatch('kai-voice-error', detail)}
       controllerRef={(c) => (controller = c)}
     />
   );

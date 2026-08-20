@@ -115,6 +115,7 @@ const MIRRORED: { kind: 'props' | 'events' | 'methods'; name: string; minElement
   { kind: 'methods', name: 'show', minElements: 8 },
   { kind: 'methods', name: 'hide', minElements: 8 },
   { kind: 'events', name: 'kai-new-chat', minElements: 2 },
+  { kind: 'events', name: 'kai-voice-error', minElements: 2 },
 ];
 
 describe('deliberately mirrored descriptions stay word-for-word identical', () => {

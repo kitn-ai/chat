@@ -120,6 +120,13 @@ app in a clean room, diff against the insider reference, file divergences as tea
 - Recorded in passing, unfixed (candidate A confirmed empirically): a wrong argument key to a
   kai MCP tool returns the 80-element index with no error; `additionalProperties: false` is
   declared and not enforced.
+- For rung 3 (learned the hard way on rung 2): scope any umask hardening in the launch script
+  to the credential extraction ONLY. Rung 2's launcher set `umask 177` globally, which stripped
+  execute bits from every directory the CLI created — destroying the session transcript, the
+  MCP logs, and the builder's own Bash tool mid-run (the run record had to be reconstructed
+  from NOTES.md). Second harness lesson from the same rung: Vite's `envDir` does not isolate
+  `loadEnv(mode, root, '')` — a keyless probe server needs a mirrored app dir excluding
+  `.env*`, or the probe spends the owner's real key.
 
 **Diff protocol:** a separate comparer agent reads both apps and classifies each divergence:
 teaching gap (the MCP/docs never say it) · builder error (taught but missed) · acceptable
