@@ -151,6 +151,46 @@ describe('BarVisualizer', () => {
   });
 });
 
+// The opt-in half of the amplitude gate. Default-off is pinned above by
+// 'zeroes the heights in every state except speaking'; these prove the
+// `listeningAmplitude` prop renders `listening` with the full speaking
+// presentation (live heights AND lit bars) without loosening any other state.
+describe('BarVisualizer listeningAmplitude opt-in', () => {
+  it('drives bar height from the bands while listening when listeningAmplitude is set', () => {
+    const { container } = render(() => (
+      <BarVisualizer
+        state="listening" size="md" bands={[0, 0.5, 1]} frozen={false} barCount={3}
+        listeningAmplitude
+      />
+    ));
+    expect(bars(container).map((b) => b.style.height)).toEqual(['0%', '50%', '100%']);
+    // The speaking presentation, not listening's centre blink: every bar lit.
+    bars(container).forEach((b) => expect(b.dataset.kaiHighlighted).toBe('true'));
+    // The host still reports the REAL state for CSS hooks.
+    expect(container.querySelector('[data-kai-state="listening"]')).toBeTruthy();
+  });
+
+  it('keeps listening static with the prop explicitly false (LiveKit parity control)', () => {
+    const { container } = render(() => (
+      <BarVisualizer
+        state="listening" size="md" bands={[1, 1, 1]} frozen={false} barCount={3}
+        listeningAmplitude={false}
+      />
+    ));
+    bars(container).forEach((b) => expect(b.style.height).toBe('0%'));
+  });
+
+  it('does not leak amplitude into any other scripted state, even with the prop set', () => {
+    const { container } = render(() => (
+      <BarVisualizer
+        state="thinking" size="md" bands={[1, 1, 1]} frozen={false} barCount={3}
+        listeningAmplitude
+      />
+    ));
+    bars(container).forEach((b) => expect(b.style.height).toBe('0%'));
+  });
+});
+
 // Deliberate, approved divergence from upstream: LiveKit only transitions
 // colour, never height, which is byte-faithful but reads as visibly stepped
 // once the demo runs at the real ~32ms analyser cadence. A short height

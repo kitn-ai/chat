@@ -4,7 +4,7 @@ import { normalizeVolumeBands } from '../../primitives/audio-bands';
 import { useSequencer } from '../../primitives/use-sequencer';
 import { radialSequence, radialInterval } from '../../primitives/visualizer-sequences';
 import { CONTAINER_HEIGHT, RADIAL_RADIUS, defaultRadialBarCount } from './sizes';
-import type { VariantProps } from './variant-bar';
+import { amplitudeRenderState, type VariantProps } from './variant-bar';
 
 /**
  * Bars arranged around a circle, growing outward with the audio.
@@ -40,10 +40,14 @@ export function RadialVisualizer(
   // many bars are on the ring.
   const dotSize = () => (radius() * Math.PI) / count();
 
+  // The state the rendering follows: `listeningAmplitude` folds `listening`
+  // into the speaking presentation. See amplitudeRenderState in variant-bar.
+  const renderState = () => amplitudeRenderState(props.state, props.listeningAmplitude);
+
   // Frozen (reduced motion) parks the sequence on frame 0 rather than stopping
   // the component: the shape still reads, it just does not move.
-  const tick = useSequencer(() => (props.frozen ? Infinity : radialInterval(props.state)));
-  const sequence = () => radialSequence(props.state, count());
+  const tick = useSequencer(() => (props.frozen ? Infinity : radialInterval(renderState())));
+  const sequence = () => radialSequence(renderState(), count());
 
   // `thinking` parks the sequencer itself (radialInterval returns Infinity)
   // and spins the whole ring in CSS instead, so every bar reads as lit rather
@@ -52,20 +56,21 @@ export function RadialVisualizer(
   // purpose: they interleave the ring so it still looks even while rotating,
   // not so a subset blinks).
   const highlighted = () =>
-    props.state === 'thinking'
+    renderState() === 'thinking'
       ? Array.from({ length: count() }, (_, i) => i)
       : (sequence()[tick() % sequence().length] ?? []);
 
-  // Bands only mean anything while speaking. Everywhere else the sequence is
-  // the whole story, so a stale level never leaks into a scripted state (same
-  // guard as the other two variants, so the render-prop's `value` means one
-  // thing across every variant).
+  // Bands only mean anything while speaking (or listening under the
+  // `listeningAmplitude` opt-in, folded in by renderState). Everywhere else
+  // the sequence is the whole story, so a stale level never leaks into a
+  // scripted state (same guard as the other two variants, so the
+  // render-prop's `value` means one thing across every variant).
   const levels = () =>
-    props.state === 'speaking'
+    renderState() === 'speaking'
       ? normalizeVolumeBands(props.bands, count())
       : new Array(count()).fill(0);
 
-  const spinning = () => props.state === 'thinking' && !props.frozen;
+  const spinning = () => renderState() === 'thinking' && !props.frozen;
 
   return (
     <div

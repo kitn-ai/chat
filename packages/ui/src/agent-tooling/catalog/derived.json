@@ -352,6 +352,12 @@
           "fn": false
         },
         {
+          "name": "listeningAmplitude",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
           "name": "shader",
           "scalar": false,
           "optional": true,

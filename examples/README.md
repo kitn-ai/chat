@@ -80,10 +80,12 @@ builds and typechecks every app the day it lands.
 | Directory | Rung | What it is |
 |---|---|---|
 | `apps/support-widget/` | 1 | A docked support chat on a product page: launcher, panel, streaming replies, no history. Vanilla TS + Vite. Mock frames with no key, OpenRouter with one, and the same client path either way. |
+| `apps/voice-assistant/` | 2 | A hands-free voice assistant: browser-native speech in and out, `kai-thread` transcript, `kai-audio-visualizer` on real mic amplitude, push-to-talk. Vanilla TS + Vite. Same mock/OpenRouter seam as rung 1; the app code was built front-door by a clean-room agent from the kai MCP alone (provenance in its README). |
 
 ```bash
 pnpm build:ui                                        # once
 pnpm --filter @kitn.ai/ui-app-support-widget dev     # http://localhost:5178
+pnpm --filter @kitn.ai/ui-app-voice-assistant dev    # http://localhost:5179
 ```
 
 Each app's own `README.md` has the rest — how the turn works, what it needs to

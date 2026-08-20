@@ -12,6 +12,7 @@ packages:
   # one by one like the starters above, and `verify:starters` cross-checks that
   # every app declaring `workspace:*` appears here.
   - 'examples/apps/support-widget'
+  - 'examples/apps/voice-assistant'
 # nextjs + tanstack-start stay standalone `file:` consumers (not workspace members).
 # demos/* are not workspace members. internal/* generally are not either — the
 # openrouter-spike is enumerated explicitly because it needs `workspace:*` linkage

@@ -297,6 +297,11 @@ describe('AuroraVisualizer: state -> uniform mapping', () => {
     expect(loud.uniforms.uScale?.value).toBeCloseTo(0.2 + 0.2 * 0.9, 6);
   });
 
+  it('folds live volume into uScale while listening when listeningAmplitude is set (opt-in)', async () => {
+    const c = await renderAurora({ state: 'listening', frozen: true, volume: 0.9, listeningAmplitude: true });
+    expect(c.uniforms.uScale?.value).toBeCloseTo(0.2 + 0.2 * 0.9, 6);
+  });
+
   it('does not let live volume leak into a non-speaking state', async () => {
     const c = await renderAurora({ state: 'idle', frozen: true, volume: 0.9 });
     // If the state guard were missing, this would read close to 0.2 + 0.2*0.9

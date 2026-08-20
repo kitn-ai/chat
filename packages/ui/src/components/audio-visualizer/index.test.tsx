@@ -619,3 +619,29 @@ describe('AudioVisualizer bands leak: state/frozen reads must not re-run an unre
     expect(runs).toBe(afterMount);
   });
 });
+
+describe('AudioVisualizer relays listeningAmplitude to the variants', () => {
+  // The per-variant gate itself is pinned in each variant's own test file;
+  // this pins the DISPATCHER wiring: `listeningAmplitude` must travel through
+  // `shared()` to what a variant actually receives, or the element facade's
+  // new prop would be connected to nothing.
+  it('caller-supplied bands drive bar heights while listening once listeningAmplitude is set', () => {
+    const { container } = render(() => (
+      <AudioVisualizer state="listening" barCount={2} bands={[0.25, 0.75]} listeningAmplitude />
+    ));
+    const heights = Array.from(container.querySelectorAll('[part~="bar"]')).map(
+      (b) => (b as HTMLElement).style.height,
+    );
+    expect(heights).toEqual(['25%', '75%']);
+  });
+
+  it('leaves listening scripted without the prop (the default is byte-identical)', () => {
+    const { container } = render(() => (
+      <AudioVisualizer state="listening" barCount={2} bands={[0.25, 0.75]} />
+    ));
+    const heights = Array.from(container.querySelectorAll('[part~="bar"]')).map(
+      (b) => (b as HTMLElement).style.height,
+    );
+    expect(heights).toEqual(['0%', '0%']);
+  });
+});

@@ -201,6 +201,17 @@ describe('WaveVisualizer: state -> uniform mapping', () => {
     expect(live.uniforms.uMix?.value).toBe(1);
   });
 
+  it('renders live volume while listening when listeningAmplitude is set (opt-in), per the speaking formulas', async () => {
+    const c = await renderWave({ state: 'listening', volume: 0.7, listeningAmplitude: true });
+    expect(c.uniforms.uAmplitude?.value).toBeCloseTo(0.015 + 0.4 * 0.7, 6);
+    expect(c.uniforms.uFrequency?.value).toBeCloseTo(20 + 60 * 0.7, 6);
+  });
+
+  it('keeps listening on its own base targets without listeningAmplitude (LiveKit parity control)', async () => {
+    const c = await renderWave({ state: 'listening', frozen: true, volume: 0.9 });
+    expect(c.uniforms.uAmplitude?.value).toBeCloseTo(waveTargets('listening').amplitude, 6);
+  });
+
   it('does not let live volume leak into a non-speaking state', async () => {
     // frozen lands idle's own targets instantly, so a missing
     // `state === 'speaking'` guard is unmistakable: amplitude would read

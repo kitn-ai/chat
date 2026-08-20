@@ -1,0 +1,21 @@
+{
+  "name": "@kitn.ai/ui-app-voice-assistant",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Rung 2 of the iteration ladder: a hands-free voice assistant. Browser-native speech in and out, streamed replies. Mock responder by default, OpenRouter when a key is present.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b --pretty false"
+  },
+  "dependencies": {
+    "@kitn.ai/ui": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.21",
+    "typescript": "~5.7.2",
+    "vite": "^6.0.0"
+  }
+}

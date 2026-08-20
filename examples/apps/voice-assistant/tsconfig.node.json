@@ -1,0 +1,34 @@
+{
+  /* The dev-server half: vite.config.ts + server/. Separate from the app project
+     because it is Node, not the browser — `types: ["node"]` here and nowhere in
+     tsconfig.app.json, so a client file cannot reach for `process.env` and
+     compile. Same split as examples/apps/support-widget and, upstream of both,
+     the kit scaffolder gate's `route-node` vs `route-web` tsc projects.
+
+     `src/routes.ts` is included in BOTH projects on purpose: it is the one
+     constant the browser fetches and the middleware serves, shared so the two
+     ends cannot drift apart. */
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "types": ["node"],
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+
+    /* Linting */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true
+  },
+  "include": ["vite.config.ts", "server", "src/routes.ts"]
+}

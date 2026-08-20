@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Voice assistant</title>
+  </head>
+  <body>
+    <!--
+      FULL PAGE MEANS FULL PAGE: `position: fixed; inset: 0` is deliberate, not a
+      stray overlay. `height: 100dvh` is only full-page in an empty document.
+    -->
+    <main id="shell" data-phase="idle">
+      <header id="bar">
+        <div id="identity">
+          <h1>Voice assistant</h1>
+          <p id="tagline">
+            Speech in and out is browser-native. No audio is sent anywhere.
+          </p>
+        </div>
+        <div id="phase-pill" role="status" aria-live="polite">
+          <kai-status id="phase-dot" theme="dark" size="md"></kai-status>
+          <span id="phase-label">Idle</span>
+        </div>
+      </header>
+
+      <!-- Support / error reporting. Hidden until there is something to say,
+           but NEVER silent: every failure path below un-hides one of these. -->
+      <div id="notices">
+        <kai-notice id="support-notice" theme="dark" severity="error" hidden>
+          <span id="support-notice-text"></span>
+        </kai-notice>
+        <!-- Deliberately NOT dismissible: a dismissed notice might stay
+             internally hidden, and a swallowed later error is the exact
+             failure mode this page is supposed to make impossible. -->
+        <kai-notice id="error-notice" theme="dark" severity="warning" hidden>
+          <span id="error-notice-text"></span>
+        </kai-notice>
+      </div>
+
+      <!-- The conversation. Every earlier turn stays in this array. -->
+      <kai-thread id="transcript" theme="dark" prose-size="base">
+        <div slot="empty" id="empty-state">
+          <p class="empty-title">Ask something out loud.</p>
+          <p class="empty-body">
+            Hold <kbd>Space</kbd> (or the <strong>Hold to talk</strong> button) and speak.
+            Release when you are done. What you said appears below as text, the answer
+            streams in, and then it is read back to you.
+          </p>
+        </div>
+      </kai-thread>
+
+      <!-- Live caption: what the recogniser is hearing, right now. -->
+      <p id="caption" data-kind="idle" aria-live="polite"></p>
+
+      <footer id="console">
+        <!-- listening-amplitude: render REAL microphone amplitude during the
+             listening state (the kit's default keeps amplitude speaking-only,
+             LiveKit parity — owner live finding 2 / option A). -->
+        <kai-audio-visualizer
+          id="viz"
+          theme="dark"
+          variant="bar"
+          state="idle"
+          size="lg"
+          bar-count="28"
+          listening-amplitude
+          label="Microphone level and assistant state"
+        ></kai-audio-visualizer>
+
+        <div id="controls">
+          <button id="ptt" type="button">
+            <span class="ptt-label">Hold to talk</span>
+            <span class="ptt-sub">or hold <kbd>Space</kbd></span>
+          </button>
+
+          <div class="control">
+            <kai-voice-input
+              id="mic"
+              theme="dark"
+              recognition-lang="en-US"
+              interim
+            ></kai-voice-input>
+            <span class="control-label">Tap to toggle</span>
+          </div>
+
+          <div class="control">
+            <kai-voice-output id="speaker" theme="dark"></kai-voice-output>
+            <span class="control-label">Replay answer</span>
+          </div>
+        </div>
+
+        <p id="provenance">
+          Replies are streamed from the local dev endpoint
+          <code>POST /api/chat</code>: a <strong>mocked</strong> response built with
+          <code>createMockResponder()</code> by default (no model provider is
+          contacted), or a real model via OpenRouter when a key is set — see the
+          README. Speech stays browser-native either way.
+        </p>
+      </footer>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

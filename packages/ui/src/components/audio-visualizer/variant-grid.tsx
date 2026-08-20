@@ -4,7 +4,7 @@ import { normalizeVolumeBands } from '../../primitives/audio-bands';
 import { useSequencer } from '../../primitives/use-sequencer';
 import { gridSequence } from '../../primitives/visualizer-sequences';
 import { GRID_CELL, GRID_GAP, defaultGridCount } from './sizes';
-import type { VariantProps } from './variant-bar';
+import { amplitudeRenderState, type VariantProps } from './variant-bar';
 
 /*
  * NOTE: The speaking thresholds below DIVERGE from upstream's GridCell math,
@@ -64,20 +64,25 @@ export function GridVisualizer(
   const interval = () => props.interval ?? 100;
   const items = () => Array.from({ length: rows() * cols() }, (_, i) => i);
 
+  // The state the rendering follows: `listeningAmplitude` folds `listening`
+  // into the speaking presentation. See amplitudeRenderState in variant-bar.
+  const renderState = () => amplitudeRenderState(props.state, props.listeningAmplitude);
+
   const tick = useSequencer(() =>
     // Speaking is driven by audio, not the clock; freezing also parks it.
-    props.frozen || props.state === 'speaking' ? Infinity : interval(),
+    props.frozen || renderState() === 'speaking' ? Infinity : interval(),
   );
 
-  const sequence = () => gridSequence(props.state, rows(), cols(), props.spread);
+  const sequence = () => gridSequence(renderState(), rows(), cols(), props.spread);
   const active = () => sequence()[tick() % sequence().length] ?? { x: -1, y: -1 };
 
-  // Bands only mean anything while speaking. Everywhere else the sequence is
-  // the whole story, so a stale level never leaks into a scripted state (same
-  // guard as BarVisualizer, so the render-prop's `value` means one thing
-  // across every variant).
+  // Bands only mean anything while speaking (or listening under the
+  // `listeningAmplitude` opt-in, folded in by renderState). Everywhere else
+  // the sequence is the whole story, so a stale level never leaks into a
+  // scripted state (same guard as BarVisualizer, so the render-prop's `value`
+  // means one thing across every variant).
   const levels = () =>
-    props.state === 'speaking' ? normalizeVolumeBands(props.bands, cols()) : new Array(cols()).fill(0);
+    renderState() === 'speaking' ? normalizeVolumeBands(props.bands, cols()) : new Array(cols()).fill(0);
 
   /**
    * While speaking, a cell lights when its column's level clears a threshold
@@ -87,7 +92,7 @@ export function GridVisualizer(
    * both per the divergence note at the top of this file.
    */
   function isLit(index: number): boolean {
-    if (props.state === 'speaking') {
+    if (renderState() === 'speaking') {
       const y = Math.floor(index / cols());
       const mid = Math.floor(rows() / 2);
       const scaled = (Math.abs(mid - y) / (mid + 1)) * SPEECH_LEVEL_CEILING;
@@ -100,13 +105,13 @@ export function GridVisualizer(
     // upstream rests one stationary centre cell here. 'disconnected' (first-
     // class 2026-08-10) mirrors idle's dark grid for now, pending the LiveKit
     // disconnected-state measurement.
-    if (props.state === 'idle' || props.state === 'disconnected') return false;
+    if (renderState() === 'idle' || renderState() === 'disconnected') return false;
     return active().x === index % cols() && active().y === Math.floor(index / cols());
   }
 
   /** Snap on, fade off: highlighted cells transition 10x faster than they decay. */
   function transition(index: number): string {
-    if (props.state === 'speaking') return '150ms';
+    if (renderState() === 'speaking') return '150ms';
     return `${interval() / (isLit(index) ? 1000 : 100)}s`;
   }
 

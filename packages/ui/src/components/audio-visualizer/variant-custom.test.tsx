@@ -517,6 +517,11 @@ describe('CustomVisualizer: state/volume -> uniform mapping', () => {
     expect(c.uniforms.uIntensity?.value).toBe(0.3);
   });
 
+  it('overrides intensity from live volume while listening when listeningAmplitude is set (opt-in)', async () => {
+    const c = await renderCustom({ state: 'listening', volume: 0.6, listeningAmplitude: true });
+    expect(c.uniforms.uIntensity?.value).toBeCloseTo(0.3 + 0.7 * 0.6, 6);
+  });
+
   it('frozen lands listening\'s intensity target immediately, skipping the tween', async () => {
     const c = await renderCustom({ state: 'listening', frozen: true });
     // shaderTargets('listening').intensity is the pulse pair [0.5, 0.8];
