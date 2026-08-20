@@ -54,6 +54,9 @@
       <p id="caption" data-kind="idle" aria-live="polite"></p>
 
       <footer id="console">
+        <!-- listening-amplitude: render REAL microphone amplitude during the
+             listening state (the kit's default keeps amplitude speaking-only,
+             LiveKit parity — owner live finding 2 / option A). -->
         <kai-audio-visualizer
           id="viz"
           theme="dark"
@@ -61,6 +64,7 @@
           state="idle"
           size="lg"
           bar-count="28"
+          listening-amplitude
           label="Microphone level and assistant state"
         ></kai-audio-visualizer>
 

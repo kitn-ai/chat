@@ -3,6 +3,7 @@ import { ShaderCanvas, hexToRgb, DEFAULT_SHADER_COLOR } from './shader-canvas';
 import { createTween } from '../../primitives/create-tween';
 import { waveTargets } from '../../primitives/visualizer-sequences';
 import { CONTAINER_HEIGHT } from './sizes';
+import { amplitudeRenderState } from './variant-bar';
 import type { ShaderVariantProps } from './index';
 import waveShader from './wave.glsl';
 
@@ -26,7 +27,11 @@ export default function WaveVisualizer(props: ShaderVariantProps): JSX.Element {
   const frequency = createTween(0);
   const opacity = createTween(1);
 
-  const targets = () => waveTargets(props.state);
+  // The state the rendering follows: `listeningAmplitude` folds `listening`
+  // into the speaking presentation (live-volume amplitude/frequency). See
+  // amplitudeRenderState in variant-bar. `data-kai-state` keeps the real state.
+  const renderState = () => amplitudeRenderState(props.state, props.listeningAmplitude);
+  const targets = () => waveTargets(renderState());
 
   // Reduced motion: land on the target immediately and skip every pulse.
   const transition = () =>
@@ -61,7 +66,7 @@ export default function WaveVisualizer(props: ShaderVariantProps): JSX.Element {
   // effect, one writer, ordering can no longer matter. Same effect-race
   // class as b5795ac's shared() finding.
   createEffect(() => {
-    if (props.state === 'speaking') {
+    if (renderState() === 'speaking') {
       // Live volume drives amplitude and frequency instantly while
       // speaking, so the line never lags the audio -- and lands at the
       // override immediately on re-entry, matching upstream's same-commit

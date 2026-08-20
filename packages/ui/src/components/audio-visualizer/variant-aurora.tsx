@@ -3,6 +3,7 @@ import { ShaderCanvas, hexToRgb, DEFAULT_SHADER_COLOR } from './shader-canvas';
 import { createTween } from '../../primitives/create-tween';
 import type { VisualizerState } from '../../primitives/visualizer-sequences';
 import { CONTAINER_HEIGHT } from './sizes';
+import { amplitudeRenderState } from './variant-bar';
 import type { ShaderVariantProps } from './index';
 import auroraShader from './aurora.glsl';
 
@@ -175,8 +176,13 @@ export default function AuroraVisualizer(props: ShaderVariantProps & { dark?: bo
   // nothing upstream resolved a theme at all (the standalone case).
   const resolvedDark = () => props.dark ?? systemDark();
 
+  // The state the rendering follows: `listeningAmplitude` folds `listening`
+  // into the speaking presentation (live-volume uScale). See
+  // amplitudeRenderState in variant-bar. `data-kai-state` keeps the real state.
+  const renderState = () => amplitudeRenderState(props.state, props.listeningAmplitude);
+
   createEffect(() => {
-    const t = auroraTargets(props.state);
+    const t = auroraTargets(renderState());
     // Fact sheet section 5: "0.5 s ease-out unless noted." Frozen (reduced
     // motion) settles on every target immediately instead.
     const landing = props.frozen ? { duration: 0 } : { duration: 0.5, ease: 'easeOut' as const };
@@ -198,7 +204,7 @@ export default function AuroraVisualizer(props: ShaderVariantProps & { dark?: bo
     // ease-out landing, and frozen collapses the spring like any tween.
     scale.to(
       t.scale,
-      props.state === 'listening' && !props.frozen
+      renderState() === 'listening' && !props.frozen
         ? { type: 'spring', duration: 1.0, bounce: 0.35 }
         : landing,
     );
@@ -231,7 +237,7 @@ export default function AuroraVisualizer(props: ShaderVariantProps & { dark?: bo
   // own value here would wire the self-retriggering effect loop
   // create-tween's doc warns about.
   createEffect(() => {
-    if (props.state !== 'speaking') return;
+    if (renderState() !== 'speaking') return;
     const volume = props.volume;
     if (!(volume > 0)) return;
     if (scale.animating()) return;
@@ -243,7 +249,7 @@ export default function AuroraVisualizer(props: ShaderVariantProps & { dark?: bo
   // absolute time in the shader, so a nonzero value would keep the figure
   // spinning through reduced motion.
   const rotationValue = () =>
-    props.frozen ? 0 : (auroraTargets(props.state).rotation * Math.PI) / 180;
+    props.frozen ? 0 : (auroraTargets(renderState()).rotation * Math.PI) / 180;
 
   // uTheme: 0 selects the shader's DARK colour pipeline, 1 selects LIGHT
   // (aurora.glsl.ts, fact sheet section 4 -- a real branch in the colour

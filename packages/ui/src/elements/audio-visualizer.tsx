@@ -30,16 +30,29 @@ interface Props extends Record<string, unknown> {
   /** Setting this makes the element an announced image (`role="img"`) instead of
    *  decorative (`aria-hidden`). Attribute: `label`. */
   label?: string;
-  /** Live microphone or WebRTC audio to analyze. JS property only. */
+  /** Live microphone or WebRTC audio to analyze. JS property only. NOTE: amplitude
+   *  renders only while state is "speaking" unless listening-amplitude is set; every
+   *  other state plays its scripted animation and ignores the audio. */
   stream?: MediaStream;
-  /** An `<audio>` or `<video>` element to tap for its audio. JS property only. */
+  /** An `<audio>` or `<video>` element to tap for its audio. JS property only. NOTE:
+   *  amplitude renders only while state is "speaking" unless listening-amplitude is
+   *  set; every other state plays its scripted animation and ignores the audio. */
   audioElement?: HTMLMediaElement;
   /** Pre-computed levels, 0..1. Set this and no AudioContext is ever built, which is
    *  what keeps headless/SSR rendering and browser-speech-synthesis playback (which
    *  exposes no audio node) free of Web Audio entirely. JS property only. A new
    *  array reference is required for each update; mutating the existing array in
-   *  place will not re-render. */
+   *  place will not re-render. NOTE: amplitude renders only while state is "speaking"
+   *  unless listening-amplitude is set; every other state plays its scripted
+   *  animation and ignores the audio. */
   bands?: number[];
+  /** Render live amplitude during the listening state as well, using the same
+   *  presentation as speaking. Off by default, which keeps LiveKit parity: amplitude
+   *  from stream, audio-element or bands renders only while state is "speaking". Set
+   *  it to show a real mic-level picture while the user is the one talking. Boolean.
+   *  Attribute: `listening-amplitude` (a bare attribute means true; reflected, so the
+   *  property reads back what the attribute set). */
+  listeningAmplitude?: boolean;
   /** Custom fragment shader for `variant="custom"`. JS property only. */
   shader?: ShaderSpec;
   /** Shader variants only: keep animating while scrolled off screen. Off by default,
@@ -76,7 +89,7 @@ export function num(value: unknown): number | undefined {
  */
 export function AudioVisualizerFacade(
   props: Props,
-  ctx?: Partial<Pick<WebComponentContext, 'dark' | 'flag'>>,
+  ctx?: Partial<Pick<WebComponentContext, 'dark' | 'flag' | 'reflectFlag'>>,
 ): JSX.Element {
   // Every element already resolves `theme='light'|'dark'|'auto'` against a
   // live `prefers-color-scheme` listener in `defineWebComponent` (see
@@ -102,6 +115,20 @@ export function AudioVisualizerFacade(
     ? ctx.flag('animateWhenNotVisible')
     : props.animateWhenNotVisible === true;
 
+  // Same bare-attribute coercion for the second boolean on this element.
+  const listeningAmplitude = ctx?.flag
+    ? ctx.flag('listeningAmplitude')
+    : props.listeningAmplitude === true;
+
+  // Reflected (kai-dock precedent, findings G-05): without this,
+  // `<kai-audio-visualizer listening-amplitude>` would leave
+  // `el.listeningAmplitude === undefined` even while the element honours the
+  // attribute, because toggleAttribute's empty-string write-back parses to
+  // undefined. See WebComponentContext.reflectFlag. `animateWhenNotVisible`
+  // predates the reflectFlag seam and is deliberately left as-is here; if it
+  // ever earns reflection that is its own change, not a rider on this one.
+  ctx?.reflectFlag?.('listeningAmplitude');
+
   return (
     <AudioVisualizer
       variant={props.variant as VisualizerVariant | undefined}
@@ -118,6 +145,7 @@ export function AudioVisualizerFacade(
       stream={props.stream as MediaStream | undefined}
       audioElement={props.audioElement as HTMLMediaElement | undefined}
       bands={props.bands as number[] | undefined}
+      listeningAmplitude={listeningAmplitude}
       shader={props.shader as ShaderSpec | undefined}
       animateWhenNotVisible={animateWhenNotVisible}
       theme={dark ? 'dark' : 'light'}
@@ -143,6 +171,19 @@ export function AudioVisualizerFacade(
  * el.bands = [0.2, 0.8, 0.4]       // pre-computed, skips Web Audio; new array each update
  * el.shader = { fragment: glsl }   // variant="custom" only
  * ```
+ *
+ * Audio drives the geometry only while `state="speaking"`. Every other state
+ * plays its scripted animation, so a mic stream attached during `listening`
+ * changes nothing by default (LiveKit parity). Set `listening-amplitude` to
+ * render real amplitude while the USER is the one talking:
+ * ```html
+ * <kai-audio-visualizer state="listening" listening-amplitude></kai-audio-visualizer>
+ * ```
+ *
+ * Size tiers are fixed pixel designs, but the element never clips: in a
+ * container narrower than the tier's natural footprint the whole picture
+ * scales down proportionally to fit, and returns to the exact designed
+ * metrics as soon as the space is back. Nothing to configure.
  *
  * The `wave`, `aurora`, and `custom` variants render through WebGL, and a
  * browser only allows about 16 live WebGL contexts per page. So a shader
@@ -174,6 +215,9 @@ defineWebComponent<Props>('kai-audio-visualizer', {
   stream: undefined,
   audioElement: undefined,
   bands: undefined,
+  // `undefined`, not `false`, for the same resolveFlag reason as
+  // `animateWhenNotVisible` below.
+  listeningAmplitude: undefined,
   shader: undefined,
   // `undefined`, not `false`: `resolveFlag` short-circuits on an explicit
   // `false` prop value, so a `false` default would beat a bare

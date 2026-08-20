@@ -106,6 +106,32 @@ describe('RadialVisualizer', () => {
     expect(host.className).toContain('animate-spin');
   });
 
+  it('extends bars from the bands while listening when listeningAmplitude is set (opt-in)', () => {
+    const { container } = render(() => (
+      <RadialVisualizer
+        state="listening" size="md" frozen={false}
+        barCount={4} radius={40} bands={[0, 0.5, 1, 0]}
+        listeningAmplitude
+      />
+    ));
+    const dot = (40 * Math.PI) / 4;
+    const heights = bars(container).map((b) => b.style.height);
+    expect(heights[1]).toBe(`${dot * 10 * 0.5}px`);
+    expect(heights[2]).toBe(`${dot * 10 * 1}px`);
+    // The host still reports the REAL state for CSS hooks.
+    expect(container.querySelector('[data-kai-state="listening"]')).toBeTruthy();
+  });
+
+  it('does not leak amplitude into any other scripted state, even with listeningAmplitude set', () => {
+    const { container } = render(() => (
+      <RadialVisualizer
+        state="thinking" size="md" bands={[1, 1, 1, 1]} frozen={false} barCount={4}
+        listeningAmplitude
+      />
+    ));
+    bars(container).forEach((b) => expect(b.style.height).toBe('0px'));
+  });
+
   it('lights the whole ring while speaking', () => {
     const { container } = render(() => (
       <RadialVisualizer state="speaking" size="md" bands={[0.5, 0.5, 0.5, 0.5]} frozen={false} barCount={4} />

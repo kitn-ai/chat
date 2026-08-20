@@ -7,6 +7,7 @@ import { useAudioAnalysis } from '../../primitives/use-audio-analysis';
 import { mirrorBandsCenterOut, mirrorBandsAroundRing } from '../../primitives/audio-bands';
 import { normalizeState, type VisualizerState } from '../../primitives/visualizer-sequences';
 import { BarVisualizer, type VariantProps } from './variant-bar';
+import { createFitScale } from './fit-scale';
 import { GridVisualizer } from './variant-grid';
 import { RadialVisualizer } from './variant-radial';
 import { defaultBarCount, defaultGridCount, defaultRadialBarCount, type VisualizerSize } from './sizes';
@@ -75,10 +76,24 @@ export interface AudioVisualizerProps {
   complexity?: number;
   /** Setting this makes the element an announced image instead of decorative. */
   label?: string;
+  /** Live audio to analyze. NOTE: amplitude renders only while
+   *  `state === 'speaking'` unless `listeningAmplitude` is set; every other
+   *  state plays its scripted animation and the analysis output is unused. */
   stream?: MediaStream;
+  /** Same speaking-only amplitude rule as `stream`: see `listeningAmplitude`. */
   audioElement?: HTMLMediaElement;
-  /** Pre-computed levels. Set this and no AudioContext is ever constructed. */
+  /** Pre-computed levels. Set this and no AudioContext is ever constructed.
+   *  Same speaking-only amplitude rule as `stream`: see `listeningAmplitude`. */
   bands?: number[];
+  /**
+   * Opt in to rendering live amplitude during `listening` as well, using the
+   * same presentation as `speaking`. Default off, which keeps LiveKit parity:
+   * amplitude (from `stream`, `audioElement` or `bands`) renders only while
+   * `state === 'speaking'`. Set this to show a real mic-level picture while
+   * the USER is the one talking. Forwarded to every variant; see
+   * `amplitudeRenderState` in variant-bar for the single mapping they share.
+   */
+  listeningAmplitude?: boolean;
   /**
    * Custom fragment shader for `variant="custom"`. See `ShaderSpec` for the
    * full contract -- most importantly, `fragment` MUST output premultiplied
@@ -371,11 +386,15 @@ export function AudioVisualizer(props: AudioVisualizerProps): JSX.Element {
   // `bands={bands()}`, at every call site below, exactly like `volume`,
   // `complexity`, etc. already are: an explicit prop gets its OWN getter,
   // entirely independent of this one.
+  // `listeningAmplitude` is safe inside this bundle (unlike `bands`): it is a
+  // boolean a caller sets once, not a signal driven at audio cadence, so
+  // reading it through the shared getters cannot drag in a hot subscription.
   const shared = (): Omit<VariantProps, 'bands'> => ({
     state: state(),
     size: size(),
     frozen: reduced(),
     color: props.color,
+    listeningAmplitude: props.listeningAmplitude,
   });
 
   // The three DOM variants (bar/grid/radial), including the bar fallback
@@ -390,9 +409,66 @@ export function AudioVisualizer(props: AudioVisualizerProps): JSX.Element {
       ? { role: 'img' as const, 'aria-label': props.label }
       : { 'aria-hidden': 'true' as const };
 
+  // Fit-to-container: measured by createFitScale (see fit-scale.ts for the
+  // full design rationale). At or above the natural width this contributes
+  // nothing but the `max-width` clamp, so the designed px metrics render
+  // exactly; below it, the inner wrapper scales the whole picture down and
+  // the outer adopts the scaled height so layout follows the visual.
+  const fit = createFitScale();
+
   return (
-    <div class={cn('inline-flex', props.class)} {...a11y()}>
-      <Switch
+    <div
+      class={cn('inline-flex', props.class)}
+      {...a11y()}
+      ref={fit.observeOuter}
+      style={{
+        // What lets a narrow container actually constrain this element: the
+        // content is fixed-px, so without the clamp the host box would just
+        // overflow (and clip at the viewport edge, the reported defect).
+        'max-width': '100%',
+        // While shrunk, the inner wrapper's LAYOUT box deliberately keeps its
+        // natural size (that is what keeps the measurement honest above), so
+        // it overhangs this box below/right of the scaled visual. `hidden`
+        // clips that overhang for BOTH painting and hit-testing -- without it
+        // the stale layout box covered a sibling button and ate its pointer
+        // events (W5 live finding, mechanism 2). Nothing visible is clipped:
+        // the scaled visual is exactly this box by construction.
+        // `vertical-align: top` rides along with `overflow: hidden`, which is
+        // what makes it necessary: hidden overflow moves an inline-flex box's
+        // baseline to its bottom border edge, so the surrounding line box
+        // grows by the font strut's descent below it and the host measures
+        // ~6px taller than the box (measured in headed Chromium: 107.2 vs
+        // 101.2). Top alignment opts out of baseline layout entirely. Scoped
+        // to the scaled state so default (unscaled) inline placement beside
+        // text keeps its original baseline behavior.
+        ...(fit.scaledHeight() !== undefined
+          ? { height: `${fit.scaledHeight()}px`, overflow: 'hidden', 'vertical-align': 'top' }
+          : {}),
+      }}
+    >
+      <div
+        ref={fit.observeInner}
+        style={{
+          // THE FEEDBACK-LOOP GUARD (W5 live finding, mechanism 1). The inner
+          // wrapper is a flex item of the outer, and a flex item's default
+          // `align-self: stretch` makes its LAYOUT height follow the outer's
+          // -- including the scaled height this component itself adopts below.
+          // The ResizeObserver measuring this element for its NATURAL size
+          // then reads back the adopted height, k multiplies in again, and
+          // the element spirals (measured in headed Chromium: 224px -> 45.7
+          // -> 0.85 -> 0.38). `flex-start` + `flex: none` pin this box to its
+          // intrinsic content size in BOTH axes, so the measurement can never
+          // see anything this component wrote. Unconditional: at scale 1 both
+          // are visually identical to the defaults for a single item that
+          // defines its container's size.
+          flex: '0 0 auto',
+          'align-self': 'flex-start',
+          ...(fit.scale() < 1
+            ? { transform: `scale(${fit.scale()})`, 'transform-origin': 'top left' }
+            : {}),
+        }}
+      >
+        <Switch
         fallback={<BarVisualizer {...domShared()} bands={bands()} barCount={props.barCount} />}
       >
         <Match when={variant() === 'grid'}>
@@ -446,6 +522,7 @@ export function AudioVisualizer(props: AudioVisualizerProps): JSX.Element {
           </Show>
         </Match>
       </Switch>
+      </div>
     </div>
   );
 }

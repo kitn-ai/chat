@@ -203,6 +203,13 @@ body {
 #viz {
   color: var(--phase-accent);
   transition: color 300ms ease;
+  /* Engages the kit's fit-to-container scaling: #console centers its items
+     (shrink-to-fit), so without this cap the host tracks the visualizer's
+     natural px footprint (1328px at bar-count 28) and overflows every viewport
+     narrower than that — the kit's scaler never sees a smaller box to fit.
+     Requires the fixed kit (W6's containment round): against the earlier
+     build, this exact rule fed back into a height collapse. */
+  max-width: 100%;
 }
 
 #controls {

@@ -145,3 +145,85 @@ finding re-observed (all in rung-1 candidate D, still unlanded).
   JSON, the app source, and the kit tree — all quoted or line-cited. Claims that only a
   transcript could carry (call ordering, call counts, candidate A) are marked unrecoverable, not
   guessed.
+
+## Addendum: live validation (owner, 2026-08-19/20)
+
+Everything above graded the *build*; this section records what driving the app
+by voice found — after a scripted IVP had passed it 9/9. The owner hit three
+symptoms; a debug worker (W4) root-caused each in a real headed Chromium
+(evidence: `.superpowers/sdd/2026-08-19-rung-2/live-debug/`, gitignored; report
+transcribed at `.superpowers/sdd/2026-08-19-rung-2/w4-findings.md`), and a fix
+worker (W5) applied the app-layer fixes — README changes 11–13 in
+`examples/apps/voice-assistant/README.md`.
+
+### The three root causes, with layer attribution
+
+1. **"Spoke, released, nothing at all" — KIT GAP (S-class), app blameless.**
+   Recognition runtime failures are 100% invisible: `use-speech-recognition.ts`'s
+   `onerror` only sets a signal nothing reads; `voice-input.tsx`'s catch comment
+   ("surfaced via speech.error") is false; an empty result fires no
+   `kai-transcription` at all, so the app's "Nothing was recognised" branch was
+   dead code on the native path. The element contract has no error signal.
+   Compounding contributor (APP): the visualizer's second `getUserMedia` sat
+   pending forever under an unanswered permission prompt — no rejection, no
+   deadline. Fixed app-side with an honest heuristic (recording ended + no final
+   transcript within 600 ms → the notice) plus a 5 s deadline on the mic open;
+   the kit gap stays open.
+2. **Visualizer dead while the user speaks — APP BUG on a misread kit contract,
+   plus a KIT AFFORDANCE GAP.** Capture contention was REFUTED (the second
+   stream succeeded alongside live recognition). The kit's bar variant reads
+   `bands`/amplitude ONLY in `state === 'speaking'` (documented LiveKit parity);
+   the app attaches the mic stream under `state='listening'`, where the whole
+   analysis pipeline runs and its output is discarded. **NOT fixed — the
+   listening-amplitude decision is pending with the owner.** The first real
+   consumer of this contract — our own app — misread it, which is itself the
+   affordance finding.
+3. **Speaking phase "intermittent" + stray error — APP BUG, enabled by a KIT
+   GAP.** Autoplay block REFUTED (utterance start at +21 ms, no gesture).
+   `voice-output.tsx` sets its speaking signal optimistically inside `speak()`
+   itself, so `kai-speaking-change {speaking:true}` fires synchronously DURING
+   the call — before the app armed its 2.5 s watchdog. Armed after, the watchdog
+   could only be cleared by speech ENDING: every reply >2.5 s tripped it
+   mid-playback (phase forced idle, false "never started speaking" error, audio
+   still playing). Fixed app-side by arming before `speak()`. The kit gap:
+   `speaking:true` means "speak() was called", not "audio started"
+   (`utterance.onstart` unused).
+
+### Why the IVP's 9/9 was vacuous — two mechanisms
+
+- **The stub mirrored the app's own constant.** The synthesis stub held
+  `speaking` for exactly 2500 ms — the watchdog's number — and registered its
+  end-timer inside `speak()` before the watchdog was armed, so it cleared the
+  watchdog by ~1 ms of timer ordering. Any stub duration >2.5 s would have
+  exposed root cause 3. A check whose fixture constants are copied from the code
+  under test cannot fail on that code's timing bugs.
+- **String equality on a prop the app itself set.** The visualizer point
+  asserted `viz.state === 'listening'` and never sampled bar geometry, so "lit
+  real-amplitude bar" was a proxy that passed while all 28 bars sat pinned at
+  32.0 px. Assert the pixels, not the prop you wrote.
+
+Both are instances of the known checks-that-prove-nothing class: neither check
+was ever watched failing for the right reason.
+
+### Kit-fix candidates (banked, not applied)
+
+1. **Error surface on both voice elements** (S-class): emit
+   `kai-voice-error {error, message}` from `kai-voice-input` (recognition
+   onerror) and `kai-voice-output` (utterance onerror), plus a distinguishable
+   no-result signal; update element-meta/docs. Extends G-12 to the input side.
+2. **Make `kai-speaking-change {speaking:true}` mean "audio started"**: set the
+   speaking signal on `utterance.onstart` for the native path, not optimistically
+   inside `speak()`.
+3. **Visualizer amplitude in `listening`**: honor `stream`/`bands` amplitude in
+   the listening state (opt-in prop if LiveKit parity must hold), or document
+   loudly on `stream`/`bands` that amplitude renders only in `speaking`.
+   RESOLVED by the owner as option A (2026-08-19): the kit gained the opt-in
+   `listeningAmplitude` reflected boolean (W6), and this app adopted it
+   (README change 14) — verified by bar geometry moving during listening in
+   headed Chromium.
+
+Caveats carried from W4: Chrome-branded cloud-recognition error classes were not
+reproduced (Chrome for Testing never fired an error event — itself evidence for
+the silence class), and the first-turn prompt-starvation chain is reconstructed
+from measured pending-gum + no-result behavior plus code paths, not a
+byte-for-byte replay of the owner's box.

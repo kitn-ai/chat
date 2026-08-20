@@ -84,6 +84,10 @@ export function microphoneErrorMessage(err: unknown): string {
       return 'No microphone was found. Plug one in, or pick one in your system sound settings.';
     case 'NotReadableError':
       return 'The microphone is already in use by another application and could not be opened.';
+    case 'TimeoutError':
+      // Raised by the app's own deadline around getUserMedia (main.ts): a
+      // permission prompt left unanswered keeps the request pending forever.
+      return 'The microphone did not open — a permission prompt may still be waiting for an answer. Allow microphone access and try again.';
     default:
       return `The microphone could not be opened: ${err instanceof Error ? err.message : String(err)}`;
   }

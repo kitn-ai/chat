@@ -99,9 +99,11 @@ live in
 [`docs/superpowers/research/2026-08-19-rung-2-front-door/`](../../../docs/superpowers/research/2026-08-19-rung-2-front-door/).
 
 An insider then finished the distance — corpus integration, the OpenRouter path,
-and nothing else. Per the standing provenance policy, both phases' complete
-instruction streams follow verbatim, then the named list of every change the
-insider made to the builder's code.
+and nothing else. A later live-validation round (the owner driving the app by
+voice) root-caused three defects and a second insider applied the app-layer
+fixes. Per the standing provenance policy, every phase's complete instruction
+stream follows verbatim, then the named list of every change made to the
+builder's code.
 
 ### Phase 1 — the front-door build (the builder's entire task prompt, verbatim)
 
@@ -183,6 +185,88 @@ Then run from repo root: pnpm --filter @kitn.ai/ui run lint:cdn-pins (all three 
 Address this before completing your current task.
 ````
 
+### Phase 3 — the live-validation fixes (this conversation, verbatim)
+
+The owner drove the app by voice and hit three defects the earlier scripted IVP
+had passed 9/9 over (its pass was vacuous — see changes 11–13 and the findings
+addendum). A debug worker (W4) root-caused them live in headed Chromium; a fix
+worker (Claude Fable worker W5) then received the following brief and dispatch
+message, reproduced unedited.
+
+The generated brief (`.superpowers/sdd/2026-08-19-rung-2/w5-livefix-brief.md`,
+gitignored):
+
+````markdown
+## Standing constraints (all roles)
+
+- No `git checkout` / `git reset` / `git stash` — ever. Restore by file copy if needed.
+- Never rebuild the package (`nx build ui`) unless the brief explicitly says so.
+- No subagents.
+- Watch every new check FAIL before trusting it (plant the defect, see the red for the right reason, then the green).
+- Never run `nx test` — the NX cache has returned wrong verdicts in both directions.
+- Edit only the files this brief assigns. If the work needs another file, stop and report.
+- Commits are the supervisor's; never touch the git index.
+- Look it up before you assert it: no claim about the tree goes in a report unread. (Not mechanizable — stated so it is not mistaken for covered.)
+
+## Implementer brief
+
+TASK: Apply the APP-LAYER fixes for the three live-validation defects root-caused in W4's report (read it in full first: it is embedded in the supervisor's ledger context; the raw evidence is under .superpowers/sdd/2026-08-19-rung-2/live-debug/ — read the report text pasted at .superpowers/sdd/2026-08-19-rung-2/w4-findings.md). Fixes, app layer ONLY (no kit/packages/ui edits): (1) Watchdog race (W4 symptom 3): in src/main.ts, arm the no-speech watchdog BEFORE calling speak(), and clear it on any kai-speaking-change speaking:true that arrives after arming; the false 'never started speaking' error on replies >2.5s must be gone. (2) Mic-open timeout (W4 symptom 1 contributor): wrap the visualizer's openMic()/getUserMedia in a timeout (~5s) so a permission prompt left pending surfaces a visible notice instead of hanging forever. (3) No-result surface (W4 symptom 1 app mitigation): the kit emits no error event, so add the honest app-side heuristic — when kai-recording-change goes false and no kai-transcription (final) arrives within ~600ms, show the existing 'Nothing was recognised — try again' notice (currently dead code); make it fire for real. Add a comment naming the kit gap (no error event on kai-voice-input) so the workaround's reason is recorded where it lives. (4) README provenance: append these changes to the phase-2 change list, each labeled with W4's symptom/root-cause; note the IVP-vacuity discovery. (5) findings.md addendum section 'Live validation (owner, 2026-08-19/20)': the three root causes with layer attribution, the two IVP-vacuity mechanisms, and the kit-fix candidates (error event on both voice elements; kai-speaking-change true means speak() called not audio started; visualizer renders amplitude only in speaking state). Do NOT change the listening-amplitude behavior — that decision is pending with the owner. Verify each fix with a real headed-Chromium probe (adapt W4's live-debug/probe.mjs — e.g. a >2.5s utterance no longer trips the watchdog; a no-result recognition run shows the notice; a never-resolving getUserMedia shows a notice) and paste the probe outputs; also npm run build exit 0.
+
+FILES: examples/apps/voice-assistant/src/** , examples/apps/voice-assistant/README.md, docs/superpowers/research/2026-08-19-rung-2-front-door/findings.md
+
+CO-WRITERS: none
+
+VERIFY: headed-Chromium probe outputs for all three fixes (red before where feasible, green after); npm run build exit 0; README + findings updated
+
+Report back exactly:
+
+```
+DONE:
+FILES:
+VERIFY:
+SELF-CHECK:
+GAPS:
+NEEDS-REGEN:
+BLOCKERS:
+```
+````
+
+The supervisor's dispatch message:
+
+````text
+You are W5, a pooled implementation worker on the kitn-chat repo (/Users/home/Projects/kitn-ai/kitn-chat, branch rung-2/voice-assistant). Your brief is at /Users/home/Projects/kitn-ai/kitn-chat/.superpowers/sdd/2026-08-19-rung-2/w5-livefix-brief.md — read it FIRST and follow it exactly, including the standing constraints. W4's full diagnosis (your input) is at .superpowers/sdd/2026-08-19-rung-2/w4-findings.md; its probe and evidence JSONs are under .superpowers/sdd/2026-08-19-rung-2/live-debug/.
+
+Note the owner may be running a dev server on :5179 — use a different port for your probes (the app accepts --port; W4 used :5180). Kill anything you start. Run git only from the repo root; never touch the git index; no kit (packages/ui) edits — app layer only, and do NOT change the listening-amplitude behavior (owner decision pending).
+
+When done: write your report to .superpowers/sdd/2026-08-19-rung-2/w5-livefix-report.md and return a summary: each fix with its before/after probe evidence, build result, README/findings diffs summary.
+````
+
+The supervisor's follow-up message, after the owner ruled on the
+listening-amplitude decision (option A: the kit gained the opt-in) — change 14
+below is what it produced:
+
+````text
+Follow-up task (writer-lock re-claimed for you on examples/apps/voice-assistant/src + README.md; same standing constraints). The owner ruled option A and W6 has landed it in the kit and REBUILT packages/ui/dist: kai-audio-visualizer now has a reflected boolean `listeningAmplitude` (attribute `listening-amplitude`) that, when set, renders real amplitude from stream/bands during the `listening` state — all six variants. Fit-to-container scaling is now default-on in the kit (no app action needed). W6's report: .superpowers/sdd/2026-08-19-rung-2/w6-kitfix-report.md.
+
+Your task: make the app's listening visualization real. (1) Set the new flag on the visualizer (attribute in index.html or property in main.ts — pick what the app's existing style does for its other visualizer props). (2) Revisit the mic wiring now that the amplitude path is live: the stream attaches ~1.8s late (W4 measured getUserMedia latency eating most of a short hold) — if a cheap honest improvement exists (e.g. pre-open the mic when the user first arms push-to-talk, reusing your 5s-deadline openMic, releasing tracks on idle), take it; if not, leave it and note the latency in the README. Do NOT add a second amplitude pipeline — the element consumes the stream directly now. (3) Verify with a headed-Chromium probe: fake-device mic, hold push-to-talk, sample bar geometry DURING listening — assert bars actually move (this was the vacuous point; measure geometry, not state strings). Also do one viewport-shrink sample (narrow window, assert the visualizer host does not overflow its parent) as a smoke check of W6's containment from the app's side. (4) README phase-3 change list gains this adoption item, labeled with the finding it closes (owner live finding 2 / option A), and append this message verbatim to the transcript section. (5) npm run build exit 0.
+
+Report back: probe evidence (bar geometry moving during listening; no overflow when narrow), what you did about mic latency, files changed.
+
+Address this before completing your current task.
+````
+
+The supervisor's final fix-round message, after the final IVP failed its
+containment point against the un-engaged app — change 15 above is what it
+produced:
+
+````text
+Final fix round, W5 — one item, your lane (lock still needed on src: it covers examples/apps/voice-assistant/src and styles.css lives there; index.html is inside your earlier claim scope too — if you touch files outside src/README, stop and report instead). The final IVP failed ONLY point 6, and its diagnosis confirms your own report's disclosure: after W6's containment fix landed in the kit, the app-side width constraint you tried and reverted was never reapplied, so the kit's fit-scale never engages — #viz renders 1328x224 at every viewport, overflowing its parent even at 1280px. IVP evidence: .superpowers/sdd/2026-08-19-rung-2/ivp-final/06-containment.json + containment-360.png; its FAIL note names the fix shape.
+
+Task: give #viz a real width constraint so fit-scale engages — your original `max-width:100%` attempt should now WORK against the fixed kit (the feedback collapse and stale-inner-box mechanisms are both fixed and probe-proven in .superpowers/sdd/2026-08-19-rung-2/w6-containment-probe/). Address the fit-content context too (#console's align-items:center) — W6's fixed kit handles the centered-flex case (its probe scenario A is exactly that), so try the minimal constraint first and MEASURE. Verify by RUNNING the IVP's own containment probe against your fixed app (node .superpowers/sdd/2026-08-19-rung-2/ivp-final/probe.mjs containment --port=<your keyless mirror port>) — red first against the unfixed app is already established by the IVP run, so one green run with: no overflow at 360px and 1280px, scaled (not collapsed, not natural) height, exact grow-back, click lands. IMPORTANT env-safety (a verifier burned a real API call on this): do NOT run probes against a server started in the real app dir — mirror the app to scratchpad excluding .env* (rsync + symlink node_modules, the IVP report describes it), confirm X-Kai-Mock: 1 before probing. Then npm run build exit 0, README phase-3 change list gains this item (labeled: owner live finding 3 / containment adoption; note the two-sided nature — kit fix W6, app engagement here), append this message verbatim to the transcript section. Report: probe JSON evidence + files changed.
+
+Address this before completing your current task.
+````
+
 ### Every insider change to the builder's code, named and labeled
 
 Gap IDs refer to the graded gap list in
@@ -251,6 +335,88 @@ the delivered snapshot.
     rewritten" — `packages/ui/scripts/lint-cdn-pins.mjs` header) covers this
     case with a `lint-cdn-pins: historical` directive, which is what was
     applied. Not a kit gap; a guard-classification call.
+
+Changes 11–13 are phase 3, the live-validation fixes (W5). Symptom numbers and
+root causes are W4's, from the live-debug round recorded in the findings
+addendum ("Live validation (owner, 2026-08-19/20)").
+
+11. **Speech watchdog armed BEFORE `speak()`** (`src/main.ts`) — W4 symptom 3
+    (the "intermittent" speaking phase plus a stray error). Root cause:
+    `<kai-voice-output>` sets its speaking signal optimistically inside
+    `speak()` itself, so `kai-speaking-change {speaking:true}` fires
+    synchronously DURING the call — before the old code armed the watchdog.
+    Armed after, the watchdog could only ever be cleared by speech ENDING, so
+    every reply longer than 2.5 s tripped it mid-playback: phase forced idle
+    and a false "never started speaking" error while audio kept playing. Armed
+    before, the synchronous confirmation disarms it. KIT GAP, banked:
+    `speaking:true` means "speak() was called", not "audio started"
+    (`utterance.onstart` is unused).
+12. **A 5 s deadline around the visualizer's `getUserMedia`** (`src/main.ts`;
+    the message's `TimeoutError` case in `src/voice-support.ts`) — W4 symptom 1
+    contributor. A permission prompt left unanswered keeps `getUserMedia`
+    pending forever — no rejection, no timeout of its own (measured live:
+    `gum: []`, the catch never fired) — so the visualizer silently never lit.
+    The race surfaces the hang as the existing microphone notice; a stream that
+    arrives after the deadline has its tracks stopped so the recording
+    indicator doesn't stay lit unused.
+13. **No-result heuristic on the native recognition path** (`src/main.ts`) —
+    W4 symptom 1, the app-side mitigation. `<kai-voice-input>` emits NO event
+    when recognition fails at runtime or hears nothing: its `onerror` only sets
+    a signal nothing reads, and an empty result fires no `kai-transcription` at
+    all — so the "Nothing was recognised" branch was dead code on the native
+    path and a failed session ended in total silence. Now, recording ending
+    with no final transcript within 600 ms shows that caption. The kit gap (no
+    error / no-result signal on `kai-voice-input`) is named in a comment at the
+    site so the workaround's reason lives where the code does.
+
+14. **Real amplitude while listening: `listening-amplitude` adopted, mic
+    pre-opened at the gesture** (`index.html`, `src/main.ts`) — closes owner
+    live finding 2 (visualizer dead while the user speaks), resolved by the
+    owner as option A: the kit gained an opt-in reflected boolean
+    (`listeningAmplitude` / attribute `listening-amplitude`) that renders real
+    amplitude from `stream` during the `listening` state, and this app sets the
+    attribute (matching its existing attribute style for the visualizer's
+    scalars). The app feeds the element its mic stream directly — no second
+    amplitude pipeline. Mic wiring revisited for latency: `getUserMedia` was
+    measured taking up to ~1.8 s, eating most of a short hold's visualization
+    window when opened on `kai-recording-change`, so `openMic()` is now
+    pre-called at the gesture itself (holdStart), with an in-flight latch so
+    the gesture call and the recording-change call share one capture (two
+    concurrent opens were measured leaking a stream with the recording
+    indicator lit), and a holdEnd release for the case where recognition never
+    reports. The stream still closes whenever the turn leaves `listening`, so
+    the recording indicator goes out between turns exactly as before. Verified
+    by bar GEOMETRY sampled during listening in headed Chromium — not state
+    strings, which is what made the old IVP point vacuous. Not adopted:
+    app-side width constraints for the kit's new fit-to-container scaling —
+    engaging it from this app's layout produced kit-layer breakage in both
+    configurations tried (a feedback height collapse under a fit-content host;
+    an inner box overflowing the adopted height and covering the push-to-talk
+    button), reported upstream rather than worked around — until the kit fix
+    landed; change 15 completes the adoption.
+15. **Containment engaged: `#viz { max-width: 100% }`** (`src/styles.css`) —
+    owner live finding 3 / containment adoption. Two-sided by design: W6 fixed
+    the kit's fit-to-container scaling (the feedback height collapse and the
+    stale inner box that covered the push-to-talk button, both of which change
+    14's first attempt hit), and this is the app's side — `#console` centers
+    its items, a shrink-to-fit context in which the host tracks the
+    visualizer's natural 1328 px footprint, so without a width cap the kit's
+    scaler never sees a smaller box and the element overflows every viewport
+    narrower than that (including an ordinary 1280 px window). Verified with
+    the final IVP's own containment probe against the fixed app: no overflow
+    at 360 px or 1280 px, proportionally scaled height (not collapsed, not
+    natural), exact return to natural on grow-back, and the push-to-talk click
+    landing — plus a re-run of the listening-amplitude geometry probe to
+    confirm the constraint costs the interaction nothing.
+
+The same round found **why the earlier scripted IVP passed 9/9 over all three
+defects**: its synthesis stub held `speaking` for exactly 2500 ms — the
+watchdog's own constant — with its end-timer registered inside `speak()` before
+the watchdog was armed, so it cleared the watchdog by ~1 ms of timer ordering
+(any stub duration over 2.5 s would have exposed change 11's bug); and its
+visualizer point asserted `viz.state === 'listening'` — string equality on the
+prop the app itself sets — without ever sampling bar geometry, so "lit
+real-amplitude bar" passed vacuously. Details in the findings addendum.
 
 Deliberately **not** fixed here, per the brief — the rung's kit-level product
 findings are banked, not patched around in the corpus: the voice elements'

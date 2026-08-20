@@ -3,6 +3,7 @@ import { ShaderCanvas, hexToRgb, DEFAULT_SHADER_COLOR, type UniformSpec, type Un
 import { createTween } from '../../primitives/create-tween';
 import { shaderTargets } from '../../primitives/visualizer-sequences';
 import { CONTAINER_HEIGHT } from './sizes';
+import { amplitudeRenderState } from './variant-bar';
 import type { ShaderVariantProps } from './index';
 
 /**
@@ -203,6 +204,11 @@ export default function CustomVisualizer(props: ShaderVariantProps): JSX.Element
   const intensity = createTween(0.3);
   const speed = createTween(1);
 
+  // The state the rendering follows: `listeningAmplitude` folds `listening`
+  // into the speaking presentation (live-volume intensity). See
+  // amplitudeRenderState in variant-bar. `data-kai-state` keeps the real state.
+  const renderState = () => amplitudeRenderState(props.state, props.listeningAmplitude);
+
   // Intensity has exactly ONE writer -- this effect -- on purpose. The
   // volume override used to live in a second effect ("if speaking,
   // intensity.to(0.3 + 0.7v, instant)") alongside this one's 0.5s tween
@@ -217,8 +223,8 @@ export default function CustomVisualizer(props: ShaderVariantProps): JSX.Element
   // the Task 12 review accepted -- these two wrote the SAME tween. See the
   // wave variant's twin comment; same effect-race class as b5795ac.
   createEffect(() => {
-    const t = shaderTargets(props.state);
-    if (props.state === 'speaking') {
+    const t = shaderTargets(renderState());
+    if (renderState() === 'speaking') {
       // Live volume takes over intensity while speaking, with no easing so
       // the picture tracks the audio exactly -- and lands immediately on
       // re-entry regardless of effect ordering. `volume` is only tracked

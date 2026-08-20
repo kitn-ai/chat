@@ -87,6 +87,35 @@ describe('GridVisualizer', () => {
     expect(lit(nearSilent.container)).toHaveLength(0);
   });
 
+  it('lights cells from the bands while listening when listeningAmplitude is set (opt-in)', () => {
+    const { container } = render(() => (
+      <GridVisualizer
+        state="listening" size="md" frozen={false}
+        count={3} bands={[1, 0, 0]}
+        listeningAmplitude
+      />
+    ));
+    // Identical to the speaking case above: column 0 fully lit, nothing else.
+    const litIdx = lit(container)
+      .map((e) => Number(e.dataset.kaiIndex))
+      .sort((a, b) => a - b);
+    expect(litIdx).toEqual([0, 3, 6]);
+    // The host still reports the REAL state for CSS hooks.
+    expect(container.querySelector('[data-kai-state="listening"]')).toBeTruthy();
+  });
+
+  it('keeps listening scripted without listeningAmplitude, even with loud bands (LiveKit parity control)', () => {
+    const { container } = render(() => (
+      <GridVisualizer
+        state="listening" size="md" frozen={false}
+        count={3} bands={[1, 0, 0]}
+      />
+    ));
+    // The scripted listening animation lights at most one cell per frame,
+    // never a whole column.
+    expect(lit(container).length).toBeLessThanOrEqual(1);
+  });
+
   it('lights exactly the middle row just past the silence floor (level 0.03)', () => {
     // The control bounding the floor from above: any real speech (bands sit
     // at ~0.1 and up) must light the centre instantly.

@@ -114,9 +114,11 @@ async function init(): Promise<void> {
   let messages: ChatMessage[] = [];
   let phase: Phase = 'idle';
   let micStream: MediaStream | null = null;
+  let micOpening: Promise<MediaStream> | null = null;
   let inFlight: AbortController | null = null;
   let bandsTimer = 0;
   let speakWatchdog = 0;
+  let noResultTimer = 0;
   let lastQuestion = { text: '', at: 0 };
 
   const setMessages = (updater: (prev: ChatMessage[]) => ChatMessage[]): void => {
@@ -173,14 +175,68 @@ async function init(): Promise<void> {
    * moment listening ends, so the browser's recording indicator goes out
    * between turns instead of staying lit.
    */
+  const MIC_OPEN_TIMEOUT_MS = 5000;
+
   const openMic = async (): Promise<void> => {
     if (!support.microphone) return;
     if (!micStream) {
-      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Latch the in-flight request: openMic is called both at the gesture
+      // (holdStart pre-open) and on kai-recording-change, and two concurrent
+      // getUserMedia calls open two captures — one of which leaks with the
+      // browser's recording indicator lit. Both callers await the same one.
+      if (!micOpening) {
+        // A permission prompt left unanswered keeps getUserMedia PENDING
+        // forever — no rejection, no timeout of its own — so without a
+        // deadline the visualizer just never lights and nothing on the page
+        // says why (measured live: W4 symptom 1, `gum: []`, catch never
+        // fired). Race a deadline so the hang surfaces as a visible notice.
+        const request = navigator.mediaDevices.getUserMedia({ audio: true });
+        micOpening = (async () => {
+          let deadline = 0;
+          try {
+            return await Promise.race([
+              request,
+              new Promise<never>((_, reject) => {
+                deadline = window.setTimeout(
+                  () =>
+                    reject(
+                      new DOMException(
+                        `getUserMedia did not settle within ${MIC_OPEN_TIMEOUT_MS / 1000} seconds`,
+                        'TimeoutError',
+                      ),
+                    ),
+                  MIC_OPEN_TIMEOUT_MS,
+                );
+              }),
+            ]);
+          } catch (err) {
+            // If the prompt is answered after the deadline, the stream still
+            // arrives — stop its tracks, or the browser's recording indicator
+            // stays lit with nothing using the audio.
+            void request.then(
+              (stream) => stream.getTracks().forEach((track) => track.stop()),
+              () => {},
+            );
+            throw err;
+          } finally {
+            window.clearTimeout(deadline);
+          }
+        })();
+      }
+      const pending = micOpening;
+      try {
+        micStream = await pending;
+      } finally {
+        if (micOpening === pending) micOpening = null;
+      }
     }
-    // Only attach if we are still listening — the user may have let go already.
+    // Only attach if we are still listening — but while the hold is still
+    // ARMING (pointer down, recognition not yet reporting), keep the stream
+    // for the attach that follows: openMic() is pre-called at the gesture
+    // (see holdStart) because getUserMedia was measured taking ~1.8 s to
+    // resolve, which ate most of a short hold's visualization window.
     if (phase === 'listening') visualizer.stream = micStream;
-    else closeMic();
+    else if (pushToTalk.dataset.held !== 'true') closeMic();
   };
 
   const closeMic = (): void => {
@@ -249,10 +305,17 @@ async function init(): Promise<void> {
 
     voiceOut.text = utterance;
     setPhase('speaking');
-    voiceOut.speak();
 
     // If `kai-speaking-change` never confirms, we would sit in "Speaking"
     // forever with silence. Say so instead of pretending.
+    //
+    // Armed BEFORE speak(), deliberately: <kai-voice-output> sets its speaking
+    // signal optimistically inside speak() itself (not on utterance.onstart),
+    // so `kai-speaking-change {speaking:true}` fires synchronously DURING the
+    // speak() call. Armed after, that confirmation had already passed and the
+    // watchdog could only ever be cleared by speech ENDING — every reply
+    // longer than 2.5 s tripped it mid-playback (W4 symptom 3). KIT GAP,
+    // banked: `speaking:true` means "speak() was called", not "audio started".
     window.clearTimeout(speakWatchdog);
     speakWatchdog = window.setTimeout(() => {
       if (phase !== 'speaking') return;
@@ -261,6 +324,7 @@ async function init(): Promise<void> {
         'The browser accepted the reply but never started speaking. The text is in the transcript; use "Replay answer" to try again.',
       );
     }, 2500);
+    voiceOut.speak();
   };
 
   const ask = async (question: string): Promise<void> => {
@@ -329,8 +393,11 @@ async function init(): Promise<void> {
 
   /* ------------------------------------------------------ element -> host */
 
+  const NO_RESULT_NOTE = 'Nothing was recognised — try again, a little closer to the mic.';
+
   on<{ recording: boolean }>(voiceIn, 'kai-recording-change', ({ recording }) => {
     if (recording) {
+      window.clearTimeout(noResultTimer);
       clearError();
       showCaption('', 'idle');
       setPhase('listening');
@@ -344,6 +411,20 @@ async function init(): Promise<void> {
     // Only fall back to idle if nothing else has taken over — the final
     // transcript may already have moved us to "thinking".
     if (phase === 'listening') setPhase('idle');
+    // KIT GAP (banked as G-12's input-side sibling): <kai-voice-input> emits
+    // no error event, and a recognition session that fails at runtime — or
+    // simply hears nothing — ends in TOTAL silence: no kai-transcription, not
+    // even an empty one, so the empty-text branch below is unreachable on the
+    // native path (measured live: W4 symptom 1). Until the kit exposes a
+    // kai-voice-error / no-result signal, infer it: recording ended and no
+    // final transcript landed shortly after means nothing was recognised.
+    window.clearTimeout(noResultTimer);
+    noResultTimer = window.setTimeout(() => {
+      // A final transcript moved us to "thinking", or a new hold is already
+      // listening — in either case there is nothing to report.
+      if (phase !== 'idle') return;
+      showCaption(NO_RESULT_NOTE, 'note');
+    }, 600);
   });
 
   on<{ text: string }>(voiceIn, 'kai-transcript-interim', ({ text }) => {
@@ -351,9 +432,10 @@ async function init(): Promise<void> {
   });
 
   on<{ text: string }>(voiceIn, 'kai-transcription', ({ text }) => {
+    window.clearTimeout(noResultTimer);
     const question = text.trim();
     if (!question) {
-      showCaption('Nothing was recognised — try again, a little closer to the mic.', 'note');
+      showCaption(NO_RESULT_NOTE, 'note');
       if (phase === 'listening') setPhase('idle');
       return;
     }
@@ -378,6 +460,10 @@ async function init(): Promise<void> {
   });
 
   on<{ speaking: boolean }>(voiceOut, 'kai-speaking-change', ({ speaking }) => {
+    // The watchdog is armed before speak() is called (see speakReply), so any
+    // speaking:true — including the synchronous one fired inside speak() —
+    // arrives after arming and disarms it. speaking:false disarms it too:
+    // speech that has already ended has nothing left to watch.
     window.clearTimeout(speakWatchdog);
     if (speaking) setPhase('speaking');
     else if (phase === 'speaking') setPhase('idle');
@@ -391,6 +477,13 @@ async function init(): Promise<void> {
     if (phase === 'listening' || phase === 'blocked') return;
     voiceOut.stop();
     pushToTalk.dataset.held = 'true';
+    // Pre-open the mic at the gesture rather than waiting for recognition to
+    // report (`kai-recording-change` arrives ~0.5 s after start()): measured
+    // live, getUserMedia takes ~1.8 s to resolve, so opened on the event the
+    // stream attached for only the tail of a short hold. The stream still
+    // closes the moment the turn leaves `listening`, so the browser's
+    // recording indicator goes out between turns exactly as before.
+    void openMic().catch((err) => showError(microphoneErrorMessage(err)));
     voiceIn.start();
   };
 
@@ -398,6 +491,9 @@ async function init(): Promise<void> {
     if (pushToTalk.dataset.held !== 'true') return;
     delete pushToTalk.dataset.held;
     voiceIn.stop();
+    // If recognition never reported (no kai-recording-change fired), nothing
+    // else will release the pre-opened stream — do it here.
+    if (phase !== 'listening') closeMic();
   };
 
   pushToTalk.addEventListener('pointerdown', (event) => {

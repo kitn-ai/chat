@@ -9,8 +9,18 @@ import { CONTAINER_HEIGHT, GAP, BAR_WIDTH, defaultBarCount, type VisualizerSize 
 export interface VariantProps {
   state: VisualizerState;
   size: VisualizerSize;
-  /** Multiband levels, 0..1. Only read while `state === 'speaking'`. */
+  /** Multiband levels, 0..1. Only read while `state === 'speaking'`, or also
+   *  while `'listening'` when `listeningAmplitude` is set. */
   bands: number[];
+  /**
+   * Opt in to rendering live amplitude during `listening` as well: the
+   * variant presents `listening` exactly as it presents `speaking` (live
+   * levels, lit geometry) while the host keeps reporting the real state via
+   * `data-kai-state`. Default off, which preserves LiveKit parity: amplitude
+   * renders only while `state === 'speaking'`, and every other state plays
+   * its scripted sequence. See `amplitudeRenderState`.
+   */
+  listeningAmplitude?: boolean;
   /** `prefers-reduced-motion`: pin the sequencer at its first frame. */
   frozen: boolean;
   /** Overrides the inherited `currentColor` the bars are painted with. */
@@ -42,20 +52,42 @@ export interface VariantProps {
  * `packages/shadcn/components/agents-ui/agent-audio-visualizer-bar.tsx`
  * (Apache License 2.0).
  */
+/**
+ * The state the RENDERING follows, as opposed to the state the consumer set.
+ *
+ * `listeningAmplitude` opts the `listening` state into the full speaking
+ * presentation: every variant routes its state-driven decisions (levels,
+ * highlight sequence, thresholds, volume overrides) through this ONE mapping
+ * rather than each patching its own `=== 'speaking'` gates, so the opt-in
+ * cannot half-apply within a variant. The host's `data-kai-state` deliberately
+ * keeps the REAL state, so CSS hooks and consumers observing the element are
+ * never lied to. With the flag absent or false this is the identity mapping,
+ * which is what keeps the default byte-identical to LiveKit parity.
+ */
+export function amplitudeRenderState(
+  state: VisualizerState,
+  listeningAmplitude: boolean | undefined,
+): VisualizerState {
+  return listeningAmplitude === true && state === 'listening' ? 'speaking' : state;
+}
+
 export function BarVisualizer(props: VariantProps & { barCount?: number }): JSX.Element {
   const count = () => props.barCount ?? defaultBarCount(props.size);
+  const renderState = () => amplitudeRenderState(props.state, props.listeningAmplitude);
 
   // Frozen (reduced motion) parks the sequence on frame 0 rather than stopping
   // the component: the shape still reads, it just does not move.
-  const tick = useSequencer(() => (props.frozen ? Infinity : barInterval(props.state, count())));
+  const tick = useSequencer(() => (props.frozen ? Infinity : barInterval(renderState(), count())));
 
-  const sequence = () => barSequence(props.state, count());
+  const sequence = () => barSequence(renderState(), count());
   const highlighted = () => sequence()[tick() % sequence().length] ?? [];
 
-  // Bands only mean anything while speaking. Everywhere else the sequence is
-  // the whole story, so a stale level never leaks into a scripted state.
+  // Bands only mean anything while speaking (or listening under the
+  // `listeningAmplitude` opt-in, which renderState folds into 'speaking').
+  // Everywhere else the sequence is the whole story, so a stale level never
+  // leaks into a scripted state.
   const levels = () =>
-    props.state === 'speaking'
+    renderState() === 'speaking'
       ? normalizeVolumeBands(props.bands, count())
       : new Array(count()).fill(0);
 

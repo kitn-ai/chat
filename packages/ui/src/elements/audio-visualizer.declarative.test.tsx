@@ -233,6 +233,63 @@ describe('AudioVisualizerFacade: the animate-when-not-visible boolean attribute'
   });
 });
 
+/**
+ * `listening-amplitude` is the second bare boolean attribute on this element,
+ * wired the same way as `animate-when-not-visible` above, PLUS reflection:
+ * unlike that one it is a reflected boolean (kai-dock precedent, #294), so the
+ * facade must also register it with `reflectFlag` or `el.listeningAmplitude`
+ * set via the attribute reads back `undefined`.
+ */
+describe('AudioVisualizerFacade: the listening-amplitude reflected boolean attribute', () => {
+  const renderFacade = (
+    props: Record<string, unknown>,
+    ctx?: { flag?: (name: string) => boolean; reflectFlag?: (name: string) => void },
+  ) => {
+    let captured: { listeningAmplitude?: boolean } | undefined;
+    vi.doMock('../components/audio-visualizer/variant-custom', () => ({
+      default: (p: { listeningAmplitude?: boolean }) => {
+        captured = p;
+        return null;
+      },
+    }));
+    render(() =>
+      AudioVisualizerFacade(
+        { variant: 'custom', ...props } as unknown as Parameters<typeof AudioVisualizerFacade>[0],
+        { dark: () => false, ...(ctx ?? {}) },
+      ),
+    );
+    return () => captured;
+  };
+
+  it('resolves a bare attribute to true, the way flag() reads a present valueless attribute', async () => {
+    const captured = renderFacade(
+      { listeningAmplitude: undefined },
+      { flag: (name) => name === 'listeningAmplitude' },
+    );
+    await waitFor(() => expect(captured()).toBeDefined());
+    expect(captured()!.listeningAmplitude).toBe(true);
+  });
+
+  it('is false when the attribute is absent', async () => {
+    const captured = renderFacade({}, { flag: () => false });
+    await waitFor(() => expect(captured()).toBeDefined());
+    expect(captured()!.listeningAmplitude).toBe(false);
+  });
+
+  it('defaults to false with no ctx at all, rather than leaking undefined downstream', async () => {
+    const captured = renderFacade({});
+    await waitFor(() => expect(captured()).toBeDefined());
+    expect(captured()!.listeningAmplitude).toBe(false);
+  });
+
+  it('registers the prop with reflectFlag, so the attribute reflects and the property reads back', async () => {
+    const reflectFlag = vi.fn();
+    const captured = renderFacade({}, { flag: () => false, reflectFlag });
+    await waitFor(() => expect(captured()).toBeDefined());
+    expect(reflectFlag).toHaveBeenCalledWith('listeningAmplitude');
+  });
+});
+
 describe('normalizeVariant(): the aura -> aurora LiveKit-markup alias contract', () => {
   // The facade passes `variant` straight through untouched and relies on
   // normalizeVariant (../components/audio-visualizer) to resolve LiveKit's
