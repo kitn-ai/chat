@@ -118,12 +118,16 @@ describe('renderer component set (derived, not restated)', () => {
   });
 
   it('does NOT claim components no renderer branches on', () => {
-    // The whole point of the gate, and `kai-conversations` is what still proves
-    // it: a real registered element that no archetype composes, so a components
-    // list containing it is not an error — `renderSurface` accepts the list and
-    // emits the tag bare, with nothing wired to it.
+    // The whole point of the gate: a real registered element that no archetype
+    // composes, so a components list containing it is not an error —
+    // `renderSurface` accepts the list and emits the tag bare, with nothing
+    // wired to it. `kai-conversations` used to be the subject; the workspace
+    // BLOCK (recast 2026-08-20, F-16) gave it a real renderer branch, so the
+    // rail now belongs on the OTHER side of this fence (asserted below) and
+    // `kai-composer` is the still-uncomposed element that keeps this honest.
     const known = rendererComponents();
-    expect(known.has('kai-conversations')).toBe(false);
+    expect(known.has('kai-composer')).toBe(false);
+    expect(known.has('kai-conversations')).toBe(true);
   });
 });
 
@@ -246,11 +250,14 @@ describe('feature availability', () => {
    * components-unavailable feature landing later is visible rather than silent.
    */
   it('refuses a feature whose components no renderer branches on (mechanism, no shipped subject)', () => {
+    // `kai-composer`, not `kai-conversations`: the workspace BLOCK (recast
+    // 2026-08-20) gave the rail a real renderer branch, so the composer is the
+    // registered-but-uncomposed element that drives this mechanism now.
     const synthetic = {
       id: 'not-a-shipped-feature',
       label: 'Synthetic',
       hint: 'exists only in this test',
-      components: ['kai-conversations'],
+      components: ['kai-composer'],
       default: false,
     } as const;
     expect(featureEmit(synthetic, react)).toBe('unavailable');
@@ -259,7 +266,7 @@ describe('feature availability', () => {
     // the unwired generator, or the components branch has stopped being reached
     // and this test would pass without exercising it.
     expect(featureUnavailableReason(synthetic, react)).toMatch(
-      /no renderer branches on kai-conversations/,
+      /no renderer branches on kai-composer/,
     );
 
     // The state of the real catalog, recorded — measured against the renderer

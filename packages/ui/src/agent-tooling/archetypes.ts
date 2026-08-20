@@ -41,9 +41,41 @@ export const archetypes: Archetype[] = [
     defaultPlacement: 'side',
     docsSlug: 'examples/agentic-assistant',
   },
+  /**
+   * THE FIRST OFFICIAL BLOCK (recast spec 2026-08-20 § 3b; F-16).
+   *
+   * This preset used to carry `kai-artifact` + `kai-resizable` — an UNWIRED
+   * artifact split — while omitting the conversation rail, the one thing its
+   * name promised (rung-3 finding F-16). It now names the workspace BLOCK: the
+   * chat-agnostic `kai-workspace` layout shell, a WIRED `kai-conversations`
+   * rail, `kai-chat` in the main region, and the `@kitn.ai/ui/state` thread
+   * helpers (bindThreadMessages / createThreadSessions / createSaveScheduler /
+   * parseStoredThread) with the persistence POLICY left in consumer-owned
+   * lines. `examples/apps/workspace/` is the block's reference implementation.
+   *
+   * The artifact split did not vanish — it moved to `artifact-split` below, so
+   * its renderer branch keeps its cells in `verify:scaffold`.
+   */
   {
     id: 'workspace',
     title: 'Agentic workspace',
+    components: ['kai-chat', 'kai-workspace', 'kai-conversations'],
+    defaultPlacement: 'full-page',
+    docsSlug: 'examples/workspace',
+  },
+  /**
+   * THE PRESET THAT KEEPS A CAPABILITY ON THE AXIS — the same reason the
+   * `attachments` preset exists (see its comment below): `listCapabilityGroups`
+   * derives the gate's surface axis from this table, so when the recast moved
+   * the artifact pair off `workspace`, this entry is what kept
+   * `kai-artifact`+`kai-resizable` compiling in `verify:scaffold` instead of
+   * silently losing every cell. The pair is ONE capability because `isArtifactSplit`
+   * in scaffold.ts requires both: a split with no preview pane is an empty
+   * panel, and a preview with no split has nowhere to sit.
+   */
+  {
+    id: 'artifact-split',
+    title: 'Artifact preview split',
     components: ['kai-chat', 'kai-artifact', 'kai-resizable'],
     defaultPlacement: 'side',
     docsSlug: 'examples/workspace',
@@ -99,10 +131,9 @@ export interface CapabilityGroup {
  * The distinct capabilities the presets know about, DERIVED from them.
  *
  * A capability is one preset's components minus `kai-chat`, deduped across the
- * catalog. Today that is five: `sources`, `tool+reasoning`, `artifact+resizable`,
- * `voice-input`, `file-upload+attachments` — and the seven presets collapse onto
- * them because `drop-in-chat` and `support-widget` both add nothing (they differ
- * only in `defaultPlacement`).
+ * catalog (run `listCapabilityGroups()` for the current list — `drop-in-chat`
+ * and `support-widget` collapse onto the same empty capability because both add
+ * nothing and differ only in `defaultPlacement`).
  *
  * Derived rather than listed for the reason the verify script's other axes are:
  * a hand-written list would have to be edited by the same hand that adds a
@@ -113,7 +144,7 @@ export interface CapabilityGroup {
  * The grouping is real and not an artifact of the derivation: `kai-tool` and
  * `kai-reasoning` are one capability because a tool panel with no reasoning
  * disclosure is not a surface anyone asks for, `kai-artifact` /
- * `kai-resizable` are one because `isWorkspace` only fires when BOTH are present
+ * `kai-resizable` are one because `isArtifactSplit` in scaffold.ts only fires when BOTH are present
  * — split them and the renderer emits a bare artifact with no pane to put it in
  * — and `kai-file-upload` / `kai-attachments` are one because `hasAttachments`
  * fires the same way, for the same kind of reason.
@@ -147,10 +178,11 @@ export interface SurfaceProbe {
  * exactly one capability — so the surfaces the multi-select makes reachable,
  * which is most of them, had nothing compiling them.
  *
- * WHY NOT THE POWER SET. 2^5 x 11 integrations x 8 frameworks is 2816 cells to
- * exercise no new branch. The renderers compose capabilities INDEPENDENTLY: each
- * companion tag is emitted on its own terms, and the one multi-component
- * predicate (`isWorkspace`) reads components from within a single group. So
+ * WHY NOT THE POWER SET. 2^groups x integrations x frameworks is thousands of
+ * cells to exercise no new branch. The renderers compose capabilities
+ * INDEPENDENTLY: each companion tag is emitted on its own terms, and the
+ * multi-component predicates (`isArtifactSplit`, `isWorkspaceBlock`) each read
+ * components from within a single group. So
  * "every capability alone" reaches every branch, and "all capabilities together"
  * makes every PAIR of capabilities co-occur, which is what proves they compose.
  *

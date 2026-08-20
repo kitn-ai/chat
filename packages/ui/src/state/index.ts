@@ -7,6 +7,18 @@ export type { SetMessages, AssistantStream } from './stream';
 export { appendTextPart, appendReasoningPart, upsertToolPart, upsertCardPart, fingerprint } from './parts';
 export type { ReasoningOpts } from './parts';
 
+// Multi-thread mechanics (the workspace recast, spec §3b): the id-bound
+// SetMessages fold + the in-flight-turn bookkeeping. The consumer's record
+// shape and every persistence/retention decision stay outside — see ./threads.
+export { updateThreadMessages, bindThreadMessages, createThreadSessions } from './threads';
+export type { ThreadLike, SetThreads, BindThreadOptions, ThreadSessions } from './threads';
+
+// The persistence SEAM, not persistence: the stored-thread validator (F-18,
+// variant list derived from the MessagePart union) and the debounce/flush
+// shape. No storage backend, no default delay — policy is the consumer's.
+export { parseStoredThread, createSaveScheduler } from './persistence';
+export type { ParsedThread, DroppedStored, SaveScheduler, SaveSchedulerOptions } from './persistence';
+
 // The zero-config mock. Produces SSE frames rather than folding parts directly,
 // so the no-backend preview runs through the SAME parser a real provider does —
 // and is deliberately impossible to mistake for one. See ./mock.

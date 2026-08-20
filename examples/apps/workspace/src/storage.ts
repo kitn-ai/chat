@@ -1,4 +1,4 @@
-import type { ChatMessage, MessagePart } from '@kitn.ai/ui/react';
+import { parseStoredThread } from '@kitn.ai/ui/state';
 import type { Conversation } from './conversations';
 
 const STORAGE_KEY = 'kai-chat-workspace/v1';
@@ -16,51 +16,29 @@ const ACTIVE_KEY = 'kai-chat-workspace/v1:active';
  * `parts: undefined` and take the whole app down on first render, losing every
  * OTHER conversation with it. So an unreadable record is DROPPED, loudly, and
  * the readable ones survive.
+ *
+ * The MESSAGE half of that check is the kit's now: `parseStoredThread`
+ * validates each stored message back into `ChatMessage[]` with the MessagePart
+ * variant list DERIVED from the union (this file used to hand-type it, which is
+ * exactly how a seventh variant would have silently stopped rehydrating), and
+ * REPORTS what it dropped. The verb — warn, discard the record, telemetry — and
+ * every conversation-level field below stay this app's own.
  */
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null;
 }
 
-/** A part is kept only if it is one of the closed union's variants and carries
- *  that variant's payload. An unknown `type` is dropped rather than passed on:
- *  the element switches on it and has no branch for a made-up one. */
-function isMessagePart(v: unknown): v is MessagePart {
-  if (!isRecord(v) || typeof v.type !== 'string') return false;
-  switch (v.type) {
-    case 'text':
-    case 'reasoning':
-      return typeof v.text === 'string';
-    case 'tool':
-      return isRecord(v.tool);
-    case 'card':
-      return isRecord(v.envelope) && typeof v.envelope.type === 'string' && typeof v.envelope.id === 'string';
-    case 'source':
-      return isRecord(v.source);
-    case 'file':
-      return isRecord(v.attachment);
-    default:
-      return false;
-  }
-}
-
-function parseMessage(v: unknown): ChatMessage | null {
-  if (!isRecord(v)) return null;
-  if (typeof v.id !== 'string' || (v.role !== 'user' && v.role !== 'assistant')) return null;
-  if (!Array.isArray(v.parts)) return null;
-  const parts = v.parts.filter(isMessagePart);
-  // A message whose every part was unreadable is an empty bubble; drop it.
-  if (parts.length === 0) return null;
-  const message: ChatMessage = { id: v.id, role: v.role, parts };
-  if (v.feedback === 'like' || v.feedback === 'dislike') message.feedback = v.feedback;
-  return message;
-}
-
 function parseConversation(v: unknown): Conversation | null {
   if (!isRecord(v)) return null;
   if (typeof v.id !== 'string' || !v.id) return null;
+  // A record whose messages are not even an array is unreadable wholesale —
+  // dropping it (rather than keeping an empty shell) is this app's policy.
   if (!Array.isArray(v.messages)) return null;
-  const messages = v.messages.map(parseMessage).filter((m): m is ChatMessage => m !== null);
+  const { messages, dropped } = parseStoredThread(v.messages);
+  if (dropped.length > 0) {
+    console.warn(`[storage] dropped ${dropped.length} unreadable stored entr${dropped.length === 1 ? 'y' : 'ies'}`, dropped);
+  }
   const now = new Date().toISOString();
   return {
     id: v.id,
@@ -85,8 +63,8 @@ export function loadConversations(): Conversation[] {
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     const conversations = parsed.map(parseConversation).filter((c): c is Conversation => c !== null);
-    const dropped = parsed.length - conversations.length;
-    if (dropped > 0) console.warn(`[storage] dropped ${dropped} unreadable conversation record(s)`);
+    const droppedRecords = parsed.length - conversations.length;
+    if (droppedRecords > 0) console.warn(`[storage] dropped ${droppedRecords} unreadable conversation record(s)`);
     return conversations;
   } catch (err) {
     console.warn('[storage] history could not be parsed and was ignored', err);

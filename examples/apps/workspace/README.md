@@ -263,3 +263,60 @@ setter and abort map (F-07), and the storage validator (F-18).
    (`.superpowers/sdd/2026-08-20-rung-3/w18-undo-fix/`). Kit-affordance note
    banked in the findings: the region's z-index has no override hook and is
    documented nowhere.
+
+### Phase 3 — the re-cast migration (this conversation, verbatim)
+
+The migration agent (Claude Fable worker laneE, dispatched by a supervisor
+session for the workspace re-cast,
+[`docs/superpowers/specs/2026-08-20-workspace-recast-design.md`](../../../docs/superpowers/specs/2026-08-20-workspace-recast-design.md))
+received the following dispatch message, reproduced unedited:
+
+````text
+You are Lane E on the kitn-chat repo (/Users/home/Projects/kitn-ai/kitn-chat, branch recast/phase-1). Execute Task E of docs/superpowers/plans/2026-08-20-recast-implementation.md — its checkboxes are the authority; read the spec's §3b (the block half) and §Sequencing first. Standing constraints: no git checkout/reset/stash; no subagents; never nx test; no package rebuild (supervisor gates — but note dist is fresh as of the Phase-1 gate run and does NOT yet contain Lane D's new state helpers; for corpus-app compilation against workspace:* that resolves through src at typecheck time check how the app's tsconfig resolves and report if you need a rebuild rather than running one). Your lock: packages/ui/src/agent-tooling + examples/apps/workspace (agent laneE; extend via the lock tool as needed).
+
+Two deliverables:
+
+(1) THE FIRST OFFICIAL BLOCK: the scaffolder emits the workspace composition — the kai-workspace layout shell + kai-conversations (+ item-mode note) + kai-chat + Lane D's ratified state helpers (updateThreadMessages/bindThreadMessages, createThreadSessions, createSaveScheduler, parseStoredThread — exact imports in .superpowers/sdd/2026-08-20-recast-impl/laneD-report.md §5). Study how the existing archetypes/integrations emit (registry-driven; verify:scaffold axes must move on their own from your registry change, per the derive-don't-type law). The block is CODE THE CONSUMER OWNS: emitted comments should carry the same honesty the corpus app's do (mock/real seam, key handling, the persistence boundary — retention/quota/policy is yours-the-consumer's). Emitted code lives in string literals: extend scaffold.test.ts red-first for wording, and rely on the supervisor-run verify:scaffold for compilation. The workspace archetype's old emission (whatever it teaches today) updates to the block shape.
+
+(2) CORPUS MIGRATION: examples/apps/workspace migrates to the shell + helpers shape — the layout moves onto <kai-workspace> (header/start/main slots + drawer-below), storage.ts/App.tsx mechanical glue replaced by Lane D's helpers per its fitness mapping (the app KEEPS: localStorage itself, quota catch, active-id policy, fetch line, delete/undo policy, title derivation — the boundary is the point). The builder's remaining composition choices stand. README provenance gains the migration as a numbered change (labeled: re-cast Task E; this dispatch appended verbatim per the provenance policy). The app must build + typecheck + dev-smoke keyless (mock SSE + the guard trio) — same evidence as W18 produced. Glue-count note for the measurement section: after migration, count the app's authored glue lines the same way findings.md §5 did and record the delta in your report (the ratchet's first data point — do NOT write it into any doc that isn't the report; the artifact of record stays the findings method).
+
+Report to .superpowers/sdd/2026-08-20-recast-impl/laneE-report.md; return: registry/scaffold changes + red-green evidence, the migration diff summary + glue-line delta, app build/smoke results, anything needing the supervisor's built-tree gates.
+````
+
+10. **The re-cast migration** (**re-cast Task E**; spec § 3b, plan
+    2026-08-20-recast-implementation Task E). The app is now the reference
+    implementation of the first official BLOCK: layout on the `<kai-workspace>`
+    shell, mechanics on the `@kitn.ai/ui/state` thread helpers, every policy
+    line still this app's own.
+    - **`src/App.tsx` — layout onto the shell**: the hand-owned flex row
+      (`.workspace` + `.rail` sibling arrangement, F-02's 59 lines of CSS) is
+      replaced by `<Workspace>` with the rail in `slot="start"`, an app bar in
+      `slot="header"`, the thread in the main region, and `drawerBelow={720}`.
+      The rail's collapse toggle now drives the SHELL's start aside
+      (`startCollapsed` controlled; the rail itself stays expanded), and
+      because a collapsed aside is fully hidden — the shell reclaims the space
+      instead of leaving the old 48px gutter — the reopen control moved to the
+      header band. The collapse UX is the one deliberate behavior change of
+      the migration.
+    - **`src/App.tsx` — mechanics onto the helpers**: the hand-rolled id-bound
+      setter (`setMessagesFor`, the reactivity-two-halves map/spread and the
+      delete-under-stream `hit` drop) is `bindThreadMessages` with a `touch`
+      policy hook; the `inFlight` AbortController map and `streamingIds`
+      bookkeeping are `createThreadSessions` (delete uses `sessions.abort`);
+      the `SAVE_DEBOUNCE_MS` timer, `latest` ref and the two persistence
+      effects are `createSaveScheduler` (the 250ms delay stays this app's
+      number). Kept, by design: localStorage, the quota catch, active-id
+      policy, the fetch line, the delete/undo policy, title derivation.
+    - **`src/storage.ts` — the message validator is the kit's**: the
+      hand-typed `isMessagePart`/`parseMessage` union walk is
+      `parseStoredThread`, whose MessagePart variant list is DERIVED from the
+      kit's own union (F-18); the drops it reports are still warned about
+      here, and every conversation-level field, the drop-the-record policy for
+      a non-array `messages`, and the storage try/catch policy stay verbatim.
+    - **`src/styles.css`** — the rail-column arrangement CSS deleted (the
+      shell owns it); the toast-layer comment updated for the `--kai-toast-z`
+      token the kit now exposes (F-20's fix); `.appbar`/`.shell` styling
+      added.
+    - Unchanged: `src/conversations.ts`, `src/main.tsx`, `index.html`, the
+      server route, the vite bridge, all tsconfigs, and every remaining
+      composition choice.
