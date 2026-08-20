@@ -159,12 +159,12 @@ Acceptance points from the spec, verbatim, plus the anti-vacuity rules above:
 
 ### 8. Re-cast spec draft (deliverable only)
 
-- [ ] From the glue-code inventory + findings: draft
+- [x] From the glue-code inventory + findings: draft
       `docs/superpowers/specs/2026-08-2X-workspace-recast-design.md` (dated on the day it is
       written) proposing `kai-workspace` / `kai-conversations` as presets over composables,
       per the composition-first RFC. What the preset encapsulates = exactly the glue the app
       wrote; what the parts need = the gaps the app hit (e.g. delete).
-- [ ] Ends at owner review. No implementation.
+- [x] Ends at owner review. No implementation.
 
 ## Verification
 
@@ -256,6 +256,45 @@ pnpm --filter @kitn.ai/ui run lint:thresholds
   :5180 — mock SSE with `: kai-mock` banner + `X-Kai-Mock: 1`, trio 405/400/400 (+400 on
   missing `messages`); lint:cdn-pins (self-test + release-wiring + plain) and
   lint:thresholds green. Full report: `.superpowers/sdd/2026-08-20-rung-3/w18-report.md`.
+- 2026-08-20 (W19): Task 8 complete. Re-cast spec DRAFTED at
+  `docs/superpowers/specs/2026-08-20-workspace-recast-design.md` — deliverable only, ends
+  at owner review, no implementation plan. Structure: §1 the glue inventory assigned
+  category-by-category with the invoice/policy test (preset absorbs projection ·
+  pipeline-minus-fetch · identity · delete wiring · event plumbing · the F-02 layout; app
+  keeps persistence and the fetch, with observe/intercept seams; theme-sync F-09 and
+  no-match F-04 routed as kit-side part/doc fixes, not preset glue); §2 part-level needs
+  regardless of the preset — F-01 S2 delete/rename with the slots-vs-events question POSED
+  not settled, F-02 arrangement, F-20 `--kai-toast-z`, the kai-search collision (which
+  becomes a real one-tag collision under the preset) + F-04/F-10/F-03; §3 the preset shape
+  with slots-per-region, the batteries-included one-tag start kept, and an honest
+  destination-by-destination migration of the element-meta-counted 32-prop/10-event
+  surface (feat!, pre-1.0); §4 not-doing + 6 owner questions (incl. compose-kai-chat vs
+  compose-thread+input sequencing); §5 measurement — rebuild + re-run the findings §5
+  inventory, ratchet not a target, persistence category expected UNCHANGED as the
+  boundary's own probe. Verified: `lint:thresholds` green (self-test 29 cases; 6 files in
+  scope incl. the new spec — one first-draft hit on a false-positive phrasing, reworded);
+  placeholder/consistency self-review done inline (fixed a five-vs-four listings
+  miscount and the event re-emit gloss). Full report:
+  `.superpowers/sdd/2026-08-20-rung-3/w19-report.md`.
+- 2026-08-20 (W19, rewrite round): Task-8 spec REWRITTEN in place after the owner worked
+  the six open questions with the supervisor — all rulings owner-ratified 2026-08-20 and
+  quoted as such in the spec. Shape change: construction-over-configuration vision section
+  (shadcn model, owner quote verbatim) + four-tier taxonomy (primitives · elements ·
+  layout elements · blocks, with the npm-update vs consumer-owned mechanical distinction);
+  kai-workspace DISSOLVES as a chat preset — re-cast as a chat-agnostic slotted layout
+  shell (kai-dock precedent), with the semantic glue shipping as the first official BLOCK
+  + headless `@kitn.ai/ui/state` helpers (first draft's preset-over-preset Q2 now MOOT);
+  kai-conversation-item BUILD NOW (item-element pattern, consumer-owned loop, menu slot;
+  supersedes the posed slots-vs-events question); naming settled (sidebar keeps search,
+  composer Globe → webSearch/kai-web-search, feat!); sequencing settled (two parallel
+  element lanes, part fixes ride along — F-04, F-20, the rename, and NEW F-21: message.tsx
+  never passes isStreaming to <Reasoning>, reasoning-first models stream into a collapsed
+  panel, evidence `.superpowers/sdd/2026-08-20-rung-3/latency-debug/report.md`). KEPT: the
+  glue-inventory evidence and boundary assignments (destinations re-mapped to
+  shell/block/helpers) and the measurement section, now with the glue-vs-composition
+  distinction so the ratchet stays honest. Open questions shrunk to 5 genuinely-open
+  items. `lint:thresholds` green (self-test 29 cases, 6 files in scope); placeholder scan
+  clean. Report updated: `.superpowers/sdd/2026-08-20-rung-3/w19-report.md`.
 - Task 3 (supervisor): disclosure restated in-session before launch; run succeeded
   (98 turns, 1,210,309 ms, session d0cf3c07-b36b-4749-b7c8-0d8593107d85, prompt sha
   566133636cf00d91714974f4a127f24ab073f2e132269a71ed13c7b96678a84a); credential
