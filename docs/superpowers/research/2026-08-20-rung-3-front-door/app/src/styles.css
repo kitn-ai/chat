@@ -1,0 +1,81 @@
+/* Every colour below is a --kai token from theme.tokens.css, so the app chrome
+   and the elements stay in step (including in dark mode — see syncColorScheme
+   in main.tsx, which puts the token file's `.dark` class on <html> to match the
+   elements' own `theme="auto"` behaviour). */
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background: var(--color-background);
+  color: var(--color-foreground);
+}
+
+/* FULL PAGE MEANS FULL PAGE. `height: 100dvh` is only full-page in an empty
+   document, and stock starters are not empty. Fixed positioning escapes any
+   inherited max-width/centring; `text-align: start` undoes inherited centring;
+   z-index keeps a sticky header from painting over the thread. */
+.workspace {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  text-align: start;
+  background: var(--color-background);
+}
+
+/* The rail is a SIBLING of <kai-chat>, not a slot="sidebar" child.
+   <kai-chat>'s sidebar slot is a fixed-width column that does not react to the
+   rail collapsing, so a collapsed rail would leave a dead 16rem gutter. Owning
+   the column here is what makes the collapse actually reclaim the space. */
+.rail {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 17rem;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--color-sidebar);
+  border-right: 1px solid var(--color-border);
+  transition:
+    flex-basis 160ms ease,
+    border-color 160ms ease;
+}
+
+/* Collapsed, the element renders only its floating reopen button. */
+.rail--collapsed {
+  flex-basis: 3.25rem;
+  border-right-color: transparent;
+  background: transparent;
+}
+
+.rail--collapsed .rail__list {
+  padding: 0.5rem;
+}
+
+.rail__list {
+  display: block;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.rail__hint {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0.75rem 1rem 1rem;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--color-muted-foreground);
+}
+
+.thread {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+}

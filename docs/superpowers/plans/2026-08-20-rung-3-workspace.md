@@ -40,31 +40,31 @@ builder, not by a plan task.
 
 ### 1. Harness rebuild (insider)
 
-- [ ] Real build: `npm run build` inside `packages/ui` (never a cached nx verdict).
-- [ ] `verify:fresh` green against that build.
-- [ ] `npm pack` → the tarball under test.
-- [ ] Sandbox OUTSIDE the repo: `<scratchpad>/rung3-cleanroom/` with an app dir and a SIBLING
+- [x] Real build: `npm run build` inside `packages/ui` (never a cached nx verdict).
+- [x] `verify:fresh` green against that build.
+- [x] `npm pack` → the tarball under test.
+- [x] Sandbox OUTSIDE the repo: `<scratchpad>/rung3-cleanroom/` with an app dir and a SIBLING
       ops dir (ops files out of the builder's cwd, as rung 1 established).
-- [ ] `npm init` + install the tarball into the app dir.
-- [ ] Strip the INSTALLED copy: delete src TS/TSX/CSS keeping the exports-reachable JSON
+- [x] `npm init` + install the tarball into the app dir.
+- [x] Strip the INSTALLED copy: delete src TS/TSX/CSS keeping the exports-reachable JSON
       (`element-meta.json`, `icon-names.json`); remove README and `llms*`; sweep for stray
       copies of any of them.
-- [ ] `.mcp.json` points at the tarball's own bin over stdio — never `npx` against the
+- [x] `.mcp.json` points at the tarball's own bin over stdio — never `npx` against the
       registry.
-- [ ] Throwaway `CLAUDE_CONFIG_DIR` (no user memory, no skills, no global CLAUDE.md).
-- [ ] Post-strip positive controls: MCP `tools/list` + one `component_reference` over stdio;
+- [x] Throwaway `CLAUDE_CONFIG_DIR` (no user memory, no skills, no global CLAUDE.md).
+- [x] Post-strip positive controls: MCP `tools/list` + one `component_reference` over stdio;
       `node -e` resolution probes for the package main, `/elements`, `/state`, `/wire`, and
       `/react` — `/react` is NEW to this rung's probe list, and the builder needs it.
-- [ ] Launcher script: cleanup trap for the credential AND the scoped-umask fix — the umask
+- [x] Launcher script: cleanup trap for the credential AND the scoped-umask fix — the umask
       change wraps ONLY the credential write, in a subshell; every directory the CLI creates
       must keep its execute bits.
-- [ ] Verification of that fix: after a 1-turn dry run, assert the session transcript `.jsonl`
+- [x] Verification of that fix: after a 1-turn dry run, assert the session transcript `.jsonl`
       EXISTS under the throwaway config dir. Rung 2 discovered its loss only after the run.
 
 ### 2. Builder task prompt (insider)
 
-- [ ] Author the prompt to the ops dir and record its sha256.
-- [ ] The verbatim draft:
+- [x] Author the prompt to the ops dir and record its sha256.
+- [x] The verbatim draft:
 
 > Build a small web app: a chat workspace where one person keeps multiple conversations with
 > an AI assistant. Requirements: a sidebar listing the user's conversations; starting a new
@@ -82,7 +82,7 @@ builder, not by a plan task.
 > (`npm run build`) and run (`npm run dev`), and write NOTES.md recording every question you
 > could not answer from the MCP and where you had to guess.
 
-- [ ] Bias statement, recorded with the prompt: it says mock facilities exist (carried from
+- [x] Bias statement, recorded with the prompt: it says mock facilities exist (carried from
       rungs 1–2 — a real consumer might not know that); it names React bindings (a consumer
       who chose React knows this from the package page); it does NOT name any element and does
       NOT hint compose-vs-monolith — which path the builder takes is itself a measurement
@@ -90,45 +90,45 @@ builder, not by a plan task.
 
 ### 3. Builder run (clean room, owner's seat)
 
-- [ ] Credential disclosure to the owner BEFORE launch.
-- [ ] Launch per the launcher: opus seat, `--setting-sources ""`,
+- [x] Credential disclosure to the owner BEFORE launch.
+- [x] Launch per the launcher: opus seat, `--setting-sources ""`,
       `--disable-slash-commands`, `--max-turns 200`, allowed tools as rung 2, strict MCP
       config.
-- [ ] After exit: confirm the credential was trap-deleted.
-- [ ] Confirm the transcript survived; copy it to the ops dir.
-- [ ] Record run metadata: turns, wall time, cost, session id, prompt sha256.
+- [x] After exit: confirm the credential was trap-deleted.
+- [x] Confirm the transcript survived; copy it to the ops dir.
+- [x] Record run metadata: turns, wall time, cost, session id, prompt sha256.
 
 ### 4. Comparer / analyst (independent agent, read-only on both apps and the kit)
 
-- [ ] Research dir `docs/superpowers/research/2026-08-20-rung-3-front-door/`, mirroring the
+- [x] Research dir `docs/superpowers/research/2026-08-20-rung-3-front-door/`, mirroring the
       rung-2 layout: `app/` snapshot (excluding node_modules and the lockfile), `NOTES.md`
       verbatim, `builder-run.md` — with the MCP call table built FROM THE TRANSCRIPT this
       time — and `findings.md`.
-- [ ] Classify every divergence: teaching gap · builder error · acceptable variation; check
+- [x] Classify every divergence: teaching gap · builder error · acceptable variation; check
       strip artifacts against the removed README/llms before filing anything as a product gap.
-- [ ] Check EVERY pre-named expected finding from the spec § Expected findings — explicitly
+- [x] Check EVERY pre-named expected finding from the spec § Expected findings — explicitly
       including candidate G's re-measures: original baseline failure #4 (the guessed `scope`
       field) and #5 (`scaffold` emits an unwired second component), first exercisable at this
       rung.
-- [ ] Verify the builder's app builds and runs independently (keyless mirror for any probe
+- [x] Verify the builder's app builds and runs independently (keyless mirror for any probe
       server).
-- [ ] Produce the GLUE-CODE INVENTORY: count and categorize every line of app wiring between
+- [x] Produce the GLUE-CODE INVENTORY: count and categorize every line of app wiring between
       the three elements (state plumbing, event wiring, persistence, identity management,
       hand-rolled affordances like delete). This is the re-cast spec's headline input.
 
 ### 5. Insider completion (task-worker, gap-labeled)
 
-- [ ] Land the app in `examples/apps/workspace/` per corpus conventions — mirror
+- [x] Land the app in `examples/apps/workspace/` per corpus conventions — mirror
       support-widget/voice-assistant: package.json shape with `workspace:*`, pinned Vite/TS,
       the tsconfig trio, `/api/chat` dev-server middleware with the OpenRouter seam and the
       `ChatRequestBody` preamble rule, `.env.example` with the unprefixed-key comment, and a
       unique port (5178 and 5179 are taken by the existing apps; read their vite.configs, do
       not trust this sentence).
-- [ ] `verify:starters` green with the app enrolled in the derived roster.
-- [ ] README provenance: all phases verbatim — the builder prompt, any insider briefs, the
+- [x] `verify:starters` green with the app enrolled in the derived roster.
+- [x] README provenance: all phases verbatim — the builder prompt, any insider briefs, the
       full conversation where more than one prompt was used (standing owner policy).
-- [ ] Every insider change is labeled with the teaching gap that made it necessary.
-- [ ] Minimal changes only; the builder's composition choices stand — a monolith build is a
+- [x] Every insider change is labeled with the teaching gap that made it necessary.
+- [x] Minimal changes only; the builder's composition choices stand — a monolith build is a
       finding that feeds the re-cast spec, not something to rewrite (spec § risks).
 
 ### 6. Hardened IVP (independent verifier, real Chromium, keyless mirror)
@@ -180,3 +180,84 @@ pnpm --filter @kitn.ai/ui run lint:thresholds
 ## Run ledger
 
 (Appended during execution — task outcomes, fix rounds, run metadata, owner validation.)
+
+- 2026-08-20 (W16): Tasks 1-2 complete. Real build + verify:fresh green (kai.es.js sha256
+  5d7a45c2…, custom-elements.json 47867a01…); tarball `kitn.ai-ui-0.25.2.tgz` sha256
+  7bf493fe… packed to the rung3-cleanroom sandbox (outside the repo; app + sibling ops dirs).
+  Strip done per rung-1 conditions, PLUS `frameworks/*.tsx` (raw shipped source rung 2 kept;
+  `./react` resolves to `dist/react.js` only, so nothing broke — /react probe green
+  post-strip). All 5 resolution probes green (`/react` needed `react`+`react-dom` installed
+  in the app dir — recorded; a React builder would have them). MCP stdio positive controls
+  green post-strip (tools/list = 4 tools; component_reference kai-conversations 200+ chars of
+  real reference). OBSERVED CHANGE vs rung 2: candidate A no longer reproduces — a wrong
+  argument key (`element`) now returns a loud "unknown argument — did you mean name?" error
+  instead of the silent 80-element index. Launcher `ops/launch-builder.sh`: umask 177 scoped
+  to a credential-write subshell ONLY; cleanup trap; post-run hard assertions (transcript
+  .jsonl exists + every config-dir directory keeps execute bits — both watched RED on planted
+  defects first; the first draft's exec-bit check was itself unfireable under pipefail via
+  grep -q/SIGPIPE and was fixed). 1-turn dry run WITHOUT credential: CLI refused the turn
+  ("Not logged in", exit 1, $0.00, no keychain fallback — CLAUDE_CONFIG_DIR isolation held)
+  but STILL persisted the session transcript .jsonl (6,192 bytes of real records) with all
+  directory execute bits intact — direct evidence the rung-2 loss is fixed. Dry-run artifacts
+  archived to ops/dry-run-evidence/; throwaway config dir reset to pristine for the real
+  launch. Task-2 prompt authored verbatim to ops/prompt.md, sha256 566133636cf00d91714974f4a1
+  27f24ab073f2e132269a71ed13c7b96678a84a; bias statement in ops/prompt-bias.md. GAP for the
+  supervisor: rung-2's exact allowed-tools list was never recorded (its launcher died with the
+  scratchpad); the launcher carries a reconstruction from rung-1 transcript evidence
+  (Bash/Read/Write/Edit/Glob/Grep/ToolSearch/TodoWrite + the four kai MCP tools;
+  WebFetch/WebSearch hard-disallowed) — review before launch. Full report:
+  `.superpowers/sdd/2026-08-20-rung-3/w16-report.md`.
+- 2026-08-20 (W17): Task 4 complete. Research dir
+  `docs/superpowers/research/2026-08-20-rung-3-front-door/` landed (app/ snapshot minus
+  node_modules/lockfile/dist, NOTES.md verbatim, builder-run.md, findings.md). Run metadata:
+  98 turns, 1,210 s, $8.12, opus, session d0cf3c07…, prompt sha 56613363… verified; transcript
+  431 lines / 97 tool calls — THE FIRST RUNG WITH A FULL TRANSCRIPT, so the MCP table is
+  per-call with line cites: 8 kai calls (list · kai-chat · kai-conversations · scaffold
+  workspace×mock×full-page×react · recipes · debug[delete] · kai-workspace · kai-button),
+  zero MCP errors (candidate A unexercisable, as W16 predicted). Comparer verdicts:
+  (a) builds + runs independently, zero fixes, keyless by construction (no env reads, no
+  .env); (b) COMPOSITION = the middle path — kai-conversations + kai-chat via the React
+  wrappers, rail as SIBLING, after pulling and rejecting kai-workspace on a verified fact
+  (its kai-search is the composer Globe, not conversation search) and never querying
+  kai-thread/kai-prompt-input; (c) G-04/#298: the mock backend route came FROM THE SCAFFOLD
+  (block 2 adopted near-verbatim, transcript 27/28+167) — first front-door proof, one
+  residual: run note omits @types/node and the first build FAILED on it (F-08); (d) candidate
+  G #4 PARTIALLY FIXED (scope typed in the reference, meaning still stated nowhere — builder
+  guessed {type:'collection'}), #5 REPRODUCED (scaffold emitted an unwired placeholder
+  Artifact+Resizable AND omitted kai-conversations — the workspace archetype disagrees with
+  the workspace-chat recipe's ingredient list, F-16); (e) delete gap confirmed as spec'd and
+  the hand-roll is a FEATURE REDUCTION (active-conversation-only delete, toast+Undo, F-01
+  S2). Gap counts: 4 product (1 S2) · 4 teaching · 8 doc · 1 builder error (NOTES §5
+  misattributes — ButtonProps.label IS documented in the shipped d.ts) · 4 acceptable
+  variations · 1 strip artifact · 0 kit defects. GLUE-CODE INVENTORY headline: 342 authored
+  TS/TSX code lines, ~300 of them glue between TWO elements — persistence 106, projection 61,
+  send/stream 52, identity ~34, hand-rolled delete ~27, sidebar plumbing ~14, theme sync ~10,
+  no-match search ~6 — plus 59 CSS lines because no documented arrangement satisfies
+  search+collapse (F-02: slot⇒dead gutter, monolith⇒no search, sibling⇒undocumented).
+  Full report: `.superpowers/sdd/2026-08-20-rung-3/w17-report.md`.
+- 2026-08-20 (W18): Task 5 complete. App landed at `examples/apps/workspace/` (port 5180 —
+  5173–5179 all taken across examples/, read from the vite.configs). Builder code kept
+  verbatim: all of src/, index.html, the tsconfig trio, AND the toolchain pins (vite ^7.3.6 /
+  TS ~5.9 / @types/node ^26 — F-19 deliberate choice, and tsconfig.app.json's
+  `erasableSyntaxOnly` needs TS ≥5.8, so pins and tsconfigs stand together; a decision the
+  plan's "pinned Vite/TS" line did not settle, recorded here). react/react-dom real deps
+  (W16 harness condition); @types/node confirmed present (F-08 residual). Insider changes,
+  gap-labeled in the app README (8 items): corpus package.json identity; port; the G-16
+  request-guard trio the builder's scaffold-derived route lacked (GET→405 verified,
+  non-JSON→400, empty/missing messages→400 — the scaffold's block-2 route ships guardless,
+  banked beside F-08/F-16); the OpenRouter seam (mock kept verbatim + X-Kai-Mock, status
+  passthrough, in-band mid-stream error); bridge env read + real-method forwarding (without
+  it the 405 is unreachable) + disconnect propagation into request.signal (F-07's
+  server-side half); .env.example + .gitignore; enrollment (pnpm-workspace.yaml,
+  examples/README.md row, lockfile via pnpm install); README provenance (all phases
+  verbatim, lint-cdn-pins historical waiver on the 0.25.2 run record). Verified:
+  verify:starters 11 of 11 with roster line `✓ examples/apps/workspace [linked] — npm run
+  build in 4s`; app `npm run build` exit 0 and `typecheck` exit 0; keyless dev smoke on
+  :5180 — mock SSE with `: kai-mock` banner + `X-Kai-Mock: 1`, trio 405/400/400 (+400 on
+  missing `messages`); lint:cdn-pins (self-test + release-wiring + plain) and
+  lint:thresholds green. Full report: `.superpowers/sdd/2026-08-20-rung-3/w18-report.md`.
+- Task 3 (supervisor): disclosure restated in-session before launch; run succeeded
+  (98 turns, 1,210,309 ms, session d0cf3c07-b36b-4749-b7c8-0d8593107d85, prompt sha
+  566133636cf00d91714974f4a127f24ab073f2e132269a71ed13c7b96678a84a); credential
+  trap-delete confirmed by the launcher's own post-cleanup assertion; the transcript
+  SURVIVED (431 lines) — the scoped-umask repair held; subscription accounting ~$8.12.
