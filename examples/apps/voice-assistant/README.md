@@ -68,9 +68,11 @@ browser-native in both modes.
 4. Every fold assigns a **new array** with a **new object** for the changed
    message, which is what re-renders `<kai-thread>`.
 5. When the turn settles, the reply text goes to `<kai-voice-output>` and is
-   spoken. A 2.5 s watchdog catches the case where synthesis silently never
-   starts (see the findings pointer below — the kit currently has no failure
-   signal for that).
+   spoken. `kai-speaking-change {speaking:true}` confirms the audio actually
+   started (utterance.onstart); a `kai-voice-error` event on either voice
+   element reports a failed session, and a 2.5 s watchdog still catches the
+   one case with no signal at all: an engine that accepts speak() and never
+   starts.
 
 ## Not production
 
@@ -267,6 +269,61 @@ Task: give #viz a real width constraint so fit-scale engages — your original `
 Address this before completing your current task.
 ````
 
+### Phase 4 — the kit error surface adopted (this conversation, verbatim)
+
+The rung's S-class kit finding (no failure signal on the voice elements) was
+fixed in the kit itself by worker W8, which then updated this app to consume
+the new signal — change 16 below. W8's received brief and dispatch message,
+reproduced unedited.
+
+The generated brief (`.superpowers/sdd/2026-08-19-rung-2/w8-voice-errors-brief.md`,
+gitignored):
+
+````markdown
+## Standing constraints (all roles)
+
+- No `git checkout` / `git reset` / `git stash` — ever. Restore by file copy if needed.
+- Never rebuild the package (`nx build ui`) unless the brief explicitly says so.
+- No subagents.
+- Watch every new check FAIL before trusting it (plant the defect, see the red for the right reason, then the green).
+- Never run `nx test` — the NX cache has returned wrong verdicts in both directions.
+- Edit only the files this brief assigns. If the work needs another file, stop and report.
+- Commits are the supervisor's; never touch the git index.
+- Look it up before you assert it: no claim about the tree goes in a report unread. (Not mechanizable — stated so it is not mistaken for covered.)
+
+## Implementer brief
+
+TASK: Kit fix, S-class, from the rung-2 findings (context: .superpowers/sdd/2026-08-19-rung-2/w4-findings.md §Symptom 1 + §Symptom 3): voice elements must surface their failures. THREE coordinated changes. (1) kai-voice-input gains an error event (name it consistently with the kai-* event conventions — check how other elements name error-ish events before inventing; candidate kai-voice-error with detail {source:'recognition', error:<the SpeechRecognitionErrorEvent.error code or exception name>, message}): fired on recognition runtime errors (today use-speech-recognition.ts:104 onerror sets a signal nothing reads, and components/voice-input.tsx:69 swallows with a false comment) AND a distinguishable no-result signal — decide the shape (either the same event with error:'no-result', or fire kai-transcription with empty text — pick ONE, justify at the site, and make main.ts-style consumers able to tell 'user said nothing' from 'recognition broke'). (2) kai-voice-output mirrors it: utterance.onerror currently vanishes (W4 traced a not-allowed error to zero message); fire the mirrored error event with source:'synthesis'. (3) kai-speaking-change semantics: speaking:true must fire on utterance.onstart (audio actually started), not optimistically before speak() — W4 §Symptom 3; components/voice-output.tsx:77. Keep the custom-synthesize path correct too (a synthesize function has its own lifecycle — decide when speaking starts there and document it). This is a behavior change consumers can observe; note it in the event's doc text. Contract rules: events are non-bubbling kai-* CustomEvents; docs no em dashes; mirrored descriptions word-identical; element facades wire via dispatch. TDD red-first on every new path (recognition error, no-result, synthesis error, onstart timing — the voice-output tests exist at src/components/voice-output.test.tsx). Then npm run build + build:api inside packages/ui (regen element-meta/types/react wrappers/llms — you own the regen this round), then pnpm --filter @kitn.ai/ui exec vitest run --project=unit (full), --project=emitted, and nx typecheck ui --skip-nx-cache. Also update examples/apps/voice-assistant/src/main.ts to CONSUME the new error events (route to its showError; keep the no-result heuristic only if the new signal does not fully replace it — if it does, delete the heuristic and its kit-gap comment, updating the README change list per the provenance policy) — the app files are in your FILES for this task; verify the app still builds (npm run build in the app dir).
+
+FILES: packages/ui/src/primitives/use-speech-recognition.ts, packages/ui/src/components/voice-input.tsx + voice-output.tsx (+ their tests), packages/ui/src/elements/voice-input.tsx + voice-output.tsx (+ element tests), build:api-derived artifacts, examples/apps/voice-assistant/src/main.ts + README.md
+
+CO-WRITERS: W9 is editing packages/ui/src/agent-tooling only (disjoint). Derived-artifact regen is YOURS; W9 will not run build:api.
+
+VERIFY: red→green per new path; full unit + emitted + typecheck green; app builds; regen artifact list
+
+Report back exactly:
+
+```
+DONE:
+FILES:
+VERIFY:
+SELF-CHECK:
+GAPS:
+NEEDS-REGEN:
+BLOCKERS:
+```
+````
+
+The supervisor's dispatch message:
+
+````text
+You are W8, a pooled implementation worker on the kitn-chat repo (/Users/home/Projects/kitn-ai/kitn-chat, branch findings/rung-2-voice). Your brief is at /Users/home/Projects/kitn-ai/kitn-chat/.superpowers/sdd/2026-08-19-rung-2/w8-voice-errors-brief.md — read it FIRST and follow it exactly, including the standing constraints (your brief explicitly authorizes npm run build + build:api inside packages/ui; everything else stands).
+
+Before designing, read: .superpowers/sdd/2026-08-19-rung-2/w4-findings.md (§Symptom 1 and §Symptom 3 are your defects, with exact file:line cites), the current sources in your FILES list, and survey existing kai-* event names for the error-event naming precedent. This is HIGH effort; you own it end to end; TDD red-first mandatory.
+
+Run git only from the repo root; never touch the git index. When done: write your report to .superpowers/sdd/2026-08-19-rung-2/w8-report.md and return a summary: event name + detail shape chosen (and why), the no-result signal decision, the kai-speaking-change semantics change and how the custom-synthesize path behaves, red→green evidence per path, gate results, regen artifact list, and what the app consumption change looks like (heuristic kept or deleted).
+````
+
 ### Every insider change to the builder's code, named and labeled
 
 Gap IDs refer to the graded gap list in
@@ -409,6 +466,27 @@ addendum ("Live validation (owner, 2026-08-19/20)").
     landing — plus a re-run of the listening-amplitude geometry probe to
     confirm the constraint costs the interaction nothing.
 
+Change 16 is phase 4, the kit error surface adoption (W8).
+
+16. **`kai-voice-error` consumed on both voice elements; the no-result timing
+    heuristic deleted** (`src/main.ts`) — closes W4 symptom 1 (and symptom 3's
+    silent `not-allowed` path) at the kit layer, superseding change 13's
+    app-side mitigation. The kit's W8 fix gives both voice elements a
+    `kai-voice-error` event (`detail.source` = `recognition` | `synthesis`,
+    `detail.error` = the platform code, the exception name, or `no-result` for
+    a clean session that heard nothing) and changes `kai-speaking-change` so
+    `speaking:true` fires on `utterance.onstart` — audio actually started —
+    instead of optimistically inside `speak()`. This app now: routes
+    recognition errors to the error notice (with `no-result`/`no-speech`
+    getting the gentle "Nothing was recognised" caption instead, and the
+    deliberate-cancel `aborted` ignored); routes synthesis errors to the error
+    notice, so a `not-allowed` failure is no longer wordless; and deletes
+    change 13's 600 ms infer-no-result timer and its kit-gap comment, because
+    the event replaces the inference exactly. The 2.5 s watchdog stays, but
+    now guards only the signal-free case (an engine that accepts `speak()` and
+    never starts); it is cleared by the genuine onstart confirmation rather
+    than by a race-prone synchronous echo.
+
 The same round found **why the earlier scripted IVP passed 9/9 over all three
 defects**: its synthesis stub held `speaking` for exactly 2500 ms — the
 watchdog's own constant — with its end-timer registered inside `speak()` before
@@ -418,9 +496,10 @@ visualizer point asserted `viz.state === 'listening'` — string equality on the
 prop the app itself sets — without ever sampling bar geometry, so "lit
 real-amplitude bar" passed vacuously. Details in the findings addendum.
 
-Deliberately **not** fixed here, per the brief — the rung's kit-level product
-findings are banked, not patched around in the corpus: the voice elements'
-missing audio tap (G-07/P-1, why this app opens a second `getUserMedia`), the
+Deliberately **not** fixed here, per the briefs — kit-level product findings
+still banked, not patched around in the corpus: the voice elements' missing
+audio tap (G-07/P-1, why this app opens a second `getUserMedia`) and the
 unexposed support detection (P-3, why `src/voice-support.ts` hand-rolls the
-probe), and the missing synthesis-failure signal (G-12, why the 2.5 s watchdog
-exists).
+probe). The missing failure signal (G-12 and its input-side sibling, why the
+2.5 s watchdog and change 13's heuristic existed) was closed in the kit by W8
+and adopted here as change 16.

@@ -3775,13 +3775,17 @@ export interface KaiVoiceInputElementEvents {
   onKaiTranscriptInterim?: (event: CustomEvent<{ text: string }>) => void;
   /** Final transcript: the `transcribe` property resolved, OR native `SpeechRecognition` produced final text (no `transcribe` set). */
   onKaiTranscription?: (event: CustomEvent<{ text: string }>) => void;
+  /** A voice session failed, so no failure is ever silent. `detail.source` names the failing side (`recognition` on `<kai-voice-input>`, `synthesis` on `<kai-voice-output>`), `detail.error` carries the platform error code, the thrown exception's name, or `no-result` when recognition ended with no error and no text (the user said nothing), and `detail.message` is human-readable. Deliberate cancellation does not fire. */
+  onKaiVoiceError?: (event: CustomEvent<{ source: "recognition"; error: string; message: string }>) => void;
 }
 
 export interface KaiVoiceOutputElementEvents {
-  /** Playback started or stopped. Drive your own UI in sync. Fires on real transitions only (manual click and programmatic speak()/stop()), never on mount. */
+  /** Playback started or stopped. Drive your own UI in sync. `speaking: true` fires when audio actually starts (utterance.onstart natively; audio playback beginning on the `synthesize` path), not when speak() is called; earlier releases fired it optimistically inside speak() itself. Fires on real transitions only (manual click and programmatic speak()/stop()), never on mount. */
   onKaiSpeakingChange?: (event: CustomEvent<{ speaking: boolean }>) => void;
   /** The model path (`synthesize`) resolved audio: the raw `Blob` before playback. */
   onKaiSynthesized?: (event: CustomEvent<{ blob: Blob }>) => void;
+  /** A voice session failed, so no failure is ever silent. `detail.source` names the failing side (`recognition` on `<kai-voice-input>`, `synthesis` on `<kai-voice-output>`), `detail.error` carries the platform error code, the thrown exception's name, or `no-result` when recognition ended with no error and no text (the user said nothing), and `detail.message` is human-readable. Deliberate cancellation does not fire. */
+  onKaiVoiceError?: (event: CustomEvent<{ source: "synthesis"; error: string; message: string }>) => void;
 }
 
 export interface KaiWorkspaceElementEvents {

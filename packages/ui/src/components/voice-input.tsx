@@ -38,6 +38,10 @@ export interface VoiceInputProps {
   /** Receive the imperative controller once mounted. The `<kai-voice-input>`
    *  facade forwards these as element methods (start/stop). */
   controllerRef?: (controller: VoiceInputController) => void;
+  /** A recognition session failed or produced nothing. `error` is the platform
+   *  error code, the thrown exception's name, or `no-result` when the session
+   *  ended with no error and no text. The facade maps this to kai-voice-error. */
+  onError?: (detail: { source: 'recognition'; error: string; message: string }) => void;
 }
 
 export function VoiceInput(props: VoiceInputProps) {
@@ -59,15 +63,43 @@ export function VoiceInput(props: VoiceInputProps) {
 
   // Native path: SpeechRecognition resolves with the final transcript when it
   // ends (click again or controller.stop()). Final text → onTranscription.
+  // Every other outcome reaches onError, so a session can never end in silence
+  // (W4 symptom 1: runtime errors set a signal nothing read, and an empty
+  // result fired no event at all).
   async function beginRecognition() {
+    let errored = false;
     try {
       const text = await speech.start({
         lang: props.lang,
         onInterim: props.interim ? (t) => props.onInterim?.(t) : undefined,
+        onError: (error, message) => {
+          errored = true;
+          props.onError?.({ source: 'recognition', error, message });
+        },
       });
-      if (text.trim()) local.onTranscription(text.trim());
-    } catch {
-      /* surfaced via speech.error; the mic returns to idle */
+      if (text.trim()) {
+        local.onTranscription(text.trim());
+      } else if (!errored) {
+        // No error, no text: the session ended cleanly having heard nothing.
+        // Reported through the SAME error event (as `no-result`) rather than an
+        // empty kai-transcription, so kai-transcription keeps its contract
+        // (final text exists) and one listener covers every failed session; the
+        // code distinguishes "user said nothing" from "recognition broke".
+        props.onError?.({
+          source: 'recognition',
+          error: 'no-result',
+          message: 'Speech recognition ended without capturing any text',
+        });
+      }
+    } catch (err) {
+      // start() itself threw (unsupported, or the platform refused to start).
+      if (!errored) {
+        props.onError?.({
+          source: 'recognition',
+          error: err instanceof Error ? err.name : 'unknown',
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
   }
 

@@ -488,43 +488,32 @@ interface Cell {
 }
 
 /**
- * Derived from the catalog, never listed.
- *
- * An integration contributes a `next` cell if it has a portable `webRoute`, plus
- * one cell for every framework-specific `routeTemplates` key a host exists for.
- * Registering an integration therefore adds coverage by itself — the property
- * `verify:scaffold` had to be repaired to get, after `openai` and `anthropic`
- * both landed in the catalog and compiled zero times.
- */
-function cellsFor(integration: Integration): Cell[] {
-  const out: Cell[] = [];
-  if (integration.webRoute) {
-    out.push({ id: integration.id, integration, host: NEXT_HOST, label: `${integration.id}/next` });
-  }
-  for (const framework of Object.keys(integration.routeTemplates)) {
-    const host = HOSTS[framework];
-    if (!host) continue;
-    out.push({ id: integration.id, integration, host, label: `${integration.id}/${framework}` });
-  }
-  return out;
-}
-
-const INTEGRATIONS = listIntegrations();
-const CELLS = INTEGRATIONS.flatMap(cellsFor);
-const COVERED = new Set(CELLS.map((c) => c.id));
-
-/**
  * Every integration this harness cannot execute, and why.
  *
  * `check` is what keeps these from being prose. Each reason is re-derived from
  * the catalog on every run, so an exclusion that stops being true fails here
  * rather than quietly granting itself amnesty — which is the same failure mode
  * as a runner exiting 0 on zero matches, one level up.
+ *
+ * Declared ABOVE `cellsFor` because `cellsFor` consults it: `mock` now ships a
+ * webRoute (the G-04 fix) that this harness's one load-bearing assertion — "a
+ * request was ISSUED" — is wrong about by design, so the exclusion has to keep
+ * the cell from existing, not merely excuse an integration that produced none.
  */
 const NOT_EXECUTABLE: Record<string, { why: string; check(i: Integration): boolean }> = {
   mock: {
-    why: 'emits no backend route at all — it streams in the browser, and `emitted-mock-path.live.test.ts` executes that path instead',
-    check: (i) => !i.webRoute && Object.keys(i.routeTemplates).length === 0,
+    why:
+      'its route reaches no transport at all — createMockResponder() streams canned frames ' +
+      'in-process, so there is no SDK conversion and no upstream contract for this harness to ' +
+      'pin, and "issued a request" is false by DESIGN rather than by defect. The frames are ' +
+      "pinned by the state package's own tests, the browser path by " +
+      '`emitted-mock-path.live.test.ts`, and the route COMPILES under verify:scaffold like any other',
+    // Honest only while the route stays transport-free: a fetch, a spawn or an
+    // SDK client appearing in it makes this check false and the exclusion red.
+    check: (i) =>
+      !!i.webRoute &&
+      Object.keys(i.routeTemplates).length === 0 &&
+      !/\bfetch\s*\(|\bspawn\s*\(|new\s+[A-Z]\w*Client/.test(i.webRoute),
   },
   'pydantic-ai': {
     why: 'Python. `verify:scaffold` sends it to `ast.parse` plus substring checks; it cannot be imported into a node runtime',
@@ -543,6 +532,37 @@ const NOT_EXECUTABLE: Record<string, { why: string; check(i: Integration): boole
       /spawn\(|app\.listen\(/.test(Object.values(i.routeTemplates).join('\n')),
   },
 };
+
+/**
+ * Derived from the catalog, never listed.
+ *
+ * An integration contributes a `next` cell if it has a portable `webRoute`, plus
+ * one cell for every framework-specific `routeTemplates` key a host exists for.
+ * Registering an integration therefore adds coverage by itself — the property
+ * `verify:scaffold` had to be repaired to get, after `openai` and `anthropic`
+ * both landed in the catalog and compiled zero times.
+ */
+function cellsFor(integration: Integration): Cell[] {
+  // Excluded integrations produce no cells AT ALL, not just an excuse after the
+  // fact — see the NOT_EXECUTABLE header. The `check` functions above are what
+  // keep this gate from being a silent coverage hole: a stale exclusion fails
+  // the "states a reason that is still true" test below.
+  if (integration.id in NOT_EXECUTABLE) return [];
+  const out: Cell[] = [];
+  if (integration.webRoute) {
+    out.push({ id: integration.id, integration, host: NEXT_HOST, label: `${integration.id}/next` });
+  }
+  for (const framework of Object.keys(integration.routeTemplates)) {
+    const host = HOSTS[framework];
+    if (!host) continue;
+    out.push({ id: integration.id, integration, host, label: `${integration.id}/${framework}` });
+  }
+  return out;
+}
+
+const INTEGRATIONS = listIntegrations();
+const CELLS = INTEGRATIONS.flatMap(cellsFor);
+const COVERED = new Set(CELLS.map((c) => c.id));
 
 // ── the runs ─────────────────────────────────────────────────────────────────
 
@@ -608,6 +628,9 @@ describe('the harness covers what the catalog contains', () => {
     for (const [id, entry] of Object.entries(NOT_EXECUTABLE)) {
       const integration = INTEGRATIONS.find((i) => i.id === id);
       expect(integration, `NOT_EXECUTABLE names '${id}', which is not in the catalog`).toBeDefined();
+      // True by construction since `cellsFor` consults NOT_EXECUTABLE; kept so
+      // that decoupling the two again cannot leave an integration both excluded
+      // and executed without a failure saying so.
       expect(
         COVERED.has(id),
         `'${id}' is excluded as "${entry.why}" but now produces an executable cell — drop the exclusion`,

@@ -72,10 +72,18 @@ export interface GatewayGroup {
  *
  * THE ORDER OF THE TESTS IS THE DESIGN, not an implementation detail:
  *
- *   1. No route at all -> **No backend**. Exactly `mock` today, and derived from
- *      the absence rather than from `id === 'mock'` or `category === 'mock'`: a
- *      second no-backend entry (a canned transcript player, say) should land in
- *      this group without editing this function.
+ *   1. `keyExposure === 'frontend-safe' && outOfBand === 'none'` -> **No
+ *      backend**. Exactly `mock` today, and still derived from declared facts
+ *      rather than from `id === 'mock'` or `category === 'mock'`: a second
+ *      no-backend entry (a canned transcript player, say) lands here by
+ *      declaring the same two. This USED to be "has no route at all", and the
+ *      G-04 fix broke that derivation on purpose: mock now ships an OPTIONAL
+ *      route (the same responder frames over HTTP), and a route the app runs
+ *      fine without must not move its heading. What "no backend" really claims
+ *      is that the browser can do the whole job — nothing secret or server-only
+ *      (frontend-safe) and nothing to install or start out of band ('none') —
+ *      so that pair is the derivation. `ollama` is the near-miss that keeps it
+ *      honest: frontend-safe, but 'local-server' — something must be listening.
  *   2. `outOfBand !== 'none'` -> **Bring a server or runtime**, and this is
  *      checked BEFORE the key test on purpose. `pydantic-ai` needs both a python
  *      runtime and OPENAI_API_KEY; the groups are not disjoint in reality, so
@@ -92,8 +100,12 @@ export interface GatewayGroup {
  * wrong about that one entry; this is the derivation, so this is the answer.
  */
 export function listGatewayGroups(): GatewayGroup[] {
-  const hasRoute = (i: Integration) =>
-    i.webRoute !== undefined || Object.keys(i.routeTemplates).length > 0;
+  // The browser can do the whole job: nothing secret or server-only, nothing to
+  // install or start. NOT "has no route" — mock's G-04 route is optional, and a
+  // route the app runs fine without must not move its heading (see the comment
+  // above).
+  const selfContained = (i: Integration) =>
+    i.keyExposure === 'frontend-safe' && i.outOfBand === 'none';
 
   const groups: GatewayGroup[] = [
     { id: 'no-backend', title: 'No backend', integrations: [] },
@@ -103,7 +115,7 @@ export function listGatewayGroups(): GatewayGroup[] {
   const into = (id: GatewayGroup['id']) => groups.find((g) => g.id === id)!;
 
   for (const integration of integrations) {
-    if (!hasRoute(integration)) into('no-backend').integrations.push(integration);
+    if (selfContained(integration)) into('no-backend').integrations.push(integration);
     else if (integration.outOfBand !== 'none') into('bring-a-server').integrations.push(integration);
     else into('bring-a-key').integrations.push(integration);
   }

@@ -975,13 +975,17 @@ describe('scaffold', () => {
     const text = (out.content as { type: string; text: string }[])[0].text;
     // renders a kai-chat surface (React wrapper)
     expect(text).toMatch(/<Chat\b|<kai-chat/);
-    // no backend call — not even a commented-out one, which is why the "go live"
-    // note points at re-scaffolding rather than pasting a request in a comment.
-    expect(text).not.toContain("fetch('/api");
+    // The FRONT END makes no backend call — not even a commented-out one, which
+    // is why the "go live" note points at re-scaffolding rather than pasting a
+    // request in a comment. Scoped to block (1) since G-04: block (2) now ships
+    // the optional route, whose Vite-middleware wrapper mentions fetch in prose.
+    const front = text.split('=== (2) BACKEND ROUTE ===')[0];
+    expect(front).not.toContain("fetch('/api");
     // the reply comes from the kit's shared responder, not a copy in this file
-    expect(text).toContain('createMockResponder()');
-    // backend block says no backend/key needed
+    expect(front).toContain('createMockResponder()');
+    // the run note still says the app needs no backend; the route is optional
     expect(text).toMatch(/No backend or API key needed/i);
+    expect(text).toContain('# OPTIONAL');
   });
 
   it("integration 'mock' (html) streams a canned reply without fetch", async () => {
@@ -992,12 +996,128 @@ describe('scaffold', () => {
       framework: 'html',
     });
     const text = (out.content as { type: string; text: string }[])[0].text;
-    expect(text).toMatch(/<kai-chat/);
-    expect(text).not.toContain("fetch('/api");
+    // Scoped to the front end since G-04 — block (2) now carries the optional route.
+    const front = text.split('=== (2) BACKEND ROUTE ===')[0];
+    expect(front).toMatch(/<kai-chat/);
+    expect(front).not.toContain("fetch('/api");
     // The cadence lives in the responder now, not in a setTimeout loop pasted
     // into the consumer's file — that inlined loop is what drifted seven ways.
-    expect(text).not.toMatch(/setTimeout/);
-    expect(text).toContain('const res = mockResponse(value);');
+    expect(front).not.toMatch(/setTimeout/);
+    expect(front).toContain('const res = mockResponse(value);');
+  });
+
+  // ── G-04: the mock BACKEND route ────────────────────────────────────────
+  //
+  // Rung-2 finding G-04 (S2), recurring since rung 1: both clean-room builders
+  // were told "replies come from a local dev endpoint that streams a mocked
+  // response" and had to hand-invent the server side, because `mock` was the one
+  // integration whose block (2) held prose where every other integration ships
+  // code — the kit's createMockResponder existed and no scaffold emitted a route
+  // serving its frames. The mock now gets the SAME treatment as a real
+  // integration: a portable webRoute that streams the responder's frames, wrapped
+  // by the identical per-framework adapters (Vite middleware for the SPA
+  // frameworks, POST exports for next/svelte/tanstack, the Express/Worker/Angular
+  // hosts). The front end is unchanged — it still streams locally with no fetch —
+  // so the route has to say it is optional.
+  describe('mock backend route (G-04)', () => {
+    const blockTwo = (out: unknown): string => {
+      const text = (out as { content: { text: string }[] }).content[0].text;
+      const block = text.split('=== (2) BACKEND ROUTE ===')[1]?.split(/^=== \(3\)/m)[0];
+      expect(block, 'no backend block emitted at all').toBeDefined();
+      return block as string;
+    };
+    /** Code lines only: the scaffolder's `#` prose and `//` comments are commentary. */
+    const codeOf = (block: string): string =>
+      block
+        .split('\n')
+        .filter((l) => !l.startsWith('#') && !l.trim().startsWith('//'))
+        .join('\n');
+
+    it('react: block (2) is the Vite dev-middleware route streaming responder frames', async () => {
+      const out = await scaffold.handler({
+        useCase: 'drop-in-chat', integration: 'mock', placement: 'full-page', framework: 'react',
+      });
+      const block = blockTwo(out);
+      expect(block).toContain('# Runtime: Vite dev-server middleware (Node)');
+      expect(block).toContain('configureServer(server)');
+      // The frames come from the kit's shared responder, never a copy pasted
+      // into the consumer's file — the same rule the front end is held to.
+      expect(block).toContain('createMockResponder()');
+      expect(block).toContain(`from '@kitn.ai/ui/state'`);
+      // No upstream: the mock IS the backend. A fetch appearing here means the
+      // mock quietly acquired a network dependency.
+      expect(codeOf(block)).not.toMatch(/\bfetch\s*\(/);
+      // No hand-rolled SSE framing either: the responder yields complete frames.
+      expect(codeOf(block)).not.toMatch(/data: \$\{/);
+    });
+
+    it('next: the same portable handler behind a POST export', async () => {
+      const out = await scaffold.handler({
+        useCase: 'drop-in-chat', integration: 'mock', placement: 'full-page', framework: 'next',
+      });
+      const block = blockTwo(out);
+      expect(block).toContain('# Runtime: Next.js route handler (Node/Edge)');
+      expect(block).toContain('export async function POST');
+      expect(block).toContain('createMockResponder()');
+    });
+
+    it('svelte: a real +server.ts RequestHandler, not a bare Request handler', async () => {
+      const out = await scaffold.handler({
+        useCase: 'drop-in-chat', integration: 'mock', placement: 'full-page', framework: 'svelte',
+      });
+      const block = blockTwo(out);
+      expect(block).toContain('# Runtime: SvelteKit +server.ts endpoint');
+      expect(block).toContain('export const POST: RequestHandler');
+    });
+
+    it('every framework with a route adapter gets an exact mock route', async () => {
+      const expected = [
+        ['react', 'Vite dev-server middleware (Node)'],
+        ['vue', 'Vite dev-server middleware (Node)'],
+        ['solid', 'Vite dev-server middleware (Node)'],
+        ['next', 'Next.js route handler (Node/Edge)'],
+        ['svelte', 'SvelteKit +server.ts endpoint'],
+        ['tanstack-start', 'TanStack Start server route'],
+        ['angular', 'Angular SSR server (Express, src/server.ts)'],
+        ['express', 'Express handler (Node)'],
+        ['worker', 'Cloudflare Worker'],
+      ] as const;
+      for (const [framework, runtime] of expected) {
+        const out = await scaffold.handler({
+          useCase: 'drop-in-chat', integration: 'mock', placement: 'full-page', framework,
+        });
+        const block = blockTwo(out);
+        expect(block, `${framework}: expected an exact route`).toContain(`# Runtime: ${runtime}`);
+        expect(block, `${framework}: the route must stream the kit's responder`).toContain(
+          'createMockResponder()',
+        );
+      }
+    });
+
+    it('the block says the route is OPTIONAL — the front end still streams locally', async () => {
+      const out = await scaffold.handler({
+        useCase: 'drop-in-chat', integration: 'mock', placement: 'full-page', framework: 'react',
+      });
+      const block = blockTwo(out);
+      // The claim that keeps the zero-config story honest: nothing about the
+      // emitted app REQUIRES this route to run.
+      expect(block).toMatch(/OPTIONAL/);
+      expect(block).toMatch(/streams its reply locally/);
+    });
+
+    it('html: the handler is still emitted (hosted elsewhere), without the self-referential mock tip', async () => {
+      const out = await scaffold.handler({
+        useCase: 'drop-in-chat', integration: 'mock', placement: 'full-page', framework: 'html',
+      });
+      const block = blockTwo(out);
+      // A static page cannot host it, so the express-hosted fallback + warning.
+      expect(block).toContain('will NOT run');
+      expect(block).toContain('createMockResponder()');
+      // "use integration: mock" is advice FOR mock — pointless here.
+      expect(block).not.toContain('or use integration: "mock"');
+      // The escape hatch it offers instead is the truth: the front end already runs.
+      expect(block).toMatch(/or ignore it/i);
+    });
   });
 
   // ── Round-1 field-test fix regressions ──────────────────────────────────
@@ -1111,9 +1231,13 @@ describe('scaffold', () => {
       framework: 'react',
     });
     const text = (out.content as { type: string; text: string }[])[0].text;
-    // mock never fetches /api — no model const should appear
+    // mock never fetches /api — no model const should appear. The no-fetch half
+    // is scoped to the front end since G-04 (block (2) now carries the optional
+    // route, whose Vite-middleware wrapper mentions fetch in prose); the
+    // no-model-const half stays whole-output, because the route must not grow
+    // one either — the mock forwards nothing.
     expect(text).not.toMatch(/const model = /);
-    expect(text).not.toContain("fetch('/api");
+    expect(text.split('=== (2) BACKEND ROUTE ===')[0]).not.toContain("fetch('/api");
   });
 
   // ── SCAF-9: agentic archetype must not emit bare propless companion elements ─

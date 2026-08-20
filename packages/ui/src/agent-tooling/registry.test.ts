@@ -292,7 +292,12 @@ it('listGatewayGroups derives the three headings the CLI prompt needs', () => {
   const idsIn = (id: string) =>
     groups.find((g) => g.id === id)!.integrations.map((i) => i.id).sort();
 
-  // Derived from having no route at all, not from `id === 'mock'`.
+  // Derived from frontend-safe + outOfBand 'none', not from `id === 'mock'` —
+  // and no longer from "has no route at all": mock ships an OPTIONAL route
+  // since G-04 (the responder frames over HTTP), and a route the app runs fine
+  // without must not move its heading. The webRoute assertion is what makes
+  // this test able to notice if that derivation quietly reverts to absence.
+  expect(getIntegration('mock')!.webRoute, 'mock lost its G-04 route — re-read listGatewayGroups before trusting this group').toBeTruthy();
   expect(idsIn('no-backend')).toEqual(['mock']);
   expect(idsIn('bring-a-server')).toEqual(['mastra', 'ollama', 'pi', 'pydantic-ai']);
   expect(idsIn('bring-a-key')).toEqual([

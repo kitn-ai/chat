@@ -26,8 +26,15 @@ export interface VoiceOutputProps {
   /** TTS model seam: given text, return an audio Blob to play. When set, the
    *  native speechSynthesis path is bypassed. Mirrors VoiceInput's `onTranscribe`. */
   onSynthesize?: (text: string) => Promise<Blob>;
-  /** Fires whenever playback starts or stops. */
+  /** Fires whenever playback starts or stops. `speaking: true` means audio has
+   *  actually started (utterance.onstart on the native path; audio.play()
+   *  resolving on the model path), not that speak() was called. */
   onSpeakingChange?: (speaking: boolean) => void;
+  /** Synthesis failed: a native utterance error, a rejecting `onSynthesize`, or
+   *  audio playback failing to start. `error` is the platform error code or the
+   *  exception's name. Deliberate cancellation (stop(), a new speak()) is not a
+   *  failure and does not fire. The facade maps this to kai-voice-error. */
+  onError?: (detail: { source: 'synthesis'; error: string; message: string }) => void;
   /** Fires once the model path resolves audio (model path only). */
   onSynthesized?: (blob: Blob) => void;
   disabled?: boolean;
@@ -68,13 +75,30 @@ export function VoiceOutput(props: VoiceOutputProps) {
   }
 
   // Native path: speechSynthesis.speak(new SpeechSynthesisUtterance(text)).
+  // isSpeaking waits for utterance.onstart, so onSpeakingChange(true) means the
+  // audio actually began. It used to flip optimistically before speak(), which
+  // made "speaking" mean "speak() was called" and raced consumers watching for
+  // playback to start (W4 symptom 3).
   function speakNative() {
     if (!hasSpeechSynthesis() || !local.text) return;
     window.speechSynthesis.cancel();
     utterance = new SpeechSynthesisUtterance(local.text);
+    utterance.onstart = () => setIsSpeaking(true);
     utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
-    setIsSpeaking(true);
+    utterance.onerror = (event) => {
+      setIsSpeaking(false);
+      const code = event?.error ?? 'unknown';
+      // `canceled`/`interrupted` are what the platform reports when the app
+      // itself cancels (stop(), or a new speak() pre-empting): deliberate, not
+      // a failure. Everything else surfaces (W4 traced a `not-allowed` here
+      // that vanished without a word).
+      if (code === 'canceled' || code === 'interrupted') return;
+      props.onError?.({
+        source: 'synthesis',
+        error: code,
+        message: `Speech synthesis error: ${code}`,
+      });
+    };
     window.speechSynthesis.speak(utterance);
   }
 
@@ -90,11 +114,27 @@ export function VoiceOutput(props: VoiceOutputProps) {
       audio ??= new Audio();
       audio.src = objectUrl;
       audio.onended = () => setIsSpeaking(false);
-      audio.onerror = () => setIsSpeaking(false);
-      setIsSpeaking(true);
+      audio.onerror = () => {
+        setIsSpeaking(false);
+        props.onError?.({
+          source: 'synthesis',
+          error: 'playback-failed',
+          message: 'The synthesized audio failed to play',
+        });
+      };
       await audio.play();
-    } catch {
+      // play() resolving is this path's "audio actually started" (the model
+      // path's counterpart of utterance.onstart), so isSpeaking flips only now.
+      setIsSpeaking(true);
+    } catch (err) {
+      // onSynthesize rejected, or play() did (e.g. NotAllowedError under an
+      // autoplay policy). Either way the reply is silent: say so.
       setIsSpeaking(false);
+      props.onError?.({
+        source: 'synthesis',
+        error: err instanceof Error ? err.name : 'unknown',
+        message: err instanceof Error ? err.message : String(err),
+      });
     } finally {
       setIsLoading(false);
     }

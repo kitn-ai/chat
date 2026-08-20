@@ -4630,7 +4630,8 @@
         "kai-audio-captured",
         "kai-recording-change",
         "kai-transcript-interim",
-        "kai-transcription"
+        "kai-transcription",
+        "kai-voice-error"
       ],
       "methods": [
         "start",
@@ -4678,7 +4679,8 @@
       ],
       "events": [
         "kai-speaking-change",
-        "kai-synthesized"
+        "kai-synthesized",
+        "kai-voice-error"
       ],
       "methods": [
         "speak",

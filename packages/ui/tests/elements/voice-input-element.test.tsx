@@ -38,6 +38,117 @@ class FakeSpeechRecognition {
   }
 }
 
+interface VoiceErrorDetail {
+  source: 'recognition';
+  error: string;
+  message: string;
+}
+
+/** Mount a <kai-voice-input> on the fake-recognition path and start a session. */
+async function mountAndStart() {
+  (window as unknown as Record<string, unknown>).SpeechRecognition = FakeSpeechRecognition;
+  FakeSpeechRecognition.last = undefined;
+
+  const el = document.createElement('kai-voice-input');
+  document.body.appendChild(el);
+  await Promise.resolve();
+
+  const errors: VoiceErrorDetail[] = [];
+  el.addEventListener('kai-voice-error', (e) => {
+    errors.push((e as CustomEvent<VoiceErrorDetail>).detail);
+  });
+  const transcripts: string[] = [];
+  el.addEventListener('kai-transcription', (e) => {
+    transcripts.push((e as CustomEvent<{ text: string }>).detail.text);
+  });
+
+  const button = el.shadowRoot!.querySelector<HTMLButtonElement>('button')!;
+  button.click(); // begin recognition
+  await Promise.resolve();
+
+  return { el, button, errors, transcripts, recog: FakeSpeechRecognition.last! };
+}
+
+function unmount(el: HTMLElement) {
+  el.remove();
+  delete (window as unknown as Record<string, unknown>).SpeechRecognition;
+}
+
+test('a recognition runtime error fires kai-voice-error with the platform code', async () => {
+  const { el, errors, transcripts, recog } = await mountAndStart();
+
+  recog.onerror?.({ error: 'network' });
+  recog.onend?.(); // the session dies after the error, with no result
+  await Promise.resolve();
+  await Promise.resolve();
+
+  expect(errors).toEqual([
+    { source: 'recognition', error: 'network', message: expect.stringContaining('network') },
+  ]);
+  expect(transcripts).toEqual([]);
+
+  unmount(el);
+});
+
+test('a session that ends with no text and no error fires kai-voice-error {error: "no-result"}', async () => {
+  const { el, button, errors, transcripts } = await mountAndStart();
+
+  button.click(); // stop -> onend resolves with the empty final text
+  await Promise.resolve();
+  await Promise.resolve();
+
+  expect(errors).toEqual([
+    { source: 'recognition', error: 'no-result', message: expect.any(String) },
+  ]);
+  expect(transcripts).toEqual([]);
+
+  unmount(el);
+});
+
+test('a session that produced text fires kai-transcription and NO kai-voice-error', async () => {
+  const { el, button, errors, transcripts, recog } = await mountAndStart();
+
+  recog.emitFinal('all good');
+  button.click();
+  await Promise.resolve();
+  await Promise.resolve();
+
+  expect(transcripts).toEqual(['all good']);
+  expect(errors).toEqual([]);
+
+  unmount(el);
+});
+
+test('recognition failing to construct/start fires kai-voice-error with the exception name', async () => {
+  class ThrowingRecognition extends FakeSpeechRecognition {
+    start = vi.fn(() => {
+      const err = new Error('recognition already started');
+      err.name = 'InvalidStateError';
+      throw err;
+    });
+  }
+  (window as unknown as Record<string, unknown>).SpeechRecognition = ThrowingRecognition;
+
+  const el = document.createElement('kai-voice-input');
+  document.body.appendChild(el);
+  await Promise.resolve();
+
+  const errors: VoiceErrorDetail[] = [];
+  el.addEventListener('kai-voice-error', (e) => {
+    errors.push((e as CustomEvent<VoiceErrorDetail>).detail);
+  });
+
+  el.shadowRoot!.querySelector<HTMLButtonElement>('button')!.click();
+  await Promise.resolve();
+  await Promise.resolve();
+
+  expect(errors).toEqual([
+    { source: 'recognition', error: 'InvalidStateError', message: 'recognition already started' },
+  ]);
+
+  unmount(el);
+});
+
 test('native recognition fires kai-transcription when no transcribe is set', async () => {
   (window as unknown as Record<string, unknown>).SpeechRecognition = FakeSpeechRecognition;
   FakeSpeechRecognition.last = undefined;

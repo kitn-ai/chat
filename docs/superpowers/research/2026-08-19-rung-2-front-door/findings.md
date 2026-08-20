@@ -211,9 +211,21 @@ was ever watched failing for the right reason.
    `kai-voice-error {error, message}` from `kai-voice-input` (recognition
    onerror) and `kai-voice-output` (utterance onerror), plus a distinguishable
    no-result signal; update element-meta/docs. Extends G-12 to the input side.
+   RESOLVED in the kit (W8, branch `findings/rung-2-voice`): both elements emit
+   `kai-voice-error {source: 'recognition'|'synthesis', error, message}`, with
+   `error: 'no-result'` as the clean-end-no-text signal (kai-transcription keeps
+   its final-text contract), the exception name for start failures, and the
+   platform code for runtime errors; deliberate cancellation
+   (`canceled`/`interrupted`/recognition abort) does not fire. The app adopted
+   it and deleted its 600 ms no-result heuristic (README change 16).
 2. **Make `kai-speaking-change {speaking:true}` mean "audio started"**: set the
    speaking signal on `utterance.onstart` for the native path, not optimistically
    inside `speak()`.
+   RESOLVED in the kit (W8, branch `findings/rung-2-voice`, same round):
+   `speaking:true` now fires on `utterance.onstart` natively and on
+   `audio.play()` resolving for the custom-`synthesize` path, so the app's
+   watchdog is cleared by the genuine confirmation; the behavior change is
+   noted in the event's rendered doc text.
 3. **Visualizer amplitude in `listening`**: honor `stream`/`bands` amplitude in
    the listening state (opt-in prop if LiveKit parity must hold), or document
    loudly on `stream`/`bands` that amplitude renders only in `speaking`.

@@ -124,9 +124,12 @@ describe('scaffold — integration matrix', () => {
     });
     const t = text(out);
     expect(t).toMatch(KAI_CHAT);
-    // no backend call — the reply streams client-side
-    expect(t).not.toContain("fetch('/api");
-    expect(t).toMatch(/No backend or API key needed|stream locally/i);
+    // No backend call in the FRONT END — the reply streams client-side. Scoped
+    // to block (1) since G-04: block (2) now ships the optional mock route,
+    // whose Vite-middleware wrapper mentions fetch('/api/chat') in prose.
+    const front = t.split('=== (2) BACKEND ROUTE ===')[0];
+    expect(front).not.toContain("fetch('/api");
+    expect(t).toMatch(/No backend or API key needed|streams its reply locally/i);
   });
 });
 
