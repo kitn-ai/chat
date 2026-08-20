@@ -5,6 +5,19 @@ export interface UseTextStreamOptions {
   speed?: number;
   characterChunkSize?: number;
   fadeDuration?: number;
+  segmentDelay?: number;
+}
+
+/** Default fade-in duration for a given speed (ms) — shared with ResponseStream. */
+export function defaultFadeDuration(speed: number): number {
+  const s = Math.min(100, Math.max(1, speed));
+  return Math.round(1000 / Math.sqrt(s));
+}
+
+/** Default per-segment stagger for a given speed (ms) — shared with ResponseStream. */
+export function defaultSegmentDelay(speed: number): number {
+  const s = Math.min(100, Math.max(1, speed));
+  return Math.max(1, Math.round(100 / Math.sqrt(s)));
 }
 
 export interface TextStreamSegment {
@@ -23,6 +36,7 @@ export function useTextStream(options: UseTextStreamOptions) {
   let fullText = '';
   let charIndex = 0;
   let intervalId: ReturnType<typeof setInterval> | undefined;
+  let completeTimeoutId: ReturnType<typeof setTimeout> | undefined;
   let isPaused = false;
   let asyncIterator: AsyncIterator<string> | undefined;
 
@@ -30,6 +44,10 @@ export function useTextStream(options: UseTextStreamOptions) {
     if (intervalId !== undefined) {
       clearInterval(intervalId);
       intervalId = undefined;
+    }
+    if (completeTimeoutId !== undefined) {
+      clearTimeout(completeTimeoutId);
+      completeTimeoutId = undefined;
     }
   }
 
@@ -76,8 +94,21 @@ export function useTextStream(options: UseTextStreamOptions) {
         const words = source.split(/(\s+)/).filter(Boolean);
         setSegments(words.map((text, index) => ({ text, index })));
         setDisplayedText(source);
-        // isComplete fires after animation has time to play
-        // (segments count * delay per segment from ResponseStream)
+        // Completion announces after the staggered animation has had time to
+        // play: segments * per-segment delay + one fade duration — the promise
+        // the comment here used to make with no code behind it (nothing on this
+        // path ever called setIsComplete(true), so kai-complete never fired for
+        // a fade-mode string). A timer, not a synchronous write: the consumer
+        // attaches its kai-complete listener a beat after mount, and a
+        // same-tick fire races past it.
+        const segDelay = typeof options.segmentDelay === 'number'
+          ? Math.max(0, options.segmentDelay)
+          : defaultSegmentDelay(speed);
+        const fadeDur = options.fadeDuration ?? defaultFadeDuration(speed);
+        completeTimeoutId = setTimeout(() => {
+          completeTimeoutId = undefined;
+          setIsComplete(true);
+        }, words.length * segDelay + fadeDur);
       }
     } else {
       if (options.mode === 'typewriter') {

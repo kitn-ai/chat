@@ -459,17 +459,9 @@ const EXEMPT: Record<string, { kind: 'story-only' | 'nothing'; reason: string }>
     kind: 'nothing',
     reason: 'no test, no element story. It has registered slots and parts (PROMPT_DOCK_SLOTS) that nothing renders or asserts.',
   },
-  'kai-response-stream': {
-    kind: 'nothing',
-    reason: 'no test, no element story — the streaming mode prop has no coverage at all, which is the worst place in this list for a gap given the kit streams by default.',
-  },
   'kai-scope-picker': {
     kind: 'nothing',
     reason: 'no test, no element story. It appears in tests/react/optional-props as the STRING beside a React wrapper it never mounts, which is exactly the false positive this guard exists to reject.',
-  },
-  'kai-segmented': {
-    kind: 'nothing',
-    reason: 'no test, no element story; slots.test.ts fixtures and a react prop-table string are the only hits. Selection, keyboard traversal and the change event are unexercised.',
   },
   'kai-setting-item': {
     kind: 'nothing',
@@ -482,10 +474,6 @@ const EXEMPT: Record<string, { kind: 'story-only' | 'nothing'; reason: string }>
   'kai-text-shimmer': {
     kind: 'nothing',
     reason: 'no test, no element story, no mention in any test file. Entirely unexercised.',
-  },
-  'kai-thinking-bar': {
-    kind: 'nothing',
-    reason: 'no test, no element story, no mention in any test file. Entirely unexercised, despite being a reasoning-surface element.',
   },
 };
 

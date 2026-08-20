@@ -7,6 +7,10 @@ import { createSupportChat, type ChatElement } from './chat';
  * Rung 1 of the iteration ladder: a docked support widget on somebody else's
  * product page. Launcher, panel, one conversation, no history.
  *
+ * The launcher/panel mechanics — open/close, Escape, `aria-expanded`, focus
+ * return, the corner placement — belong to `<kai-dock>` in index.html now, not
+ * to this file. What is left here is only the product: wiring the chat turn.
+ *
  * Two contract details this file owns, both of which a framework wrapper would
  * otherwise hide:
  *
@@ -24,24 +28,7 @@ function must<T extends HTMLElement>(id: string): T {
   return element as T;
 }
 
-const launcher = must<HTMLButtonElement>('launcher');
-const panel = must<HTMLElement>('support-panel');
 const chat = must<HTMLElement>('support-chat') as ChatElement;
-
-function setOpen(open: boolean): void {
-  panel.hidden = !open;
-  launcher.setAttribute('aria-expanded', String(open));
-}
-
-launcher.addEventListener('click', () => setOpen(panel.hidden));
-
-// Escape closes the panel and returns focus to the launcher, which is what a
-// dialog-shaped overlay owes a keyboard user.
-document.addEventListener('keydown', (event) => {
-  if (event.key !== 'Escape' || panel.hidden) return;
-  setOpen(false);
-  launcher.focus();
-});
 
 async function boot(): Promise<void> {
   await customElements.whenDefined('kai-chat'); // gotcha 1
