@@ -4,10 +4,12 @@ import { Copy, RefreshCw } from 'lucide-solid';
 import './register'; // every kai-* element used below
 import type { KaiNavItem } from '../ui/nav';
 import type { KaiTabItem } from '../ui/tabs';
-import type { ConversationSummary } from '../types';
+import type { ConversationSummary, ConversationGroup } from '../types';
 
-// Labs/Apps: a third dogfood — "Perplexity", an answer-engine UI, built on
-// kai-workspace + the kai-* elements exactly as a consumer would. It assembles
+// Labs/Apps: a third dogfood — "Perplexity", an answer-engine UI, built on the
+// re-cast kai-workspace SHELL (five layout slots; the rail is a real
+// <kai-conversations slot="start"> with the brand + nav chrome in its header
+// slot) + the kai-* elements exactly as a consumer would. It assembles
 // the answer-with-sources composite: a sources strip, a tabbed Answer/Sources/
 // Images header, streamed prose with INLINE numbered citation chips that
 // hover-preview their source, a media strip, an answer action toolbar, and a
@@ -31,7 +33,7 @@ declare module 'solid-js' {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
-      'kai-workspace': JSX.HTMLAttributes<HTMLElement> & { 'sidebar-min-width'?: string | number; 'collapse-below'?: string | number };
+      'kai-workspace': JSX.HTMLAttributes<HTMLElement> & { 'collapse-below'?: string | number; 'drawer-below'?: string | number };
       'kai-button': JSX.HTMLAttributes<HTMLElement> & { variant?: string; size?: string; icon?: string; 'icon-trailing'?: string; label?: string; disabled?: boolean; full?: boolean; align?: 'start' | 'center' | 'end' };
       'kai-nav': JSX.HTMLAttributes<HTMLElement> & { value?: string; 'default-value'?: string; theme?: string };
       'kai-menu': JSX.HTMLAttributes<HTMLElement> & { theme?: string; 'trigger-icon'?: string; 'trigger-label'?: string; 'trigger-icon-trailing'?: string; label?: string };
@@ -78,8 +80,11 @@ const NAV: KaiNavItem[] = [
   { id: 'library', label: 'Library', icon: 'book-open' },
 ];
 
-// Recent threads for the workspace's built-in conversation pane (the rail's
-// "Library"). Times are spread so the kit auto-derives varied relative labels.
+// Recent threads for the <kai-conversations> rail (the rail's "Library").
+// Times are spread so the kit auto-derives varied relative labels.
+const GROUPS: ConversationGroup[] = [
+  { id: 'library', name: 'Library', sortOrder: 0, createdAt: '2026-06-01' },
+];
 const RECENTS: ConversationSummary[] = ([
   ['What is retrieval-augmented generation?', '2026-06-27T14:10:00Z'],
   ['Best mirrorless cameras for video 2026', '2026-06-27T11:00:00Z'],
@@ -87,7 +92,7 @@ const RECENTS: ConversationSummary[] = ([
   ['Tax deadlines for freelancers', '2026-06-25T09:00:00Z'],
   ['Compare Rust vs Go for backends', '2026-06-23T12:00:00Z'],
   ['Why is the sky blue, simply?', '2026-06-20T10:00:00Z'],
-] as const).map(([title, ts], i) => ({ id: `q${i}`, title, scope: { type: 'document' }, messageCount: 2, lastMessageAt: ts, updatedAt: ts }));
+] as const).map(([title, ts], i) => ({ id: `q${i}`, title, groupId: 'library', scope: { type: 'document' }, messageCount: 2, lastMessageAt: ts, updatedAt: ts }));
 
 // The cited sources for the answer. Each carries the favicon-deriving `href`, a
 // `domain` + `title` for the source cards, and a `snippet` that becomes the
@@ -213,31 +218,35 @@ export const Perplexity: Story = {
         <kai-workspace
           ref={(el) => {
             const w = el as El;
-            w.conversations = RECENTS;
             w.compact = true;
-            // sidebar-max-width is set here (not as a JSX attribute) because the
-            // shared global JSX augmentation for kai-workspace must match the other
-            // stories' byte-for-byte (TS2717); adding the prop only here diverges it.
-            el.setAttribute('sidebar-max-width', '420');
+            // Rail geometry is CSS custom properties on the shell (the kai-dock
+            // rule), not props.
+            el.style.setProperty('--kai-workspace-start-min-width', '240px');
+            el.style.setProperty('--kai-workspace-start-max-width', '420px');
           }}
           class="block h-full"
-          sidebar-min-width="240"
           collapse-below="720"
         >
-          {/* sidebar-header: brand, New Thread, the flat rail nav */}
-          <div slot="sidebar-header" class="flex flex-col gap-2 px-2.5 pt-2.5">
-            <div class="flex items-center gap-2 px-1.5 pb-1">
-              <kai-icon name="sparkles" class="text-primary"></kai-icon>
-              <span class="text-sm font-semibold tracking-tight">perplexity</span>
+          {/* start: the rail is a real <kai-conversations>. The brand, New Thread
+              and the flat rail nav ride in its header slot; the account menu +
+              settings in its footer slot; the Library recents are its own
+              conversations/groups props. */}
+          <kai-conversations
+            slot="start"
+            ref={(el) => { const c = el as El; c.groups = GROUPS; c.conversations = RECENTS; }}
+            style={{ display: 'block', height: '100%' }}
+          >
+            <div slot="header" class="flex flex-col gap-2 px-2.5 pt-2.5 pb-1">
+              <div class="flex items-center gap-2 px-1.5 pb-1">
+                <kai-icon name="sparkles" class="text-primary"></kai-icon>
+                <span class="text-sm font-semibold tracking-tight">perplexity</span>
+              </div>
+              <kai-button variant="outline" full align="start" icon="square-pen">New Thread</kai-button>
+              <kai-nav ref={(el) => { const n = el as El; n.items = NAV; n.defaultValue = 'home'; }}></kai-nav>
             </div>
-            <kai-button variant="outline" full align="start" icon="square-pen">New Thread</kai-button>
-            <kai-nav ref={(el) => { const n = el as El; n.items = NAV; n.defaultValue = 'home'; }}></kai-nav>
-          </div>
 
-          {/* sidebar-footer: the account menu + settings */}
-          <div slot="sidebar-footer">
-            <kai-separator></kai-separator>
-            <div class="flex items-center px-2 py-1.5">
+            {/* footer: the account menu + settings */}
+            <div slot="footer" class="flex items-center px-2 py-1.5">
               <kai-menu ref={(el) => { (el as El).items = ACCOUNT; }} label="Account menu">
                 {/* Trigger content is NON-interactive: kai-menu supplies its own
                     <button>, so a button/kai-button here would double-nest. */}
@@ -251,7 +260,7 @@ export const Perplexity: Story = {
                 <kai-button variant="ghost" size="icon-sm" icon="settings" label="Settings"></kai-button>
               </kai-tooltip>
             </div>
-          </div>
+          </kai-conversations>
 
           {/* main: the answer view (scrolls) above the follow-up composer (pinned) */}
           <div slot="main" class="flex h-full flex-col">
@@ -433,20 +442,23 @@ export const Perplexity: Story = {
         // render). The tabs swap the panel; the strip overflow expands the cards;
         // inline citations + the Sources tab use the REAL kai-source/kai-sources
         // (chip + hover snippet).
-        code: `<kai-workspace sidebar-min-width="240" sidebar-max-width="420" collapse-below="720">
-  <!-- rail: brand, New Thread, the flat nav (Home / Discover / Spaces / Library) -->
-  <div slot="sidebar-header">
-    <span>perplexity</span>
-    <kai-button variant="outline" icon="square-pen">New Thread</kai-button>
-    <kai-nav></kai-nav>
-    <!-- stand-in icons: the named-icon registry has no Compass/Layers/Image glyphs -->
-  </div>
-  <div slot="sidebar-footer">
-    <kai-menu label="Account menu">
-      <div slot="trigger"><kai-avatar fallback="AR"></kai-avatar> Ada · Pro</div>
-    </kai-menu>
-    <kai-button variant="ghost" size="icon-sm" icon="settings" label="Settings"></kai-button>
-  </div>
+        code: `<kai-workspace collapse-below="720"
+  style="--kai-workspace-start-min-width: 240px; --kai-workspace-start-max-width: 420px">
+  <!-- start: the rail is a <kai-conversations>; chrome rides in ITS slots -->
+  <kai-conversations slot="start">
+    <div slot="header">
+      <span>perplexity</span>
+      <kai-button variant="outline" icon="square-pen">New Thread</kai-button>
+      <kai-nav></kai-nav>
+      <!-- stand-in icons: the named-icon registry has no Compass/Layers/Image glyphs -->
+    </div>
+    <div slot="footer">
+      <kai-menu label="Account menu">
+        <div slot="trigger"><kai-avatar fallback="AR"></kai-avatar> Ada · Pro</div>
+      </kai-menu>
+      <kai-button variant="ghost" size="icon-sm" icon="settings" label="Settings"></kai-button>
+    </div>
+  </kai-conversations>
 
   <!-- main: the answer view + the follow-up composer -->
   <div slot="main">
@@ -501,7 +513,10 @@ export const Perplexity: Story = {
 
 <script type="module">
   // Array/object props are JS properties (the kai- contract); scalars are attributes.
-  document.querySelector('kai-workspace').conversations = [/* ConversationSummary[] */];
+  // The recents live on the rail part now, not the layout shell.
+  const rail = document.querySelector('kai-conversations');
+  rail.groups = [{ id: 'library', name: 'Library', sortOrder: 0, createdAt: '2026-06-01' }];
+  rail.conversations = [/* ConversationSummary[] - groupId: 'library' */];
   document.querySelector('kai-nav').items = [/* { id, label, icon } rail rows */];
   document.querySelector('kai-tabs').items = [{ id: 'answer', label: 'Answer' }, { id: 'sources', label: 'Sources' }, { id: 'images', label: 'Images' }];
   document.querySelector('kai-tabs').defaultValue = 'answer';

@@ -3,17 +3,20 @@ import { createSignal, Show, For } from 'solid-js';
 import './register'; // every kai-* element used below
 import type { KaiNavItem } from '../ui/nav';
 import type { KaiCommandItem } from './command';
-import type { ConversationSummary } from '../types';
+import type { ConversationSummary, ConversationGroup } from '../types';
 import { textMessage } from '../state';
 import type { ChatMessage } from './chat-types';
 
 // Labs/Apps: a fourth dogfood - "ChatGPT", a replica of chatgpt.com, the
 // general-chat flagship. Its whole job is to validate the kit's CORE chat
 // surface (the thread, the composer, the model picker, the canvas) the way a
-// consumer would wire it. Built on kai-workspace + the kai-* elements;
-// INTERACTIVE via createSignal + ref-callback wiring (Search opens a kai-command
-// palette, the composer Tools menu + a header button open the kai-artifact canvas
-// in a kai-resizable split).
+// consumer would wire it. Built on the re-cast kai-workspace SHELL (five layout
+// slots; nothing chat-shaped on its surface): the rail is a real
+// <kai-conversations slot="start"> carrying the recents, with the app's own
+// chrome in its header/footer slots; the thread + composer + canvas live in the
+// main region. INTERACTIVE via createSignal + ref-callback wiring (Search opens
+// a kai-command palette, the composer Tools menu + a header button open the
+// kai-artifact canvas in a kai-resizable split).
 
 // kai-resizable / kai-resizable-item / kai-artifact / kai-avatar are used here as
 // JSX elements; the other kai-* tags are declared (identically) by sibling story
@@ -23,7 +26,7 @@ declare module 'solid-js' {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
-      'kai-workspace': JSX.HTMLAttributes<HTMLElement> & { 'sidebar-min-width'?: string | number; 'collapse-below'?: string | number };
+      'kai-workspace': JSX.HTMLAttributes<HTMLElement> & { 'collapse-below'?: string | number; 'drawer-below'?: string | number };
       'kai-button': JSX.HTMLAttributes<HTMLElement> & { variant?: string; size?: string; icon?: string; 'icon-trailing'?: string; label?: string; disabled?: boolean; full?: boolean; align?: 'start' | 'center' | 'end' };
       'kai-nav': JSX.HTMLAttributes<HTMLElement> & { value?: string; 'default-value'?: string; theme?: string };
       'kai-menu': JSX.HTMLAttributes<HTMLElement> & { theme?: string; 'trigger-icon'?: string; 'trigger-label'?: string; 'trigger-icon-trailing'?: string; label?: string };
@@ -61,9 +64,12 @@ const PRIMARY: KaiNavItem[] = [
   { id: 'gpts', label: 'GPTs', icon: 'box' },
 ];
 
-// Recents fed to the workspace's built-in conversation pane. Times are spread so
-// the kit auto-derives varied relative labels off `updatedAt`. The pane renders
-// them as a flat list with a relative-time label per row.
+// Recents fed to the <kai-conversations> rail. Times are spread so the kit
+// auto-derives varied relative labels off `updatedAt`. One "Chats" group files
+// every row under the same heading the ChatGPT rail shows.
+const GROUPS: ConversationGroup[] = [
+  { id: 'chats', name: 'Chats', sortOrder: 0, createdAt: '2026-06-01' },
+];
 const RECENTS: ConversationSummary[] = ([
   ['Debounce vs throttle in TS', '2026-06-27T09:10:00Z'],
   ['Postgres EXPLAIN ANALYZE help', '2026-06-27T02:00:00Z'],
@@ -73,7 +79,7 @@ const RECENTS: ConversationSummary[] = ([
   ['Regex for ISO timestamps', '2026-06-20T10:00:00Z'],
   ['Dockerfile multi-stage build', '2026-06-12T10:00:00Z'],
   ['Explain CAP theorem simply', '2026-06-01T10:00:00Z'],
-] as const).map(([title, ts], i) => ({ id: `c${i}`, title, scope: { type: 'document' }, messageCount: 6, lastMessageAt: ts, updatedAt: ts }));
+] as const).map(([title, ts], i) => ({ id: `c${i}`, title, groupId: 'chats', scope: { type: 'document' }, messageCount: 6, lastMessageAt: ts, updatedAt: ts }));
 
 // The composer model picker (Auto / Instant / Thinking). ModelOption = { id, name }.
 const MODELS = [
@@ -170,55 +176,70 @@ export const ChatGPT: Story = {
   render: () => {
     const [cmdOpen, setCmdOpen] = createSignal(false);
     const [canvasOpen, setCanvasOpen] = createSignal(false);
-    // Captured in the workspace ref so the sidebar toggle can drive the exposed
-    // imperative API (toggleSidebar) from a sibling element's ref.
+    // Mirrors the start aside's collapsed state (fed by kai-aside-toggle) so the
+    // thread top bar can show a reopen button while the rail is away.
+    const [railCollapsed, setRailCollapsed] = createSignal(false);
+    // Captured in the workspace ref so the rail toggle can drive the exposed
+    // imperative API (toggleAside) from a sibling element's ref.
     let ws: El | undefined;
+    const toggleRail = () => (ws?.toggleAside as ((side: string) => void) | undefined)?.('start');
 
     // Array/object props (and event wiring) are applied in each element's ref
-    // callback, NOT a one-shot onMount, so they survive remounts. sidebarMaxWidth
-    // is set here as a property (not a `sidebar-max-width` attribute) because the
-    // shared kai-workspace JSX decl is kept byte-identical across the sibling app
-    // stories to avoid TS2717; sidebar-min-width / collapse-below are in that decl.
+    // callback, NOT a one-shot onMount, so they survive remounts. The rail
+    // geometry is CSS custom properties on the shell (the kai-dock rule), set in
+    // the ref; the recents live on <kai-conversations>, the shell's start slot.
     return (
       <div class="relative h-screen w-full">
         <kai-workspace
-          ref={(el) => { ws = el as El; ws.conversations = RECENTS; ws.compact = true; ws.sidebarMaxWidth = 420; }}
+          ref={(el) => {
+            ws = el as El;
+            ws.compact = true;
+            el.style.setProperty('--kai-workspace-start-min-width', '240px');
+            el.style.setProperty('--kai-workspace-start-max-width', '420px');
+            el.addEventListener('kai-aside-toggle', (e) => {
+              const d = (e as CustomEvent).detail as { side: string; collapsed: boolean };
+              if (d.side === 'start') setRailCollapsed(d.collapsed);
+            });
+          }}
           class="block h-full"
-          sidebar-min-width="240"
           collapse-below="720"
         >
-          {/* sidebar-header: toggle, New chat, Search, the flat primary rows. */}
-          <div slot="sidebar-header" class="flex flex-col gap-2 px-2.5 pt-2.5">
-            <div class="flex justify-between">
-              <kai-tooltip content="Toggle sidebar">
-                <kai-button
-                  ref={(el) => { el.addEventListener('kai-click', () => (ws?.toggleSidebar as (() => void) | undefined)?.()); }}
-                  variant="ghost"
-                  size="icon-sm"
-                  icon="panel-left"
-                  label="Toggle sidebar"
-                ></kai-button>
-              </kai-tooltip>
+          {/* start: the conversation rail is a real <kai-conversations>. The app
+              chrome (toggle, New chat, Search, the flat primary rows) rides in
+              its header slot; the account entry in its footer slot; the recents
+              are its own conversations/groups props. */}
+          <kai-conversations
+            slot="start"
+            ref={(el) => { const c = el as El; c.groups = GROUPS; c.conversations = RECENTS; }}
+            style={{ display: 'block', height: '100%' }}
+          >
+            <div slot="header" class="flex flex-col gap-2 px-2.5 pt-2.5 pb-1">
+              <div class="flex justify-between">
+                <kai-tooltip content="Toggle sidebar">
+                  <kai-button
+                    ref={(el) => { el.addEventListener('kai-click', toggleRail); }}
+                    variant="ghost"
+                    size="icon-sm"
+                    icon="panel-left"
+                    label="Toggle sidebar"
+                  ></kai-button>
+                </kai-tooltip>
+              </div>
+              <kai-button variant="ghost" full align="start" icon="square-pen">New chat</kai-button>
+              <kai-button
+                ref={(el) => { el.addEventListener('kai-click', () => setCmdOpen(true)); }}
+                variant="ghost"
+                full
+                align="start"
+                icon="search"
+              >
+                Search chats
+                <span class="ml-auto rounded border border-border px-1 text-[0.6875rem] text-muted-foreground">⌘K</span>
+              </kai-button>
+              <kai-nav ref={(el) => { (el as El).items = PRIMARY; }}></kai-nav>
             </div>
-            <kai-button variant="ghost" full align="start" icon="square-pen">New chat</kai-button>
-            <kai-button
-              ref={(el) => { el.addEventListener('kai-click', () => setCmdOpen(true)); }}
-              variant="ghost"
-              full
-              align="start"
-              icon="search"
-            >
-              Search chats
-              <span class="ml-auto rounded border border-border px-1 text-[0.6875rem] text-muted-foreground">⌘K</span>
-            </kai-button>
-            <kai-nav ref={(el) => { (el as El).items = PRIMARY; }}></kai-nav>
-            <div class="mt-1 pl-2.5 text-[0.6875rem] font-semibold uppercase tracking-wider text-muted-foreground">Chats</div>
-          </div>
 
-          {/* sidebar-footer: the account entry pinned at the bottom. */}
-          <div slot="sidebar-footer">
-            <kai-separator></kai-separator>
-            <div class="px-2 py-1.5">
+            <div slot="footer" class="px-2 py-1.5">
               <kai-menu ref={(el) => { (el as El).items = ACCOUNT_ITEMS; }} label="Account menu">
                 {/* The trigger content is NON-interactive: kai-menu wraps it in its
                     own <button>, so a button/kai-button here would double-nest. */}
@@ -229,11 +250,26 @@ export const ChatGPT: Story = {
                 </div>
               </kai-menu>
             </div>
-          </div>
+          </kai-conversations>
 
-          {/* main-header: the thread top bar - a title/version menu on the left,
-              Share + a Canvas toggle on the right. */}
-          <div slot="main-header" class="flex items-center justify-between gap-3 px-4 py-2">
+          {/* main: the thread top bar above the thread + canvas split. The bar is
+              plain markup at the top of the main region (the shell has no
+              main-header slot); it grows a reopen button while the rail is
+              collapsed. */}
+          <div slot="main" class="flex h-full flex-col">
+          <div class="flex shrink-0 items-center justify-between gap-3 px-4 py-2">
+            <div class="flex items-center gap-1.5">
+            <Show when={railCollapsed()}>
+              <kai-tooltip content="Open sidebar">
+                <kai-button
+                  ref={(el) => { el.addEventListener('kai-click', toggleRail); }}
+                  variant="ghost"
+                  size="icon-sm"
+                  icon="panel-left"
+                  label="Open sidebar"
+                ></kai-button>
+              </kai-tooltip>
+            </Show>
             <kai-menu
               ref={(el) => { (el as El).items = [
                 { id: 'gpt5', label: 'ChatGPT 5', checked: true },
@@ -246,6 +282,7 @@ export const ChatGPT: Story = {
               trigger-icon-trailing="chevron-down"
               label="Switch model"
             ></kai-menu>
+            </div>
             <div class="flex items-center gap-1.5">
               <kai-button variant="ghost" size="sm" icon="share">Share</kai-button>
               <kai-tooltip content="Open canvas">
@@ -270,10 +307,10 @@ export const ChatGPT: Story = {
             </div>
           </div>
 
-          {/* main: the thread + composer beside the canvas, in a resizable split.
-              The canvas panel starts COLLAPSED and toggles from the header button
+          {/* the thread + composer beside the canvas, in a resizable split. The
+              canvas panel starts COLLAPSED and toggles from the header button
               or the composer Tools menu (Write or code). */}
-          <div slot="main" class="h-full">
+          <div class="min-h-0 flex-1">
             <kai-resizable orientation="horizontal" class="block h-full">
               {/* thread column: a scrolling turn list above the pinned composer */}
               <kai-resizable-item min="420px">
@@ -373,6 +410,7 @@ export const ChatGPT: Story = {
               </kai-resizable-item>
             </kai-resizable>
           </div>
+          </div>
         </kai-workspace>
 
         {/* Command palette: a light-DOM overlay hosting kai-command. Opened by the
@@ -407,39 +445,43 @@ export const ChatGPT: Story = {
       source: {
         language: 'html',
         // A representative skeleton of the composition (not the full interactive
-        // render). The recents are the workspace's built-in conversation pane;
+        // render). The rail is a <kai-conversations> in the shell's start slot
+        // (app chrome in its header/footer slots, recents as its own props);
         // the thread is a kai-message list; the composer carries the +/Tools
         // menus + the model picker; the canvas is a kai-artifact in a kai-resizable
-        // split.
-        code: `<kai-workspace sidebar-min-width="240" sidebar-max-width="420" collapse-below="720">
-  <!-- rail: toggle, New chat, Search, the flat primary rows -->
-  <div slot="sidebar-header">
-    <kai-tooltip content="Toggle sidebar">
-      <kai-button variant="ghost" size="icon-sm" icon="panel-left" label="Toggle sidebar"></kai-button>
-    </kai-tooltip>
-    <kai-button variant="ghost" icon="square-pen">New chat</kai-button>
-    <kai-button variant="ghost" icon="search">Search chats ⌘K</kai-button>
-    <kai-nav></kai-nav> <!-- Library, GPTs (flat rows) -->
-  </div>
-  <div slot="sidebar-footer">
-    <kai-menu label="Account menu">
-      <!-- Trigger content is NON-interactive: kai-menu supplies the button. -->
-      <div slot="trigger"><kai-avatar fallback="S"></kai-avatar> Sam</div>
-    </kai-menu>
-  </div>
+        // split. Rail geometry is CSS custom properties on the shell.
+        code: `<kai-workspace collapse-below="720"
+  style="--kai-workspace-start-min-width: 240px; --kai-workspace-start-max-width: 420px">
+  <!-- start: the conversation rail. Chrome rides in ITS header/footer slots. -->
+  <kai-conversations slot="start">
+    <div slot="header">
+      <kai-tooltip content="Toggle sidebar">
+        <kai-button variant="ghost" size="icon-sm" icon="panel-left" label="Toggle sidebar"></kai-button>
+      </kai-tooltip>
+      <kai-button variant="ghost" icon="square-pen">New chat</kai-button>
+      <kai-button variant="ghost" icon="search">Search chats ⌘K</kai-button>
+      <kai-nav></kai-nav> <!-- Library, GPTs (flat rows) -->
+    </div>
+    <div slot="footer">
+      <kai-menu label="Account menu">
+        <!-- Trigger content is NON-interactive: kai-menu supplies the button. -->
+        <div slot="trigger"><kai-avatar fallback="S"></kai-avatar> Sam</div>
+      </kai-menu>
+    </div>
+  </kai-conversations>
 
-  <!-- top bar: the model/version menu, Share, and a Canvas toggle -->
-  <div slot="main-header">
-    <kai-menu trigger-label="ChatGPT 5" trigger-icon-trailing="chevron-down" label="Switch model"></kai-menu>
-    <kai-button variant="ghost" icon="share">Share</kai-button>
-    <kai-tooltip content="Open canvas">
-      <kai-button variant="ghost" size="icon-sm" icon="code" label="Open canvas"></kai-button>
-    </kai-tooltip>
-    <kai-menu trigger-icon="more-horizontal" label="More"></kai-menu>
-  </div>
-
-  <!-- main: the thread + composer beside the canvas, in a resizable split -->
+  <!-- main: the top bar is plain markup at the head of the main column -->
   <div slot="main">
+    <div class="thread-bar">
+      <kai-menu trigger-label="ChatGPT 5" trigger-icon-trailing="chevron-down" label="Switch model"></kai-menu>
+      <kai-button variant="ghost" icon="share">Share</kai-button>
+      <kai-tooltip content="Open canvas">
+        <kai-button variant="ghost" size="icon-sm" icon="code" label="Open canvas"></kai-button>
+      </kai-tooltip>
+      <kai-menu trigger-icon="more-horizontal" label="More"></kai-menu>
+    </div>
+
+    <!-- the thread + composer beside the canvas, in a resizable split -->
     <kai-resizable orientation="horizontal">
       <kai-resizable-item min="420px">
         <!-- one <kai-message> per turn; assistant carries the built-in action row -->
@@ -474,7 +516,10 @@ export const ChatGPT: Story = {
 
 <script type="module">
   // Array/object props are JS properties (the kai- contract); scalars are attributes.
-  document.querySelector('kai-workspace').conversations = [/* ConversationSummary[] - recents */];
+  // The recents live on the rail part now, not the layout shell.
+  const rail = document.querySelector('kai-conversations');
+  rail.groups = [{ id: 'chats', name: 'Chats', sortOrder: 0, createdAt: '2026-06-01' }];
+  rail.conversations = [/* ConversationSummary[] - recents, groupId: 'chats' */];
   document.querySelector('kai-workspace').compact = true;
   document.querySelector('kai-nav').items = [{ id: 'library', label: 'Library', icon: 'book-open' }, { id: 'gpts', label: 'GPTs', icon: 'box' }];
   // One message object per turn; the assistant turn carries the action row.
@@ -487,8 +532,10 @@ export const ChatGPT: Story = {
   document.querySelector('kai-artifact').defaultTab = 'code';
   document.querySelector('kai-command').items = [/* KaiCommandItem[] grouped by 'group' */];
 
-  // Interactions: Search opens the palette; the header button + the Tools menu
+  // Interactions: the rail toggle drives the layout shell's per-aside API;
+  // Search opens the palette; the header button + the Tools menu
   // "Write or code" toggle the canvas panel (collapse the kai-resizable-item).
+  railToggle.addEventListener('kai-click', () => document.querySelector('kai-workspace').toggleAside('start'));
   searchButton.addEventListener('kai-click', () => showPalette());
   canvasButton.addEventListener('kai-click', () => toggleCanvas());
   document.querySelector('kai-menu.tools').addEventListener('kai-select', (e) => { if (e.detail.id === 'canvas') openCanvas(); });

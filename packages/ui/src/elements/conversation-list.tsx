@@ -35,6 +35,8 @@ interface Props extends Record<string, unknown> {
   /** Initial collapsed state when uncontrolled (default false). Use the
    *  `default-collapsed` attribute to start collapsed in plain HTML. */
   defaultCollapsed?: boolean;
+  /** Dense single-line rows (a leading dot + title, no message count). */
+  compact?: boolean;
 }
 
 interface Events {
@@ -81,6 +83,7 @@ defineWebComponent<Props, Events>('kai-conversations', {
   activeId: undefined,
   collapsed: undefined,
   defaultCollapsed: undefined,
+  compact: undefined,
 }, (props, { dispatch, element, expose, flag }) => {
   // Read declarative <kai-conversation> children from light DOM.
   // Shadow DOM with no <slot> suppresses them visually — they're invisible data carriers.
@@ -179,6 +182,7 @@ defineWebComponent<Props, Events>('kai-conversations', {
         onSelect={(id) => dispatch('kai-conversation-select', { id })}
         onNewChat={() => dispatch('kai-new-chat')}
         onToggleSidebar={() => { dispatch('kai-toggle-sidebar'); setCollapsedTo(true); }}
+        compact={flag('compact')}
         onSearchChange={(query) => dispatch('kai-search', { query })}
         controllerRef={(c) => (controller = c)}
         items={itemMode() ? <slot /> : undefined}

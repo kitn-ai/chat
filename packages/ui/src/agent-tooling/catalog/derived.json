@@ -1569,6 +1569,12 @@
           "scalar": true,
           "optional": true,
           "fn": false
+        },
+        {
+          "name": "compact",
+          "scalar": true,
+          "optional": true,
+          "fn": false
         }
       ],
       "events": [

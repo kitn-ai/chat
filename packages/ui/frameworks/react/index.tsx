@@ -647,6 +647,8 @@ export interface ConversationsProps extends WebComponentProps {
   collapsed?: boolean;
   /** Initial collapsed state when uncontrolled (default false). Use the `default-collapsed` attribute to start collapsed in plain HTML. */
   defaultCollapsed?: boolean;
+  /** Dense single-line rows (a leading dot + title, no message count). */
+  compact?: boolean;
   /** The rail was collapsed or expanded (via the toggle, the reopen button, or a `collapse()`/`expand()`/`toggle()` call). */
   onCollapseToggle?: (event: CustomEvent<{ collapsed: boolean }>) => void;
   /** A conversation was selected. The selection event in BOTH modes: a batteries data row, or an activated `<kai-conversation-item>` child (click, Enter or Space). */
@@ -661,7 +663,7 @@ export interface ConversationsProps extends WebComponentProps {
 
 export const Conversations = /*#__PURE__*/ createWebComponent<ConversationsProps>(
   'kai-conversations',
-  ["theme","groups","conversations","activeId","collapsed","defaultCollapsed"],
+  ["theme","groups","conversations","activeId","collapsed","defaultCollapsed","compact"],
   { onCollapseToggle: 'kai-collapse-toggle', onConversationSelect: 'kai-conversation-select', onNewChat: 'kai-new-chat', onSearch: 'kai-search', onToggleSidebar: 'kai-toggle-sidebar' },
   () => import('@kitn.ai/ui/elements/conversation-list'),
 );

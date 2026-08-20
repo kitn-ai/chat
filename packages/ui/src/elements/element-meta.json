@@ -3016,6 +3016,14 @@
         "scalar": true,
         "description": "Initial collapsed state when uncontrolled (default false). Use the `default-collapsed` attribute to start collapsed in plain HTML.",
         "displayType": "undefined | false | true"
+      },
+      {
+        "name": "compact",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Dense single-line rows (a leading dot + title, no message count).",
+        "displayType": "undefined | false | true"
       }
     ],
     "events": [

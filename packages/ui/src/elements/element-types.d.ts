@@ -655,6 +655,8 @@ export interface KaiConversationsElement extends HTMLElement {
   collapsed?: boolean;
   /** Initial collapsed state when uncontrolled (default false). Use the `default-collapsed` attribute to start collapsed in plain HTML. */
   defaultCollapsed?: boolean;
+  /** Dense single-line rows (a leading dot + title, no message count). */
+  compact?: boolean;
   /** Focus the built-in search input inside the shadow root. */
   focus(options?: FocusOptions): void;
   /** Clear the internal search query (resets the list filter) and fire kai-search with an empty string. */
@@ -2347,6 +2349,8 @@ export interface KaiConversationsElementProps {
   collapsed?: boolean;
   /** Initial collapsed state when uncontrolled (default false). Use the `default-collapsed` attribute to start collapsed in plain HTML. */
   defaultCollapsed?: boolean;
+  /** Dense single-line rows (a leading dot + title, no message count). */
+  compact?: boolean;
 }
 
 export interface KaiDialogElementProps {

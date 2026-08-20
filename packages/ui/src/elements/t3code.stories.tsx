@@ -7,13 +7,16 @@ import type { KaiNavItem } from '../ui/nav';
 import type { KaiCommandItem } from './command';
 
 // Labs/Apps: a second dogfood — "T3 Code", a desktop control plane for coding
-// agents (think an Electron shell). Built on kai-workspace + the kai-* elements
-// exactly as a consumer would: a projects -> threads tree, an agent thread, and a
-// composer. It is INTERACTIVE (like the Claude Code Desktop story): createSignal
-// state + ref-callback wiring. Search opens a kai-command palette, the action-bar
-// carets open real kai-menus, the single sidebar toggle drives the workspace API,
-// and selecting a thread swaps the header. Every surface is assembled from real
-// kai-* elements the way a consumer would wire them.
+// agents (think an Electron shell). Built on the re-cast kai-workspace SHELL
+// (five layout slots; the whole rail is the consumer's own column in `start` —
+// a projects -> threads kai-nav, not a conversation list, which is exactly what
+// the chat-agnostic shell allows) + the kai-* elements exactly as a consumer
+// would: a projects -> threads tree, an agent thread, and a composer. It is
+// INTERACTIVE (like the Claude Code Desktop story): createSignal state +
+// ref-callback wiring. Search opens a kai-command palette, the action-bar
+// carets open real kai-menus, the single rail toggle drives the shell's
+// toggleAside API, and selecting a thread swaps the header. Every surface is
+// assembled from real kai-* elements the way a consumer would wire them.
 
 // kai-file-tree, kai-command, and kai-tooltip are used here as JSX elements
 // without their own story facades, so declare their tags locally. The other kai-*
@@ -25,7 +28,7 @@ declare module 'solid-js' {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
-      'kai-workspace': JSX.HTMLAttributes<HTMLElement> & { 'sidebar-min-width'?: string | number; 'collapse-below'?: string | number };
+      'kai-workspace': JSX.HTMLAttributes<HTMLElement> & { 'collapse-below'?: string | number; 'drawer-below'?: string | number };
       'kai-button': JSX.HTMLAttributes<HTMLElement> & { variant?: string; size?: string; icon?: string; 'icon-trailing'?: string; label?: string; disabled?: boolean; full?: boolean; align?: 'start' | 'center' | 'end' };
       'kai-nav': JSX.HTMLAttributes<HTMLElement> & { value?: string; 'default-value'?: string; theme?: string };
       'kai-menu': JSX.HTMLAttributes<HTMLElement> & { theme?: string; 'trigger-icon'?: string; 'trigger-label'?: string; 'trigger-icon-trailing'?: string; label?: string };
@@ -159,15 +162,19 @@ export const T3Code: Story = {
   render: () => {
     const [activeThread, setActiveThread] = createSignal('codebase-overview');
     const [cmdOpen, setCmdOpen] = createSignal(false);
+    // Mirrors the start aside's collapsed state (fed by kai-aside-toggle) so the
+    // action bar can show the matching expand button while the rail is away.
+    const [railCollapsed, setRailCollapsed] = createSignal(false);
     // The selected thread's title + project, shown in the action bar — selecting a
     // thread row in the projects tree swaps them.
     const activeTitle = () => THREAD_INFO.get(activeThread())?.title ?? 'Codebase overview';
     const activeProject = () => THREAD_INFO.get(activeThread())?.project ?? 't3.gg';
-    // Captured in the workspace ref so the sidebar toggle can drive its exposed
-    // imperative API (toggleSidebar); the nav is captured so thread selection can
+    // Captured in the workspace ref so the rail toggle can drive its exposed
+    // imperative API (toggleAside); the nav is captured so thread selection can
     // drive its controlled `value` (so the "Show more" row never looks selected).
     let ws: El | undefined;
     let projectsNav: El | undefined;
+    const toggleRail = () => (ws?.toggleAside as ((side: string) => void) | undefined)?.('start');
 
     // Array/object props (and event wiring) are applied in each element's ref
     // callback, NOT a one-shot onMount, so they survive remounts.
@@ -176,31 +183,32 @@ export const T3Code: Story = {
         <kai-workspace
           ref={(el) => {
             ws = el as El;
-            // sidebar-max-width + no-conversations are set here (not as JSX attrs)
-            // because the kai-workspace JSX type is shared byte-for-byte with sibling
-            // stories. `no-conversations` suppresses the workspace's built-in
-            // ConversationList so this rail nav owns the whole rail flex region.
-            ws.noConversations = true;
-            el.setAttribute('sidebar-max-width', '420');
+            // Rail geometry is CSS custom properties on the shell (the kai-dock
+            // rule), not props. The re-cast shell has no built-in conversation
+            // pane, so nothing needs suppressing: the start slot IS the rail.
+            el.style.setProperty('--kai-workspace-start-min-width', '240px');
+            el.style.setProperty('--kai-workspace-start-max-width', '420px');
+            el.addEventListener('kai-aside-toggle', (e) => {
+              const d = (e as CustomEvent).detail as { side: string; collapsed: boolean };
+              if (d.side === 'start') setRailCollapsed(d.collapsed);
+            });
           }}
           class="block h-full"
-          sidebar-min-width="240"
           collapse-below="720"
         >
-          {/* sidebar-header: a single collapse toggle, command search, the PROJECTS
+          {/* start: a single collapse toggle, command search, the PROJECTS
               header, then the projects -> threads tree as ONE nested kai-nav (the
-              scrollable region), with Settings pinned at the bottom. With
-              `no-conversations` set on the workspace, this rail owns the whole flex
-              region (the built-in conversation pane is suppressed). */}
-          <div slot="sidebar-header" class="flex h-full flex-col px-2.5 pt-2.5">
+              scrollable region), with Settings pinned at the bottom. The rail is
+              the consumer's own column — the shell never reads it. */}
+          <div slot="start" class="flex h-full flex-col px-2.5 pt-2.5">
             <div class="flex shrink-0 flex-col gap-2">
-              {/* The ONE panel control: this collapses the rail; when collapsed the
-                  workspace's own thin rail provides the matching expand button (both
-                  on the LEFT), so the action bar carries no second, competing toggle. */}
+              {/* The rail-side panel control: collapses the rail. While collapsed
+                  the action bar (below) shows the matching expand button, since a
+                  collapsed aside renders nothing. */}
               <div class="flex">
                 <kai-tooltip content="Collapse sidebar">
                   <kai-button
-                    ref={(el) => { el.addEventListener('kai-click', () => (ws?.toggleSidebar as (() => void) | undefined)?.()); }}
+                    ref={(el) => { el.addEventListener('kai-click', toggleRail); }}
                     variant="ghost"
                     size="icon-sm"
                     icon="panel-left"
@@ -256,9 +264,23 @@ export const T3Code: Story = {
             </div>
           </div>
 
-          {/* main-header: the thread action bar */}
-          <div slot="main-header" class="flex items-center justify-between gap-3 px-4 py-2">
+          {/* main: the thread action bar is plain markup at the top of the main
+              column (the shell has no main-header slot), above the agent thread
+              (scrolls) and the composer (pinned). */}
+          <div slot="main" class="flex h-full flex-col">
+          <div class="flex shrink-0 items-center justify-between gap-3 px-4 py-2">
             <div class="flex min-w-0 items-center gap-2">
+              <Show when={railCollapsed()}>
+                <kai-tooltip content="Expand sidebar">
+                  <kai-button
+                    ref={(el) => { el.addEventListener('kai-click', toggleRail); }}
+                    variant="ghost"
+                    size="icon-sm"
+                    icon="panel-left"
+                    label="Expand sidebar"
+                  ></kai-button>
+                </kai-tooltip>
+              </Show>
               <span class="truncate text-sm font-medium">{activeTitle()}</span>
               <kai-badge>{activeProject()}</kai-badge>
             </div>
@@ -312,8 +334,8 @@ export const T3Code: Story = {
             </div>
           </div>
 
-          {/* main: the agent thread (scrolls) above the composer (pinned) */}
-          <div slot="main" class="flex h-full flex-col">
+          {/* the agent thread (scrolls) above the composer (pinned) */}
+          <div class="flex min-h-0 flex-1 flex-col">
             <div class="min-h-0 flex-1 overflow-y-auto">
               <div class="mx-auto flex max-w-3xl flex-col gap-5 px-6 py-6">
                 <kai-message
@@ -391,6 +413,7 @@ export const T3Code: Story = {
               </div>
             </div>
           </div>
+          </div>
         </kai-workspace>
 
         {/* Command palette: a light-DOM overlay hosting kai-command. Opened by the
@@ -425,18 +448,20 @@ export const T3Code: Story = {
       source: {
         language: 'html',
         // A representative skeleton of the composition (not the full interactive
-        // render). The sidebar is ONE nested kai-nav (projects -> threads, with
-        // per-thread status dots + relative-time meta); a single collapse toggle
-        // lives in the rail (the workspace's own thin rail expands it), so the
-        // action bar carries no competing toggle. Search opens a kai-command
+        // render). The rail is the consumer's OWN column in the re-cast shell's
+        // start slot: ONE nested kai-nav (projects -> threads, with per-thread
+        // status dots + relative-time meta) — not a conversation list, which the
+        // chat-agnostic shell is fine with. The collapse toggle lives in the
+        // rail and drives toggleAside('start'); the action bar shows the
+        // matching expand button while collapsed. Search opens a kai-command
         // palette; the action-bar carets are real kai-menus (Commit & push uses an
         // outline trigger); the changed files use kai-file-tree with diff stats + a
-        // summary header. `no-conversations` suppresses the workspace's built-in
-        // conversation pane so the rail nav owns the whole rail flex region.
-        code: `<kai-workspace sidebar-min-width="240" sidebar-max-width="420" collapse-below="720" no-conversations>
-  <!-- rail: one collapse toggle, command search, the projects header, then the
+        // summary header. Rail geometry is CSS custom properties on the shell.
+        code: `<kai-workspace collapse-below="720"
+  style="--kai-workspace-start-min-width: 240px; --kai-workspace-start-max-width: 420px">
+  <!-- start: one collapse toggle, command search, the projects header, then the
        nested projects -> threads nav, with Settings pinned at the bottom -->
-  <div slot="sidebar-header">
+  <div slot="start">
     <kai-tooltip content="Collapse sidebar">
       <kai-button variant="ghost" size="icon-sm" icon="panel-left" label="Collapse sidebar"></kai-button>
     </kai-tooltip>
@@ -452,13 +477,14 @@ export const T3Code: Story = {
     </div>
     <!-- the nested projects -> threads tree (status dots on the live threads, meta times) -->
     <kai-nav></kai-nav>
-    <!-- no-conversations (above) suppresses the built-in conversation pane; this rail owns the space -->
     <kai-button variant="ghost" icon="settings">Settings</kai-button>
   </div>
 
-  <!-- action bar: text-labeled menus + icon-only buttons (tooltip'd). No panel
-       toggle here — the rail (above) owns the single collapse/expand control. -->
-  <div slot="main-header">
+  <!-- main: the action bar is plain markup at the top of the main column
+       (text-labeled menus + icon-only buttons, tooltip'd). While the rail is
+       collapsed it shows the matching expand button. -->
+  <div slot="main">
+    <div class="action-bar">
     Codebase overview <kai-badge>t3.gg</kai-badge>
     <kai-menu trigger-icon="plus" trigger-label="Add action"></kai-menu>
     <kai-menu trigger-label="Open" trigger-icon-trailing="chevron-down"></kai-menu>
@@ -470,10 +496,9 @@ export const T3Code: Story = {
     <kai-tooltip content="Window">
       <kai-button variant="ghost" size="icon-sm" icon="monitor" label="Window"></kai-button>
     </kai-tooltip>
-  </div>
+    </div>
 
-  <!-- thread + composer -->
-  <div slot="main">
+    <!-- thread + composer -->
     <kai-message><!-- message set as a property: markdown table + prose --></kai-message>
     <div><!-- Changed files: the file tree renders its own summary header -->
       <kai-file-tree summary></kai-file-tree>
@@ -532,9 +557,9 @@ export const T3Code: Story = {
   document.querySelector('kai-command').items = [/* KaiCommandItem[] grouped by 'group' */];
   document.querySelector('kai-model-switcher').models = [{ id: 'opus-4-5', name: 'Claude Opus 4.5' }, /* ... */];
 
-  // Interactions: the rail toggle drives the workspace API; Search opens the
-  // palette; the action-bar carets open menus; selecting a thread swaps the header.
-  collapseToggle.addEventListener('kai-click', () => workspace.toggleSidebar());
+  // Interactions: the rail toggle drives the shell's per-aside API; Search opens
+  // the palette; the action-bar carets open menus; selecting a thread swaps the header.
+  collapseToggle.addEventListener('kai-click', () => workspace.toggleAside('start'));
   searchButton.addEventListener('kai-click', () => showPalette());
 </script>`,
       },
