@@ -25,7 +25,7 @@ type AnyEl = HTMLElement & Record<string, unknown>;
 const LEGACY = { id: 'bad', role: 'assistant', content: 'legacy shape' };
 const GOOD = { id: 'good', role: 'assistant', parts: [{ type: 'text', text: 'still here' }] };
 
-const FACADES = ['kai-thread', 'kai-chat', 'kai-workspace'] as const;
+const FACADES = ['kai-thread', 'kai-chat'] as const;
 
 let errorSpy: ReturnType<typeof vi.spyOn>;
 

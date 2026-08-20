@@ -12,7 +12,7 @@ declare module 'solid-js' {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
-      'kai-prompt-input': JSX.HTMLAttributes<HTMLElement> & { theme?: string; placeholder?: string; loading?: boolean; disabled?: boolean; voice?: boolean; search?: boolean; attach?: boolean; submit?: string; 'suggestion-mode'?: string };
+      'kai-prompt-input': JSX.HTMLAttributes<HTMLElement> & { theme?: string; placeholder?: string; loading?: boolean; disabled?: boolean; voice?: boolean; 'web-search'?: boolean; attach?: boolean; submit?: string; 'suggestion-mode'?: string };
       'kai-action': JSX.HTMLAttributes<HTMLElement> & { icon?: string; tooltip?: string };
     }
   }
@@ -40,21 +40,21 @@ interface PromptInputEl extends HTMLElement {
   disabled?: boolean;
   loading?: boolean;
   suggestions?: string[];
-  search?: boolean;
+  webSearch?: boolean;
   voice?: boolean;
   attachments?: AttachmentData[];
   triggers?: TriggerDef[];
 }
 
 /** Live demo of the actual `<kai-prompt-input>` custom element (Shadow DOM and all). */
-function PromptInputElement(props: { search?: boolean; voice?: boolean; attachments?: AttachmentData[]; args?: Record<string, unknown> }) {
+function PromptInputElement(props: { webSearch?: boolean; voice?: boolean; attachments?: AttachmentData[]; args?: Record<string, unknown> }) {
   let el: PromptInputEl | undefined;
   onMount(() => {
     if (!el) return;
     // Default fixed data
     el.placeholder = 'Ask anything...';
     el.suggestions = sampleSuggestions;
-    if (props.search) el.setAttribute('search', '');
+    if (props.webSearch) el.setAttribute('web-search', '');
     if (props.voice) el.setAttribute('voice', '');
     if (props.attachments) el.attachments = props.attachments;
     // Scalar args from Controls
@@ -62,13 +62,13 @@ function PromptInputElement(props: { search?: boolean; voice?: boolean; attachme
     if (args) {
       const scalarNames = [
         'value', 'placeholder', 'disabled', 'loading', 'suggestionMode',
-        'search', 'voice',
+        'webSearch', 'voice',
       ];
       for (const name of scalarNames) {
         if (name in args) (el as unknown as Record<string, unknown>)[name] = args[name];
       }
     }
-    // Log every declared CustomEvent (kai-submit, kai-value-change, kai-search,
+    // Log every declared CustomEvent (kai-submit, kai-value-change, kai-web-search,
     // kai-voice, kai-suggestion-click, …) to the Actions panel.
     onCleanup(attachKaiActions(el));
   });
@@ -134,7 +134,7 @@ const meta = {
       description: specDescription('kai-prompt-input', [
           '`<kai-prompt-input>` is the framework-agnostic **web component** version of the chat composer, an auto-resizing textarea with a send button and optional suggestion chips, isolated in **Shadow DOM** so the host page\'s CSS can\'t leak in and the kit\'s styles can\'t leak out. SolidJS is bundled in, so the host needs nothing.',
           '**When to use:** adding a message composer to a non-Solid app (React, Vue, Svelte, plain HTML), or anywhere you want zero style conflicts. If you *are* in SolidJS and want fine-grained control, compose the `PromptInput` primitives instead.',
-          '**How to use:** register once with `import \'@kitn.ai/ui/elements\'`, configure it with JS **properties** (`placeholder`, `value`, `disabled`, `loading`, `suggestions`, `attachments`) and flag attributes (`search`, `voice` to show the Globe/Mic toolbar buttons), and listen for **CustomEvents** (`kai-submit`, `kai-value-change`, `kai-suggestion-click`, `kai-search`, `kai-voice`) directly on the element. Leave `value` unset to let the element manage its own input state; seed `attachments` to pre-populate staged files. **Custom toolbar buttons:** place `<kai-action id icon tooltip>` elements as children; they are invisible data carriers (Shadow DOM hides them) that the element reads and renders as extra ghost icon buttons in the left toolbar. Each click fires a `kai-toolbar-action` CustomEvent with `detail.action` equal to the action id (the same `<kai-action>` descriptor element that `<kai-message>` uses; composition symmetry).',
+          '**How to use:** register once with `import \'@kitn.ai/ui/elements\'`, configure it with JS **properties** (`placeholder`, `value`, `disabled`, `loading`, `suggestions`, `attachments`) and flag attributes (`web-search`, `voice` to show the Globe/Mic toolbar buttons), and listen for **CustomEvents** (`kai-submit`, `kai-value-change`, `kai-suggestion-click`, `kai-web-search`, `kai-voice`) directly on the element. Leave `value` unset to let the element manage its own input state; seed `attachments` to pre-populate staged files. **Custom toolbar buttons:** place `<kai-action id icon tooltip>` elements as children; they are invisible data carriers (Shadow DOM hides them) that the element reads and renders as extra ghost icon buttons in the left toolbar. Each click fires a `kai-toolbar-action` CustomEvent with `detail.action` equal to the action id (the same `<kai-action>` descriptor element that `<kai-message>` uses; composition symmetry).',
           '**Entity pills (triggers):** set the `triggers` JS property to a list of `{ char, kind, items }` definitions. Typing the trigger char (e.g. `/` for skills, `@` for agents/plugins) opens a menu; selecting an item inserts an atomic pill. `kai-submit` / `kai-value-change` carry the structured `doc` + `entities` alongside the flattened `value` string. See the *Entity Pills* and *Prefilled* stories.',
           '**Placement:** pinned to the bottom of a chat surface, full width. Set `loading` while a response streams to show the busy state, and `disabled` to block input entirely.',
           'See the **Code** tab below for the HTML usage; the *SolidJS* story shows the same element inside a Solid component.',
@@ -153,7 +153,7 @@ export const Default: Story = {
     disabled: false,
     loading: false,
     suggestionMode: 'submit',
-    search: false,
+    webSearch: false,
     voice: false,
   },
   render: (args: Record<string, unknown>) => <PromptInputElement args={args} />,
@@ -168,20 +168,20 @@ export const InSolidJS: Story = {
 };
 
 const TOOLBAR_SNIPPET = `<!-- show the Search (Globe) + Voice (Mic) toolbar buttons -->
-<kai-prompt-input id="input" search voice></kai-prompt-input>
+<kai-prompt-input id="input" web-search voice></kai-prompt-input>
 
 <script type="module">
   import '@kitn.ai/ui/elements';
   const input = document.getElementById('input');
-  input.addEventListener('kai-search', () => console.log('search clicked'));
+  input.addEventListener('kai-web-search', () => console.log('web search clicked'));
   input.addEventListener('kai-voice', () => console.log('voice clicked'));
 </script>`;
 
-/** With the **microphone** (and search) toolbar buttons enabled via the `voice`
- *  and `search` flags. Clicking them fires `kai-voice` / `kai-search` CustomEvents. */
+/** With the **microphone** (and web-search) toolbar buttons enabled via the `voice`
+ *  and `webSearch` flags. Clicking them fires `kai-voice` / `kai-web-search` CustomEvents. */
 export const WithVoiceAndSearch: Story = {
   name: 'With Voice & Search',
-  render: () => <PromptInputElement search voice />,
+  render: () => <PromptInputElement webSearch voice />,
   parameters: { docs: { source: { code: TOOLBAR_SNIPPET, language: 'html' } } },
 };
 

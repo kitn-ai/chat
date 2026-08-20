@@ -1,30 +1,32 @@
 ---
 title: Workspace app
-description: A ChatGPT-style layout — collapsible conversation sidebar beside a live thread — powered by a single <kai-workspace> element.
+description: A ChatGPT-style layout — a collapsible conversation rail beside a live thread — composed from <kai-workspace>, <kai-conversations>, and <kai-chat>.
 ---
 
 import WorkspaceDemo from '../../../components/WorkspaceDemo.tsx';
 
-<p class="kai-lede">One element gives you the full workspace: a resizable, collapsible sidebar listing past conversations, plus a streaming chat thread. Select a conversation, start a new one, or send a message below.</p>
+<p class="kai-lede">Three elements give you the full workspace: the `<kai-workspace>` layout shell, a resizable, collapsible `<kai-conversations>` rail listing past conversations, and a streaming `<kai-chat>` thread. Select a conversation, start a new one, or send a message below.</p>
 
 <WorkspaceDemo client:only="solid" />
 
 ## How it works
 
-`<kai-workspace>` wraps `<kai-conversations>` and `<kai-chat>` inside a resizable split. You pass a flat `conversations` array (add `groups` when you want section headers) and the active thread's `messages`. Three events drive all the interactivity:
+`<kai-workspace>` is the layout: it arranges its slots, handles resize and collapse, and nothing else. You slot `<kai-conversations>` into `start` and `<kai-chat>` into the main region, then drive each part directly. The rail gets a flat `conversations` array (add `groups` when you want section headers), the chat gets the active thread's `messages`, and three events drive all the interactivity:
 
 ```html
-<kai-workspace id="ws"></kai-workspace>
+<kai-workspace collapse-below="720" drawer-below="640" style="display:block; height:100vh;">
+  <kai-conversations slot="start"></kai-conversations>
+  <kai-chat></kai-chat>
+</kai-workspace>
 
 <script type="module">
   import '@kitn.ai/ui/elements';
 
-  await customElements.whenDefined('kai-workspace');
+  const rail = document.querySelector('kai-conversations');
+  const chat = document.querySelector('kai-chat');
 
-  const ws = document.getElementById('ws');
-
-  // Seed conversations (assign in JavaScript — arrays can't be attributes).
-  ws.conversations = [
+  // Seed the rail (assign in JavaScript — arrays can't be attributes).
+  rail.conversations = [
     {
       id: 'c1', title: 'Migrating the dashboard to web components',
       scope: { type: 'collection' }, messageCount: 4,
@@ -33,9 +35,10 @@ import WorkspaceDemo from '../../../components/WorkspaceDemo.tsx';
     },
     // … more conversations
   ];
+  rail.activeId = 'c1';
 
   // Seed the active thread.
-  ws.messages = [
+  chat.messages = [
     { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'How do I share state across the panels?' }] },
     {
       id: 'a1', role: 'assistant',
@@ -43,61 +46,62 @@ import WorkspaceDemo from '../../../components/WorkspaceDemo.tsx';
       actions: ['copy', 'like', 'dislike'],
     },
   ];
-  ws.activeId = 'c1';
 
   // Swap the thread when the user picks a conversation.
-  ws.addEventListener('kai-conversation-select', (e) => {
-    ws.activeId = e.detail.id;
-    ws.messages = threadFor(e.detail.id); // load from your store
+  rail.addEventListener('kai-conversation-select', (e) => {
+    rail.activeId = e.detail.id;
+    chat.messages = threadFor(e.detail.id); // load from your store
   });
 
   // Clear the thread and start fresh.
-  ws.addEventListener('kai-new-chat', () => {
-    ws.messages = [];
-    ws.activeId = undefined;
+  rail.addEventListener('kai-new-chat', () => {
+    chat.messages = [];
+    rail.activeId = undefined;
   });
 
-  // Stream a reply — identical pattern to <kai-chat>.
-  ws.addEventListener('kai-submit', async (e) => {
+  // Stream a reply — identical pattern to standalone <kai-chat>.
+  chat.addEventListener('kai-submit', async (e) => {
     const { value } = e.detail;
     const aId = crypto.randomUUID();
-    ws.messages = [
-      ...ws.messages,
+    chat.messages = [
+      ...chat.messages,
       { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: value }] },
       { id: aId, role: 'assistant', parts: [] },
     ];
-    ws.loading = true;
+    chat.loading = true;
     let answer = '';
     for await (const token of streamFromYourModel(value)) {
       answer += token;
-      ws.messages = ws.messages.map((m) =>
+      chat.messages = chat.messages.map((m) =>
         m.id === aId ? { ...m, parts: [{ type: 'text', text: answer }] } : m,
       );
     }
-    ws.loading = false;
+    chat.loading = false;
   });
 </script>
 ```
 
 **Key data shapes:**
 
-- `conversations` — each entry needs `id`, `title`, `scope` (`{ type: 'collection' }`), `messageCount`, `lastMessageAt`, and `updatedAt`. The component uses the timestamps to bucket rows into "Today", "Yesterday", "Last 7 days", etc.
-- `messages` — the same `ChatMessage[]` shape as `<kai-chat>`: `id`, `role`, an ordered `parts` array (`text`, `reasoning`, `tool`, `card`, `source`, `file`), plus optional `actions`.
+- `conversations` (on `<kai-conversations>`) — each entry needs `id`, `title`, `scope` (`{ type: 'collection' }`), `messageCount`, `lastMessageAt`, and `updatedAt`. The rail uses the timestamps to bucket rows into "Today", "Yesterday", "Last 7 days", etc.
+- `messages` (on `<kai-chat>`) — the standard `ChatMessage[]` shape: `id`, `role`, an ordered `parts` array (`text`, `reasoning`, `tool`, `card`, `source`, `file`), plus optional `actions`.
 
-**Sidebar controls:**
+**Sidebar layout:**
 
-| Prop | Default | Effect |
+The shell owns the rail's geometry. Widths are CSS custom properties on `<kai-workspace>`, not props:
+
+| Custom property | Default | Effect |
 |---|---|---|
-| `sidebarWidth` | `22` | Initial sidebar width (%) |
-| `sidebarMinWidth` | `200` | Minimum sidebar width (px) |
-| `sidebarMaxWidth` | `420` | Maximum sidebar width (px) |
-| `sidebarCollapsed` | `false` | Start with sidebar collapsed |
+| `--kai-workspace-start-width` | `280px` | Initial rail width |
+| `--kai-workspace-start-min-width` | `200px` | Minimum rail width |
+| `--kai-workspace-start-max-width` | `480px` | Maximum rail width |
 
-The user can drag the divider to resize or click the sidebar toggle. Listen to `kai-sidebar-toggle` (`detail.collapsed`) to persist the state.
+The user can drag the handle to resize (the shell fires `kai-aside-resize`) or collapse the rail. Start collapsed with the `default-start-collapsed` attribute, and listen to `kai-aside-toggle` (`detail.side`, `detail.collapsed`) on the shell to persist the state.
 
 ## Next steps
 
 - **[Drop-in chat](/examples/drop-in-chat/)** — the simpler single-thread starting point and streaming loop.
-- **[`kai-workspace` reference](/components/workspace/)** — every prop and event, including model switcher, context meter, and slash commands.
-- **[`kai-conversations` reference](/components/conversations/)** — use this element standalone when you want to build your own layout instead of using the pre-composed workspace.
+- **[Use a workspace](/guides/use-a-workspace/)** — the full composition guide, including the migration table from the old single-element chat preset.
+- **[`kai-workspace` reference](/components/workspace/)** — every slot, prop, and event on the layout shell.
+- **[`kai-conversations` reference](/components/conversations/)** — the rail element, usable in any layout you build.
 - **[Theming](/guides/theming/)** — brand the sidebar (`--color-sidebar`) and chat thread in one pass.

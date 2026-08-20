@@ -74,8 +74,18 @@ const ALLOWED_LARGE_FILES = new Map([
  * Backstop ceiling on total unpacked size. Headroom over the current figure is
  * deliberate — this should catch a step change, not normal drift. Raise it only
  * with a note saying what grew and that the growth is genuinely needed.
+ *
+ * 12.5 → 13.0 MiB (2026-08-20, the workspace re-cast): the batch that tripped
+ * the old ceiling measured 12.60 MiB, audited file-by-file against the pack
+ * listing — the growth is exactly the shipped new surface and nothing else:
+ * the `kai-conversation-item` and reshaped `kai-workspace` shell (element
+ * chunks, Solid components, their d.ts, manifest/meta/llms rows), the
+ * `@kitn.ai/ui/state` thread/persistence helpers (threads.ts + persistence.ts
+ * + dist), and the workspace BLOCK emission inside dist/mcp.es.js +
+ * src/agent-tooling (which ships by design). No tests, stories, probe scripts
+ * or scripts/ entries are in the tarball (checked explicitly).
  */
-const MAX_UNPACKED_BYTES = 12.5 * 1024 * 1024;
+const MAX_UNPACKED_BYTES = 13.0 * 1024 * 1024;
 
 const kib = (n) => `${(n / 1024).toFixed(1)} KiB`;
 const mib = (n) => `${(n / 1024 / 1024).toFixed(2)} MiB`;

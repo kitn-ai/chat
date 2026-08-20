@@ -100,9 +100,47 @@ Nested `<kai-conversation>` elements — no JavaScript wiring needed.
 
 <Example client:visible tag="kai-conversations" data="declarative" />
 
+## Item mode: bring your own rows
+
+Slot `<kai-conversation-item>` children into the list and the loop is yours: framework-native `map`, `<For>`, or `v-for` over your own records. The container detects the children, skips its data rendering, and runs the assembly contract over them: selection state flowing container to item, roving tabindex, and the accessible list semantics (each row is a listitem whose body is the activation button, with `aria-current` marking the active one, the same dialect the built-in rows speak). `kai-conversation-select` stays the selection event in both modes.
+
+```jsx
+// React: your records, your loop, your menu.
+<Conversations activeId={activeId} onConversationSelect={(e) => setActiveId(e.detail.id)}>
+  {threads.map((t) => (
+    <kai-conversation-item key={t.id} conversation-id={t.id}>
+      {t.title}
+      <span slot="meta">{t.lastReplyAgo}</span>
+      <MyThreadMenu slot="menu" thread={t} />
+    </kai-conversation-item>
+  ))}
+</Conversations>
+```
+
+```html
+<!-- Plain HTML works the same way. -->
+<kai-conversations id="sidebar">
+  <kai-conversation-item conversation-id="c-1">
+    Web component architecture
+    <span slot="meta">2h ago</span>
+    <button slot="menu" aria-label="Actions">&#8942;</button>
+  </kai-conversation-item>
+</kai-conversations>
+```
+
+Each item takes a default slot for the title plus three named slots: `leading` (an icon or avatar), `meta` (a timestamp or status line), and `menu`. The `menu` slot takes your own popover, and that is the point: rename, fork, and archive are entries in YOUR menu, wired to YOUR state, not a declarative actions prop. A click inside the menu never selects the row.
+
+Keyboard order: the row bodies share a single roving tab stop (Tab enters at the active row, arrow keys move between rows), and each row's menu trigger keeps its natural place in the tab order, directly after its row. The menu sits BESIDE the activation body in the accessibility tree, never inside it, so your trigger stays reachable without tripping accessibility checkers on nested controls.
+
+**The batteries boundary.** With item children present, the built-in search filter, grouping, and empty state do not apply to your rows: your loop owns them. The chrome still renders (header, search box, new-chat, footer slots) and `kai-search` still fires, so filter your own loop off the event. The `conversations` array is ignored while any item child is present, and data rows return when the last one leaves.
+
 ## Slots
 
 Replace the title bar or the empty state, or add a footer row (account, settings, usage). The slot names mirror `<kai-chat>`, so the two compose with one vocabulary.
+
+In batteries mode the built-in filter decides loudly: A search query that matches nothing shows a visible "No conversations match your search" state, distinct from the zero-conversations empty state.
+
+A note on the row shape: `updatedAt` drives the auto relative time on each row (`lastMessageAt` is its fallback), and the list never reads `scope`. It exists for scope-aware consumers.
 
 <SlotTable tag="kai-conversations" />
 

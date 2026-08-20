@@ -12,7 +12,10 @@ import type { KaiTabItem } from '../ui/tabs';
 // each screen from REAL kit building blocks:
 //
 //   1. a two-mode SHELL - a segmented Assistant | Computer toggle in the rail that
-//      swaps the whole sidebar + main view (the kit seam under test);
+//      swaps the whole sidebar + main view (the kit seam under test). The rail is
+//      the consumer's OWN column in the re-cast kai-workspace's `start` slot —
+//      nothing here is a conversation list, which is exactly what the
+//      chat-agnostic shell is for;
 //   2. WORKING Answer / Sources / Images tab-switching in the answer view;
 //   3. the answer assembled from real pieces - kai-message (query + prose),
 //      inline kai-source citations, kai-reasoning (the steps disclosure), kai-image
@@ -33,13 +36,13 @@ declare module 'solid-js' {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
-      'kai-workspace': JSX.HTMLAttributes<HTMLElement> & { 'sidebar-min-width'?: string | number; 'collapse-below'?: string | number };
+      'kai-workspace': JSX.HTMLAttributes<HTMLElement> & { 'collapse-below'?: string | number; 'drawer-below'?: string | number };
       'kai-button': JSX.HTMLAttributes<HTMLElement> & { variant?: string; size?: string; icon?: string; 'icon-trailing'?: string; label?: string; disabled?: boolean; full?: boolean; align?: 'start' | 'center' | 'end' };
       'kai-nav': JSX.HTMLAttributes<HTMLElement> & { value?: string; 'default-value'?: string; theme?: string };
       'kai-menu': JSX.HTMLAttributes<HTMLElement> & { theme?: string; 'trigger-icon'?: string; 'trigger-label'?: string; 'trigger-icon-trailing'?: string; label?: string };
       'kai-badge': JSX.HTMLAttributes<HTMLElement> & { variant?: string };
       'kai-message': JSX.HTMLAttributes<HTMLElement>;
-      'kai-prompt-input': JSX.HTMLAttributes<HTMLElement> & { theme?: string; placeholder?: string; loading?: boolean; disabled?: boolean; voice?: boolean; search?: boolean; attach?: boolean; submit?: string; 'suggestion-mode'?: string };
+      'kai-prompt-input': JSX.HTMLAttributes<HTMLElement> & { theme?: string; placeholder?: string; loading?: boolean; disabled?: boolean; voice?: boolean; 'web-search'?: boolean; attach?: boolean; submit?: string; 'suggestion-mode'?: string };
       'kai-separator': JSX.HTMLAttributes<HTMLElement> & { orientation?: string };
       'kai-tabs': JSX.HTMLAttributes<HTMLElement> & { variant?: string; value?: string; 'default-value'?: string; disabled?: boolean; theme?: string };
       'kai-icon': JSX.HTMLAttributes<HTMLElement> & { name?: string; size?: string };
@@ -234,22 +237,19 @@ export const PerplexityPro: Story = {
         <style>{`.kai-cite { margin: 0 1px; vertical-align: baseline }`}</style>
         <kai-workspace
           ref={(el) => {
-            const w = el as El;
-            // The two-mode rail lives entirely in sidebar-header (below). The
-            // workspace's built-in conversation pane is suppressed via
-            // `no-conversations`, so the rail owns the whole flex region.
-            // no-conversations + sidebar-max-width are set here, not as JSX
-            // attributes, because the shared kai-workspace JSX type must match
-            // siblings byte-for-byte (TS2717).
-            w.noConversations = true;
-            el.setAttribute('sidebar-max-width', '300');
+            // The two-mode rail is the consumer's OWN column in the start slot
+            // (below) — the re-cast shell has no built-in conversation pane to
+            // suppress. Rail geometry is CSS custom properties (the kai-dock
+            // rule), not props.
+            el.style.setProperty('--kai-workspace-start-min-width', '240px');
+            el.style.setProperty('--kai-workspace-start-max-width', '300px');
           }}
           class="block h-full"
-          sidebar-min-width="240"
           collapse-below="720"
         >
-          {/* ── sidebar-header: the mode toggle, then the per-mode rail ────────── */}
-          <div slot="sidebar-header" class="flex flex-col gap-2.5 px-2.5 pt-2.5">
+          {/* ── start: the mode toggle + the per-mode rail, with Settings pinned ── */}
+          <div slot="start" class="flex h-full flex-col">
+          <div class="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-2.5 pt-2.5">
             {/* THE shell seam: a segmented Assistant | Computer toggle that swaps
                 the whole rail + main view, built on kai-tabs variant="segmented". */}
             <kai-tabs
@@ -317,8 +317,8 @@ export const PerplexityPro: Story = {
             </Show>
           </div>
 
-          {/* ── sidebar-footer: Settings + a battery indicator (pinned) ───────── */}
-          <div slot="sidebar-footer">
+          {/* ── the rail footer: Settings + a battery indicator (pinned) ──────── */}
+          <div class="shrink-0">
             <kai-separator></kai-separator>
             <div class="flex items-center justify-between px-2.5 py-1.5">
               <kai-button variant="ghost" align="start" icon="settings">Settings</kai-button>
@@ -326,6 +326,7 @@ export const PerplexityPro: Story = {
                 <kai-button variant="ghost" size="icon-sm" label="Battery"><BatteryMedium slot="icon" class="size-4" /></kai-button>
               </kai-tooltip>
             </div>
+          </div>
           </div>
 
           {/* ── main: the per-mode / per-view surface ─────────────────────────── */}
@@ -587,9 +588,12 @@ export const PerplexityPro: Story = {
         // render). The segmented toggle swaps the rail + main; the Answer/Sources/
         // Images tabs swap the answer panel; the answer is assembled from real
         // kai-* pieces.
-        code: `<kai-workspace sidebar-min-width="240" sidebar-max-width="300" collapse-below="720" no-conversations>
-  <!-- rail: the mode toggle, then the per-mode rail -->
-  <div slot="sidebar-header">
+        code: `<kai-workspace collapse-below="720"
+  style="--kai-workspace-start-min-width: 240px; --kai-workspace-start-max-width: 300px">
+  <!-- start: the whole rail is the consumer's OWN column (the re-cast shell is
+       chat-agnostic — a mode toggle + per-mode nav is as valid as a
+       conversation list). Settings pins at the column's bottom. -->
+  <div slot="start">
     <!-- the segmented Assistant | Computer toggle, built on kai-tabs
          variant="segmented". Swaps rail + main. -->
     <kai-tabs variant="segmented"></kai-tabs>
@@ -602,10 +606,8 @@ export const PerplexityPro: Story = {
     <kai-nav></kai-nav> <!-- ~18 recent sessions; selecting one opens an answer -->
 
     <!-- COMPUTER rail (when selected): New Task, nav, search, empty state -->
-    <!-- no-conversations suppresses the built-in 'Chats' conversation pane, so the
-         whole rail lives here in sidebar-header. -->
-  </div>
-  <div slot="sidebar-footer">
+
+    <!-- pinned at the rail's bottom -->
     <kai-button variant="ghost" icon="settings">Settings</kai-button>
     <kai-button variant="ghost" size="icon-sm" label="Battery"><svg slot="icon">…</svg></kai-button>
   </div>

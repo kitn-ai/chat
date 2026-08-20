@@ -56,7 +56,7 @@ Register elements once, then wire up JS properties and DOM events:
 ```
 
 - **Array / object props** — `suggestions`, `triggers`, `kindIcons`, and `attachments` are arrays/objects, so set them in JavaScript rather than as HTML attributes.
-- **Scalar flags** — `placeholder`, `disabled`, `loading`, `search`, `voice`, `stoppable`, and `suggestionMode` work as plain attributes or properties.
+- **Scalar flags** — `placeholder`, `disabled`, `loading`, `webSearch` (attribute `web-search`), `voice`, `stoppable`, and `suggestionMode` work as plain attributes or properties.
 - **Loading + stoppable** — set `loading` while a response streams; add `stoppable` to swap the send button for a Stop button that fires `kai-stop`.
 - **Custom toolbar buttons** — place `<kai-action id icon tooltip>` children inside the element; clicks fire `kai-toolbar-action` with `detail.action`.
 - **Entity pills** — set `triggers` to let `/` and `@` insert atomic skill/agent/plugin pills. `kai-submit` and `kai-value-change` then carry the structured `doc` + `entities` alongside the flattened `value` string. See [`<kai-composer>`](/components/composer/) for the full pill model.
@@ -72,11 +72,11 @@ Out-of-the-box composer with starter suggestions. Type and press Enter (or click
 
 <Example client:visible tag="kai-prompt-input" data="withSuggestions" />
 
-### With Voice and Search
+### With Voice and Web Search
 
-`search` and `voice` flags add Globe and Mic buttons to the toolbar, firing `kai-search` and `kai-voice` respectively.
+`webSearch` and `voice` flags add Globe and Mic buttons to the toolbar, firing `kai-web-search` and `kai-voice` respectively. (Renamed from `search`/`kai-search`: those names now belong to conversation filtering, and there is no alias.)
 
-<Example client:visible tag="kai-prompt-input" config={{ search: true, voice: true }} data="withSuggestions" />
+<Example client:visible tag="kai-prompt-input" config={{ webSearch: true, voice: true }} data="withSuggestions" />
 
 ### Entity Pills
 

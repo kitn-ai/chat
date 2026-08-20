@@ -31,9 +31,11 @@ export interface ConversationSummary {
   id: string;
   title: string;
   groupId?: string;
-  scope: ConversationScope;
+  /** Only meaningful to scope-aware consumers; the list never reads it. */
+  scope?: ConversationScope;
   messageCount: number;
-  lastMessageAt: string;
+  /** Fallback for the auto relative time when updatedAt is absent. */
+  lastMessageAt?: string;
   updatedAt: string;
   /** Right-aligned trailing text on the row — a count, status, or "days ago".
    *  When omitted, a short relative time is auto-derived from `updatedAt`

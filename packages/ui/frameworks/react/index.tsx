@@ -301,8 +301,6 @@ export const ChainOfThought = /*#__PURE__*/ createWebComponent<ChainOfThoughtPro
 );
 
 export interface ChatProps extends WebComponentProps {
-  /** Show a Search (Globe) button in the input toolbar; fires a `search` event. */
-  search?: boolean;
   /** Value of the input. A **string** is controlled (the host owns the text and updates it on `kai-value-change`). A **ComposerDoc** is a one-time seed that pre-populates pills; the user then edits freely. Leave unset for uncontrolled. */
   value?: string | ({ type: "text"; text: string } | { type: "entity"; entity: { kind: string; id: string; label: string; icon?: string; promptText?: string; data?: Record<string, unknown> } })[];
   /** Placeholder text shown in the empty input. */
@@ -347,6 +345,8 @@ export interface ChatProps extends WebComponentProps {
   composerActions?: boolean;
   /** INJECT: footer row below the composer (disclaimers, token meter, …). */
   footer?: boolean;
+  /** Show a web-search (Globe) button in the input toolbar; calls `onWebSearch`. */
+  webSearch?: boolean;
   /** Show a Voice (Mic) button in the input toolbar; fires a `voice` event. */
   voice?: boolean;
   /** Rich entity triggers. Each `{ char, kind, items }` opens a caret-anchored menu that inserts an atomic pill (`/` skills, `@` agents/plugins). Set as a JS property; forwarded to the input. */
@@ -371,8 +371,6 @@ export interface ChatProps extends WebComponentProps {
   onMessageAction?: (event: CustomEvent<{ messageId: string; action: string; state?: undefined | "on" | "off" }>) => void;
   /** The header model switcher changed. */
   onModelChange?: (event: CustomEvent<{ modelId: string }>) => void;
-  /** The Search button was clicked. */
-  onSearch?: (event: CustomEvent<Record<string, never>>) => void;
   /** User submitted a message. */
   onSubmit?: (event: CustomEvent<{ value: string; attachments: { id: string; type: "file" | "source-document"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[] }>) => void;
   /** A suggestion chip was clicked (only in `suggestion-mode="fill"`). */
@@ -381,12 +379,14 @@ export interface ChatProps extends WebComponentProps {
   onValueChange?: (event: CustomEvent<{ value: string }>) => void;
   /** The Mic / voice button was clicked. */
   onVoice?: (event: CustomEvent<Record<string, never>>) => void;
+  /** The web-search (Globe) toolbar button was clicked. */
+  onWebSearch?: (event: CustomEvent<Record<string, never>>) => void;
 }
 
 export const Chat = /*#__PURE__*/ createWebComponent<ChatProps>(
   'kai-chat',
-  ["theme","search","value","placeholder","loading","suggestions","suggestionMode","persistSuggestions","proseSize","codeTheme","codeHighlight","chatTitle","models","currentModel","context","scrollButton","headerStart","headerEnd","headerFull","sidebar","empty","composer","composerActions","footer","voice","triggers","kindIcons","actionsReveal","accept","messages","cardTypes","cardSchemas"],
-  { onAttachmentsChange: 'kai-attachments-change', onAttachmentsRejected: 'kai-attachments-rejected', onMessageAction: 'kai-message-action', onModelChange: 'kai-model-change', onSearch: 'kai-search', onSubmit: 'kai-submit', onSuggestionClick: 'kai-suggestion-click', onValueChange: 'kai-value-change', onVoice: 'kai-voice' },
+  ["theme","value","placeholder","loading","suggestions","suggestionMode","persistSuggestions","proseSize","codeTheme","codeHighlight","chatTitle","models","currentModel","context","scrollButton","headerStart","headerEnd","headerFull","sidebar","empty","composer","composerActions","footer","webSearch","voice","triggers","kindIcons","actionsReveal","accept","messages","cardTypes","cardSchemas"],
+  { onAttachmentsChange: 'kai-attachments-change', onAttachmentsRejected: 'kai-attachments-rejected', onMessageAction: 'kai-message-action', onModelChange: 'kai-model-change', onSubmit: 'kai-submit', onSuggestionClick: 'kai-suggestion-click', onValueChange: 'kai-value-change', onVoice: 'kai-voice', onWebSearch: 'kai-web-search' },
   () => import('@kitn.ai/ui/elements/chat'),
 );
 
@@ -620,20 +620,38 @@ export const Context = /*#__PURE__*/ createWebComponent<ContextProps>(
   () => import('@kitn.ai/ui/elements/context-meter'),
 );
 
+export interface ConversationItemProps extends WebComponentProps {
+  /** The row's identity, handed to the container's selection contract. In the element this is the `conversation-id` attribute (host `id` is the fallback). */
+  conversationId?: string;
+  /** Selected state. Reflected as `aria-current` on the row body and a `data-active` styling hook on the row; the container drives it from its `activeId`. */
+  active?: boolean;
+  /** Dense single-line row padding. */
+  compact?: boolean;
+}
+
+export const ConversationItem = /*#__PURE__*/ createWebComponent<ConversationItemProps>(
+  'kai-conversation-item',
+  ["theme","conversationId","active","compact"],
+  {  },
+  () => import('@kitn.ai/ui/elements/conversation-item'),
+);
+
 export interface ConversationsProps extends WebComponentProps {
   /** The list's section headers (`{ id, name, sortOrder, createdAt }`), rendered in array order. A group carries no conversations of its own; it is matched against `conversations` by id, so the two props are complementary rather than alternatives. Omit for an ungrouped list. Set as a JS property. */
   groups?: { id: string; userId?: string; teamId?: string; name: string; sortOrder: number; createdAt: string }[];
-  /** Every conversation the list renders, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId`, or with a `groupId` matching no entry in `groups`, falls into a trailing "Ungrouped" section, so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. Omit to supply them as `<kai-conversation>` light-DOM children instead, or for the empty state. */
-  conversations?: { id: string; title: string; groupId?: string; scope: { type: "document" | "collection"; documentId?: string; filters?: { tags?: string[]; authors?: string[]; contentType?: "transcript" | "markdown"; dateRange?: { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: string }[];
+  /** Every conversation the list renders, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId`, or with a `groupId` matching no entry in `groups`, falls into a trailing "Ungrouped" section, so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. Omit to supply them as `<kai-conversation>` light-DOM children instead, or for the empty state. A search query that matches nothing shows a visible "No conversations match your search" state, distinct from the zero-conversations empty state. Slotted `<kai-conversation-item>` children switch the list into item mode instead: your own rows win and this array is not rendered. */
+  conversations?: { id: string; title: string; groupId?: string; scope?: { type: "document" | "collection"; documentId?: string; filters?: { tags?: string[]; authors?: string[]; contentType?: "transcript" | "markdown"; dateRange?: { from: string; to: string } } }; messageCount: number; lastMessageAt?: string; updatedAt: string; trailing?: string }[];
   /** The id of the currently-open conversation, highlighted in the list. */
   activeId?: string;
   /** Controlled collapsed state. Set as a JS property (`el.collapsed = true`) to drive the rail from your app, updating it in response to `kai-collapse-toggle`. Omit for uncontrolled (the element manages it). Collapsed shrinks the rail to a floating reopen button. */
   collapsed?: boolean;
   /** Initial collapsed state when uncontrolled (default false). Use the `default-collapsed` attribute to start collapsed in plain HTML. */
   defaultCollapsed?: boolean;
+  /** Dense single-line rows (a leading dot + title, no message count). */
+  compact?: boolean;
   /** The rail was collapsed or expanded (via the toggle, the reopen button, or a `collapse()`/`expand()`/`toggle()` call). */
   onCollapseToggle?: (event: CustomEvent<{ collapsed: boolean }>) => void;
-  /** A conversation was selected. */
+  /** A conversation was selected. The selection event in BOTH modes: a batteries data row, or an activated `<kai-conversation-item>` child (click, Enter or Space). */
   onConversationSelect?: (event: CustomEvent<{ id: string }>) => void;
   /** The "New chat" button was clicked. */
   onNewChat?: (event: CustomEvent<Record<string, never>>) => void;
@@ -645,7 +663,7 @@ export interface ConversationsProps extends WebComponentProps {
 
 export const Conversations = /*#__PURE__*/ createWebComponent<ConversationsProps>(
   'kai-conversations',
-  ["theme","groups","conversations","activeId","collapsed","defaultCollapsed"],
+  ["theme","groups","conversations","activeId","collapsed","defaultCollapsed","compact"],
   { onCollapseToggle: 'kai-collapse-toggle', onConversationSelect: 'kai-conversation-select', onNewChat: 'kai-new-chat', onSearch: 'kai-search', onToggleSidebar: 'kai-toggle-sidebar' },
   () => import('@kitn.ai/ui/elements/conversation-list'),
 );
@@ -1261,8 +1279,8 @@ export interface PromptInputProps extends WebComponentProps {
   suggestions?: string[];
   /** What clicking a suggestion does: `'submit'` (default) sends it immediately as if typed and submitted; `'fill'` just places it in the input. */
   suggestionMode?: "submit" | "fill";
-  /** Show a Search (Globe) button in the left toolbar; clicking it fires a `search` event. */
-  search?: boolean;
+  /** Show a web-search (Globe) button in the left toolbar; clicking it fires a `kai-web-search` event. Attribute: `web-search`. */
+  webSearch?: boolean;
   /** Show a Voice (Mic) button in the left toolbar; clicking it fires a `voice` event. */
   voice?: boolean;
   /** When set and `loading` is true, the send button is replaced by a Stop button (square icon, "Stop" aria-label). Clicking it fires `kai-stop`. */
@@ -1279,8 +1297,6 @@ export interface PromptInputProps extends WebComponentProps {
   kindIcons?: Record<string, string>;
   /** The staged attachments changed: a file was added (via the paperclip) or removed (per-chip ×). Carries the full current list so a consumer can react in real time (validate, show upload progress, toggle the send button). */
   onAttachmentsChange?: (event: CustomEvent<{ attachments: { id: string; type: "file" | "source-document"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[] }>) => void;
-  /** The Search (Globe) toolbar button was clicked. */
-  onSearch?: (event: CustomEvent<Record<string, never>>) => void;
   /** The Stop button was clicked while `stoppable` and `loading` are both true. */
   onStop?: (event: CustomEvent<Record<string, never>>) => void;
   /** The user submitted the prompt (Enter or send button). `value` is the flattened text (back-compat); `doc` is the structured document and `entities` the inserted pills (skills/agents) for downstream expansion. */
@@ -1293,12 +1309,14 @@ export interface PromptInputProps extends WebComponentProps {
   onValueChange?: (event: CustomEvent<{ value: string; doc: ({ type: "text"; text: string } | { type: "entity"; entity: { kind: string; id: string; label: string; icon?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> } })[]; entities: { kind: string; id: string; label: string; icon?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[] }>) => void;
   /** The Voice (Mic) toolbar button was clicked. */
   onVoice?: (event: CustomEvent<Record<string, never>>) => void;
+  /** The web-search (Globe) toolbar button was clicked. */
+  onWebSearch?: (event: CustomEvent<Record<string, never>>) => void;
 }
 
 export const PromptInput = /*#__PURE__*/ createWebComponent<PromptInputProps>(
   'kai-prompt-input',
-  ["theme","value","placeholder","disabled","loading","suggestions","suggestionMode","search","voice","stoppable","submit","attach","attachments","triggers","kindIcons"],
-  { onAttachmentsChange: 'kai-attachments-change', onSearch: 'kai-search', onStop: 'kai-stop', onSubmit: 'kai-submit', onSuggestionClick: 'kai-suggestion-click', onToolbarAction: 'kai-toolbar-action', onValueChange: 'kai-value-change', onVoice: 'kai-voice' },
+  ["theme","value","placeholder","disabled","loading","suggestions","suggestionMode","webSearch","voice","stoppable","submit","attach","attachments","triggers","kindIcons"],
+  { onAttachmentsChange: 'kai-attachments-change', onStop: 'kai-stop', onSubmit: 'kai-submit', onSuggestionClick: 'kai-suggestion-click', onToolbarAction: 'kai-toolbar-action', onValueChange: 'kai-value-change', onVoice: 'kai-voice', onWebSearch: 'kai-web-search' },
   () => import('@kitn.ai/ui/elements/prompt-input'),
 );
 
@@ -1958,78 +1976,29 @@ export const VoiceOutput = /*#__PURE__*/ createWebComponent<VoiceOutputProps>(
 );
 
 export interface WorkspaceProps extends WebComponentProps {
-  /** The sidebar's section headers, rendered in array order. A group carries no conversations of its own; it is matched against `conversations` by id, so the two props are complementary rather than alternatives. Omit for an ungrouped sidebar. Set as a JS property. */
-  groups?: { id: string; userId?: string; teamId?: string; name: string; sortOrder: number; createdAt: string }[];
-  /** Every conversation in the sidebar, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId`, or with a `groupId` matching no entry in `groups`, falls into a trailing ungrouped section (headerless when `compact`), so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. Omit for an empty sidebar, or when `no-conversations` replaces the built-in list with your own `sidebar-header` content. */
-  conversations?: { id: string; title: string; groupId?: string; scope: { type: "document" | "collection"; documentId?: string; filters?: { tags?: string[]; authors?: string[]; contentType?: "transcript" | "markdown"; dateRange?: { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: string }[];
-  /** Id of the open conversation, highlighted in the sidebar. */
-  activeId?: string;
-  /** The active conversation's message thread, newest last. Set as a JS property (`el.messages = [...]`); a NEW array reference per streaming chunk re-renders (mutating in place does not). Omit for an empty thread. */
-  messages?: { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: string; index?: number; streamId?: string; signature?: string; raw?: { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: "command" | "file-change" | "search" | "fetch" | "mcp" | "image" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: Record<string, unknown>; rawInput?: string; output?: Record<string, unknown>; toolCallId?: string; errorText?: string; raw?: { source: string; payload: unknown } }; raw?: { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: string; resolution?: { kind: "action"; action: string; payload?: unknown; at?: string } | { kind: "submit"; data: unknown; at?: string } | { kind: "dismissed"; at?: string } | { kind: "expired"; reason?: string; at?: string } }; raw?: { source: string; payload: unknown } } | { type: "source"; source: { id?: string; url?: string; title?: string; snippet?: string; index?: number }; raw?: { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }; raw?: { source: string; payload: unknown } })[]; actions?: ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: string; tooltip?: string })[]; avatar?: { src?: string; fallback?: string; alt?: string }; feedback?: "like" | "dislike" }[];
-  value?: string;
-  placeholder?: string;
-  loading?: boolean;
-  suggestions?: string[];
-  suggestionMode?: "submit" | "fill";
-  proseSize?: "xs" | "sm" | "base" | "lg";
-  codeTheme?: string;
-  codeHighlight?: boolean;
-  chatTitle?: string;
-  models?: { id: string; name: string; provider?: string; description?: string; group?: string }[];
-  currentModel?: string;
-  context?: { usedTokens: number; maxTokens: number; inputTokens?: number; outputTokens?: number; estimatedCost?: number };
-  scrollButton?: boolean;
-  search?: boolean;
-  voice?: boolean;
-  /** Rich entity triggers (`/` skills, `@` agents/plugins) forwarded to the input. */
-  triggers?: { char: string; kind: string; items?: { id: string; label: string; icon?: string; description?: string; group?: string; kind?: string; promptText?: string; data?: Record<string, unknown> }[] }[];
-  /** Default icon per entity kind (kind → image src) forwarded to the input. */
-  kindIcons?: Record<string, string>;
-  /** Sidebar default width as a percent of the workspace (default 26). */
-  sidebarWidth?: number;
-  /** Sidebar min width in px (default 240). */
-  sidebarMinWidth?: number;
-  /** Sidebar max width in px (default 420). */
-  sidebarMaxWidth?: number;
-  /** Controlled collapsed state. Set this as a JS property (`el.sidebarCollapsed = true`) to drive the sidebar from your app, updating it in response to the `kai-sidebar-toggle` event. Omit for uncontrolled (the element manages it). */
-  sidebarCollapsed?: boolean;
-  /** Initial collapsed state when uncontrolled (default false). Use the `default-sidebar-collapsed` attribute to start collapsed in plain HTML. */
-  defaultSidebarCollapsed?: boolean;
-  /** Auto-collapse the rail when the workspace's own width drops below this many px, and re-expand when it grows back above. Uncontrolled only (it never fights an app-driven `sidebarCollapsed`); omit to disable. Fires `kai-sidebar-toggle`. Attribute: `collapse-below`. */
+  /** Controlled collapsed state of the start aside. Set this as a JS property (`el.startCollapsed = true`) to drive the aside from your app, updating it in response to the `kai-aside-toggle` event. Omit for uncontrolled (the element manages it). */
+  startCollapsed?: boolean;
+  /** Initial collapsed state of the start aside when uncontrolled (default false). Use the `default-start-collapsed` attribute to start collapsed in plain HTML. */
+  defaultStartCollapsed?: boolean;
+  /** Controlled collapsed state of the end aside. Set this as a JS property (`el.endCollapsed = true`) to drive the aside from your app, updating it in response to the `kai-aside-toggle` event. Omit for uncontrolled (the element manages it). */
+  endCollapsed?: boolean;
+  /** Initial collapsed state of the end aside when uncontrolled (default false). Use the `default-end-collapsed` attribute to start collapsed in plain HTML. */
+  defaultEndCollapsed?: boolean;
+  /** Auto-collapse both asides when the shell's own width drops below this many px, and re-expand when it grows back above. Applies to uncontrolled asides only (it never fights an app-driven collapsed prop); omit to disable. Fires `kai-aside-toggle`. Attribute: `collapse-below`. */
   collapseBelow?: number;
-  /** Render Recents as dense single-line rows (a leading dot + title, no count). */
+  /** Below this shell width in px, an expanded aside renders as an overlay drawer over the main region instead of a column beside it. Escape inside the drawer closes it and returns focus to the element focused before it opened. Omit to disable. Attribute: `drawer-below`. */
+  drawerBelow?: number;
+  /** Density hint. Reflected as a `data-compact` hook on the root (and as the `compact` attribute on the element) for your CSS and slotted content; the shell itself keeps no other opinion about density. */
   compact?: boolean;
-  /** Suppress the built-in ConversationList so the `sidebar-header` slot owns the whole rail flex region (for apps that supply their own rail nav). Default false. Attribute: `no-conversations`. */
-  noConversations?: boolean;
-  /** Optional card type -> custom-element tag overrides/additions for `card` parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type. */
-  cardTypes?: Record<string, string>;
-  /** JSON Schemas for the card types this app renders, keyed by envelope type. The companion of `cardTypes`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type, the one your app actually cares about, as the only unchecked thing on screen. A schema here WINS over a built-in of the same name. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `"type"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one. */
-  cardSchemas?: Record<string, object>;
-  /** A conversation was selected in the sidebar. */
-  onConversationSelect?: (event: CustomEvent<{ id: string }>) => void;
-  /** An action button on a message was clicked. `state` is present only for the toggleable feedback votes: `'on'` when a like/dislike is set, `'off'` when re-tapped to clear. */
-  onMessageAction?: (event: CustomEvent<{ messageId: string; action: string; state?: undefined | "on" | "off" }>) => void;
-  /** The header model switcher changed. */
-  onModelChange?: (event: CustomEvent<{ modelId: string }>) => void;
-  /** The "New chat" button was clicked. */
-  onNewChat?: (event: CustomEvent<Record<string, never>>) => void;
-  /** The Search button was clicked. */
-  onSearch?: (event: CustomEvent<Record<string, never>>) => void;
-  /** The sidebar was collapsed or expanded. */
-  onSidebarToggle?: (event: CustomEvent<{ collapsed: boolean }>) => void;
-  /** User submitted a message. */
-  onSubmit?: (event: CustomEvent<{ value: string; attachments: { id: string; type: "file" | "source-document"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[] }>) => void;
-  /** A suggestion chip was clicked (only in `suggestion-mode="fill"`). */
-  onSuggestionClick?: (event: CustomEvent<{ value: string }>) => void;
-  /** Fired on every input change. */
-  onValueChange?: (event: CustomEvent<{ value: string }>) => void;
-  /** The Mic / voice button was clicked. */
-  onVoice?: (event: CustomEvent<Record<string, never>>) => void;
+  /** The aside was resized (fires per drag step, keyboard nudge, or a handle double-click reset), width in px. */
+  onAsideResize?: (event: CustomEvent<{ side: "start" | "end"; width: number }>) => void;
+  /** An aside collapsed or expanded (a method, the breakpoint, the drawer's Escape). */
+  onAsideToggle?: (event: CustomEvent<{ side: "start" | "end"; collapsed: boolean }>) => void;
 }
 
 export const Workspace = /*#__PURE__*/ createWebComponent<WorkspaceProps>(
   'kai-workspace',
-  ["theme","groups","conversations","activeId","messages","value","placeholder","loading","suggestions","suggestionMode","proseSize","codeTheme","codeHighlight","chatTitle","models","currentModel","context","scrollButton","search","voice","triggers","kindIcons","sidebarWidth","sidebarMinWidth","sidebarMaxWidth","sidebarCollapsed","defaultSidebarCollapsed","collapseBelow","compact","noConversations","cardTypes","cardSchemas"],
-  { onConversationSelect: 'kai-conversation-select', onMessageAction: 'kai-message-action', onModelChange: 'kai-model-change', onNewChat: 'kai-new-chat', onSearch: 'kai-search', onSidebarToggle: 'kai-sidebar-toggle', onSubmit: 'kai-submit', onSuggestionClick: 'kai-suggestion-click', onValueChange: 'kai-value-change', onVoice: 'kai-voice' },
+  ["theme","startCollapsed","defaultStartCollapsed","endCollapsed","defaultEndCollapsed","collapseBelow","drawerBelow","compact"],
+  { onAsideResize: 'kai-aside-resize', onAsideToggle: 'kai-aside-toggle' },
   () => import('@kitn.ai/ui/elements/chat-workspace'),
 );

@@ -3,14 +3,14 @@
 ## Overview
 
 <!-- spec:overview -->
-`@kitn.ai/ui` ships 81 framework-agnostic custom elements built on the SolidJS kit.
+`@kitn.ai/ui` ships 82 framework-agnostic custom elements built on the SolidJS kit.
 
 | Tag | Purpose |
 |-----|---------|
 | `<kai-chat>` | Full chat UI — message list plus prompt input |
 | `<kai-conversations>` | Sidebar conversation browser with group support |
 | `<kai-prompt-input>` | Standalone text-input area with send button |
-| + 78 composable primitives | See the full roster below |
+| + 79 composable primitives | See the full roster below |
 <!-- /spec:overview -->
 
 Each element renders into its own **Shadow DOM** so the host page's CSS cannot leak in, and the kit's Tailwind classes cannot leak out. SolidJS and all kit dependencies are bundled inside the element bundle — the host does not need SolidJS.
@@ -139,7 +139,6 @@ Every element also accepts a `theme` attribute (`'light' | 'dark' | 'auto'`, def
 | Property | Attribute | Type | Default | Notes |
 |----------|-----------|------|---------|-------|
 | `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
-| `search` | `search` | `undefined | false | true` | `false` | Show a Search (Globe) button in the input toolbar; fires a `search` event. |
 | `value` | — | `undefined | string | ({ type: "text"; text: string } | { type: "entity"; entity: { kind: string; id: string; label: string; icon?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> } })[]` | — | Value of the input. A **string** is controlled (the host owns the text and updates it on `kai-value-change`). A **ComposerDoc** is a one-time seed that pre-populates pills; the user then edits freely. Leave unset for uncontrolled. |
 | `placeholder` | `placeholder` | `undefined | string` | `'Send a message...'` | Placeholder text shown in the empty input. |
 | `loading` | `loading` | `undefined | false | true` | `false` | When true, shows the loading/streaming state and disables submit (use while awaiting the assistant's reply). |
@@ -162,6 +161,7 @@ Every element also accepts a `theme` attribute (`'light' | 'dark' | 'auto'`, def
 | `composer` | `composer` | `undefined | false | true` | — | REPLACE: full custom composer in place of the built-in prompt input. The projected content wires its own submit (the data-flow boundary). |
 | `composerActions` | `composer-actions` | `undefined | false | true` | — | INJECT: accessory row just above the composer (e.g. extra actions). |
 | `footer` | `footer` | `undefined | false | true` | — | INJECT: footer row below the composer (disclaimers, token meter, …). |
+| `webSearch` | `web-search` | `undefined | false | true` | `false` | Show a web-search (Globe) button in the input toolbar; calls `onWebSearch`. |
 | `voice` | `voice` | `undefined | false | true` | `false` | Show a Voice (Mic) button in the input toolbar; fires a `voice` event. |
 | `triggers` | — | `undefined | { char: string; kind: string; items?: undefined | { id: string; label: string; icon?: undefined | string; description?: undefined | string; group?: undefined | string; kind?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[] }[]` | — | Rich entity triggers. Each `{ char, kind, items }` opens a caret-anchored menu that inserts an atomic pill (`/` skills, `@` agents/plugins). Set as a JS property; forwarded to the input. |
 | `kindIcons` | — | `undefined | Record<string, string>` | — | Default icon per entity kind (kind → image src) for pills/menu items. |
@@ -179,11 +179,11 @@ Every element also accepts a `theme` attribute (`'light' | 'dark' | 'auto'`, def
 | `kai-attachments-rejected` | `{ rejected: { filename: string; mediaType: string; reason: "filtered" | "unsupported" }[] }` | One or more picked files were refused because `accept` excluded them. The element renders NO message of its own: it reports the facts (name, media type, whether the kit could have sent it) and what the user should see is the application's call. Only ever fires when `accept` is set. |
 | `kai-message-action` | `{ messageId: string; action: string; state?: undefined | "on" | "off" }` | An action button on a message was clicked. `action` is the built-in name or custom id. `state` is present only for the toggleable feedback votes: `'on'` when a like/dislike is set, `'off'` when re-tapped to clear. |
 | `kai-model-change` | `{ modelId: string }` | The header model switcher changed. |
-| `kai-search` | — | The Search button was clicked. |
 | `kai-submit` | `{ value: string; attachments: AttachmentData[] }` | User submitted a message. |
 | `kai-suggestion-click` | `{ value: string }` | A suggestion chip was clicked (only in `suggestion-mode="fill"`). |
 | `kai-value-change` | `{ value: string }` | Fired on every input change. |
 | `kai-voice` | — | The Mic / voice button was clicked. |
+| `kai-web-search` | — | The web-search (Globe) toolbar button was clicked. |
 
 #### Methods
 
@@ -244,66 +244,30 @@ A complete chat interface: a scrolling message list (with Markdown rendering, re
 | Property | Attribute | Type | Default | Notes |
 |----------|-----------|------|---------|-------|
 | `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
-| `groups` | — | `undefined | { id: string; userId?: undefined | string; teamId?: undefined | string; name: string; sortOrder: number; createdAt: string }[]` | `[]` | The sidebar's section headers, rendered in array order. A group carries no conversations of its own; it is matched against `conversations` by id, so the two props are complementary rather than alternatives. Omit for an ungrouped sidebar. Set as a JS property. |
-| `conversations` | — | `undefined | { id: string; title: string; groupId?: undefined | string; scope: { type: "document" | "collection"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | "transcript" | "markdown"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[]` | `[]` | Every conversation in the sidebar, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId`, or with a `groupId` matching no entry in `groups`, falls into a trailing ungrouped section (headerless when `compact`), so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. Omit for an empty sidebar, or when `no-conversations` replaces the built-in list with your own `sidebar-header` content. |
-| `activeId` | `active-id` | `undefined | string` | — | Id of the open conversation, highlighted in the sidebar. |
-| `messages` | — | `undefined | { id: string; role: "user" | "assistant"; parts: ({ type: "text"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: "reasoning"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: "tool"; tool: { type: string; kind?: undefined | "command" | "file-change" | "search" | "fetch" | "mcp" | "image" | "generic"; state: "input-streaming" | "input-available" | "output-available" | "output-error"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: "card"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: "action"; action: string; payload?: unknown; at?: undefined | string } | { kind: "submit"; data: unknown; at?: undefined | string } | { kind: "dismissed"; at?: undefined | string } | { kind: "expired"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: "source"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: "file"; attachment: { id: string; type: "file" | "source-document"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | ("copy" | "like" | "dislike" | "regenerate" | "edit" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | "like" | "dislike" }[]` | `[]` | The active conversation's message thread, newest last. Set as a JS property (`el.messages = [...]`); a NEW array reference per streaming chunk re-renders (mutating in place does not). Omit for an empty thread. |
-| `value` | `value` | `undefined | string` | — |  |
-| `placeholder` | `placeholder` | `undefined | string` | `'Send a message...'` |  |
-| `loading` | `loading` | `undefined | false | true` | `false` |  |
-| `suggestions` | — | `undefined | string[]` | — |  |
-| `suggestionMode` | `suggestion-mode` | `undefined | "submit" | "fill"` | `'submit'` |  |
-| `proseSize` | `prose-size` | `undefined | "xs" | "sm" | "base" | "lg"` | `'sm'` |  |
-| `codeTheme` | `code-theme` | `undefined | string` | `'github-dark-dimmed'` |  |
-| `codeHighlight` | `code-highlight` | `undefined | false | true` | `true` |  |
-| `chatTitle` | `chat-title` | `undefined | string` | — |  |
-| `models` | — | `undefined | { id: string; name: string; provider?: undefined | string; description?: undefined | string; group?: undefined | string }[]` | — |  |
-| `currentModel` | `current-model` | `undefined | string` | — |  |
-| `context` | — | `ContextData | undefined` | — |  |
-| `scrollButton` | `scroll-button` | `undefined | false | true` | `true` |  |
-| `search` | `search` | `undefined | false | true` | `false` |  |
-| `voice` | `voice` | `undefined | false | true` | `false` |  |
-| `triggers` | — | `undefined | { char: string; kind: string; items?: undefined | { id: string; label: string; icon?: undefined | string; description?: undefined | string; group?: undefined | string; kind?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[] }[]` | — | Rich entity triggers (`/` skills, `@` agents/plugins) forwarded to the input. |
-| `kindIcons` | — | `undefined | Record<string, string>` | — | Default icon per entity kind (kind → image src) forwarded to the input. |
-| `sidebarWidth` | `sidebar-width` | `undefined | number` | `26` | Sidebar default width as a percent of the workspace (default 26). |
-| `sidebarMinWidth` | `sidebar-min-width` | `undefined | number` | `240` | Sidebar min width in px (default 240). |
-| `sidebarMaxWidth` | `sidebar-max-width` | `undefined | number` | `420` | Sidebar max width in px (default 420). |
-| `sidebarCollapsed` | `sidebar-collapsed` | `undefined | false | true` | — | Controlled collapsed state. Set this as a JS property (`el.sidebarCollapsed = true`) to drive the sidebar from your app, updating it in response to the `kai-sidebar-toggle` event. Omit for uncontrolled (the element manages it). |
-| `defaultSidebarCollapsed` | `default-sidebar-collapsed` | `undefined | false | true` | — | Initial collapsed state when uncontrolled (default false). Use the `default-sidebar-collapsed` attribute to start collapsed in plain HTML. |
-| `collapseBelow` | `collapse-below` | `undefined | number` | — | Auto-collapse the rail when the workspace's own width drops below this many px, and re-expand when it grows back above. Uncontrolled only (it never fights an app-driven `sidebarCollapsed`); omit to disable. Fires `kai-sidebar-toggle`. Attribute: `collapse-below`. |
-| `compact` | `compact` | `undefined | false | true` | — | Render Recents as dense single-line rows (a leading dot + title, no count). |
-| `noConversations` | `no-conversations` | `undefined | false | true` | — | Suppress the built-in ConversationList so the `sidebar-header` slot owns the whole rail flex region (for apps that supply their own rail nav). Default false. Attribute: `no-conversations`. |
-| `cardTypes` | — | `undefined | Record<string, string>` | — | Optional card type -> custom-element tag overrides/additions for `card` parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type. |
-| `cardSchemas` | — | `undefined | Record<string, object>` | — | JSON Schemas for the card types this app renders, keyed by envelope type. The companion of `cardTypes`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type, the one your app actually cares about, as the only unchecked thing on screen. A schema here WINS over a built-in of the same name. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `"type"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one. |
+| `startCollapsed` | `start-collapsed` | `undefined | false | true` | — | Controlled collapsed state of the start aside. Set this as a JS property (`el.startCollapsed = true`) to drive the aside from your app, updating it in response to the `kai-aside-toggle` event. Omit for uncontrolled (the element manages it). |
+| `defaultStartCollapsed` | `default-start-collapsed` | `undefined | false | true` | — | Initial collapsed state of the start aside when uncontrolled (default false). Use the `default-start-collapsed` attribute to start collapsed in plain HTML. |
+| `endCollapsed` | `end-collapsed` | `undefined | false | true` | — | Controlled collapsed state of the end aside. Set this as a JS property (`el.endCollapsed = true`) to drive the aside from your app, updating it in response to the `kai-aside-toggle` event. Omit for uncontrolled (the element manages it). |
+| `defaultEndCollapsed` | `default-end-collapsed` | `undefined | false | true` | — | Initial collapsed state of the end aside when uncontrolled (default false). Use the `default-end-collapsed` attribute to start collapsed in plain HTML. |
+| `collapseBelow` | `collapse-below` | `undefined | number` | — | Auto-collapse both asides when the shell's own width drops below this many px, and re-expand when it grows back above. Applies to uncontrolled asides only (it never fights an app-driven collapsed prop); omit to disable. Fires `kai-aside-toggle`. Attribute: `collapse-below`. |
+| `drawerBelow` | `drawer-below` | `undefined | number` | — | Below this shell width in px, an expanded aside renders as an overlay drawer over the main region instead of a column beside it. Escape inside the drawer closes it and returns focus to the element focused before it opened. Omit to disable. Attribute: `drawer-below`. |
+| `compact` | `compact` | `undefined | false | true` | — | Density hint. Reflected as a `data-compact` hook on the root (and as the `compact` attribute on the element) for your CSS and slotted content; the shell itself keeps no other opinion about density. |
 
 #### Events
 
 | Event | `detail` | Description |
 |-------|-----------|-------------|
-| `kai-conversation-select` | `{ id: string }` | A conversation was selected in the sidebar. |
-| `kai-message-action` | `{ messageId: string; action: string; state?: undefined | "on" | "off" }` | An action button on a message was clicked. `state` is present only for the toggleable feedback votes: `'on'` when a like/dislike is set, `'off'` when re-tapped to clear. |
-| `kai-model-change` | `{ modelId: string }` | The header model switcher changed. |
-| `kai-new-chat` | — | The "New chat" button was clicked. |
-| `kai-search` | — | The Search button was clicked. |
-| `kai-sidebar-toggle` | `{ collapsed: false | true }` | The sidebar was collapsed or expanded. |
-| `kai-submit` | `{ value: string; attachments: AttachmentData[] }` | User submitted a message. |
-| `kai-suggestion-click` | `{ value: string }` | A suggestion chip was clicked (only in `suggestion-mode="fill"`). |
-| `kai-value-change` | `{ value: string }` | Fired on every input change. |
-| `kai-voice` | — | The Mic / voice button was clicked. |
+| `kai-aside-resize` | `{ side: "start" | "end"; width: number }` | The aside was resized (fires per drag step, keyboard nudge, or a handle double-click reset), width in px. |
+| `kai-aside-toggle` | `{ side: "start" | "end"; collapsed: false | true }` | An aside collapsed or expanded (a method, the breakpoint, the drawer's Escape). |
 
 #### Methods
 
-Call these on the element instance: `document.querySelector('kai-workspace').toggleSidebar()`.
+Call these on the element instance: `document.querySelector('kai-workspace').toggleAside(…)`.
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `toggleSidebar` | `(): void` | Collapse/expand the conversation sidebar and fire `kai-sidebar-toggle`. |
-| `collapseSidebar` | `(): void` | Force the conversation sidebar collapsed (fires `kai-sidebar-toggle`). |
-| `expandSidebar` | `(): void` | Force the conversation sidebar expanded (fires `kai-sidebar-toggle`). |
-| `focus` | `(options?: FocusOptions): void` | Focus the thread's composer. |
-| `clear` | `(): void` | Clear the thread draft + staged attachments. |
-| `send` | `(): void` | Submit the current thread draft programmatically (fires `kai-submit`). |
-| `scrollToBottom` | `(behavior?: ScrollBehavior): void` | Scroll the thread to the newest message. |
+| `toggleAside` | `(side: WorkspaceAsideSide): void` | Collapse/expand one aside (fires `kai-aside-toggle`). |
+| `collapseAside` | `(side: WorkspaceAsideSide): void` | Force one aside collapsed (fires `kai-aside-toggle`). |
+| `expandAside` | `(side: WorkspaceAsideSide): void` | Force one aside expanded (fires `kai-aside-toggle`). |
 
 #### Slots
 
@@ -311,10 +275,12 @@ Project your own markup with `slot="name"` on a light-DOM child.
 
 | Slot | Mode | Description |
 |------|------|-------------|
-| `sidebar-header` | inject | Top of the conversation rail (brand, a kai-tabs strip). |
-| `sidebar-footer` | inject | Bottom of the rail: an upgrade card, a Design trigger, a user-menu cluster. |
-| `main-header` | inject | Top of the main region (a top-placed banner or a corner action). |
-| `main` | replace | Replace the built-in chat thread with your own main view (a home or dashboard screen). Omit to keep the thread. |
+| _(default)_ | inject | The main region content (same region as the `main` slot): your `<kai-chat>`, or any app view. |
+| `header` | inject | The top band across the full shell width (app bar, tabs, breadcrumbs). |
+| `start` | inject | The inline-start aside column (a conversation rail, a nav, a file tree). Resizable and collapsible. |
+| `main` | inject | The main region. Unnamed children project here too, via the default slot. |
+| `end` | inject | The inline-end aside column (inspector, notes, preview). Resizable and collapsible. |
+| `footer` | inject | The bottom band across the full shell width (status bar, disclaimers). |
 
 #### Styleable parts
 
@@ -322,11 +288,16 @@ Restyle from outside the Shadow DOM via `kai-workspace::part(name)`.
 
 | Part | Description |
 |------|-------------|
-| `::part(sidebar)` | The conversation rail. Carries a subtle, theme-aware default background (bg-surface); override its background, border, or width from outside. `sidebar-min-width` sets its min px width and `collapse-below` auto-collapses it under a width. <br>`kai-workspace::part(sidebar) { background: var(--color-card); border-right: 1px solid var(--color-border) }` |
+| `::part(aside)` | Both aside columns match this part (each also matches its own start/end part). Restyle the shared aside surface or border from outside; the --kai-workspace-start-* and --kai-workspace-end-* custom properties set the widths. <br>`kai-workspace::part(aside) { background: var(--color-card) }` |
+| `::part(header)` | The top band across the full shell width (app bar, tabs, breadcrumbs). |
+| `::part(start)` | The inline-start aside column (a conversation rail, a nav, a file tree). Resizable and collapsible. |
+| `::part(main)` | The main region. Unnamed children project here too, via the default slot. |
+| `::part(end)` | The inline-end aside column (inspector, notes, preview). Resizable and collapsible. |
+| `::part(footer)` | The bottom band across the full shell width (status bar, disclaimers). |
 
 #### Composed from
 
-`Components/ChatThread`, `Components/ConversationList`, `Components/CollapsedRail`, `UI/ResizablePanelGroup`, `UI/ResizablePanel`, `UI/ResizableHandle`
+`Components/WorkspaceShell`
 
 #### Theming
 
@@ -388,17 +359,18 @@ The full app shell in one tag — a collapsible conversation-list sidebar (left)
 |----------|-----------|------|---------|-------|
 | `theme` | `theme` | `"light" | "dark" | "auto"` | `'auto'` | Color mode (`auto` follows prefers-color-scheme). |
 | `groups` | — | `undefined | { id: string; userId?: undefined | string; teamId?: undefined | string; name: string; sortOrder: number; createdAt: string }[]` | `[]` | The list's section headers (`{ id, name, sortOrder, createdAt }`), rendered in array order. A group carries no conversations of its own; it is matched against `conversations` by id, so the two props are complementary rather than alternatives. Omit for an ungrouped list. Set as a JS property. |
-| `conversations` | — | `undefined | { id: string; title: string; groupId?: undefined | string; scope: { type: "document" | "collection"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | "transcript" | "markdown"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[]` | `[]` | Every conversation the list renders, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId`, or with a `groupId` matching no entry in `groups`, falls into a trailing "Ungrouped" section, so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. Omit to supply them as `<kai-conversation>` light-DOM children instead, or for the empty state. |
+| `conversations` | — | `undefined | { id: string; title: string; groupId?: undefined | string; scope?: undefined | { type: "document" | "collection"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | "transcript" | "markdown"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt?: undefined | string; updatedAt: string; trailing?: undefined | string }[]` | `[]` | Every conversation the list renders, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId`, or with a `groupId` matching no entry in `groups`, falls into a trailing "Ungrouped" section, so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. Omit to supply them as `<kai-conversation>` light-DOM children instead, or for the empty state. A search query that matches nothing shows a visible "No conversations match your search" state, distinct from the zero-conversations empty state. Slotted `<kai-conversation-item>` children switch the list into item mode instead: your own rows win and this array is not rendered. |
 | `activeId` | `active-id` | `undefined | string` | — | The id of the currently-open conversation, highlighted in the list. |
 | `collapsed` | `collapsed` | `undefined | false | true` | — | Controlled collapsed state. Set as a JS property (`el.collapsed = true`) to drive the rail from your app, updating it in response to `kai-collapse-toggle`. Omit for uncontrolled (the element manages it). Collapsed shrinks the rail to a floating reopen button. |
 | `defaultCollapsed` | `default-collapsed` | `undefined | false | true` | — | Initial collapsed state when uncontrolled (default false). Use the `default-collapsed` attribute to start collapsed in plain HTML. |
+| `compact` | `compact` | `undefined | false | true` | — | Dense single-line rows (a leading dot + title, no message count). |
 
 #### Events
 
 | Event | `detail` | Description |
 |-------|-----------|-------------|
 | `kai-collapse-toggle` | `{ collapsed: false | true }` | The rail was collapsed or expanded (via the toggle, the reopen button, or a `collapse()`/`expand()`/`toggle()` call). |
-| `kai-conversation-select` | `{ id: string }` | A conversation was selected. |
+| `kai-conversation-select` | `{ id: string }` | A conversation was selected. The selection event in BOTH modes: a batteries data row, or an activated `<kai-conversation-item>` child (click, Enter or Space). |
 | `kai-new-chat` | — | The "New chat" button was clicked. |
 | `kai-search` | `{ query: string }` | The built-in search box query changed (typing, or a programmatic `clear()` which fires it with `''`). Lets a consumer mirror or server-side the filter. |
 | `kai-toggle-sidebar` | — | The sidebar toggle was clicked. |
@@ -422,6 +394,7 @@ Project your own markup with `slot="name"` on a light-DOM child.
 
 | Slot | Mode | Description |
 |------|------|-------------|
+| _(default)_ | inject | Your own `<kai-conversation-item>` rows (item mode: the consumer-owned loop). Data rows do not render while any are present. |
 | `header` | replace | Full custom title bar; replaces the built-in toggle / "Chats" / New-chat row. |
 | `empty` | replace | Custom zero-state shown when there are no conversations; replaces the built-in "No conversations yet". |
 | `footer` | inject | A row below the list: account, settings, or usage. |
@@ -432,7 +405,7 @@ Compose these in light DOM instead of setting the JS property — the no-JS rout
 
 | Child element | Attributes | Text content | Notes |
 |---------------|------------|--------------|-------|
-| `<kai-conversation>` | `group-id`, `id` | yes | Parse a single light-DOM `<kai-conversation>` element into a `ConversationSummary`. Attribute mapping: - `id` → ConversationSummary.id - `group-id` → ConversationSummary.groupId (optional) - textContent → ConversationSummary.title Required fields not expressible as HTML attributes (`scope`, `messageCount`, `lastMessageAt`, `updatedAt`) receive safe defaults so the rendered list item is fully functional with just `id` + title text. |
+| `<kai-conversation>` | `group-id`, `id` | yes | Parse a single light-DOM `<kai-conversation>` element into a `ConversationSummary`. Attribute mapping: - `id` → ConversationSummary.id - `group-id` → ConversationSummary.groupId (optional) - textContent → ConversationSummary.title Fields not expressible as HTML attributes are NOT fabricated (F-10): the optional `scope` and `lastMessageAt` stay absent, and the required `messageCount`/`updatedAt` get honest defaults — zero messages, and an empty `updatedAt` from which no trailing relative time is derived (the epoch it used to fabricate rendered a bogus "many days ago" on every declarative row). |
 
 #### Styleable parts
 
@@ -441,6 +414,7 @@ Restyle from outside the Shadow DOM via `kai-conversations::part(name)`.
 | Part | Description |
 |------|-------------|
 | `::part(trailing)` | The right-aligned trailing text on each conversation row (a count, status, or relative time). Set it per item via the `trailing` field; otherwise a short auto relative time is derived from `updatedAt`. Recolor or resize it from outside. <br>`kai-conversations::part(trailing) { color: var(--color-primary); font-variant-numeric: tabular-nums }` |
+| `::part(items)` | The item-mode listbox region wrapping your slotted `<kai-conversation-item>` children. <br>`kai-conversations::part(items) { gap: 2px }` |
 
 #### Composed from
 
@@ -469,7 +443,7 @@ Sidebar panel listing conversations, optionally grouped. Emits events for naviga
 | `loading` | `loading` | `undefined | false | true` | `false` | Show the loading/streaming state and block submit (use while awaiting a reply). |
 | `suggestions` | — | `undefined | string[]` | — | Starter prompts shown above the input. Clicking one follows `suggestionMode`. Set as a JS property. |
 | `suggestionMode` | `suggestion-mode` | `undefined | "submit" | "fill"` | `'submit'` | What clicking a suggestion does: `'submit'` (default) sends it immediately as if typed and submitted; `'fill'` just places it in the input. |
-| `search` | `search` | `undefined | false | true` | `false` | Show a Search (Globe) button in the left toolbar; clicking it fires a `search` event. |
+| `webSearch` | `web-search` | `undefined | false | true` | `false` | Show a web-search (Globe) button in the left toolbar; clicking it fires a `kai-web-search` event. Attribute: `web-search`. |
 | `voice` | `voice` | `undefined | false | true` | `false` | Show a Voice (Mic) button in the left toolbar; clicking it fires a `voice` event. |
 | `stoppable` | `stoppable` | `undefined | false | true` | `false` | When set and `loading` is true, the send button is replaced by a Stop button (square icon, "Stop" aria-label). Clicking it fires `kai-stop`. |
 | `submit` | `submit` | `undefined | "always" | "auto"` | `'always'` | Send-button visibility. `'always'` (default) always shows it; `'auto'` shows it only when there's text/attachments (an empty composer hides it, though Enter still submits). To hide it entirely (Enter-only), it's pure CSS: `::part(send){display:none}`, no prop needed. Restyle via `::part(send)`. The Stop button (`stoppable` + `loading`) is unaffected. |
@@ -483,13 +457,13 @@ Sidebar panel listing conversations, optionally grouped. Emits events for naviga
 | Event | `detail` | Description |
 |-------|-----------|-------------|
 | `kai-attachments-change` | `{ attachments: { id: string; type: "file" | "source-document"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[] }` | The staged attachments changed: a file was added (via the paperclip) or removed (per-chip ×). Carries the full current list so a consumer can react in real time (validate, show upload progress, toggle the send button). |
-| `kai-search` | — | The Search (Globe) toolbar button was clicked. |
 | `kai-stop` | — | The Stop button was clicked while `stoppable` and `loading` are both true. |
 | `kai-submit` | `{ value: string; doc: ({ type: "text"; text: string } | { type: "entity"; entity: { kind: string; id: string; label: string; icon?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> } })[]; entities: { kind: string; id: string; label: string; icon?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[]; attachments: { id: string; type: "file" | "source-document"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[] }` | The user submitted the prompt (Enter or send button). `value` is the flattened text (back-compat); `doc` is the structured document and `entities` the inserted pills (skills/agents) for downstream expansion. |
 | `kai-suggestion-click` | `{ value: string }` | A suggestion was clicked while `suggestion-mode="fill"`. |
 | `kai-toolbar-action` | `{ action: string }` | A custom `<kai-action>` toolbar button was clicked. `action` is the `id` of the `<kai-action>` element that was clicked. |
 | `kai-value-change` | `{ value: string; doc: ({ type: "text"; text: string } | { type: "entity"; entity: { kind: string; id: string; label: string; icon?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> } })[]; entities: { kind: string; id: string; label: string; icon?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[] }` | The input changed (fires on every edit). Carries the flattened `value` plus the structured `doc` + `entities`. |
 | `kai-voice` | — | The Voice (Mic) toolbar button was clicked. |
+| `kai-web-search` | — | The web-search (Globe) toolbar button was clicked. |
 
 #### Methods
 

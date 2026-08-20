@@ -107,21 +107,34 @@ const FLEX_FILL = 'flex: 1; min-height: 0;';
  * stops consuming height. `text-align: start` is still needed because text-align
  * INHERITS regardless of positioning.
  *
- * `z-index` matters as much as the positioning, and is the same 1000 the other two
- * fixed placements already use. Without it the surface stacks at `auto`, and the
- * TanStack starter's header is `sticky top-0 z-50` — so the chat would sit at the
- * right geometry and still have the top 73px of its thread painted over. Half-
- * covered is the worst outcome available: either the chat owns the viewport or it
- * does not.
+ * `z-index` matters as much as the positioning. Without it the surface stacks at
+ * `auto`, and the TanStack starter's header is `sticky top-0 z-50` — so the chat
+ * would sit at the right geometry and still have the top 73px of its thread
+ * painted over. Half-covered is the worst outcome available: either the chat owns
+ * the viewport or it does not.
+ *
+ * WHY 90 AND NOT 1000 (F-20's scaffold-side sibling). The kit's `kai-toast-region`
+ * — which `toast()` mounts as a body-level SIBLING of the app root — paints its
+ * stack at `z-index: var(--kai-toast-z, 100)`, and both layers live in the root
+ * stacking context. Every fixed placement here used to stamp `z-index: 1000`, so
+ * every scaffolded app buried every toast (Undo included) under its own wrapper —
+ * the exact defect the corpus workspace app's IVP caught in its builder CSS.
+ * 90 still outranks any sticky starter chrome (z-50 is the highest observed) and
+ * stays below the toast layer; the emitted comment states the contract so a
+ * consumer raising the wrapper knows what they are burying.
  *
  * The trade is stated in the emitted comment rather than hidden: this overlays
  * whatever the starter draws around it, nav included. A consumer who wants the chat
  * inside their layout wants `placement: 'inline'`, which is what that placement is for.
  */
+const TOAST_LAYER_NOTE =
+  'The z-index stays BELOW 100: the kit\'s kai-toast-region (a body-level sibling toast() mounts) ' +
+  'paints at z-index var(--kai-toast-z, 100), so a wrapper at or above it buries every toast.';
+
 const FULL_PAGE: PlacementStyle = {
   style:
     'position: fixed; inset: 0; display: flex; flex-direction: column; ' +
-    'text-align: start; z-index: 1000;',
+    'text-align: start; z-index: 90;',
   chatFill: FLEX_FILL,
   note: 'fills the viewport (fixed, inset 0)',
   altNote: [
@@ -131,6 +144,7 @@ const FULL_PAGE: PlacementStyle = {
     'TanStack Start starter wraps every route in a Header + Footer that pushed the composer 13px',
     'below the fold at 1280x800. Fixed positioning escapes both, `text-align: start` undoes the',
     'inherited centring, and z-index keeps a sticky header from painting over the thread.',
+    TOAST_LAYER_NOTE,
     'This DOES cover the chrome around it (nav included) — that is what full-page means here.',
     'Want the chat to sit INSIDE your own layout instead? Use placement: "inline".',
   ],
@@ -152,23 +166,27 @@ function placementStyle(placement: string): PlacementStyle {
       return {
         style:
           'position: fixed; top: 0; inset-inline-end: 0; height: 100dvh; width: 380px; ' +
-          'border-inline-start: 1px solid var(--kai-color-border); display: flex; flex-direction: column; z-index: 1000;',
+          'border-inline-start: 1px solid var(--kai-color-border); display: flex; flex-direction: column; z-index: 90;',
         chatFill: FLEX_FILL,
         note: 'full-height side panel, docked to the trailing edge (100dvh)',
         altNote: [
+          TOAST_LAYER_NOTE,
           'In-flow alternative (push content instead of overlay): drop `position`/`z-index` and ' +
             'make this a `flex: 0 0 380px` column inside a `display: flex` row at `height: 100dvh`.',
         ],
       };
     case 'docked-widget':
-      // The bottom-right floating bubble — rounded, elevated, fixed size.
+      // The bottom-right floating bubble — rounded, elevated, fixed size. Its
+      // corner is exactly where the toast stack lives, so the z-index contract
+      // matters MOST here.
       return {
         style:
           'position: fixed; bottom: 1.5rem; inset-inline-end: 1.5rem; width: 380px; height: 600px; ' +
           'max-height: calc(100dvh - 3rem); border-radius: 16px; overflow: hidden; ' +
-          'box-shadow: 0 12px 32px var(--kai-shadow-color, rgba(0,0,0,0.18)); display: flex; flex-direction: column; z-index: 1000;',
+          'box-shadow: 0 12px 32px var(--kai-shadow-color, rgba(0,0,0,0.18)); display: flex; flex-direction: column; z-index: 90;',
         chatFill: FLEX_FILL,
         note: 'fixed, floating bottom-right widget',
+        altNote: [TOAST_LAYER_NOTE],
       };
     default:
       // Unknown placement falls back to full-page (full height) rather than the bubble,
@@ -360,10 +378,19 @@ function realStreamBody(opts: {
    * identical. That identity is the point: see `mockRequest`.
    */
   mock?: boolean;
+  /**
+   * The workspace block's cancellation story: an expression for the turn's
+   * AbortSignal, put on the fetch. The controller comes from
+   * `createThreadSessions().begin(id)` in the block's prelude, so switching
+   * threads or deleting one can abort the outgoing request rather than only
+   * dropping its deltas. Ignored on the mock path (there is no request).
+   */
+  fetchSignal?: string;
 }): string {
   const {
     pad, read, commitSet, setterAdapter, setLoading, bodyPayload, strictRoles = false, toolLoop, thread,
     cards = false, valueSource = 'e.detail.value', afterValue = [], afterTurn = [], mock = false, filesExpr,
+    fetchSignal,
   } = opts;
   const asConst = strictRoles ? ' as const' : '';
   // Under strict TS an un-annotated array literal widens the part's `type` to
@@ -426,6 +453,13 @@ function realStreamBody(opts: {
     `${indent}  method: 'POST',`,
     `${indent}  headers: { 'Content-Type': 'application/json' },`,
     `${indent}  body: JSON.stringify(${bodyPayload(threadExpr)}),`,
+    ...(fetchSignal
+      ? [
+          `${indent}  // The turn's own AbortSignal (from sessions.begin above): switching`,
+          `${indent}  // threads or deleting this one can cancel the request itself.`,
+          `${indent}  signal: ${fetchSignal},`,
+        ]
+      : []),
     `${indent}});`,
     `${indent}// The finished turn: text, reasoning, tool calls, stop reason, usage. An`,
     `${indent}// error FRAME inside a 200 stream lands on turn.error, and whatever`,
@@ -452,6 +486,13 @@ function realStreamBody(opts: {
       `${pad}  if (turn.error) console.error('Model error:', turn.error.message);`,
     ]),
     `${pad}} catch (err) {`,
+    ...(fetchSignal && !mock
+      ? [
+          `${pad}  // A DELIBERATE abort (the thread was deleted, or a new turn began on it)`,
+          `${pad}  // is not a failure and has no one left to report it to.`,
+          `${pad}  if (${fetchSignal}.aborted) return;`,
+        ]
+      : []),
     `${pad}  // Without this a bad key is a permanently blank assistant bubble plus an`,
     `${pad}  // unhandled rejection. abort(reason) settles the message AND puts the`,
     `${pad}  // reason where the reader can see it: onto any tool panel still waiting`,
@@ -766,13 +807,17 @@ function wireImportLines(opts: {
    * needs this one from the state entry.
    */
   attachments?: boolean;
+  /** the workspace BLOCK → the thread/persistence helpers from the state entry */
+  workspaceBlock?: boolean;
 }): string[] {
-  const { pad = '', typed, toolLoop = false, setMessagesType = false, cards = false, cardTools: emitsCardTools = false, mock = false, attachments = false } = opts;
+  const { pad = '', typed, toolLoop = false, setMessagesType = false, cards = false, cardTools: emitsCardTools = false, mock = false, attachments = false, workspaceBlock = false } = opts;
   const stateNames = [
+    ...(workspaceBlock ? ['bindThreadMessages'] : []),
     'createAssistantStream',
     // The mock's canned reply comes from the kit, not from a copy pasted into
     // this file. One implementation, shared with create-kai and the starters.
     ...(mock ? ['createMockResponder'] : []),
+    ...(workspaceBlock ? ['createSaveScheduler', 'createThreadSessions', 'parseStoredThread'] : []),
     ...(attachments ? ['type AttachmentData'] : []),
     ...(typed ? ['type ChatMessage'] : []),
     ...(typed && setMessagesType ? ['type SetMessages'] : []),
@@ -1007,6 +1052,13 @@ function jsxComment(lines: readonly string[], pad: string): string[] {
   return lines.map((l) => `${pad}{/* ${l.replace(/^\/\/ ?/, '')} */}`);
 }
 
+/** Re-indent already-built emitted lines (some entries hold multiple lines
+ *  joined with \n) so a wrapper — the block's shell — can nest them without
+ *  every builder above knowing about the wrapping. Blank lines stay blank. */
+function indentEmitted(lines: readonly string[], by: string): string[] {
+  return lines.flatMap((l) => l.split('\n')).map((l) => (l === '' ? l : `${by}${l}`));
+}
+
 // ── SCAF-9: message-embedded companion logic ──────────────────────────────────
 
 /**
@@ -1016,19 +1068,198 @@ function jsxComment(lines: readonly string[], pad: string): string[] {
  */
 const MESSAGE_EMBEDDED_TAGS = new Set(['kai-tool', 'kai-reasoning']);
 
-// ── SCAF-14: workspace structural/layout logic ────────────────────────────────
+// ── SCAF-14: artifact-split structural/layout logic ───────────────────────────
 
 /**
- * Tags that participate in the workspace layout structure — kai-resizable is the
- * container (needs kai-resizable-item children), kai-artifact is the preview pane.
- * Neither should be emitted as a bare sibling of kai-chat — the idiomatic structure
- * is a resizable split with chat in one pane and artifact in another.
+ * Tags that participate in the artifact-split layout structure — kai-resizable
+ * is the container (needs kai-resizable-item children), kai-artifact is the
+ * preview pane. Neither should be emitted as a bare sibling of kai-chat — the
+ * idiomatic structure is a resizable split with chat in one pane and artifact
+ * in another.
+ *
+ * (This predicate was named `isWorkspace` until the recast: the `workspace`
+ * preset now names the shell + rail BLOCK below, and a predicate about the
+ * artifact pair claiming that name would lie about both.)
  */
-const WORKSPACE_STRUCTURAL_TAGS = new Set(['kai-resizable', 'kai-artifact']);
+const ARTIFACT_SPLIT_TAGS = new Set(['kai-resizable', 'kai-artifact']);
 
-/** True when the surface is the resizable split workspace (chat + artifact). */
-function isWorkspace(components: readonly string[]): boolean {
+/** True when the surface renders the resizable split (chat + artifact preview). */
+function isArtifactSplit(components: readonly string[]): boolean {
   return components.includes('kai-resizable') && components.includes('kai-artifact');
+}
+
+// ── the workspace BLOCK (recast spec 2026-08-20 § 3b; F-16) ──────────────────
+
+/**
+ * Tags the block composes structurally: the shell wraps the surface and the
+ * rail sits in its `start` slot, so neither is ever a bare sibling.
+ */
+const BLOCK_TAGS = new Set(['kai-workspace', 'kai-conversations']);
+
+/**
+ * True when the surface is the workspace BLOCK: the `kai-workspace` layout
+ * shell with a wired `kai-conversations` rail in its start aside, `kai-chat`
+ * in the main region, and multi-thread state built on the `@kitn.ai/ui/state`
+ * helpers (bindThreadMessages / createThreadSessions / createSaveScheduler /
+ * parseStoredThread). BOTH tags, for the same reason `isArtifactSplit` needs
+ * both: a shell with nothing in its aside is an empty column, and a rail with
+ * no thread store behind it is the bare-sibling defect the rail wiring exists
+ * to prevent. They are one capability group in `archetypes.ts`, so in practice
+ * a request carries both or neither.
+ *
+ * The block is CODE THE CONSUMER OWNS from generation time (spec § Taxonomy):
+ * the persistence policy, the fetch line and the record shape are exactly what
+ * a consumer should be editing without asking us. The kit-owned mechanics ride
+ * in the npm-updateable helpers instead, which is the split the emitted
+ * comments below spell out.
+ */
+function isWorkspaceBlock(components: readonly string[]): boolean {
+  return components.includes('kai-workspace') && components.includes('kai-conversations');
+}
+
+/**
+ * The block's module-scope thread store: the record shape the APP owns, plus
+ * load/save with the persistence POLICY stated as the consumer's. Framework-
+ * independent by construction — every target below emits these lines verbatim
+ * (module scope in all of them), so the boundary comment cannot drift between
+ * frameworks.
+ *
+ * `parseStoredThread` is the kit-owned half: it validates the stored messages
+ * back into `ChatMessage[]` with the variant list DERIVED from the MessagePart
+ * union, and REPORTS what it dropped. The verb — warn, discard the record,
+ * telemetry — stays out here, in the consumer's line.
+ */
+function blockThreadStoreLines(pad = ''): string[] {
+  return [
+    `${pad}// ── The workspace block's thread store — YOUR code, from here down ─────────`,
+    `${pad}//`,
+    `${pad}// The record shape is yours (title policy, timestamps, whatever you add);`,
+    `${pad}// the kit's helpers only require { id, messages } (ThreadLike).`,
+    `${pad}interface Thread {`,
+    `${pad}  id: string;`,
+    `${pad}  title: string;`,
+    `${pad}  updatedAt: string;`,
+    `${pad}  messages: ChatMessage[];`,
+    `${pad}}`,
+    ``,
+    `${pad}const THREADS_KEY = 'kai-workspace/threads/v1';`,
+    ``,
+    `${pad}// PERSISTENCE IS YOURS. localStorage here is a starting policy, not kit`,
+    `${pad}// behavior: the backend, the quota, what is retained and for how long are`,
+    `${pad}// application decisions. Swap these two functions for your API and nothing`,
+    `${pad}// else in the block changes.`,
+    `${pad}function loadThreads(): Thread[] {`,
+    `${pad}  let raw: string | null = null;`,
+    `${pad}  // Private-mode Safari throws on ACCESS: no storage is a working app with`,
+    `${pad}  // no history, not a crash on first paint.`,
+    `${pad}  try { raw = localStorage.getItem(THREADS_KEY); } catch { return []; }`,
+    `${pad}  if (!raw) return [];`,
+    `${pad}  try {`,
+    `${pad}    const stored: unknown = JSON.parse(raw);`,
+    `${pad}    if (!Array.isArray(stored)) return [];`,
+    `${pad}    return stored.flatMap((record): Thread[] => {`,
+    `${pad}      if (typeof record !== 'object' || record === null) return [];`,
+    `${pad}      const r = record as { id?: unknown; title?: unknown; updatedAt?: unknown; messages?: unknown };`,
+    `${pad}      if (typeof r.id !== 'string' || r.id === '') return [];`,
+    `${pad}      // The kit validates the MESSAGES (the shape it owns — the MessagePart`,
+    `${pad}      // variant list is derived, not hand-typed) and reports the drops;`,
+    `${pad}      // deciding what a drop means is this line, and it is yours.`,
+    `${pad}      const { messages, dropped } = parseStoredThread(r.messages);`,
+    `${pad}      if (dropped.length > 0) console.warn('[threads] dropped unreadable stored entries', dropped);`,
+    `${pad}      return [{`,
+    `${pad}        id: r.id,`,
+    `${pad}        title: typeof r.title === 'string' ? r.title : 'New conversation',`,
+    `${pad}        updatedAt: typeof r.updatedAt === 'string' ? r.updatedAt : new Date().toISOString(),`,
+    `${pad}        messages,`,
+    `${pad}      }];`,
+    `${pad}    });`,
+    `${pad}  } catch {`,
+    `${pad}    // Unparseable history is ignored, loudly enough to notice in dev.`,
+    `${pad}    console.warn('[threads] stored history could not be parsed and was ignored');`,
+    `${pad}    return [];`,
+    `${pad}  }`,
+    `${pad}}`,
+    ``,
+    `${pad}function saveThreads(threads: Thread[]): void {`,
+    `${pad}  // QuotaExceededError is the realistic failure. Warn-and-continue is a`,
+    `${pad}  // POLICY (yours): the alternative — throwing out of a save mid-stream —`,
+    `${pad}  // would take the thread down with it.`,
+    `${pad}  try { localStorage.setItem(THREADS_KEY, JSON.stringify(threads)); }`,
+    `${pad}  catch (err) { console.warn('[threads] history could not be saved', err); }`,
+    `${pad}}`,
+    ``,
+    `${pad}// First line of the first user turn, clipped — the fallback titling policy.`,
+    `${pad}// Titles are what the rail's built-in search matches, so this is also the`,
+    `${pad}// search index; swap in your own (a summariser, a user rename).`,
+    `${pad}function deriveTitle(text: string): string {`,
+    `${pad}  const firstLine = text.trim().split('\\n', 1)[0] ?? '';`,
+    `${pad}  if (firstLine === '') return 'New conversation';`,
+    `${pad}  return firstLine.length > 48 ? firstLine.slice(0, 47) + '…' : firstLine;`,
+    `${pad}}`,
+  ];
+}
+
+/**
+ * The rail's comment, one wording for every target (the html-comment targets
+ * wrap it in `htmlComment`, the JSX targets in `jsxComment`): what the rows
+ * are, and the item-mode escape hatch by name.
+ */
+const BLOCK_RAIL_NOTE = [
+  `The rail renders the ROWS it is handed (batteries mode) — a view of your`,
+  `records, no message bodies. To own the row markup instead, slot your own`,
+  `<kai-conversation-item> loop as light-DOM children (item mode): data rows`,
+  `stop rendering while any item child is present, and selection still arrives`,
+  `as kai-conversation-select.`,
+];
+
+/** The same note where the rows are the Solid `ConversationList` (which takes
+ *  `items` instead of light-DOM children). Mirrored wording, Solid names. */
+const BLOCK_RAIL_NOTE_SOLID = [
+  `The rail renders the ROWS it is handed (batteries mode) — a view of your`,
+  `records, no message bodies. To own the row markup instead, pass your own`,
+  `SlottedConversationItem loop via the \`items\` prop (item mode): data rows`,
+  `stop rendering while items are present, and selection still arrives through`,
+  `onSelect.`,
+];
+
+/**
+ * The submit prelude's comments, shared so the wording tests pin ONE copy.
+ * Each target interleaves these with its own state idiom's lines.
+ */
+const BLOCK_TARGET_ID_NOTE = [
+  `The thread that was open when the user hit send — not whichever is open`,
+  `when the tokens land. Everything below binds to this id, which is what`,
+  `makes switching away mid-reply safe.`,
+];
+const BLOCK_BIND_NOTE = [
+  `bindThreadMessages routes every stream delta to THIS thread, with the`,
+  `reactivity two-halves (new array + new object) handled by the helper.`,
+  `\`touch\` is your policy hook — here it stamps updatedAt on every delta.`,
+];
+const BLOCK_SESSIONS_NOTE = [
+  `One in-flight turn per thread: begin() aborts a prior turn on the same`,
+  `thread and hands back its AbortController. Deleting a thread mid-stream is`,
+  `sessions.abort(id) — the aborted turn's late deltas are dropped by the`,
+  `bound sink instead of resurrecting the record.`,
+];
+
+/**
+ * The block's tool-loop thread binding for every target whose store reads back
+ * synchronously (signals, refs, runes, a plain module `let`): the STORE is the
+ * thread. The id-bound sink writes each delta into the record, and each loop
+ * round re-encodes the live value read back out — no turn-local copy to keep
+ * in sync. React is the exception (async state) and keeps its own copy binding.
+ */
+function blockLiveThread(readExpr: string): ThreadBinding {
+  return {
+    open: ({ pad, userMessage }) => [
+      `${pad}// The STORE is the thread: the id-bound sink writes each delta back into`,
+      `${pad}// the record, so every round below re-encodes the live, current value.`,
+      `${pad}setMessages(() => [...${readExpr}, ${userMessage}]);`,
+    ],
+    live: readExpr,
+    setter: 'setMessages',
+  };
 }
 
 // ── composition: where a companion GOES ──────────────────────────────────────
@@ -1164,8 +1395,8 @@ function slottedChildMarkup(
         `SLOTTED, not a sibling: <kai-chat> renders this into its own`,
         `::part(${s.slot}) aside — a fixed-width column, and that is the whole of`,
         `what the shell does with it. Collapsing the rail does NOT narrow the`,
-        `column: use <kai-workspace> (sidebarWidth / sidebarCollapsed /`,
-        `collapseBelow) or your own layout if it has to collapse or resize.${opts.wired ? ' src/main.ts drives the rail.' : ''}`,
+        `column: use the <kai-workspace> layout shell (start aside: startCollapsed /`,
+        `collapseBelow / drawer-below) or your own layout if it has to collapse or resize.${opts.wired ? ' src/main.ts drives the rail.' : ''}`,
       ],
       pad,
     ),
@@ -1228,7 +1459,7 @@ const ATTACHMENT_TAGS = new Set(['kai-file-upload', 'kai-attachments']);
 
 /**
  * True when the surface stages attachments — BOTH tags, for the same reason
- * `isWorkspace` needs both.
+ * `isArtifactSplit` needs both.
  *
  * They are one capability group in `archetypes.ts`, so in practice a request
  * carries both or neither. Requiring both here is what keeps a hand-built
@@ -1597,16 +1828,21 @@ interface RenderCtx {
  * block of its own, above the chat, with ids the emitted module wires together.
  */
 function componentTags(components: readonly string[], chatFill: string): string {
+  const block = isWorkspaceBlock(components);
   // The catalog's nesting decision, applied: a slotted companion is a CHILD of
   // <kai-chat> and never a sibling in the column below it, so it comes out of the
-  // companion loop the same way the workspace and attachment pairs do.
+  // companion loop the same way the workspace and attachment pairs do. In BLOCK
+  // mode the rail moves to the SHELL's start aside instead, so the chat keeps no
+  // sidebar child.
   const slotted = slottedInChat(components);
   const slottedTags = new Set(slotted.map((s) => s.tag));
+  const chatSlotted = block ? slotted.filter((s) => !BLOCK_TAGS.has(s.tag)) : slotted;
   const companionTags = components.filter(
     (t) =>
       t !== 'kai-chat' &&
       !MESSAGE_EMBEDDED_TAGS.has(t) &&
-      !WORKSPACE_STRUCTURAL_TAGS.has(t) &&
+      !ARTIFACT_SPLIT_TAGS.has(t) &&
+      !(block && BLOCK_TAGS.has(t)) &&
       !slottedTags.has(t) &&
       !(hasAttachments(components) && ATTACHMENT_TAGS.has(t)),
   );
@@ -1614,7 +1850,7 @@ function componentTags(components: readonly string[], chatFill: string): string 
   // an inline rail collapses to its text height in the shell's fixed-width
   // column. The same two declarations the chat-slots story puts on it.
   const chatBlock = (pad: string): string[] =>
-    slotted.length === 0
+    chatSlotted.length === 0
       ? [`${pad}<kai-chat id="chat" suggestion-mode="submit" style="${chatFill}"></kai-chat>`]
       : [
           `${pad}<kai-chat id="chat" suggestion-mode="submit" style="${chatFill}">`,
@@ -1650,7 +1886,7 @@ function componentTags(components: readonly string[], chatFill: string): string 
   // unreachable until the surface axis became a components list. Building the
   // chat block into `lines` instead means the companion loop below runs either
   // way, which is the property that was missing rather than a special case.
-  if (isWorkspace(components)) {
+  if (isArtifactSplit(components)) {
     lines.push(
       `  <!-- SCAF-14: workspace split — chat pane left, artifact preview right. -->`,
       `  <!-- kai-resizable needs kai-resizable-item children to render panels. -->`,
@@ -1692,6 +1928,30 @@ function componentTags(components: readonly string[], chatFill: string): string 
     lines.push(`  <!-- wire data props — see the component_reference MCP tool -->`);
   }
 
+  // The workspace BLOCK wrap: the shell around everything above, the rail in
+  // its start aside, the rest projected into its main region.
+  if (block) {
+    return [
+      `  <!-- ── The workspace BLOCK: the shell + the rail + your thread records ── -->`,
+      ...htmlComment(
+        [
+          `<kai-workspace> is the chat-agnostic layout shell: header/start/main/`,
+          `end/footer slots, aside resize + collapse, and a mobile drawer below`,
+          `the drawer-below width. It knows nothing about chat.`,
+        ],
+        '  ',
+      ),
+      `  <kai-workspace drawer-below="720" style="display:block;width:100%;height:100%">`,
+      ...htmlComment([...BLOCK_RAIL_NOTE, `src/main.ts drives the rail.`], '    '),
+      `    <kai-conversations id="conversations" slot="start" style="display:block;height:100%"></kai-conversations>`,
+      `    <!-- Unnamed children project into the shell's MAIN region. -->`,
+      `    <div style="display:flex;flex-direction:column;height:100%;min-height:0">`,
+      ...lines.map((l) => (l === '' ? l : `    ${l}`)),
+      `    </div>`,
+      `  </kai-workspace>`,
+    ].join('\n');
+  }
+
   return lines.join('\n');
 }
 
@@ -1726,7 +1986,10 @@ function htmlModule(ctx: RenderCtx, components: readonly string[]): string {
   const hasEmbedded = components.some((t) => MESSAGE_EMBEDDED_TAGS.has(t));
   const hasSources = components.includes('kai-sources');
   const attachments = hasAttachments(components);
-  const conversations = slottedInChat(components).some((s) => s.tag === 'kai-conversations');
+  const block = isWorkspaceBlock(components);
+  // In BLOCK mode the rail is the shell's start aside driven by the block's
+  // thread store below, not the in-memory slotted-in-chat wiring.
+  const conversations = !block && slottedInChat(components).some((s) => s.tag === 'kai-conversations');
 
   // MODULE scope, like `model`/`runTool`: the staged list has to outlive `init()`
   // so the submit handler can read it, and `Staged` is used by the module-scope
@@ -1910,6 +2173,63 @@ function htmlModule(ctx: RenderCtx, components: readonly string[]): string {
       ]
     : [];
 
+  // The BLOCK's init-scope wiring: the thread store projected onto the rail and
+  // the chat, the helpers owning the mechanics, every policy line labelled as
+  // the consumer's. `showWorkspace` is a function declaration so the sessions
+  // callback above it can name it before it is reached.
+  const blockSetupLines = block
+    ? [
+        `  // ── The block's state: your records + the kit's session/persistence helpers ─`,
+        `  const conversationsEl = document.getElementById('conversations') as KaiConversationsElement;`,
+        `  // Same upgrade rule as <kai-chat>: 'conversations' is an array, so it is a`,
+        `  // PROPERTY, and a property set before the element upgrades is dropped on upgrade.`,
+        `  await customElements.whenDefined('kai-conversations');`,
+        ``,
+        `  let threads: Thread[] = loadThreads();`,
+        `  // null means a DRAFT: "New chat" was pressed and nothing is stored yet. A`,
+        `  // record is created on its first turn, so the rail never fills with empties.`,
+        `  let activeId: string | null = threads[0]?.id ?? null;`,
+        ...BLOCK_SESSIONS_NOTE.map((l) => `  // ${l}`),
+        `  const sessions = createThreadSessions(() => showWorkspace());`,
+        `  // The save scheduler: the debounce/flush MECHANICS are the kit's; the delay,`,
+        `  // the save target and what a failed save means are YOURS (see saveThreads).`,
+        `  const saver = createSaveScheduler(saveThreads, { delayMs: 250 });`,
+        `  // Flush the pending write when the tab closes mid-debounce (or mid-stream).`,
+        `  window.addEventListener('beforeunload', () => saver.flush());`,
+        `  // Every write goes through this: schedule the save and re-project the views.`,
+        `  const setThreads = (updater: (prev: Thread[]) => Thread[]): void => {`,
+        `    threads = updater(threads);`,
+        `    saver.schedule(threads);`,
+        `    showWorkspace();`,
+        `  };`,
+        ``,
+        `  // Project the records onto the elements. NEW arrays per write — the array`,
+        `  // reference is what notifies (reactivity-two-halves; the changed objects`,
+        `  // inside come from the helpers' folds).`,
+        `  function showWorkspace(): void {`,
+        `    // The rail's row shape is a VIEW of your record — titles and counts, no`,
+        `    // message bodies. The rail renders the array in the order it is given.`,
+        `    conversationsEl.conversations = threads.map((t) => ({ id: t.id, title: t.title, messageCount: t.messages.length, updatedAt: t.updatedAt }));`,
+        `    conversationsEl.activeId = activeId ?? undefined;`,
+        `    chat.messages = [...(threads.find((t) => t.id === activeId)?.messages ?? [])];`,
+        `    chat.loading = activeId !== null && sessions.isStreaming(activeId);`,
+        `  }`,
+        `  showWorkspace();`,
+        ``,
+        `  conversationsEl.addEventListener('kai-conversation-select', (event: Event) => {`,
+        `    activeId = (event as CustomEvent<{ id: string }>).detail.id;`,
+        `    showWorkspace();`,
+        `  });`,
+        `  conversationsEl.addEventListener('kai-new-chat', () => {`,
+        `    // The event carries no detail by design: it IS the whole signal. A DRAFT,`,
+        `    // not a record — see activeId above.`,
+        `    activeId = null;`,
+        `    showWorkspace();`,
+        `  });`,
+        ``,
+      ]
+    : [];
+
   // Module scope, like vue/angular: the handler below closes over all three, and
   // `runTool` is a function declaration rather than something wedged into init().
   const modelLines = ctx.defaultModel
@@ -1943,7 +2263,8 @@ function htmlModule(ctx: RenderCtx, components: readonly string[]): string {
     ...(attachments ? ['KaiAttachmentsElement'] : []),
     // Same rule again: only when the rail is really on this surface. It types the
     // property assignments AND supplies the row type, so it is used twice over.
-    ...(conversations ? ['KaiConversationsElement'] : []),
+    // The block drives the same element from its own thread store.
+    ...(conversations || block ? ['KaiConversationsElement'] : []),
   ].join(', ');
 
   /**
@@ -1955,8 +2276,11 @@ function htmlModule(ctx: RenderCtx, components: readonly string[]): string {
    * `const history: ChatMessage[]`; the tool-loop shape's thread IS
    * `chat.messages`, already typed by `KaiChatElement`, and importing the type
    * there is a TS6133 that fails `npm run build` in a stock app.
+   *
+   * The BLOCK always references it: the `Thread` record's `messages` field is
+   * `ChatMessage[]`, so in block mode the import is used whatever the loop shape.
    */
-  const annotatesChatMessage = !ctx.emitToolLoop;
+  const annotatesChatMessage = !ctx.emitToolLoop || block;
 
   const head = [
     `// src/main.ts — the page's logic, in a module YOUR build type-checks.`,
@@ -1977,12 +2301,14 @@ function htmlModule(ctx: RenderCtx, components: readonly string[]): string {
       cardTools: ctx.cardProvider !== null,
       mock: ctx.isMock,
       attachments,
+      workspaceBlock: block,
     }),
     `import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
     ``,
     ...(ctx.isMock ? [...mockResponderInit(), ``] : []),
     ...modelLines,
     ...attachmentModuleLines,
+    ...(block ? [...blockThreadStoreLines(''), ``] : []),
     ...cardsLines,
     ...toolsLines,
     ...runnerLines,
@@ -2001,6 +2327,7 @@ function htmlModule(ctx: RenderCtx, components: readonly string[]): string {
     ...sourcesSetupLines,
     ...attachmentSetupLines,
     ...conversationsSetupLines,
+    ...blockSetupLines,
   ];
 
   // `Event`, not `CustomEvent`: addEventListener with a custom event name hands
@@ -2024,26 +2351,55 @@ function htmlModule(ctx: RenderCtx, components: readonly string[]): string {
     `void init();`,
   ];
 
+  // The block's submit prelude: bind the turn to ONE thread id, create the
+  // record on its first turn, and open the session.
+  const blockPrelude = block
+    ? [
+        ...BLOCK_TARGET_ID_NOTE.map((l) => `// ${l}`),
+        `const targetId = activeId ?? crypto.randomUUID();`,
+        `// The record is born on its first turn — with YOUR title policy.`,
+        `setThreads((prev) => prev.some((t) => t.id === targetId)`,
+        `  ? prev`,
+        `  : [{ id: targetId, title: deriveTitle(value), updatedAt: new Date().toISOString(), messages: [] }, ...prev]);`,
+        `activeId = targetId;`,
+        ...BLOCK_BIND_NOTE.map((l) => `// ${l}`),
+        `const setMessages = bindThreadMessages<Thread>(setThreads, targetId, {`,
+        `  touch: (t) => ({ ...t, updatedAt: new Date().toISOString() }),`,
+        `});`,
+        `const controller = sessions.begin(targetId);`,
+        `showWorkspace();`,
+      ]
+    : [];
   return [
     ...head,
     `  // messages is a JS PROPERTY (objects can't be HTML attributes)`,
     ...listenerOpen,
     realStreamBody({
       pad: '    ',
-      read: 'chat.messages',
-      commitSet: (expr) => `chat.messages = ${expr};`,
-      setterAdapter: '(fn) => { chat.messages = fn(chat.messages); }',
-      setLoading: (v) => `chat.loading = ${v};`,
+      read: block ? `(threads.find((t) => t.id === targetId)?.messages ?? [])` : 'chat.messages',
+      commitSet: block
+        ? (expr) => `setMessages(() => ${expr});`
+        : (expr) => `chat.messages = ${expr};`,
+      setterAdapter: block ? 'setMessages' : '(fn) => { chat.messages = fn(chat.messages); }',
+      setLoading: block
+        ? (v) =>
+            v === 'true'
+              ? `// loading for THIS thread now derives from the sessions map (showWorkspace).`
+              : `sessions.end(targetId, controller); showWorkspace();`
+        : (v) => `chat.loading = ${v};`,
       bodyPayload: realBodyPayload({ defaultModel: ctx.defaultModel, tools: ctx.emitTools }),
       strictRoles: true,
       toolLoop: ctx.emitToolLoop,
       cards: ctx.emitCards,
-      thread: liveThreadBinding(
-        'chat.messages',
-        '(fn) => { chat.messages = fn(chat.messages); }',
-        'chat.messages ?? []',
-      ),
+      thread: block
+        ? blockLiveThread(`(threads.find((t) => t.id === targetId)?.messages ?? [])`)
+        : liveThreadBinding(
+            'chat.messages',
+            '(fn) => { chat.messages = fn(chat.messages); }',
+            'chat.messages ?? []',
+          ),
       mock: ctx.isMock,
+      ...(block ? { fetchSignal: 'controller.signal', afterValue: blockPrelude } : {}),
       // ONE call site, in the `finally`, and deliberately not also on submit. The
       // finally sees the WHOLE turn — the user's message and the assistant's — so
       // one call cannot leave the row disagreeing with the thread, and it runs on
@@ -2055,11 +2411,16 @@ function htmlModule(ctx: RenderCtx, components: readonly string[]): string {
       ...(attachments
         ? {
             filesExpr: 'files',
-            afterValue: attachmentTurnLines({
-              stagedExpr: 'staged',
-              clear: ['staged = [];', 'showStaged();'],
-              fromSubmitEvent: true,
-            }),
+            // The attachment capture must read the staging list before anything
+            // clears it, so it precedes the block's prelude.
+            afterValue: [
+              ...attachmentTurnLines({
+                stagedExpr: 'staged',
+                clear: ['staged = [];', 'showStaged();'],
+                fromSubmitEvent: true,
+              }),
+              ...blockPrelude,
+            ],
           }
         : {}),
     }),
@@ -2125,7 +2486,8 @@ function renderJsx(components: readonly string[], ctx: RenderCtx, framework: str
   const { p, emptyHint, suggestions, isMock, defaultModel, emitTools, emitToolLoop } = ctx;
 
   const hasEmbedded = components.some((t) => MESSAGE_EMBEDDED_TAGS.has(t));
-  const workspace = isWorkspace(components);
+  const workspace = isArtifactSplit(components);
+  const block = isWorkspaceBlock(components);
 
   // SCAF-9: exclude message-embedded tags from import list.
   // SCAF-14: workspace uses Resizable+ResizableItem+Artifact — keep them in the import list.
@@ -2150,13 +2512,15 @@ function renderJsx(components: readonly string[], ctx: RenderCtx, framework: str
   const attachments = hasAttachments(components);
 
   // SCAF-9: standalone companion tags (not kai-chat, not message-embedded, not
-  // workspace-structural, and not the attachment pair — that gets a composed
-  // block of its own with state behind it).
+  // workspace-structural, not the block's shell/rail pair — both structural —
+  // and not the attachment pair — that gets a composed block of its own with
+  // state behind it).
   const standaloneCompanionTags = components.filter(
     (t) =>
       t !== 'kai-chat' &&
       !MESSAGE_EMBEDDED_TAGS.has(t) &&
-      !WORKSPACE_STRUCTURAL_TAGS.has(t) &&
+      !ARTIFACT_SPLIT_TAGS.has(t) &&
+      !(block && BLOCK_TAGS.has(t)) &&
       !(attachments && ATTACHMENT_TAGS.has(t)),
   );
 
@@ -2244,16 +2608,69 @@ function renderJsx(components: readonly string[], ctx: RenderCtx, framework: str
   const mockInit = isMock ? mockResponderInit() : [];
 
   // SCAF-9: no fabricated seed — see SAMPLE_AGENTIC_MESSAGE for the three ways
-  // one broke a real app.
-  const sampleMessagesInit = [
-    ...(hasEmbedded
-      ? sampleSeedComment(isMock, '  ', (literal) => [
-          `const sampleMessages: ChatMessage[] = [${literal}];`,
-          `const [messages, setMessages] = useState<ChatMessage[]>(sampleMessages);`,
-        ])
-      : []),
-    `  const [messages, setMessages] = useState<ChatMessage[]>([]);`,
-  ].join('\n');
+  // one broke a real app. In BLOCK mode the thread state is the block's
+  // multi-thread store below, so the single-thread pair is not emitted (and the
+  // sample seed with it — the store starts from what localStorage really holds).
+  const sampleMessagesInit = block
+    ? [
+        `  // ── The block's state: your records + the kit's session/persistence helpers ─`,
+        `  const [threads, setThreads] = useState<Thread[]>(loadThreads);`,
+        `  // null means a DRAFT: "New chat" was pressed and nothing is stored yet. A`,
+        `  // record is created on its first turn, so the rail never fills with empties.`,
+        `  const [activeId, setActiveId] = useState<string | null>(threads[0]?.id ?? null);`,
+        `  // One id per in-flight reply — a stream keeps running when you switch away,`,
+        `  // so this cannot be a single boolean.`,
+        `  const [streamingIds, setStreamingIds] = useState<string[]>([]);`,
+        ...BLOCK_SESSIONS_NOTE.map((l) => `  // ${l}`),
+        `  const [sessions] = useState(() => createThreadSessions(setStreamingIds));`,
+        `  // The save scheduler: the debounce/flush MECHANICS are the kit's; the delay,`,
+        `  // the save target and what a failed save means are YOURS (see saveThreads).`,
+        `  const [saver] = useState(() => createSaveScheduler(saveThreads, { delayMs: 250 }));`,
+        `  useEffect(() => { saver.schedule(threads); }, [saver, threads]);`,
+        `  useEffect(() => {`,
+        `    // Flush the pending write when the tab closes mid-debounce (or mid-stream).`,
+        `    const flush = () => saver.flush();`,
+        `    window.addEventListener('beforeunload', flush);`,
+        `    return () => window.removeEventListener('beforeunload', flush);`,
+        `  }, [saver]);`,
+        ``,
+        `  const active = threads.find((t) => t.id === activeId) ?? null;`,
+        `  const messages = active?.messages ?? NO_MESSAGES;`,
+        `  const loading = activeId !== null && streamingIds.includes(activeId);`,
+        `  // The rail's row shape is a VIEW of your record — titles and counts, no`,
+        `  // message bodies. Newest-first is your ordering; the rail renders the array`,
+        `  // in the order it is given.`,
+        `  const rows = threads.map((t) => ({ id: t.id, title: t.title, messageCount: t.messages.length, updatedAt: t.updatedAt }));`,
+      ].join('\n')
+    : [
+        ...(hasEmbedded
+          ? sampleSeedComment(isMock, '  ', (literal) => [
+              `const sampleMessages: ChatMessage[] = [${literal}];`,
+              `const [messages, setMessages] = useState<ChatMessage[]>(sampleMessages);`,
+            ])
+          : []),
+        `  const [messages, setMessages] = useState<ChatMessage[]>([]);`,
+      ].join('\n');
+
+  // The block's module-scope pieces: the thread store (the consumer-owned
+  // persistence boundary) plus the stable empty-thread reference.
+  const blockModuleInit = block
+    ? [
+        // One joined entry so the JSX branches' blank-line filter cannot squash
+        // the store's own paragraph breaks.
+        [
+          `/** A stable reference for the empty thread. \`messages\` is diffed by`,
+          ` *  reference, so a fresh \`[]\` every render would re-notify for nothing. */`,
+          `const NO_MESSAGES: ChatMessage[] = [];`,
+          ``,
+          ...blockThreadStoreLines(''),
+        ].join('\n'),
+      ]
+    : [];
+
+  // In block mode `loading` derives from the sessions map, so the single
+  // boolean is not declared (and would fail noUnusedLocals if it were).
+  const loadingInit = block ? [] : [`  const [loading, setLoading] = useState(false);`];
 
   // SCAF-9: sample sources data for knowledge-base archetype.
   const sampleSourcesInit =
@@ -2289,23 +2706,138 @@ function renderJsx(components: readonly string[], ctx: RenderCtx, framework: str
   const cardPropsNote = (pad: string): string[] =>
     ctx.emitCards ? jsxComment(CARD_PROP_COMMENT, pad) : [];
 
+  // The block's submit prelude: bind the turn to ONE thread id, create the
+  // record on its first turn, and open the session. Rides in `afterValue` so it
+  // lands after the value guard (and after the attachment capture, which must
+  // read the staging list before anything clears it).
+  const blockPrelude = block
+    ? [
+        ...BLOCK_TARGET_ID_NOTE.map((l) => `// ${l}`),
+        `const targetId = activeId ?? crypto.randomUUID();`,
+        `// The record is born on its first turn — with YOUR title policy.`,
+        `setThreads((prev) => prev.some((t) => t.id === targetId)`,
+        `  ? prev`,
+        `  : [{ id: targetId, title: deriveTitle(value), updatedAt: new Date().toISOString(), messages: [] }, ...prev]);`,
+        `setActiveId(targetId);`,
+        ...BLOCK_BIND_NOTE.map((l) => `// ${l}`),
+        `const setMessages = bindThreadMessages<Thread>(setThreads, targetId, {`,
+        `  touch: (t) => ({ ...t, updatedAt: new Date().toISOString() }),`,
+        `});`,
+        `const controller = sessions.begin(targetId);`,
+      ]
+    : [];
+
+  // The turn-scoped React thread binding, seeded from the TARGET thread's
+  // stored messages — the line that makes continuing an old conversation after
+  // a reload a real continuation rather than a fresh start.
+  const blockReactThread: ThreadBinding = {
+    open: ({ pad, userMessage }) => [
+      `${pad}// THE TURN OWNS THE THREAD (same rule as the single-thread scaffold): the`,
+      `${pad}// loop below re-encodes it every round, and React state cannot be read`,
+      `${pad}// back mid-turn. setMessages (the id-bound sink) just projects it.`,
+      `${pad}let thread: ChatMessage[] = [...(threads.find((t) => t.id === targetId)?.messages ?? []), ${userMessage}];`,
+      `${pad}const set: SetMessages = (fn) => { thread = fn(thread); setMessages(() => thread); };`,
+      `${pad}setMessages(() => thread);`,
+    ],
+    live: 'thread',
+    setter: 'set',
+  };
+
   // onSubmit body. The mock and the real backend differ by ONE expression — the
   // stream's source — and share every other line: see `realStreamBody`.
   const onSubmitBody = realStreamBody({
     pad: '    ',
-    read: 'messages',
-    commitSet: (expr) => `setMessages(${expr});`,
-    // useState's setter IS a SetMessages: both are (updater) => void.
+    read: block ? `(threads.find((t) => t.id === targetId)?.messages ?? [])` : 'messages',
+    commitSet: block ? (expr) => `setMessages(() => ${expr});` : (expr) => `setMessages(${expr});`,
+    // useState's setter IS a SetMessages: both are (updater) => void — and in
+    // block mode the id-bound sink from bindThreadMessages is one too.
     setterAdapter: 'setMessages',
-    setLoading: (v) => `setLoading(${v});`,
+    setLoading: block
+      ? (v) =>
+          v === 'true'
+            ? `// loading for THIS thread now derives from the sessions map (streamingIds).`
+            : `sessions.end(targetId, controller);`
+      : (v) => `setLoading(${v});`,
     bodyPayload: realBodyPayload({ defaultModel, tools: emitTools }),
     strictRoles: true,
     toolLoop: emitToolLoop,
     cards: ctx.emitCards,
-    thread: REACT_THREAD,
+    thread: block ? blockReactThread : REACT_THREAD,
     mock: isMock,
+    ...(block ? { fetchSignal: 'controller.signal' } : {}),
     ...attachmentSubmitOpts,
+    ...(block
+      ? {
+          afterValue: [
+            ...((attachmentSubmitOpts as { afterValue?: string[] }).afterValue ?? []),
+            ...blockPrelude,
+          ],
+        }
+      : {}),
   });
+
+  // The surface JSX, shared by the next and plain-react branches below: the
+  // attachment strip, the chat (or the artifact split around it) and the
+  // companions — wrapped by the shell when this is the workspace BLOCK.
+  const chatJsx = (pad: string): string[] => [
+    ...cardPropsNote(pad),
+    `${pad}<Chat`,
+    `${pad}  messages={messages}`,
+    `${pad}  loading={loading}`,
+    `${pad}  suggestions={suggestions}`,
+    `${pad}  suggestionMode="submit"`,
+    ...cardProps(`${pad}  `),
+    `${pad}  onSubmit={onSubmit}`,
+    `${pad}  style={{ ${jsxStyle(p.chatFill)} }}`,
+    `${pad}/>`,
+  ];
+  const splitJsx: string[] = [
+    `      {/* SCAF-14: workspace split — chat pane left, artifact preview right. */}`,
+    `      {/* Resizable needs ResizableItem children to render panels. */}`,
+    `      <Resizable orientation="horizontal" style={{ display: 'block', width: '100%', height: '100%' }}>`,
+    `        <ResizableItem size="40%" min="240px">`,
+    ...chatJsx('          '),
+    `        </ResizableItem>`,
+    `        <ResizableItem min="280px">`,
+    `          {/* Replace src + files with your real artifact data (files is required: array/object props are never optional attributes on a kai-* element). */}`,
+    `          <Artifact src="https://example.com" files={[{ path: 'index.html', url: 'https://example.com' }]} style={{ width: '100%', height: '100%' }} />`,
+    `        </ResizableItem>`,
+    `      </Resizable>`,
+  ];
+  // Standalone companions are siblings of the SPLIT (or of the chat): the split
+  // owns chat + artifact, and a sources panel or a voice input belongs beside
+  // it. Dropping them here is what the old workspace branch used to do.
+  const mainJsx: string[] = [
+    ...(attachmentJsx ? [attachmentJsx] : []),
+    ...(workspace ? [...splitJsx, companions] : [...chatJsx('      '), companions]),
+  ];
+  const surfaceJsx: string[] = block
+    ? [
+        `      {/* ── The workspace BLOCK: the shell + the rail + your thread records ── */}`,
+        `      {/* <Workspace> is the chat-agnostic layout shell (header/start/main/end/`,
+        `          footer slots, aside resize + collapse, a mobile drawer below`,
+        `          drawerBelow px). It knows nothing about chat. */}`,
+        `      <Workspace drawerBelow={720} style={{ display: 'block', width: '100%', height: '100%' }}>`,
+        ...jsxComment(BLOCK_RAIL_NOTE, '        '),
+        `        {/* The React wrappers forward no slot prop, so a plain div carries the`,
+        `            slot attribute into the shell's start aside. */}`,
+        `        <div slot="start" style={{ height: '100%' }}>`,
+        `          {/* New chat = a DRAFT (activeId null): the record appears on the first turn. */}`,
+        `          <Conversations`,
+        `            conversations={rows}`,
+        `            activeId={activeId ?? undefined}`,
+        `            onConversationSelect={(e) => setActiveId(e.detail.id)}`,
+        `            onNewChat={() => setActiveId(null)}`,
+        `            style={{ display: 'block', height: '100%' }}`,
+        `          />`,
+        `        </div>`,
+        `        {/* Unnamed children project into the shell's MAIN region. */}`,
+        `        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>`,
+        ...indentEmitted(mainJsx, '    '),
+        `        </div>`,
+        `      </Workspace>`,
+      ]
+    : mainJsx;
 
   // SCAF-2: Next.js App Router requires 'use client' for components that use hooks/interactivity.
   const useClientDirective = framework === 'next' ? [`'use client';`, ``] : [];
@@ -2330,7 +2862,7 @@ function renderJsx(components: readonly string[], ctx: RenderCtx, framework: str
     return [
       // 'use client' must be the very first line for Next.js App Router.
       ...useClientDirective,
-      `import { useState } from 'react';`,
+      `import { ${block ? 'useEffect, useState' : 'useState'} } from 'react';`,
       `import dynamic from 'next/dynamic';`,
       // The adapter is pure parsing + pure state; both entries are SSR-import-safe,
       // so they stay static imports even though the ELEMENTS have to be dynamic.
@@ -2342,6 +2874,7 @@ function renderJsx(components: readonly string[], ctx: RenderCtx, framework: str
         cardTools: ctx.cardProvider !== null,
         mock: isMock,
         attachments,
+        workspaceBlock: block,
       }),
       `import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
       `// <kai-*> are client-only custom elements (the server has no customElements`,
@@ -2355,10 +2888,11 @@ function renderJsx(components: readonly string[], ctx: RenderCtx, framework: str
       ...mockInit,
       ``,
       ...attachmentModuleInit,
+      ...blockModuleInit,
       ...cardsInit,
       `export default function App() {`,
       sampleMessagesInit,
-      `  const [loading, setLoading] = useState(false);`,
+      ...loadingInit,
       `  const suggestions = ${jsArray(suggestions)};`,
       ...(attachmentStateInit ? [attachmentStateInit] : []),
       ...(sampleSourcesInit ? [sampleSourcesInit] : []),
@@ -2372,48 +2906,7 @@ function renderJsx(components: readonly string[], ctx: RenderCtx, framework: str
       ``,
       `  return (`,
       `    <div style={{ ${jsxStyle(p.style)} }}>`,
-      ...(attachmentJsx ? [attachmentJsx] : []),
-      ...(workspace
-        ? [
-            `      {/* SCAF-14: workspace split — chat pane left, artifact preview right. */}`,
-            `      {/* Resizable needs ResizableItem children to render panels. */}`,
-            `      <Resizable orientation="horizontal" style={{ display: 'block', width: '100%', height: '100%' }}>`,
-            `        <ResizableItem size="40%" min="240px">`,
-            ...cardPropsNote('          '),
-            `          <Chat`,
-            `            messages={messages}`,
-            `            loading={loading}`,
-            `            suggestions={suggestions}`,
-            `            suggestionMode="submit"`,
-            ...cardProps('            '),
-            `            onSubmit={onSubmit}`,
-            `            style={{ ${jsxStyle(p.chatFill)} }}`,
-            `          />`,
-            `        </ResizableItem>`,
-            `        <ResizableItem min="280px">`,
-            `          {/* Replace src + files with your real artifact data (files is required: array/object props are never optional attributes on a kai-* element). */}`,
-            `          <Artifact src="https://example.com" files={[{ path: 'index.html', url: 'https://example.com' }]} style={{ width: '100%', height: '100%' }} />`,
-            `        </ResizableItem>`,
-            `      </Resizable>`,
-            // Standalone companions are siblings of the SPLIT, not of the chat:
-            // the split owns chat + artifact, and a sources panel or a voice input
-            // belongs beside it. Dropping them here is what the workspace branch
-            // used to do — see WORKSPACE_STRUCTURAL_TAGS.
-            companions,
-          ]
-        : [
-            ...cardPropsNote('      '),
-            `      <Chat`,
-            `        messages={messages}`,
-            `        loading={loading}`,
-            `        suggestions={suggestions}`,
-            `        suggestionMode="submit"`,
-            ...cardProps('        '),
-            `        onSubmit={onSubmit}`,
-            `        style={{ ${jsxStyle(p.chatFill)} }}`,
-            `      />`,
-            companions,
-          ]),
+      ...surfaceJsx,
       `    </div>`,
       `  );`,
       `}`,
@@ -2431,7 +2924,7 @@ function renderJsx(components: readonly string[], ctx: RenderCtx, framework: str
     // (1) REQUIRED: registers <kai-*> — the react wrappers do NOT auto-register.
     // Must come BEFORE importing the wrappers, or <kai-chat> renders empty.
     `import '@kitn.ai/ui/elements';  // registers <kai-*> — required, must come first`,
-    `import { useState } from 'react';`,
+    `import { ${block ? 'useEffect, useState' : 'useState'} } from 'react';`,
     `import { ${importList} } from '@kitn.ai/ui/react';`,
     ...wireImportLines({
       typed: true,
@@ -2441,6 +2934,7 @@ function renderJsx(components: readonly string[], ctx: RenderCtx, framework: str
       cardTools: ctx.cardProvider !== null,
       mock: isMock,
       attachments,
+      workspaceBlock: block,
     }),
     `import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
     ``,
@@ -2450,10 +2944,11 @@ function renderJsx(components: readonly string[], ctx: RenderCtx, framework: str
     ...mockInit,
     ``,
     ...attachmentModuleInit,
+    ...blockModuleInit,
     ...cardsInit,
     `export default function App() {`,
     sampleMessagesInit,
-    `  const [loading, setLoading] = useState(false);`,
+    ...loadingInit,
     `  const suggestions = ${jsArray(suggestions)};`,
     ...(attachmentStateInit ? [attachmentStateInit] : []),
     ...(sampleSourcesInit ? [sampleSourcesInit] : []),
@@ -2467,45 +2962,7 @@ function renderJsx(components: readonly string[], ctx: RenderCtx, framework: str
     ``,
     `  return (`,
     `    <div style={{ ${jsxStyle(p.style)} }}>`,
-    ...(attachmentJsx ? [attachmentJsx] : []),
-    ...(workspace
-      ? [
-          `      {/* SCAF-14: workspace split — chat pane left, artifact preview right. */}`,
-          `      {/* Resizable needs ResizableItem children to render panels. */}`,
-          `      <Resizable orientation="horizontal" style={{ display: 'block', width: '100%', height: '100%' }}>`,
-          `        <ResizableItem size="40%" min="240px">`,
-          ...cardPropsNote('          '),
-          `          <Chat`,
-          `            messages={messages}`,
-          `            loading={loading}`,
-          `            suggestions={suggestions}`,
-          `            suggestionMode="submit"`,
-          ...cardProps('            '),
-          `            onSubmit={onSubmit}`,
-          `            style={{ ${jsxStyle(p.chatFill)} }}`,
-          `          />`,
-          `        </ResizableItem>`,
-          `        <ResizableItem min="280px">`,
-          `          {/* Replace src + files with your real artifact data (files is required: array/object props are never optional attributes on a kai-* element). */}`,
-          `          <Artifact src="https://example.com" files={[{ path: 'index.html', url: 'https://example.com' }]} style={{ width: '100%', height: '100%' }} />`,
-          `        </ResizableItem>`,
-          `      </Resizable>`,
-          // Siblings of the SPLIT — see the same line in the other JSX branch.
-          companions,
-        ]
-      : [
-          ...cardPropsNote('      '),
-          `      <Chat`,
-          `        messages={messages}`,
-          `        loading={loading}`,
-          `        suggestions={suggestions}`,
-          `        suggestionMode="submit"`,
-          ...cardProps('        '),
-          `        onSubmit={onSubmit}`,
-          `        style={{ ${jsxStyle(p.chatFill)} }}`,
-          `      />`,
-          companions,
-        ]),
+    ...surfaceJsx,
     `    </div>`,
     `  );`,
     `}`,
@@ -2520,17 +2977,21 @@ function renderVue(components: readonly string[], ctx: RenderCtx): string {
 
   // SCAF-9: exclude message-embedded tags from companion rendering.
   // SCAF-14: also exclude workspace structural tags (handled by the workspace block below).
-  const workspace = isWorkspace(components);
+  const workspace = isArtifactSplit(components);
+  const block = isWorkspaceBlock(components);
   const attachments = hasAttachments(components);
   // Slotted companions are children of <kai-chat> (see `slottedChildMarkup`), so
-  // they leave the sibling loop the same way they do in the html target.
+  // they leave the sibling loop the same way they do in the html target. In
+  // BLOCK mode the rail lives in the SHELL's start aside instead.
   const slottedTags = new Set(slottedInChat(components).map((s) => s.tag));
-  const vueSlotted = (pad: string) => slottedChildMarkup(components, pad, { wired: false, ids: false });
+  const vueSlotted = (pad: string) =>
+    block ? [] : slottedChildMarkup(components, pad, { wired: false, ids: false });
   const standaloneCompanionTags = components.filter(
     (t) =>
       t !== 'kai-chat' &&
       !MESSAGE_EMBEDDED_TAGS.has(t) &&
-      !WORKSPACE_STRUCTURAL_TAGS.has(t) &&
+      !ARTIFACT_SPLIT_TAGS.has(t) &&
+      !(block && BLOCK_TAGS.has(t)) &&
       !slottedTags.has(t) &&
       !(attachments && ATTACHMENT_TAGS.has(t)),
   );
@@ -2602,19 +3063,57 @@ function renderVue(components: readonly string[], ctx: RenderCtx): string {
       }
     : {};
 
+  // The block's submit prelude — same shape as the other targets; refs instead
+  // of React state.
+  const blockRead = `(threads.value.find((t) => t.id === targetId)?.messages ?? [])`;
+  const blockPrelude = block
+    ? [
+        ...BLOCK_TARGET_ID_NOTE.map((l) => `// ${l}`),
+        `const targetId = activeId.value ?? crypto.randomUUID();`,
+        `// The record is born on its first turn — with YOUR title policy.`,
+        `setThreads((prev) => prev.some((t) => t.id === targetId)`,
+        `  ? prev`,
+        `  : [{ id: targetId, title: deriveTitle(value), updatedAt: new Date().toISOString(), messages: [] }, ...prev]);`,
+        `activeId.value = targetId;`,
+        ...BLOCK_BIND_NOTE.map((l) => `// ${l}`),
+        `const setMessages = bindThreadMessages<Thread>(setThreads, targetId, {`,
+        `  touch: (t) => ({ ...t, updatedAt: new Date().toISOString() }),`,
+        `});`,
+        `const controller = sessions.begin(targetId);`,
+      ]
+    : [];
+
   const onSubmitBody = realStreamBody({
     pad: '    ',
-    read: 'messages.value',
-    commitSet: (expr) => `messages.value = ${expr};`,
-    setterAdapter: '(fn) => { messages.value = fn(messages.value); }',
-    setLoading: (v) => `loading.value = ${v};`,
+    read: block ? blockRead : 'messages.value',
+    commitSet: block
+      ? (expr) => `setMessages(() => ${expr});`
+      : (expr) => `messages.value = ${expr};`,
+    setterAdapter: block ? 'setMessages' : '(fn) => { messages.value = fn(messages.value); }',
+    setLoading: block
+      ? (v) =>
+          v === 'true'
+            ? `// loading for THIS thread now derives from the sessions map (streamingIds).`
+            : `sessions.end(targetId, controller);`
+      : (v) => `loading.value = ${v};`,
     bodyPayload: realBodyPayload({ defaultModel, tools: emitTools }),
     strictRoles: true,
     toolLoop: emitToolLoop,
     cards: ctx.emitCards,
-    thread: liveThreadBinding('messages.value', '(fn) => { messages.value = fn(messages.value); }'),
+    thread: block
+      ? blockLiveThread(blockRead)
+      : liveThreadBinding('messages.value', '(fn) => { messages.value = fn(messages.value); }'),
     mock: isMock,
+    ...(block ? { fetchSignal: 'controller.signal' } : {}),
     ...attachmentSubmitOpts,
+    ...(block
+      ? {
+          afterValue: [
+            ...((attachmentSubmitOpts as { afterValue?: string[] }).afterValue ?? []),
+            ...blockPrelude,
+          ],
+        }
+      : {}),
   });
 
   // SCAF-10: ChatMessage declaration for strict-TS Vue consumers.
@@ -2644,15 +3143,51 @@ function renderVue(components: readonly string[], ctx: RenderCtx): string {
   // Same scope again: the loop in onSubmit calls runTool.
   const runnerLines = emitToolLoop ? toolRunnerLines('', true) : [];
 
-  // SCAF-9: no fabricated seed — see SAMPLE_AGENTIC_MESSAGE.
-  const sampleSeed = [
-    ...(hasEmbedded
-      ? sampleSeedComment(isMock, '', (literal) => [
-          `const messages = ref<ChatMessage[]>([${literal}]);`,
-        ])
-      : []),
-    `const messages = ref<ChatMessage[]>([]);`,
-  ];
+  // SCAF-9: no fabricated seed — see SAMPLE_AGENTIC_MESSAGE. In BLOCK mode the
+  // thread state is the block's multi-thread store; `messages`/`loading` become
+  // computed views of it.
+  const sampleSeed = block
+    ? [
+        `// ── The block's state: your records + the kit's session/persistence helpers ──`,
+        `const threads = ref<Thread[]>(loadThreads());`,
+        `// null means a DRAFT: "New chat" was pressed and nothing is stored yet. A`,
+        `// record is created on its first turn, so the rail never fills with empties.`,
+        `const activeId = ref<string | null>(threads.value[0]?.id ?? null);`,
+        `// One id per in-flight reply — a stream keeps running when you switch away.`,
+        `const streamingIds = ref<string[]>([]);`,
+        ...BLOCK_SESSIONS_NOTE.map((l) => `// ${l}`),
+        `const sessions = createThreadSessions((ids) => { streamingIds.value = ids; });`,
+        `// The save scheduler: the debounce/flush MECHANICS are the kit's; the delay,`,
+        `// the save target and what a failed save means are YOURS (see saveThreads).`,
+        `const saver = createSaveScheduler(saveThreads, { delayMs: 250 });`,
+        `watch(threads, () => saver.schedule(threads.value));`,
+        `// Every write goes through this — a NEW array per write is what notifies.`,
+        `const setThreads = (updater: (prev: Thread[]) => Thread[]): void => {`,
+        `  threads.value = updater(threads.value);`,
+        `};`,
+        `const active = computed(() => threads.value.find((t) => t.id === activeId.value) ?? null);`,
+        `const messages = computed(() => active.value?.messages ?? []);`,
+        `const loading = computed(() => { const id = activeId.value; return id !== null && streamingIds.value.includes(id); });`,
+        `// The rail's row shape is a VIEW of your record — titles and counts, no`,
+        `// message bodies. The rail renders the array in the order it is given.`,
+        `const rows = computed(() => threads.value.map((t) => ({ id: t.id, title: t.title, messageCount: t.messages.length, updatedAt: t.updatedAt })));`,
+        ``,
+        `function onSelect(event: Event) {`,
+        `  activeId.value = (event as CustomEvent<{ id: string }>).detail.id;`,
+        `}`,
+        `function onNewChat() {`,
+        `  // A DRAFT, not a record: it becomes a thread on its first turn.`,
+        `  activeId.value = null;`,
+        `}`,
+      ]
+    : [
+        ...(hasEmbedded
+          ? sampleSeedComment(isMock, '', (literal) => [
+              `const messages = ref<ChatMessage[]>([${literal}]);`,
+            ])
+          : []),
+        `const messages = ref<ChatMessage[]>([]);`,
+      ];
 
   // SCAF-9: sample sources setup.
   const sourcesSeed = standaloneCompanionTags.includes('kai-sources')
@@ -2671,7 +3206,10 @@ function renderVue(components: readonly string[], ctx: RenderCtx): string {
 
   // SCAF-15: always import onMounted — we re-apply props after the element upgrades
   // (the .prop bindings can apply before the async element registration resolves).
-  const vueImports = `import { ref, onMounted } from 'vue';`;
+  // The block adds computed (the derived views) and watch (the save schedule).
+  const vueImports = block
+    ? `import { computed, onMounted, ref, watch } from 'vue';`
+    : `import { ref, onMounted } from 'vue';`;
 
   // SCAF-14: workspace template block — resizable split with chat + artifact panes.
   const workspaceTemplate = workspace
@@ -2729,15 +3267,17 @@ function renderVue(components: readonly string[], ctx: RenderCtx): string {
       cardTools: ctx.cardProvider !== null,
       mock: isMock,
       attachments,
+      workspaceBlock: block,
     }),
     `import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
     vueImports,
     ``,
     ...mockInit,
     ``,
+    ...(block ? [blockThreadStoreLines('').join('\n'), ``] : []),
     ...cardsInit,
     ...sampleSeed,
-    `const loading = ref(false);`,
+    ...(block ? [] : [`const loading = ref(false);`]),
     `const suggestions = ${jsArray(suggestions)};`,
     ...modelInit,
     ...toolsLines,
@@ -2753,6 +3293,16 @@ function renderVue(components: readonly string[], ctx: RenderCtx): string {
     ...(ctx.emitCards ? CARD_PROP_COMMENT.map((l) => `  ${l}`) : []),
     `  const el = document.querySelector('kai-chat');`,
     `  if (el) Object.assign(el, { messages: messages.value, loading: loading.value, suggestions${cardPropAssign.length ? `, ${cardPropAssign.join(', ')}` : ''} });`,
+    ...(block
+      ? [
+          `  // The rail's array props follow the same upgrade rule.`,
+          `  await customElements.whenDefined('kai-conversations');`,
+          `  const rail = document.querySelector('kai-conversations');`,
+          `  if (rail) Object.assign(rail, { conversations: rows.value, activeId: activeId.value ?? undefined });`,
+          `  // Flush the pending write when the tab closes mid-debounce (or mid-stream).`,
+          `  window.addEventListener('beforeunload', saver.flush);`,
+        ]
+      : []),
     `});`,
     ``,
     `async function onSubmit(e: ${attachments
@@ -2764,8 +3314,38 @@ function renderVue(components: readonly string[], ctx: RenderCtx): string {
     ``,
     `<template>`,
     `  <div style="${p.style}">`,
-    ...(attachmentTemplate ? [attachmentTemplate] : []),
-    ...workspaceTemplate,
+    ...(block
+      ? [
+          `    <!-- ── The workspace BLOCK: the shell + the rail + your thread records ── -->`,
+          ...htmlComment(
+            [
+              `<kai-workspace> is the chat-agnostic layout shell: header/start/main/`,
+              `end/footer slots, aside resize + collapse, and a mobile drawer below`,
+              `the drawer-below width. It knows nothing about chat.`,
+            ],
+            '    ',
+          ),
+          `    <kai-workspace drawer-below="720" style="display:block;width:100%;height:100%">`,
+          ...htmlComment(BLOCK_RAIL_NOTE, '      '),
+          `      <!-- New chat = a DRAFT (activeId null): the record appears on the first turn. -->`,
+          `      <kai-conversations`,
+          `        slot="start"`,
+          `        :conversations.prop="rows"`,
+          `        :activeId.prop="activeId ?? undefined"`,
+          `        style="display:block;height:100%"`,
+          `        @kai-conversation-select="onSelect"`,
+          `        @kai-new-chat="onNewChat"`,
+          `      />`,
+          `      <!-- Unnamed children project into the shell's MAIN region. -->`,
+          `      <div style="display:flex;flex-direction:column;height:100%;min-height:0">`,
+          ...indentEmitted(
+            [...(attachmentTemplate ? [attachmentTemplate] : []), ...workspaceTemplate],
+            '    ',
+          ),
+          `      </div>`,
+          `    </kai-workspace>`,
+        ]
+      : [...(attachmentTemplate ? [attachmentTemplate] : []), ...workspaceTemplate]),
     `  </div>`,
     `</template>`,
   ]
@@ -2779,17 +3359,21 @@ function renderSvelte(components: readonly string[], ctx: RenderCtx): string {
 
   // SCAF-9: exclude message-embedded tags from companion rendering.
   // SCAF-14: also exclude workspace structural tags (handled by the workspace block below).
-  const workspace = isWorkspace(components);
+  const workspace = isArtifactSplit(components);
+  const block = isWorkspaceBlock(components);
   const attachments = hasAttachments(components);
   // Slotted companions are children of <kai-chat>, not siblings — same rule the
-  // html and vue targets follow, read from the same catalog record.
+  // html and vue targets follow, read from the same catalog record. In BLOCK
+  // mode the rail lives in the SHELL's start aside instead.
   const slottedTags = new Set(slottedInChat(components).map((s) => s.tag));
-  const svelteSlotted = (pad: string) => slottedChildMarkup(components, pad, { wired: false, ids: false });
+  const svelteSlotted = (pad: string) =>
+    block ? [] : slottedChildMarkup(components, pad, { wired: false, ids: false });
   const standaloneCompanionTags = components.filter(
     (t) =>
       t !== 'kai-chat' &&
       !MESSAGE_EMBEDDED_TAGS.has(t) &&
-      !WORKSPACE_STRUCTURAL_TAGS.has(t) &&
+      !ARTIFACT_SPLIT_TAGS.has(t) &&
+      !(block && BLOCK_TAGS.has(t)) &&
       !slottedTags.has(t) &&
       !(attachments && ATTACHMENT_TAGS.has(t)),
   );
@@ -2824,19 +3408,54 @@ function renderSvelte(components: readonly string[], ctx: RenderCtx): string {
       }
     : {};
 
+  // The block's submit prelude — runes state instead of refs; same shape.
+  const blockRead = `(threads.find((t) => t.id === targetId)?.messages ?? [])`;
+  const blockPrelude = block
+    ? [
+        ...BLOCK_TARGET_ID_NOTE.map((l) => `// ${l}`),
+        `const targetId = activeId ?? crypto.randomUUID();`,
+        `// The record is born on its first turn — with YOUR title policy.`,
+        `setThreads((prev) => prev.some((t) => t.id === targetId)`,
+        `  ? prev`,
+        `  : [{ id: targetId, title: deriveTitle(value), updatedAt: new Date().toISOString(), messages: [] }, ...prev]);`,
+        `activeId = targetId;`,
+        ...BLOCK_BIND_NOTE.map((l) => `// ${l}`),
+        `const setMessages = bindThreadMessages<Thread>(setThreads, targetId, {`,
+        `  touch: (t) => ({ ...t, updatedAt: new Date().toISOString() }),`,
+        `});`,
+        `const controller = sessions.begin(targetId);`,
+      ]
+    : [];
+
   const onSubmitBody = realStreamBody({
     pad: '    ',
-    read: 'messages',
-    commitSet: (expr) => `messages = ${expr};`,
-    setterAdapter: '(fn) => { messages = fn(messages); }',
-    setLoading: (v) => `loading = ${v};`,
+    read: block ? blockRead : 'messages',
+    commitSet: block ? (expr) => `setMessages(() => ${expr});` : (expr) => `messages = ${expr};`,
+    setterAdapter: block ? 'setMessages' : '(fn) => { messages = fn(messages); }',
+    setLoading: block
+      ? (v) =>
+          v === 'true'
+            ? `// loading for THIS thread now derives from the sessions map (streamingIds).`
+            : `sessions.end(targetId, controller);`
+      : (v) => `loading = ${v};`,
     bodyPayload: realBodyPayload({ defaultModel, tools: emitTools }),
     strictRoles: true,
     toolLoop: emitToolLoop,
     cards: ctx.emitCards,
-    thread: liveThreadBinding('messages', '(fn) => { messages = fn(messages); }'),
+    thread: block
+      ? blockLiveThread(blockRead)
+      : liveThreadBinding('messages', '(fn) => { messages = fn(messages); }'),
     mock: isMock,
+    ...(block ? { fetchSignal: 'controller.signal' } : {}),
     ...attachmentSubmitOpts,
+    ...(block
+      ? {
+          afterValue: [
+            ...((attachmentSubmitOpts as { afterValue?: string[] }).afterValue ?? []),
+            ...blockPrelude,
+          ],
+        }
+      : {}),
   });
 
   // SCAF-10: ChatMessage declaration for strict-TS Svelte consumers.
@@ -2870,14 +3489,55 @@ function renderSvelte(components: readonly string[], ctx: RenderCtx): string {
   // chunk (mutating in place does not re-render), which is exactly what raw state
   // tracks. Deep state would also proxy every message object on its way into a
   // Solid-backed custom element, for reactivity this code never relies on.
-  const sampleMessagesInit = [
-    ...(hasEmbedded
-      ? sampleSeedComment(isMock, '  ', (literal) => [
-          `let messages = $state.raw<ChatMessage[]>([${literal}]);`,
-        ])
-      : []),
-    `  let messages = $state.raw<ChatMessage[]>([]);`,
-  ];
+  const sampleMessagesInit = block
+    ? [
+        `  // ── The block's state: your records + the kit's session/persistence helpers ─`,
+        `  // $state.raw for the same reason messages was: the kit's contract is a NEW`,
+        `  // array reference per write, which is exactly what raw state tracks.`,
+        `  let threads = $state.raw<Thread[]>(loadThreads());`,
+        `  // null means a DRAFT: "New chat" was pressed and nothing is stored yet. A`,
+        `  // record is created on its first turn, so the rail never fills with empties.`,
+        `  let activeId = $state<string | null>(threads[0]?.id ?? null);`,
+        `  // One id per in-flight reply — a stream keeps running when you switch away.`,
+        `  let streamingIds = $state.raw<string[]>([]);`,
+        ...BLOCK_SESSIONS_NOTE.map((l) => `  // ${l}`),
+        `  const sessions = createThreadSessions((ids) => { streamingIds = ids; });`,
+        `  // The save scheduler: the debounce/flush MECHANICS are the kit's; the delay,`,
+        `  // the save target and what a failed save means are YOURS (see saveThreads).`,
+        `  const saver = createSaveScheduler(saveThreads, { delayMs: 250 });`,
+        `  $effect(() => { saver.schedule(threads); });`,
+        `  // Every write goes through this — a NEW array per write is what notifies.`,
+        `  const setThreads = (updater: (prev: Thread[]) => Thread[]): void => {`,
+        `    threads = updater(threads);`,
+        `  };`,
+        `  const active = $derived(threads.find((t) => t.id === activeId) ?? null);`,
+        `  const messages = $derived(active?.messages ?? []);`,
+        `  const loading = $derived.by(() => { const id = activeId; return id !== null && streamingIds.includes(id); });`,
+        `  // The rail's row shape is a VIEW of your record — titles and counts, no`,
+        `  // message bodies. The rail renders the array in the order it is given.`,
+        `  const rows = $derived(threads.map((t) => ({ id: t.id, title: t.title, messageCount: t.messages.length, updatedAt: t.updatedAt })));`,
+        `  // \`bind:this\` writes to this binding, so under runes it must be $state.`,
+        `  let railEl = $state<KaiConversationsElement | undefined>(undefined);`,
+        `  $effect(() => {`,
+        `    if (railEl && defined) { railEl.conversations = rows; railEl.activeId = activeId ?? undefined; }`,
+        `  });`,
+        ``,
+        `  function onSelect(e: CustomEvent<{ id: string }>) {`,
+        `    activeId = e.detail.id;`,
+        `  }`,
+        `  function onNewChat() {`,
+        `    // A DRAFT, not a record: it becomes a thread on its first turn.`,
+        `    activeId = null;`,
+        `  }`,
+      ]
+    : [
+        ...(hasEmbedded
+          ? sampleSeedComment(isMock, '  ', (literal) => [
+              `let messages = $state.raw<ChatMessage[]>([${literal}]);`,
+            ])
+          : []),
+        `  let messages = $state.raw<ChatMessage[]>([]);`,
+      ];
 
   // SCAF-9: sources element ref + sample data. Typed as the kit's own element
   // interface (not HTMLElement) so the `.sources =` assignment below typechecks
@@ -2974,6 +3634,7 @@ function renderSvelte(components: readonly string[], ctx: RenderCtx): string {
     // on every archetype without kai-sources.
     `  import type { ${[
       'KaiChatElement',
+      ...(block ? ['KaiConversationsElement'] : []),
       ...(hasSourcesCompanion ? ['KaiSourcesElement'] : []),
       ...(attachments ? ['KaiAttachmentsElement'] : []),
     ].join(', ')} } from '@kitn.ai/ui/elements';`,
@@ -2985,20 +3646,37 @@ function renderSvelte(components: readonly string[], ctx: RenderCtx): string {
       cardTools: ctx.cardProvider !== null,
       mock: isMock,
       attachments,
+      workspaceBlock: block,
     }),
     `  import '@kitn.ai/ui/theme.tokens.css';  // compiled token defaults; use theme.css only for Tailwind-source apps`,
     `  import { onMount } from 'svelte';`,
     ...mockInit,
+    ...(block ? [blockThreadStoreLines('  ').join('\n'), ``] : []),
     `  // \`bind:this\` writes to this binding, so under runes it must be $state.`,
     `  let chatEl = $state<KaiChatElement | undefined>(undefined);`,
     `  // SCAF-15: kai-* register via an async dynamic import (SSR-safety). Gate the`,
     `  // property $effect on the upgrade so the first application isn't dropped`,
     `  // (props set on a not-yet-upgraded element are lost on upgrade).`,
     `  let defined = $state(false);`,
-    `  onMount(async () => { await customElements.whenDefined('kai-chat'); defined = true; });`,
+    ...(block
+      ? [
+          `  onMount(() => {`,
+          `    void Promise.all([`,
+          `      customElements.whenDefined('kai-chat'),`,
+          `      customElements.whenDefined('kai-conversations'),`,
+          `    ]).then(() => { defined = true; });`,
+          `    // Flush the pending write when the tab closes mid-debounce (or mid-stream).`,
+          `    const flush = () => saver.flush();`,
+          `    window.addEventListener('beforeunload', flush);`,
+          `    return () => window.removeEventListener('beforeunload', flush);`,
+          `  });`,
+        ]
+      : [
+          `  onMount(async () => { await customElements.whenDefined('kai-chat'); defined = true; });`,
+        ]),
     ...sourcesEl,
     ...sampleMessagesInit,
-    `  let loading = $state(false);`,
+    ...(block ? [] : [`  let loading = $state(false);`]),
     `  const suggestions: string[] = ${jsArray(suggestions)};`,
     ...modelInit,
     ...cardsInit,
@@ -3020,8 +3698,34 @@ function renderSvelte(components: readonly string[], ctx: RenderCtx): string {
     `</script>`,
     ``,
     `<div style="${p.style}">`,
-    ...attachmentMarkup,
-    ...workspaceMarkup,
+    ...(block
+      ? [
+          `  <!-- ── The workspace BLOCK: the shell + the rail + your thread records ── -->`,
+          ...htmlComment(
+            [
+              `<kai-workspace> is the chat-agnostic layout shell: header/start/main/`,
+              `end/footer slots, aside resize + collapse, and a mobile drawer below`,
+              `the drawer-below width. It knows nothing about chat.`,
+            ],
+            '  ',
+          ),
+          `  <kai-workspace drawer-below="720" style="display:block;width:100%;height:100%">`,
+          ...htmlComment(BLOCK_RAIL_NOTE, '    '),
+          `    <!-- New chat = a DRAFT (activeId null): the record appears on the first turn. -->`,
+          `    <kai-conversations`,
+          `      bind:this={railEl}`,
+          `      slot="start"`,
+          `      style="display:block;height:100%"`,
+          `      onkai-conversation-select={onSelect}`,
+          `      onkai-new-chat={onNewChat}`,
+          `    ></kai-conversations>`,
+          `    <!-- Unnamed children project into the shell's MAIN region. -->`,
+          `    <div style="display:flex;flex-direction:column;height:100%;min-height:0">`,
+          ...indentEmitted([...attachmentMarkup, ...workspaceMarkup], '    '),
+          `    </div>`,
+          `  </kai-workspace>`,
+        ]
+      : [...attachmentMarkup, ...workspaceMarkup]),
     `</div>`,
   ]
     .filter((l, i, arr) => !(l === '' && arr[i - 1] === '' && i === arr.length - 1))
@@ -3068,7 +3772,8 @@ function renderTanstackStart(components: readonly string[], ctx: RenderCtx): str
   //      is not needed here — the library is SSR-import-safe, but we include elements for safety)
 
   const hasEmbedded = components.some((t) => MESSAGE_EMBEDDED_TAGS.has(t));
-  const workspace = isWorkspace(components);
+  const workspace = isArtifactSplit(components);
+  const block = isWorkspaceBlock(components);
 
   // Same union as renderJsx, for the same measured reason: this target renders
   // `<Chat …>` unconditionally, so the import list cannot come from `components`
@@ -3089,7 +3794,8 @@ function renderTanstackStart(components: readonly string[], ctx: RenderCtx): str
     (t) =>
       t !== 'kai-chat' &&
       !MESSAGE_EMBEDDED_TAGS.has(t) &&
-      !WORKSPACE_STRUCTURAL_TAGS.has(t) &&
+      !ARTIFACT_SPLIT_TAGS.has(t) &&
+      !(block && BLOCK_TAGS.has(t)) &&
       !(attachments && ATTACHMENT_TAGS.has(t)),
   );
 
@@ -3169,16 +3875,63 @@ function renderTanstackStart(components: readonly string[], ctx: RenderCtx): str
 
   const mockInit = isMock ? mockResponderInit() : [];
 
-  // SCAF-9: no fabricated seed — see SAMPLE_AGENTIC_MESSAGE.
-  const sampleMessagesInit = [
-    ...(hasEmbedded
-      ? sampleSeedComment(isMock, '  ', (literal) => [
-          `const sampleMessages: ChatMessage[] = [${literal}];`,
-          `const [messages, setMessages] = useState<ChatMessage[]>(sampleMessages);`,
-        ])
-      : []),
-    `  const [messages, setMessages] = useState<ChatMessage[]>([]);`,
-  ].join('\n');
+  // SCAF-9: no fabricated seed — see SAMPLE_AGENTIC_MESSAGE. In BLOCK mode the
+  // thread state is the block's multi-thread store (same shape as renderJsx).
+  const sampleMessagesInit = block
+    ? [
+        `  // ── The block's state: your records + the kit's session/persistence helpers ─`,
+        `  const [threads, setThreads] = useState<Thread[]>(loadThreads);`,
+        `  // null means a DRAFT: "New chat" was pressed and nothing is stored yet. A`,
+        `  // record is created on its first turn, so the rail never fills with empties.`,
+        `  const [activeId, setActiveId] = useState<string | null>(threads[0]?.id ?? null);`,
+        `  // One id per in-flight reply — a stream keeps running when you switch away,`,
+        `  // so this cannot be a single boolean.`,
+        `  const [streamingIds, setStreamingIds] = useState<string[]>([]);`,
+        ...BLOCK_SESSIONS_NOTE.map((l) => `  // ${l}`),
+        `  const [sessions] = useState(() => createThreadSessions(setStreamingIds));`,
+        `  // The save scheduler: the debounce/flush MECHANICS are the kit's; the delay,`,
+        `  // the save target and what a failed save means are YOURS (see saveThreads).`,
+        `  const [saver] = useState(() => createSaveScheduler(saveThreads, { delayMs: 250 }));`,
+        `  useEffect(() => { saver.schedule(threads); }, [saver, threads]);`,
+        `  useEffect(() => {`,
+        `    // Flush the pending write when the tab closes mid-debounce (or mid-stream).`,
+        `    const flush = () => saver.flush();`,
+        `    window.addEventListener('beforeunload', flush);`,
+        `    return () => window.removeEventListener('beforeunload', flush);`,
+        `  }, [saver]);`,
+        ``,
+        `  const active = threads.find((t) => t.id === activeId) ?? null;`,
+        `  const messages = active?.messages ?? NO_MESSAGES;`,
+        `  const loading = activeId !== null && streamingIds.includes(activeId);`,
+        `  // The rail's row shape is a VIEW of your record — titles and counts, no`,
+        `  // message bodies. Newest-first is your ordering; the rail renders the array`,
+        `  // in the order it is given.`,
+        `  const rows = threads.map((t) => ({ id: t.id, title: t.title, messageCount: t.messages.length, updatedAt: t.updatedAt }));`,
+      ].join('\n')
+    : [
+        ...(hasEmbedded
+          ? sampleSeedComment(isMock, '  ', (literal) => [
+              `const sampleMessages: ChatMessage[] = [${literal}];`,
+              `const [messages, setMessages] = useState<ChatMessage[]>(sampleMessages);`,
+            ])
+          : []),
+        `  const [messages, setMessages] = useState<ChatMessage[]>([]);`,
+      ].join('\n');
+
+  // The block's module-scope pieces (one joined entry — see renderJsx).
+  const blockModuleInit = block
+    ? [
+        [
+          `/** A stable reference for the empty thread. \`messages\` is diffed by`,
+          ` *  reference, so a fresh \`[]\` every render would re-notify for nothing. */`,
+          `const NO_MESSAGES: ChatMessage[] = [];`,
+          ``,
+          ...blockThreadStoreLines(''),
+        ].join('\n'),
+      ]
+    : [];
+
+  const loadingInit = block ? [] : [`  const [loading, setLoading] = useState(false);`];
 
   const sampleSourcesInit =
     standaloneCompanionTags.includes('kai-sources')
@@ -3206,20 +3959,66 @@ function renderTanstackStart(components: readonly string[], ctx: RenderCtx): str
   const cardPropsNote = (pad: string): string[] =>
     ctx.emitCards ? jsxComment(CARD_PROP_COMMENT, pad) : [];
 
+  // The block's submit prelude + turn-scoped thread binding — same shape as
+  // renderJsx (this target IS React); see there for the comments' reasoning.
+  const blockPrelude = block
+    ? [
+        ...BLOCK_TARGET_ID_NOTE.map((l) => `// ${l}`),
+        `const targetId = activeId ?? crypto.randomUUID();`,
+        `// The record is born on its first turn — with YOUR title policy.`,
+        `setThreads((prev) => prev.some((t) => t.id === targetId)`,
+        `  ? prev`,
+        `  : [{ id: targetId, title: deriveTitle(value), updatedAt: new Date().toISOString(), messages: [] }, ...prev]);`,
+        `setActiveId(targetId);`,
+        ...BLOCK_BIND_NOTE.map((l) => `// ${l}`),
+        `const setMessages = bindThreadMessages<Thread>(setThreads, targetId, {`,
+        `  touch: (t) => ({ ...t, updatedAt: new Date().toISOString() }),`,
+        `});`,
+        `const controller = sessions.begin(targetId);`,
+      ]
+    : [];
+  const blockReactThread: ThreadBinding = {
+    open: ({ pad, userMessage }) => [
+      `${pad}// THE TURN OWNS THE THREAD (same rule as the single-thread scaffold): the`,
+      `${pad}// loop below re-encodes it every round, and React state cannot be read`,
+      `${pad}// back mid-turn. setMessages (the id-bound sink) just projects it.`,
+      `${pad}let thread: ChatMessage[] = [...(threads.find((t) => t.id === targetId)?.messages ?? []), ${userMessage}];`,
+      `${pad}const set: SetMessages = (fn) => { thread = fn(thread); setMessages(() => thread); };`,
+      `${pad}setMessages(() => thread);`,
+    ],
+    live: 'thread',
+    setter: 'set',
+  };
+
   const onSubmitBody = realStreamBody({
     pad: '    ',
-    read: 'messages',
-    commitSet: (expr) => `setMessages(${expr});`,
-    // useState's setter IS a SetMessages: both are (updater) => void.
+    read: block ? `(threads.find((t) => t.id === targetId)?.messages ?? [])` : 'messages',
+    commitSet: block ? (expr) => `setMessages(() => ${expr});` : (expr) => `setMessages(${expr});`,
+    // useState's setter IS a SetMessages: both are (updater) => void — and in
+    // block mode the id-bound sink from bindThreadMessages is one too.
     setterAdapter: 'setMessages',
-    setLoading: (v) => `setLoading(${v});`,
+    setLoading: block
+      ? (v) =>
+          v === 'true'
+            ? `// loading for THIS thread now derives from the sessions map (streamingIds).`
+            : `sessions.end(targetId, controller);`
+      : (v) => `setLoading(${v});`,
     bodyPayload: realBodyPayload({ defaultModel, tools: emitTools }),
     strictRoles: true,
     toolLoop: emitToolLoop,
     cards: ctx.emitCards,
-    thread: REACT_THREAD,
+    thread: block ? blockReactThread : REACT_THREAD,
     mock: isMock,
+    ...(block ? { fetchSignal: 'controller.signal' } : {}),
     ...attachmentSubmitOpts,
+    ...(block
+      ? {
+          afterValue: [
+            ...((attachmentSubmitOpts as { afterValue?: string[] }).afterValue ?? []),
+            ...blockPrelude,
+          ],
+        }
+      : {}),
   });
 
   // File path guidance for TanStack Start (file-based routing)
@@ -3238,11 +4037,72 @@ function renderTanstackStart(components: readonly string[], ctx: RenderCtx): str
     ``,
   ];
 
+  // The surface JSX — same shapes as renderJsx (this target IS React),
+  // including the block's shell wrap.
+  const chatJsx = (pad: string): string[] => [
+    ...cardPropsNote(pad),
+    `${pad}<Chat`,
+    `${pad}  messages={messages}`,
+    `${pad}  loading={loading}`,
+    `${pad}  suggestions={suggestions}`,
+    `${pad}  suggestionMode="submit"`,
+    ...cardProps(`${pad}  `),
+    `${pad}  onSubmit={onSubmit}`,
+    `${pad}  style={{ ${jsxStyle(p.chatFill)} }}`,
+    `${pad}/>`,
+  ];
+  const splitJsx: string[] = [
+    `      {/* SCAF-14: workspace split — chat pane left, artifact preview right. */}`,
+    `      {/* Resizable needs ResizableItem children to render panels. */}`,
+    `      <Resizable orientation="horizontal" style={{ display: 'block', width: '100%', height: '100%' }}>`,
+    `        <ResizableItem size="40%" min="240px">`,
+    ...chatJsx('          '),
+    `        </ResizableItem>`,
+    `        <ResizableItem min="280px">`,
+    `          {/* Replace src + files with your real artifact data (files is required: array/object props are never optional attributes on a kai-* element). */}`,
+    `          <Artifact src="https://example.com" files={[{ path: 'index.html', url: 'https://example.com' }]} style={{ width: '100%', height: '100%' }} />`,
+    `        </ResizableItem>`,
+    `      </Resizable>`,
+  ];
+  // Siblings of the SPLIT (or of the chat) — dropping them here is what the old
+  // workspace branch used to do.
+  const mainJsx: string[] = [
+    ...(attachmentJsx ? [attachmentJsx] : []),
+    ...(workspace ? [...splitJsx, companions] : [...chatJsx('      '), companions]),
+  ];
+  const surfaceJsx: string[] = block
+    ? [
+        `      {/* ── The workspace BLOCK: the shell + the rail + your thread records ── */}`,
+        `      {/* <Workspace> is the chat-agnostic layout shell (header/start/main/end/`,
+        `          footer slots, aside resize + collapse, a mobile drawer below`,
+        `          drawerBelow px). It knows nothing about chat. */}`,
+        `      <Workspace drawerBelow={720} style={{ display: 'block', width: '100%', height: '100%' }}>`,
+        ...jsxComment(BLOCK_RAIL_NOTE, '        '),
+        `        {/* The React wrappers forward no slot prop, so a plain div carries the`,
+        `            slot attribute into the shell's start aside. */}`,
+        `        <div slot="start" style={{ height: '100%' }}>`,
+        `          {/* New chat = a DRAFT (activeId null): the record appears on the first turn. */}`,
+        `          <Conversations`,
+        `            conversations={rows}`,
+        `            activeId={activeId ?? undefined}`,
+        `            onConversationSelect={(e) => setActiveId(e.detail.id)}`,
+        `            onNewChat={() => setActiveId(null)}`,
+        `            style={{ display: 'block', height: '100%' }}`,
+        `          />`,
+        `        </div>`,
+        `        {/* Unnamed children project into the shell's MAIN region. */}`,
+        `        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>`,
+        ...indentEmitted(mainJsx, '    '),
+        `        </div>`,
+        `      </Workspace>`,
+      ]
+    : mainJsx;
+
   return [
     ...filePathNote,
     // TanStack Start uses @tanstack/react-router's createFileRoute
     `import { createFileRoute } from '@tanstack/react-router'`,
-    `import { useState } from 'react'`,
+    `import { ${block ? 'useEffect, useState' : 'useState'} } from 'react'`,
     // Elements registration: the library is SSR-import-safe; top-level import is safe here
     `import '@kitn.ai/ui/elements';  // registers <kai-*> — required, must come first`,
     `import { ${importList} } from '@kitn.ai/ui/react'`,
@@ -3254,6 +4114,7 @@ function renderTanstackStart(components: readonly string[], ctx: RenderCtx): str
       cardTools: ctx.cardProvider !== null,
       mock: isMock,
       attachments,
+      workspaceBlock: block,
     }),
     `import '@kitn.ai/ui/theme.tokens.css'  // compiled token defaults`,
     ``,
@@ -3262,6 +4123,7 @@ function renderTanstackStart(components: readonly string[], ctx: RenderCtx): str
     ...mockInit,
     ``,
     ...attachmentModuleInit,
+    ...blockModuleInit,
     ...cardsInit,
     `// ssr: false keeps the Solid-based web component client-only.`,
     `// Server HTML for /chat omits <kai-chat> → no hydration mismatch.`,
@@ -3272,7 +4134,7 @@ function renderTanstackStart(components: readonly string[], ctx: RenderCtx): str
     ``,
     `function ChatPage() {`,
     sampleMessagesInit,
-    `  const [loading, setLoading] = useState(false);`,
+    ...loadingInit,
     `  const suggestions = ${jsArray(suggestions)};`,
     ...(attachmentStateInit ? [attachmentStateInit] : []),
     ...(sampleSourcesInit ? [sampleSourcesInit] : []),
@@ -3286,45 +4148,7 @@ function renderTanstackStart(components: readonly string[], ctx: RenderCtx): str
     ``,
     `  return (`,
     `    <main style={{ ${jsxStyle(p.style)} }}>`,
-    ...(attachmentJsx ? [attachmentJsx] : []),
-    ...(workspace
-      ? [
-          `      {/* SCAF-14: workspace split — chat pane left, artifact preview right. */}`,
-          `      {/* Resizable needs ResizableItem children to render panels. */}`,
-          `      <Resizable orientation="horizontal" style={{ display: 'block', width: '100%', height: '100%' }}>`,
-          `        <ResizableItem size="40%" min="240px">`,
-          ...cardPropsNote('          '),
-          `          <Chat`,
-          `            messages={messages}`,
-          `            loading={loading}`,
-          `            suggestions={suggestions}`,
-          `            suggestionMode="submit"`,
-          ...cardProps('            '),
-          `            onSubmit={onSubmit}`,
-          `            style={{ ${jsxStyle(p.chatFill)} }}`,
-          `          />`,
-          `        </ResizableItem>`,
-          `        <ResizableItem min="280px">`,
-          `          {/* Replace src + files with your real artifact data (files is required: array/object props are never optional attributes on a kai-* element). */}`,
-          `          <Artifact src="https://example.com" files={[{ path: 'index.html', url: 'https://example.com' }]} style={{ width: '100%', height: '100%' }} />`,
-          `        </ResizableItem>`,
-          `      </Resizable>`,
-          // Siblings of the SPLIT — see the same line in the other JSX branch.
-          companions,
-        ]
-      : [
-          ...cardPropsNote('      '),
-          `      <Chat`,
-          `        messages={messages}`,
-          `        loading={loading}`,
-          `        suggestions={suggestions}`,
-          `        suggestionMode="submit"`,
-          ...cardProps('        '),
-          `        onSubmit={onSubmit}`,
-          `        style={{ ${jsxStyle(p.chatFill)} }}`,
-          `      />`,
-          companions,
-        ]),
+    ...surfaceJsx,
     `    </main>`,
     `  );`,
     `}`,
@@ -3362,16 +4186,19 @@ function renderTanstackStart(components: readonly string[], ctx: RenderCtx): str
 function renderAngular(components: readonly string[], ctx: RenderCtx): string {
   const { p, emptyHint, suggestions, isMock, defaultModel, emitTools, emitToolLoop } = ctx;
 
-  const workspace = isWorkspace(components);
+  const workspace = isArtifactSplit(components);
+  const block = isWorkspaceBlock(components);
   const attachments = hasAttachments(components);
   // Slotted companions are children of <kai-chat> (see `chatTag`), so they leave
-  // the sibling loop the way the workspace and attachment pairs do.
+  // the sibling loop the way the workspace and attachment pairs do. In BLOCK
+  // mode the rail lives in the SHELL's start aside instead.
   const slottedTags = new Set(slottedInChat(components).map((s) => s.tag));
   const standaloneCompanionTags = components.filter(
     (t) =>
       t !== 'kai-chat' &&
       !MESSAGE_EMBEDDED_TAGS.has(t) &&
-      !WORKSPACE_STRUCTURAL_TAGS.has(t) &&
+      !ARTIFACT_SPLIT_TAGS.has(t) &&
+      !(block && BLOCK_TAGS.has(t)) &&
       !slottedTags.has(t) &&
       !(attachments && ATTACHMENT_TAGS.has(t)),
   );
@@ -3457,19 +4284,52 @@ function renderAngular(components: readonly string[], ctx: RenderCtx): string {
   const commit = (value: string) => `this.messages.set(${value});`;
   const setter = '(fn) => this.messages.set(fn(this.messages()))';
 
+  // The block's submit prelude — signals instead of refs; same shape.
+  const blockRead = `(this.threads().find((t) => t.id === targetId)?.messages ?? [])`;
+  const blockPrelude = block
+    ? [
+        ...BLOCK_TARGET_ID_NOTE.map((l) => `// ${l}`),
+        `const targetId = this.activeId() ?? crypto.randomUUID();`,
+        `// The record is born on its first turn — with YOUR title policy.`,
+        `this.setThreads((prev) => prev.some((t) => t.id === targetId)`,
+        `  ? prev`,
+        `  : [{ id: targetId, title: deriveTitle(value), updatedAt: new Date().toISOString(), messages: [] }, ...prev]);`,
+        `this.activeId.set(targetId);`,
+        ...BLOCK_BIND_NOTE.map((l) => `// ${l}`),
+        `const setMessages = bindThreadMessages<Thread>(this.setThreads, targetId, {`,
+        `  touch: (t) => ({ ...t, updatedAt: new Date().toISOString() }),`,
+        `});`,
+        `const controller = this.sessions.begin(targetId);`,
+      ]
+    : [];
+
   const onSubmitBody = realStreamBody({
     pad: '    ',
-    read,
-    commitSet: (expr) => commit(expr),
-    setterAdapter: setter,
-    setLoading: (v) => `this.loading.set(${v});`,
+    read: block ? blockRead : read,
+    commitSet: block ? (expr) => `setMessages(() => ${expr});` : (expr) => commit(expr),
+    setterAdapter: block ? 'setMessages' : setter,
+    setLoading: block
+      ? (v) =>
+          v === 'true'
+            ? `// loading for THIS thread now derives from the sessions map (streamingIds).`
+            : `this.sessions.end(targetId, controller);`
+      : (v) => `this.loading.set(${v});`,
     bodyPayload: realBodyPayload({ defaultModel, tools: emitTools }),
     strictRoles: true,
     toolLoop: emitToolLoop,
     cards: ctx.emitCards,
-    thread: accessorThreadBinding(read, commit, setter),
+    thread: block ? blockLiveThread(blockRead) : accessorThreadBinding(read, commit, setter),
     mock: isMock,
+    ...(block ? { fetchSignal: 'controller.signal' } : {}),
     ...attachmentSubmitOpts,
+    ...(block
+      ? {
+          afterValue: [
+            ...((attachmentSubmitOpts as { afterValue?: string[] }).afterValue ?? []),
+            ...blockPrelude,
+          ],
+        }
+      : {}),
   });
 
   // Module scope, exactly like vue: a class can hold neither a bare `const` nor a
@@ -3498,15 +4358,43 @@ function renderAngular(components: readonly string[], ctx: RenderCtx): string {
       ]
     : [];
 
-  // SCAF-9: no fabricated seed — see SAMPLE_AGENTIC_MESSAGE.
-  const sampleSeed = [
-    ...(hasEmbedded
-      ? sampleSeedComment(isMock, '  ', (literal) => [
-          `readonly messages = signal<ChatMessage[]>([${literal}]);`,
-        ])
-      : []),
-    `  readonly messages = signal<ChatMessage[]>([]);`,
-  ];
+  // SCAF-9: no fabricated seed — see SAMPLE_AGENTIC_MESSAGE. In BLOCK mode the
+  // thread state is the block's multi-thread store; `messages`/`loading` are
+  // computed views of it.
+  const sampleSeed = block
+    ? [
+        `  // ── The block's state: your records + the kit's session/persistence helpers ─`,
+        `  readonly threads = signal<Thread[]>(loadThreads());`,
+        `  // null means a DRAFT: "New chat" was pressed and nothing is stored yet. A`,
+        `  // record is created on its first turn, so the rail never fills with empties.`,
+        `  readonly activeId = signal<string | null>(this.threads()[0]?.id ?? null);`,
+        `  // One id per in-flight reply — a stream keeps running when you switch away.`,
+        `  readonly streamingIds = signal<string[]>([]);`,
+        ...BLOCK_SESSIONS_NOTE.map((l) => `  // ${l}`),
+        `  private readonly sessions = createThreadSessions((ids) => this.streamingIds.set(ids));`,
+        `  // The save scheduler: the debounce/flush MECHANICS are the kit's; the delay,`,
+        `  // the save target and what a failed save means are YOURS (see saveThreads).`,
+        `  private readonly saver = createSaveScheduler(saveThreads, { delayMs: 250 });`,
+        `  // Every write goes through this — a NEW array per write is what notifies.`,
+        `  private readonly setThreads = (updater: (prev: Thread[]) => Thread[]): void =>`,
+        `    this.threads.update(updater);`,
+        `  readonly active = computed(() => this.threads().find((t) => t.id === this.activeId()) ?? null);`,
+        `  readonly messages = computed(() => this.active()?.messages ?? []);`,
+        `  readonly loading = computed(() => { const id = this.activeId(); return id !== null && this.streamingIds().includes(id); });`,
+        `  // The rail's row shape is a VIEW of your record — titles and counts, no`,
+        `  // message bodies. The rail renders the array in the order it is given.`,
+        `  readonly rows = computed(() => this.threads().map((t) => ({ id: t.id, title: t.title, messageCount: t.messages.length, updatedAt: t.updatedAt })));`,
+        `  // The template cannot spell \`undefined\` portably, so the ?? lives here.`,
+        `  readonly activeIdOrUndefined = computed(() => this.activeId() ?? undefined);`,
+      ]
+    : [
+        ...(hasEmbedded
+          ? sampleSeedComment(isMock, '  ', (literal) => [
+              `readonly messages = signal<ChatMessage[]>([${literal}]);`,
+            ])
+          : []),
+        `  readonly messages = signal<ChatMessage[]>([]);`,
+      ];
 
   const sourcesField = hasSourcesCompanion
     ? [
@@ -3523,7 +4411,7 @@ function renderAngular(components: readonly string[], ctx: RenderCtx): string {
     : [];
 
   const chatTag = (pad: string) => {
-    const slotted = slottedChildMarkup(components, '  ', { wired: false, ids: false });
+    const slotted = block ? [] : slottedChildMarkup(components, '  ', { wired: false, ids: false });
     return [
       `<kai-chat`,
       `  #chat`,
@@ -3558,10 +4446,47 @@ function renderAngular(components: readonly string[], ctx: RenderCtx): string {
   // KaiSourcesElement is imported only when a kai-sources companion is really
   // declared: an always-on import is unused on every other archetype, and a stock
   // Angular tsconfig turns on the checks that make that a build error.
-  const elementTypes = hasSourcesCompanion ? 'KaiChatElement, KaiSourcesElement' : 'KaiChatElement';
+  const elementTypes = [
+    'KaiChatElement',
+    ...(block ? ['KaiConversationsElement'] : []),
+    ...(hasSourcesCompanion ? ['KaiSourcesElement'] : []),
+  ].join(', ');
   // No KaiAttachmentsElement here: unlike svelte/html this target never holds an
   // element reference for the list — `[items]` is a template binding, so nothing
   // in the class is typed by it.
+
+  // The BLOCK's template wrap: the shell around the whole surface, the rail in
+  // its start aside, the rest projected into the main region.
+  const surfaceTemplate = block
+    ? [
+        `      <!-- ── The workspace BLOCK: the shell + the rail + your thread records ── -->`,
+        ...htmlComment(
+          [
+            `<kai-workspace> is the chat-agnostic layout shell: header/start/main/`,
+            `end/footer slots, aside resize + collapse, and a mobile drawer below`,
+            `the drawer-below width. It knows nothing about chat.`,
+          ],
+          '      ',
+        ),
+        `      <kai-workspace drawer-below="720" style="display:block;width:100%;height:100%">`,
+        ...htmlComment(BLOCK_RAIL_NOTE, '        '),
+        `        <!-- New chat = a DRAFT (activeId null): the record appears on the first turn. -->`,
+        `        <kai-conversations`,
+        `          #rail`,
+        `          slot="start"`,
+        `          [conversations]="rows()"`,
+        `          [activeId]="activeIdOrUndefined()"`,
+        `          style="display:block;height:100%"`,
+        `          (kai-conversation-select)="onSelect($event)"`,
+        `          (kai-new-chat)="onNewChat()"`,
+        `        ></kai-conversations>`,
+        `        <!-- Unnamed children project into the shell's MAIN region. -->`,
+        `        <div style="display:flex;flex-direction:column;height:100%;min-height:0">`,
+        ...indentEmitted([...attachmentTemplate, ...templateBody], '    '),
+        `        </div>`,
+        `      </kai-workspace>`,
+      ]
+    : [...attachmentTemplate, ...templateBody];
 
   return [
     `// Angular standalone component — save as: src/app/chat.component.ts`,
@@ -3574,7 +4499,7 @@ function renderAngular(components: readonly string[], ctx: RenderCtx): string {
     `//   "styles": ["node_modules/@kitn.ai/ui/dist/theme.tokens.css", "src/styles.css"]`,
     `// (@kitn.ai/ui/theme.tokens.css is the compiled token file; theme.css is`,
     `// Tailwind source and is only for apps that compile Tailwind themselves.)`,
-    `import { CUSTOM_ELEMENTS_SCHEMA, Component, ElementRef, afterNextRender, signal, viewChild } from '@angular/core';`,
+    `import { CUSTOM_ELEMENTS_SCHEMA, Component, ElementRef, afterNextRender, ${block ? 'computed, effect, ' : ''}signal, viewChild } from '@angular/core';`,
     `import '@kitn.ai/ui/elements';  // registers <kai-*> — required, must come first`,
     `import type { ${elementTypes} } from '@kitn.ai/ui/elements';`,
     ...wireImportLines({
@@ -3584,6 +4509,7 @@ function renderAngular(components: readonly string[], ctx: RenderCtx): string {
       cardTools: ctx.cardProvider !== null,
       mock: isMock,
       attachments,
+      workspaceBlock: block,
     }),
     ``,
     `// ${ctx.label} — ${p.note}. empty-state hint: ${emptyHint}`,
@@ -3592,6 +4518,7 @@ function renderAngular(components: readonly string[], ctx: RenderCtx): string {
     ``,
     ...modelInit,
     ...attachmentModuleInit,
+    ...(block ? [...blockThreadStoreLines(''), ``] : []),
     ...cardsInit,
     ...toolsLines,
     ...runnerLines,
@@ -3603,8 +4530,7 @@ function renderAngular(components: readonly string[], ctx: RenderCtx): string {
     `  schemas: [CUSTOM_ELEMENTS_SCHEMA],`,
     `  template: \``,
     `    <div style="${p.style}">`,
-    ...attachmentTemplate,
-    ...templateBody,
+    ...surfaceTemplate,
     `    </div>`,
     `  \`,`,
     `})`,
@@ -3612,12 +4538,21 @@ function renderAngular(components: readonly string[], ctx: RenderCtx): string {
     `  // Every write assigns a NEW array. That reference change is what re-renders`,
     `  // <kai-chat> — mutating the array in place does nothing.`,
     ...sampleSeed,
-    `  readonly loading = signal(false);`,
+    ...(block ? [] : [`  readonly loading = signal(false);`]),
     `  readonly suggestions = ${jsArray(suggestions)};`,
     ...sourcesField,
     `  private readonly chatEl = viewChild.required<ElementRef<KaiChatElement>>('chat');`,
+    ...(block
+      ? [`  private readonly railEl = viewChild.required<ElementRef<KaiConversationsElement>>('rail');`]
+      : []),
     ``,
     `  constructor() {`,
+    ...(block
+      ? [
+          `    // The save scheduler rides an effect: every threads() write schedules a save.`,
+          `    effect(() => this.saver.schedule(this.threads()));`,
+        ]
+      : []),
     `    // SCAF-15: kai-* register via an async dynamic import (SSR-safety), so the`,
     `    // element may not be upgraded when Angular first applies the bindings above —`,
     `    // and a property set on a not-yet-upgraded element is dropped on upgrade.`,
@@ -3632,10 +4567,34 @@ function renderAngular(components: readonly string[], ctx: RenderCtx): string {
     `        suggestions: this.suggestions,`,
     ...cardPropAssign,
     `      });`,
+    ...(block
+      ? [
+          `      // The rail's array props follow the same upgrade rule.`,
+          `      await customElements.whenDefined('kai-conversations');`,
+          `      Object.assign(this.railEl().nativeElement, {`,
+          `        conversations: this.rows(),`,
+          `        activeId: this.activeIdOrUndefined(),`,
+          `      });`,
+          `      // Flush the pending write when the tab closes mid-debounce (or mid-stream).`,
+          `      window.addEventListener('beforeunload', () => this.saver.flush());`,
+        ]
+      : []),
     ...sourcesReapply,
     `    });`,
     `  }`,
     ``,
+    ...(block
+      ? [
+          `  onSelect(event: Event) {`,
+          `    this.activeId.set((event as CustomEvent<{ id: string }>).detail.id);`,
+          `  }`,
+          `  onNewChat() {`,
+          `    // A DRAFT, not a record: it becomes a thread on its first turn.`,
+          `    this.activeId.set(null);`,
+          `  }`,
+          ``,
+        ]
+      : []),
     ...attachmentFields,
     ``,
     `  // \`Event\`, not \`CustomEvent\`: under strictTemplates Angular types \`$event\` on`,
@@ -3696,13 +4655,15 @@ function renderAngular(components: readonly string[], ctx: RenderCtx): string {
 function renderSolid(components: readonly string[], ctx: RenderCtx): string {
   const { p, emptyHint, suggestions, isMock, defaultModel, emitTools, emitToolLoop } = ctx;
 
-  const workspace = isWorkspace(components);
+  const workspace = isArtifactSplit(components);
+  const block = isWorkspaceBlock(components);
   const attachments = hasAttachments(components);
   const standaloneCompanionTags = components.filter(
     (t) =>
       t !== 'kai-chat' &&
       !MESSAGE_EMBEDDED_TAGS.has(t) &&
-      !WORKSPACE_STRUCTURAL_TAGS.has(t) &&
+      !ARTIFACT_SPLIT_TAGS.has(t) &&
+      !(block && BLOCK_TAGS.has(t)) &&
       !(attachments && ATTACHMENT_TAGS.has(t)),
   );
   const hasSources = standaloneCompanionTags.includes('kai-sources');
@@ -3751,6 +4712,9 @@ function renderSolid(components: readonly string[], ctx: RenderCtx): string {
     'SourceTrigger',
     'Tool',
     ...(workspace ? ['Artifact', 'ResizableHandle', 'ResizablePanel', 'ResizablePanelGroup'] : []),
+    // The BLOCK's structural pair: the Solid shell + the Solid rail (this target
+    // renders components, not <kai-*> tags — same rule as everything above).
+    ...(block ? ['ConversationList', 'WorkspaceShell'] : []),
     ...(hasVoice ? ['VoiceInput'] : []),
     // `Attachments`/`Attachment`/`AttachmentPreview`/`AttachmentInfo` are already
     // unconditional above — `renderPart` draws `file` PARTS with them whatever the
@@ -3768,17 +4732,43 @@ function renderSolid(components: readonly string[], ctx: RenderCtx): string {
   // exactly the `SetMessages` shape createAssistantStream wants.
   const setter = '(fn) => setMessages((prev) => fn(prev))';
 
+  // The block's submit prelude — signals; same shape as every other target.
+  // `setThreads` is Solid's own setter: its function-argument overload IS the
+  // SetThreads updater shape bindThreadMessages wants.
+  const blockRead = `(threads().find((t) => t.id === targetId)?.messages ?? [])`;
+  const blockPrelude = block
+    ? [
+        ...BLOCK_TARGET_ID_NOTE.map((l) => `// ${l}`),
+        `const targetId = activeId() ?? crypto.randomUUID();`,
+        `// The record is born on its first turn — with YOUR title policy.`,
+        `setThreads((prev) => prev.some((t) => t.id === targetId)`,
+        `  ? prev`,
+        `  : [{ id: targetId, title: deriveTitle(value), updatedAt: new Date().toISOString(), messages: [] }, ...prev]);`,
+        `setActiveId(targetId);`,
+        ...BLOCK_BIND_NOTE.map((l) => `// ${l}`),
+        `const setMessages = bindThreadMessages<Thread>((fn) => { setThreads((prev) => fn(prev)); }, targetId, {`,
+        `  touch: (t) => ({ ...t, updatedAt: new Date().toISOString() }),`,
+        `});`,
+        `const controller = sessions.begin(targetId);`,
+      ]
+    : [];
+
   const onSubmitBody = realStreamBody({
     pad: '    ',
-    read,
-    commitSet: (expr) => commit(expr),
-    setterAdapter: setter,
-    setLoading: (v) => `setLoading(${v});`,
+    read: block ? blockRead : read,
+    commitSet: block ? (expr) => `setMessages(() => ${expr});` : (expr) => commit(expr),
+    setterAdapter: block ? 'setMessages' : setter,
+    setLoading: block
+      ? (v) =>
+          v === 'true'
+            ? `// loading for THIS thread now derives from the sessions map (streamingIds).`
+            : `sessions.end(targetId, controller);`
+      : (v) => `setLoading(${v});`,
     bodyPayload: realBodyPayload({ defaultModel, tools: emitTools }),
     strictRoles: true,
     toolLoop: emitToolLoop,
     cards: ctx.emitCards,
-    thread: accessorThreadBinding(read, commit, setter),
+    thread: block ? blockLiveThread(blockRead) : accessorThreadBinding(read, commit, setter),
     valueSource: 'input()',
     // The staged files are captured BEFORE either list is cleared. `setInput('')`
     // stays last so the order reads the way it executes.
@@ -3790,9 +4780,11 @@ function renderSolid(components: readonly string[], ctx: RenderCtx): string {
             fromSubmitEvent: false,
           })
         : []),
+      ...blockPrelude,
       `setInput('');`,
     ],
     ...(attachments ? { filesExpr: 'files' } : {}),
+    ...(block ? { fetchSignal: 'controller.signal' } : {}),
     mock: isMock,
   });
 
@@ -4041,7 +5033,7 @@ function renderSolid(components: readonly string[], ctx: RenderCtx): string {
     `// The @source line is NOT optional: without it Tailwind scans only src/, strips`,
     `// every kit utility class as unused, and the whole UI renders unstyled.`,
     `// (theme.css here, not theme.tokens.css: this app compiles Tailwind itself.)`,
-    `import { For, Index, Match, Show, Switch, createMemo, createSignal } from 'solid-js';`,
+    `import { For, Index, Match, Show, Switch, ${block ? 'createEffect, ' : ''}createMemo, createSignal${block ? ', onCleanup' : ''} } from 'solid-js';`,
     // '@kitn.ai/ui/solid', NOT the root '@kitn.ai/ui', and the difference is
     // invisible to every compiler on this repo's critical path: src/solid.ts is
     // `export * from './index'`, so ./solid is a strict SUPERSET of the root and
@@ -4069,12 +5061,14 @@ function renderSolid(components: readonly string[], ctx: RenderCtx): string {
       cards: ctx.emitCards,
       cardTools: ctx.cardProvider !== null,
       mock: isMock,
+      workspaceBlock: block,
     }),
     ``,
     `// ${ctx.label} — ${p.note}. empty-state hint: ${emptyHint}`,
     ...(p.altNote ?? []).map((l) => `// ${l}`),
     ``,
     ...(isMock ? [...mockResponderInit(), ``] : []),
+    ...(block ? [...blockThreadStoreLines(''), ``] : []),
     ...cardsInit,
     `// Narrow a part to ONE variant, or false. One read, one cast — and the JSX`,
     `// below re-runs it on every delta, which is what keeps a growing text or`,
@@ -4252,8 +5246,36 @@ function renderSolid(components: readonly string[], ctx: RenderCtx): string {
     `  // streaming message as a NEW OBJECT on every delta: a new reference IS the`,
     `  // re-render signal. Which is exactly why the thread below is keyed by message`,
     `  // id rather than by the message objects — see messageKeys.`,
-    `  const [messages, setMessages] = createSignal<ChatMessage[]>([]);`,
-    `  const [loading, setLoading] = createSignal(false);`,
+    ...(block
+      ? [
+          `  // ── The block's state: your records + the kit's session/persistence helpers ─`,
+          `  const [threads, setThreads] = createSignal<Thread[]>(loadThreads());`,
+          `  // null means a DRAFT: "New chat" was pressed and nothing is stored yet. A`,
+          `  // record is created on its first turn, so the rail never fills with empties.`,
+          `  const [activeId, setActiveId] = createSignal<string | null>(threads()[0]?.id ?? null);`,
+          `  // One id per in-flight reply — a stream keeps running when you switch away.`,
+          `  const [streamingIds, setStreamingIds] = createSignal<string[]>([]);`,
+          ...BLOCK_SESSIONS_NOTE.map((l) => `  // ${l}`),
+          `  const sessions = createThreadSessions((ids) => setStreamingIds(ids));`,
+          `  // The save scheduler: the debounce/flush MECHANICS are the kit's; the delay,`,
+          `  // the save target and what a failed save means are YOURS (see saveThreads).`,
+          `  const saver = createSaveScheduler(saveThreads, { delayMs: 250 });`,
+          `  createEffect(() => saver.schedule(threads()));`,
+          `  // Flush the pending write when the tab closes mid-debounce (or mid-stream).`,
+          `  const flushOnUnload = () => saver.flush();`,
+          `  window.addEventListener('beforeunload', flushOnUnload);`,
+          `  onCleanup(() => window.removeEventListener('beforeunload', flushOnUnload));`,
+          `  const active = createMemo(() => threads().find((t) => t.id === activeId()) ?? null);`,
+          `  const messages = createMemo(() => active()?.messages ?? []);`,
+          `  const loading = createMemo(() => { const id = activeId(); return id !== null && streamingIds().includes(id); });`,
+          `  // The rail's row shape is a VIEW of your record — titles and counts, no`,
+          `  // message bodies. The rail renders the array in the order it is given.`,
+          `  const rows = createMemo(() => threads().map((t) => ({ id: t.id, title: t.title, messageCount: t.messages.length, updatedAt: t.updatedAt })));`,
+        ]
+      : [
+          `  const [messages, setMessages] = createSignal<ChatMessage[]>([]);`,
+          `  const [loading, setLoading] = createSignal(false);`,
+        ]),
     `  // PromptInput is CONTROLLED here, so this signal — not a kai-submit event — is`,
     `  // where the submitted text comes from.`,
     `  const [input, setInput] = createSignal('');`,
@@ -4281,7 +5303,33 @@ function renderSolid(components: readonly string[], ctx: RenderCtx): string {
     `    // component below it. Mount it once, at the top.`,
     `    <ChatConfig>`,
     `      <div style={{ ${solidStyle(p.style)} }}>`,
-    ...tree,
+    ...(block
+      ? [
+          `        {/* ── The workspace BLOCK: the shell + the rail + your thread records ── */}`,
+          `        {/* WorkspaceShell is the chat-agnostic layout shell (header/start/main/`,
+          `            end/footer regions, aside resize + collapse, a mobile drawer below`,
+          `            drawerBelow px). It knows nothing about chat. */}`,
+          `        <WorkspaceShell`,
+          `          drawerBelow={720}`,
+          `          class="h-full w-full"`,
+          `          start={`,
+          // A JS line comment, not a {/* */} pair: inside an attribute's
+          // expression container the braces form is a parse error.
+          ...BLOCK_RAIL_NOTE_SOLID.map((l) => `            // ${l}`),
+          `            <ConversationList`,
+          `              groups={[]}`,
+          `              conversations={rows()}`,
+          `              activeId={activeId() ?? undefined}`,
+          `              onSelect={(id) => setActiveId(id)}`,
+          `              onNewChat={() => setActiveId(null)}`,
+          `              class="h-full"`,
+          `            />`,
+          `          }`,
+          `        >`,
+          ...indentEmitted(tree, '  '),
+          `        </WorkspaceShell>`,
+        ]
+      : tree),
     `      </div>`,
     `    </ChatConfig>`,
     `  );`,
@@ -5528,8 +6576,8 @@ function rejectUseCase(id: string): string {
     // so the rejection that teaches the id list is the right place to say so.
     `These are PRESETS over the real axis, which is \`components\`. To compose a surface no`,
     `preset names, pass the list directly, e.g. components: ["kai-chat", "kai-tool",`,
-    `"kai-reasoning", "kai-artifact", "kai-resizable"] for a workspace that also renders its`,
-    `tool calls. Pick a preset id or pass \`components\`, then call scaffold again.`,
+    `"kai-reasoning", "kai-artifact", "kai-resizable"] for an artifact split that also renders`,
+    `its tool calls. Pick a preset id or pass \`components\`, then call scaffold again.`,
   ].join('\n');
 }
 

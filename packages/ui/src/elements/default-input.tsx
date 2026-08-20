@@ -70,8 +70,8 @@ export interface DefaultPromptInputProps {
    *  (name, media type, reason) and renders nothing itself: what the user should
    *  see is the application's call, not the kit's. */
   onAttachmentsRejected?: (rejected: RejectedAttachment[]) => void;
-  /** Show a Search (Globe) button in the left toolbar; calls `onSearch`. */
-  search?: boolean;
+  /** Show a web-search (Globe) button in the left toolbar; calls `onWebSearch`. */
+  webSearch?: boolean;
   /** Show a Voice (Mic) button in the left toolbar; calls `onVoice`. */
   voice?: boolean;
   /** Send-button visibility. `'always'` (default) always shows it; `'auto'` shows
@@ -84,7 +84,7 @@ export interface DefaultPromptInputProps {
   onSubmit: () => void;
   onSuggestionClick: (v: string) => void;
   onAttachmentsChange?: (attachments: AttachmentData[]) => void;
-  onSearch?: () => void;
+  onWebSearch?: () => void;
   onVoice?: () => void;
   /** When `true` and `loading` is also `true`, the send button is replaced by
    *  a Stop button that calls `onStop`. */
@@ -296,7 +296,7 @@ export function DefaultPromptInput(props: DefaultPromptInputProps) {
                 <Paperclip class="size-4" />
               </Button>
             </Show>
-            <Show when={props.search}>
+            <Show when={props.webSearch}>
               <Button
                 type="button"
                 variant="outline"
@@ -304,7 +304,7 @@ export function DefaultPromptInput(props: DefaultPromptInputProps) {
                 class="rounded-full gap-1"
                 aria-label="Search the web"
                 disabled={props.disabled}
-                onClick={() => props.onSearch?.()}
+                onClick={() => props.onWebSearch?.()}
               >
                 <Globe class="size-4" />
                 Search

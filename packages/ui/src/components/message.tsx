@@ -346,6 +346,13 @@ export interface MessageBodyProps {
   activeFeedback?: FeedbackVote;
   /** When true, the copy button shows its "copied" check icon. */
   copied?: boolean;
+  /** Whether this message is the one currently streaming. Forwarded to each
+   *  reasoning part's `<Reasoning>` so the disclosure auto-opens while the
+   *  model is thinking and settles back once the stream ends (F-21: without it
+   *  the user watches a static collapsed "Reasoning" label for the whole
+   *  thinking window). The caller owns the definition of "streaming" — for
+   *  `ChatThread` that is `loading` + being the last assistant message. */
+  isStreaming?: boolean;
   /** INJECT slot projected at the TOP of the body — above the reasoning / tools /
    *  content. A per-message header: a model-name label, a role + timestamp line.
    *  In the `<kai-message>` shadow this is `<slot name="before-body" />`. */
@@ -616,7 +623,7 @@ function MessageBody(props: MessageBodyProps) {
                     <Match when={carrierOnly()}>{null}</Match>
                     <Match when={shownReasoning()}>
                       {(p) => (
-                        <Reasoning class="mb-2 w-full">
+                        <Reasoning class="mb-2 w-full" isStreaming={props.isStreaming}>
                           <ReasoningTrigger>{p().label ?? 'Reasoning'}</ReasoningTrigger>
                           <ReasoningContent markdown>{p().text}</ReasoningContent>
                         </Reasoning>

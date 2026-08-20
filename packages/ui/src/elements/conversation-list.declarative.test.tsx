@@ -57,13 +57,19 @@ describe('parseKaiConversationElement', () => {
     expect(parseKaiConversationElement(el).id).toBe('');
   });
 
-  it('provides safe defaults for scope, messageCount, lastMessageAt, updatedAt', () => {
+  it('leaves optional fields absent instead of fabricating them (F-10)', () => {
     const el = makeEl({ id: 'c-1' }, 'Q2 plan');
     const item = parseKaiConversationElement(el);
-    expect(item.scope).toEqual({ type: 'collection' });
+    // A `<kai-conversation>` child carries no scope and no message timestamp,
+    // so the parse must not invent them: `scope` used to be fabricated as
+    // `{ type: 'collection' }` (the exact guess F-10 was filed against) and the
+    // timestamps as the epoch, which rendered a bogus "many days ago" trailing.
+    expect(item.scope).toBeUndefined();
+    expect(item.lastMessageAt).toBeUndefined();
+    // Still-required fields keep honest defaults: zero messages, and an empty
+    // `updatedAt` from which relativeTimeShort derives NO trailing text at all.
     expect(item.messageCount).toBe(0);
-    expect(typeof item.lastMessageAt).toBe('string');
-    expect(typeof item.updatedAt).toBe('string');
+    expect(item.updatedAt).toBe('');
   });
 });
 

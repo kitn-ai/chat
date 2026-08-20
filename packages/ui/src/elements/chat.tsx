@@ -14,7 +14,7 @@ import type { ModelOption } from '../types';
 
 type Props = Omit<ChatThreadProps,
   'class' | 'onValueChange' | 'onSubmit' | 'onAttachmentsChange' | 'onSuggestionClick' | 'onModelChange'
-  | 'onMessageAction' | 'onSearch' | 'onVoice' | 'controllerRef' | 'cardTypes' | 'cardSchemas' | 'messages'
+  | 'onMessageAction' | 'onWebSearch' | 'onVoice' | 'controllerRef' | 'cardTypes' | 'cardSchemas' | 'messages'
   | 'accept' | 'onAttachmentsRejected'> & Record<string, unknown> & {
     /** Which attachment media types the user may stage, in HTML `accept` syntax:
      *  `<kai-chat accept="image/*,application/pdf">`. A plain string, so unlike
@@ -86,8 +86,8 @@ interface Events {
   'kai-message-action': { messageId: string; action: string; state?: 'on' | 'off' };
   /** The header model switcher changed. */
   'kai-model-change': { modelId: string };
-  /** The Search button was clicked. */
-  'kai-search': Record<string, never>;
+  /** The web-search (Globe) toolbar button was clicked. */
+  'kai-web-search': Record<string, never>;
   /** The Mic / voice button was clicked. */
   'kai-voice': Record<string, never>;
 }
@@ -97,7 +97,7 @@ defineWebComponent<Props, Events>('kai-chat', {
   suggestions: undefined, suggestionMode: 'submit', persistSuggestions: false, proseSize: 'sm',
   codeTheme: 'github-dark-dimmed', codeHighlight: true, chatTitle: undefined,
   models: undefined, currentModel: undefined, context: undefined, scrollButton: true,
-  search: false, voice: false, triggers: undefined, kindIcons: undefined,
+  webSearch: false, voice: false, triggers: undefined, kindIcons: undefined,
   actionsReveal: 'always', cardTypes: undefined, cardSchemas: undefined, accept: undefined,
 }, (props, { dispatch, flag, reflectFlag, element, expose }) => {
   // `messages` is an untyped boundary: a consumer can hand it anything at
@@ -164,7 +164,7 @@ defineWebComponent<Props, Events>('kai-chat', {
     codeTheme={props.codeTheme as string} codeHighlight={flag('codeHighlight')}
     chatTitle={props.chatTitle as string | undefined} models={props.models as ModelOption[] | undefined}
     currentModel={props.currentModel as string | undefined} context={props.context as ChatThreadContextUsage | undefined}
-    scrollButton={props.scrollButton !== false} search={flag('search')} voice={flag('voice')}
+    scrollButton={props.scrollButton !== false} webSearch={flag('webSearch')} voice={flag('voice')}
     triggers={props.triggers as TriggerDef[] | undefined}
     kindIcons={props.kindIcons as Record<string, string> | undefined}
     actionsReveal={props.actionsReveal as 'always' | 'hover'}
@@ -178,7 +178,7 @@ defineWebComponent<Props, Events>('kai-chat', {
     onSuggestionClick={(value) => dispatch('kai-suggestion-click', { value })}
     onModelChange={(modelId) => dispatch('kai-model-change', { modelId })}
     onMessageAction={(detail) => dispatch('kai-message-action', detail)}
-    onSearch={() => dispatch('kai-search', {})}
+    onWebSearch={() => dispatch('kai-web-search', {})}
     onVoice={() => dispatch('kai-voice', {})}
     controllerRef={(c) => (controller = c)}
     headerStart={slot('header-start')}

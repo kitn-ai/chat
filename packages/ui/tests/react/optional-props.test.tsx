@@ -160,7 +160,9 @@ const conversations = [
 ];
 
 const _conversationsWithoutGroups: ConversationsProps = { conversations, activeId: 'c1' };
-const _workspaceWithoutGroups: WorkspaceProps = { conversations, activeId: 'c1' };
+// The 2026-08-20 re-cast: <Workspace> is the layout shell now, so its optional
+// props are the layout knobs, not the removed chat surface.
+const _workspaceShellPartial: WorkspaceProps = { startCollapsed: false, collapseBelow: 720 };
 
 test('<Conversations> renders with no `groups` prop', () => {
   const { container } = render(<Conversations conversations={conversations} activeId="c1" />);
@@ -168,10 +170,10 @@ test('<Conversations> renders with no `groups` prop', () => {
   expect(_conversationsWithoutGroups.conversations).toHaveLength(1);
 });
 
-test('<Workspace> renders with no `groups` prop', () => {
-  const { container } = render(<Workspace conversations={conversations} activeId="c1" />);
+test('<Workspace> renders with only a subset of the layout knobs set', () => {
+  const { container } = render(<Workspace defaultStartCollapsed drawerBelow={640} />);
   expect(container.querySelector('kai-workspace')).toBeTruthy();
-  expect(_workspaceWithoutGroups.conversations).toHaveLength(1);
+  expect(_workspaceShellPartial.collapseBelow).toBe(720);
 });
 
 // The populated forms must keep compiling — every change here is a WIDENING, not
@@ -191,7 +193,7 @@ const _stillPopulated = {
   sources: { sources: [{ href: 'https://example.com' }] } satisfies SourcesProps,
   suggestions: { suggestions: ['Summarize this'] } satisfies SuggestionsProps,
   toastRegion: { toasts: [{ id: 't1', message: 'Saved' }] } satisfies ToastRegionProps,
-  workspace: { conversations, messages: [] } satisfies WorkspaceProps,
+  workspace: { startCollapsed: false, endCollapsed: false, collapseBelow: 720, drawerBelow: 640, compact: true } satisfies WorkspaceProps,
 };
 
 test('the populated forms still type-check and render', () => {

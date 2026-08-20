@@ -6,14 +6,16 @@ import './register'; // every kai-* element used below
 import type { KaiNavItem } from '../ui/nav';
 import type { KaiTabItem } from '../ui/tabs';
 import type { KaiCommandItem } from './command';
-import type { ConversationSummary } from '../types';
+import type { ConversationSummary, ConversationGroup } from '../types';
 
-// Labs: a working interactive prototype of the Claude desktop app, built on
-// kai-workspace + the kai-* elements. Home/Code swap the main view via kai-tabs;
-// Design opens the kai-screen takeover; the rail collapses; the user menu and
-// Recents filter are real kai-menus. It showcases the kit composing a full
-// desktop shell. Styling is Tailwind utilities (the storybook preview scans
-// src/, so they generate).
+// Labs: a working interactive prototype of the Claude desktop app, built on the
+// re-cast kai-workspace SHELL (five layout slots) + the kai-* elements. The rail
+// is a real <kai-conversations slot="start"> (recents as its own props; the app
+// chrome in its header/footer slots); Home/Code swap the main view via kai-tabs;
+// Design opens the kai-screen takeover; the rail collapses via the shell's
+// toggleAside API; the user menu and Recents filter are real kai-menus. It
+// showcases the kit composing a full desktop shell. Styling is Tailwind
+// utilities (the storybook preview scans src/, so they generate).
 
 // kai-tasks, kai-command, and kai-icon are used as JSX elements here without their
 // stories' own facades, so declare their tags locally.
@@ -48,7 +50,11 @@ const NAV: KaiNavItem[] = [
 ];
 // [title, updatedAt]. Times are spread so the kai-conversations trailing
 // auto-derives varied relative labels (a few hours ago through ~four weeks),
-// instead of every row reading "1d ago" off one shared timestamp.
+// instead of every row reading "1d ago" off one shared timestamp. One "Recents"
+// group files every row under the heading the desktop rail shows.
+const GROUPS: ConversationGroup[] = [
+  { id: 'recents', name: 'Recents', sortOrder: 0, createdAt: '2026-05-01' },
+];
 const RECENTS: ConversationSummary[] = ([
   ['Postgres index tuning', '2026-06-27T07:30:00Z'],
   ['Dark-mode token audit', '2026-06-27T01:15:00Z'],
@@ -62,7 +68,7 @@ const RECENTS: ConversationSummary[] = ([
   ['Claude desktop update not installing', '2026-06-12T10:00:00Z'],
   ['Checking Claude version', '2026-06-06T10:00:00Z'],
   ['How compound interest works', '2026-05-30T10:00:00Z'],
-] as const).map(([title, ts], i) => ({ id: `r${i}`, title, scope: { type: 'document' }, messageCount: 3, lastMessageAt: ts, updatedAt: ts }));
+] as const).map(([title, ts], i) => ({ id: `r${i}`, title, groupId: 'recents', scope: { type: 'document' }, messageCount: 3, lastMessageAt: ts, updatedAt: ts }));
 const IDEAS = [
   { label: 'Send me a daily briefing', icon: 'sparkles', value: 'brief' },
   { label: 'Organize my inbox', icon: 'folder', value: 'inbox' },
@@ -135,9 +141,13 @@ export const ClaudeCode: Story = {
     const [cmdOpen, setCmdOpen] = createSignal(false);
     // Drives the dock's top notice lip; the lip's dismiss control clears it.
     const [noticeOpen, setNoticeOpen] = createSignal(true);
-    // Captured in the workspace ref so the sidebar-header toggle can drive its
-    // exposed imperative API (toggleSidebar) from a sibling element's ref.
+    // Mirrors the start aside's collapsed state (fed by kai-aside-toggle) so the
+    // main view can float a reopen button while the rail is away.
+    const [railCollapsed, setRailCollapsed] = createSignal(false);
+    // Captured in the workspace ref so the rail toggle can drive its exposed
+    // imperative API (toggleAside) from a sibling element's ref.
     let ws: El | undefined;
+    const toggleRail = () => (ws?.toggleAside as ((side: string) => void) | undefined)?.('start');
 
     // Array/object props (and event wiring) are applied in each element's ref
     // callback, NOT a one-shot onMount. The Home view lives inside <Show>, so it
@@ -148,74 +158,108 @@ export const ClaudeCode: Story = {
         {/* Size the placeholder glyphs large: a class-qualified ::part selector
             outranks kai-icon's own fixed-size class on the part. */}
         <style>{`.slot-placeholder-icon::part(icon) { width: 2.25rem; height: 2.25rem }`}</style>
-        <kai-workspace ref={(el) => { ws = el as El; ws.conversations = RECENTS; ws.compact = true; }} class="block h-full" sidebar-min-width="240" collapse-below="720">
-          {/* sidebar-header: chrome + full-width tabs + nav */}
-          <div slot="sidebar-header" class="px-2.5 pt-2">
-            <div class="flex justify-between gap-1 pb-2">
-              <kai-tooltip content="Toggle sidebar">
-                <kai-button
-                  ref={(el) => { el.addEventListener('kai-click', () => (ws?.toggleSidebar as (() => void) | undefined)?.()); }}
-                  variant="ghost"
-                  size="icon-sm"
-                  icon="panel-left"
-                  label="Toggle sidebar"
-                ></kai-button>
-              </kai-tooltip>
-              <kai-tooltip content="Search">
-                <kai-button
-                  ref={(el) => { el.addEventListener('kai-click', () => setCmdOpen(true)); }}
-                  variant="ghost"
-                  size="icon-sm"
-                  icon="search"
-                  label="Search"
-                ></kai-button>
-              </kai-tooltip>
-            </div>
-            <kai-tabs
-              ref={(el) => {
-                const t = el as El;
-                t.items = TABS; t.defaultValue = 'home'; t.block = true;
-                el.addEventListener('kai-tab-change', (e) => setView((e as CustomEvent).detail.value));
-              }}
-              variant="segmented"
-            ></kai-tabs>
-            <div class="mt-2"><kai-nav ref={(el) => { const n = el as El; n.items = NAV; n.defaultValue = 'new'; }}></kai-nav></div>
-          </div>
-
-          {/* sidebar-footer: checklist + Design (-> kai-screen) + user menu */}
-          <div slot="sidebar-footer">
-            <div class="px-2.5 py-2"><kai-tasks ref={(el) => { (el as El).data = ONBOARDING; }}></kai-tasks></div>
-            <kai-separator></kai-separator>
-            <div class="px-2.5 py-1.5">
-              <kai-button
-                ref={(el) => { el.addEventListener('kai-click', () => setDesignOpen(true)); }}
-                full
-                align="start"
-                variant="ghost"
-                icon="workflow"
-              >Design</kai-button>
-            </div>
-            <div class={`${footerRow} flex items-center px-2 py-1.5`}>
-              <kai-menu ref={(el) => { (el as El).items = MENU_ITEMS; }} label="Account menu">
-                {/* The trigger content is NON-interactive: kai-menu wraps it in its
-                    own <button>, so a button/kai-button here would double-nest. */}
-                <div slot="trigger" class="flex items-center gap-2 text-left">
-                  <kai-avatar fallback="JD" size="sm"></kai-avatar>
-                  <span class="text-sm font-medium">John</span>
-                  <span class="text-[0.8125rem] text-muted-foreground">Max</span>
-                </div>
-              </kai-menu>
-              <span class="relative ml-auto inline-flex">
-                <kai-tooltip content="Sync">
-                  <kai-button variant="ghost" size="icon-sm" label="Sync"><Download slot="icon" class="size-4" /></kai-button>
+        <kai-workspace
+          ref={(el) => {
+            ws = el as El;
+            ws.compact = true;
+            el.style.setProperty('--kai-workspace-start-min-width', '240px');
+            el.addEventListener('kai-aside-toggle', (e) => {
+              const d = (e as CustomEvent).detail as { side: string; collapsed: boolean };
+              if (d.side === 'start') setRailCollapsed(d.collapsed);
+            });
+          }}
+          class="block h-full"
+          collapse-below="720"
+        >
+          {/* start: the rail is a real <kai-conversations>. Chrome (toggle/search,
+              the segmented tabs, the nav) rides in its header slot; the checklist,
+              Design and account rows in its footer slot; the recents are its own
+              conversations/groups props. */}
+          <kai-conversations
+            slot="start"
+            ref={(el) => { const c = el as El; c.groups = GROUPS; c.conversations = RECENTS; }}
+            style={{ display: 'block', height: '100%' }}
+          >
+            <div slot="header" class="px-2.5 pt-2 pb-1">
+              <div class="flex justify-between gap-1 pb-2">
+                <kai-tooltip content="Toggle sidebar">
+                  <kai-button
+                    ref={(el) => { el.addEventListener('kai-click', toggleRail); }}
+                    variant="ghost"
+                    size="icon-sm"
+                    icon="panel-left"
+                    label="Toggle sidebar"
+                  ></kai-button>
                 </kai-tooltip>
-                <kai-status status="new" pulse class="pointer-events-none absolute -top-0.5 -right-0.5"></kai-status>
-              </span>
+                <kai-tooltip content="Search">
+                  <kai-button
+                    ref={(el) => { el.addEventListener('kai-click', () => setCmdOpen(true)); }}
+                    variant="ghost"
+                    size="icon-sm"
+                    icon="search"
+                    label="Search"
+                  ></kai-button>
+                </kai-tooltip>
+              </div>
+              <kai-tabs
+                ref={(el) => {
+                  const t = el as El;
+                  t.items = TABS; t.defaultValue = 'home'; t.block = true;
+                  el.addEventListener('kai-tab-change', (e) => setView((e as CustomEvent).detail.value));
+                }}
+                variant="segmented"
+              ></kai-tabs>
+              <div class="mt-2"><kai-nav ref={(el) => { const n = el as El; n.items = NAV; n.defaultValue = 'new'; }}></kai-nav></div>
             </div>
-          </div>
 
-          {/* main: swaps Home <-> Code */}
+            <div slot="footer">
+              <div class="px-2.5 py-2"><kai-tasks ref={(el) => { (el as El).data = ONBOARDING; }}></kai-tasks></div>
+              <kai-separator></kai-separator>
+              <div class="px-2.5 py-1.5">
+                <kai-button
+                  ref={(el) => { el.addEventListener('kai-click', () => setDesignOpen(true)); }}
+                  full
+                  align="start"
+                  variant="ghost"
+                  icon="workflow"
+                >Design</kai-button>
+              </div>
+              <div class={`${footerRow} flex items-center px-2 py-1.5`}>
+                <kai-menu ref={(el) => { (el as El).items = MENU_ITEMS; }} label="Account menu">
+                  {/* The trigger content is NON-interactive: kai-menu wraps it in its
+                      own <button>, so a button/kai-button here would double-nest. */}
+                  <div slot="trigger" class="flex items-center gap-2 text-left">
+                    <kai-avatar fallback="JD" size="sm"></kai-avatar>
+                    <span class="text-sm font-medium">John</span>
+                    <span class="text-[0.8125rem] text-muted-foreground">Max</span>
+                  </div>
+                </kai-menu>
+                <span class="relative ml-auto inline-flex">
+                  <kai-tooltip content="Sync">
+                    <kai-button variant="ghost" size="icon-sm" label="Sync"><Download slot="icon" class="size-4" /></kai-button>
+                  </kai-tooltip>
+                  <kai-status status="new" pulse class="pointer-events-none absolute -top-0.5 -right-0.5"></kai-status>
+                </span>
+              </div>
+            </div>
+          </kai-conversations>
+
+          {/* main: swaps Home <-> Code; floats a reopen button while the rail is
+              collapsed (the shell renders nothing for a collapsed aside). */}
           <div slot="main" class="relative h-full">
+            <Show when={railCollapsed()}>
+              <div class="absolute left-2 top-2 z-10">
+                <kai-tooltip content="Open sidebar">
+                  <kai-button
+                    ref={(el) => { el.addEventListener('kai-click', toggleRail); }}
+                    variant="ghost"
+                    size="icon-sm"
+                    icon="panel-left"
+                    label="Open sidebar"
+                  ></kai-button>
+                </kai-tooltip>
+              </div>
+            </Show>
             <Show when={view() === 'home'}>
               <div class={`${mainView} justify-center`}>
                 <h1 class={`${greeting} text-4xl`}>
@@ -320,7 +364,7 @@ export const ClaudeCode: Story = {
         </kai-screen>
 
         {/* Command center: a light-DOM overlay hosting kai-command. Opened by the
-            sidebar-header search button; closes on backdrop click, Escape, or a
+            rail-header search button; closes on backdrop click, Escape, or a
             selection. The inner panel stops click/keydown from reaching the scrim. */}
         <Show when={cmdOpen()}>
           <div
@@ -351,32 +395,36 @@ export const ClaudeCode: Story = {
       source: {
         language: 'html',
         // A representative skeleton of the composition (not the full interactive
-        // render). Home/Code swap the main view via kai-tabs; Design opens the
-        // kai-screen takeover; the account + filter are kai-menus.
+        // render). The rail is a <kai-conversations> in the shell's start slot
+        // (chrome in its header/footer slots, recents as its own props);
+        // Home/Code swap the main view via kai-tabs; Design opens the kai-screen
+        // takeover; the account + filter are kai-menus.
         code: `<kai-workspace compact>
-  <!-- sidebar chrome: toggle/search, full-width tabs, nav -->
-  <div slot="sidebar-header">
-    <kai-tooltip content="Toggle sidebar">
-      <kai-button variant="ghost" size="icon-sm" icon="panel-left" label="Toggle sidebar"></kai-button>
-    </kai-tooltip>
-    <kai-tooltip content="Search">
-      <kai-button variant="ghost" size="icon-sm" icon="search" label="Search"></kai-button>
-    </kai-tooltip>
-    <kai-tabs variant="segmented"></kai-tabs>
-    <kai-nav></kai-nav>
-  </div>
+  <!-- start: the rail. Chrome rides in ITS header/footer slots. -->
+  <kai-conversations slot="start">
+    <div slot="header">
+      <kai-tooltip content="Toggle sidebar">
+        <kai-button variant="ghost" size="icon-sm" icon="panel-left" label="Toggle sidebar"></kai-button>
+      </kai-tooltip>
+      <kai-tooltip content="Search">
+        <kai-button variant="ghost" size="icon-sm" icon="search" label="Search"></kai-button>
+      </kai-tooltip>
+      <kai-tabs variant="segmented"></kai-tabs>
+      <kai-nav></kai-nav>
+    </div>
 
-  <!-- footer: onboarding checklist, Design trigger, account menu -->
-  <div slot="sidebar-footer">
-    <kai-tasks></kai-tasks>
-    <kai-button variant="ghost" icon="workflow">Design</kai-button>
-    <kai-menu label="Account menu">
-      <!-- Trigger content is NON-interactive: kai-menu supplies the button. -->
-      <div slot="trigger" class="flex items-center gap-2">
-        <kai-avatar fallback="JD"></kai-avatar> John
-      </div>
-    </kai-menu>
-  </div>
+    <!-- footer: onboarding checklist, Design trigger, account menu -->
+    <div slot="footer">
+      <kai-tasks></kai-tasks>
+      <kai-button variant="ghost" icon="workflow">Design</kai-button>
+      <kai-menu label="Account menu">
+        <!-- Trigger content is NON-interactive: kai-menu supplies the button. -->
+        <div slot="trigger" class="flex items-center gap-2">
+          <kai-avatar fallback="JD"></kai-avatar> John
+        </div>
+      </kai-menu>
+    </div>
+  </kai-conversations>
 
   <!-- main: the consumer-owned view, swapped per tab -->
   <div slot="main">
@@ -421,11 +469,16 @@ export const ClaudeCode: Story = {
   tabs.items = [{ id: 'home', label: 'Home', icon: 'home' }, { id: 'code', label: 'Code', icon: 'code' }];
   tabs.defaultValue = 'home'; tabs.block = true;
   document.querySelector('kai-nav').items = [/* { id, label, icon, badge } ... */];
-  document.querySelector('kai-workspace').conversations = [/* ConversationSummary[] */];
+  // The recents live on the rail part now, not the layout shell.
+  const rail = document.querySelector('kai-conversations');
+  rail.groups = [{ id: 'recents', name: 'Recents', sortOrder: 0, createdAt: '2026-05-01' }];
+  rail.conversations = [/* ConversationSummary[] - groupId: 'recents' */];
   document.querySelector('kai-suggestions').suggestions = [/* { label, icon, value } ... */];
 
-  // Interactions: swap the main view per tab; open the Design takeover.
+  // Interactions: swap the main view per tab; collapse the rail via the shell's
+  // per-aside API; open the Design takeover.
   tabs.addEventListener('kai-tab-change', (e) => showView(e.detail.value));
+  railToggle.addEventListener('kai-click', () => document.querySelector('kai-workspace').toggleAside('start'));
   designButton.addEventListener('kai-click', () => (screen.open = true));
   screen.addEventListener('kai-back', () => (screen.open = false));
 </script>`,

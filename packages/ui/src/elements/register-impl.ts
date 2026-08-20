@@ -6,6 +6,7 @@
 import { installKaiDevtoolsHook } from '../diagnostics/hook';
 import { emitElementRegistry } from './element-diagnostics';
 import './conversation-list';
+import './conversation-item';
 import './prompt-input';
 import './chat';
 import './chat-workspace';

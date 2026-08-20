@@ -141,7 +141,7 @@ Every interaction surfaces as a non-bubbling `kai-*` CustomEvent. Listen on the 
 - **`kai-suggestion-click`** — a starter chip was chosen in `'fill'` mode (in `'submit'` mode you get `kai-submit` instead). `detail: { value }`.
 - **`kai-message-action`** — a message action button was clicked. `detail: { messageId, action, state? }`, where `action` is a built-in (`copy`, `like`, `dislike`, `regenerate`, `edit`) or your custom id; `state` is `'on'`/`'off'` for the like/dislike toggles. Show actions by adding an `actions` array to a message.
 - **`kai-value-change`** — fires on every keystroke; useful for draft persistence or a controlled input.
-- **`kai-search`** / **`kai-voice`** — the toolbar Search and Mic buttons, shown when you set the `search` and `voice` props. Each fires with an empty detail; you own what happens next.
+- **`kai-web-search`** / **`kai-voice`** — the toolbar Globe and Mic buttons, shown when you set the `webSearch` and `voice` props. Each fires with an empty detail; you own what happens next. (Renamed from `kai-search`/`search`: the old names now belong to conversation filtering, and there is no alias.)
 
 ```js
 chat.addEventListener('kai-message-action', (e) => {

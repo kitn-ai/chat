@@ -174,3 +174,46 @@ test('controlled collapsed prop wins over an internal toggle', async () => {
   expect(root.querySelector('button[aria-label="Open sidebar"]')).not.toBeNull();
   el.remove();
 });
+
+// ── compact (row density, the old kai-workspace `compact` maps here) ────────
+// Both orders per the kai-tool upgrade class: the attribute present in MARKUP
+// before properties are assigned, and the property assigned on a bare element.
+// The compact row drops the "N messages" line; the default row keeps it — the
+// default case is the non-vacuity pair for the compact assertions.
+
+test('compact via markup attribute renders dense rows (no message-count line)', async () => {
+  document.body.innerHTML = '<kai-conversations compact></kai-conversations>';
+  const el = document.body.querySelector('kai-conversations') as ConvEl;
+  el.groups = groups;
+  el.conversations = conversations;
+  await Promise.resolve();
+
+  // Scoped to the ROW node: the shadow root's textContent includes the inline
+  // <style> fallback, whose CSS happens to contain the word "messages".
+  const row = el.shadowRoot!.querySelector('[data-conversation-id="c1"]')!;
+  expect(row.textContent).toContain('Hello world');
+  expect(row.textContent).not.toContain('messages');
+  document.body.innerHTML = '';
+});
+
+test('compact via property assignment renders dense rows; default keeps the count line', async () => {
+  // Default first: the count line renders, so its absence below means something.
+  const plain = mountConversations();
+  await Promise.resolve();
+  expect(plain.shadowRoot!.querySelector('[data-conversation-id="c1"]')!.textContent).toContain('2 messages');
+  plain.remove();
+
+  const el = document.createElement('kai-conversations') as ConvEl & { compact?: boolean };
+  el.compact = true;
+  el.groups = groups;
+  el.conversations = conversations;
+  document.body.appendChild(el);
+  await Promise.resolve();
+
+  const row = el.shadowRoot!.querySelector('[data-conversation-id="c1"]')!;
+  expect(row.textContent).toContain('Hello world');
+  expect(row.textContent).not.toContain('messages');
+  // The property reads back what was set (#294 read-back class).
+  expect(el.compact).toBe(true);
+  el.remove();
+});

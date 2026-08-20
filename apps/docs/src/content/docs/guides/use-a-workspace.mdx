@@ -1,150 +1,71 @@
 ---
 title: Use a workspace
-description: Build a full chat app — conversation sidebar plus a live thread — from a single <kai-workspace> element.
+description: Arrange a chat app inside the <kai-workspace> layout shell and drive the chat parts directly.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
-import WorkspaceDemo from '../../../components/WorkspaceDemo.tsx';
 
-`<kai-workspace>` is the whole app in one element: a resizable, collapsible sidebar listing past conversations beside a streaming chat thread. Pick a conversation, start a new one, or send a message — the demo below is live.
-
-<WorkspaceDemo client:only="solid" />
-
-## What it is, and when to reach for it
-
-`<kai-workspace>` composes a conversation list and a chat thread into one ChatGPT-style layout. You hand it the list of conversations and the active thread's messages; it renders the sidebar, the resize handle, the header, and the composer.
-
-Reach for it when your app has **many conversations** and you want the sidebar handled for you. If you only need a single thread, use [`<kai-chat>`](/guides/getting-started/) instead — same `messages` and `kai-submit` contract, no sidebar. When you outgrow the built-in layout, [compose your own shell](/patterns/compose-your-own/) from the same parts.
-
-## Seed the data
-
-Two properties hold the state: `conversations` (the sidebar list) and `messages` (the open thread). Both are arrays, so set them in JavaScript — arrays can't be HTML attributes. `activeId` tells the sidebar which row is open.
+`<kai-workspace>` is a layout shell: five slots (`header`, `start`, `main`, `end`, `footer`), resize handles between the columns, per-aside collapse, a collapse breakpoint, and a mobile drawer mode. It knows nothing about chat. You slot `<kai-conversations>` and `<kai-chat>` into it, and you drive those parts directly.
 
 ```html
-<kai-workspace id="ws" style="display:block; height:100dvh;"></kai-workspace>
+<kai-workspace collapse-below="720" drawer-below="640" style="display:block; height:100dvh;">
+  <kai-conversations slot="start"></kai-conversations>
+  <kai-chat></kai-chat>
+</kai-workspace>
 
 <script type="module">
   import '@kitn.ai/ui/elements';
 
-  await customElements.whenDefined('kai-workspace');
+  const rail = document.querySelector('kai-conversations');
+  const chat = document.querySelector('kai-chat');
 
-  const ws = document.getElementById('ws');
+  // Arrays are JS properties, never attributes; reassign a NEW array to re-render.
+  rail.conversations = await api.listConversations();
+  chat.messages = [];
 
-  // The sidebar list. With no `groups`, every row renders in one Ungrouped section.
-  ws.conversations = [
-    {
-      id: 'c1',
-      title: 'Migrating the dashboard to web components',
-      scope: { type: 'collection' },
-      messageCount: 4,
-      lastMessageAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    },
-    // … more conversations
-  ];
+  rail.addEventListener('kai-conversation-select', async (e) => {
+    rail.activeId = e.detail.id;
+    chat.messages = await api.loadThread(e.detail.id);
+  });
 
-  // The open thread — same ChatMessage shape as <kai-chat>.
-  ws.messages = [
-    { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'How do I share state across the panels?' }] },
-    {
-      id: 'a1', role: 'assistant',
-      parts: [{ type: 'text', text: 'Keep one source of truth and reassign it on each change.' }],
-      actions: ['copy', 'like', 'dislike'],
-    },
-  ];
-
-  // Highlight the open conversation in the sidebar.
-  ws.activeId = 'c1';
+  chat.addEventListener('kai-submit', (e) => send(e.detail.value));
 </script>
 ```
 
-Each conversation needs `id`, `title`, `scope` (`{ type: 'collection' }` for a general chat, or `{ type: 'document' }` when it's scoped to a document), `messageCount`, `lastMessageAt`, and `updatedAt`. The two timestamps drive the "Today" / "Yesterday" / "Last 7 days" grouping.
+Unnamed children land in the main region; `slot="main"` works too. The `end` aside is for an inspector, notes, or a preview pane, and the `header`/`footer` bands span the full shell width. Every region renders only when you project content into it.
 
-`messages` is the same shape `<kai-chat>` uses: `id`, `role`, an ordered `parts` array (`text`, `reasoning`, `tool`, `card`, `source`, `file`), plus optional `actions`.
+## Layout behavior
 
-## Handle the events
+- **Resize.** A drag handle sits beside each aside. Widths are CSS custom properties, not props: `--kai-workspace-start-width` (280px), `--kai-workspace-start-min-width` (200px), `--kai-workspace-start-max-width` (480px), and the `--kai-workspace-end-*` trio (320px / 200px / 480px). Each resize fires `kai-aside-resize` with `{ side, width }`.
+- **Collapse.** `startCollapsed` / `endCollapsed` are controlled props (JS properties); `default-start-collapsed` / `default-end-collapsed` seed the uncontrolled state from HTML. `collapse-below` auto-collapses both asides when the shell narrows past it. Every change fires `kai-aside-toggle` with `{ side, collapsed }`.
+- **Drawer.** Below `drawer-below`, an expanded aside paints as an overlay drawer above the main region. Escape inside it closes it and returns focus to the opener.
+- **Methods.** `toggleAside(side)`, `collapseAside(side)`, `expandAside(side)`, with `side` being `'start'` or `'end'`.
 
-Three events drive the interactivity. Like every `kai-*` element, the events are non-bubbling `CustomEvent`s — listen on the element itself.
+`start` and `end` are logical: on an RTL page, `start` is the right column.
 
-```js
-// 1. Selecting a conversation in the sidebar.
-ws.addEventListener('kai-conversation-select', (e) => {
-  ws.activeId = e.detail.id;
-  ws.messages = threadFor(e.detail.id); // load this thread from your store
-});
+## BREAKING: migrating from the chat preset
 
-// 2. Starting a new chat.
-ws.addEventListener('kai-new-chat', () => {
-  ws.activeId = undefined;
-  ws.messages = [];
-});
+Before the 2026-08-20 re-cast, `<kai-workspace>` was a chat preset that took `messages`, `conversations`, and 30 other props. That surface is gone; there is no back-compat alias. The fastest migration is to regenerate the composition: the kai MCP `scaffold` tool's `workspace` archetype emits the shell with the parts wired. To migrate by hand, move each prop to the part that owns it now:
 
-// 3. Submitting a message — identical loop to <kai-chat>.
-ws.addEventListener('kai-submit', async (e) => {
-  const text = e.detail.value.trim();
-  if (!text) return;
+| Old `<kai-workspace>` prop | Where it lives now |
+| --- | --- |
+| `conversations`, `activeId`, `groups`, `noConversations` | your own `<kai-conversations slot="start">` |
+| `messages`, `loading`, `proseSize`, `codeTheme`, `codeHighlight`, `chatTitle`, `scrollButton`, `cardTypes`, `cardSchemas` | your own `<kai-chat>` in the main region |
+| `value`, `placeholder`, `suggestions`, `suggestionMode`, `voice`, `triggers`, `kindIcons`, `search` (renamed `webSearch`) | the composer surface on `<kai-chat>` or `<kai-prompt-input>` |
+| `models`, `currentModel`, `context` | header chrome you slot (a model picker is a part in a slot, not three orchestrator props) |
+| `sidebarWidth`, `sidebarMinWidth`, `sidebarMaxWidth` | the `--kai-workspace-start-*` custom properties |
+| `sidebarCollapsed`, `defaultSidebarCollapsed` | `startCollapsed` / `defaultStartCollapsed` (the end aside has its own pair) |
+| `collapseBelow` | kept, now collapsing both asides |
+| `compact` | kept as a reflected density hint; the rail's row density is `<kai-conversations>`' own `compact` |
+| `theme` | unchanged, as on every element |
 
-  const aId = crypto.randomUUID();
-  ws.messages = [
-    ...ws.messages,
-    { id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text }] },
-    { id: aId, role: 'assistant', parts: [] },
-  ];
-  ws.loading = true;
+Events moved with their owners: listen for `kai-conversation-select` and `kai-new-chat` on `<kai-conversations>`, for `kai-submit`, `kai-message-action`, `kai-model-change`, `kai-value-change`, `kai-suggestion-click`, `kai-voice`, and `kai-web-search` (was `kai-search`) on `<kai-chat>`. The shell itself fires only `kai-aside-toggle` (was `kai-sidebar-toggle`, now with a `side`) and `kai-aside-resize`. The old sidebar methods `toggleSidebar()` / `collapseSidebar()` / `expandSidebar()` are `toggleAside(side)` / `collapseAside(side)` / `expandAside(side)`, and the thread methods (`focus()`, `clear()`, `send()`, `scrollToBottom()`) live on your `<kai-chat>`.
 
-  // Stream the reply from your backend (or a proxy to your model provider).
-  let answer = '';
-  for await (const token of streamFromYourModel(text)) {
-    // Reassign a NEW array each token — mutating in place won't re-render.
-    answer += token;
-    ws.messages = ws.messages.map((m) =>
-      m.id === aId ? { ...m, parts: [{ type: 'text', text: answer }] } : m,
-    );
-  }
-  ws.loading = false;
-});
-```
-
-- `kai-conversation-select` carries the picked row on `e.detail.id`.
-- `kai-new-chat` has no payload — clear the thread and drop `activeId`.
-- `kai-submit` carries the input on `e.detail.value` and any staged files on `e.detail.attachments`.
-
-<Aside type="note" title="The sidebar resizes and collapses on its own">
-The user can drag the divider or collapse the sidebar with no wiring from you. To persist that state, listen for `kai-sidebar-toggle` and read `e.detail.collapsed`. Tune the defaults with the `sidebarWidth`, `sidebarMinWidth`, and `sidebarMaxWidth` props.
+<Aside type="note" title="Why the preset dissolved">
+Every consumer feature had to become a workspace prop, and the surface still misdescribed itself (its `kai-search` was the composer's web-search toggle, not conversation search). You compose the parts now; the shell only arranges them.
 </Aside>
-
-## Own the data, render with the element
-
-`<kai-workspace>` keeps no database. It renders whatever `conversations` and `messages` you give it and tells you when the user acts — you decide what those events mean against your own backend.
-
-The pattern is a single source of truth you reassign on every change:
-
-```js
-// Your store — could be local state, a query cache, or anything.
-const conversations = await api.listConversations();
-const threads = new Map(); // id -> ChatMessage[]
-
-ws.conversations = conversations;
-
-ws.addEventListener('kai-conversation-select', async (e) => {
-  const id = e.detail.id;
-  // Lazy-load the thread the first time it's opened.
-  if (!threads.has(id)) threads.set(id, await api.loadThread(id));
-  ws.activeId = id;
-  ws.messages = threads.get(id);
-});
-
-ws.addEventListener('kai-new-chat', async () => {
-  const conv = await api.createConversation();
-  ws.conversations = [conv, ...ws.conversations]; // new array → re-render
-  ws.activeId = conv.id;
-  ws.messages = [];
-});
-```
-
-Reassign `conversations` (and `messages`) to a **new array** whenever the data changes — a fresh reference is what re-renders the element. After a turn finishes, persist `ws.messages` back to your store so the thread survives a reload.
 
 ## What's next
 
-- **[Compose your own shell](/patterns/compose-your-own/)** — when you outgrow the all-in-one and want to lay out the sidebar and thread yourself, built from the same parts.
-- **[`kai-workspace` reference](/components/workspace/)** — every prop and event, including the model switcher, context meter, search, and entity triggers.
+- **[Compose your own shell](/patterns/compose-your-own/)** for a layout the shell's five regions cannot express, built from the same parts.
+- **[`kai-workspace` reference](/components/workspace/)** for every slot, part, prop, and event.

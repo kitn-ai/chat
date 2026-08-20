@@ -399,12 +399,12 @@ describe('scaffold', () => {
      */
     const EXPECTED: Record<string, string> = {
       // html / vue / svelte / angular emit a CSS string.
-      css: 'position: fixed; inset: 0; display: flex; flex-direction: column; text-align: start; z-index: 1000;',
+      css: 'position: fixed; inset: 0; display: flex; flex-direction: column; text-align: start; z-index: 90;',
       // react / next / tanstack-start emit a camelCased React style object.
-      jsx: "position: 'fixed', inset: '0', display: 'flex', flexDirection: 'column', textAlign: 'start', zIndex: '1000'",
+      jsx: "position: 'fixed', inset: '0', display: 'flex', flexDirection: 'column', textAlign: 'start', zIndex: '90'",
       // solid's style prop is csstype's HYPHENATED set, applied via setProperty.
       solid:
-        "'position': 'fixed', 'inset': '0', 'display': 'flex', 'flex-direction': 'column', 'text-align': 'start', 'z-index': '1000'",
+        "'position': 'fixed', 'inset': '0', 'display': 'flex', 'flex-direction': 'column', 'text-align': 'start', 'z-index': '90'",
     };
     const FAMILY: Record<string, keyof typeof EXPECTED> = {
       html: 'css', vue: 'css', svelte: 'css', angular: 'css',
@@ -459,7 +459,10 @@ describe('scaffold', () => {
    * Every archetype, because the sources companion carried its own `$:` block.
    */
   it('svelte emits Svelte 5 runes, never Svelte 4 syntax (sv create forces runes mode)', async () => {
-    for (const useCase of ['drop-in-chat', 'knowledge-base', 'agentic', 'workspace'] as const) {
+    // `artifact-split`, not `workspace`: the workspace preset is the BLOCK now
+    // (multi-thread store, no single `messages`/`loading` state) — its own runes
+    // discipline is pinned in the workspace-BLOCK describe at the bottom.
+    for (const useCase of ['drop-in-chat', 'knowledge-base', 'agentic', 'artifact-split'] as const) {
       for (const integration of ['mock', 'openrouter'] as const) {
         const out = await scaffold.handler({ useCase, integration, placement: 'full-page', framework: 'svelte' });
         const text = (out.content as { type: string; text: string }[])[0].text;
@@ -1489,7 +1492,7 @@ describe('scaffold', () => {
 
   it('SCAF-14: workspace (react) emits Resizable with ResizableItem children and Artifact with src', async () => {
     const out = await scaffold.handler({
-      useCase: 'workspace',
+      useCase: 'artifact-split',
       integration: 'openrouter',
       placement: 'full-page',
       framework: 'react',
@@ -1513,7 +1516,7 @@ describe('scaffold', () => {
 
   it('SCAF-14: workspace (next) emits Resizable with ResizableItem children and Artifact with src', async () => {
     const out = await scaffold.handler({
-      useCase: 'workspace',
+      useCase: 'artifact-split',
       integration: 'mock',
       placement: 'full-page',
       framework: 'next',
@@ -1544,7 +1547,7 @@ describe('scaffold', () => {
     'SCAF-14: workspace (%s) emits Artifact with a files prop (tsc --strict TS2741 guard)',
     async (framework) => {
       const out = await scaffold.handler({
-        useCase: 'workspace',
+        useCase: 'artifact-split',
         integration: 'openrouter',
         placement: 'full-page',
         framework,
@@ -1656,7 +1659,7 @@ describe('scaffold', () => {
 
   it('SCAF-14B: workspace (vue) emits kai-resizable with kai-resizable-item children and kai-artifact with src', async () => {
     const out = await scaffold.handler({
-      useCase: 'workspace',
+      useCase: 'artifact-split',
       integration: 'mock',
       placement: 'full-page',
       framework: 'vue',
@@ -1678,7 +1681,7 @@ describe('scaffold', () => {
 
   it('SCAF-14B: workspace (svelte) emits kai-resizable with kai-resizable-item children and kai-artifact with src', async () => {
     const out = await scaffold.handler({
-      useCase: 'workspace',
+      useCase: 'artifact-split',
       integration: 'mock',
       placement: 'full-page',
       framework: 'svelte',
@@ -1756,7 +1759,7 @@ describe('scaffold', () => {
 
   it('SCAF-14: workspace (html) emits kai-resizable with kai-resizable-item children and kai-artifact with src', async () => {
     const out = await scaffold.handler({
-      useCase: 'workspace',
+      useCase: 'artifact-split',
       integration: 'mock',
       placement: 'full-page',
       framework: 'html',
@@ -4568,5 +4571,160 @@ describe('chatRoutePreamble — the seam a file-writing consumer needs', () => {
     // editable const here would be the dead-const defect `forwardsFromClient`
     // exists to prevent.
     expect(defaultModelFor(getIntegration('langgraph')!)).toBeUndefined();
+  });
+});
+
+/**
+ * The first official BLOCK (recast spec 2026-08-20 § 3b; plan Task E).
+ *
+ * F-16 first: the `workspace` preset used to emit an UNWIRED artifact split
+ * while omitting the rail — the one thing its name promised. It now composes
+ * the layout shell + the wired rail + kai-chat + the @kitn.ai/ui/state thread
+ * helpers, and the artifact split lives on under its own honest preset id so
+ * the capability keeps its cells in verify:scaffold.
+ *
+ * Wording tests only: emitted code lives in string literals, so compilation is
+ * verify:scaffold's job (all three tsc projects) and these pin the words.
+ */
+describe('scaffold — the workspace BLOCK (F-16 + recast § 3b)', () => {
+  const BLOCK_FRONTENDS = ['react', 'next', 'tanstack-start', 'vue', 'svelte', 'angular', 'solid', 'html'] as const;
+
+  it('F-16: the workspace preset is the block, and the artifact split keeps its own preset', () => {
+    // Registry-level: the components ARE the axis, so this is the change that
+    // moves verify:scaffold's cell counts on its own.
+    expect(getArchetype('workspace')!.components).toEqual([
+      'kai-chat',
+      'kai-workspace',
+      'kai-conversations',
+    ]);
+    // The old pair must stay a reachable capability (its renderers' split branch
+    // would otherwise lose every gate cell without anything failing to say so).
+    expect(getArchetype('artifact-split')?.components).toEqual([
+      'kai-chat',
+      'kai-artifact',
+      'kai-resizable',
+    ]);
+    // And the derivation saw both: one probe carries the shell+rail pair, one
+    // carries the artifact pair.
+    const probes = listSurfaceProbes();
+    expect(probes.some((p) => p.components.includes('kai-workspace') && p.components.includes('kai-conversations'))).toBe(true);
+    expect(probes.some((p) => p.components.includes('kai-artifact') && p.components.includes('kai-resizable'))).toBe(true);
+  });
+
+  it('every framework: shell + wired rail + helpers, and no artifact split', async () => {
+    for (const framework of BLOCK_FRONTENDS) {
+      const out = await scaffold.handler({
+        useCase: 'workspace',
+        integration: 'openrouter',
+        placement: 'full-page',
+        framework,
+      });
+      const front = (out.content as { type: string; text: string }[])[0].text.split('=== (2)')[0];
+      // The shell (element targets) or the Solid shell component.
+      expect(front, `${framework}: no layout shell`).toMatch(/<kai-workspace|<Workspace\b|<WorkspaceShell\b/);
+      // The rail, present AND wired: rows assigned, selection handled.
+      expect(front, `${framework}: no rail`).toMatch(/<kai-conversations|<Conversations\b|<ConversationList\b/);
+      expect(front, `${framework}: rail not wired to selection`).toMatch(
+        /kai-conversation-select|onConversationSelect|onSelect/,
+      );
+      // F-16's other half: the split does NOT ride along uninvited.
+      expect(front, `${framework}: artifact split leaked into the block`).not.toMatch(/<kai-artifact|<Artifact[\s/>]|<kai-resizable|<Resizable\b|ResizablePanelGroup/);
+      // Lane D's ratified helpers, imported from the state entry.
+      for (const helper of ['bindThreadMessages', 'createThreadSessions', 'createSaveScheduler', 'parseStoredThread']) {
+        expect(front, `${framework}: missing ${helper}`).toContain(helper);
+      }
+      // The boundary, said out loud: persistence policy is the consumer's.
+      expect(front, `${framework}: persistence boundary unstated`).toContain('PERSISTENCE IS YOURS');
+      // Delete-under-stream has a named answer rather than a resurrecting thread.
+      expect(front, `${framework}: sessions.abort unmentioned`).toContain('sessions.abort');
+      // The item-mode note: batteries rows now, bring-your-own rows named.
+      expect(front, `${framework}: item mode unmentioned`).toMatch(
+        /kai-conversation-item|SlottedConversationItem/,
+      );
+    }
+  });
+
+  it('svelte block keeps the runes discipline (raw state + derived views, no Svelte 4)', async () => {
+    const out = await scaffold.handler({
+      useCase: 'workspace',
+      integration: 'openrouter',
+      placement: 'full-page',
+      framework: 'svelte',
+    });
+    const front = (out.content as { type: string; text: string }[])[0].text.split('=== (2)')[0];
+    expect(front).not.toMatch(/^\s*\$:/m);
+    expect(front).not.toMatch(/\son:[a-z-]+=\{/);
+    expect(front).toContain('let threads = $state.raw<Thread[]>(');
+    expect(front).toContain('const messages = $derived(');
+    expect(front).toContain('let railEl = $state<KaiConversationsElement | undefined>(undefined)');
+  });
+
+  it('mock: the block previews keyless and still teaches the helpers', async () => {
+    const out = await scaffold.handler({
+      useCase: 'workspace',
+      integration: 'mock',
+      placement: 'full-page',
+      framework: 'react',
+    });
+    const front = (out.content as { type: string; text: string }[])[0].text.split('=== (2)')[0];
+    expect(front).toContain('mockResponse');
+    expect(front).toContain('createThreadSessions');
+    expect(front).toContain('createSaveScheduler');
+  });
+
+  it('the block composes with the split and the companions (the every-capability shape)', async () => {
+    // The all-capabilities probe puts the shell, the split, tools, sources,
+    // voice and attachments in ONE surface; the shell wraps, the split becomes
+    // the main region, and nothing is dropped.
+    const components = [
+      'kai-chat', 'kai-workspace', 'kai-conversations',
+      'kai-artifact', 'kai-resizable', 'kai-tool', 'kai-reasoning',
+      'kai-sources', 'kai-voice-input',
+    ];
+    for (const framework of ['react', 'html'] as const) {
+      const out = await scaffold.handler({
+        components,
+        integration: 'openrouter',
+        placement: 'full-page',
+        framework,
+      });
+      const front = (out.content as { type: string; text: string }[])[0].text.split('=== (2)')[0];
+      expect(front, `${framework}: shell missing`).toMatch(/<kai-workspace|<Workspace\b/);
+      expect(front, `${framework}: rail missing`).toMatch(/<kai-conversations|<Conversations\b/);
+      expect(front, `${framework}: split dropped`).toMatch(/<kai-resizable|<Resizable\b/);
+      expect(front, `${framework}: artifact dropped`).toMatch(/<kai-artifact|<Artifact\s/);
+      expect(front, `${framework}: sources dropped`).toMatch(/<kai-sources|<Sources\b/);
+      // Not the bare-sibling emit this same shape produced before the block:
+      // the rail is wired and the block's boundary comment rides along.
+      expect(front, `${framework}: block layer missing (bare-sibling emit)`).toContain(
+        'PERSISTENCE IS YOURS',
+      );
+    }
+  });
+});
+
+/**
+ * F-20's scaffold-side sibling: every fixed placement used to stamp
+ * `z-index: 1000` on its wrapper, which sits ABOVE the kit's toast layer
+ * (`kai-toast-region` paints at `var(--kai-toast-z, 100)` as a body-level
+ * sibling of the app root) — so every scaffolded app inherited the exact
+ * buried-Undo defect the corpus workspace app paid an IVP round for.
+ */
+describe('scaffold — fixed placements stay BELOW the toast layer (F-20 class)', () => {
+  it.each([
+    ['full-page', 'react'],
+    ['full-page', 'html'],
+    ['side', 'react'],
+    ['docked-widget', 'html'],
+  ] as const)('%s (%s): wrapper z-index below 100, contract named', async (placement, framework) => {
+    const out = await scaffold.handler({
+      useCase: 'drop-in-chat',
+      integration: 'mock',
+      placement,
+      framework,
+    });
+    const front = (out.content as { type: string; text: string }[])[0].text.split('=== (2)')[0];
+    expect(front, 'the wrapper still promotes itself above the toast layer').not.toMatch(/z-index:\s*1000|zIndex:\s*'1000'/);
+    expect(front, 'the toast-layer contract is unstated').toContain('--kai-toast-z');
   });
 });

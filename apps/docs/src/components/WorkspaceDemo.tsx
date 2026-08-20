@@ -1,7 +1,8 @@
-/** Live demo for the Workspace example page. Mounts <kai-workspace>, seeds it
- *  with sample conversations + a thread, and scripts a canned streaming reply
- *  on submit — identical approach to ChatDemo but using the single-element
- *  multi-conversation API. */
+/** Live demo for the Workspace example page. Mounts the <kai-workspace> layout
+ *  shell with <kai-conversations> slotted into `start` and <kai-chat> in the
+ *  main region, then drives each part directly — the rail gets the conversation
+ *  list, the chat gets the active thread, and a canned streaming reply plays on
+ *  submit. Same approach as ChatDemo, plus the rail wiring. */
 import { createSignal, onMount, onCleanup } from 'solid-js';
 import { loadKit } from './example/kit';
 
@@ -154,8 +155,12 @@ const nextId = () => `m${++uid}`;
 
 // --------------------------------------------------------------------------
 
+type ElementHost = HTMLElement & { [k: string]: unknown };
+
 export default function WorkspaceDemo() {
-  let host: (HTMLElement & { [k: string]: unknown }) | undefined;
+  let rail: ElementHost | undefined;
+  let chat: ElementHost | undefined;
+  let shell: ElementHost | undefined;
   const [, setReady] = createSignal(false);
   let timer: number | undefined;
 
@@ -166,14 +171,14 @@ export default function WorkspaceDemo() {
 
   const onConversationSelect = (e: Event) => {
     const id = (e as CustomEvent<{ id: string }>).detail?.id;
-    if (!id || !host) return;
+    if (!id || !rail || !chat) return;
     activeId = id;
-    host.activeId = id;
-    host.messages = THREADS[id] ?? [];
+    rail.activeId = id;
+    chat.messages = THREADS[id] ?? [];
   };
 
   const onNewChat = () => {
-    if (!host) return;
+    if (!rail || !chat) return;
     const id = `new-${Date.now()}`;
     const newConv: ConversationSummary = {
       id,
@@ -185,24 +190,24 @@ export default function WorkspaceDemo() {
     };
     THREADS[id] = [];
     activeId = id;
-    host.conversations = [newConv, ...(host.conversations as ConversationSummary[])];
-    host.activeId = id;
-    host.messages = [];
+    rail.conversations = [newConv, ...(rail.conversations as ConversationSummary[])];
+    rail.activeId = id;
+    chat.messages = [];
   };
 
   const onSubmit = (e: Event) => {
     const text = ((e as CustomEvent).detail?.value as string | undefined)?.trim();
-    if (!text || !host) return;
+    if (!text || !chat) return;
     const aId = nextId();
-    const msgs = (host.messages as ChatMessage[]) ?? [];
-    host.messages = [
+    const msgs = (chat.messages as ChatMessage[]) ?? [];
+    chat.messages = [
       ...msgs,
       { id: nextId(), role: 'user', parts: [{ type: 'text', text }] },
       { id: aId, role: 'assistant', parts: [] },
     ];
-    host.loading = true;
+    chat.loading = true;
     // Update local thread store.
-    THREADS[activeId] = host.messages as ChatMessage[];
+    THREADS[activeId] = chat.messages as ChatMessage[];
 
     const words = DEFAULT_REPLY.split(/(\s+)/);
     let i = 0;
@@ -211,42 +216,50 @@ export default function WorkspaceDemo() {
       i += 2;
       const partial = words.slice(0, i).join('');
       const done = i >= words.length;
-      host!.messages = ((host!.messages as ChatMessage[]) ?? []).map((m) =>
+      chat!.messages = ((chat!.messages as ChatMessage[]) ?? []).map((m) =>
         m.id === aId
           ? { ...m, parts: [{ type: 'text', text: partial }], ...(done ? { actions: ['copy', 'like', 'dislike'] } : {}) }
           : m,
       );
-      THREADS[activeId] = host!.messages as ChatMessage[];
+      THREADS[activeId] = chat!.messages as ChatMessage[];
       if (!done) timer = window.setTimeout(tick, 38);
-      else host!.loading = false;
+      else chat!.loading = false;
     };
     timer = window.setTimeout(tick, 240);
   };
 
   onMount(async () => {
     await loadKit();
-    if (!host) return;
-    customElements.upgrade(host);
+    if (!rail || !chat || !shell) return;
+    customElements.upgrade(shell);
+    customElements.upgrade(rail);
+    customElements.upgrade(chat);
 
-    host.conversations = CONVERSATIONS;
-    host.messages = THREADS['c1'];
-    host.activeId = 'c1';
-    host.setAttribute('theme', theme());
+    rail.conversations = CONVERSATIONS;
+    rail.activeId = 'c1';
+    chat.messages = THREADS['c1'];
 
-    host.addEventListener('kai-conversation-select', onConversationSelect);
-    host.addEventListener('kai-new-chat', onNewChat);
-    host.addEventListener('kai-submit', onSubmit);
+    const applyTheme = () => {
+      shell?.setAttribute('theme', theme());
+      rail?.setAttribute('theme', theme());
+      chat?.setAttribute('theme', theme());
+    };
+    applyTheme();
+
+    rail.addEventListener('kai-conversation-select', onConversationSelect);
+    rail.addEventListener('kai-new-chat', onNewChat);
+    chat.addEventListener('kai-submit', onSubmit);
 
     setReady(true);
 
-    const obs = new MutationObserver(() => host?.setAttribute('theme', theme()));
+    const obs = new MutationObserver(applyTheme);
     obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
     onCleanup(() => {
       clearTimeout(timer);
-      host?.removeEventListener('kai-conversation-select', onConversationSelect);
-      host?.removeEventListener('kai-new-chat', onNewChat);
-      host?.removeEventListener('kai-submit', onSubmit);
+      rail?.removeEventListener('kai-conversation-select', onConversationSelect);
+      rail?.removeEventListener('kai-new-chat', onNewChat);
+      chat?.removeEventListener('kai-submit', onSubmit);
       obs.disconnect();
     });
   });
@@ -257,7 +270,17 @@ export default function WorkspaceDemo() {
       style={{ height: '560px' }}
     >
       {/* @ts-expect-error custom element */}
-      <kai-workspace ref={(el: HTMLElement) => (host = el as any)} style={{ display: 'block', height: '100%' }} />
+      <kai-workspace
+        ref={(el: HTMLElement) => (shell = el as ElementHost)}
+        collapse-below="720"
+        drawer-below="640"
+        style={{ display: 'block', height: '100%' }}
+      >
+        {/* @ts-expect-error custom element */}
+        <kai-conversations slot="start" ref={(el: HTMLElement) => (rail = el as ElementHost)} />
+        {/* @ts-expect-error custom element */}
+        <kai-chat ref={(el: HTMLElement) => (chat = el as ElementHost)} style={{ display: 'block', height: '100%' }} />
+      </kai-workspace>
     </div>
   );
 }

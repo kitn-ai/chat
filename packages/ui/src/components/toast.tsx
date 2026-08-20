@@ -320,11 +320,17 @@ function anchorStyle(position: ToastPosition, r: TargetRect): Record<string, str
   }
 }
 
+/** The overlay layer both region roots sit on (F-20). One token, one default:
+ *  your app chrome must stay below the toast layer; set `--kai-toast-z`
+ *  (default 100) on the host to move the layer. */
+const TOAST_Z = 'var(--kai-toast-z, 100)';
+
 /**
  * Renders a stack of toasts at a viewport edge. Caps the visible count at `max`
  * (newest on top); overflow waits in a queue and is promoted as visible toasts
  * leave. `aria-live=polite` / `role=region` so screen readers announce new
- * toasts without stealing focus.
+ * toasts without stealing focus. Your app chrome must stay below the toast
+ * layer; set `--kai-toast-z` (default 100) on the host to move the layer.
  */
 export function ToastRegion(props: ToastRegionProps) {
   const max = () => props.max ?? 3;
@@ -425,12 +431,12 @@ export function ToastRegion(props: ToastRegionProps) {
           aria-live="polite"
           data-stack="expanded"
           class={cn(
-            'pointer-events-none fixed z-[100] flex flex-col gap-2',
+            'pointer-events-none fixed flex flex-col gap-2',
             anchor()
               ? ANCHOR_FLEX[position()]
               : cn('max-w-[min(30rem,calc(100vw-2rem))]', POSITION_CLASSES[position()]),
           )}
-          style={anchor() ? anchorStyle(position(), anchor()!) : undefined}
+          style={{ 'z-index': TOAST_Z, ...(anchor() ? anchorStyle(position(), anchor()!) : undefined) }}
         >
           <For each={visible()}>
             {(item) => (
@@ -456,8 +462,8 @@ export function ToastRegion(props: ToastRegionProps) {
         onPointerLeave={() => setHovered(false)}
         onFocusIn={() => setFocused(true)}
         onFocusOut={() => setFocused(false)}
-        class={cn('pointer-events-none fixed z-[100]', !anchor() && POSITION_CLASSES[position()])}
-        style={anchor() ? anchorStyle(position(), anchor()!) : undefined}
+        class={cn('pointer-events-none fixed', !anchor() && POSITION_CLASSES[position()])}
+        style={{ 'z-index': TOAST_Z, ...(anchor() ? anchorStyle(position(), anchor()!) : undefined) }}
       >
         {/* Relative stage with an explicit height so it's ONE continuous hover
             surface (pointer-events-auto) — no flicker when the cursor crosses gaps

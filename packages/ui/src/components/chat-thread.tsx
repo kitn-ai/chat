@@ -120,8 +120,8 @@ export interface ChatThreadProps {
   accept?: MediaTypeFilter;
   /** Files the composer refused because `accept` excluded them. */
   onAttachmentsRejected?: (rejected: RejectedAttachment[]) => void;
-  /** Show a Search (Globe) button in the input toolbar; fires a `search` event. */
-  search?: boolean;
+  /** Show a web-search (Globe) button in the input toolbar; calls `onWebSearch`. */
+  webSearch?: boolean;
   /** Show a Voice (Mic) button in the input toolbar; fires a `voice` event. */
   voice?: boolean;
   /** Rich entity triggers. Each `{ char, kind, items }` opens a caret-anchored
@@ -140,7 +140,7 @@ export interface ChatThreadProps {
   onSuggestionClick?: (value: string) => void;
   onModelChange?: (modelId: string) => void;
   onMessageAction?: (detail: MessageActionDetail) => void;
-  onSearch?: () => void;
+  onWebSearch?: () => void;
   onVoice?: () => void;
   /** Receive the imperative controller once mounted. The kai-chat facade forwards
    *  these as element methods (focus/clear/send/scrollToBottom). */
@@ -335,6 +335,11 @@ export function ChatThread(props: ChatThreadProps) {
                         const body = (
                           <MessageBody
                             parts={m().parts}
+                            /* F-21: streaming-ness = the thread's ONE existing
+                               loading signal + being the last message and an
+                               assistant turn. No second streaming source; the
+                               reasoning disclosure auto-opens on it. */
+                            isStreaming={props.loading === true && m().role === 'assistant' && i() === props.messages.length - 1}
                             cardTypes={props.cardTypes}
                             cardSchemas={props.cardSchemas}
                             isUser={m().role === 'user'}
@@ -401,11 +406,11 @@ export function ChatThread(props: ChatThreadProps) {
                     value={current()} placeholder={props.placeholder} loading={props.loading === true}
                     suggestions={visibleSuggestions()} attachments={attachments()}
                     accept={props.accept} onAttachmentsRejected={props.onAttachmentsRejected}
-                    search={props.search === true} voice={props.voice === true}
+                    webSearch={props.webSearch === true} voice={props.voice === true}
                     triggers={props.triggers} kindIcons={props.kindIcons}
                     onValueChange={handleChange} onSubmit={handleSubmit} onSuggestionClick={handleSuggestionClick}
                     onAttachmentsChange={(a) => { setAttachments(a); props.onAttachmentsChange?.(a); }}
-                    onSearch={() => props.onSearch?.()} onVoice={() => props.onVoice?.()}
+                    onWebSearch={() => props.onWebSearch?.()} onVoice={() => props.onVoice?.()}
                   />
                 }
               >

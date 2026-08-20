@@ -217,9 +217,9 @@ export type ControlKind =
 
 // Controlled-value bindings: scalar props that, when set, switch an element into
 // controlled mode and disable its own click-to-toggle UI (e.g. kai-popover `open`,
-// kai-workspace `sidebarCollapsed`). Exposing them as casual Playground toggles
+// kai-dialog `open`). Exposing them as casual Playground toggles
 // makes the live demo look broken, so drive those via the element's own trigger.
-const CONTROLLED_BINDING_PROPS = new Set(['open', 'sidebarCollapsed']);
+const CONTROLLED_BINDING_PROPS = new Set(['open', 'startCollapsed', 'endCollapsed']);
 
 // Per-element controls to hide. kai-artifact: `tab` is redundant with its own
 // in-component Preview|Code toggle; `sandbox` is set by the sample (which sets
