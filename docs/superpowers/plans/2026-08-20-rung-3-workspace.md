@@ -276,6 +276,25 @@ pnpm --filter @kitn.ai/ui run lint:thresholds
   placeholder/consistency self-review done inline (fixed a five-vs-four listings
   miscount and the event re-emit gloss). Full report:
   `.superpowers/sdd/2026-08-20-rung-3/w19-report.md`.
+- 2026-08-20 (W19, rewrite round): Task-8 spec REWRITTEN in place after the owner worked
+  the six open questions with the supervisor — all rulings owner-ratified 2026-08-20 and
+  quoted as such in the spec. Shape change: construction-over-configuration vision section
+  (shadcn model, owner quote verbatim) + four-tier taxonomy (primitives · elements ·
+  layout elements · blocks, with the npm-update vs consumer-owned mechanical distinction);
+  kai-workspace DISSOLVES as a chat preset — re-cast as a chat-agnostic slotted layout
+  shell (kai-dock precedent), with the semantic glue shipping as the first official BLOCK
+  + headless `@kitn.ai/ui/state` helpers (first draft's preset-over-preset Q2 now MOOT);
+  kai-conversation-item BUILD NOW (item-element pattern, consumer-owned loop, menu slot;
+  supersedes the posed slots-vs-events question); naming settled (sidebar keeps search,
+  composer Globe → webSearch/kai-web-search, feat!); sequencing settled (two parallel
+  element lanes, part fixes ride along — F-04, F-20, the rename, and NEW F-21: message.tsx
+  never passes isStreaming to <Reasoning>, reasoning-first models stream into a collapsed
+  panel, evidence `.superpowers/sdd/2026-08-20-rung-3/latency-debug/report.md`). KEPT: the
+  glue-inventory evidence and boundary assignments (destinations re-mapped to
+  shell/block/helpers) and the measurement section, now with the glue-vs-composition
+  distinction so the ratchet stays honest. Open questions shrunk to 5 genuinely-open
+  items. `lint:thresholds` green (self-test 29 cases, 6 files in scope); placeholder scan
+  clean. Report updated: `.superpowers/sdd/2026-08-20-rung-3/w19-report.md`.
 - Task 3 (supervisor): disclosure restated in-session before launch; run succeeded
   (98 turns, 1,210,309 ms, session d0cf3c07-b36b-4749-b7c8-0d8593107d85, prompt sha
   566133636cf00d91714974f4a127f24ab073f2e132269a71ed13c7b96678a84a); credential

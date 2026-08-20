@@ -1,14 +1,17 @@
-# Design: the workspace re-cast — presets over composables
+# Design: the workspace re-cast — construction over configuration
 
-Date: 2026-08-20. Status: DRAFT for owner review — a deliverable, not a build. No
+Date: 2026-08-20. Status: DRAFT for owner review — a deliverable, not a build. Rewritten
+same-day after the owner worked through the first draft's six open questions with the
+supervisor; every ruling below is **owner-ratified 2026-08-20** and quoted as such. No
 implementation and no implementation plan follow from this document until the owner
 green-lights it (rung-3 spec, § owner ruling).
 
 Parent direction: `docs/superpowers/specs/2026-07-01-composition-first-architecture-proposal.md`
-(the composition-first RFC). This spec executes the RFC's `kai-workspace` sections and
-**supersedes them with evidence**: where the RFC argued from structure (config scales as
-parts × placements), this spec argues from a measured build — the rung-3 clean-room app and
-its glue-code inventory.
+(the composition-first RFC). This spec executes and **supersedes the RFC's workspace
+sections with evidence** — where the RFC argued from structure (config scales as
+parts × placements), this spec argues from a measured build, and where the RFC proposed a
+preset ELEMENT, the owner rulings replace it with a layout shell plus a consumer-owned
+block (§ 3).
 
 Evidence of record, cited throughout:
 
@@ -20,355 +23,345 @@ Evidence of record, cited throughout:
   17 questions, verbatim.
 - `examples/apps/workspace/` — the delivered app, the corpus copy of the glue this spec
   proposes to absorb.
+- `.superpowers/sdd/2026-08-20-rung-3/latency-debug/report.md` — the 2026-08-20 latency
+  diagnosis (the F-21 finding below).
 - `packages/ui/src/elements/element-meta.json` — the current surfaces. Every prop/event
   count below is counted from that artifact; re-count there, never from this prose.
 - The mandate: `docs/superpowers/specs/2026-08-20-rung-3-workspace-design.md` § owner
   ruling — "the app's glue code IS the preset's design input", and the drafted re-cast
   spec is the rung's named deliverable.
 
-## Why now — what rung 3 proved that July could only assert
+## Vision — construction over configuration (owner-ratified 2026-08-20)
 
-The RFC predicted the monolith would fail a real consumer on the config treadmill. Rung 3
-ran the experiment: a clean-room builder, told nothing about elements or compose-vs-monolith,
-with the full `kai-workspace` reference in hand (23,641 ch, builder-run.md call 7),
-**rejected the monolith on a verified fact** — its `kai-search` event is the composer's Globe
-button (`detail: Record<string, never>`), not conversation search, and search was a hard
-requirement (NOTES §2). It also rejected the documented slot composition (a collapsed slotted
-rail leaves a dead 16rem gutter, the recipe's own caveat) and built the undocumented third
-arrangement: rail as sibling, layout hand-owned (findings scorecard 2, F-02).
+This is the spec's spine, and it is the shadcn model. The owner's words:
 
-Then it wrote the wiring. Of 342 authored TS/TSX code lines, ~300 are glue between TWO
-elements (findings § 5 — method: non-blank non-comment code lines, per file and per
-`App.tsx` region):
+> "shadcn doesnt just pass in a bunch of configurations, you compose. and that is the
+> vision i have for our component set."
 
-| Category | Lines | Where |
-|---|---|---|
-| Persistence | 106 | `storage.ts` + bootstrap/effects |
-| State lifting / projection | 61 | `conversations.ts` + derived memos |
-| Send/stream pipeline | 52 | `App.tsx` handleSubmit |
-| Identity management | ~34 | id-bound setter, per-conversation loading, abort map |
-| Hand-rolled delete affordance | ~27 | F-01 |
-| Sidebar event plumbing | ~14 | select/new/collapse/search mirror |
-| Theme sync | ~10 | `main.tsx` (F-09) |
-| No-match search state | ~6 | F-04 |
-| Layout CSS (no documented arrangement fit) | 59 CSS | F-02 |
+Consumers **construct** their chat app from elements. A config-driven black box — a
+mega-element whose every consumer feature must become our prop — is the anti-pattern this
+re-cast retires. Rung 3 ran the experiment that makes this more than taste: a clean-room
+builder, told nothing about elements or compose-vs-monolith, pulled the full
+`kai-workspace` reference (23,641 ch, builder-run.md call 7) and **rejected the monolith on
+a verified fact** — its `kai-search` event is the composer's web-search Globe
+(`detail: Record<string, never>`), not conversation search, and search was a hard
+requirement (NOTES §2). The config surface did not merely fail to cover a need; it
+actively misdescribed itself. The builder then composed — and wrote ~300 lines of glue
+doing it (§ 1), which is the other half of the evidence: construction must be made cheap,
+not merely permitted.
 
-The findings' own scale line: the app renders two kit elements plus a button and wrote more
-lines wiring them than `<kai-chat>` has props. That inventory is this spec's input — the
-preset is defined as "the glue the app wrote", not as a feature list anyone imagined.
+## Taxonomy — four tiers (owner-ratified 2026-08-20)
 
-## 1. What the preset encapsulates — the inventory, category by category
+The kit's public surface re-states itself as four tiers. The first two exist today; the
+third is a reclassification; the fourth is new.
 
-The boundary rule is CLAUDE.md's: **the kit decides HOW, the app decides WHETHER** — does
-this decision land on an invoice or in a policy document? Applied to each category:
+1. **Primitives** — generic atoms (`packages/ui/src/ui/`: buttons, popovers, inputs). No
+   domain knowledge.
+2. **Elements** — domain components: the thread, the composer, cards, voice, the
+   conversation rail. They know what a chat is; they do not know what an app is.
+3. **Layout elements** — arrangement, not domain behavior: `kai-dock`,
+   `kai-prompt-dock`, `kai-resizable`/`kai-resizable-item` (all in element-meta.json
+   today), and the re-cast workspace shell (§ 3). They own placement, resize, collapse,
+   z-layering, focus-return — the prop/JSON-driven behaviors CSS alone cannot do — and are
+   chat-agnostic by definition.
+4. **Blocks** — generated compositions the consumer **owns**: emitted by the kai MCP
+   scaffolder / create-kai, with the corpus apps as reference implementations. shadcn
+   blocks, exactly.
 
-### Persistence (106 lines) — **app-side. The preset does NOT persist.**
+The mechanical distinction that makes the tiers real, stated as the accepted trade-off it
+is: **a layout-element or element fix reaches every consumer via npm update; a block's
+code belongs to the consumer at generation time and no later fix reaches it.** That IS the
+block's point — the consumer can edit every line without a fork or an ejection cliff — and
+it is why the split in § 3 pushes every mechanically-updateable piece down into elements
+and state helpers, and leaves in the block only what the consumer should own.
 
-What is retained, where, for how long, and what happens at quota are policy decisions
-(retention lands in policy documents; storage backends land on invoices). The rung-3 owner
-ruling that made THIS app client-only was itself an application decision — another consumer
-of the same preset wants a server. The preset must not choose for them.
+## 1. The evidence — the glue inventory, category by category
 
-What the kit owes instead is the **serialization contract**, which is squarely the medium:
+Rung 3's builder wrote 342 authored TS/TSX code lines wiring TWO elements, ~300 of them
+glue (findings § 5 — method: non-blank non-comment code lines, per file and per `App.tsx`
+region). The findings' own scale line: the app renders two kit elements plus a button and
+wrote more lines wiring them than `<kai-chat>` has props.
 
-- F-13 (doc gap, S3): the rung's defining surface — JSON round-trip of `ChatMessage[]` and
-  re-feeding a rehydrated thread — is stated nowhere as supported. It works (the builder
-  proved it end-to-end including the re-encoded wire body after reload); one sentence
-  ("plain data, JSON-safe, re-assignable") makes the whole workspace pattern legitimate
-  instead of lucky.
-- F-18: the app's storage validator hand-types the `MessagePart` variant list — the
-  derive-don't-type liability, exported into consumer code. Evidence for shipping a
-  validator with the kit (a `parseStoredThread`-shaped helper whose variant list derives
-  from the union in `src/elements/chat-types.ts`, the same derivation `lint:silent-drops`
-  and `verify:scaffold` already use). Validating that a stored blob IS a `ChatMessage[]`
-  is a fact about the kit's own type; keeping or dropping the record is still the app's
-  call, and the app's framing (availability, loud drop, not a rendering trust boundary —
-  `storage.ts` header comment) is the doc paragraph.
-- The preset's obligation is **seams**: expose the state changes (thread updated,
-  conversation created/deleted, active changed) as events/callbacks so an app can persist
-  them anywhere. The debounce-plus-`beforeunload`-flush dance is app code today; whether it
-  moves into a documented recipe or a state helper is an open question below, but it never
-  moves into the preset as behavior.
+The boundary rule for assigning each category is CLAUDE.md's: **the kit decides HOW, the
+app decides WHETHER** — does this decision land on an invoice or in a policy document?
+The first draft of this spec assigned destinations to a preset element; under the § 
+Taxonomy rulings the destinations are re-mapped to the shell, the block, and the state
+helpers. The assignments themselves — what is medium, what is policy — are unchanged;
+they were derived from the evidence, not from the delivery vehicle.
 
-### State lifting / projection (61 lines) — **preset-side.**
+| Category | Lines (findings § 5) | Boundary verdict | Destination under the taxonomy |
+|---|---|---|---|
+| Persistence (load/validate/save, debounce+flush, active-id) | 106 | **App policy** — retention, backend, quota land in policy documents and on invoices | Stays consumer-owned, in the BLOCK; the mechanical halves (the `parseStoredThread` validator, F-18; the debounce/flush seam) move to `@kitn.ai/ui/state` helpers so they stay npm-updateable |
+| State lifting / projection (record→row, title derivation, recency sort) | 61 | **Medium** — how a thread renders as a row invoices nobody | State helpers (the projection fold) + the BLOCK (the consumer's own record shape) |
+| Send/stream pipeline (submit → encode → fetch → fold; error-vs-abort split) | 52 | **Split on the fetch line** — the kit parses, the consumer fetches; endpoint/auth/model/spend is the invoice | State helpers own everything around the fetch (incl. the F-07 cancellation story); the fetch itself is the consumer's line in the BLOCK |
+| Identity management (id-bound sinks, per-thread loading, abort map, delete-under-stream) | ~34 | **Medium** — pure assembly-correctness; a wrong answer is a bug, not a decision | State helpers (the thread-switching fold) — the strongest case in the inventory for a mechanically-updateable helper |
+| Hand-rolled delete affordance | ~27 | **Split** — the affordance is the medium; WHETHER/confirm/soft-delete is policy | The affordance: `kai-conversation-item` (§ 2a, owner ruling: build now). The wiring: the BLOCK. The policy: the consumer, who owns that code |
+| Sidebar event plumbing (select/new/collapse/search mirror) | ~14 | **Medium** | The BLOCK (it is the block's definitional job), leaning on the helpers |
+| Theme sync (who owns `.dark`, F-09) | ~10 | **Kit-side docs/token fix** — not workspace glue; a shell toggling `<html>` would reach outside its boundary | The standing docs pass |
+| No-match search state (F-04) | ~6 | **Part-side fix** — a decide-loudly violation inside the element | `kai-conversations` (§ 2, rides along per § Sequencing) |
+| Layout CSS (no documented arrangement satisfies search+collapse, F-02) | 59 CSS | **Medium — arrangement** | The LAYOUT SHELL (§ 3); this category is the shell's whole reason to exist |
 
-`conversations.ts` exists because the app's record of truth (id, title, timestamps, full
-`messages`) is not the shape `<kai-conversations>` renders (`scope`, `messageCount`,
-`lastMessageAt`, no bodies). Projecting one onto the other — `toRows`, title derivation,
-recency ordering — is pure medium: how a thread renders as a row invoices nobody. Today
-every consumer re-derives it; F-11 records that even "you must sort" is unstated, and F-03
-that title derivation is the de-facto search index (an unstated coupling). The preset owns a
-default projection (title from the first user turn, move-to-front on activity — the
-builder's behavior, called "preset-worthy" in F-11) with app override for title/ordering.
-This also dissolves most of F-10 at the preset level: a required row field no consumer can
-explain (`scope`, guessed as `{ type: 'collection' }` in NOTES §12; `lastMessageAt` AND
-`updatedAt` both required, one documented) is a field the preset defaults or the part drops
-— see § 2.
+Two categories the first draft routed to "the preset" deserve the explicit re-statement:
+projection, identity, and plumbing now ship as **the first official block plus headless
+state helpers** — not as a preset element, which under the § 3 ruling does not exist to
+receive them. The layout CSS ships as the shell.
 
-### Send/stream pipeline (52 lines) — **split on the fetch line.**
+## 2. What the parts need regardless — element-tier fixes
 
-The kit PARSES, the consumer FETCHES (CLAUDE.md, wire layer). Everything around the fetch is
-medium and moves preset-side: submit event → encode full history via `toOpenAIMessages` →
-fold via `createAssistantStream`/`readOpenAIStream` → settle, with the error-vs-deliberate-
-abort split the builder had to reinvent (F-07's client half — the cancellation story is a
-teaching gap three rungs running). The fetch itself — endpoint, auth, model choice, spend —
-lands on an invoice and stays a consumer-supplied seam: the preset takes a send function
-(history in, `Response`/stream out) and owns everything on both sides of it.
+These are element-tier gaps the rung paid for. They are valuable under every § 4 open
+question and proceed per § Sequencing.
 
-### Identity management (~34 lines) — **preset-side, the strongest case in the inventory.**
+### 2a. `kai-conversation-item` — BUILD NOW (owner-ratified 2026-08-20)
 
-The id-bound `SetMessages` (tokens land in the conversation that was open at send, not
-whichever is open when they arrive), per-conversation loading state, the in-flight
-`AbortController` map, delete-under-stream safety (drop late deltas, never resurrect a
-deleted thread). This is exactly the RFC's "assembly-correctness cost… a preset encodes the
-correct assembly once so consumers cannot get it subtly wrong". No invoice, no policy —
-only correctness. A consumer who gets this wrong ships a bug, not a decision.
+This supersedes the first draft's posed-not-settled slots-vs-events question. The ruling:
+the **item-element pattern**, with batteries mode kept as sugar.
 
-### Hand-rolled delete (~27 lines) — **split: affordance part-side, wiring preset-side, policy app-side.**
+The evidence it answers: F-01 (the rung's S2). `kai-conversations`' complete event list
+(element-meta.json: `kai-collapse-toggle`, `kai-conversation-select`, `kai-new-chat`,
+`kai-search`, `kai-toggle-sidebar`) has no delete, no rename, no per-row action; rows
+expose no `::part` (NOTES §1: only `trailing`, a plain string). The measured cost was a
+**feature reduction**: the builder's hand-roll can only delete the ACTIVE conversation —
+"you cannot delete an arbitrary row from the list without replacing the built-in list
+wholesale."
 
-The affordance belongs on `kai-conversations` regardless of any preset (§ 2, F-01 S2). Once
-the part fires a per-row intent, the preset wires the default consequence: abort that
-conversation's in-flight stream, remove it from state, emit the change (so the app's
-persistence sees it), and the toast-undo reversibility window the builder chose over a
-confirm. WHETHER deletion is allowed, confirmed, or soft-deleted is app policy — the preset's
-default must be interceptable (a cancelable intent event before the state change).
+The shape:
 
-### Sidebar event plumbing (~14 lines) — **preset-side.** Mirroring select/new/collapse/
-search between the rail and the thread is the definitional job of a composition preset;
-there is nothing here an app could want to decide differently that isn't already an event
-it can observe.
+- **The consumer owns the loop** — framework-native `map` / `<For>` / `v-for` over their
+  own records, emitting `<kai-conversation-item>` children into `<kai-conversations>`'
+  light DOM. This is the construction vision applied to the rail: the row is composed,
+  not configured.
+- **The container detects light-DOM item children and skips its data rendering.**
+  Batteries mode — the `conversations` array prop — STAYS, unchanged, as the sugar layer
+  for the consumer who wants ten rows and no opinions.
+- **Item slots**: default (title), `meta`, `leading`, `menu`. The `menu` slot takes the
+  consumer's OWN popover — the owner's real-world example: rename / fork / session /
+  archive — which is exactly the open-ended action surface no declarative `actions` prop
+  could have enumerated. Any future declarative menu prop is batteries-mode sugar, never
+  the only path.
+- **The parent↔item contract is the hard 70%**, and it is where the element earns its
+  tier: selection state flowing container→item, roving tabindex across slotted children
+  (maintained via `slotchange`), and the ARIA listbox/option relationship — the
+  assembly-correctness a consumer loop cannot be asked to get right per-app.
 
-### Theme sync (~10 lines) — **kit-side, but not preset glue.**
+Delete and rename stop being kit features at all: they are entries in the consumer's menu
+slot, wired to the consumer's own state — with the mechanical consequences (abort the
+in-flight stream, drop late deltas) available from the § 3 state helpers.
 
-F-09: elements resolve `prefers-color-scheme` in-shadow while `theme.tokens.css` scopes dark
-under `.dark`, and no shipped doc says who toggles it — the builder's `matchMedia` mirror in
-`main.tsx` is the missing doc paragraph written as code. This is a documentation/token fix
-for every consumer (the standing docs pass), not something a workspace preset should own:
-a page-level class is the app's document, and a preset reaching up to `<html>` would violate
-its own boundary.
+### 2b. The naming collision — SETTLED (owner-ratified 2026-08-20)
 
-### No-match search (~6 lines) — **part-side fix, not preset glue.** F-04's silently blank
-list is a decide-loudly violation inside `kai-conversations` (empty state keys off the
-unfiltered count); it is fixed in the element for every arrangement, § 2.
-
-### Layout CSS (59 lines) — **preset-side; this IS the preset.**
-
-F-02 (product gap, S3): of the three documented arrangements, the requirement pair
-search + collapse is satisfiable by none — slot ⇒ dead gutter, monolith ⇒ no search,
-sibling ⇒ "not documented as a supported arrangement" (NOTES §2). The recipe documents its
-own inadequacy and the escape hatch is unnamed. The preset's layout — a sidebar column that
-actually collapses, alongside a main region — is the arrangement the builder had to own by
-hand, and encoding it once is most of what "app-shell preset" means (RFC § level
-distinction).
-
-**Summary: the preset absorbs projection, pipeline-minus-fetch, identity, delete wiring,
-event plumbing, and layout (per findings § 5, roughly the inventory minus persistence and
-the two kit-side fixes). The app keeps persistence, the fetch, and every policy decision —
-each with a seam to observe or intercept the preset's defaults.**
-
-## 2. What the parts need regardless of the preset
-
-These are part-level gaps the rung hit. A consumer composing by hand — the RFC's canonical
-customization path — hits every one of them even if the preset ships tomorrow.
-
-### 2a. Per-row delete/rename affordance on `kai-conversations` — F-01, the rung's S2
-
-The element's complete event list (element-meta.json: `kai-collapse-toggle`,
-`kai-conversation-select`, `kai-new-chat`, `kai-search`, `kai-toggle-sidebar`) has no
-delete, no rename, no per-row action of any kind, and rows expose no `::part` (NOTES §1:
-only `trailing`, a plain string). The measured cost was a **feature reduction**, not just
-extra code: the builder's hand-roll can only delete the ACTIVE conversation — "you cannot
-delete an arbitrary row from the list without replacing the built-in list wholesale."
-
-**Design question for the owner — posed, not settled.** Two shapes, not exclusive:
-
-- **Declarative actions (events).** An `actions` prop on the element (e.g.
-  `[{ id: 'delete', label, icon?, destructive? }]`) rendered as a per-row kebab/hover
-  affordance, firing one `kai-conversation-action` event with
-  `detail: { conversationId, actionId }`. Framework-agnostic, works from plain HTML,
-  matches "behaviors are prop/JSON-driven". Ceiling: the affordance's UI is ours; a
-  consumer cannot render their own control in the row.
-- **Per-row slot/part (composition).** Expose the row's trailing region as a real slot
-  (templated per row) and/or `::part(row)`. No ceiling on the UI — but per-row slotting
-  through Shadow DOM list rendering is the hard case (a slot is not a template; N rows
-  need N light-DOM children or a template contract the kit does not have today), and it
-  reopens the shadow-piercing boundary for styling.
-
-Rename is the same surface (a second declarative action + an editing affordance — note
-`kai-editable-label` already ships) and should be decided with delete, not after it. The
-rung-3 spec scoped rename out of the APP; the part-level design should not repeat that
-scoping accidentally.
-
-### 2b. The arrangement gap — F-02
-
-Independent of the preset, the sibling arrangement the builder used needs to be either
-documented as supported (it is consistent with `host-coordinates` and the recipe's own
-"changes where it renders, never how it is wired" line, NOTES §2) or subsumed: if the
-re-cast lands, the preset IS the supported arrangement and the recipe points at it. Until
-then the recipe recommends a composition that cannot satisfy search + collapse, which is a
-standing trap for every hand-composer.
+The first draft posed which `kai-search` keeps the name. Ruling: **the sidebar keeps
+"search"** — conversation filtering is what search means in chat products — and the
+composer's web-search toggle renames `search` → `webSearch` / `kai-web-search` on
+`kai-prompt-input`, `kai-chat`, and the workspace surface (element-meta.json, all four
+listings today). `feat!`, pre-1.0, a minor bump under release-please. The evidence is the
+builder's monolith rejection over exactly this misnomer (NOTES §2): the name did not
+merely confuse, it cost the kit its one chance at being adopted whole.
 
 ### 2c. The toast z-index contract — F-20
 
 `kai-toast-region` paints at a hardcoded `z-index: 100`, documented nowhere, with no
-override hook — the IVP found every toast buried under the app's own fixed-position layout,
-and the fix was archaeology (devtools, not docs). Part-level fix: a `--kai-toast-z` custom
+override hook — the IVP found every toast buried under the app's own fixed-position
+layout, and the fix was archaeology (devtools, not docs). Fix: a `--kai-toast-z` custom
 property (the kit decides the default stacking; the app can re-decide, loudly, in its own
-CSS) plus the one-sentence doc ("your app chrome must stay below the toast layer"). This
-matters doubly for the preset: § 1 wires delete's reversibility through that toast, so the
-preset would be shipping a default UX that any consumer `z-index` can silently disable.
+CSS) plus the one-sentence doc ("your app chrome must stay below the toast layer"). The
+first block's delete flow rides on that toast, so this lands before or with it.
 
-### 2d. The `kai-search` naming collision
+### 2d. Reasoning streams into a collapsed panel — NEW finding, F-21
 
-Today two different `kai-search` events exist: `kai-conversations`' rail filter
-(`detail: { query }`) and the composer Globe toggle (`detail: Record<string, never>`) on
-`kai-prompt-input` / `kai-chat` / `kai-workspace` (element-meta.json, all four listings).
-On separate tags this is confusing — it cost the builder a full monolith evaluation and is
-the literal fact `kai-workspace` was rejected on. On a preset that composes rail AND
-composer and re-emits both, it stops being confusing and becomes a genuine collision: one
-tag, one event name, two incompatible detail shapes. One of them must be renamed before or
-with the re-cast (candidate: the Globe becomes `kai-web-search-toggle` or folds into the
-existing `kai-toolbar-action`; the rail's filter keeps `kai-search`, matching its
-`{ query }` payload — pre-1.0, `feat!` per conventions). Owner's call on direction; the
-constraint is only that the preset cannot ship while both exist.
+From the 2026-08-20 latency diagnosis
+(`.superpowers/sdd/2026-08-20-rung-3/latency-debug/report.md`): the pipeline handles
+reasoning-first models end to end — `formats/openai.ts` parses `reasoning` /
+`reasoning_content`, `consume.ts` builds reasoning parts, `message.tsx` renders a
+"Thinking" disclosure — but `packages/ui/src/components/reasoning.tsx` gates its
+auto-open-while-streaming on an `isStreaming` prop that
+`packages/ui/src/components/message.tsx` **never passes**. So a reasoning-first model
+(the diagnosis drove `deepseek/deepseek-v4-flash-0731` through 8 real OpenRouter calls)
+streams its thinking into a collapsed, motionless panel: the report's mid-stream
+screenshot shows a completely blank thread, and the measured invisible-reasoning window
+ran 0.9s to 16s depending on provider routing. The proxy and the client render path were
+both measured clean — this one missing prop is where the perceived latency lives. Fix in
+`message.tsx`; rides along per § Sequencing.
 
 ### 2e. Smaller part fixes the inventory paid for
 
 - F-04: `kai-conversations`' empty state must key off the FILTERED count (decide loudly —
-  in the element, where it fixes every consumer).
+  in the element, where it fixes every consumer, batteries mode and item mode alike).
 - F-10: `scope` required with no stated meaning; `lastMessageAt` and `updatedAt` both
-  required with one documented. Make the unexplainable fields optional (or document what
-  they drive); a required field no consumer can explain is a field to default or drop.
-- F-03: state the search semantics (titles-only, non-disableable, local) where the MCP and
-  docs render the element — the builder got them from the compiled bundle.
+  required with one documented (NOTES §12 — the builder guessed `{ type: 'collection' }`
+  for every row). Make the unexplainable fields optional or document what they drive.
+  The item element sharpens this: a required prop a consumer cannot explain is worse on
+  an element they now instantiate per row.
+- F-03: state the search semantics (titles-only, non-disableable, local) where the MCP
+  and docs render the element — the builder got them from the compiled bundle.
+- F-02's documentation half: until the shell ships, the sibling arrangement the builder
+  used is the only one satisfying search+collapse and is "not documented as a supported
+  arrangement" (NOTES §2). The shell resolves this structurally; the recipe should stop
+  recommending an arrangement that cannot satisfy the pair in the meantime.
 
-## 3. The preset shape
+## 3. The dissolution — shell + block + helpers (owner-ratified 2026-08-20)
 
-### The re-cast
+This supersedes the first draft's § 3 (a preset element composing the parts) entirely.
+**`kai-workspace` dissolves as a chat preset.** Its 32-prop / 10-event surface (counted
+from `packages/ui/src/elements/element-meta.json`; re-count there) splits three ways, and
+no chat mega-element remains.
 
-`kai-workspace` keeps its tag and becomes a thin composition over three public parts —
-`kai-conversations` + `kai-thread` + `kai-prompt-input` — plus the § 1 preset logic
-(projection, pipeline, identity, delete wiring, plumbing, layout). Per the RFC's keystone
-note, `kai-thread` is the element this shape depends on: it exists in element-meta.json
-today (messages/loading/prose/code/scroll props, `kai-message-action`, an `empty` slot) but
-the RFC's phase-1 ("expose `kai-thread`, reimplement `kai-chat` as a behavior-preserving
-preset over it") is the natural first slice, with the workspace as the same pattern drawn
-one level up. Whether the workspace preset composes `kai-thread` + `kai-prompt-input`
-directly or composes the re-cast `kai-chat` (which bundles them — the middle path the
-builder chose) is an open question below; the builder's evidence mildly favors the latter,
-since `kai-thread`/`kai-prompt-input` were never even queried in a successful build
-(builder-run.md: they appear only inside other tools' output).
+### 3a. The layout shell (layout element, npm-updateable)
 
-Each region is a slot with a preset-provided default: `sidebar` (default:
-`kai-conversations`, wired), `main` (default: thread + composer, wired), and the existing
-header/footer regions. Filling a slot replaces the default part but keeps the preset's
-wiring where the replacement speaks the same events — the RFC's no-ejection-cliff rule.
+`kai-workspace` re-casts as a slotted, **chat-agnostic** layout shell:
 
-The batteries-included five-minute start survives by construction: `<kai-workspace>` with
-data in (`conversations`, `messages`, `activeId`) and a send seam is still one tag. What
-changes is where customization goes: to the parts, via slots — not through new props on the
-preset. The RFC's success criterion, now measurable: new features land as elements, not as
-orchestrator props.
+- Slots: `left-aside` · `main` · `right-aside` · `header` · `footer`.
+- Behaviors — the prop/JSON-driven things CSS alone cannot do: resize handles between
+  regions, collapse-below-breakpoint, and a mobile drawer for the asides.
+- Precedent: `kai-dock` (`docs/superpowers/specs/2026-08-19-kai-dock-design.md`), the
+  proven layout element — placement, focus-return, escape/close, z-layering, no domain
+  knowledge. The shell is its big sibling: same tier, drawn at page scale.
+- It knows nothing about chat. A consumer can put a file tree in `left-aside` and a
+  terminal in `main`; the workspace app puts `kai-conversations` and `kai-chat` there.
 
-### Honest migration — what today's surface maps to
+This is where the inventory's 59 lines of F-02 layout CSS go: the arrangement that
+satisfies search+collapse — a rail column that actually collapses beside a main region —
+becomes the shell's default behavior instead of every consumer's hand-owned flexbox.
 
-`kai-workspace` today: 32 props / 10 events, counted from
-`packages/ui/src/elements/element-meta.json` (re-count there; the RFC's own "~28 props" for
-`kai-chat` shows how these figures rot in prose). Mapping, by destination:
+### 3b. The semantic glue has NO element home — it ships as the first block + state helpers
 
-- **Kept as preset globals** (genuinely whole-surface concerns, per the RFC's rule):
-  `theme`, `conversations`, `activeId`, `messages`, `loading` — plus the send seam this
-  spec adds.
-- **Pass through to the rail** (`kai-conversations` already owns them): `groups`,
-  `sidebarCollapsed` → `collapsed`, `defaultSidebarCollapsed` → `defaultCollapsed`.
-- **Pass through to the thread** (`kai-thread` props today): `proseSize`, `codeTheme`,
-  `codeHighlight`, `scrollButton`, `cardTypes`, `cardSchemas`.
-- **Pass through to the composer** (`kai-prompt-input` props today): `value`,
-  `placeholder`, `suggestions`, `suggestionMode`, `voice`, `triggers`, `kindIcons`,
-  `search` (pending the 2d rename).
-- **Become slot content, not props**: `chatTitle`, `models`, `currentModel`, `context`
-  (main-header concerns — the model picker is a part in a slot, not four orchestrator
-  props); `noConversations` (don't fill the sidebar slot, or slot it empty).
-- **Layout knobs — the honest residue**: `sidebarWidth`, `sidebarMinWidth`,
-  `sidebarMaxWidth`, `collapseBelow`, `compact`. These are the preset's own domain (it owns
-  the F-02 layout), but five props is the treadmill in miniature; proposal: CSS custom
-  properties on the host for the widths, keeping `collapseBelow`/`compact` as the only
-  layout props. Open question below.
+The sidebar-selection→thread swap, the projection, the identity management: under the
+taxonomy these are not element material (they orchestrate an APP, and an element that
+orchestrates an app is the monolith again). They ship twice, split by updateability:
 
-Events: the 10 (element-meta.json) re-emit unchanged — from the default parts, or from
-slotted chrome for the ones whose source becomes a slot (`kai-model-change`) — except
-`kai-search` (§ 2d) and the additions the § 1 seams require (conversation created/deleted/changed for the
-persistence seam; the cancelable delete intent). `kai-sidebar-toggle` vs the rail's
-`kai-toggle-sidebar` is a second, smaller naming divergence to unify in the same breaking
-pass.
+- **The first official BLOCK**: sidebar + `kai-chat` + persistence wiring inside the
+  shell, emitted by the scaffolder / create-kai, with `examples/apps/workspace/` as its
+  reference implementation. The consumer owns this code from generation time — the
+  accepted trade-off from § Taxonomy, stated again because it is the design: the
+  persistence policy, the fetch line, the menu actions are exactly what a consumer should
+  be editing without asking us.
+- **Headless helpers in `@kitn.ai/ui/state`** for the mechanical chat-aware parts, which
+  stay npm-updateable: the thread-switching fold (the id-bound `SetMessages`,
+  per-conversation loading, the abort map, delete-under-stream safety — the inventory's
+  identity category, verbatim), and the persistence seam (the debounce/flush shape plus
+  the `parseStoredThread` validator from F-18, whose `MessagePart` variant list derives
+  from the union in `src/elements/chat-types.ts` — the same derivation `lint:silent-drops`
+  and `verify:scaffold` use — so consumer storage code stops hand-typing the union).
 
-**What breaks:** pass-through props whose names change (`sidebarCollapsed`), props that
-become slots (`chatTitle`, `models`, `currentModel`, `context`, `noConversations`), the
-2d/2e event renames, and any behavior the preset now defaults differently (recency
-move-to-front). Pre-1.0: `feat!`, a minor bump under release-please, per conventions.
-Phasing follows the RFC's migration section (additive → behavior-preserving reimplement →
-deprecate-then-remove), with `/consumer-regression` green as the gate at step two; the RFC's
-prop-usage-audit risk stands and is cheaper now — the corpus apps plus the starters are a
-countable consumer set.
+**The five-minute start = scaffold the block, not mount a mega-element.** The first-run
+moment the RFC defended survives as a generation step: one scaffolder call emits a working
+workspace whose every line the consumer may edit. The first draft's Q2 (does the preset
+compose `kai-chat` or `kai-thread`+`kai-prompt-input`?) is **MOOT**: blocks compose
+`kai-chat`; no preset element exists to stack.
 
-## 4. Explicitly not doing
+### 3c. Honest migration — where the 32 props go
+
+By destination (prop names from element-meta.json):
+
+- **To the shell** (arrangement behavior): `sidebarWidth` / `sidebarMinWidth` /
+  `sidebarMaxWidth` (or CSS custom properties — open question), `sidebarCollapsed` /
+  `defaultSidebarCollapsed` (as generic aside collapse), `collapseBelow`, `compact`.
+  `theme` stays, as on every element.
+- **To the parts inside the block** (the consumer's own markup now carries them):
+  `conversations` / `activeId` / `groups` / `noConversations` → `kai-conversations`;
+  `messages` / `loading` / `proseSize` / `codeTheme` / `codeHighlight` / `chatTitle` /
+  `scrollButton` / `cardTypes` / `cardSchemas` → `kai-chat`; `value` / `placeholder` /
+  `suggestions` / `suggestionMode` / `voice` / `triggers` / `kindIcons` and the renamed
+  `webSearch` (§ 2b) → the composer surface; `models` / `currentModel` / `context` → 
+  header chrome the consumer slots (a model picker is a part in a slot, not three
+  orchestrator props).
+- **Events**: the shell keeps only layout events (`kai-sidebar-toggle`-shaped, names to be
+  settled with the slot names); every chat event (`kai-submit`, `kai-conversation-select`,
+  `kai-message-action`, `kai-model-change`, …) is listened to on the part that fires it,
+  in the block's consumer-owned code — which also dissolves the first draft's
+  `kai-sidebar-toggle` vs `kai-toggle-sidebar` unification question down to the shell's
+  own naming pass.
+
+**What breaks:** everything about `kai-workspace`-as-chat-element — a consumer driving it
+today re-generates as a block or re-slots the shell by hand. Plus the § 2b rename and any
+F-10 row-field loosening. Pre-1.0: `feat!`, a minor bump under release-please, per
+conventions. The RFC's phased-migration discipline (additive first, `/consumer-regression`
+green before any removal) still governs; the RFC's prop-usage-audit risk is cheaper now —
+the corpus apps plus the starters are a countable consumer set.
+
+## Sequencing (owner-ratified 2026-08-20)
+
+Settles the first draft's Q6:
+
+- **Two parallel element lanes, disjoint by construction**: `kai-conversation-item`
+  (§ 2a) and the layout shell (§ 3a). Neither blocks the other.
+- **State helpers + the first block** land on both lanes: the helpers have no DOM
+  dependency on either element; the block is generated against whatever has landed and is
+  re-generated cheaply (that being the point of blocks).
+- **The small part fixes ride along in whichever PR touches their files**: F-04 (no-match
+  empty state), F-20 (`--kai-toast-z`), the § 2b `webSearch` rename, and F-21 (the
+  `isStreaming` prop `message.tsx` never passes).
+- **The RFC's `kai-chat`-as-preset phase stays future**, unblocked by any of this — the
+  block composes today's `kai-chat` as-is.
+
+## 4. Explicitly not doing + open questions
 
 - **Implementing anything.** This document ends at owner review (the rung-3 spec's owner
-  ruling; the plan's Task 8: "deliverable only"). No implementation plan either — that is a
-  separate, later document if the owner green-lights the direction.
-- **Persistence in the preset** — § 1. Not localStorage, not IndexedDB, not a `persist`
-  prop. Seams only.
-- **Re-casting `kai-chat`** — the RFC's phase 1; this spec depends on it but does not
-  design it.
-- **Rename/pinning/grouping features** other than the § 2a affordance surface (the rung-3 spec
-  scoped these out of the app; the part-level ACTION surface covers rename's plumbing, the
-  feature itself is not designed here).
-- **Server-side or multi-tab sync** — application territory, same boundary as persistence.
-- **The MCP/docs teaching-gap fixes** (F-03/F-08/F-09/F-13 doc sentences, the wrapper-layer
-  discoverability gap, `debug`'s 0-for-2) — they ride the standing docs pass and the banked
-  rung follow-ups, not this re-cast.
+  ruling; the plan's Task 8: "deliverable only"). No implementation plan either — that is
+  a separate, later document if the owner green-lights the direction.
+- **Persistence as kit behavior** — § 1. Not localStorage, not IndexedDB, not a `persist`
+  prop on anything. The validator and the seam are helpers; the policy is the block's
+  consumer-owned code.
+- **Re-casting `kai-chat`** — the RFC's phase 1, explicitly future per § Sequencing.
+- **A declarative row-actions prop** — permitted later as batteries-mode sugar (§ 2a),
+  not designed here, never the only path.
+- **Server-side or multi-tab sync** — application territory, same boundary as
+  persistence.
+- **The MCP/docs teaching-gap fixes** (F-03/F-08/F-09/F-13 doc sentences, the
+  wrapper-layer discoverability gap, `debug`'s 0-for-2) — they ride the standing docs
+  pass and the banked rung follow-ups. Note the scaffolder work here is larger than a doc
+  fix: blocks make the scaffolder a distribution channel (§ Taxonomy), and the
+  `workspace` archetype must stop emitting the unwired Artifact split while omitting the
+  rail (F-16) before it can carry the first block.
 
-### Open questions for the owner
+### Open questions for the owner (what genuinely remains)
 
-1. **2a: events vs slots for per-row actions** — declarative `actions` prop, a real per-row
-   slot/part contract, or both (prop for the common path, part for styling)?
-2. **Does the workspace preset compose `kai-chat` (the builder's middle path) or
-   `kai-thread` + `kai-prompt-input` directly?** The former keeps one preset over another
-   preset (consistent with "presets all the way down"); the latter is flatter but re-does
-   `kai-chat`'s assembly.
-3. **Layout knobs**: CSS custom properties vs props for the sidebar widths (§ 3)?
-4. **The persistence seam's shape**: events only, or also a documented state helper (the
-   debounce/flush recipe as code) in `@kitn.ai/ui/state`? F-18's validator
-   (`parseStoredThread`) — ship it, and in which entry point?
-5. **2d: which `kai-search` keeps the name?**
-6. **Sequencing**: does the workspace re-cast wait for the RFC's phase 1 (`kai-chat` as
-   preset), or proceed in parallel with the part-level fixes (2a–2e), which are valuable
-   under any answer?
+1. **The persistence helper's exact API shape** — events only, callbacks, or a small
+   store-shaped object; and which entry point carries `parseStoredThread`.
+2. **Shell slot and event naming** — `left-aside`/`right-aside` vs `start`/`end`
+   (logical properties suggest the latter; `kai-dock` precedent to follow), and the
+   layout event names.
+3. **Shell layout knobs**: props vs CSS custom properties for the aside widths.
+4. **Does `kai-prompt-dock` formally reclassify as a layout element now, or at its next
+   touch?** (Pure bookkeeping — docs/MCP tier labels — but the taxonomy should not ship
+   with a known misfiled element unaddressed.)
+5. **The batteries-mode boundary on `kai-conversations`**: when item children are
+   detected, which container behaviors (search filter, grouping, empty state) still
+   apply to slotted items and which become the consumer's loop's job.
 
-## 5. Measurement — how a future rung proves the preset
+## 5. Measurement — how a future rung proves the shell + block + helpers
 
 The claim this spec makes is falsifiable and should be falsified the same way it was
-produced: **rebuild the same app, front-door-first, against the preset, and re-run the
-glue-code inventory.**
+produced: **rebuild the same app, front-door-first, against the shell + the first block +
+the state helpers, and re-run the glue-code inventory.**
 
 - **Baseline**: findings.md § 5 — 342 authored TS/TSX code lines, ~300 glue, per-category
-  table above. The artifact of record is
+  table in § 1. The artifact of record is
   `docs/superpowers/research/2026-08-20-rung-3-front-door/findings.md`; the corpus copy of
   the measured code is `examples/apps/workspace/`.
 - **Re-measure**: a future rung's comparer produces the same per-category table over the
   rebuilt app, same method (non-blank non-comment code lines per file and region, as
-  findings § 5 states it), landing in that rung's `findings.md`. The categories are the
-  contract: persistence should be roughly UNCHANGED (the preset deliberately does not
-  absorb it — if it shrinks to zero, the preset overreached its boundary), while
-  projection, identity, delete, plumbing, and the F-02 CSS should approach zero. Success is
-  the glue total falling materially below the baseline recorded in `findings.md` § 5 —
-  a ratchet, not a target — with the persistence category intact.
-- **The same rebuild re-measures the teaching layer**: the builder's path (does it find the
-  preset? does it eject to parts when asked for something the preset doesn't do?) tests the
-  RFC's no-ejection-cliff claim the way rung 3 tested the monolith.
+  findings § 5 states it), landing in that rung's `findings.md`.
+- **The distinction that keeps the ratchet honest — glue vs composition.** Under the
+  construction vision the rebuilt app is SUPPOSED to contain consumer-authored lines: the
+  loop over `<kai-conversation-item>`, the consumer's menu popover, the persistence
+  policy, the fetch line. Those are **composition** — lines expressing an app decision or
+  an app's own markup — and are expected, not counted as glue. **Glue** remains what
+  findings § 5 measured: lines that exist only to make two kit pieces cooperate
+  (projection plumbing, identity bookkeeping, event mirroring, arrangement CSS) while
+  deciding nothing. The re-measure classifies every line as one or the other, in the
+  rung's findings, before totalling.
+- **Expected shape of the result**: the mechanical-wiring categories (identity, plumbing,
+  projection scaffolding) and the F-02 layout CSS should approach zero — that is what the
+  helpers and the shell absorb. Success is the GLUE total falling materially under the
+  baseline recorded in `findings.md` § 5 — a ratchet, not a target — while the
+  composition lines are reported alongside it, unpenalized.
+- **The same rebuild re-measures the teaching layer**: does the front door find the
+  shell, the item element, and the block scaffold? Does the builder eject cleanly —
+  editing block code rather than fighting an element? That tests the no-ejection-cliff
+  claim the way rung 3 tested the monolith.
 - Regression floor for existing consumers: `/consumer-regression` green through the
-  deprecation window (the RFC's success criterion, unchanged).
+  migration window (the RFC's success criterion, unchanged).
 
 What this measurement deliberately does not use: any figure retyped into this spec or the
-preset's docs. The baseline lives in the findings artifact; the re-measure lives in the
-future rung's; this document only names them.
+docs. The baseline lives in the findings artifact; the re-measure lives in the future
+rung's; this document only names them.
