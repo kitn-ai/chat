@@ -81,6 +81,11 @@ export const CONVERSATION_ITEM_SLOTS: SlotDef[] = [
  *  are covered by their slot defs' `part: true` flags.) */
 export const CONVERSATION_ITEM_PARTS: PartDef[] = [
   {
+    name: 'body',
+    doc: 'The activation surface inside the row (button role; carries aria-current and the roving tabindex). The focus ring paints here.',
+    recipe: 'kai-conversation-item::part(body) { outline-offset: 2px }',
+  },
+  {
     name: 'row',
     doc: 'The whole row surface. Carries `data-active` while selected.',
     recipe: 'kai-conversation-item::part(row) { border-radius: 0.5rem }',

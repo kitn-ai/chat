@@ -24,9 +24,14 @@ import { createServer } from 'vite';
 import solidPlugin from 'vite-plugin-solid';
 import { chromium } from 'playwright';
 import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const axeSource = readFileSync(
+  path.join(root, '..', '..', 'node_modules', 'axe-core', 'axe.min.js'),
+  'utf-8',
+);
 
 const PAGE = /* html */ `<!doctype html>
 <html><head><meta charset="utf-8"><title>conversation item focus order</title></head>
@@ -97,15 +102,25 @@ if (boot.error) {
   process.exit(2);
 }
 
-/** Deepest active element through shadow roots, reported as tag + conversation-id. */
+/** Deepest active element through shadow roots. Under the sibling restructure
+ *  (ratified 2026-08-20) the focus target is the item's shadow BODY
+ *  (`data-kai-item-body`), so the report resolves the owning
+ *  `kai-conversation-item` host via getRootNode().host and says whether the
+ *  focused node IS a body. */
 const readFocus = () =>
   page.evaluate(() => {
     let el = document.activeElement;
     while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement;
     const r = el?.getBoundingClientRect() ?? { x: 0, y: 0, width: 0, height: 0 };
+    const root = el?.getRootNode?.();
+    const host = root instanceof ShadowRoot ? root.host : null;
+    const isBody = !!el?.hasAttribute?.('data-kai-item-body');
+    const owner = host?.localName === 'kai-conversation-item' ? host : (el?.closest?.('kai-conversation-item') ?? null);
     return {
       tag: el?.localName ?? null,
-      id: el?.getAttribute?.('conversation-id') ?? el?.id ?? null,
+      isBody,
+      ownerTag: owner?.localName ?? null,
+      id: owner?.getAttribute?.('conversation-id') ?? el?.getAttribute?.('conversation-id') ?? el?.getAttribute?.('aria-label') ?? el?.id ?? null,
       rect: { x: r.x, y: r.y, width: r.width, height: r.height },
     };
   });
@@ -135,36 +150,43 @@ let f;
 for (let i = 0; i < 10; i++) {
   await page.keyboard.press('Tab');
   f = await readFocus();
-  tabTrail.push(`${f.tag}[${f.id}]`);
-  if (f.tag === 'kai-conversation-item') break;
+  tabTrail.push(`${f.tag}[${f.id}]${f.isBody ? ':body' : ''}`);
+  if (f.isBody) break;
 }
-check('Tab reaches the item set at the active item (b)', f.tag === 'kai-conversation-item' && f.id === 'b', tabTrail.join(' -> '));
+check('Tab reaches the item set at the active item body (b)', f.isBody && f.ownerTag === 'kai-conversation-item' && f.id === 'b', tabTrail.join(' -> '));
 check('the focused item painted inside the list', f.rect.height > 0 && f.rect.y >= listRect.y, JSON.stringify(f.rect));
 const rectB = f.rect;
 
-// One more Tab leaves the item set: the other items are NOT tab stops.
+// The documented tab order (ratified 2026-08-20): each row's menu trigger keeps
+// its natural DOM order, so from the active body the next Tab lands on THAT
+// row's menu button; the following Tab exits without touching another body.
 await page.keyboard.press('Tab');
 f = await readFocus();
-check('the next Tab exits the item set (single tab stop)', f.tag !== 'kai-conversation-item', `focused ${f.tag}[${f.id}]`);
+check("the next Tab lands on the active row's menu trigger", !f.isBody && f.ownerTag === 'kai-conversation-item' && f.id === 'b' && f.tag === 'button', `focused ${f.tag}[${f.id}]`);
+await page.keyboard.press('Tab');
+f = await readFocus();
+check('the following Tab exits the item set (bodies are a single tab stop)', !f.isBody, `focused ${f.tag}[${f.id}]`);
 
 // 2. Arrow keys move focus item-to-item (how focus arrived is irrelevant to the
 //    arrow contract, so re-enter at the active item directly).
-await page.evaluate(() => document.querySelector('kai-conversation-item[conversation-id="b"]').focus());
+await page.evaluate(() => document.querySelector('kai-conversation-item[conversation-id="b"]').shadowRoot.querySelector('[data-kai-item-body]').focus());
 await page.keyboard.press('ArrowDown');
 f = await readFocus();
-check('ArrowDown focuses the next item (c)', f.tag === 'kai-conversation-item' && f.id === 'c', `focused ${f.tag}[${f.id}]`);
+check('ArrowDown focuses the next item body (c)', f.isBody && f.id === 'c', `focused ${f.tag}[${f.id}]${f.isBody ? ':body' : ''}`);
 check('focus moved to a DIFFERENT painted row (y changed)', f.rect.height > 0 && f.rect.y !== rectB.y, `y ${rectB.y} -> ${f.rect.y}`);
 
 await page.keyboard.press('ArrowUp');
 await page.keyboard.press('ArrowUp');
 f = await readFocus();
-check('ArrowUp twice reaches the first item (a)', f.id === 'a', `focused ${f.tag}[${f.id}]`);
+check('ArrowUp twice reaches the first item body (a)', f.isBody && f.id === 'a', `focused ${f.tag}[${f.id}]${f.isBody ? ':body' : ''}`);
 
-// 3. Roving bookkeeping after movement: exactly one tabindex="0".
+// 3. Roving bookkeeping after movement: exactly one body tabindex="0".
 const roving = await page.evaluate(() =>
-  [...document.querySelectorAll('kai-conversation-item')].map((i) => i.getAttribute('tabindex')),
+  [...document.querySelectorAll('kai-conversation-item')].map((i) =>
+    i.shadowRoot.querySelector('[data-kai-item-body]')?.getAttribute('tabindex') ?? null,
+  ),
 );
-check('exactly one item is the tab stop', roving.filter((t) => t === '0').length === 1, JSON.stringify(roving));
+check('exactly one item body is the tab stop', roving.filter((t) => t === '0').length === 1, JSON.stringify(roving));
 
 // 4. Enter on the focused item surfaces kai-conversation-select on the container.
 //    Install the listener first (it writes to window), then press, then read.
@@ -177,6 +199,24 @@ await page.evaluate(() => {
 await page.keyboard.press('Enter');
 const activated = await page.evaluate(() => window.__selected ?? null);
 check('Enter activates the focused item (a)', activated === 'a', `detail.id=${activated}`);
+
+// 5. ELEMENT-MODE axe pass — the storybook a11y gate only covers the Solid
+//    layer, so the composed element (list region + item hosts + a light-DOM
+//    menu button) is measured here, over the same rules that drove the
+//    ratified 2026-08-20 sibling restructure.
+await page.addScriptTag({ content: axeSource });
+const axeResult = await page.evaluate(async () => {
+  const results = await window.axe.run(document.getElementById('list'), {
+    runOnly: {
+      type: 'rule',
+      values: ['aria-required-parent', 'aria-required-children', 'nested-interactive', 'aria-allowed-attr', 'aria-valid-attr-value'],
+    },
+  });
+  return results.violations.map(
+    (v) => `${v.id}: ${v.nodes.map((n) => n.failureSummary?.trim().replace(/\s+/g, ' ')).join(' | ')}`,
+  );
+});
+check('element mode passes the restructure-driving axe rules', axeResult.length === 0, axeResult.join(' ;; ') || 'no violations');
 
 if (pageErrors.length) { console.log('\npage errors:\n  ' + pageErrors.join('\n  ')); failed++; }
 await browser.close();

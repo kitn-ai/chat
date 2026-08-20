@@ -52,10 +52,10 @@ describe('children mode wins over the conversations prop', () => {
     // No batteries rows...
     expect(container.querySelector('[data-conversation-id]')).toBeNull();
     expect(container.textContent).not.toContain('Data row one');
-    // ...the consumer's items render inside a listbox region instead.
-    const listbox = container.querySelector('[role="listbox"]');
-    expect(listbox).not.toBeNull();
-    expect(listbox!.querySelector('[data-t="slotted-item"]')).not.toBeNull();
+    // ...the consumer's items render inside a list region instead.
+    const list = container.querySelector('[role="list"]');
+    expect(list).not.toBeNull();
+    expect(list!.querySelector('[data-t="slotted-item"]')).not.toBeNull();
   });
 
   it('keeps the chrome in items mode: search box renders and still reports queries', () => {
@@ -73,7 +73,7 @@ describe('children mode wins over the conversations prop', () => {
     fireEvent.input(input!, { target: { value: 'billing' } });
     expect(query).toBe('billing');
     // The consumer's loop owns filtering: the slotted row is untouched.
-    expect(container.querySelector('[role="listbox"]')!.textContent).toContain('row');
+    expect(container.querySelector('[role="list"]')!.textContent).toContain('row');
     // And no built-in empty state competes with the consumer's items.
     expect(container.textContent).not.toContain('No conversations yet');
   });
@@ -119,20 +119,20 @@ describe('createConversationItemsController', () => {
 
   afterEach(() => { document.body.innerHTML = ''; });
 
-  it('selection flows container to item: exactly one item is aria-selected="true"', () => {
+  it('selection flows container to item: exactly one item is aria-current="true"', () => {
     const { items, setActive } = setup(['a', 'b', 'c'], 'b');
-    expect(items.map((i) => i.getAttribute('aria-selected'))).toEqual(['false', 'true', 'false']);
+    expect(items.map((i) => i.getAttribute('aria-current'))).toEqual(['false', 'true', 'false']);
     // And the active property is driven for the facade's styling hook.
     expect((items[1] as HTMLElement & { active?: boolean }).active).toBe(true);
     setActive('c');
-    expect(items.map((i) => i.getAttribute('aria-selected'))).toEqual(['false', 'false', 'true']);
+    expect(items.map((i) => i.getAttribute('aria-current'))).toEqual(['false', 'false', 'true']);
   });
 
-  it('gives items role="option" when they carry none, and leaves an authored role alone', () => {
+  it('gives items role="button" when they carry none, and leaves an authored role alone', () => {
     const authored = makeItem('x');
     authored.setAttribute('role', 'treeitem');
     const { items } = setup(['a']);
-    expect(items[0].getAttribute('role')).toBe('option');
+    expect(items[0].getAttribute('role')).toBe('button');
     const controller = createConversationItemsController({
       getItems: () => [authored], getActiveId: () => undefined, onSelect: noop,
     });

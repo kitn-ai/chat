@@ -636,7 +636,7 @@ export interface KaiConversationItemElement extends HTMLElement {
   theme?: "light" | "dark" | "auto";
   /** The row's identity, handed to the container's selection contract. In the element this is the `conversation-id` attribute (host `id` is the fallback). */
   conversationId?: string;
-  /** Selected state. Reflected as `aria-selected` and a `data-active` styling hook on the row; the container drives it from its `activeId`. */
+  /** Selected state. Reflected as `aria-current` on the row body and a `data-active` styling hook on the row; the container drives it from its `activeId`. */
   active?: boolean;
   /** Dense single-line row padding. */
   compact?: boolean;
@@ -2330,7 +2330,7 @@ export interface KaiConversationItemElementProps {
   theme?: "light" | "dark" | "auto";
   /** The row's identity, handed to the container's selection contract. In the element this is the `conversation-id` attribute (host `id` is the fallback). */
   conversationId?: string;
-  /** Selected state. Reflected as `aria-selected` and a `data-active` styling hook on the row; the container drives it from its `activeId`. */
+  /** Selected state. Reflected as `aria-current` on the row body and a `data-active` styling hook on the row; the container drives it from its `activeId`. */
   active?: boolean;
   /** Dense single-line row padding. */
   compact?: boolean;

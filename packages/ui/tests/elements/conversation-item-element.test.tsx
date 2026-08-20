@@ -26,6 +26,13 @@ type ItemEl = HTMLElement & { conversationId?: string; active?: boolean };
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
+/** The item's activation node — the shadow body the controller targets (the
+ *  sibling restructure, ratified 2026-08-20: the HOST is the row listitem, the
+ *  button role sits on the body inside the shadow so the light-DOM menu is
+ *  never a control descendant). */
+const bodyOf = (item: HTMLElement) =>
+  item.shadowRoot!.querySelector('[data-kai-item-body]') as HTMLElement;
+
 function mountList(): ConvEl {
   const el = document.createElement('kai-conversations') as ConvEl;
   el.groups = [];
@@ -91,20 +98,27 @@ describe('<kai-conversation-item>', () => {
     expect(menuSlot.assignedElements()).toContain(menuBtn);
   });
 
-  it('host carries option semantics; active drives aria-selected both ways', async () => {
+  it('host is the row listitem; the shadow BODY is the control and active drives its aria-current', async () => {
     const item = makeItem('c1', 'T');
     document.body.appendChild(item);
     await tick();
-    expect(item.getAttribute('role')).toBe('option');
-    expect(item.getAttribute('aria-selected')).toBe('false');
+    // Sibling restructure (ratified 2026-08-20): the host wraps body + menu,
+    // so it is a listitem, never the control — a focusable light-DOM menu child
+    // of a control host is what axe nested-interactive rejected.
+    expect(item.getAttribute('role')).toBe('listitem');
+    expect(item.hasAttribute('aria-current')).toBe(false);
+    const body = bodyOf(item);
+    expect(body).not.toBeNull();
+    expect(body.getAttribute('role')).toBe('button');
+    expect(body.getAttribute('aria-current')).toBe('false');
     item.active = true;
     await tick();
-    expect(item.getAttribute('aria-selected')).toBe('true');
-    // The inner row must NOT carry a second option role (one option, not two).
-    expect(item.shadowRoot!.querySelector('[role="option"]')).toBeNull();
+    expect(bodyOf(item).getAttribute('aria-current')).toBe('true');
+    // Exactly ONE activation control in the item's tree (the body).
+    expect(item.shadowRoot!.querySelectorAll('[role="button"]').length).toBe(1);
     item.active = false;
     await tick();
-    expect(item.getAttribute('aria-selected')).toBe('false');
+    expect(bodyOf(item).getAttribute('aria-current')).toBe('false');
   });
 
   it('an authored role is left alone', async () => {
@@ -129,28 +143,30 @@ describe('item children switch <kai-conversations> into item mode', () => {
     const root = el.shadowRoot!;
     expect(root.querySelector('[data-conversation-id]')).toBeNull();
     expect(root.textContent).not.toContain('Data row title');
-    // The listbox region exists and the items are assigned to its slot.
-    const listbox = root.querySelector('[role="listbox"]')!;
-    expect(listbox).not.toBeNull();
-    const slot = listbox.querySelector('slot') as HTMLSlotElement;
+    // The list region exists and the items are assigned to its slot.
+    const list = root.querySelector('[role="list"]')!;
+    expect(list).not.toBeNull();
+    const slot = list.querySelector('slot') as HTMLSlotElement;
     expect(slot.assignedElements().map((n) => n.getAttribute('conversation-id'))).toEqual(['x1', 'x2']);
   });
 
-  it('selection flows container to item: activeId marks exactly one item aria-selected', async () => {
+  it('selection flows container to item: activeId marks exactly one item aria-current', async () => {
     const el = mountList();
     const a = makeItem('a', 'A');
     const b = makeItem('b', 'B');
     el.append(a, b);
     el.activeId = 'b';
     await tick();
-    expect(a.getAttribute('aria-selected')).toBe('false');
-    expect(b.getAttribute('aria-selected')).toBe('true');
-    expect(a.getAttribute('tabindex')).toBe('-1');
-    expect(b.getAttribute('tabindex')).toBe('0');
+    // The contract targets each item's BODY (the host is a listitem; the
+    // control semantics and tabbing target the body).
+    expect(bodyOf(a).getAttribute('aria-current')).toBe('false');
+    expect(bodyOf(b).getAttribute('aria-current')).toBe('true');
+    expect(bodyOf(a).getAttribute('tabindex')).toBe('-1');
+    expect(bodyOf(b).getAttribute('tabindex')).toBe('0');
     el.activeId = 'a';
     await tick();
-    expect(a.getAttribute('aria-selected')).toBe('true');
-    expect(b.getAttribute('aria-selected')).toBe('false');
+    expect(bodyOf(a).getAttribute('aria-current')).toBe('true');
+    expect(bodyOf(b).getAttribute('aria-current')).toBe('false');
   });
 
   it('item activation emits kai-conversation-select with the item id; the menu slot does not', async () => {
@@ -176,14 +192,14 @@ describe('item children switch <kai-conversations> into item mode', () => {
     const a = makeItem('a', 'A');
     el.append(a);
     await tick();
-    expect(a.getAttribute('tabindex')).toBe('0');
+    expect(bodyOf(a).getAttribute('tabindex')).toBe('0');
     const b = makeItem('b', 'B');
     el.append(b);
     await tick();
-    expect([a, b].map((i) => i.getAttribute('tabindex'))).toEqual(['0', '-1']);
+    expect([a, b].map((i) => bodyOf(i).getAttribute('tabindex'))).toEqual(['0', '-1']);
     a.remove();
     await tick();
-    expect(b.getAttribute('tabindex')).toBe('0');
+    expect(bodyOf(b).getAttribute('tabindex')).toBe('0');
   });
 
   it('a harness flips modes when children arrive and when they leave', async () => {
@@ -195,7 +211,7 @@ describe('item children switch <kai-conversations> into item mode', () => {
     el.append(item);
     await tick();
     expect(el.shadowRoot!.textContent).not.toContain('Batteries title');
-    expect(el.shadowRoot!.querySelector('[role="listbox"]')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('[role="list"]')).not.toBeNull();
     item.remove();
     await tick();
     expect(el.shadowRoot!.textContent).toContain('Batteries title');

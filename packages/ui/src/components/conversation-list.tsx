@@ -55,9 +55,9 @@ export interface ConversationItemsController {
   /** Re-derive the ARIA/roving-tabindex bookkeeping over the current items.
    *  Call on slotchange / child mutation and whenever `activeId` changes. */
   sync(): void;
-  /** The container's listbox-region click handler (composed-path aware). */
+  /** The container's items-region click handler (composed-path aware). */
   handleClick(e: MouseEvent): void;
-  /** The container's listbox-region keydown handler (arrows, Home/End,
+  /** The container's items-region keydown handler (arrows, Home/End,
    *  Enter/Space). */
   handleKeyDown(e: KeyboardEvent): void;
 }
@@ -70,11 +70,16 @@ export interface ConversationItemsController {
  * (each facade is its own Solid root), so the channel is DOM traversal by
  * construction:
  *
- * - selection flows container to item — exactly one item `aria-selected="true"`,
- *   plus the `active` property for the item's own styling hook;
- * - `role="option"` is ensured on each item (an authored role is left alone);
- * - roving tabindex — exactly one item `tabindex="0"` (the active one, else the
- *   first), the rest `-1`, re-derived on every `sync()`;
+ * - selection flows container to item — exactly one item's BODY node (the
+ *   shadow body of a `kai-conversation-item`, else the node itself; see
+ *   `bodyOf`) is `aria-current="true"`, plus the `active` property on the
+ *   host for the item's own styling hook;
+ * - `role="button"` is ensured on each item's body node (an authored role is
+ *   left alone);
+ * - roving tabindex — exactly one body node `tabindex="0"` (the active
+ *   item's, else the first's), the rest `-1`, re-derived on every `sync()`;
+ *   menu content keeps its natural tab order (it is the body's SIBLING, per
+ *   the ratified 2026-08-20 sibling restructure);
  * - activation (click / Enter / Space) calls `onSelect` with the item's id, and
  *   is SUPPRESSED when the composed path crosses the item's `menu` region
  *   (light-DOM `slot="menu"` content or the shadow `data-kai-item-menu`
@@ -89,6 +94,14 @@ export function createConversationItemsController(
     const items = opts.getItems();
     return e.composedPath().find((n): n is HTMLElement => items.includes(n as HTMLElement));
   };
+  /** The item's ACTIVATION node — the target of role/aria-current/tabindex/
+   *  focus. For a `kai-conversation-item` host that is its shadow body (the
+   *  sibling restructure, ratified 2026-08-20: the host is the row listitem
+   *  wrapping the body AND the consumer's tabbable menu, so the control
+   *  semantics must sit below it). A bare node with no such body is its own
+   *  control. */
+  const bodyOf = (item: HTMLElement): HTMLElement =>
+    (item.shadowRoot?.querySelector('[data-kai-item-body]') as HTMLElement | null) ?? item;
   const menuInPath = (e: Event): boolean =>
     e.composedPath().some(
       (n) =>
@@ -101,23 +114,43 @@ export function createConversationItemsController(
   const setAttr = (el: Element, name: string, value: string) => {
     if (el.getAttribute(name) !== value) el.setAttribute(name, value);
   };
-  const setRoving = (items: HTMLElement[], anchor: HTMLElement | undefined) => {
-    for (const item of items) setAttr(item, 'tabindex', item === anchor ? '0' : '-1');
+  /** An item whose shadow body has not RENDERED yet must not be stamped: the
+   *  fallback would write control semantics onto the HOST, they would stick
+   *  (the item facade defers to an authored role), and axe then sees exactly
+   *  the role="button"-host-with-focusable-menu shape the restructure removed.
+   *  Measured in the focus-order probe: the container's first sync can run
+   *  before the item elements upgrade. A later sync catches them — the
+   *  facade's own mount mutates host attributes, which re-runs sync through
+   *  the container's MutationObserver read(). Bare nodes (no dash: the jsdom
+   *  stand-ins) are always ready. */
+  const readyBodies = (items: HTMLElement[]) => {
+    const out = new Map<HTMLElement, HTMLElement>();
+    for (const item of items) {
+      const body = bodyOf(item);
+      if (body === item && item.localName.includes('-')) continue;
+      out.set(item, body);
+    }
+    return out;
+  };
+
+  const rove = (items: HTMLElement[], target: HTMLElement | undefined) => {
+    for (const [item, body] of readyBodies(items)) setAttr(body, 'tabindex', item === target ? '0' : '-1');
   };
 
   const sync = () => {
     const items = opts.getItems();
     const activeId = opts.getActiveId();
+    const bodies = readyBodies(items);
     let anchor: HTMLElement | undefined;
-    for (const item of items) {
+    for (const [item, body] of bodies) {
       const isActive = activeId !== undefined && readConversationItemId(item) === activeId;
-      if (!item.hasAttribute('role')) item.setAttribute('role', 'option');
-      setAttr(item, 'aria-selected', isActive ? 'true' : 'false');
+      if (!body.hasAttribute('role')) body.setAttribute('role', 'button');
+      setAttr(body, 'aria-current', isActive ? 'true' : 'false');
       const host = item as HTMLElement & { active?: boolean };
       if (host.active !== isActive) host.active = isActive;
       if (isActive) anchor = item;
     }
-    setRoving(items, anchor ?? items[0]);
+    rove(items, anchor ?? (bodies.keys().next().value as HTMLElement | undefined));
   };
 
   return {
@@ -138,15 +171,15 @@ export function createConversationItemsController(
         return;
       }
       let next: HTMLElement | undefined;
-      const idx = item ? items.indexOf(item) : items.findIndex((i) => i.getAttribute('tabindex') === '0');
+      const idx = item ? items.indexOf(item) : items.findIndex((i) => bodyOf(i).getAttribute('tabindex') === '0');
       if (e.key === 'ArrowDown') next = items[Math.min(idx + 1, items.length - 1)];
       else if (e.key === 'ArrowUp') next = items[Math.max(idx - 1, 0)];
       else if (e.key === 'Home') next = items[0];
       else if (e.key === 'End') next = items[items.length - 1];
       if (!next) return;
       e.preventDefault();
-      setRoving(items, next);
-      next.focus();
+      rove(items, next);
+      bodyOf(next).focus();
     },
   };
 }
@@ -173,17 +206,17 @@ export interface ConversationListProps {
    *  facade uses it to focus / clear the internal search input. */
   controllerRef?: (controller: ConversationListController) => void;
   /** Item mode (spec 2026-08-20 § 2a): the consumer's OWN rows, rendered inside
-   *  a listbox region in place of the data rows. When set, the built-in search
+   *  a list region in place of the data rows. When set, the built-in search
    *  filter, grouping and empty/no-match states do not apply — the consumer's
    *  loop owns them — while the chrome (header, search box, new-chat, footer)
    *  still renders and `onSearchChange` still reports queries. The
    *  `kai-conversations` facade passes its default `<slot>` here when it detects
    *  `kai-conversation-item` children. */
   items?: JSX.Element;
-  /** Keydown handler for the item-mode listbox region (the facade wires
+  /** Keydown handler for the item-mode list region (the facade wires
    *  `createConversationItemsController.handleKeyDown`). */
   itemsKeyDown?: (e: KeyboardEvent) => void;
-  /** Click handler for the item-mode listbox region (the facade wires
+  /** Click handler for the item-mode list region (the facade wires
    *  `createConversationItemsController.handleClick`). */
   itemsClick?: (e: MouseEvent) => void;
   class?: string;
@@ -280,13 +313,13 @@ export function ConversationList(props: ConversationListProps) {
           </div>
         </div>
       </Show>
-      {/* Item mode: the consumer's own rows in a listbox region. The container's
+      {/* Item mode: the consumer's own rows in a list region. The container's
           filter/grouping/empty states do not apply — the consumer's loop owns
           them (spec § 2a batteries boundary). */}
       <Show when={itemMode()}>
         <ScrollArea class="flex-1 px-2">
           <div
-            role="listbox"
+            role="list"
             aria-label="Conversations"
             part="items"
             class="space-y-0.5 py-1"

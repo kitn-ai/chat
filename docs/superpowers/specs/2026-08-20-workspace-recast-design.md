@@ -140,8 +140,18 @@ The shape:
   the only path.
 - **The parent↔item contract is the hard 70%**, and it is where the element earns its
   tier: selection state flowing container→item, roving tabindex across slotted children
-  (maintained via `slotchange`), and the ARIA listbox/option relationship — the
+  (maintained via `slotchange`), and the accessible list semantics — the
   assembly-correctness a consumer loop cannot be asked to get right per-app.
+  **AMENDED at implementation (ratified 2026-08-20, the sibling restructure):** the
+  vocabulary is list/listitem rows with a `role="button"` body carrying `aria-current`
+  and the roving tabindex, and the `menu` slot as the body's tabbable SIBLING — NOT the
+  listbox/option relationship this line first named. Two axe rules make the original
+  wording unimplementable alongside the menu slot above: `nested-interactive` bans
+  focusable descendants of an option (negative tabindex included), and
+  `aria-required-children` lets a listbox subtree own nothing but options, so a sibling
+  menu is illegal anywhere inside one. The shape follows `src/ui/nav.tsx`
+  TrailingActions (actions as siblings of the row control) and matches the
+  batteries-mode row, which was already a button with `aria-current`.
 
 Delete and rename stop being kit features at all: they are entries in the consumer's menu
 slot, wired to the consumer's own state — with the mechanical consequences (abort the

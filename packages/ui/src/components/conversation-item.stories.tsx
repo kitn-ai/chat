@@ -148,47 +148,66 @@ const slottedRows = [
   { id: 'c3', title: 'Roadmap draft', meta: '3d ago' },
 ];
 
-/** The consumer-owned loop: your records, your rows, your menu. */
+/** The consumer-owned loop: your records, your rows, your menu.
+ *
+ *  The rows sit inside a `role="list"` container, each row a listitem holding
+ *  a `role="button"` body (`aria-current` marks the active one) with the menu
+ *  button as the body's tabbable SIBLING — the ratified 2026-08-20 sibling
+ *  restructure, nav.tsx TrailingActions precedent. NOT listbox/option: axe
+ *  `nested-interactive` bans focusable descendants of a control, and
+ *  `aria-required-children` lets a listbox subtree own nothing but options,
+ *  which outlaws a sibling menu anywhere inside one. Selection is one delegated
+ *  click handler on the list, not a wrapper div per row. This story is the axe
+ *  evidence for the shape. */
 export const SlottedRows: StoryObj = {
   render: () => {
     const [active, setActive] = createSignal('c2');
     return (
-      <div role="listbox" aria-label="Conversations" class="w-72">
+      <div
+        role="list"
+        aria-label="Conversations"
+        class="w-72"
+        onClick={(e) => {
+          const row = (e.target as HTMLElement).closest('[data-conversation-id]');
+          if (row) setActive(row.getAttribute('data-conversation-id')!);
+        }}
+      >
         <For each={slottedRows}>
           {(row) => (
-            <div onClick={() => setActive(row.id)}>
-              <SlottedConversationItem
-                conversationId={row.id}
-                active={active() === row.id}
-                meta={<span>{row.meta}</span>}
-                menu={<button aria-label={`Actions for ${row.title}`}>&#8942;</button>}
-              >
-                {row.title}
-              </SlottedConversationItem>
-            </div>
+            <SlottedConversationItem
+              conversationId={row.id}
+              active={active() === row.id}
+              meta={<span>{row.meta}</span>}
+              menu={<button aria-label={`Actions for ${row.title}`}>&#8942;</button>}
+            >
+              {row.title}
+            </SlottedConversationItem>
           )}
         </For>
       </div>
     );
   },
-  ...src(`<For each={threads}>
-  {(t) => (
-    <SlottedConversationItem
-      conversationId={t.id}
-      active={activeId() === t.id}
-      meta={<span>{t.lastReplyAgo}</span>}
-      menu={<MyThreadMenu thread={t} />}
-    >
-      {t.title}
-    </SlottedConversationItem>
-  )}
-</For>`),
+  ...src(`<div role="list" aria-label="Conversations">
+  <For each={threads}>
+    {(t) => (
+      <SlottedConversationItem
+        conversationId={t.id}
+        active={activeId() === t.id}
+        meta={<span>{t.lastReplyAgo}</span>}
+        menu={<MyThreadMenu thread={t} />}
+      >
+        {t.title}
+      </SlottedConversationItem>
+    )}
+  </For>
+</div>`),
 };
 
-/** Leading region plus the compact density. */
+/** Leading region plus the compact density. The `role="list"` wrapper keeps
+ *  the rows' listitem semantics (and the container's aria-label legal). */
 export const SlottedWithLeading: StoryObj = {
   render: () => (
-    <div class="w-72 space-y-0.5">
+    <div role="list" aria-label="Conversations" class="w-72 space-y-0.5">
       <SlottedConversationItem
         conversationId="c1"
         leading={<span aria-hidden="true">#</span>}
@@ -201,10 +220,12 @@ export const SlottedWithLeading: StoryObj = {
       </SlottedConversationItem>
     </div>
   ),
-  ...src(`<SlottedConversationItem conversationId="c1" leading={<Hash />} meta={<span>12 messages</span>}>
-  Channel-style row
-</SlottedConversationItem>
-<SlottedConversationItem conversationId="c2" active compact>
-  Compact active row
-</SlottedConversationItem>`),
+  ...src(`<div role="list" aria-label="Conversations">
+  <SlottedConversationItem conversationId="c1" leading={<Hash />} meta={<span>12 messages</span>}>
+    Channel-style row
+  </SlottedConversationItem>
+  <SlottedConversationItem conversationId="c2" active compact>
+    Compact active row
+  </SlottedConversationItem>
+</div>`),
 };

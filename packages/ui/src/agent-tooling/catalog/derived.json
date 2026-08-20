@@ -1520,6 +1520,7 @@
       "events": [],
       "methods": [],
       "parts": [
+        "body",
         "row",
         "title",
         "leading",

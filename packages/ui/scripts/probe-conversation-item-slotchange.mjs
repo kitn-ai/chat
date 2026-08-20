@@ -98,12 +98,17 @@ const check = (label, ok, detail) => {
 const readState = () =>
   page.evaluate(() => {
     const list = document.getElementById('list');
-    const items = [...document.querySelectorAll('kai-conversation-item')].map((i) => ({
-      id: i.getAttribute('conversation-id'),
-      tabindex: i.getAttribute('tabindex'),
-      selected: i.getAttribute('aria-selected'),
-      rect: (({ y, height }) => ({ y, height }))(i.getBoundingClientRect()),
-    }));
+    // The sibling restructure (ratified 2026-08-20): roving tabindex and
+    // aria-current live on each item's shadow BODY, not the host.
+    const items = [...document.querySelectorAll('kai-conversation-item')].map((i) => {
+      const body = i.shadowRoot?.querySelector('[data-kai-item-body]');
+      return {
+        id: i.getAttribute('conversation-id'),
+        tabindex: body?.getAttribute('tabindex') ?? null,
+        current: body?.getAttribute('aria-current') ?? null,
+        rect: (({ y, height }) => ({ y, height }))(i.getBoundingClientRect()),
+      };
+    });
     return { items, batteriesVisible: (list.shadowRoot?.textContent ?? '').includes('Batteries row') };
   });
 

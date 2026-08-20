@@ -46,13 +46,23 @@ export function relativeTimeShort(iso?: string, now: number = Date.now()): strin
  * presentational, and the `data-kai-item-menu` marker on the menu region is what
  * the container's activation guard keys off so a click in the consumer's menu
  * never also selects the row.
+ *
+ * ARIA contract for direct Solid use: the row renders `role="listitem"` holding
+ * a `role="button"` body (`aria-current` marks the active row, the same dialect
+ * as the batteries-mode row above) with the menu as the body's tabbable SIBLING
+ * (ratified 2026-08-20; axe `nested-interactive` bans focusable descendants of
+ * a control, and `aria-required-children` outlaws non-option content anywhere
+ * inside a listbox, which is why the vocabulary is not listbox/option). Render
+ * your loop's rows inside a `role="list"` ancestor; element mode has no such
+ * burden: `<kai-conversations>`' items region provides it for slotted items.
  */
 export interface SlottedConversationItemProps {
   /** The row's identity, handed to the container's selection contract. In the
    *  element this is the `conversation-id` attribute (host `id` is the fallback). */
   conversationId?: string;
-  /** Selected state. Reflected as `aria-selected` and a `data-active` styling
-   *  hook on the row; the container drives it from its `activeId`. */
+  /** Selected state. Reflected as `aria-current` on the row body and a
+   *  `data-active` styling hook on the row; the container drives it from its
+   *  `activeId`. */
   active?: boolean;
   /** Dense single-line row padding. */
   compact?: boolean;
@@ -64,11 +74,11 @@ export interface SlottedConversationItemProps {
   menu?: JSX.Element;
   /** The title (the element's default slot). */
   children?: JSX.Element;
-  /** Set when the element HOST carries the option semantics (`role="option"`,
-   *  `aria-selected`): the inner row then renders without them, so the
-   *  accessibility tree sees one option, not two. The `kai-conversation-item`
-   *  facade sets it; Solid consumers rendering the component directly leave it
-   *  off and the row itself is the option. */
+  /** Set when the element HOST carries the row-group semantics: the inner row
+   *  then renders `role="presentation"` so the accessibility tree sees one
+   *  group (the host), never two. The `kai-conversation-item` facade sets it;
+   *  Solid consumers rendering the component directly leave it off and the row
+   *  itself is the group. */
   hostSemantics?: boolean;
   class?: string;
 }
@@ -76,29 +86,45 @@ export interface SlottedConversationItemProps {
 export function SlottedConversationItem(props: SlottedConversationItemProps) {
   const [local] = splitProps(props, ['conversationId', 'active', 'compact', 'leading', 'meta', 'menu', 'children', 'hostSemantics', 'class']);
   return (
+    // The sibling restructure (ratified 2026-08-20): axe nested-interactive
+    // bans focusable descendants of an activation control, so the control role
+    // sits on the row BODY and the consumer's menu is its tabbable SIBLING
+    // (the nav.tsx TrailingActions precedent). The vocabulary is
+    // list/listitem/button + aria-current — NOT listbox/option, because axe
+    // aria-required-children lets a listbox subtree own nothing but options
+    // (and groups of options), which outlaws a sibling menu ANYWHERE inside
+    // it; button + aria-current is also exactly what the batteries-mode
+    // ConversationItem row above renders, so the two modes speak one dialect.
     <div
       part="row"
-      role={local.hostSemantics ? undefined : 'option'}
-      aria-selected={local.hostSemantics ? undefined : local.active ? 'true' : 'false'}
+      role={local.hostSemantics ? 'presentation' : 'listitem'}
       data-active={local.active ? '' : undefined}
       data-conversation-id={local.conversationId}
       class={cn(
-        'flex w-full items-center gap-2.5 rounded-lg text-left transition-colors cursor-pointer',
+        'flex w-full items-center gap-2.5 rounded-lg text-left transition-colors',
         local.compact ? 'px-2.5 py-1.5' : 'px-2.5 py-2',
         local.active ? 'bg-muted' : 'hover:bg-muted/50',
         local.class,
       )}
     >
-      <Show when={local.leading}>
-        <span part="leading" class="flex shrink-0 items-center text-muted-foreground">{local.leading}</span>
-      </Show>
-      <div class="min-w-0 flex-1">
-        <div part="title" class={cn('truncate text-sm', local.active ? 'font-medium text-foreground' : 'text-foreground/80')}>
-          {local.children}
-        </div>
-        <Show when={local.meta}>
-          <div part="meta" class="mt-0.5 truncate text-xs text-muted-foreground">{local.meta}</div>
+      <div
+        part="body"
+        role="button"
+        data-kai-item-body
+        aria-current={local.active ? 'true' : 'false'}
+        class="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <Show when={local.leading}>
+          <span part="leading" class="flex shrink-0 items-center text-muted-foreground">{local.leading}</span>
         </Show>
+        <div class="min-w-0 flex-1">
+          <div part="title" class={cn('truncate text-sm', local.active ? 'font-medium text-foreground' : 'text-foreground/80')}>
+            {local.children}
+          </div>
+          <Show when={local.meta}>
+            <div part="meta" class="mt-0.5 truncate text-xs text-muted-foreground">{local.meta}</div>
+          </Show>
+        </div>
       </div>
       <Show when={local.menu}>
         <span part="menu" data-kai-item-menu class="ml-auto flex shrink-0 items-center">{local.menu}</span>

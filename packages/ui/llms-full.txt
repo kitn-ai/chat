@@ -980,7 +980,7 @@ _No events._
 |---|---|---|---|
 | `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
 | `conversationId` | `conversation-id` | `undefined \| string` | The row's identity, handed to the container's selection contract. In the element this is the `conversation-id` attribute (host `id` is the fallback). |
-| `active` | `active` | `undefined \| false \| true` | Selected state. Reflected as `aria-selected` and a `data-active` styling hook on the row; the container drives it from its `activeId`. |
+| `active` | `active` | `undefined \| false \| true` | Selected state. Reflected as `aria-current` on the row body and a `data-active` styling hook on the row; the container drives it from its `activeId`. |
 | `compact` | `compact` | `undefined \| false \| true` | Dense single-line row padding. |
 
 _No events._
@@ -998,6 +998,7 @@ _No events._
 
 | Part | Description |
 |---|---|
+| `::part(body)` | The activation surface inside the row (button role; carries aria-current and the roving tabindex). The focus ring paints here. — `kai-conversation-item::part(body) { outline-offset: 2px }` |
 | `::part(row)` | The whole row surface. Carries `data-active` while selected. — `kai-conversation-item::part(row) { border-radius: 0.5rem }` |
 | `::part(title)` | The title line (the default slot renders inside it). — `kai-conversation-item::part(title) { font-weight: 600 }` |
 | `::part(leading)` | Leading region before the title (an icon or avatar). |

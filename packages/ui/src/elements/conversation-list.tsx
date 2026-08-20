@@ -105,6 +105,12 @@ defineWebComponent<Props, Events>('kai-conversations', {
         prev.length === hosts.length && hosts.every((h, i) => h === prev[i]) ? prev : hosts,
       );
       setSlots(readSlots(element, CONVERSATIONS_SLOTS));
+      // Re-sync on EVERY mutation, not only membership changes: an item host
+      // that upgrades after the first sync mutates its own attributes (the
+      // facade's mount), which lands here — and its shadow body needs stamping
+      // even though the hosts array is reference-stable. sync() writes
+      // on-change only, so this cannot feed the observer a loop.
+      if (hosts.length) itemsController.sync();
     };
     read();
     const observer = new MutationObserver(read);
@@ -118,7 +124,7 @@ defineWebComponent<Props, Events>('kai-conversations', {
   const allConversations = () => [...(props.conversations ?? []), ...slottedConversations()];
 
   // The parent-item contract: selection flowing container→item, roving tabindex,
-  // ARIA listbox/option — pure DOM, host-agnostic (see the controller's JSDoc in
+  // ARIA list-row bookkeeping — pure DOM, host-agnostic (see the controller's JSDoc in
   // components/conversation-list.tsx). Solid context cannot cross the element
   // boundary, so the channel is DOM traversal by construction.
   const itemsController = createConversationItemsController({
