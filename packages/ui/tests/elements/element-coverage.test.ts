@@ -668,13 +668,19 @@ describe('element coverage', () => {
   });
 
   it('each exemption says what is missing, and the `kind` is true', () => {
+    // Strip each story ONCE, then ask `constructsIn` per tag — the same
+    // strip-once-per-file split the main scan uses, and for the same measured
+    // reason: `constructsTag` re-runs `stripNonCode` on every call, so asking it
+    // per story × per exemption re-stripped the whole story corpus 17 times.
+    // That was 1975ms of this test locally, and at CI speed it blew vitest's
+    // strict 5000ms default twice on this branch (runs 32318854828, 32324835418).
     const storyFiles = walk(join(PKG, 'src')).filter((p) => /\.stories\.tsx?$/.test(p));
-    const sources = storyFiles.map((f) => readFileSync(f, 'utf8'));
+    const stories = storyFiles.map((f) => stripNonCode(readFileSync(f, 'utf8')));
 
     const wrong: string[] = [];
     for (const [tag, { kind, reason }] of Object.entries(EXEMPT)) {
       expect(reason.length, `${tag}'s exemption needs a real reason`).toBeGreaterThan(60);
-      const hasStory = sources.some((s) => constructsTag(s, tag));
+      const hasStory = stories.some((s) => constructsIn(s, tag));
       if (hasStory && kind !== 'story-only') wrong.push(`${tag}: marked "${kind}" but a story renders it`);
       if (!hasStory && kind !== 'nothing') wrong.push(`${tag}: marked "${kind}" but no story renders it`);
     }
