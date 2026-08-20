@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "kai": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "/private/tmp/claude-501/-Users-home-Projects-kitn-ai-kitn-chat/6c41b350-c9ff-45df-ba55-99ef09dd8a20/scratchpad/rung3-cleanroom/app/node_modules/@kitn.ai/ui/bin/mcp.js"
+      ]
+    }
+  }
+}
