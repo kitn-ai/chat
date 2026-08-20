@@ -166,97 +166,12 @@ main {
 
 /* ── the widget ────────────────────────────────────────────────────────────── */
 
-.launcher {
-  position: fixed;
-  bottom: 1.5rem;
-  inset-inline-end: 1.5rem;
-  z-index: 1001; /* above the panel, so it stays clickable as the close control */
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.7rem 1.1rem;
-  border: 0;
-  border-radius: 999px;
-  background: #16181d;
-  color: #fff;
-  font: inherit;
-  font-weight: 550;
-  cursor: pointer;
-  box-shadow: 0 10px 26px rgb(22 24 29 / 24%);
-}
-
-.launcher svg {
-  width: 20px;
-  height: 20px;
-  fill: none;
-  stroke: currentcolor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-/* One button, two icons: the open state shows the close glyph. */
-.launcher .launcher-close,
-.launcher[aria-expanded='true'] .launcher-open {
-  display: none;
-}
-
-.launcher[aria-expanded='true'] .launcher-close {
-  display: block;
-}
-
-.launcher[aria-expanded='true'] .launcher-label {
-  display: none;
-}
-
-/*
- * THE DOCKED PLACEMENT, copied from the kai MCP scaffolder's
- * `placementStyle('docked-widget')` (packages/ui/src/agent-tooling/mcp/tools/scaffold.ts):
- *
- *   position: fixed; bottom: 1.5rem; inset-inline-end: 1.5rem; width: 380px;
- *   height: 600px; max-height: calc(100dvh - 3rem); border-radius: 16px;
- *   overflow: hidden; box-shadow: 0 12px 32px var(--kai-shadow-color, …);
- *   display: flex; flex-direction: column; z-index: 1000;
- *
- * Two deliberate departures, both because this is a launcher-toggled widget and
- * the scaffold output is a bare always-open panel:
- *   · the bottom offset clears the launcher rather than sitting under it;
- *   · a narrow-viewport rule, below, so a phone gets the whole screen instead of
- *     a 380px box hanging off the edge.
- * The chat itself fills the panel with the scaffolder's `chatFill` verbatim.
- */
-.support-panel {
-  position: fixed;
-  bottom: 5.5rem;
-  inset-inline-end: 1.5rem;
-  z-index: 1000;
-  display: flex;
-  flex-direction: column;
-  width: 380px;
-  height: 600px;
-  max-height: calc(100dvh - 8rem);
-  overflow: hidden;
-  border-radius: 16px;
-  background: #fff;
-  box-shadow: 0 12px 32px var(--kai-shadow-color, rgb(0 0 0 / 18%));
-}
-
-/* `hidden` has to win over `display: flex`; the attribute selector out-specifies
-   the class rule above, so no `!important` is needed. */
-.support-panel[hidden] {
-  display: none;
-}
-
-#support-chat {
-  flex: 1;
-  min-height: 0;
-}
-
-@media (width <= 480px) {
-  .support-panel {
-    inset-inline: 0.75rem;
-    bottom: 5rem;
-    width: auto;
-    max-height: calc(100dvh - 7rem);
-  }
-}
+/* There is no widget CSS left. The launcher, the docked panel, the icon morph,
+   the `docked-widget` placement geometry and the narrow-viewport full-bleed rule
+   all live inside `<kai-dock>` now (its defaults match what this file used to
+   hand-write: 380x600 panel, 1.5rem inset, 16px radius, full-bleed under
+   480px). Geometry overrides, if this page ever needs them, are the dock's CSS
+   custom properties — --kai-dock-width, --kai-dock-height, --kai-dock-inset,
+   --kai-dock-gap, --kai-dock-radius, --kai-dock-z — never a reach into its
+   shadow root. The chat fills the panel via the dock's own slotted-content
+   rule, so the old `#support-chat { flex: 1 }` is gone too. */

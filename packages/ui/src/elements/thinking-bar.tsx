@@ -25,10 +25,19 @@ defineWebComponent<Props, Events>('kai-thinking-bar', {
   text: 'Thinking',
   stoppable: false,
   stopLabel: 'Answer now',
-}, (props, { dispatch, flag }) => (
-  <ThinkingBar
-    text={props.text}
-    stopLabel={props.stopLabel}
-    onStop={flag('stoppable') ? () => dispatch('kai-stop') : undefined}
-  />
-));
+}, (props, { dispatch, flag, reflectFlag }) => {
+  // `stoppable` reflects, following kai-tool's `disabled` (its FIX1). Without it the
+  // remove direction is dead: `el.removeAttribute('stoppable')` parses to `undefined`,
+  // the prop was already `undefined` after a bare-attribute add, so no prop change
+  // fires and `flag()`'s non-reactive hasAttribute fallback is never re-read — the
+  // stop affordance stays rendered forever. reflectFlag's coercing read-back resolves
+  // every write through the same `flag()` policy, making both directions reactive.
+  reflectFlag('stoppable');
+  return (
+    <ThinkingBar
+      text={props.text}
+      stopLabel={props.stopLabel}
+      onStop={flag('stoppable') ? () => dispatch('kai-stop') : undefined}
+    />
+  );
+});

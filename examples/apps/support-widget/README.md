@@ -59,6 +59,27 @@ the path that ships, so the mock cannot be green over a broken wire.
    **new object for the message that changed** (what makes the change visible in
    a reference-keyed list). Both halves, on every update.
 
+## The dock
+
+The launcher and panel are `<kai-dock>` (adopted 2026-08-20; the app originally
+hand-rolled them — see the git history and the extraction test in
+`docs/superpowers/specs/2026-08-19-kai-dock-design.md` §7). The dock owns the
+corner placement, open/close, `aria-expanded`, focus return and the
+narrow-viewport full-bleed rule; the app slots `<kai-chat slot="panel">` in and
+wires only the turn.
+
+**Two behaviors changed with the adoption**, both deliberate (they are the dock
+facade's documented migration notes):
+
+1. **Escape is scoped to the dock.** The hand-rolled version listened on
+   `document` and closed on any Escape anywhere on the page. `<kai-dock>` closes
+   only while the dock holds focus, and never stops the event — a widget docked
+   on someone else's page does not get to eat their Escape.
+2. **The closed panel keeps its layout box.** It hides with `visibility` +
+   `inert`, not `display: none`, and is never unmounted — so a reply that lands
+   while closed keeps folding in and a reopened thread does not re-measure from
+   zero. The old `hidden` panel was `display: none`.
+
 ## Not production
 
 `server/chat-api.ts` is a Vite plugin with `apply: 'serve'`. It does not exist in
@@ -183,3 +204,7 @@ carry no prompt transcript — the policy covers how the app was BUILT.
   pattern (same user-facing copy) after the rung-1 findings iteration fixed
   `abort` to put its reason in the thread; the previous `appendText` version
   merged the apology into the model's half-streamed sentence.
+- **2026-08-20** — the hand-rolled launcher/panel/Escape wiring replaced by
+  `<kai-dock>` (the banked extraction test from the kai-dock design spec §7).
+  Net deletion; behavior changes noted in "The dock" above: Escape is now
+  scoped to the dock, and the closed panel keeps its layout box.

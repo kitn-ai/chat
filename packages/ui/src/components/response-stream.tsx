@@ -1,6 +1,7 @@
 import { splitProps, Show, For, createEffect, on } from 'solid-js';
+import { Dynamic } from 'solid-js/web';
 import { cn } from '../utils/cn';
-import { useTextStream } from '../primitives/use-text-stream';
+import { useTextStream, defaultFadeDuration, defaultSegmentDelay } from '../primitives/use-text-stream';
 
 export type Mode = 'typewriter' | 'fade';
 
@@ -30,6 +31,7 @@ function ResponseStream(props: ResponseStreamProps) {
     speed: speed(),
     characterChunkSize: local.characterChunkSize,
     fadeDuration: local.fadeDuration,
+    segmentDelay: local.segmentDelay,
   });
 
   createEffect(on(
@@ -39,15 +41,20 @@ function ResponseStream(props: ResponseStreamProps) {
     }
   ));
 
+  // Deferred: `isComplete` INITIALISES true (nothing has streamed yet), so an
+  // undeferred first run would announce completion at mount — the same
+  // no-event-on-mount contract kai-tool pins for kai-open-change. Only the
+  // false -> true transition of a real stream may call onComplete.
   createEffect(on(
     () => stream.isComplete(),
     (complete) => {
       if (complete) local.onComplete?.();
-    }
+    },
+    { defer: true }
   ));
 
   const fadeStyle = () => {
-    const dur = local.fadeDuration ?? Math.round(1000 / Math.sqrt(Math.min(100, Math.max(1, speed()))));
+    const dur = local.fadeDuration ?? defaultFadeDuration(speed());
     return `
       @keyframes fadeIn {
         from { opacity: 0; }
@@ -66,12 +73,11 @@ function ResponseStream(props: ResponseStreamProps) {
 
   const segDelay = () => {
     if (typeof local.segmentDelay === 'number') return Math.max(0, local.segmentDelay);
-    const normalizedSpeed = Math.min(100, Math.max(1, speed()));
-    return Math.max(1, Math.round(100 / Math.sqrt(normalizedSpeed)));
+    return defaultSegmentDelay(speed());
   };
 
   return (
-    <div class={local.class}>
+    <Dynamic component={local.as ?? 'div'} class={local.class}>
       <Show
         when={mode() === 'fade'}
         fallback={<>{stream.displayedText()}</>}
@@ -96,7 +102,7 @@ function ResponseStream(props: ResponseStreamProps) {
           </For>
         </div>
       </Show>
-    </div>
+    </Dynamic>
   );
 }
 

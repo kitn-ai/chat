@@ -10,6 +10,7 @@ import { scaffold } from './tools/scaffold';
 import { theme } from './tools/theme';
 import { debug } from './tools/debug';
 import type { Tool } from './tools/types';
+import { validateToolArgs } from './validate-args';
 
 const tools: Tool[] = [reference, scaffold, theme, debug];
 
@@ -96,7 +97,16 @@ export function createServer(): AiUiServer {
         content: [{ type: 'text', text: `Unknown tool: ${request.params.name}` }],
       };
     }
-    return tool.handler(request.params.arguments ?? {});
+    const args = request.params.arguments ?? {};
+    // Enforce the schema each tool ADVERTISES (additionalProperties: false +
+    // required) — one path for all four tools. Without this, a wrong key was
+    // silently ignored and the handler answered a different question (see
+    // validate-args.ts for the observed failure).
+    const problem = validateToolArgs(tool.name, tool.inputSchema, args);
+    if (problem) {
+      return { isError: true, content: [{ type: 'text', text: problem }] };
+    }
+    return tool.handler(args);
   });
 
   server.__listToolsForTest = () => tools.map((t) => t.name);
