@@ -725,12 +725,6 @@
           "fn": false
         },
         {
-          "name": "search",
-          "scalar": true,
-          "optional": true,
-          "fn": false
-        },
-        {
           "name": "value",
           "scalar": false,
           "optional": true,
@@ -863,6 +857,12 @@
           "fn": false
         },
         {
+          "name": "webSearch",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
           "name": "voice",
           "scalar": true,
           "optional": true,
@@ -916,11 +916,11 @@
         "kai-attachments-rejected",
         "kai-message-action",
         "kai-model-change",
-        "kai-search",
         "kai-submit",
         "kai-suggestion-click",
         "kai-value-change",
-        "kai-voice"
+        "kai-voice",
+        "kai-web-search"
       ],
       "methods": [
         "focus",
@@ -1490,6 +1490,48 @@
       "tokens": []
     },
     {
+      "tag": "kai-conversation-item",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "conversationId",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "active",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "compact",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [],
+      "methods": [],
+      "parts": [
+        "row",
+        "title",
+        "leading",
+        "meta",
+        "menu"
+      ],
+      "composedFrom": [
+        "SlottedConversationItem"
+      ],
+      "tokens": []
+    },
+    {
       "tag": "kai-conversations",
       "props": [
         {
@@ -1545,7 +1587,8 @@
         "toggle"
       ],
       "parts": [
-        "trailing"
+        "trailing",
+        "items"
       ],
       "composedFrom": [
         "ConversationList",
@@ -3073,7 +3116,7 @@
           "fn": false
         },
         {
-          "name": "search",
+          "name": "webSearch",
           "scalar": true,
           "optional": true,
           "fn": false
@@ -3123,13 +3166,13 @@
       ],
       "events": [
         "kai-attachments-change",
-        "kai-search",
         "kai-stop",
         "kai-submit",
         "kai-suggestion-click",
         "kai-toolbar-action",
         "kai-value-change",
-        "kai-voice"
+        "kai-voice",
+        "kai-web-search"
       ],
       "methods": [
         "focus",
@@ -4706,157 +4749,25 @@
           "fn": false
         },
         {
-          "name": "groups",
-          "scalar": false,
-          "optional": true,
-          "fn": false
-        },
-        {
-          "name": "conversations",
-          "scalar": false,
-          "optional": true,
-          "fn": false
-        },
-        {
-          "name": "activeId",
+          "name": "startCollapsed",
           "scalar": true,
           "optional": true,
           "fn": false
         },
         {
-          "name": "messages",
-          "scalar": false,
-          "optional": true,
-          "fn": false
-        },
-        {
-          "name": "value",
+          "name": "defaultStartCollapsed",
           "scalar": true,
           "optional": true,
           "fn": false
         },
         {
-          "name": "placeholder",
+          "name": "endCollapsed",
           "scalar": true,
           "optional": true,
           "fn": false
         },
         {
-          "name": "loading",
-          "scalar": true,
-          "optional": true,
-          "fn": false
-        },
-        {
-          "name": "suggestions",
-          "scalar": false,
-          "optional": true,
-          "fn": false
-        },
-        {
-          "name": "suggestionMode",
-          "scalar": true,
-          "optional": true,
-          "fn": false
-        },
-        {
-          "name": "proseSize",
-          "scalar": true,
-          "optional": true,
-          "fn": false
-        },
-        {
-          "name": "codeTheme",
-          "scalar": true,
-          "optional": true,
-          "fn": false
-        },
-        {
-          "name": "codeHighlight",
-          "scalar": true,
-          "optional": true,
-          "fn": false
-        },
-        {
-          "name": "chatTitle",
-          "scalar": true,
-          "optional": true,
-          "fn": false
-        },
-        {
-          "name": "models",
-          "scalar": false,
-          "optional": true,
-          "fn": false
-        },
-        {
-          "name": "currentModel",
-          "scalar": true,
-          "optional": true,
-          "fn": false
-        },
-        {
-          "name": "context",
-          "scalar": false,
-          "optional": true,
-          "fn": false
-        },
-        {
-          "name": "scrollButton",
-          "scalar": true,
-          "optional": true,
-          "fn": false
-        },
-        {
-          "name": "search",
-          "scalar": true,
-          "optional": true,
-          "fn": false
-        },
-        {
-          "name": "voice",
-          "scalar": true,
-          "optional": true,
-          "fn": false
-        },
-        {
-          "name": "triggers",
-          "scalar": false,
-          "optional": true,
-          "fn": false
-        },
-        {
-          "name": "kindIcons",
-          "scalar": false,
-          "optional": true,
-          "fn": false
-        },
-        {
-          "name": "sidebarWidth",
-          "scalar": true,
-          "optional": true,
-          "fn": false
-        },
-        {
-          "name": "sidebarMinWidth",
-          "scalar": true,
-          "optional": true,
-          "fn": false
-        },
-        {
-          "name": "sidebarMaxWidth",
-          "scalar": true,
-          "optional": true,
-          "fn": false
-        },
-        {
-          "name": "sidebarCollapsed",
-          "scalar": true,
-          "optional": true,
-          "fn": false
-        },
-        {
-          "name": "defaultSidebarCollapsed",
+          "name": "defaultEndCollapsed",
           "scalar": true,
           "optional": true,
           "fn": false
@@ -4868,61 +4779,37 @@
           "fn": false
         },
         {
+          "name": "drawerBelow",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
           "name": "compact",
           "scalar": true,
-          "optional": true,
-          "fn": false
-        },
-        {
-          "name": "noConversations",
-          "scalar": true,
-          "optional": true,
-          "fn": false
-        },
-        {
-          "name": "cardTypes",
-          "scalar": false,
-          "optional": true,
-          "fn": false
-        },
-        {
-          "name": "cardSchemas",
-          "scalar": false,
           "optional": true,
           "fn": false
         }
       ],
       "events": [
-        "kai-conversation-select",
-        "kai-message-action",
-        "kai-model-change",
-        "kai-new-chat",
-        "kai-search",
-        "kai-sidebar-toggle",
-        "kai-submit",
-        "kai-suggestion-click",
-        "kai-value-change",
-        "kai-voice"
+        "kai-aside-resize",
+        "kai-aside-toggle"
       ],
       "methods": [
-        "toggleSidebar",
-        "collapseSidebar",
-        "expandSidebar",
-        "focus",
-        "clear",
-        "send",
-        "scrollToBottom"
+        "toggleAside",
+        "collapseAside",
+        "expandAside"
       ],
       "parts": [
-        "sidebar"
+        "aside",
+        "header",
+        "start",
+        "main",
+        "end",
+        "footer"
       ],
       "composedFrom": [
-        "ChatThread",
-        "ConversationList",
-        "CollapsedRail",
-        "ResizablePanelGroup",
-        "ResizablePanel",
-        "ResizableHandle"
+        "WorkspaceShell"
       ],
       "tokens": []
     }

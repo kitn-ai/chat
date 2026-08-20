@@ -88,7 +88,6 @@ describe('defaulted props: optional to pass, total to read', () => {
     const names = governed.map((g) => `${g.tag}.${g.prop}`);
     // Spot-check the ones the scaffolder actually reads back.
     expect(names).toContain('kai-chat.messages');
-    expect(names).toContain('kai-workspace.messages');
     expect(names).toContain('kai-toast-region.toasts');
     expect(names).toContain('kai-conversations.conversations');
   });

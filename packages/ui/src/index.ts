@@ -339,6 +339,8 @@ export type { VoiceInputProps, VoiceInputController } from './components/voice-i
 export { ConversationList } from './components/conversation-list';
 export type { ConversationListProps, ConversationListController } from './components/conversation-list';
 export { ConversationItem } from './components/conversation-item';
+export { SlottedConversationItem } from './components/conversation-item';
+export type { SlottedConversationItemProps } from './components/conversation-item';
 export type { ConversationItemProps } from './components/conversation-item';
 export { ModelSwitcher } from './components/model-switcher';
 export type { ModelSwitcherProps } from './components/model-switcher';

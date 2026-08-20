@@ -150,3 +150,6 @@ export type {
   AudioVisualizerProps, VisualizerVariant, ShaderSpec, ShaderVariantProps,
 } from './components/audio-visualizer';
 export type { VisualizerSize } from './components/audio-visualizer/sizes';
+export { WorkspaceShell, type WorkspaceShellProps, type WorkspaceShellController, type WorkspaceAsideSide, type WorkspaceAsideToggleDetail, type WorkspaceAsideResizeDetail } from './components/workspace-shell';
+export { createConversationItemsController, readConversationItemId } from './components/conversation-list';
+export type { ConversationItemsController, ConversationItemsControllerOptions } from './components/conversation-list';

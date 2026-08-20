@@ -17,7 +17,7 @@ declare module 'solid-js' {
         loading?: boolean;
         disabled?: boolean;
         voice?: boolean;
-        search?: boolean;
+        'web-search'?: boolean;
         attach?: boolean;
         submit?: string;
         'suggestion-mode'?: string;

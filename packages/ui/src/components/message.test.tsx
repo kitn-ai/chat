@@ -260,6 +260,61 @@ describe('MessageBody streaming identity', () => {
   });
 });
 
+// ─── F-21: reasoning auto-open while streaming ───────────────────────────────
+//
+// `reasoning.tsx` has always gated auto-open-while-streaming on an `isStreaming`
+// prop, and `message.tsx` never passed it — so a user watched a static collapsed
+// "Reasoning ⌄" label for the whole thinking window (the reproduced defect from
+// .superpowers/sdd/2026-08-20-rung-3/latency-debug/report.md). These tests pin
+// the plumb through MessageBody.
+describe('MessageBody reasoning auto-open while streaming (F-21)', () => {
+  const reasoningParts = () => appendReasoningPart([], 'Considering', { index: 0, streamId: 's1' });
+
+  const renderStreaming = (initialStreaming: boolean) => {
+    const [parts, setParts] = createSignal<MessagePart[]>(reasoningParts());
+    const [streaming, setStreaming] = createSignal(initialStreaming);
+    const rendered = render(() => (
+      <MessageBody parts={parts()} isUser={false} markdown={false} isStreaming={streaming()} />
+    ));
+    return {
+      ...rendered,
+      delta: (fold: (p: MessagePart[]) => MessagePart[]) => setParts(fold(parts())),
+      setStreaming,
+    };
+  };
+
+  it('opens the reasoning disclosure while the message is streaming (the reproduced defect)', () => {
+    // Before the fix MessageBody accepted no `isStreaming` at all, so this
+    // rendered the exact collapsed-while-streaming state the latency report
+    // photographed: text arriving, panel shut.
+    const { container, delta } = renderStreaming(true);
+    expect(reasoningOpen(container)).toBe(true);
+
+    // …and it stays open as the reasoning text keeps streaming in.
+    delta((p) => appendReasoningPart(p, ' the options.', { index: 0, streamId: 's1' }));
+    expect(reasoningOpen(container)).toBe(true);
+    expect(container.textContent).toContain('Considering the options.');
+  });
+
+  it('renders collapsed when the message is not streaming', () => {
+    const { container } = renderStreaming(false);
+    expect(reasoningOpen(container)).toBe(false);
+  });
+
+  it('keeps the state the user toggled once streaming ends', () => {
+    const { container, setStreaming } = renderStreaming(true);
+    expect(reasoningOpen(container)).toBe(true);
+
+    // The user shuts the panel mid-stream; the end of the stream must not
+    // reopen it or fight the toggle.
+    fireEvent.click(reasoningTrigger(container));
+    expect(reasoningOpen(container)).toBe(false);
+
+    setStreaming(false);
+    expect(reasoningOpen(container)).toBe(false);
+  });
+});
+
 // ─── The citation row ────────────────────────────────────────────────────────
 //
 // `source` parts arrive on the message correctly (the wire and

@@ -62,6 +62,34 @@ export const CONVERSATIONS_PARTS: PartDef[] = [
     doc: 'The right-aligned trailing text on each conversation row (a count, status, or relative time). Set it per item via the `trailing` field; otherwise a short auto relative time is derived from `updatedAt`. Recolor or resize it from outside.',
     recipe: 'kai-conversations::part(trailing) { color: var(--color-primary); font-variant-numeric: tabular-nums }',
   },
+  {
+    name: 'items',
+    doc: 'The item-mode listbox region wrapping your slotted `<kai-conversation-item>` children.',
+    recipe: 'kai-conversations::part(items) { gap: 2px }',
+  },
+];
+
+/** Slots of `<kai-conversation-item>` — one composed row of a consumer-owned
+ *  conversation loop (the default slot is the title). */
+export const CONVERSATION_ITEM_SLOTS: SlotDef[] = [
+  { name: 'leading', mode: 'inject', part: true, doc: 'Leading region before the title (an icon or avatar).' },
+  { name: 'meta', mode: 'inject', part: true, doc: 'Meta region under the title (a timestamp or status line).' },
+  { name: 'menu', mode: 'inject', part: true, doc: 'Your own row menu (a popover trigger). Never selects the row.' },
+];
+
+/** Styleable `::part`s of `<kai-conversation-item>`. (`leading`/`meta`/`menu`
+ *  are covered by their slot defs' `part: true` flags.) */
+export const CONVERSATION_ITEM_PARTS: PartDef[] = [
+  {
+    name: 'row',
+    doc: 'The whole row surface. Carries `data-active` while selected.',
+    recipe: 'kai-conversation-item::part(row) { border-radius: 0.5rem }',
+  },
+  {
+    name: 'title',
+    doc: 'The title line (the default slot renders inside it).',
+    recipe: 'kai-conversation-item::part(title) { font-weight: 600 }',
+  },
 ];
 
 /** Slots of `<kai-message>` — per-message composition seams. `before-body` and
@@ -355,21 +383,21 @@ export const CARD_PARTS: PartDef[] = [
   },
 ];
 
-/** Injection slots of `<kai-workspace>` (the carrier regions the consumer drops
- *  content into: brand/tabs, the upgrade/Design/user-menu cluster, a top banner). */
+/** Slots of `<kai-workspace>` (the five shell regions; main also takes the default slot). */
 export const WORKSPACE_SLOTS: SlotDef[] = [
-  { name: 'sidebar-header', mode: 'inject', doc: 'Top of the conversation rail (brand, a kai-tabs strip).' },
-  { name: 'sidebar-footer', mode: 'inject', doc: 'Bottom of the rail: an upgrade card, a Design trigger, a user-menu cluster.' },
-  { name: 'main-header', mode: 'inject', doc: 'Top of the main region (a top-placed banner or a corner action).' },
-  { name: 'main', mode: 'replace', doc: 'Replace the built-in chat thread with your own main view (a home or dashboard screen). Omit to keep the thread.' },
+  { name: 'header', mode: 'inject', part: true, doc: 'The top band across the full shell width (app bar, tabs, breadcrumbs).' },
+  { name: 'start', mode: 'inject', part: true, doc: 'The inline-start aside column (a conversation rail, a nav, a file tree). Resizable and collapsible.' },
+  { name: 'main', mode: 'inject', part: true, doc: 'The main region. Unnamed children project here too, via the default slot.' },
+  { name: 'end', mode: 'inject', part: true, doc: 'The inline-end aside column (inspector, notes, preview). Resizable and collapsible.' },
+  { name: 'footer', mode: 'inject', part: true, doc: 'The bottom band across the full shell width (status bar, disclaimers).' },
 ];
 
-/** Styleable `::part`s of `<kai-workspace>`. */
+/** Styleable `::part`s of `<kai-workspace>` (beyond the slot-backed header/start/main/end/footer parts). */
 export const WORKSPACE_PARTS: PartDef[] = [
   {
-    name: 'sidebar',
-    doc: 'The conversation rail. Carries a subtle, theme-aware default background (bg-surface); override its background, border, or width from outside. `sidebar-min-width` sets its min px width and `collapse-below` auto-collapses it under a width.',
-    recipe: 'kai-workspace::part(sidebar) { background: var(--color-card); border-right: 1px solid var(--color-border) }',
+    name: 'aside',
+    doc: 'Both aside columns match this part (each also matches its own start/end part). Restyle the shared aside surface or border from outside; the --kai-workspace-start-* and --kai-workspace-end-* custom properties set the widths.',
+    recipe: 'kai-workspace::part(aside) { background: var(--color-card) }',
   },
 ];
 
@@ -682,7 +710,8 @@ export const AUDIO_VISUALIZER_PARTS: PartDef[] = [
 export const ELEMENT_COMPOSITION: Record<string, ElementComposition> = {
   'kai-chat': { slots: CHAT_SLOTS, parts: CHAT_PARTS },
   'kai-command': { parts: COMMAND_PARTS },
-  'kai-conversations': { slots: CONVERSATIONS_SLOTS, parts: CONVERSATIONS_PARTS },
+  'kai-conversations': { slots: CONVERSATIONS_SLOTS, parts: CONVERSATIONS_PARTS, children: 'Your own `<kai-conversation-item>` rows (item mode: the consumer-owned loop). Data rows do not render while any are present.' },
+  'kai-conversation-item': { slots: CONVERSATION_ITEM_SLOTS, parts: CONVERSATION_ITEM_PARTS, children: 'The row title. `leading`, `meta` and `menu` are the named regions around it.' },
   'kai-message': { slots: MESSAGE_SLOTS, parts: MESSAGE_PARTS },
   'kai-thread': { slots: THREAD_SLOTS },
   'kai-prompt-input': { slots: PROMPT_INPUT_SLOTS, parts: PROMPT_INPUT_PARTS },
@@ -701,7 +730,7 @@ export const ELEMENT_COMPOSITION: Record<string, ElementComposition> = {
   'kai-voice-output': { parts: VOICE_OUTPUT_PARTS },
   'kai-screen': { slots: SCREEN_SLOTS, parts: SCREEN_PARTS, children: 'The screen body, below the title bar.' },
   'kai-card': { slots: CARD_SLOTS, parts: CARD_PARTS, children: 'The card body, below the header/media regions.' },
-  'kai-workspace': { slots: WORKSPACE_SLOTS, parts: WORKSPACE_PARTS },
+  'kai-workspace': { slots: WORKSPACE_SLOTS, parts: WORKSPACE_PARTS, children: 'The main region content (same region as the `main` slot): your `<kai-chat>`, or any app view.' },
   'kai-nav': { parts: NAV_PARTS },
   'kai-coachmark': { slots: COACHMARK_SLOTS, parts: COACHMARK_PARTS, children: 'The ANCHOR the coachmark points at: the element it attaches to and positions against. The bubble body is the `content` slot.' },
   'kai-progress-bar': { parts: PROGRESS_BAR_PARTS },

@@ -2,47 +2,23 @@ import type { Meta, StoryObj } from 'storybook-solidjs-vite';
 import { onMount, onCleanup } from 'solid-js';
 import { Sparkles } from 'lucide-solid';
 import './chat-workspace';
+import './conversation-list';
+import './chat';
 import './card';
 import { attachKaiActions } from '../stories/docs/story-actions';
 import { textMessage } from '../state';
 import type { ChatMessage } from './chat-types';
 import type { ConversationSummary, ConversationGroup } from '../types';
 
-// Labs: the kai-workspace injection slots. Three bounded holes the consumer
-// fills with their own light-DOM markup:
-//   • sidebar-header — top of the rail (brand / a kai-tabs strip)
-//   • sidebar-footer — bottom of the rail (an upgrade card / Design trigger / user menu)
-//   • main-header    — top of the main region (a top-placed banner / corner action)
-// Each region renders ONLY when content is projected, so a plain <kai-workspace>
-// is unchanged.
-
-declare module 'solid-js' {
-  // eslint-disable-next-line @typescript-eslint/no-namespace
-  namespace JSX {
-    interface IntrinsicElements {
-      'kai-workspace': JSX.HTMLAttributes<HTMLElement> & { 'sidebar-min-width'?: string | number; 'collapse-below'?: string | number };
-      'kai-card': JSX.HTMLAttributes<HTMLElement> & {
-        appearance?: 'outlined' | 'filled' | 'plain' | 'accent';
-        orientation?: 'vertical' | 'horizontal' | 'responsive';
-        collapse?: string;
-        dense?: boolean;
-        dismissible?: boolean;
-        href?: string;
-        target?: string;
-        rel?: string;
-        clickable?: boolean;
-      };
-    }
-  }
-}
-
-type WorkspaceEl = HTMLElement & {
-  groups?: ConversationGroup[];
-  conversations?: ConversationSummary[];
-  activeId?: string;
-  messages?: ChatMessage[];
-  chatTitle?: string;
-};
+// Labs: the re-cast kai-workspace shell slots. Five bounded regions the
+// consumer fills with their own light-DOM markup:
+//   • header — the top band across the full shell width (app bar, banner)
+//   • start  — the inline-start aside (here: a kai-conversations rail)
+//   • main   — the main region (here: a kai-chat; unnamed children land here)
+//   • end    — the inline-end aside (inspector, notes)
+//   • footer — the bottom band (status bar, disclaimers)
+// The shell owns arrangement only: resize handles, collapse-below, the mobile
+// drawer. Every chat prop and chat event lives on the parts themselves.
 
 const scope = { type: 'document' as const };
 const groups: ConversationGroup[] = [
@@ -69,75 +45,93 @@ const meta = {
 export default meta;
 type Story = StoryObj;
 
+type El = HTMLElement & Record<string, unknown>;
+
 function SlotsDemo() {
-  let el: WorkspaceEl | undefined;
-  let upgrade: HTMLElement | undefined;
+  let ws: El | undefined;
+  let rail: El | undefined;
+  let chat: El | undefined;
   onMount(() => {
-    if (el) {
-      el.groups = groups;
-      el.conversations = conversations;
-      el.activeId = 'c1';
-      el.messages = messages;
-      el.chatTitle = 'Acme';
-      onCleanup(attachKaiActions(el));
+    if (rail) {
+      rail.groups = groups;
+      rail.conversations = conversations;
+      rail.activeId = 'c1';
     }
-    if (upgrade) onCleanup(attachKaiActions(upgrade)); // logs kai-card-click
+    if (chat) {
+      chat.messages = messages;
+      chat.chatTitle = 'Acme';
+    }
+    if (ws) {
+      // Set as a property: the generated attribute typings regenerate with the
+      // supervisor's build:api pass, and properties are the contract anyway.
+      ws.drawerBelow = 560;
+      onCleanup(attachKaiActions(ws)); // logs kai-aside-toggle / kai-aside-resize
+    }
   });
   return (
-    <kai-workspace ref={(e) => (el = e as WorkspaceEl)} style={{ display: 'block', height: '100vh' }}>
-      {/* sidebar-header: brand mark at the top of the rail. */}
-      <div slot="sidebar-header" style="display:flex;align-items:center;gap:8px;padding:14px 16px;font:600 14px system-ui;color:var(--color-foreground)">
+    <kai-workspace ref={(e) => (ws = e as El)} collapse-below="720" style={{ display: 'block', height: '100vh' }}>
+      {/* header: brand band across the full shell width. */}
+      <div slot="header" style="display:flex;align-items:center;gap:8px;padding:10px 16px;font:600 14px system-ui;color:var(--color-foreground)">
         <span style="color:var(--color-primary);display:flex"><Sparkles size={18} /></span> Acme
       </div>
 
-      {/* main-header: a top-placed banner over the main region. */}
-      <div slot="main-header" style="padding:8px 16px;font:13px/1.4 system-ui;color:var(--color-foreground);background:var(--color-surface)">
-        You are on the free plan. <a href="#" style="color:var(--color-primary)">Upgrade for higher limits.</a>
+      {/* start: the conversation rail is a PART in a slot, driven by its own props. */}
+      <kai-conversations slot="start" ref={(e) => (rail = e as El)} style="display:block;height:100%"></kai-conversations>
+
+      {/* main: unnamed children land in the main region. */}
+      <kai-chat ref={(e) => (chat = e as El)} style="display:block;height:100%"></kai-chat>
+
+      {/* end: an inspector aside; anything goes, the shell never reads it. */}
+      <div slot="end" style="padding:14px 16px;font:13px/1.5 system-ui;color:var(--color-muted-foreground)">
+        <strong style="display:block;color:var(--color-foreground);font-weight:600">Notes</strong>
+        <p style="margin-top:0.5rem">Pin research, files, or a preview here.</p>
       </div>
 
-      {/* sidebar-footer: the upgrade card — a real, clickable kai-card. */}
-      <kai-card
-        slot="sidebar-footer"
-        clickable
-        dense
-        ref={(e) => (upgrade = e as HTMLElement)}
-        style="display:block;margin:10px"
-      >
-        <strong style="display:block;font-weight:600">Upgrade to Pro</strong>
-        <p style="margin-top:0.25rem;font-size:0.8125rem;color:var(--color-muted-foreground)">Unlock Fable 5 and higher limits.</p>
-      </kai-card>
+      {/* footer: status band. */}
+      <div slot="footer" style="padding:6px 16px;font:12px system-ui;color:var(--color-muted-foreground)">
+        Acme can make mistakes. Check important info.
+      </div>
     </kai-workspace>
   );
 }
 
 export const Slots: Story = {
-  name: 'sidebar-header, sidebar-footer & main-header',
+  name: 'header, start, main, end & footer',
   render: () => <SlotsDemo />,
   parameters: {
     docs: {
       source: {
         language: 'html',
-        code: `<kai-workspace>
-  <!-- Top of the rail. -->
-  <div slot="sidebar-header">Acme</div>
+        code: `<kai-workspace collapse-below="720" drawer-below="560">
+  <!-- header: the top band across the full shell width. -->
+  <div slot="header">Acme</div>
 
-  <!-- Top of the main region (a banner / corner action). -->
-  <div slot="main-header">You are on the free plan. <a href="#">Upgrade.</a></div>
+  <!-- start: the rail is a part in a slot, driven by its own props/events. -->
+  <kai-conversations slot="start"></kai-conversations>
 
-  <!-- Bottom of the rail: an upgrade card, Design trigger, or user menu. -->
-  <kai-card slot="sidebar-footer" clickable dense>
-    <strong>Upgrade to Pro</strong>
-    <p>Unlock higher limits.</p>
-  </kai-card>
+  <!-- main: unnamed children land in the main region. -->
+  <kai-chat></kai-chat>
+
+  <!-- end: an inspector aside. -->
+  <div slot="end">Notes</div>
+
+  <!-- footer: the bottom band. -->
+  <div slot="footer">Acme can make mistakes.</div>
 </kai-workspace>
 
 <script type="module">
-  const ws = document.querySelector('kai-workspace');
-  ws.conversations = [/* ConversationSummary[] */];
-  ws.messages = [/* ChatMessage[] */];
+  // Chat props/events live on the parts now, not on the shell.
+  const rail = document.querySelector('kai-conversations');
+  rail.conversations = [/* ConversationSummary[] */];
+  rail.addEventListener('kai-conversation-select', (e) => loadThread(e.detail.id));
 
-  // The card stays interactive while projected into the shadow slot.
-  ws.querySelector('kai-card').addEventListener('kai-card-click', () => openBilling());
+  const chat = document.querySelector('kai-chat');
+  chat.messages = [/* ChatMessage[] */];
+  chat.addEventListener('kai-submit', (e) => send(e.detail.value));
+
+  // The shell fires layout events only.
+  const ws = document.querySelector('kai-workspace');
+  ws.addEventListener('kai-aside-toggle', (e) => console.log(e.detail));
 </script>`,
       },
     },

@@ -47,6 +47,9 @@ interface Events {
  * Stack-level defaults are also declarative: `<kai-toast-region appearance="card"
  * inverse>` makes every toast that doesn't set its own `appearance`/`inverse`
  * render as an inverted card. A per-toast value always wins.
+ *
+ * Your app chrome must stay below the toast layer; set `--kai-toast-z`
+ * (default 100) on the host to move the layer.
  */
 defineWebComponent<Props, Events>('kai-toast-region', {
   toasts: [],

@@ -776,10 +776,10 @@ describe('ELEMENT_COMPOSITION registry (single source of truth the build extract
 
     // POSITIVE — the false-positive direction, and the one that gets a guard
     // disabled. `row` is genuinely SHARED: `components/message.tsx` renders it and
-    // four different elements mount that module, so all four must be credited.
+    // three different elements mount that module, so all four must be credited.
     // A naive "the part must appear in the element's OWN file" rule would fail
     // three of these on correct code.
-    for (const tag of ['kai-message', 'kai-chat', 'kai-thread', 'kai-workspace']) {
+    for (const tag of ['kai-message', 'kai-chat', 'kai-thread']) {
       expect(partsOf(tag).has('row'), `${tag} should render the shared row part`).toBe(true);
     }
 
@@ -802,6 +802,7 @@ describe('ELEMENT_COMPOSITION registry (single source of truth the build extract
       'kai-code-block',
       'kai-command',
       'kai-context',
+      'kai-conversation-item',
       'kai-conversations',
       'kai-dialog',
       'kai-dock',

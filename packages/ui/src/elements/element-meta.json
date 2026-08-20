@@ -1355,15 +1355,6 @@
         "displayType": "\"light\" | \"dark\" | \"auto\""
       },
       {
-        "name": "search",
-        "type": "undefined | false | true",
-        "optional": true,
-        "scalar": true,
-        "description": "Show a Search (Globe) button in the input toolbar; fires a `search` event.",
-        "default": "false",
-        "displayType": "undefined | false | true"
-      },
-      {
         "name": "value",
         "type": "undefined | string | ({ type: \"text\"; text: string } | { type: \"entity\"; entity: { kind: string; id: string; label: string; icon?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> } })[]",
         "optional": true,
@@ -1554,6 +1545,15 @@
         "displayType": "undefined | false | true"
       },
       {
+        "name": "webSearch",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Show a web-search (Globe) button in the input toolbar; calls `onWebSearch`.",
+        "default": "false",
+        "displayType": "undefined | false | true"
+      },
+      {
         "name": "voice",
         "type": "undefined | false | true",
         "optional": true,
@@ -1653,12 +1653,6 @@
         "displayDetail": "{ modelId: string }"
       },
       {
-        "name": "kai-search",
-        "detail": "Record<string, never>",
-        "description": "The Search button was clicked.",
-        "displayDetail": "Record<string, never>"
-      },
-      {
         "name": "kai-submit",
         "detail": "{ value: string; attachments: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[] }",
         "description": "User submitted a message.",
@@ -1680,6 +1674,12 @@
         "name": "kai-voice",
         "detail": "Record<string, never>",
         "description": "The Mic / voice button was clicked.",
+        "displayDetail": "Record<string, never>"
+      },
+      {
+        "name": "kai-web-search",
+        "detail": "Record<string, never>",
+        "description": "The web-search (Globe) toolbar button was clicked.",
         "displayDetail": "Record<string, never>"
       }
     ],
@@ -2855,6 +2855,106 @@
     ]
   },
   {
+    "tag": "kai-conversation-item",
+    "className": "KaiConversationItemElement",
+    "displayName": "ConversationItem",
+    "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
+        "name": "conversationId",
+        "type": "undefined | string",
+        "optional": true,
+        "scalar": true,
+        "description": "The row's identity, handed to the container's selection contract. In the element this is the `conversation-id` attribute (host `id` is the fallback).",
+        "displayType": "undefined | string"
+      },
+      {
+        "name": "active",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Selected state. Reflected as `aria-selected` and a `data-active` styling hook on the row; the container drives it from its `activeId`.",
+        "displayType": "undefined | false | true"
+      },
+      {
+        "name": "compact",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Dense single-line row padding.",
+        "displayType": "undefined | false | true"
+      }
+    ],
+    "events": [],
+    "methods": [],
+    "composedFrom": [
+      {
+        "name": "SlottedConversationItem",
+        "group": "Components",
+        "storyId": "solid-advanced-elements-slottedconversationitem--docs"
+      }
+    ],
+    "tokens": [],
+    "slots": [
+      {
+        "name": "",
+        "mode": "inject",
+        "doc": "The row title. `leading`, `meta` and `menu` are the named regions around it."
+      },
+      {
+        "name": "leading",
+        "mode": "inject",
+        "part": true,
+        "doc": "Leading region before the title (an icon or avatar)."
+      },
+      {
+        "name": "meta",
+        "mode": "inject",
+        "part": true,
+        "doc": "Meta region under the title (a timestamp or status line)."
+      },
+      {
+        "name": "menu",
+        "mode": "inject",
+        "part": true,
+        "doc": "Your own row menu (a popover trigger). Never selects the row."
+      }
+    ],
+    "parts": [
+      {
+        "name": "row",
+        "doc": "The whole row surface. Carries `data-active` while selected.",
+        "recipe": "kai-conversation-item::part(row) { border-radius: 0.5rem }"
+      },
+      {
+        "name": "title",
+        "doc": "The title line (the default slot renders inside it).",
+        "recipe": "kai-conversation-item::part(title) { font-weight: 600 }"
+      },
+      {
+        "name": "leading",
+        "doc": "Leading region before the title (an icon or avatar)."
+      },
+      {
+        "name": "meta",
+        "doc": "Meta region under the title (a timestamp or status line)."
+      },
+      {
+        "name": "menu",
+        "doc": "Your own row menu (a popover trigger). Never selects the row."
+      }
+    ]
+  },
+  {
     "tag": "kai-conversations",
     "className": "KaiConversationsElement",
     "displayName": "Conversations",
@@ -2883,15 +2983,15 @@
       },
       {
         "name": "conversations",
-        "type": "undefined | { id: string; title: string; groupId?: undefined | string; scope: { type: \"document\" | \"collection\"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | \"transcript\" | \"markdown\"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[]",
+        "type": "undefined | { id: string; title: string; groupId?: undefined | string; scope?: undefined | { type: \"document\" | \"collection\"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | \"transcript\" | \"markdown\"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt?: undefined | string; updatedAt: string; trailing?: undefined | string }[]",
         "optional": true,
         "scalar": false,
-        "description": "Every conversation the list renders, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId`, or with a `groupId` matching no entry in `groups`, falls into a trailing \"Ungrouped\" section, so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. Omit to supply them as `<kai-conversation>` light-DOM children instead, or for the empty state.",
+        "description": "Every conversation the list renders, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId`, or with a `groupId` matching no entry in `groups`, falls into a trailing \"Ungrouped\" section, so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. Omit to supply them as `<kai-conversation>` light-DOM children instead, or for the empty state. A search query that matches nothing shows a visible \"No conversations match your search\" state, distinct from the zero-conversations empty state. Slotted `<kai-conversation-item>` children switch the list into item mode instead: your own rows win and this array is not rendered.",
         "typeName": "ConversationSummary[]",
-        "typeShape": "{ id: string; title: string; groupId?: undefined | string; scope: { type: \"document\" | \"collection\"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | \"transcript\" | \"markdown\"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[]",
+        "typeShape": "{ id: string; title: string; groupId?: undefined | string; scope?: undefined | { type: \"document\" | \"collection\"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | \"transcript\" | \"markdown\"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt?: undefined | string; updatedAt: string; trailing?: undefined | string }[]",
         "default": "[]",
         "typeImport": "ConversationSummary",
-        "displayType": "undefined | { id: string; title: string; groupId?: undefined | string; scope: { type: \"document\" | \"collection\"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | \"transcript\" | \"markdown\"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[]"
+        "displayType": "undefined | { id: string; title: string; groupId?: undefined | string; scope?: undefined | { type: \"document\" | \"collection\"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | \"transcript\" | \"markdown\"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt?: undefined | string; updatedAt: string; trailing?: undefined | string }[]"
       },
       {
         "name": "activeId",
@@ -2928,7 +3028,7 @@
       {
         "name": "kai-conversation-select",
         "detail": "{ id: string }",
-        "description": "A conversation was selected.",
+        "description": "A conversation was selected. The selection event in BOTH modes: a batteries data row, or an activated `<kai-conversation-item>` child (click, Enter or Space).",
         "displayDetail": "{ id: string }"
       },
       {
@@ -3012,10 +3112,15 @@
           "id"
         ],
         "text": true,
-        "description": "Parse a single light-DOM `<kai-conversation>` element into a `ConversationSummary`. Attribute mapping: - `id` → ConversationSummary.id - `group-id` → ConversationSummary.groupId (optional) - textContent → ConversationSummary.title Required fields not expressible as HTML attributes (`scope`, `messageCount`, `lastMessageAt`, `updatedAt`) receive safe defaults so the rendered list item is fully functional with just `id` + title text."
+        "description": "Parse a single light-DOM `<kai-conversation>` element into a `ConversationSummary`. Attribute mapping: - `id` → ConversationSummary.id - `group-id` → ConversationSummary.groupId (optional) - textContent → ConversationSummary.title Fields not expressible as HTML attributes are NOT fabricated (F-10): the optional `scope` and `lastMessageAt` stay absent, and the required `messageCount`/`updatedAt` get honest defaults — zero messages, and an empty `updatedAt` from which no trailing relative time is derived (the epoch it used to fabricate rendered a bogus \"many days ago\" on every declarative row)."
       }
     ],
     "slots": [
+      {
+        "name": "",
+        "mode": "inject",
+        "doc": "Your own `<kai-conversation-item>` rows (item mode: the consumer-owned loop). Data rows do not render while any are present."
+      },
       {
         "name": "header",
         "mode": "replace",
@@ -3037,6 +3142,11 @@
         "name": "trailing",
         "doc": "The right-aligned trailing text on each conversation row (a count, status, or relative time). Set it per item via the `trailing` field; otherwise a short auto relative time is derived from `updatedAt`. Recolor or resize it from outside.",
         "recipe": "kai-conversations::part(trailing) { color: var(--color-primary); font-variant-numeric: tabular-nums }"
+      },
+      {
+        "name": "items",
+        "doc": "The item-mode listbox region wrapping your slotted `<kai-conversation-item>` children.",
+        "recipe": "kai-conversations::part(items) { gap: 2px }"
       }
     ]
   },
@@ -6017,11 +6127,11 @@
         "displayType": "undefined | \"submit\" | \"fill\""
       },
       {
-        "name": "search",
+        "name": "webSearch",
         "type": "undefined | false | true",
         "optional": true,
         "scalar": true,
-        "description": "Show a Search (Globe) button in the left toolbar; clicking it fires a `search` event.",
+        "description": "Show a web-search (Globe) button in the left toolbar; clicking it fires a `kai-web-search` event. Attribute: `web-search`.",
         "default": "false",
         "displayType": "undefined | false | true"
       },
@@ -6100,12 +6210,6 @@
         "displayDetail": "{ attachments: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[] }"
       },
       {
-        "name": "kai-search",
-        "detail": "Record<string, never>",
-        "description": "The Search (Globe) toolbar button was clicked.",
-        "displayDetail": "Record<string, never>"
-      },
-      {
         "name": "kai-stop",
         "detail": "Record<string, never>",
         "description": "The Stop button was clicked while `stoppable` and `loading` are both true.",
@@ -6139,6 +6243,12 @@
         "name": "kai-voice",
         "detail": "Record<string, never>",
         "description": "The Voice (Mic) toolbar button was clicked.",
+        "displayDetail": "Record<string, never>"
+      },
+      {
+        "name": "kai-web-search",
+        "detail": "Record<string, never>",
+        "description": "The web-search (Globe) toolbar button was clicked.",
         "displayDetail": "Record<string, never>"
       }
     ],
@@ -9063,244 +9173,35 @@
         "displayType": "\"light\" | \"dark\" | \"auto\""
       },
       {
-        "name": "groups",
-        "type": "undefined | { id: string; userId?: undefined | string; teamId?: undefined | string; name: string; sortOrder: number; createdAt: string }[]",
-        "optional": true,
-        "scalar": false,
-        "description": "The sidebar's section headers, rendered in array order. A group carries no conversations of its own; it is matched against `conversations` by id, so the two props are complementary rather than alternatives. Omit for an ungrouped sidebar. Set as a JS property.",
-        "typeName": "ConversationGroup[]",
-        "typeShape": "{ id: string; userId?: undefined | string; teamId?: undefined | string; name: string; sortOrder: number; createdAt: string }[]",
-        "default": "[]",
-        "typeImport": "ConversationGroup",
-        "displayType": "undefined | { id: string; userId?: undefined | string; teamId?: undefined | string; name: string; sortOrder: number; createdAt: string }[]"
-      },
-      {
-        "name": "conversations",
-        "type": "undefined | { id: string; title: string; groupId?: undefined | string; scope: { type: \"document\" | \"collection\"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | \"transcript\" | \"markdown\"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[]",
-        "optional": true,
-        "scalar": false,
-        "description": "Every conversation in the sidebar, flat. Each one is filed under the group whose `id` equals its `groupId`; one with no `groupId`, or with a `groupId` matching no entry in `groups`, falls into a trailing ungrouped section (headerless when `compact`), so nothing you pass in is ever dropped. There is no recency bucketing. Set as a JS property. Omit for an empty sidebar, or when `no-conversations` replaces the built-in list with your own `sidebar-header` content.",
-        "typeName": "ConversationSummary[]",
-        "typeShape": "{ id: string; title: string; groupId?: undefined | string; scope: { type: \"document\" | \"collection\"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | \"transcript\" | \"markdown\"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[]",
-        "default": "[]",
-        "typeImport": "ConversationSummary",
-        "displayType": "undefined | { id: string; title: string; groupId?: undefined | string; scope: { type: \"document\" | \"collection\"; documentId?: undefined | string; filters?: undefined | { tags?: undefined | string[]; authors?: undefined | string[]; contentType?: undefined | \"transcript\" | \"markdown\"; dateRange?: undefined | { from: string; to: string } } }; messageCount: number; lastMessageAt: string; updatedAt: string; trailing?: undefined | string }[]"
-      },
-      {
-        "name": "activeId",
-        "type": "undefined | string",
-        "optional": true,
-        "scalar": true,
-        "description": "Id of the open conversation, highlighted in the sidebar.",
-        "displayType": "undefined | string"
-      },
-      {
-        "name": "messages",
-        "type": "undefined | { id: string; role: \"user\" | \"assistant\"; parts: ({ type: \"text\"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: \"reasoning\"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: \"tool\"; tool: { type: string; kind?: undefined | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"image\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"card\"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"source\"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: \"file\"; attachment: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]",
-        "optional": true,
-        "scalar": false,
-        "description": "The active conversation's message thread, newest last. Set as a JS property (`el.messages = [...]`); a NEW array reference per streaming chunk re-renders (mutating in place does not). Omit for an empty thread.",
-        "typeName": "ChatMessage[]",
-        "typeShape": "{ id: string; role: \"user\" | \"assistant\"; parts: ({ type: \"text\"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: \"reasoning\"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: \"tool\"; tool: { type: string; kind?: undefined | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"image\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"card\"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"source\"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: \"file\"; attachment: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]",
-        "default": "[]",
-        "typeImport": "ChatMessage",
-        "displayType": "undefined | { id: string; role: \"user\" | \"assistant\"; parts: ({ type: \"text\"; text: string; raw?: undefined | { source: string; payload: unknown } } | { type: \"reasoning\"; text: string; label?: undefined | string; index?: undefined | number; streamId?: undefined | string; signature?: undefined | string; raw?: undefined | { source: string; payload: unknown } } | { type: \"tool\"; tool: { type: string; kind?: undefined | \"command\" | \"file-change\" | \"search\" | \"fetch\" | \"mcp\" | \"image\" | \"generic\"; state: \"input-streaming\" | \"input-available\" | \"output-available\" | \"output-error\"; input?: undefined | Record<string, unknown>; rawInput?: undefined | string; output?: undefined | Record<string, unknown>; toolCallId?: undefined | string; errorText?: undefined | string; raw?: undefined | { source: string; payload: unknown } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"card\"; envelope: { type: string; id: string; data: unknown; title?: undefined | string; resolution?: undefined | { kind: \"action\"; action: string; payload?: unknown; at?: undefined | string } | { kind: \"submit\"; data: unknown; at?: undefined | string } | { kind: \"dismissed\"; at?: undefined | string } | { kind: \"expired\"; reason?: undefined | string; at?: undefined | string } }; raw?: undefined | { source: string; payload: unknown } } | { type: \"source\"; source: { id?: undefined | string; url?: undefined | string; title?: undefined | string; snippet?: undefined | string; index?: undefined | number }; raw?: undefined | { source: string; payload: unknown } } | { type: \"file\"; attachment: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }; raw?: undefined | { source: string; payload: unknown } })[]; actions?: undefined | (\"copy\" | \"like\" | \"dislike\" | \"regenerate\" | \"edit\" | { id: string; label: string; icon?: undefined | string; tooltip?: undefined | string })[]; avatar?: undefined | { src?: undefined | string; fallback?: undefined | string; alt?: undefined | string }; feedback?: undefined | \"like\" | \"dislike\" }[]"
-      },
-      {
-        "name": "value",
-        "type": "undefined | string",
-        "optional": true,
-        "scalar": true,
-        "description": "",
-        "displayType": "undefined | string"
-      },
-      {
-        "name": "placeholder",
-        "type": "undefined | string",
-        "optional": true,
-        "scalar": true,
-        "description": "",
-        "default": "'Send a message...'",
-        "displayType": "undefined | string"
-      },
-      {
-        "name": "loading",
+        "name": "startCollapsed",
         "type": "undefined | false | true",
         "optional": true,
         "scalar": true,
-        "description": "",
-        "default": "false",
+        "description": "Controlled collapsed state of the start aside. Set this as a JS property (`el.startCollapsed = true`) to drive the aside from your app, updating it in response to the `kai-aside-toggle` event. Omit for uncontrolled (the element manages it).",
         "displayType": "undefined | false | true"
       },
       {
-        "name": "suggestions",
-        "type": "undefined | string[]",
-        "optional": true,
-        "scalar": false,
-        "description": "",
-        "displayType": "undefined | string[]"
-      },
-      {
-        "name": "suggestionMode",
-        "type": "undefined | \"submit\" | \"fill\"",
-        "optional": true,
-        "scalar": true,
-        "description": "",
-        "default": "'submit'",
-        "displayType": "undefined | \"submit\" | \"fill\""
-      },
-      {
-        "name": "proseSize",
-        "type": "undefined | \"xs\" | \"sm\" | \"base\" | \"lg\"",
-        "optional": true,
-        "scalar": true,
-        "description": "",
-        "default": "'sm'",
-        "displayType": "undefined | \"xs\" | \"sm\" | \"base\" | \"lg\""
-      },
-      {
-        "name": "codeTheme",
-        "type": "undefined | string",
-        "optional": true,
-        "scalar": true,
-        "description": "",
-        "default": "'github-dark-dimmed'",
-        "displayType": "undefined | string"
-      },
-      {
-        "name": "codeHighlight",
+        "name": "defaultStartCollapsed",
         "type": "undefined | false | true",
         "optional": true,
         "scalar": true,
-        "description": "",
-        "default": "true",
+        "description": "Initial collapsed state of the start aside when uncontrolled (default false). Use the `default-start-collapsed` attribute to start collapsed in plain HTML.",
         "displayType": "undefined | false | true"
       },
       {
-        "name": "chatTitle",
-        "type": "undefined | string",
-        "optional": true,
-        "scalar": true,
-        "description": "",
-        "displayType": "undefined | string"
-      },
-      {
-        "name": "models",
-        "type": "undefined | { id: string; name: string; provider?: undefined | string; description?: undefined | string; group?: undefined | string }[]",
-        "optional": true,
-        "scalar": false,
-        "description": "",
-        "typeName": "ModelOption[]",
-        "typeShape": "{ id: string; name: string; provider?: undefined | string; description?: undefined | string; group?: undefined | string }[]",
-        "typeImport": "ModelOption",
-        "displayType": "undefined | { id: string; name: string; provider?: undefined | string; description?: undefined | string; group?: undefined | string }[]"
-      },
-      {
-        "name": "currentModel",
-        "type": "undefined | string",
-        "optional": true,
-        "scalar": true,
-        "description": "",
-        "displayType": "undefined | string"
-      },
-      {
-        "name": "context",
-        "type": "undefined | { usedTokens: number; maxTokens: number; inputTokens?: undefined | number; outputTokens?: undefined | number; estimatedCost?: undefined | number }",
-        "optional": true,
-        "scalar": false,
-        "description": "",
-        "typeName": "ChatThreadContextUsage",
-        "typeShape": "{ usedTokens: number; maxTokens: number; inputTokens?: undefined | number; outputTokens?: undefined | number; estimatedCost?: undefined | number }",
-        "typeImport": "ChatThreadContextUsage",
-        "displayType": "ContextData | undefined"
-      },
-      {
-        "name": "scrollButton",
+        "name": "endCollapsed",
         "type": "undefined | false | true",
         "optional": true,
         "scalar": true,
-        "description": "",
-        "default": "true",
+        "description": "Controlled collapsed state of the end aside. Set this as a JS property (`el.endCollapsed = true`) to drive the aside from your app, updating it in response to the `kai-aside-toggle` event. Omit for uncontrolled (the element manages it).",
         "displayType": "undefined | false | true"
       },
       {
-        "name": "search",
+        "name": "defaultEndCollapsed",
         "type": "undefined | false | true",
         "optional": true,
         "scalar": true,
-        "description": "",
-        "default": "false",
-        "displayType": "undefined | false | true"
-      },
-      {
-        "name": "voice",
-        "type": "undefined | false | true",
-        "optional": true,
-        "scalar": true,
-        "description": "",
-        "default": "false",
-        "displayType": "undefined | false | true"
-      },
-      {
-        "name": "triggers",
-        "type": "undefined | { char: string; kind: string; items?: undefined | { id: string; label: string; icon?: undefined | string; description?: undefined | string; group?: undefined | string; kind?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[] }[]",
-        "optional": true,
-        "scalar": false,
-        "description": "Rich entity triggers (`/` skills, `@` agents/plugins) forwarded to the input.",
-        "typeName": "TriggerDef[]",
-        "typeShape": "{ char: string; kind: string; items?: undefined | { id: string; label: string; icon?: undefined | string; description?: undefined | string; group?: undefined | string; kind?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[] }[]",
-        "typeImport": "TriggerDef",
-        "displayType": "undefined | { char: string; kind: string; items?: undefined | { id: string; label: string; icon?: undefined | string; description?: undefined | string; group?: undefined | string; kind?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[] }[]"
-      },
-      {
-        "name": "kindIcons",
-        "type": "undefined | Record<string, string>",
-        "optional": true,
-        "scalar": false,
-        "description": "Default icon per entity kind (kind → image src) forwarded to the input.",
-        "displayType": "undefined | Record<string, string>"
-      },
-      {
-        "name": "sidebarWidth",
-        "type": "undefined | number",
-        "optional": true,
-        "scalar": true,
-        "description": "Sidebar default width as a percent of the workspace (default 26).",
-        "default": "26",
-        "displayType": "undefined | number"
-      },
-      {
-        "name": "sidebarMinWidth",
-        "type": "undefined | number",
-        "optional": true,
-        "scalar": true,
-        "description": "Sidebar min width in px (default 240).",
-        "default": "240",
-        "displayType": "undefined | number"
-      },
-      {
-        "name": "sidebarMaxWidth",
-        "type": "undefined | number",
-        "optional": true,
-        "scalar": true,
-        "description": "Sidebar max width in px (default 420).",
-        "default": "420",
-        "displayType": "undefined | number"
-      },
-      {
-        "name": "sidebarCollapsed",
-        "type": "undefined | false | true",
-        "optional": true,
-        "scalar": true,
-        "description": "Controlled collapsed state. Set this as a JS property (`el.sidebarCollapsed = true`) to drive the sidebar from your app, updating it in response to the `kai-sidebar-toggle` event. Omit for uncontrolled (the element manages it).",
-        "displayType": "undefined | false | true"
-      },
-      {
-        "name": "defaultSidebarCollapsed",
-        "type": "undefined | false | true",
-        "optional": true,
-        "scalar": true,
-        "description": "Initial collapsed state when uncontrolled (default false). Use the `default-sidebar-collapsed` attribute to start collapsed in plain HTML.",
+        "description": "Initial collapsed state of the end aside when uncontrolled (default false). Use the `default-end-collapsed` attribute to start collapsed in plain HTML.",
         "displayType": "undefined | false | true"
       },
       {
@@ -9308,7 +9209,15 @@
         "type": "undefined | number",
         "optional": true,
         "scalar": true,
-        "description": "Auto-collapse the rail when the workspace's own width drops below this many px, and re-expand when it grows back above. Uncontrolled only (it never fights an app-driven `sidebarCollapsed`); omit to disable. Fires `kai-sidebar-toggle`. Attribute: `collapse-below`.",
+        "description": "Auto-collapse both asides when the shell's own width drops below this many px, and re-expand when it grows back above. Applies to uncontrolled asides only (it never fights an app-driven collapsed prop); omit to disable. Fires `kai-aside-toggle`. Attribute: `collapse-below`.",
+        "displayType": "undefined | number"
+      },
+      {
+        "name": "drawerBelow",
+        "type": "undefined | number",
+        "optional": true,
+        "scalar": true,
+        "description": "Below this shell width in px, an expanded aside renders as an overlay drawer over the main region instead of a column beside it. Escape inside the drawer closes it and returns focus to the element focused before it opened. Omit to disable. Attribute: `drawer-below`.",
         "displayType": "undefined | number"
       },
       {
@@ -9316,200 +9225,114 @@
         "type": "undefined | false | true",
         "optional": true,
         "scalar": true,
-        "description": "Render Recents as dense single-line rows (a leading dot + title, no count).",
+        "description": "Density hint. Reflected as a `data-compact` hook on the root (and as the `compact` attribute on the element) for your CSS and slotted content; the shell itself keeps no other opinion about density.",
         "displayType": "undefined | false | true"
-      },
-      {
-        "name": "noConversations",
-        "type": "undefined | false | true",
-        "optional": true,
-        "scalar": true,
-        "description": "Suppress the built-in ConversationList so the `sidebar-header` slot owns the whole rail flex region (for apps that supply their own rail nav). Default false. Attribute: `no-conversations`.",
-        "displayType": "undefined | false | true"
-      },
-      {
-        "name": "cardTypes",
-        "type": "undefined | Record<string, string>",
-        "optional": true,
-        "scalar": false,
-        "description": "Optional card type -> custom-element tag overrides/additions for `card` parts (merged over the built-ins). Property: `el.cardTypes`. Typed as a plain string map (not the `CardTagMap` alias) so the generated React wrapper inlines it instead of emitting an unresolved named type.",
-        "displayType": "undefined | Record<string, string>"
-      },
-      {
-        "name": "cardSchemas",
-        "type": "undefined | Record<string, object>",
-        "optional": true,
-        "scalar": false,
-        "description": "JSON Schemas for the card types this app renders, keyed by envelope type. The companion of `cardTypes`, which says what DRAWS a card while this says what a VALID one looks like. An OBJECT, so it is a JS property only: `el.cardSchemas = { 'pricing-table': pricingSchema }`, never an attribute. `createCardRegistry(...).validationSchemas` is exactly this shape. Without it the kit validates its own seven built-ins and leaves your own card type, the one your app actually cares about, as the only unchecked thing on screen. A schema here WINS over a built-in of the same name. Typed `Record<string, object>` rather than `Record<string, JsonSchema>` deliberately: an imported `.json` schema widens `\"type\"` to `string`, and an authored one carries `$schema`/`title`/`description`/`additionalProperties`, so the tighter type would reject both of the normal ways to supply one.",
-        "displayType": "undefined | Record<string, object>"
       }
     ],
     "events": [
       {
-        "name": "kai-conversation-select",
-        "detail": "{ id: string }",
-        "description": "A conversation was selected in the sidebar.",
-        "displayDetail": "{ id: string }"
+        "name": "kai-aside-resize",
+        "detail": "{ side: \"start\" | \"end\"; width: number }",
+        "description": "The aside was resized (fires per drag step, keyboard nudge, or a handle double-click reset), width in px.",
+        "displayDetail": "{ side: \"start\" | \"end\"; width: number }"
       },
       {
-        "name": "kai-message-action",
-        "detail": "{ messageId: string; action: string; state?: undefined | \"on\" | \"off\" }",
-        "description": "An action button on a message was clicked. `state` is present only for the toggleable feedback votes: `'on'` when a like/dislike is set, `'off'` when re-tapped to clear.",
-        "displayDetail": "{ messageId: string; action: string; state?: undefined | \"on\" | \"off\" }"
-      },
-      {
-        "name": "kai-model-change",
-        "detail": "{ modelId: string }",
-        "description": "The header model switcher changed.",
-        "displayDetail": "{ modelId: string }"
-      },
-      {
-        "name": "kai-new-chat",
-        "detail": "Record<string, never>",
-        "description": "The \"New chat\" button was clicked.",
-        "displayDetail": "Record<string, never>"
-      },
-      {
-        "name": "kai-search",
-        "detail": "Record<string, never>",
-        "description": "The Search button was clicked.",
-        "displayDetail": "Record<string, never>"
-      },
-      {
-        "name": "kai-sidebar-toggle",
-        "detail": "{ collapsed: false | true }",
-        "description": "The sidebar was collapsed or expanded.",
-        "displayDetail": "{ collapsed: false | true }"
-      },
-      {
-        "name": "kai-submit",
-        "detail": "{ value: string; attachments: { id: string; type: \"file\" | \"source-document\"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[] }",
-        "description": "User submitted a message.",
-        "displayDetail": "{ value: string; attachments: AttachmentData[] }"
-      },
-      {
-        "name": "kai-suggestion-click",
-        "detail": "{ value: string }",
-        "description": "A suggestion chip was clicked (only in `suggestion-mode=\"fill\"`).",
-        "displayDetail": "{ value: string }"
-      },
-      {
-        "name": "kai-value-change",
-        "detail": "{ value: string }",
-        "description": "Fired on every input change.",
-        "displayDetail": "{ value: string }"
-      },
-      {
-        "name": "kai-voice",
-        "detail": "Record<string, never>",
-        "description": "The Mic / voice button was clicked.",
-        "displayDetail": "Record<string, never>"
+        "name": "kai-aside-toggle",
+        "detail": "{ side: \"start\" | \"end\"; collapsed: false | true }",
+        "description": "An aside collapsed or expanded (a method, the breakpoint, the drawer's Escape).",
+        "displayDetail": "{ side: \"start\" | \"end\"; collapsed: false | true }"
       }
     ],
     "methods": [
       {
-        "name": "toggleSidebar",
-        "params": "",
+        "name": "toggleAside",
+        "params": "side: WorkspaceAsideSide",
         "returns": "void",
-        "description": "Collapse/expand the conversation sidebar and fire `kai-sidebar-toggle`."
+        "description": "Collapse/expand one aside (fires `kai-aside-toggle`)."
       },
       {
-        "name": "collapseSidebar",
-        "params": "",
+        "name": "collapseAside",
+        "params": "side: WorkspaceAsideSide",
         "returns": "void",
-        "description": "Force the conversation sidebar collapsed (fires `kai-sidebar-toggle`)."
+        "description": "Force one aside collapsed (fires `kai-aside-toggle`)."
       },
       {
-        "name": "expandSidebar",
-        "params": "",
+        "name": "expandAside",
+        "params": "side: WorkspaceAsideSide",
         "returns": "void",
-        "description": "Force the conversation sidebar expanded (fires `kai-sidebar-toggle`)."
-      },
-      {
-        "name": "focus",
-        "params": "options?: FocusOptions",
-        "returns": "void",
-        "description": "Focus the thread's composer."
-      },
-      {
-        "name": "clear",
-        "params": "",
-        "returns": "void",
-        "description": "Clear the thread draft + staged attachments."
-      },
-      {
-        "name": "send",
-        "params": "",
-        "returns": "void",
-        "description": "Submit the current thread draft programmatically (fires `kai-submit`)."
-      },
-      {
-        "name": "scrollToBottom",
-        "params": "behavior?: ScrollBehavior",
-        "returns": "void",
-        "description": "Scroll the thread to the newest message."
+        "description": "Force one aside expanded (fires `kai-aside-toggle`)."
       }
     ],
     "composedFrom": [
       {
-        "name": "ChatThread",
+        "name": "WorkspaceShell",
         "group": "Components",
-        "storyId": "solid-advanced-elements-chatthread--docs"
-      },
-      {
-        "name": "ConversationList",
-        "group": "Components",
-        "storyId": "solid-advanced-elements-conversationlist--docs"
-      },
-      {
-        "name": "CollapsedRail",
-        "group": "Components",
-        "storyId": "solid-advanced-elements-collapsedrail--docs"
-      },
-      {
-        "name": "ResizablePanelGroup",
-        "group": "UI",
-        "storyId": "solid-advanced-primitives-resizablepanelgroup--docs"
-      },
-      {
-        "name": "ResizablePanel",
-        "group": "UI",
-        "storyId": "solid-advanced-primitives-resizablepanel--docs"
-      },
-      {
-        "name": "ResizableHandle",
-        "group": "UI",
-        "storyId": "solid-advanced-primitives-resizablehandle--docs"
+        "storyId": "solid-advanced-elements-workspaceshell--docs"
       }
     ],
     "tokens": [],
     "slots": [
       {
-        "name": "sidebar-header",
+        "name": "",
         "mode": "inject",
-        "doc": "Top of the conversation rail (brand, a kai-tabs strip)."
+        "doc": "The main region content (same region as the `main` slot): your `<kai-chat>`, or any app view."
       },
       {
-        "name": "sidebar-footer",
+        "name": "header",
         "mode": "inject",
-        "doc": "Bottom of the rail: an upgrade card, a Design trigger, a user-menu cluster."
+        "part": true,
+        "doc": "The top band across the full shell width (app bar, tabs, breadcrumbs)."
       },
       {
-        "name": "main-header",
+        "name": "start",
         "mode": "inject",
-        "doc": "Top of the main region (a top-placed banner or a corner action)."
+        "part": true,
+        "doc": "The inline-start aside column (a conversation rail, a nav, a file tree). Resizable and collapsible."
       },
       {
         "name": "main",
-        "mode": "replace",
-        "doc": "Replace the built-in chat thread with your own main view (a home or dashboard screen). Omit to keep the thread."
+        "mode": "inject",
+        "part": true,
+        "doc": "The main region. Unnamed children project here too, via the default slot."
+      },
+      {
+        "name": "end",
+        "mode": "inject",
+        "part": true,
+        "doc": "The inline-end aside column (inspector, notes, preview). Resizable and collapsible."
+      },
+      {
+        "name": "footer",
+        "mode": "inject",
+        "part": true,
+        "doc": "The bottom band across the full shell width (status bar, disclaimers)."
       }
     ],
     "parts": [
       {
-        "name": "sidebar",
-        "doc": "The conversation rail. Carries a subtle, theme-aware default background (bg-surface); override its background, border, or width from outside. `sidebar-min-width` sets its min px width and `collapse-below` auto-collapses it under a width.",
-        "recipe": "kai-workspace::part(sidebar) { background: var(--color-card); border-right: 1px solid var(--color-border) }"
+        "name": "aside",
+        "doc": "Both aside columns match this part (each also matches its own start/end part). Restyle the shared aside surface or border from outside; the --kai-workspace-start-* and --kai-workspace-end-* custom properties set the widths.",
+        "recipe": "kai-workspace::part(aside) { background: var(--color-card) }"
+      },
+      {
+        "name": "header",
+        "doc": "The top band across the full shell width (app bar, tabs, breadcrumbs)."
+      },
+      {
+        "name": "start",
+        "doc": "The inline-start aside column (a conversation rail, a nav, a file tree). Resizable and collapsible."
+      },
+      {
+        "name": "main",
+        "doc": "The main region. Unnamed children project here too, via the default slot."
+      },
+      {
+        "name": "end",
+        "doc": "The inline-end aside column (inspector, notes, preview). Resizable and collapsible."
+      },
+      {
+        "name": "footer",
+        "doc": "The bottom band across the full shell width (status bar, disclaimers)."
       }
     ]
   }

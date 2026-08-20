@@ -2,12 +2,12 @@ import type { Meta, StoryObj } from 'storybook-solidjs-vite';
 import { onMount } from 'solid-js';
 import './register'; // registers kai-workspace, kai-nav, kai-notice, kai-prompt-input, kai-suggestions, kai-card
 import type { KaiNavItem } from '../ui/nav';
-import type { ConversationSummary } from '../types';
 
-// Labs: the home/dashboard assembly. The `main` slot replaces the built-in chat
-// thread with a consumer-owned view, so the SAME kai-workspace shell hosts a
-// non-thread Home screen. Nav fills sidebar-header, an upgrade card fills
-// sidebar-footer, and the greeting + notice + composer + ideas fill `main`.
+// Labs: the home/dashboard assembly on the re-cast shell. The workspace is a
+// chat-agnostic layout element now: the consumer composes the rail themselves
+// in the `start` slot (nav + upgrade card), and the Home screen is plain
+// default-slot content in the main region. Nothing here is a workspace prop;
+// every piece is the consumer's own markup.
 
 const meta = { title: 'Labs/Workspace Home', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
@@ -21,11 +21,6 @@ const NAV: KaiNavItem[] = [
   { id: 'artifacts', label: 'Artifacts', icon: 'sparkles' },
   { id: 'customize', label: 'Customize', icon: 'settings' },
 ];
-const RECENTS: ConversationSummary[] = [
-  { id: 'c1', title: 'Dark-mode token audit', scope: { type: 'document' }, messageCount: 4, lastMessageAt: '2026-06-26T10:00:00Z', updatedAt: '2026-06-26T10:00:00Z' },
-  { id: 'c2', title: 'Markdown file conversion', scope: { type: 'document' }, messageCount: 2, lastMessageAt: '2026-06-25T10:00:00Z', updatedAt: '2026-06-25T10:00:00Z' },
-  { id: 'c3', title: 'How compound interest works', scope: { type: 'document' }, messageCount: 6, lastMessageAt: '2026-06-24T10:00:00Z', updatedAt: '2026-06-24T10:00:00Z' },
-];
 const IDEAS = [
   { label: 'Send me a daily briefing', icon: 'sparkles', value: 'brief' },
   { label: 'Organize my inbox', icon: 'folder', value: 'inbox' },
@@ -34,9 +29,8 @@ const IDEAS = [
 
 export const Home: Story = {
   render: () => {
-    let ws!: El, nav!: El, sugg!: El, notice!: El, input!: El, card!: El;
+    let nav!: El, sugg!: El, notice!: El, input!: El, card!: El;
     onMount(() => {
-      ws.conversations = RECENTS;
       nav.items = NAV;
       nav.defaultValue = 'new';
       sugg.suggestions = IDEAS;
@@ -46,16 +40,18 @@ export const Home: Story = {
     });
     return (
       <div style={{ height: '680px', width: '100%' }}>
-        <kai-workspace ref={ws}>
-          <div slot="sidebar-header" style={{ padding: '0.75rem 0.5rem 0.25rem' }}>
-            <kai-nav ref={nav}></kai-nav>
+        <kai-workspace collapse-below="720">
+          {/* start: the consumer-owned rail column (nav on top, upgrade card pinned below). */}
+          <div slot="start" style={{ display: 'flex', 'flex-direction': 'column', height: '100%' }}>
+            <div style={{ padding: '0.75rem 0.5rem 0.25rem', flex: '1', 'min-height': '0' }}>
+              <kai-nav ref={nav}></kai-nav>
+            </div>
+            <kai-card ref={card} clickable style={{ display: 'block', margin: '0.75rem' }}>
+              <h3 slot="header">Upgrade to Pro</h3>
+              Unlock higher limits and Fable 5.
+            </kai-card>
           </div>
-          <kai-card slot="sidebar-footer" ref={card} clickable style={{ display: 'block', margin: '0.75rem' }}>
-            <h3 slot="header">Upgrade to Pro</h3>
-            Unlock higher limits and Fable 5.
-          </kai-card>
           <div
-            slot="main"
             style={{
               display: 'flex',
               'flex-direction': 'column',
@@ -81,20 +77,18 @@ export const Home: Story = {
     docs: {
       source: {
         language: 'html',
-        code: `<kai-workspace>
-  <!-- sidebar-header: the nav rail -->
-  <div slot="sidebar-header">
+        code: `<kai-workspace collapse-below="720">
+  <!-- start: the rail column is YOURS (nav, card, whatever your app needs) -->
+  <div slot="start">
     <kai-nav></kai-nav>
+    <kai-card clickable>
+      <h3 slot="header">Upgrade to Pro</h3>
+      Unlock higher limits and Fable 5.
+    </kai-card>
   </div>
 
-  <!-- sidebar-footer: an upgrade card -->
-  <kai-card slot="sidebar-footer" clickable>
-    <h3 slot="header">Upgrade to Pro</h3>
-    Unlock higher limits and Fable 5.
-  </kai-card>
-
-  <!-- main: replaces the built-in chat thread with a Home screen -->
-  <div slot="main">
+  <!-- main: unnamed children land in the main region -->
+  <div>
     <h1>Good evening, John</h1>
     <kai-notice severity="neutral">Claude Fable 5 is currently unavailable.</kai-notice>
     <kai-prompt-input placeholder="How can I help you today?"></kai-prompt-input>
@@ -104,8 +98,6 @@ export const Home: Story = {
 
 <script type="module">
   // Array/object props are set as JS properties, never attributes.
-  document.querySelector('kai-workspace').conversations = [/* ConversationSummary[] */];
-
   const nav = document.querySelector('kai-nav');
   nav.items = [/* KaiNavItem[] */];
   nav.defaultValue = 'new';

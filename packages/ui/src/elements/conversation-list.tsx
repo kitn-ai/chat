@@ -1,9 +1,12 @@
-import { createSignal, onMount, onCleanup, Show } from 'solid-js';
+import { createSignal, createEffect, onMount, onCleanup, Show } from 'solid-js';
 import { defineWebComponent } from './define';
 import { createControllableSignal } from '../primitives/controllable';
 import { readSlots, CONVERSATIONS_SLOTS } from './slots';
-import { ConversationList, CollapsedRail, type ConversationListController } from '../components/conversation-list';
-import type { ConversationGroup, ConversationSummary, ConversationScope } from '../types';
+import {
+  ConversationList, CollapsedRail, createConversationItemsController,
+  type ConversationListController,
+} from '../components/conversation-list';
+import type { ConversationGroup, ConversationSummary } from '../types';
 
 interface Props extends Record<string, unknown> {
   /** The list's section headers (`{ id, name, sortOrder, createdAt }`), rendered
@@ -16,7 +19,11 @@ interface Props extends Record<string, unknown> {
    *  matching no entry in `groups`, falls into a trailing "Ungrouped" section, so
    *  nothing you pass in is ever dropped. There is no recency bucketing. Set as a
    *  JS property. Omit to supply them as `<kai-conversation>` light-DOM children
-   *  instead, or for the empty state. */
+   *  instead, or for the empty state. A search query that matches nothing shows a
+   *  visible "No conversations match your search" state, distinct from the
+   *  zero-conversations empty state. Slotted `<kai-conversation-item>` children
+   *  switch the list into item mode instead: your own rows win and this array is
+   *  not rendered. */
   conversations?: ConversationSummary[];
   /** The id of the currently-open conversation, highlighted in the list. */
   activeId?: string;
@@ -31,7 +38,9 @@ interface Props extends Record<string, unknown> {
 }
 
 interface Events {
-  /** A conversation was selected. */
+  /** A conversation was selected. The selection event in BOTH modes: a
+   *  batteries data row, or an activated `<kai-conversation-item>` child
+   *  (click, Enter or Space). */
   'kai-conversation-select': { id: string };
   /** The "New chat" button was clicked. */
   'kai-new-chat': Record<string, never>;
@@ -50,19 +59,19 @@ interface Events {
  *   - `id`       → ConversationSummary.id
  *   - `group-id` → ConversationSummary.groupId (optional)
  *   - textContent → ConversationSummary.title
- *  Required fields not expressible as HTML attributes (`scope`, `messageCount`,
- *  `lastMessageAt`, `updatedAt`) receive safe defaults so the rendered list item
- *  is fully functional with just `id` + title text.
+ *  Fields not expressible as HTML attributes are NOT fabricated (F-10): the
+ *  optional `scope` and `lastMessageAt` stay absent, and the required
+ *  `messageCount`/`updatedAt` get honest defaults — zero messages, and an empty
+ *  `updatedAt` from which no trailing relative time is derived (the epoch it
+ *  used to fabricate rendered a bogus "many days ago" on every declarative row).
  */
 export function parseKaiConversationElement(n: Element): ConversationSummary {
   return {
     id: n.getAttribute('id') ?? '',
     title: n.textContent?.trim() ?? '',
     groupId: n.getAttribute('group-id') ?? undefined,
-    scope: { type: 'collection' } as ConversationScope,
     messageCount: 0,
-    lastMessageAt: new Date(0).toISOString(),
-    updatedAt: new Date(0).toISOString(),
+    updatedAt: '',
   };
 }
 
@@ -76,12 +85,22 @@ defineWebComponent<Props, Events>('kai-conversations', {
   // Read declarative <kai-conversation> children from light DOM.
   // Shadow DOM with no <slot> suppresses them visually — they're invisible data carriers.
   const [slottedConversations, setSlottedConversations] = createSignal<ConversationSummary[]>([]);
+  // Item mode (spec 2026-08-20 § 2a): light-DOM <kai-conversation-item> children
+  // mean the CONSUMER owns the loop — the container skips its data rendering and
+  // runs the parent-item contract over the hosts instead.
+  const [itemHosts, setItemHosts] = createSignal<HTMLElement[]>([]);
   // Which composition slots (header/empty/footer) the consumer has filled.
   const [slots, setSlots] = createSignal<Record<string, boolean>>({});
   onMount(() => {
     const read = () => {
       const nodes = [...element.querySelectorAll('kai-conversation')];
       setSlottedConversations(nodes.map(parseKaiConversationElement));
+      // Reference-stable: a fresh array every observer tick would re-run the
+      // sync effect (whose writes the observer sees) in a feedback loop.
+      const hosts = [...element.querySelectorAll<HTMLElement>(':scope > kai-conversation-item')];
+      setItemHosts((prev) =>
+        prev.length === hosts.length && hosts.every((h, i) => h === prev[i]) ? prev : hosts,
+      );
       setSlots(readSlots(element, CONVERSATIONS_SLOTS));
     };
     read();
@@ -90,8 +109,25 @@ defineWebComponent<Props, Events>('kai-conversations', {
     onCleanup(() => observer.disconnect());
   });
 
+  const itemMode = () => itemHosts().length > 0;
+
   // Prop conversations take precedence; slotted children are appended after.
   const allConversations = () => [...(props.conversations ?? []), ...slottedConversations()];
+
+  // The parent-item contract: selection flowing container→item, roving tabindex,
+  // ARIA listbox/option — pure DOM, host-agnostic (see the controller's JSDoc in
+  // components/conversation-list.tsx). Solid context cannot cross the element
+  // boundary, so the channel is DOM traversal by construction.
+  const itemsController = createConversationItemsController({
+    getItems: itemHosts,
+    getActiveId: () => props.activeId as string | undefined,
+    onSelect: (id) => dispatch('kai-conversation-select', { id }),
+  });
+  // Re-derive the bookkeeping whenever the children change (the MutationObserver
+  // and the shadow slot's slotchange both funnel into itemHosts) or activeId moves.
+  createEffect(() => {
+    if (itemMode()) itemsController.sync();
+  });
 
   // ── Rail collapse (controlled/uncontrolled, same pattern as kai-workspace) ──
   // `collapsed` (when set) wins; otherwise the element manages its own state,
@@ -145,6 +181,9 @@ defineWebComponent<Props, Events>('kai-conversations', {
         onToggleSidebar={() => { dispatch('kai-toggle-sidebar'); setCollapsedTo(true); }}
         onSearchChange={(query) => dispatch('kai-search', { query })}
         controllerRef={(c) => (controller = c)}
+        items={itemMode() ? <slot /> : undefined}
+        itemsKeyDown={itemsController.handleKeyDown}
+        itemsClick={itemsController.handleClick}
         header={slots().header ? <slot name="header" /> : undefined}
         footer={slots().footer ? <slot name="footer" /> : undefined}
         empty={slots().empty ? <slot name="empty" /> : undefined}

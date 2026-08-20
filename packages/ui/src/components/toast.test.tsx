@@ -308,6 +308,53 @@ describe('ToastRegion — target anchoring honors position', () => {
   });
 });
 
+describe('ToastRegion — the --kai-toast-z layer token (F-20)', () => {
+  // jsdom resolves no var(), so the assertion is structural: the region's
+  // z-index DECLARATION must be the token with the current default (100) as its
+  // fallback. Setting --kai-toast-z on the host then changes the effective
+  // z-index in a real browser; unset falls back to 100. Red against the old
+  // hardcoded `z-[100]` class: the inline declaration was empty.
+  const TOKEN = 'var(--kai-toast-z, 100)';
+
+  it('expanded region carries z-index: var(--kai-toast-z, 100)', () => {
+    const { getByRole } = render(() => <ToastRegion toasts={[base({ duration: 0 })]} />);
+    expect(getByRole('region').style.zIndex).toBe(TOKEN);
+  });
+
+  it('collapsed region carries the same token', () => {
+    const { getByRole } = render(() => (
+      <ToastRegion toasts={[base({ duration: 0 })]} stack="collapsed" />
+    ));
+    expect(getByRole('region').style.zIndex).toBe(TOKEN);
+  });
+
+  it('an anchored region keeps the token alongside its position styles', async () => {
+    // The anchor branch wires a ResizeObserver; stub it like the anchoring suite.
+    const RealRO = (globalThis as unknown as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver;
+    (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    };
+    const target = document.createElement('div');
+    target.getBoundingClientRect = () =>
+      ({ top: 100, left: 200, right: 600, bottom: 400, width: 400, height: 300, x: 200, y: 100, toJSON() {} }) as DOMRect;
+    document.body.appendChild(target);
+    try {
+      const { getByRole } = render(() => (
+        <ToastRegion toasts={[base({ duration: 0, target })]} target={target} />
+      ));
+      const region = getByRole('region');
+      expect(region.style.zIndex).toBe(TOKEN);
+      // the anchor positioning still landed (the merge did not clobber it)
+      await waitFor(() => expect(region.style.top).not.toBe(''));
+    } finally {
+      target.remove();
+      (globalThis as unknown as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver = RealRO;
+    }
+  });
+});
+
 describe('ToastRegion — collapsed stacking', () => {
   const items = (n: number) =>
     Array.from({ length: n }, (_, i) => base({ id: `s${i}`, message: `S${i}`, duration: 0 }));

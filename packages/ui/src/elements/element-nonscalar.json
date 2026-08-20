@@ -166,17 +166,5 @@
   ],
   "kai-voice-output": [
     "synthesize"
-  ],
-  "kai-workspace": [
-    "cardSchemas",
-    "cardTypes",
-    "context",
-    "conversations",
-    "groups",
-    "kindIcons",
-    "messages",
-    "models",
-    "suggestions",
-    "triggers"
   ]
 }

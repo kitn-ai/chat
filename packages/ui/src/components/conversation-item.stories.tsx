@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
 import { fn } from 'storybook/test';
-import { ConversationItem } from './conversation-item';
+import { createSignal, For } from 'solid-js';
+import { ConversationItem, SlottedConversationItem } from './conversation-item';
 import { componentDescription } from '../stories/docs/element-controls';
 
 const baseConversation = {
@@ -133,4 +134,77 @@ export const MultipleItems: Story = {
   <ConversationItem conversation={c2} isActive={false} onSelect={onSelect} />
   <ConversationItem conversation={c3} isActive={false} onSelect={onSelect} />
 </div>`),
+};
+
+// ── The slotted-item shape (spec 2026-08-20 § 2a) ───────────────────────────
+// Rendered by <kai-conversation-item>: regions, not a ConversationSummary. This
+// story is the human-inspectable companion of the two real-Chromium probes
+// (scripts/probe-conversation-item-focus-order.mjs and -slotchange.mjs), which
+// drive the element pair directly.
+
+const slottedRows = [
+  { id: 'c1', title: 'Quarterly report', meta: '2h ago' },
+  { id: 'c2', title: 'Support triage', meta: 'yesterday' },
+  { id: 'c3', title: 'Roadmap draft', meta: '3d ago' },
+];
+
+/** The consumer-owned loop: your records, your rows, your menu. */
+export const SlottedRows: StoryObj = {
+  render: () => {
+    const [active, setActive] = createSignal('c2');
+    return (
+      <div role="listbox" aria-label="Conversations" class="w-72">
+        <For each={slottedRows}>
+          {(row) => (
+            <div onClick={() => setActive(row.id)}>
+              <SlottedConversationItem
+                conversationId={row.id}
+                active={active() === row.id}
+                meta={<span>{row.meta}</span>}
+                menu={<button aria-label={`Actions for ${row.title}`}>&#8942;</button>}
+              >
+                {row.title}
+              </SlottedConversationItem>
+            </div>
+          )}
+        </For>
+      </div>
+    );
+  },
+  ...src(`<For each={threads}>
+  {(t) => (
+    <SlottedConversationItem
+      conversationId={t.id}
+      active={activeId() === t.id}
+      meta={<span>{t.lastReplyAgo}</span>}
+      menu={<MyThreadMenu thread={t} />}
+    >
+      {t.title}
+    </SlottedConversationItem>
+  )}
+</For>`),
+};
+
+/** Leading region plus the compact density. */
+export const SlottedWithLeading: StoryObj = {
+  render: () => (
+    <div class="w-72 space-y-0.5">
+      <SlottedConversationItem
+        conversationId="c1"
+        leading={<span aria-hidden="true">#</span>}
+        meta={<span>12 messages</span>}
+      >
+        Channel-style row
+      </SlottedConversationItem>
+      <SlottedConversationItem conversationId="c2" active compact>
+        Compact active row
+      </SlottedConversationItem>
+    </div>
+  ),
+  ...src(`<SlottedConversationItem conversationId="c1" leading={<Hash />} meta={<span>12 messages</span>}>
+  Channel-style row
+</SlottedConversationItem>
+<SlottedConversationItem conversationId="c2" active compact>
+  Compact active row
+</SlottedConversationItem>`),
 };

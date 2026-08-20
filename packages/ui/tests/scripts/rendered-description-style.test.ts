@@ -101,7 +101,7 @@ describe('no rendered description uses an em dash (apps/docs/STYLE.md)', () => {
  * shared text is, both come from the model. `theme` is injected into all 80
  * elements by `define.tsx`; `show`/`hide`/`defaultOpen` are the shared disclosure
  * vocabulary; `cardTypes`/`cardSchemas` are the card-rendering pair that
- * `<kai-chat>`, `<kai-message>`, `<kai-thread>` and `<kai-workspace>` all take.
+ * `<kai-chat>`, `<kai-message>` and `<kai-thread>` all take.
  *
  * A name only belongs here when the members really are one concept. Most repeated
  * names are NOT: `value`, `disabled` and `select` mean different things per
@@ -110,11 +110,15 @@ describe('no rendered description uses an em dash (apps/docs/STYLE.md)', () => {
 const MIRRORED: { kind: 'props' | 'events' | 'methods'; name: string; minElements: number }[] = [
   { kind: 'props', name: 'theme', minElements: 50 },
   { kind: 'props', name: 'defaultOpen', minElements: 8 },
-  { kind: 'props', name: 'cardTypes', minElements: 4 },
-  { kind: 'props', name: 'cardSchemas', minElements: 4 },
+  // Floor 3, was 4: the 2026-08-20 workspace re-cast dissolved kai-workspace's
+  // chat surface, so the card pair now lives on kai-chat/kai-message/kai-thread.
+  { kind: 'props', name: 'cardTypes', minElements: 3 },
+  { kind: 'props', name: 'cardSchemas', minElements: 3 },
   { kind: 'methods', name: 'show', minElements: 8 },
   { kind: 'methods', name: 'hide', minElements: 8 },
-  { kind: 'events', name: 'kai-new-chat', minElements: 2 },
+  // `kai-new-chat` left this list with the same re-cast: kai-workspace stopped
+  // firing it, leaving kai-conversations as the ONLY declarer, and a mirror
+  // group of one is vacuous (there is nothing for the copy to drift from).
   { kind: 'events', name: 'kai-voice-error', minElements: 2 },
 ];
 

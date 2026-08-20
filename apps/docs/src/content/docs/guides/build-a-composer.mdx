@@ -117,7 +117,7 @@ effort.addEventListener('kai-select', (e) => console.log('effort:', e.detail.id)
 The effort selector is a `<kai-menu>` with `trigger-label` + a trailing chevron — not a prompt-input prop. Composing it from a menu means you own the options and the label, and `kai-prompt-input` stays a composer, not a settings panel. Same reasoning for the model switcher: it's its own element you drop into the slot.
 </Aside>
 
-The mic and voice buttons are plain `<kai-button>`s — `variant` + `icon` do the styling, and `label` is required because they're icon-only. Listen for `kai-click` to wire them up. `<kai-prompt-input>` also has built-in `voice` and `search` props if you'd rather use its own toolbar buttons; here we compose our own so they sit in the trailing cluster.
+The mic and voice buttons are plain `<kai-button>`s — `variant` + `icon` do the styling, and `label` is required because they're icon-only. Listen for `kai-click` to wire them up. `<kai-prompt-input>` also has built-in `voice` and `webSearch` props if you'd rather use its own toolbar buttons; here we compose our own so they sit in the trailing cluster.
 
 ## Suggestions and the notice — your own layout
 

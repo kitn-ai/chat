@@ -1,6 +1,7 @@
 {
   "tags": {
     "kai-conversations": "conversation-list",
+    "kai-conversation-item": "conversation-item",
     "kai-prompt-input": "prompt-input",
     "kai-chat": "chat",
     "kai-workspace": "chat-workspace",
@@ -84,6 +85,9 @@
   "files": {
     "conversation-list": [
       "kai-conversations"
+    ],
+    "conversation-item": [
+      "kai-conversation-item"
     ],
     "prompt-input": [
       "kai-prompt-input"

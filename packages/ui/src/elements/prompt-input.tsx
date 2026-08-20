@@ -27,9 +27,9 @@ interface Props extends Record<string, unknown> {
   /** What clicking a suggestion does: `'submit'` (default) sends it immediately
    *  as if typed and submitted; `'fill'` just places it in the input. */
   suggestionMode?: 'submit' | 'fill';
-  /** Show a Search (Globe) button in the left toolbar; clicking it fires a
-   *  `search` event. */
-  search?: boolean;
+  /** Show a web-search (Globe) button in the left toolbar; clicking it fires a
+   *  `kai-web-search` event. Attribute: `web-search`. */
+  webSearch?: boolean;
   /** Show a Voice (Mic) button in the left toolbar; clicking it fires a `voice`
    *  event. */
   voice?: boolean;
@@ -75,8 +75,8 @@ interface Events {
   'kai-attachments-change': { attachments: AttachmentData[] };
   /** A suggestion was clicked while `suggestion-mode="fill"`. */
   'kai-suggestion-click': { value: string };
-  /** The Search (Globe) toolbar button was clicked. */
-  'kai-search': Record<string, never>;
+  /** The web-search (Globe) toolbar button was clicked. */
+  'kai-web-search': Record<string, never>;
   /** The Voice (Mic) toolbar button was clicked. */
   'kai-voice': Record<string, never>;
   /** The Stop button was clicked while `stoppable` and `loading` are both true. */
@@ -93,7 +93,7 @@ defineWebComponent<Props, Events>('kai-prompt-input', {
   loading: false,
   suggestions: undefined,
   suggestionMode: 'submit',
-  search: false,
+  webSearch: false,
   voice: false,
   stoppable: false,
   submit: 'always',
@@ -215,7 +215,7 @@ defineWebComponent<Props, Events>('kai-prompt-input', {
       attach={flag('attach')}
       suggestions={props.suggestions}
       attachments={attachments()}
-      search={flag('search')}
+      webSearch={flag('webSearch')}
       voice={flag('voice')}
       toolbarActions={toolbarActions()}
       triggers={props.triggers}
@@ -225,7 +225,7 @@ defineWebComponent<Props, Events>('kai-prompt-input', {
       onSubmit={handleSubmit}
       onSuggestionClick={handleSuggestionClick}
       onAttachmentsChange={(a) => { setAttachments(a); dispatch('kai-attachments-change', { attachments: a }); }}
-      onSearch={() => dispatch('kai-search')}
+      onWebSearch={() => dispatch('kai-web-search')}
       onVoice={() => dispatch('kai-voice')}
       onStop={() => dispatch('kai-stop')}
       onAction={(id) => dispatch('kai-toolbar-action', { action: id })}
