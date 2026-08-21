@@ -1,0 +1,26 @@
+{
+  "name": "@kitn.ai/ui-app-builder",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Rung 4 of the iteration ladder: an AI page builder. Chat on the left, a live preview with versions on the right; each assistant reply carries a whole self-contained HTML page as a kai_artifact tool call. React + Vite. Mock responder by default, OpenRouter when a key is present.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b --pretty false"
+  },
+  "dependencies": {
+    "@kitn.ai/ui": "workspace:*",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.1.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2"
+  }
+}
