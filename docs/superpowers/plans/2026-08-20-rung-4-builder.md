@@ -77,19 +77,21 @@ for carrying a generated page in an assistant reply is itself a measurement.
 > produces a new version of the page; every version is kept as a checkpoint the user can
 > restore, and the preview shows the selected version (the latest by default). The preview
 > panel is resizable against the chat column and can be maximized. Add a device-width toggle
-> (desktop / tablet / mobile) that constrains the previewed page's width. React + TypeScript +
-> Vite. Use the `@kitn.ai/ui` package already installed in this directory — it ships web
-> components for AI chat UIs and React bindings. Its `kai` MCP server is configured for you:
-> use it to learn what the package provides and how to use it. Replies should come from a
-> local dev endpoint that streams a mocked response; the package ships facilities for mocking —
-> discover them, including how an assistant reply can carry a generated page. Do not fetch any
-> remote docs or read the package's source on npm/GitHub; work from the MCP and what is
-> installed. When done: the app must build (`npm run build`) and run (`npm run dev`), and
-> write NOTES.md recording every question you could not answer from the MCP and where you had
-> to guess.
+> (desktop / tablet / mobile) that constrains the previewed page's width. Give the app a slim
+> top bar with its name and a non-functional Publish button. Each generated page should also
+> appear as a compact card in the conversation itself; selecting a card shows that version in
+> the preview panel. React + TypeScript + Vite. Use the `@kitn.ai/ui` package already
+> installed in this directory — it ships web components for AI chat UIs and React bindings.
+> Its `kai` MCP server is configured for you: use it to learn what the package provides and
+> how to use it. Replies should come from a local dev endpoint that streams a mocked
+> response; the package ships facilities for mocking — discover them, including how an
+> assistant reply can carry a generated page. Do not fetch any remote docs or read the
+> package's source on npm/GitHub; work from the MCP and what is installed. When done: the
+> app must build (`npm run build`) and run (`npm run dev`), and write NOTES.md recording
+> every question you could not answer from the MCP and where you had to guess.
 
 - [ ] Bias statement, recorded with the prompt: it names the product requirements a real
-      consumer would state (split shell, preview/code, versions, device toggle) and NO kit
+      consumer would state (split shell, preview/code, versions, device toggle, top bar, in-thread page cards) and NO kit
       vocabulary — not kai-artifact, not kai-resizable, not cards, tools, or blob URLs; the
       mock-facilities hint is carried from rungs 1–3; "including how an assistant reply can
       carry a generated page" is a NEW nudge — it asserts the kit has an answer to the
