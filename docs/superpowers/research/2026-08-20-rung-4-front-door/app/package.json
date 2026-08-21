@@ -1,0 +1,27 @@
+{
+  "name": "pagesmith",
+  "private": true,
+  "version": "1.0.0",
+  "description": "An AI page builder: chat on the left, live preview with versions on the right.",
+  "type": "module",
+  "license": "ISC",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "@kitn.ai/ui": "file:../ops/kitn.ai-ui-0.25.2.tgz",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.1.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2"
+  }
+}
