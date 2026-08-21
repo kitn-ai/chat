@@ -69,7 +69,10 @@ console.info(`[kai] ${MOCK_BANNER.slice(2)}`);
 // `minimum`, `maxItems` and `oneOf`, none of which survive either provider's
 // strict subset — `cardTools(..., { strict: true })` throws and names them.
 const ARTIFACT_TOOLS = cardTools({ artifact: cardSchemas.artifact }, { provider: 'openai' }).map(
-  (tool) => ({ ...tool, function: { ...tool.function, parameters: providerSafe(tool.function.parameters) } }),
+  (tool) => ({
+    ...tool,
+    function: { ...tool.function, parameters: demandFileCode(providerSafe(tool.function.parameters)) },
+  }),
 );
 
 /**
@@ -108,6 +111,46 @@ function providerSafe(parameters: Readonly<Record<string, unknown>>): Record<str
   return { ...rest, description };
 }
 
+/**
+ * INSIDER CHANGE — found by the DeepSeek acceptance run, and the reason this app
+ * can offer a cheap model at all.
+ *
+ * The kit's artifact card requires only `path` of each file; `code` is optional,
+ * and its own description says "Omit for binary files (image/pdf), which have no
+ * code view." That is exactly right for the CARD — an artifact may legitimately
+ * be a PDF — and exactly wrong for THIS app, whose entire product is the code.
+ *
+ * `deepseek/deepseek-v4-flash-0731` reads the schema literally and takes the
+ * cheap path: five of six turns came back with a perfectly valid, perfectly
+ * useless call —
+ *
+ *   {"files":[{"path":"index.html","language":"html","type":"html",
+ *              "additions":100,"status":"added"}]}
+ *
+ * — file metadata and no file. Nothing downstream can recover a document from
+ * that, and SYSTEM_PROMPT already asked for it in prose, which is evidently not
+ * where a small model looks. Raw SSE: w7-evidence/ds-t2-{1,3,4,5,6}.sse.
+ *
+ * So the app narrows the DERIVED schema instead of restating it: `code` joins
+ * `path` in the file's own `required`, and `files` gets a floor of one entry.
+ * Every property, type and description still comes from the kit. A model that
+ * cannot omit the document stops omitting it.
+ */
+function demandFileCode(parameters: Record<string, unknown>): Record<string, unknown> {
+  const properties = parameters.properties as Record<string, unknown> | undefined;
+  const files = properties?.files as Record<string, unknown> | undefined;
+  const items = files?.items as Record<string, unknown> | undefined;
+  if (!properties || !files || !items) return parameters;
+  const required = Array.isArray(items.required) ? (items.required as string[]) : [];
+  return {
+    ...parameters,
+    properties: {
+      ...properties,
+      files: { ...files, minItems: 1, items: { ...items, required: [...new Set([...required, 'code'])] } },
+    },
+  };
+}
+
 // The one instruction real mode adds. The client posts the user's prompt
 // lineage and nothing else, so without this a model answers in prose and no
 // version ever appears — the tool definition alone is an offer, not a contract.
@@ -126,6 +169,9 @@ const SYSTEM_PROMPT = [
   '  to the page the earlier ones describe. Rebuild the WHOLE page each time, applying every one.',
   '- Say one or two sentences about what you built or changed, then make the call. Never paste the',
   '  HTML into your prose; it belongs in the tool call.',
+  '- Call the tool ONCE. One reply builds one page; a second call is discarded.',
+  '- `code` is the document itself, not a quoted string: write real line breaks. Never write the',
+  '  two characters backslash-n where a newline belongs — they render as visible text on the page.',
 ].join('\n');
 
 /** What the front end POSTs. `request.json()` is `unknown`, so narrow it once. */
@@ -236,7 +282,29 @@ async function proxyOpenRouter(
         max_tokens: env.maxTokens,
         messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...messages],
         tools: ARTIFACT_TOOLS,
-        tool_choice: 'auto',
+        // NOT 'auto'. Under 'auto', `openai/gpt-4o-mini` intermittently narrates
+        // the call instead of making one — "Now I will provide the complete HTML
+        // document. Calling the tool now." — and then stops (`finish_reason:
+        // "stop"`, zero tool calls), so the turn produced no version at all. Seen
+        // in a browser session and in w7-evidence/t2-16.sse.
+        //
+        // 'required' is not a workaround, it is this app's contract stated on the
+        // wire: SYSTEM_PROMPT's first line is "Every reply builds ONE complete,
+        // self-contained HTML document", exactly one tool is offered, and a reply
+        // that builds no page has nowhere to go. The prose still streams; the
+        // model simply cannot end the turn without the call.
+        tool_choice: 'required',
+        // One page per turn is this app's contract, and SYSTEM_PROMPT says so —
+        // but a prompt is a request, not a constraint. Measured on
+        // `openai/gpt-4o-mini`, roughly one turn in six fans the SAME reply out
+        // into two or three PARALLEL `kai_artifact` calls carrying byte-identical
+        // (or near-identical, equally damaged) documents; the app then minted a
+        // version per call. See w7-evidence/t2-8, t2-14, t2-19.
+        //
+        // This is the fix AT THE SOURCE. It is a request-level flag, so a
+        // provider route that ignores it changes nothing — which is why the
+        // client keeps its own one-version-per-turn policy in App.tsx as well.
+        parallel_tool_calls: false,
       }),
       signal: request.signal,
     });

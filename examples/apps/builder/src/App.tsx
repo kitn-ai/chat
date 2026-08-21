@@ -8,8 +8,9 @@ import { readOpenAIStream, toOpenAIMessages, type AssistantStreamSink, type Mode
 
 import { PAGE_VERSION_TYPE, cards, type PageVersionCardData } from './cards';
 import { SELECT_ACTION } from './page-version-card';
+import { repairPageHtml } from './page-html';
 import { PreviewPanel, type Device } from './components/PreviewPanel';
-import { TopBar } from './components/TopBar';
+import { TopBar, type ChatMode } from './components/TopBar';
 import { formatBytes, titleOf, type PageVersion } from './versions';
 
 const SUGGESTIONS = [
@@ -29,6 +30,11 @@ export default function App() {
   const [tab, setTab] = useState<'preview' | 'code'>('preview');
   const [device, setDevice] = useState<Device>('desktop');
   const [maximized, setMaximized] = useState(false);
+  // Which half of the mock/real seam answered the LAST turn, read off the
+  // response's `X-Kai-Mock` header. `null` until a turn has been answered, so
+  // the badge claims nothing before there is anything to claim. Nothing branches
+  // on this — it is a label, not a seam; the seam stays in server/chat.ts.
+  const [mode, setMode] = useState<ChatMode>(null);
 
   // The streaming handler runs outside React's render, so it reads versions
   // through a ref rather than a closed-over (and by then stale) array. Every
@@ -87,24 +93,76 @@ export default function App() {
     });
   }, [selectedId]);
 
-  /** One arriving `kai_artifact` call becomes one version plus one compact card. */
-  const takeToolCall = useCallback((call: ModelToolCall, addCard: (data: PageVersionCardData, id: string) => void, prompt: string, basePrompts: string[]) => {
+  /**
+   * ONE TURN MAKES AT MOST ONE VERSION, and this is where that is enforced.
+   *
+   * The app asks the model for exactly one `kai_artifact` call (SYSTEM_PROMPT
+   * says so, and the route now sends `parallel_tool_calls: false`). Measured
+   * against `openai/gpt-4o-mini` that still is not a guarantee: roughly one turn
+   * in six came back with two or three PARALLEL calls carrying the same document
+   * — three of them minted v2, v3 and v4 off a single edit. Captured SSE in
+   * `.superpowers/sdd/2026-08-20-rung-4-builder/w7-evidence/{t2-8,t2-14,t2-19}.sse`.
+   *
+   * THE POLICY, and why this one: the FIRST usable call wins, any further call
+   * in the same turn is dropped, and the drop is announced. A page builder has
+   * one preview and one linear history, so a second page in the same turn has
+   * nowhere to live; and every extra call observed was either byte-identical to
+   * the first or a damaged variant of it, never a genuine second design. Keeping
+   * one version per UNIQUE call was the alternative and it fails on the evidence
+   * — t2-14's third call differed by 74 bytes, so uniqueness would still have
+   * minted two versions for one edit. If a future model is asked for several
+   * pages at once, this is the function that changes, and the drop it currently
+   * reports is what makes that need visible instead of silent.
+   */
+  const applyTurnCalls = useCallback((calls: readonly ModelToolCall[], addCard: (data: PageVersionCardData, id: string) => void, prompt: string, basePrompts: string[]) => {
     // isCardTool / cardFromToolCall rather than matching the `kai_` prefix by
     // hand; a call that is not a card tool returns null and falls through.
-    if (!isCardTool(call.name) || !call.input) return;
-    const envelope = cardFromToolCall(call.name, call.input, { id: call.id });
-    if (!envelope || envelope.type !== 'artifact') return;
+    const pages = calls.flatMap((call) => {
+      if (!isCardTool(call.name) || !call.input) return [];
+      const envelope = cardFromToolCall(call.name, call.input, { id: call.id });
+      if (!envelope || envelope.type !== 'artifact') return [];
+      const data = envelope.data as ArtifactCardData;
+      const file = data.files?.find((f) => typeof f.code === 'string');
+      if (!file?.code) return [];
+      return [{ envelope, data, file, code: file.code }];
+    });
 
-    const data = envelope.data as ArtifactCardData;
-    const file = data.files?.find((f) => typeof f.code === 'string');
-    if (!file?.code) return;
+    if (pages.length === 0) {
+      // Decide loudly. A reply that carried no page at all is a real outcome —
+      // the model answered in prose, or its arguments were malformed and the
+      // reader settled the call to an error — and the user has to be told, or
+      // the preview just silently keeps showing the previous version.
+      const why = calls.length === 0 ? 'answered without building a page' : 'sent a page this app could not read';
+      console.warn(`[builder] the model ${why}; no version was created.`, calls);
+      toast(`The model ${why}. Try asking again.`);
+      return;
+    }
+
+    if (pages.length > 1) {
+      console.warn(
+        `[builder] the model returned ${pages.length} pages for one turn; keeping the first and dropping the rest.`,
+        pages.map((p) => p.envelope.id),
+      );
+      toast(`The model returned ${pages.length} pages for one turn — kept the first.`);
+    }
+
+    const { envelope, data, file, code } = pages[0];
+
+    // A small model asked for a whole file inside a JSON argument sometimes
+    // escapes it twice, and the result renders literal `\n` runs as page text.
+    // See page-html.ts for the tell and why the test is narrow.
+    const { html, repaired } = repairPageHtml(code);
+    if (repaired) {
+      console.warn('[builder] the model double-escaped the document; line breaks were restored.');
+      toast('The model sent the page double-escaped — its line breaks were restored.');
+    }
 
     const version: PageVersion = {
       id: envelope.id,
       label: `v${versionsRef.current.length + 1}`,
       fileName: data.displayUrl ?? file.path,
       prompt,
-      html: file.code,
+      html,
       createdAt: Date.now(),
       basePrompts: [...basePrompts, prompt],
     };
@@ -178,11 +236,29 @@ export default function App() {
             versionCount: versionsRef.current.length,
           }),
         });
+        // Label only — nothing branches on it. The route sets `X-Kai-Mock` only
+        // when it answered from the mock responder, so its ABSENCE is what says
+        // a provider answered.
+        setMode(res.headers.get('X-Kai-Mock') ? 'mock' : 'live');
+
+        // Collected, not applied one at a time: the one-version-per-turn policy
+        // can only be decided once the whole turn is in. No UX is lost by
+        // waiting — the kit settles every tool call at the END of the stream
+        // anyway (a JSON-object prefix never parses), so `onToolCallReady` was
+        // already firing here, just without the other calls for company.
+        const ready: ModelToolCall[] = [];
         const turn = await readOpenAIStream(res, sink, {
           traceId: `page-${versionsRef.current.length + 1}`,
-          onToolCallReady: (call) => takeToolCall(call, addCard, value, basePrompts),
+          onToolCallReady: (call) => ready.push(call),
         });
-        if (turn.error) console.error('Model error:', turn.error.message);
+        if (turn.error) {
+          // An in-band provider failure. Report THAT rather than letting the
+          // no-page branch below blame the model for answering in prose.
+          console.error('Model error:', turn.error.message);
+          toast.error(turn.error.message);
+        } else {
+          applyTurnCalls(ready, addCard, value, basePrompts);
+        }
       } catch (err) {
         // abort(reason) settles the message and puts the reason in the thread,
         // so a failure is never a permanently blank assistant bubble.
@@ -193,7 +269,7 @@ export default function App() {
         setLoading(false);
       }
     },
-    [loading, messages, takeToolCall],
+    [loading, messages, applyTurnCalls],
   );
 
   /** Restore = the checkpoint becomes the newest version; nothing is thrown away. */
@@ -215,7 +291,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <TopBar versionCount={versions.length} />
+      <TopBar versionCount={versions.length} mode={mode} />
       <Resizable
         orientation="horizontal"
         maximizedIndex={maximized ? PREVIEW_PANEL : null}

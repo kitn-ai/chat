@@ -80,7 +80,7 @@ by this app's first real turn and both written up at their site in
    artifact card on the two largest providers. The route drops the top-level
    combinator and says the same thing in the description; every property stays
    derived. Proposed as **F-20** for the rung's findings.
-2. **The default model is `openai/gpt-4o-mini`, not the corpus's
+2. **The default model is `deepseek/deepseek-v4-flash-0731`, not the corpus's
    `anthropic/claude-haiku-4.5`.** This app's whole reply is a *streamed* tool
    call, and OpenRouter's streamed `tool_calls` argument deltas come back as
    invalid JSON on its Anthropic routes — a stray `}` near the end, reproduced
@@ -88,9 +88,34 @@ by this app's first real turn and both written up at their site in
    streamed deltas parse fine, so it is an upstream defect, but on an Anthropic
    model this app produces no page at all.
 
+   `openai/gpt-4o-mini` is the **verified alternate** and passes the same
+   three-turn acceptance run; set `OPENROUTER_MODEL` to switch. It is markedly
+   less generous, though — its pages land around 400–800 bytes against
+   DeepSeek's 3–7 KB — so the preview looks thin.
+
 Real mode also sends a short system prompt (one call, one complete document, in
 `files[0].code`). The tool definition alone is an offer, not a contract: without
 it the model answers in prose and no version ever appears.
+
+### What small models do to this loop
+
+Three failure modes showed up in real turns, none of them visible to any test
+over the tree, all three fixed at their own layer. Captured SSE for each is under
+`.superpowers/sdd/2026-08-20-rung-4-builder/w7-evidence/`.
+
+| What happened | Where it was fixed |
+| --- | --- |
+| One edit minted three versions: `gpt-4o-mini` fanned the reply into parallel `kai_artifact` calls carrying the same document | `parallel_tool_calls: false` on the request, **and** a one-version-per-turn policy in `App.tsx` that drops extras loudly |
+| The page rendered visible `\n` runs: the model escaped the document a second time inside the tool argument, so `JSON.parse` handed back backslash-n pairs | `src/page-html.ts` repairs a document that has zero real line breaks and several escaped ones |
+| The turn produced nothing: the model narrated the call (*"Calling the tool now."*) and stopped, or — on DeepSeek — sent file *metadata* with no `code` | `tool_choice: 'required'`, and `demandFileCode()` narrowing the derived schema so `code` is required |
+
+The last one is the interesting one. The kit's artifact card requires only
+`path` per file and documents `code` as optional ("omit for binary files"),
+which is right for the card and wrong for an app whose product *is* the code.
+DeepSeek read the schema literally and returned `{"path":"index.html",
+"type":"html","status":"added"}` in five of six turns. The route now narrows the
+derived schema rather than restating it — everything still comes from
+`cardSchemas.artifact`.
 
 ## How it works
 

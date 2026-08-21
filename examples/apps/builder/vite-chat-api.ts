@@ -29,7 +29,7 @@ import type { ChatEnv } from './server/chat.js';
  * (see this app's README, "Real mode"). Upstream defect, named here because the
  * default that works everywhere else silently does not work here.
  */
-const DEFAULT_MODEL = 'openai/gpt-4o-mini';
+const DEFAULT_MODEL = 'deepseek/deepseek-v4-flash-0731';
 
 /** A cost ceiling per reply, not a style choice. A page is a big reply. */
 const DEFAULT_MAX_TOKENS = 8000;
