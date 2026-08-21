@@ -20,7 +20,13 @@ const ollama: Integration = {
   // The model is pinned here, not sent by the browser. tools IS forwarded:
   // it is undefined unless the front end declared any, and JSON.stringify
   // drops it, so the same handler serves a tool archetype and a plain chat.
-  const { messages, tools } = await readChatRequest(request);
+  let chatBody: ChatRequestBody;
+  try {
+    chatBody = await readChatRequest(request);
+  } catch (error) {
+    return toChatErrorResponse(error);
+  }
+  const { messages, tools } = chatBody;
 
   const upstream = await fetch('http://localhost:11434/v1/chat/completions', {
     method: 'POST',

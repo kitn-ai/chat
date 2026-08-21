@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { cardFromToolCall, cardTypeFromToolName, KAI_TOOL_PREFIX } from './from-tool-call';
 import { cardSchemaNames, cardSchemas, type CardSchema } from './index';
 import { ANTHROPIC_STRICT, OPENAI_STRICT, checkProviderSubset } from './provider-subsets';
@@ -10,6 +10,7 @@ import {
   toJsonSchemaTools,
   toOpenAITools,
   type AnthropicToolDef,
+  type JsonSchemaToolDef,
   type OpenAIToolDef,
 } from './tool-defs';
 
@@ -156,12 +157,12 @@ describe('cardTools: the non-strict projection (the default, and the proven mode
     expect(openai()).toHaveLength(cardSchemaNames.length);
   });
 
-  it('is EXACTLY the authored schema minus $schema, $id and x-*', () => {
+  it('is EXACTLY the authored schema minus $schema, $id and x-* (jsonschema only — F-20 relaxes the openai/anthropic non-strict projections at the root)', () => {
     // Checked against an independently written stripper, not against the
     // implementation, so a bug in the projection cannot define its own expectation.
-    for (const def of anthropic()) {
+    for (const def of cardTools({ provider: 'jsonschema' })) {
       const type = cardTypeFromToolName(def.name) as keyof typeof cardSchemas;
-      expect(def.input_schema).toEqual(stripMetaIndependently(cardSchemas[type]));
+      expect((def as JsonSchemaToolDef).schema).toEqual(stripMetaIndependently(cardSchemas[type]));
     }
   });
 
@@ -418,5 +419,128 @@ describe('cardTools: strict mode THROWS rather than downgrading', () => {
     // Anthropic allows optional, so it must NOT be rewritten there.
     const anth = cardTools(src, { provider: 'anthropic', strict: true })[0].input_schema as { required: string[] };
     expect(anth.required).toEqual(['a']);
+  });
+});
+
+describe('cardTools: the require option narrows the DERIVED tool schema (F-23)', () => {
+  it('joins a property into the array items\' required and sets minItems', () => {
+    const [artifact] = cardTools({ artifact: cardSchemas.artifact }, {
+      provider: 'openai',
+      require: { artifact: [{ path: 'files', required: ['code'], minItems: 1 }] },
+    }) as OpenAIToolDef[];
+    const files = (artifact.function.parameters as any).properties.files;
+    expect(files.minItems).toBe(1);
+    expect(files.items.required).toContain('code');
+    expect(files.items.required).toContain('path'); // the authored requirement survives
+  });
+
+  it('narrows a top-level object node when the path names the root', () => {
+    const [artifact] = cardTools({ artifact: cardSchemas.artifact }, {
+      provider: 'anthropic',
+      require: { artifact: [{ path: '', required: ['tab'] }] },
+    }) as AnthropicToolDef[];
+    expect((artifact.input_schema as any).required).toContain('tab');
+  });
+
+  it('throws naming the card, path and field for a required name absent from the node\'s properties (an unsatisfiable tool is louder than a silent one)', () => {
+    expect(() =>
+      cardTools({ artifact: cardSchemas.artifact }, {
+        provider: 'openai',
+        require: { artifact: [{ path: 'files', required: ['nope'] }] },
+      }),
+    ).toThrow(/artifact.*files.*nope/);
+  });
+
+  it('throws naming the card and the path for an unknown dot-path', () => {
+    expect(() =>
+      cardTools({ artifact: cardSchemas.artifact }, {
+        provider: 'openai',
+        require: { artifact: [{ path: 'nope.deep', required: ['x'] }] },
+      }),
+    ).toThrow(/artifact.*nope\.deep/);
+  });
+
+  it('throws naming the card type for a require key the registry does not carry', () => {
+    expect(() =>
+      cardTools({ artifact: cardSchemas.artifact }, {
+        provider: 'openai',
+        require: { 'no-such-card': [{ path: 'files', required: ['code'] }] },
+      }),
+    ).toThrow(/no-such-card/);
+  });
+
+  it('never mutates the authored schema and applies to every provider including jsonschema', () => {
+    const before = JSON.stringify(cardSchemas.artifact);
+    const [js] = cardTools({ artifact: cardSchemas.artifact }, {
+      provider: 'jsonschema',
+      require: { artifact: [{ path: 'files', required: ['code'], minItems: 1 }] },
+    }) as JsonSchemaToolDef[];
+    expect((js.schema as any).properties.files.minItems).toBe(1);
+    expect(JSON.stringify(cardSchemas.artifact)).toBe(before);
+  });
+
+  it('composes with the F-20 relaxation (require on artifact, openai non-strict)', () => {
+    const [artifact] = cardTools({ artifact: cardSchemas.artifact }, {
+      provider: 'openai',
+      require: { artifact: [{ path: 'files', required: ['code'], minItems: 1 }] },
+    }) as OpenAIToolDef[];
+    expect((artifact.function.parameters as any).properties.files.minItems).toBe(1);
+    expect(artifact.function.parameters).not.toHaveProperty('anyOf');
+  });
+});
+
+describe('cardTools: the non-strict projection survives the providers (F-20)', () => {
+  const ROOT_COMBINATORS = ['anyOf', 'allOf', 'oneOf', 'not'] as const;
+
+  it('projects kai_artifact for openai non-strict with type:object at the root and no root combinator', () => {
+    const [artifact] = cardTools({ artifact: cardSchemas.artifact }, { provider: 'openai' }) as OpenAIToolDef[];
+    expect(artifact.function.parameters.type).toBe('object');
+    for (const k of ROOT_COMBINATORS) expect(artifact.function.parameters).not.toHaveProperty(k);
+  });
+
+  it('projects kai_embed for anthropic non-strict the same way (the derived-prediction case, now pinned)', () => {
+    const [embed] = cardTools({ embed: cardSchemas.embed }, { provider: 'anthropic' }) as AnthropicToolDef[];
+    expect(embed.input_schema.type).toBe('object');
+    for (const k of ROOT_COMBINATORS) expect(embed.input_schema).not.toHaveProperty(k);
+  });
+
+  it('restates the dropped constraint in the description the model reads', () => {
+    const [artifact] = cardTools({ artifact: cardSchemas.artifact }, { provider: 'openai' }) as OpenAIToolDef[];
+    expect(artifact.function.description).toMatch(/src|files/);
+    const [embed] = cardTools({ embed: cardSchemas.embed }, { provider: 'anthropic' }) as AnthropicToolDef[];
+    expect(embed.description).toMatch(/url/);
+  });
+
+  it('warns on a single-card call, naming the tool', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    cardTools({ artifact: cardSchemas.artifact }, { provider: 'openai' });
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('kai_artifact'));
+    warn.mockRestore();
+  });
+
+  it('keeps the jsonschema projection byte-faithful: the root combinator survives there', () => {
+    const [artifact] = cardTools({ artifact: cardSchemas.artifact }, { provider: 'jsonschema' }) as JsonSchemaToolDef[];
+    expect(artifact.schema).toHaveProperty('anyOf');
+  });
+
+  it('never mutates the authored schema — registry.validate semantics are untouched', () => {
+    const before = JSON.stringify(cardSchemas.artifact);
+    cardTools({ artifact: cardSchemas.artifact }, { provider: 'openai' });
+    expect(JSON.stringify(cardSchemas.artifact)).toBe(before);
+  });
+
+  it('restates a generic note when a CUSTOM card carries a root combinator with no curated copy', () => {
+    const [custom] = cardTools(
+      { 'pricing-table': { type: 'object', properties: {}, anyOf: [{ required: ['a'] }, { required: ['b'] }] } },
+      { provider: 'openai' },
+    ) as OpenAIToolDef[];
+    expect(custom.function.parameters).not.toHaveProperty('anyOf');
+    expect(custom.function.description).toMatch(/relaxed/i);
+  });
+
+  it('guards EVERY built-in: no root combinator reaches an openai non-strict tool array', () => {
+    for (const def of cardTools({ provider: 'openai' }) as OpenAIToolDef[]) {
+      for (const k of ROOT_COMBINATORS) expect(def.function.parameters).not.toHaveProperty(k);
+    }
   });
 });

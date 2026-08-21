@@ -169,7 +169,13 @@ const FINISH_REASONS: Record<string, string> = {
 };
 
 async function chatHandler(request: Request): Promise<Response> {
-  const { messages, tools } = await readChatRequest(request);
+  let chatBody: ChatRequestBody;
+  try {
+    chatBody = await readChatRequest(request);
+  } catch (error) {
+    return toChatErrorResponse(error);
+  }
+  const { messages, tools } = chatBody;
   const toolSet = toToolSet(tools);
   const prompt = toModelMessages(messages);
 

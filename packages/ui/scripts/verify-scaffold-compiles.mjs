@@ -1263,6 +1263,11 @@ async function routeCheck(scaffold) {
   const noRoute = [];
   const usedProjects = new Set();
   const importFailures = [];
+  // F-10: the emitted route must survive a bare GET / malformed body. Counted
+  // per cell so a green run cannot be a zero-cell green run.
+  let guardedRoutes = 0;
+  let viteMiddlewareCells = 0;
+  const guardFailures = [];
 
   for (const c of cells) {
     const out = await scaffold.handler({
@@ -1329,6 +1334,37 @@ async function routeCheck(scaffold) {
       cleanup();
       fail(`${c.label}: block (2) declares runtime "${runtime}" but contains no code to compile.`);
     }
+
+    // F-10 GUARDS, over the emitted route text. tsc compiles the guards fine and
+    // says nothing when they are gone — a bare `await request.json()` cast is
+    // perfectly valid TypeScript — so this is textual on purpose, the same class
+    // of hole as solidPartCoverageCheck above. Every TypeScript route composes
+    // `chatRoutePreamble`, so BOTH markers must be present in it: the mapper
+    // (`toChatErrorResponse`) without the 405 guard means a bare GET still
+    // reaches `request.json()`. Zero matches is a hard failure below, never a
+    // skip.
+    if (!code.includes('toChatErrorResponse') || !code.includes('405')) {
+      guardFailures.push(
+        `${c.label}: the emitted route lacks the F-10 body guards ` +
+          `(toChatErrorResponse / 405) — a bare GET or malformed body reaches request.json() unguarded`,
+      );
+    } else {
+      guardedRoutes++;
+    }
+
+    // The Vite dev-server bridge is where F-10 actually killed a server: an
+    // unhandled rejection in an async connect middleware EXITS Node 22. Its
+    // `chatHandler` call must sit inside a try/catch.
+    if (runtime === 'Vite dev-server middleware (Node)') {
+      viteMiddlewareCells++;
+      const wrapped = /try\s*\{[\s\S]*?await chatHandler\([\s\S]*?\}\s*catch\s*\{/.test(code);
+      if (!wrapped) {
+        guardFailures.push(
+          `${c.label}: the Vite middleware does not wrap chatHandler in try/catch — ` +
+            'a handler rejection is an unhandled rejection and can EXIT the dev server',
+        );
+      }
+    }
     usedProjects.add(project);
     const cellDir = join(PROJECTS[project].dir, c.label);
     for (const f of [...files, ...generatedCompanions(files)]) {
@@ -1344,6 +1380,24 @@ async function routeCheck(scaffold) {
     fail(`${importFailures.length} emitted route import(s) lack an explicit file extension.`);
   }
   console.log('  ✓ every relative import in an emitted route carries an explicit extension (TS2835)');
+
+  // Anti-vacuity for the F-10 guards: a FILTER or an axis change that emptied
+  // these buckets must not read as a pass.
+  if (!FILTER) {
+    if (guardedRoutes === 0)
+      fail('no TypeScript route was checked for the F-10 body guards — the check never ran.');
+    if (viteMiddlewareCells === 0)
+      fail('no Vite dev-server middleware cell was checked for the chatHandler try/catch — the check never ran.');
+  }
+  if (guardFailures.length) {
+    for (const f of guardFailures) console.log(`  ✗ ${f}`);
+    cleanup();
+    fail(`${guardFailures.length} emitted route(s) lost the F-10 guards (bare GET / malformed body).`);
+  }
+  console.log(
+    `  ✓ ${guardedRoutes} emitted routes carry the F-10 body guards (toChatErrorResponse + 405); ` +
+      `${viteMiddlewareCells} Vite middleware cell(s) wrap chatHandler in try/catch`,
+  );
 
   await assertRoutesAreSurfaceIndependent(scaffold, reference);
   if (noRoute.length) console.log(`  · ${noRoute.length} cases have no backend by design (mock streams in the browser)`);

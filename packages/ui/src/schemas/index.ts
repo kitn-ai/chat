@@ -279,6 +279,7 @@ export {
 } from './tool-defs';
 export type {
   AnthropicToolDef,
+  CardRequireRule,
   CardToolInput,
   CardToolOptions,
   CardToolSource,

@@ -27,9 +27,14 @@
 // `format: "uri"` (link/embed/artifact), `minimum` (tasks/embed/artifact),
 // `maxItems` (confirm/artifact), `pattern` (embed), `if`/`then` (embed), `oneOf`
 // (artifact), a free-form object (form) and untyped `payload`/`allowOther` members
-// (confirm/choice). Non-strict is therefore not merely the default, it is currently
-// the only working mode, and it is also the mode the five-configuration conformance
-// spike actually proved cards in.
+// (confirm/choice). Non-strict is therefore the default and the mode the
+// five-configuration conformance spike actually proved cards in — but since F-20 it
+// is no longer a raw pass-through either: a root combinator (`anyOf` on artifact,
+// `allOf` on embed) gets HTTP 400 from OpenAI and Anthropic even non-strict, so the
+// non-strict projection relaxes those root combinators LOUDLY (constraint restated in
+// the description, console.warn names the relaxation, registry.validate still
+// enforces at render time). The jsonschema projection stays byte-faithful to the
+// authored schema.
 //
 // The alternative was to silently drop the offending keywords. That is rejected for
 // the reason the plan gives: a dropped `maxItems: 4` means the model emits six
@@ -126,6 +131,42 @@ export interface CardToolOptions<P extends ToolProvider = ToolProvider> {
    * When it throws it names the card, the path and the keyword.
    */
   readonly strict?: boolean;
+  /**
+   * Narrow the DERIVED tool schema per card type, after projection (F-23).
+   *
+   * A card's authored schema is deliberately permissive — `files` is optional on an
+   * artifact, its items need only a `path` — because the card CONTRACT must accept
+   * what a host may legitimately render. A model filling the tool in, though, is
+   * often better served by a tighter tool: requiring `code` on every file, or at
+   * least one file at all, moves a class of failures from render time (a card the
+   * registry rejects) to generation time (the model literally cannot emit one).
+   *
+   * This narrows the WIRE projection only — the authored schema and
+   * `registry.validate()` are untouched, so a hand-built envelope still validates.
+   * Applied for every provider, `jsonschema` included, and merged loudly: an
+   * unknown path or a required name the node has no property for is a TypeError
+   * naming the card, the path and the field, because a tool that can never be
+   * satisfied must not ship quietly.
+   */
+  readonly require?: Readonly<Record<string, readonly CardRequireRule[]>>;
+}
+
+/**
+ * One narrowing instruction for one node of one card's projected schema.
+ *
+ * `path` is a dot-path from the envelope-data root through `properties` keys
+ * (`''` names the root node itself). On an ARRAY node, `required` narrows
+ * `items.required` and `minItems` lands on the array; on an object node,
+ * `required` lands on the node's own `required`. Existing requirements merge,
+ * never replace.
+ */
+export interface CardRequireRule {
+  /** Dot-path from the envelope-data root to a schema node, e.g. 'files'. */
+  readonly path: string;
+  /** Property names to require. On an ARRAY node this narrows `items.required`; on an object node, the node's own `required`. */
+  readonly required?: readonly string[];
+  /** Sets `minItems` (array nodes only). */
+  readonly minItems?: number;
 }
 
 /**
@@ -225,7 +266,7 @@ function formatUnsupported(subset: ProviderSubset, cards: readonly UnsupportedCa
   lines.push('');
   lines.push(`  subset source: ${subset.source} (read ${subset.checkedOn})`);
   lines.push(
-    '  Fix: drop `strict: true`. Non-strict is the default and is the mode the kit\'s cards are proven in; both providers accept a loose schema there and ignore what they do not compile. Rewriting a built-in card schema to fit a strict subset would change what a valid card IS, which is a card-contract change, not a projection setting.',
+    '  Fix: drop `strict: true`. Non-strict mode projects a provider-valid schema (root combinators are relaxed with the constraint restated in the description and still enforced by card validation). Rewriting a built-in card schema to fit a strict subset would change what a valid card IS, which is a card-contract change, not a projection setting.',
   );
   return lines.join('\n');
 }
@@ -236,6 +277,107 @@ function formatUnsupported(subset: ProviderSubset, cards: readonly UnsupportedCa
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/**
+ * Root combinators the two largest providers refuse on a tool schema's root node
+ * (measured: OpenAI and Anthropic 400 before the model runs — findings F-20;
+ * DeepSeek's OpenAI-compatible route requires the same workaround). The AUTHORED
+ * schemas keep them — card validation keeps every constraint. Only the WIRE
+ * projection relaxes, loudly: the constraint is restated in the description the
+ * model reads, a console.warn names the relaxation, and a violating envelope
+ * still fails registry.validate() at render time with a hard diagnostic.
+ */
+const ROOT_RELAXATIONS: Readonly<Record<string, string>> = {
+  artifact:
+    'Provide `src` (a preview URL) or `files` — at least one. An envelope with neither is rejected.',
+  embed:
+    "For provider 'generic', include `url`. For 'youtube'/'vimeo', include `id` or `url`.",
+};
+
+/** Strip a banned combinator key from the projected ROOT node only (nested
+ *  combinators are accepted by every provider measured and stay). Returns the
+ *  relaxation note to restate in the TOOL description the model reads. Two
+ *  distinct no-note return paths: `undefined` when NOTHING was banned (the wire
+ *  projection is faithful, nothing was widened), and GENERIC_NOTE when something
+ *  WAS banned but no curated copy exists (a custom card) — that path still
+ *  restates the relaxation, because deleting a combinator without telling the
+ *  model would be a silent widening. */
+const GENERIC_RELAXATION_NOTE =
+  'The root constraint of this schema was relaxed for this provider; consult the card registry for what a valid payload is.';
+
+function relaxRootCombinators(parameters: Record<string, unknown>, cardType: string): string | undefined {
+  const note = ROOT_RELAXATIONS[cardType];
+  const banned = (['anyOf', 'allOf', 'oneOf', 'not', 'enum', 'const'] as const).filter(
+    (k) => k in parameters,
+  );
+  if (banned.length === 0) return undefined;
+  for (const k of banned) delete parameters[k];
+  // eslint-disable-next-line no-console
+  console.warn(
+    `[kai-card-tools] relaxed root ${banned.join('/')} on the projected '${toolNameForCardType(cardType)}' tool schema ` +
+      `for this provider (it would be refused with HTTP 400); the constraint now lives in the ` +
+      `description and is still enforced by card validation.`,
+  );
+  return note ?? GENERIC_RELAXATION_NOTE;
+}
+
+/**
+ * Apply one card's `require` rules to its PROJECTED parameters (F-23).
+ *
+ * Runs after `project()` and `relaxRootCombinators()`, on the copy the projection
+ * built — never on the authored schema, which `registry.validate()` keeps reading.
+ * Merges into whatever `required` already exists rather than replacing it, so a
+ * rule can only ever NARROW what the model may emit, never widen it.
+ */
+function applyRequire(
+  parameters: Record<string, unknown>,
+  cardType: string,
+  rules: readonly CardRequireRule[],
+): void {
+  for (const rule of rules) {
+    // Resolve the dot-path through `properties` keys. `''` names the root node;
+    // every other segment must name a property of the node reached so far.
+    let node: Record<string, unknown> = parameters;
+    if (rule.path !== '') {
+      for (const segment of rule.path.split('.')) {
+        const props = isRecord(node.properties) ? node.properties : undefined;
+        const next = props?.[segment];
+        if (!isRecord(next)) {
+          throw new TypeError(
+            `cardTools: require on '${cardType}': path '${rule.path}' does not resolve in the schema`,
+          );
+        }
+        node = next;
+      }
+    }
+
+    const isArrayNode = node.type === 'array' || (node.type === undefined && 'items' in node);
+    if (isArrayNode && rule.minItems !== undefined) node.minItems = rule.minItems;
+    if (!isArrayNode && rule.minItems !== undefined) {
+      throw new TypeError(
+        `cardTools: minItems at require path '${rule.path}' applies to array nodes only, ` +
+          `but '${rule.path}' in the '${cardType}' schema is not one`,
+      );
+    }
+
+    if (rule.required !== undefined) {
+      // On an array node the requirement lives on the ITEMS (each element must carry
+      // the field), not on the array itself.
+      const target = isArrayNode && isRecord(node.items) ? node.items : node;
+      const props = isRecord(target.properties) ? target.properties : undefined;
+      for (const field of rule.required) {
+        if (!props || !(field in props)) {
+          throw new TypeError(
+            `cardTools: require on '${cardType}' at path '${rule.path}': '${field}' is not a property of that node — ` +
+              `a required name with no property would make the tool unsatisfiable`,
+          );
+        }
+      }
+      const existing = Array.isArray(target.required) ? target.required.map(String) : [];
+      target.required = [...new Set([...existing, ...rule.required])];
+    }
+  }
+}
 
 /**
  * Keywords stripped from every projection, strict or not.
@@ -430,10 +572,39 @@ export function cardTools(a: CardToolInput | CardToolOptions, b?: CardToolOption
   const defs: ToolDef[] = [];
   const failures: UnsupportedCardTool[] = [];
 
+  // A `require` key naming a card the call does not carry is a typo, and a typo here
+  // would otherwise narrow NOTHING while looking like it narrowed something — the
+  // same decide-loudly class as an unknown dot-path below.
+  if (opts.require !== undefined) {
+    for (const key of Object.keys(opts.require)) {
+      if (!(key in schemas)) {
+        throw new TypeError(
+          `cardTools: require names card type '${key}', which this call does not carry ` +
+            `(carries: ${Object.keys(schemas).join(', ') || 'none'})`,
+        );
+      }
+    }
+  }
+
   for (const [cardType, schema] of Object.entries(schemas)) {
     const name = toolNameForCardType(cardType);
     const description = describe(cardType, schema, descriptions);
     const parameters = project(schema, projectOptions) as ToolParameters;
+
+    // F-20: non-strict only. Strict mode already refuses these cards with the full
+    // subset check, so the relaxation must never mask it. The note is restated in the
+    // TOOL description — the envelope field the model reads when choosing the tool.
+    const relaxedNote =
+      subset === null && opts.provider !== 'jsonschema'
+        ? relaxRootCombinators(parameters as Record<string, unknown>, cardType)
+        : undefined;
+    const wireDescription = relaxedNote ? `${description} ${relaxedNote}` : description;
+
+    // F-23: every provider, jsonschema included — a consumer handing the bare schema
+    // to the Vercel AI SDK narrows their tool the same way. Runs BEFORE the strict
+    // subset check so that check judges the schema that actually ships.
+    const requireRules = opts.require?.[cardType];
+    if (requireRules !== undefined) applyRequire(parameters as Record<string, unknown>, cardType, requireRules);
 
     if (subset) {
       const violations = checkProviderSubset(parameters, subset);
@@ -444,9 +615,9 @@ export function cardTools(a: CardToolInput | CardToolOptions, b?: CardToolOption
     }
 
     if (opts.provider === 'openai') {
-      defs.push({ type: 'function', function: { name, description, parameters, ...(strict ? { strict: true as const } : {}) } });
+      defs.push({ type: 'function', function: { name, description: wireDescription, parameters, ...(strict ? { strict: true as const } : {}) } });
     } else if (opts.provider === 'anthropic') {
-      defs.push({ name, description, input_schema: parameters, ...(strict ? { strict: true as const } : {}) });
+      defs.push({ name, description: wireDescription, input_schema: parameters, ...(strict ? { strict: true as const } : {}) });
     } else {
       defs.push({ name, description, schema: parameters });
     }

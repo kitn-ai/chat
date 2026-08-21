@@ -24,9 +24,44 @@ import type { OpenAIWireMessage } from '@kitn.ai/ui/wire';
  */
 type ChatRequestBody = { messages: OpenAIWireMessage[] };
 
+class ChatRequestError extends Error {
+  constructor(readonly status: number, message: string) { super(message); }
+}
+
+/** Narrow the JSON body once, at the edge. A bare GET, a malformed body, or a
+ *  missing messages array is a ChatRequestError with a status — NEVER an
+ *  unhandled SyntaxError (findings F-10). */
+async function readChatRequest(request: Request): Promise<ChatRequestBody> {
+  if (request.method !== 'POST') {
+    throw new ChatRequestError(405, \`Method \${request.method} not allowed — POST /api/chat.\`);
+  }
+  let parsed: unknown;
+  try { parsed = await request.json(); } catch {
+    throw new ChatRequestError(400, 'Request body is not valid JSON.');
+  }
+  const body = parsed as ChatRequestBody;
+  if (!Array.isArray(body?.messages)) {
+    throw new ChatRequestError(400, 'Request body must carry a messages array.');
+  }
+  return body;
+}
+
+/** Map a guard rejection to the Response its status demands; rethrow anything
+ *  else — an unexpected error should be loud, not laundered into a 400. */
+function toChatErrorResponse(error: unknown): Response {
+  if (error instanceof ChatRequestError) return Response.json({ error: error.message }, { status: error.status });
+  throw error;
+}
+
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
-    const { messages } = (await req.json()) as ChatRequestBody;
+    let chatBody: ChatRequestBody;
+    try {
+      chatBody = await readChatRequest(req);
+    } catch (error) {
+      return toChatErrorResponse(error);
+    }
+    const { messages } = chatBody;
 
     let nativeStream: ReadableStream<Uint8Array>;
     try {
@@ -101,7 +136,13 @@ export default {
   },
   webRoute: `async function chatHandler(request: Request): Promise<Response> {
   // Proxy Workers AI over its OpenAI-compatible HTTP endpoint, token server-side.
-  const { messages } = await readChatRequest(request);
+  let chatBody: ChatRequestBody;
+  try {
+    chatBody = await readChatRequest(request);
+  } catch (error) {
+    return toChatErrorResponse(error);
+  }
+  const { messages } = chatBody;
 
   const upstream = await fetch(
     \`https://api.cloudflare.com/client/v4/accounts/\${process.env.CF_ACCOUNT_ID}/ai/v1/chat/completions\`,

@@ -31,7 +31,13 @@ const agent = createReactAgent({
 
 // Stream a compiled LangGraph agent to the browser as OpenAI-format SSE.
 async function chatHandler(request: Request): Promise<Response> {
-  const { messages } = await readChatRequest(request);
+  let chatBody: ChatRequestBody;
+  try {
+    chatBody = await readChatRequest(request);
+  } catch (error) {
+    return toChatErrorResponse(error);
+  }
+  const { messages } = chatBody;
 
   // agent.stream() coerces plain {role, content} objects into BaseMessage
   // instances itself, including OpenAI-shaped tool_calls, so the wire messages

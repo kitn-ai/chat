@@ -2832,9 +2832,14 @@ describe('real-backend scaffolds send what the panel needs and survive a failure
       )[1];
       // Read through the shared `readChatRequest` preamble, not an inline
       // `request.json()`: `json()` hands back `unknown`, so destructuring it
-      // directly is TS2339 on every field under a server tsconfig.
+      // directly is TS2339 on every field under a server tsconfig. F-10: the
+      // read is guarded — the try/catch maps a bare GET / malformed body to a
+      // Response instead of an unhandled rejection.
       expect(route, `${integration}: route never reads tools`).toMatch(
-        /const \{[^}]*\btools\b[^}]*\} = await readChatRequest\(request\);/,
+        /let chatBody: ChatRequestBody;\s*\n\s*try\s*\{\s*\n\s*chatBody = await readChatRequest\(request\);\s*\n\s*\} catch \(error\) \{\s*\n\s*return toChatErrorResponse\(error\);/,
+      );
+      expect(route, `${integration}: tools not destructured off the guarded body`).toMatch(
+        /const \{[^}]*\btools\b[^}]*\} = chatBody;/,
       );
       // Two shapes, one claim: the destructured value reaches the upstream call
       // rather than being dropped on the floor.
@@ -4459,7 +4464,7 @@ describe('chatRoutePreamble — the seam a file-writing consumer needs', () => {
    * someone has to think about whether every emitter still compiles.
    */
   const PREAMBLE_UNIVERSE = [
-    'ChatRequestBody', 'readChatRequest',
+    'ChatRequestBody', 'ChatRequestError', 'readChatRequest', 'toChatErrorResponse',
     'WireFileSource', 'WirePart', 'DATA_URI', 'wireParts', 'wireText',
   ] as const;
 

@@ -72,7 +72,13 @@ async function chatHandler(request: Request): Promise<Response> {
   // courtesy — but the body is still read exactly the way a real route reads
   // it, so swapping this handler for a provider's changes nothing upstream of
   // this file.
-  const { messages } = await readChatRequest(request);
+  let chatBody: ChatRequestBody;
+  try {
+    chatBody = await readChatRequest(request);
+  } catch (error) {
+    return toChatErrorResponse(error);
+  }
+  const { messages } = chatBody;
   const last = [...messages].reverse().find((m) => m.role === 'user');
   const prompt = last && typeof last.content === 'string' ? last.content : '';
 

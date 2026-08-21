@@ -28,7 +28,13 @@ const mastra = new MastraClient({ baseUrl: MASTRA_URL });
 
 // Proxy a Mastra agent to the browser as OpenAI-format SSE.
 async function chatHandler(request: Request): Promise<Response> {
-  const { messages } = await readChatRequest(request);
+  let chatBody: ChatRequestBody;
+  try {
+    chatBody = await readChatRequest(request);
+  } catch (error) {
+    return toChatErrorResponse(error);
+  }
+  const { messages } = chatBody;
 
   // MastraClient's Agent.stream() takes AI-SDK CoreMessage[], not the OpenAI
   // wire format: each message has ONE literal role (not a union) and content
