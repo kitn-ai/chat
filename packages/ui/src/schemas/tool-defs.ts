@@ -131,6 +131,42 @@ export interface CardToolOptions<P extends ToolProvider = ToolProvider> {
    * When it throws it names the card, the path and the keyword.
    */
   readonly strict?: boolean;
+  /**
+   * Narrow the DERIVED tool schema per card type, after projection (F-23).
+   *
+   * A card's authored schema is deliberately permissive — `files` is optional on an
+   * artifact, its items need only a `path` — because the card CONTRACT must accept
+   * what a host may legitimately render. A model filling the tool in, though, is
+   * often better served by a tighter tool: requiring `code` on every file, or at
+   * least one file at all, moves a class of failures from render time (a card the
+   * registry rejects) to generation time (the model literally cannot emit one).
+   *
+   * This narrows the WIRE projection only — the authored schema and
+   * `registry.validate()` are untouched, so a hand-built envelope still validates.
+   * Applied for every provider, `jsonschema` included, and merged loudly: an
+   * unknown path or a required name the node has no property for is a TypeError
+   * naming the card, the path and the field, because a tool that can never be
+   * satisfied must not ship quietly.
+   */
+  readonly require?: Readonly<Record<string, readonly CardRequireRule[]>>;
+}
+
+/**
+ * One narrowing instruction for one node of one card's projected schema.
+ *
+ * `path` is a dot-path from the envelope-data root through `properties` keys
+ * (`''` names the root node itself). On an ARRAY node, `required` narrows
+ * `items.required` and `minItems` lands on the array; on an object node,
+ * `required` lands on the node's own `required`. Existing requirements merge,
+ * never replace.
+ */
+export interface CardRequireRule {
+  /** Dot-path from the envelope-data root to a schema node, e.g. 'files'. */
+  readonly path: string;
+  /** Property names to require. On an ARRAY node this narrows `items.required`; on an object node, the node's own `required`. */
+  readonly required?: readonly string[];
+  /** Sets `minItems` (array nodes only). */
+  readonly minItems?: number;
 }
 
 /**
@@ -283,6 +319,64 @@ function relaxRootCombinators(parameters: Record<string, unknown>, cardType: str
       `description and is still enforced by card validation.`,
   );
   return note ?? GENERIC_RELAXATION_NOTE;
+}
+
+/**
+ * Apply one card's `require` rules to its PROJECTED parameters (F-23).
+ *
+ * Runs after `project()` and `relaxRootCombinators()`, on the copy the projection
+ * built — never on the authored schema, which `registry.validate()` keeps reading.
+ * Merges into whatever `required` already exists rather than replacing it, so a
+ * rule can only ever NARROW what the model may emit, never widen it.
+ */
+function applyRequire(
+  parameters: Record<string, unknown>,
+  cardType: string,
+  rules: readonly CardRequireRule[],
+): void {
+  for (const rule of rules) {
+    // Resolve the dot-path through `properties` keys. `''` names the root node;
+    // every other segment must name a property of the node reached so far.
+    let node: Record<string, unknown> = parameters;
+    if (rule.path !== '') {
+      for (const segment of rule.path.split('.')) {
+        const props = isRecord(node.properties) ? node.properties : undefined;
+        const next = props?.[segment];
+        if (!isRecord(next)) {
+          throw new TypeError(
+            `cardTools: require on '${cardType}': path '${rule.path}' does not resolve in the schema`,
+          );
+        }
+        node = next;
+      }
+    }
+
+    const isArrayNode = node.type === 'array' || (node.type === undefined && 'items' in node);
+    if (isArrayNode && rule.minItems !== undefined) node.minItems = rule.minItems;
+    if (!isArrayNode && rule.minItems !== undefined) {
+      throw new TypeError(
+        `cardTools: minItems at require path '${rule.path}' applies to array nodes only, ` +
+          `but '${rule.path}' in the '${cardType}' schema is not one`,
+      );
+    }
+
+    if (rule.required !== undefined) {
+      // On an array node the requirement lives on the ITEMS (each element must carry
+      // the field), not on the array itself.
+      const target = isArrayNode && isRecord(node.items) ? node.items : node;
+      const props = isRecord(target.properties) ? target.properties : undefined;
+      for (const field of rule.required) {
+        if (!props || !(field in props)) {
+          throw new TypeError(
+            `cardTools: require on '${cardType}' at path '${rule.path}': '${field}' is not a property of that node — ` +
+              `a required name with no property would make the tool unsatisfiable`,
+          );
+        }
+      }
+      const existing = Array.isArray(target.required) ? target.required.map(String) : [];
+      target.required = [...new Set([...existing, ...rule.required])];
+    }
+  }
 }
 
 /**
@@ -491,6 +585,12 @@ export function cardTools(a: CardToolInput | CardToolOptions, b?: CardToolOption
         ? relaxRootCombinators(parameters as Record<string, unknown>, cardType)
         : undefined;
     const wireDescription = relaxedNote ? `${description} ${relaxedNote}` : description;
+
+    // F-23: every provider, jsonschema included — a consumer handing the bare schema
+    // to the Vercel AI SDK narrows their tool the same way. Runs BEFORE the strict
+    // subset check so that check judges the schema that actually ships.
+    const requireRules = opts.require?.[cardType];
+    if (requireRules !== undefined) applyRequire(parameters as Record<string, unknown>, cardType, requireRules);
 
     if (subset) {
       const violations = checkProviderSubset(parameters, subset);

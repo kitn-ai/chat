@@ -422,6 +422,64 @@ describe('cardTools: strict mode THROWS rather than downgrading', () => {
   });
 });
 
+describe('cardTools: the require option narrows the DERIVED tool schema (F-23)', () => {
+  it('joins a property into the array items\' required and sets minItems', () => {
+    const [artifact] = cardTools({ artifact: cardSchemas.artifact }, {
+      provider: 'openai',
+      require: { artifact: [{ path: 'files', required: ['code'], minItems: 1 }] },
+    }) as OpenAIToolDef[];
+    const files = (artifact.function.parameters as any).properties.files;
+    expect(files.minItems).toBe(1);
+    expect(files.items.required).toContain('code');
+    expect(files.items.required).toContain('path'); // the authored requirement survives
+  });
+
+  it('narrows a top-level object node when the path names the root', () => {
+    const [artifact] = cardTools({ artifact: cardSchemas.artifact }, {
+      provider: 'anthropic',
+      require: { artifact: [{ path: '', required: ['tab'] }] },
+    }) as AnthropicToolDef[];
+    expect((artifact.input_schema as any).required).toContain('tab');
+  });
+
+  it('throws naming the card, path and field for a required name absent from the node\'s properties (an unsatisfiable tool is louder than a silent one)', () => {
+    expect(() =>
+      cardTools({ artifact: cardSchemas.artifact }, {
+        provider: 'openai',
+        require: { artifact: [{ path: 'files', required: ['nope'] }] },
+      }),
+    ).toThrow(/artifact.*files.*nope/);
+  });
+
+  it('throws naming the card and the path for an unknown dot-path', () => {
+    expect(() =>
+      cardTools({ artifact: cardSchemas.artifact }, {
+        provider: 'openai',
+        require: { artifact: [{ path: 'nope.deep', required: ['x'] }] },
+      }),
+    ).toThrow(/artifact.*nope\.deep/);
+  });
+
+  it('never mutates the authored schema and applies to every provider including jsonschema', () => {
+    const before = JSON.stringify(cardSchemas.artifact);
+    const [js] = cardTools({ artifact: cardSchemas.artifact }, {
+      provider: 'jsonschema',
+      require: { artifact: [{ path: 'files', required: ['code'], minItems: 1 }] },
+    }) as JsonSchemaToolDef[];
+    expect((js.schema as any).properties.files.minItems).toBe(1);
+    expect(JSON.stringify(cardSchemas.artifact)).toBe(before);
+  });
+
+  it('composes with the F-20 relaxation (require on artifact, openai non-strict)', () => {
+    const [artifact] = cardTools({ artifact: cardSchemas.artifact }, {
+      provider: 'openai',
+      require: { artifact: [{ path: 'files', required: ['code'], minItems: 1 }] },
+    }) as OpenAIToolDef[];
+    expect((artifact.function.parameters as any).properties.files.minItems).toBe(1);
+    expect(artifact.function.parameters).not.toHaveProperty('anyOf');
+  });
+});
+
 describe('cardTools: the non-strict projection survives the providers (F-20)', () => {
   const ROOT_COMBINATORS = ['anyOf', 'allOf', 'oneOf', 'not'] as const;
 
