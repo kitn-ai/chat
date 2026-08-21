@@ -31,6 +31,13 @@ export default defineConfig({
         // without this the dts build still emitted type stubs for them into
         // dist/wire/fixtures/, describing modules that do not ship.
         'src/wire/fixtures/**',
+        // *.testlib.ts files are TEST-ONLY loaders (node:path / node:url).
+        // This tsconfig deliberately has no node types — that absence is what
+        // keeps Node imports out of shipped browser code — so including a
+        // testlib here logs TS2307 on every build and emits a d.ts for a
+        // module that must not ship. Excluded from the tarball by the
+        // matching !**/*.testlib.* negations in package.json `files`.
+        'src/**/*.testlib.ts',
       ],
       outDir: 'dist',
       entryRoot: 'src',
