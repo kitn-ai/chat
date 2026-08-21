@@ -460,6 +460,15 @@ describe('cardTools: the require option narrows the DERIVED tool schema (F-23)',
     ).toThrow(/artifact.*nope\.deep/);
   });
 
+  it('throws naming the card type for a require key the registry does not carry', () => {
+    expect(() =>
+      cardTools({ artifact: cardSchemas.artifact }, {
+        provider: 'openai',
+        require: { 'no-such-card': [{ path: 'files', required: ['code'] }] },
+      }),
+    ).toThrow(/no-such-card/);
+  });
+
   it('never mutates the authored schema and applies to every provider including jsonschema', () => {
     const before = JSON.stringify(cardSchemas.artifact);
     const [js] = cardTools({ artifact: cardSchemas.artifact }, {

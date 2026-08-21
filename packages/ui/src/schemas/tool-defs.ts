@@ -572,6 +572,20 @@ export function cardTools(a: CardToolInput | CardToolOptions, b?: CardToolOption
   const defs: ToolDef[] = [];
   const failures: UnsupportedCardTool[] = [];
 
+  // A `require` key naming a card the call does not carry is a typo, and a typo here
+  // would otherwise narrow NOTHING while looking like it narrowed something — the
+  // same decide-loudly class as an unknown dot-path below.
+  if (opts.require !== undefined) {
+    for (const key of Object.keys(opts.require)) {
+      if (!(key in schemas)) {
+        throw new TypeError(
+          `cardTools: require names card type '${key}', which this call does not carry ` +
+            `(carries: ${Object.keys(schemas).join(', ') || 'none'})`,
+        );
+      }
+    }
+  }
+
   for (const [cardType, schema] of Object.entries(schemas)) {
     const name = toolNameForCardType(cardType);
     const description = describe(cardType, schema, descriptions);
