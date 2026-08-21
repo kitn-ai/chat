@@ -321,7 +321,10 @@ export const PerplexityPro: Story = {
           <div class="shrink-0">
             <kai-separator></kai-separator>
             <div class="flex items-center justify-between px-2.5 py-1.5">
-              <kai-button variant="ghost" align="start" icon="settings">Settings</kai-button>
+              {/* `full` fills the HOST's box; in a flex row the host is a flex
+                  item that hugs content unless it grows, so flex-1 is what hands
+                  it the remaining width (min-w-0 keeps long labels truncatable). */}
+              <kai-button variant="ghost" align="start" icon="settings" full class="min-w-0 flex-1">Settings</kai-button>
               <kai-tooltip content="On battery - 82%">
                 <kai-button variant="ghost" size="icon-sm" label="Battery"><BatteryMedium slot="icon" class="size-4" /></kai-button>
               </kai-tooltip>
@@ -608,7 +611,7 @@ export const PerplexityPro: Story = {
     <!-- COMPUTER rail (when selected): New Task, nav, search, empty state -->
 
     <!-- pinned at the rail's bottom -->
-    <kai-button variant="ghost" icon="settings">Settings</kai-button>
+    <kai-button variant="ghost" icon="settings" full>Settings</kai-button>
     <kai-button variant="ghost" size="icon-sm" label="Battery"><svg slot="icon">…</svg></kai-button>
   </div>
 
