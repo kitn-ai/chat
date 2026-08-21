@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { cardFromToolCall, cardTypeFromToolName, KAI_TOOL_PREFIX } from './from-tool-call';
 import { cardSchemaNames, cardSchemas, type CardSchema } from './index';
 import { ANTHROPIC_STRICT, OPENAI_STRICT, checkProviderSubset } from './provider-subsets';
@@ -10,6 +10,7 @@ import {
   toJsonSchemaTools,
   toOpenAITools,
   type AnthropicToolDef,
+  type JsonSchemaToolDef,
   type OpenAIToolDef,
 } from './tool-defs';
 
@@ -156,12 +157,12 @@ describe('cardTools: the non-strict projection (the default, and the proven mode
     expect(openai()).toHaveLength(cardSchemaNames.length);
   });
 
-  it('is EXACTLY the authored schema minus $schema, $id and x-*', () => {
+  it('is EXACTLY the authored schema minus $schema, $id and x-* (jsonschema only — F-20 relaxes the openai/anthropic non-strict projections at the root)', () => {
     // Checked against an independently written stripper, not against the
     // implementation, so a bug in the projection cannot define its own expectation.
-    for (const def of anthropic()) {
+    for (const def of cardTools({ provider: 'jsonschema' })) {
       const type = cardTypeFromToolName(def.name) as keyof typeof cardSchemas;
-      expect(def.input_schema).toEqual(stripMetaIndependently(cardSchemas[type]));
+      expect((def as JsonSchemaToolDef).schema).toEqual(stripMetaIndependently(cardSchemas[type]));
     }
   });
 
@@ -418,5 +419,52 @@ describe('cardTools: strict mode THROWS rather than downgrading', () => {
     // Anthropic allows optional, so it must NOT be rewritten there.
     const anth = cardTools(src, { provider: 'anthropic', strict: true })[0].input_schema as { required: string[] };
     expect(anth.required).toEqual(['a']);
+  });
+});
+
+describe('cardTools: the non-strict projection survives the providers (F-20)', () => {
+  const ROOT_COMBINATORS = ['anyOf', 'allOf', 'oneOf', 'not'] as const;
+
+  it('projects kai_artifact for openai non-strict with type:object at the root and no root combinator', () => {
+    const [artifact] = cardTools({ artifact: cardSchemas.artifact }, { provider: 'openai' }) as OpenAIToolDef[];
+    expect(artifact.function.parameters.type).toBe('object');
+    for (const k of ROOT_COMBINATORS) expect(artifact.function.parameters).not.toHaveProperty(k);
+  });
+
+  it('projects kai_embed for anthropic non-strict the same way (the derived-prediction case, now pinned)', () => {
+    const [embed] = cardTools({ embed: cardSchemas.embed }, { provider: 'anthropic' }) as AnthropicToolDef[];
+    expect(embed.input_schema.type).toBe('object');
+    for (const k of ROOT_COMBINATORS) expect(embed.input_schema).not.toHaveProperty(k);
+  });
+
+  it('restates the dropped constraint in the description the model reads', () => {
+    const [artifact] = cardTools({ artifact: cardSchemas.artifact }, { provider: 'openai' }) as OpenAIToolDef[];
+    expect(artifact.function.description).toMatch(/src|files/);
+    const [embed] = cardTools({ embed: cardSchemas.embed }, { provider: 'anthropic' }) as AnthropicToolDef[];
+    expect(embed.description).toMatch(/url/);
+  });
+
+  it('warns loudly, once per call, naming the card and the relaxed constraint', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    cardTools({ artifact: cardSchemas.artifact }, { provider: 'openai' });
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('kai_artifact'));
+    warn.mockRestore();
+  });
+
+  it('keeps the jsonschema projection byte-faithful: the root combinator survives there', () => {
+    const [artifact] = cardTools({ artifact: cardSchemas.artifact }, { provider: 'jsonschema' }) as JsonSchemaToolDef[];
+    expect(artifact.schema).toHaveProperty('anyOf');
+  });
+
+  it('never mutates the authored schema — registry.validate semantics are untouched', () => {
+    const before = JSON.stringify(cardSchemas.artifact);
+    cardTools({ artifact: cardSchemas.artifact }, { provider: 'openai' });
+    expect(JSON.stringify(cardSchemas.artifact)).toBe(before);
+  });
+
+  it('guards EVERY built-in: no root combinator reaches an openai non-strict tool array', () => {
+    for (const def of cardTools({ provider: 'openai' }) as OpenAIToolDef[]) {
+      for (const k of ROOT_COMBINATORS) expect(def.function.parameters).not.toHaveProperty(k);
+    }
   });
 });

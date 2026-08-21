@@ -27,9 +27,14 @@
 // `format: "uri"` (link/embed/artifact), `minimum` (tasks/embed/artifact),
 // `maxItems` (confirm/artifact), `pattern` (embed), `if`/`then` (embed), `oneOf`
 // (artifact), a free-form object (form) and untyped `payload`/`allowOther` members
-// (confirm/choice). Non-strict is therefore not merely the default, it is currently
-// the only working mode, and it is also the mode the five-configuration conformance
-// spike actually proved cards in.
+// (confirm/choice). Non-strict is therefore the default and the mode the
+// five-configuration conformance spike actually proved cards in — but since F-20 it
+// is no longer a raw pass-through either: a root combinator (`anyOf` on artifact,
+// `allOf` on embed) gets HTTP 400 from OpenAI and Anthropic even non-strict, so the
+// non-strict projection relaxes those root combinators LOUDLY (constraint restated in
+// the description, console.warn names the relaxation, registry.validate still
+// enforces at render time). The jsonschema projection stays byte-faithful to the
+// authored schema.
 //
 // The alternative was to silently drop the offending keywords. That is rejected for
 // the reason the plan gives: a dropped `maxItems: 4` means the model emits six
@@ -225,7 +230,7 @@ function formatUnsupported(subset: ProviderSubset, cards: readonly UnsupportedCa
   lines.push('');
   lines.push(`  subset source: ${subset.source} (read ${subset.checkedOn})`);
   lines.push(
-    '  Fix: drop `strict: true`. Non-strict is the default and is the mode the kit\'s cards are proven in; both providers accept a loose schema there and ignore what they do not compile. Rewriting a built-in card schema to fit a strict subset would change what a valid card IS, which is a card-contract change, not a projection setting.',
+    '  Fix: drop `strict: true`. Non-strict mode projects a provider-valid schema (root combinators are relaxed with the constraint restated in the description and still enforced by card validation). Rewriting a built-in card schema to fit a strict subset would change what a valid card IS, which is a card-contract change, not a projection setting.',
   );
   return lines.join('\n');
 }
@@ -236,6 +241,42 @@ function formatUnsupported(subset: ProviderSubset, cards: readonly UnsupportedCa
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/**
+ * Root combinators the two largest providers refuse on a tool schema's root node
+ * (measured: OpenAI and Anthropic 400 before the model runs — findings F-20;
+ * DeepSeek's OpenAI-compatible route requires the same workaround). The AUTHORED
+ * schemas keep them — card validation keeps every constraint. Only the WIRE
+ * projection relaxes, loudly: the constraint is restated in the description the
+ * model reads, a console.warn names the relaxation, and a violating envelope
+ * still fails registry.validate() at render time with a hard diagnostic.
+ */
+const ROOT_RELAXATIONS: Readonly<Record<string, string>> = {
+  artifact:
+    'Provide `src` (a preview URL) or `files` — at least one. An envelope with neither is rejected.',
+  embed:
+    "For provider 'generic', include `url`. For 'youtube'/'vimeo', include `id` or `url`.",
+};
+
+/** Strip a banned combinator key from the projected ROOT node only (nested
+ *  combinators are accepted by every provider measured and stay). Returns the
+ *  relaxation note that was applied, so the caller can restate it in the TOOL
+ *  description the model actually reads (undefined when nothing was relaxed). */
+function relaxRootCombinators(parameters: Record<string, unknown>, cardType: string): string | undefined {
+  const note = ROOT_RELAXATIONS[cardType];
+  const banned = (['anyOf', 'allOf', 'oneOf', 'not', 'enum', 'const'] as const).filter(
+    (k) => k in parameters,
+  );
+  if (banned.length === 0) return undefined;
+  for (const k of banned) delete parameters[k];
+  // eslint-disable-next-line no-console
+  console.warn(
+    `[kai-card-tools] relaxed root ${banned.join('/')} on the projected '${toolNameForCardType(cardType)}' tool schema ` +
+      `for this provider (it would be refused with HTTP 400); the constraint now lives in the ` +
+      `description and is still enforced by card validation.`,
+  );
+  return note;
+}
 
 /**
  * Keywords stripped from every projection, strict or not.
@@ -435,6 +476,15 @@ export function cardTools(a: CardToolInput | CardToolOptions, b?: CardToolOption
     const description = describe(cardType, schema, descriptions);
     const parameters = project(schema, projectOptions) as ToolParameters;
 
+    // F-20: non-strict only. Strict mode already refuses these cards with the full
+    // subset check, so the relaxation must never mask it. The note is restated in the
+    // TOOL description — the envelope field the model reads when choosing the tool.
+    const relaxedNote =
+      subset === null && opts.provider !== 'jsonschema'
+        ? relaxRootCombinators(parameters as Record<string, unknown>, cardType)
+        : undefined;
+    const wireDescription = relaxedNote ? `${description} ${relaxedNote}` : description;
+
     if (subset) {
       const violations = checkProviderSubset(parameters, subset);
       if (violations.length > 0) {
@@ -444,9 +494,9 @@ export function cardTools(a: CardToolInput | CardToolOptions, b?: CardToolOption
     }
 
     if (opts.provider === 'openai') {
-      defs.push({ type: 'function', function: { name, description, parameters, ...(strict ? { strict: true as const } : {}) } });
+      defs.push({ type: 'function', function: { name, description: wireDescription, parameters, ...(strict ? { strict: true as const } : {}) } });
     } else if (opts.provider === 'anthropic') {
-      defs.push({ name, description, input_schema: parameters, ...(strict ? { strict: true as const } : {}) });
+      defs.push({ name, description: wireDescription, input_schema: parameters, ...(strict ? { strict: true as const } : {}) });
     } else {
       defs.push({ name, description, schema: parameters });
     }
