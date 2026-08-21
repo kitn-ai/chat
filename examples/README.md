@@ -82,12 +82,14 @@ builds and typechecks every app the day it lands.
 | `apps/support-widget/` | 1 | A docked support chat on a product page: `<kai-dock>` launcher + panel, streaming replies, no history. Vanilla TS + Vite. Mock frames with no key, OpenRouter with one, and the same client path either way. |
 | `apps/voice-assistant/` | 2 | A hands-free voice assistant: browser-native speech in and out, `kai-thread` transcript, `kai-audio-visualizer` on real mic amplitude, push-to-talk. Vanilla TS + Vite. Same mock/OpenRouter seam as rung 1; the app code was built front-door by a clean-room agent from the kai MCP alone (provenance in its README). |
 | `apps/workspace/` | 3 | A multi-conversation chat workspace: `kai-conversations` rail beside `kai-chat`, thread switching, delete with undo, search, and localStorage persistence that survives a reload mid-conversation. React + Vite on the `@kitn.ai/ui/react` wrappers. Same mock/OpenRouter seam; front-door-built by a clean-room agent (provenance in its README). |
+| `apps/builder/` | 4 | An AI page builder: chat left, live preview right. Each reply carries a whole self-contained HTML page as a `kai_artifact` tool call, which becomes a `kai-artifact` preview, a compact custom card in the thread, and a `kai-checkpoint` version you can restore. Device widths, maximize, Preview/Code. React + Vite. Same mock/OpenRouter seam; front-door-built by a clean-room agent (provenance in its README). |
 
 ```bash
 pnpm build:ui                                        # once
 pnpm --filter @kitn.ai/ui-app-support-widget dev     # http://localhost:5178
 pnpm --filter @kitn.ai/ui-app-voice-assistant dev    # http://localhost:5179
 pnpm --filter @kitn.ai/ui-app-workspace dev          # http://localhost:5180
+pnpm --filter @kitn.ai/ui-app-builder dev            # http://localhost:5181
 ```
 
 Each app's own `README.md` has the rest — how the turn works, what it needs to

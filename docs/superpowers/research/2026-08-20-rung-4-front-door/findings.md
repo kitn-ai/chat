@@ -433,20 +433,160 @@ and the element was defined. The probe could not see into the shadow root; line 
 "nothing rendered" that turns out to be the *checker's* blindness is exactly the class this
 project keeps paying for.
 
+---
+
+## Findings from the real-mode turn (F-20 – F-22)
+
+F-01 – F-19 come from the clean-room run, which was mock-only by design. The three below came
+out of the **insider's real-mode smoke** while landing the app into `examples/apps/builder/`
+(`.superpowers/sdd/2026-08-20-rung-4-builder/task-5-report.md`, and the labeled sites in
+`examples/apps/builder/server/chat.ts`). They are filed here because they belong to this
+catalog, not because the comparer observed the HTTP responses: **the provider 400s and the
+OpenRouter corruption are the insider's measurements and are cited as such.** Everything below
+that is stated about the kit's own code, I re-derived myself against the tree and the shipped
+package, and where that changed the verdict I say so.
+
+### F-20 — `cardTools` emits tool definitions that OpenAI and Anthropic reject with HTTP 400, in the mode the kit calls the only working one · product gap · S1
+
+`cardTools({ artifact: cardSchemas.artifact }, { provider: 'openai' })` carries the artifact
+schema's **top-level `anyOf`** (`[{required:['src']},{required:['files']}]`). Both providers
+refuse the tool array outright, before the model runs (insider's measurements):
+
+```
+OpenAI (openai/gpt-4o-mini, HTTP 400):
+  Invalid schema for function 'kai_artifact': schema must have type 'object'
+  and not have 'oneOf'/'anyOf'/'allOf'/'enum'/'const'/'not' at the top level
+
+Anthropic (anthropic/claude-haiku-4.5, HTTP 400, on every OpenRouter route tried
+— Anthropic, Bedrock, Google, Azure):
+  tools.0.custom.input_schema: input_schema does not support oneOf, allOf,
+  or anyOf at the top level
+```
+
+**Positive control (insider):** `google/gemini-2.5-flash`, byte-identical tool array, HTTP 200.
+So the schema is not universally invalid — it is invalid for the two largest providers.
+
+**Re-derived here, against the shipped 0.25.2 package and the tree — three things, and two of
+them widen the finding:**
+
+1. **The combinator really does survive the projection.** Probing the installed package:
+   `cardTools({ artifact: … }, { provider: 'openai' })` yields parameters whose top-level keys
+   are `title, description, type, additionalProperties, anyOf, properties` — `anyOf` present.
+2. **It is not one card, it is two.** Over `packages/ui/src/primitives/card-schemas/*.json`,
+   **`artifact` carries a top-level `anyOf` and `embed` carries a top-level `allOf`**; the other
+   five are clean. And `cardTools({ provider: 'openai' })` with no card argument — the
+   project-everything call — emits **7 tools, 2 of them carrying a top-level combinator**
+   (`kai_artifact(anyOf)`, `kai_embed(allOf)`). Both provider error strings name `allOf` at the
+   top level as well as `anyOf`, so **`kai_embed` is very likely refused on the same two
+   providers**. *Flagged as a derived prediction, not a measurement — nobody has sent `embed`.*
+   That matters because the front door's own instruction is to build the definitions once with
+   `cardTools(registry, { provider })`, and the default registry contains both.
+3. **The check that would catch this cannot run in the mode that needs it.** In
+   `schemas/tool-defs.ts:419`, `const subset = strict ? … : null`, and `checkProviderSubset` is
+   called only `if (subset)`. `provider-subsets.ts` knows the rule exactly — `anyOf` is
+   *"supported … and it may not be at the root"* for OpenAI, `allOf` *"unsupported"* — and that
+   knowledge is unreachable on the default path.
+
+**The contradiction is worse than a stale header comment.** `tool-defs.ts:30-32` says non-strict
+*"is not merely the default, it is currently the only working mode"*. But the same file's
+**error text, the one a consumer is shown when `strict: true` throws** (line 228), reads: *"Fix:
+drop `strict: true`. … both providers accept a loose schema there and ignore what they do not
+compile."* That is the kit instructing the developer, at the moment of failure, to take the path
+that returns HTTP 400. A remediation message that routes you into the defect is a stronger defect
+than a comment that is merely out of date.
+
+**Severity: S1, raised from the insider's proposed S2**, and the reason is the blast radius, not
+the fix cost. This is a hard refusal, before the model runs, on the two largest providers, for the
+flagship card of the exact flow this rung exists to measure — and it is reached by following the
+kit's own documented one-liner. The app's workaround is 8 lines (`providerSafe`,
+`examples/apps/builder/server/chat.ts:103-109`), and every consumer of `cardTools` for these two
+cards has to write it.
+
+**Re-cast input:** either run the top-level-combinator check on the **non-strict** path (it is a
+provider refusal, not a strictness nicety) or re-express "one of `src`/`files`" in the artifact
+schema without a root combinator — and fix the `strict: true` error text either way, since it
+currently prescribes the failure. Check `embed` at the same time.
+
+### F-21 — OpenRouter's streamed tool-call argument deltas corrupt on its Anthropic routes · environmental / upstream defect · S3, with a kit consequence
+
+Insider's isolation, three probes:
+
+| Request | Result |
+|---|---|
+| `anthropic/claude-haiku-4.5`, `stream: true` | concatenated `arguments` is **invalid JSON** — a stray `}` before the close |
+| `anthropic/claude-haiku-4.5`, `stream: false` | `JSON.parse` **OK** |
+| `openai/gpt-4o-mini`, `stream: true` | `JSON.parse` **OK** |
+
+Not the model, not the schema, and **not the kit's reader** — it is OpenRouter's
+Anthropic→OpenAI streaming translation. **Filed as environmental, and it is the only finding in
+this catalog that is not about this repo.**
+
+**The kit-relevant consequence, which is why it is recorded here at all:** this app is a streamed
+tool call by construction, so the corpus's standard default model would have shipped an example
+that never produces a page. The insider changed the app's default to `openai/gpt-4o-mini`
+(`examples/apps/builder/vite-chat-api.ts`, `.env.example`), with the reason written at the site —
+**the first corpus app to diverge from the corpus-standard model, and the divergence is
+load-bearing rather than cosmetic.** If the corpus ever standardises a model per app, this is the
+precedent to point at; if OpenRouter fixes the translation, this app's default should go back.
+
+### F-22 — a malformed tool call is reported only on the channel card apps are told to suppress · product gap · S2
+
+**The claim as it reached me was that a tool call whose arguments fail to parse "produces no
+error anywhere on the kit path". I checked, and that is not true — the kit reports it, twice and
+well.** `wire/consume.ts:230-244` catches the parse failure and calls
+`sink.upsertTool(id, { state: 'output-error', errorText: … })` with a genuinely good message that
+even distinguishes the truncation case (*"the stream hit the token limit mid-call"*) and clips the
+raw text; and the failure is also returned on `ModelToolCall.error`, a documented field
+(*"Why this call is unusable (malformed or truncated args, missing name)"*, `wire/chunk.ts:158`),
+reachable as `turn.toolCalls[i].error`.
+
+**The real defect is where those two channels land**, and it is a genuine decide-loudly problem:
+
+1. **Channel one is the one every card app is pushed to switch off.** `upsertTool` is also what
+   renders the raw tool panel that duplicates the card built from the same call — F-17. The
+   workaround for F-17 is a custom `AssistantStreamSink` with `upsertTool: () => undefined`,
+   which is exactly what this app ships (`App.tsx:163-168`). **Error reporting and duplicate
+   rendering ride the same wire**, so suppressing the cosmetic problem silently disables the
+   diagnostic one.
+2. **Channel two is not the one anyone is taught to check.** The scaffolder's own emitted client
+   ends with `if (turn.error) console.error('Model error:', turn.error.message)` — and
+   `ModelTurn.error` is the **turn-level** error; a malformed tool call does not set it. Nothing
+   in any of the ten MCP responses mentions `turn.toolCalls[].error`.
+
+Net effect for this app, and for any app that follows the same two pieces of advice: a corrupted
+tool call produces no visible failure — `takeToolCall` falls through on a missing `call.input`
+(`App.tsx:94`), no version appears, and the thread just says nothing happened. Which is precisely
+how F-21 presented before it was isolated.
+
+**Re-cast input:** give the failure a channel that survives tool-panel suppression — set
+`ModelTurn.error` (or a dedicated `toolErrors`) on a malformed call, or make "suppress the panel"
+an explicit reader option that keeps errors flowing rather than something a host achieves by
+gutting the sink. This is the same fix surface as F-17 and the two should be designed together.
+
 ## Counts by class
 
 | Class | Count | IDs |
 |---|---|---|
 | teaching gap | 3 | F-01, F-02, F-06 |
-| product gap | 9 | F-03, F-04, F-05, F-07, F-08, F-09, F-10, F-11, F-14 |
+| product gap | 11 | F-03, F-04, F-05, F-07, F-08, F-09, F-10, F-11, F-14, **F-20**, **F-22** |
 | doc gap | 3 | F-12, F-13, F-15 |
 | builder error | 1 | F-16 |
 | acceptable variation | 2 | F-17, F-18 |
+| environmental / upstream | 1 | **F-21** |
 | strip artifact | **0** | — (all candidates checked against the real `llms-full.txt` / `README.md`) |
 | recorded non-finding | 1 | F-19 |
+| **Classified total** | **21** | F-01 – F-22 less the non-finding F-19 |
 
-By severity: **S1 ×3** (F-01, F-02, F-10) · **S2 ×7** (F-03, F-04, F-05, F-06, F-07, F-08, F-14)
-· **S3 ×4** (F-09, F-11, F-12, F-13) · **S4 ×2** (F-15, F-16).
+By severity: **S1 ×4** (F-01, F-02, F-10, F-20) · **S2 ×8** (F-03, F-04, F-05, F-06, F-07, F-08,
+F-14, F-22) · **S3 ×5** (F-09, F-11, F-12, F-13, F-21) · **S4 ×2** (F-15, F-16). Nineteen
+severity-carrying findings; the two acceptable variations (F-17, F-18) carry none, and F-19 is a
+recorded non-finding.
+
+**Provenance split.** F-01 – F-19 are the clean-room run (mock-only by design). **F-20 – F-22**
+came out of the insider's real-mode smoke and are marked as such at each site: the provider HTTP
+responses are the insider's measurements, everything asserted about the kit's own code was
+re-derived by the comparer — which raised F-20 from the proposed S2 to S1 and **corrected the
+premise of F-22** (the kit is not silent; the channels it reports on are the wrong two).
 
 ## Rung-3 residuals, re-checked
 
