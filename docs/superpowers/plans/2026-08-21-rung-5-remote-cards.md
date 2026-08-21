@@ -183,12 +183,21 @@ describe('cardTools: the require option narrows the DERIVED tool schema (F-23)',
     expect(files.items.required).toContain('path'); // the authored requirement survives
   });
 
-  it('narrows a top-level object node when the path names one', () => {
-    const [form] = cardTools({ form: cardSchemas.form }, {
+  it('narrows a top-level object node when the path names the root', () => {
+    const [artifact] = cardTools({ artifact: cardSchemas.artifact }, {
       provider: 'anthropic',
-      require: { form: [{ path: '', required: ['someTopLevelField'] }] },
+      require: { artifact: [{ path: '', required: ['tab'] }] },
     }) as AnthropicToolDef[];
-    expect((form.input_schema as any).required).toContain('someTopLevelField');
+    expect((artifact.input_schema as any).required).toContain('tab');
+  });
+
+  it('throws naming the card, path and field for a required name absent from the node\'s properties (an unsatisfiable tool is louder than a silent one)', () => {
+    expect(() =>
+      cardTools({ artifact: cardSchemas.artifact }, {
+        provider: 'openai',
+        require: { artifact: [{ path: 'files', required: ['nope'] }] },
+      }),
+    ).toThrow(/artifact.*files.*nope/);
   });
 
   it('throws naming the card and the path for an unknown dot-path', () => {
@@ -222,7 +231,7 @@ describe('cardTools: the require option narrows the DERIVED tool schema (F-23)',
 ```
 
 - [ ] **Step 2: Run to verify they fail** (`vitest run src/schemas/tool-defs.test.ts` — TS error: no `require` option).
-- [ ] **Step 3: Implement**: add `CardRequireRule`, the `require` field on `CardToolOptions`, and a `applyRequire(parameters, cardType, rules)` helper run after `project()`/`relaxRootCombinators()` for every provider. Resolve each dot-path segment through `properties` (`''` = root); array node → `required` merges into `node.items.required`, `minItems` onto the node; object node → `required` merges onto the node. Unknown path → `throw new TypeError(\`cardTools: require path '${path}' does not resolve in the '${cardType}' schema\`)`. Merge, never replace, existing `required`.
+- [ ] **Step 3: Implement**: add `CardRequireRule`, the `require` field on `CardToolOptions`, and a `applyRequire(parameters, cardType, rules)` helper run after `project()`/`relaxRootCombinators()` for every provider. Resolve each dot-path segment through `properties` (`''` = root); array node → `required` merges into `node.items.required`, `minItems` onto the node; object node → `required` merges onto the node. Unknown path → `throw new TypeError(\`cardTools: require path '${path}' does not resolve in the '${cardType}' schema\`)`; a `required` name absent from the resolved node's `properties` → TypeError naming card, path and field. Merge, never replace, existing `required`.
 - [ ] **Step 4: Run to verify pass** + full `src/schemas/` suite green.
 - [ ] **Step 5: Commit** — `feat(schemas): cardTools require option for derived-schema narrowing (F-23)`
 
