@@ -509,6 +509,17 @@ function ResizableHandle(props: ResizableHandleProps) {
       style={{
         cursor: isStatic() ? 'default' : isHoriz() ? 'col-resize' : 'row-resize',
         [isHoriz() ? 'width' : 'height']: '8px',
+        // The panels on either side are given explicit `flex-shrink: 0` (see
+        // `applyDelta`/`resetPanelToDefault`/`ResizablePanel.sizeStyle`) so THEY
+        // never yield space back to the handle. Without an equally explicit
+        // shrink here the handle keeps the flexbox default (`flex-shrink: 1`),
+        // so the moment its neighbors' sizes sum to (or exceed) the container's
+        // main axis — e.g. two percentage sizes that add to 100% after a
+        // maximize/restore round trip — flexbox has nowhere else to reclaim the
+        // 8px shortfall from and squeezes the handle itself to a computed width
+        // of 0. That makes the divider invisible AND undraggable (no hit area)
+        // until reload. Pin it to never shrink, matching its neighbors.
+        'flex-shrink': '0',
         'background': showStripHighlight() ? 'var(--color-muted-foreground, #98989f)' : 'transparent',
         'opacity': showStripHighlight() ? '0.3' : '1',
       }}
