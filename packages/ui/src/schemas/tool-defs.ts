@@ -260,8 +260,15 @@ const ROOT_RELAXATIONS: Readonly<Record<string, string>> = {
 
 /** Strip a banned combinator key from the projected ROOT node only (nested
  *  combinators are accepted by every provider measured and stay). Returns the
- *  relaxation note that was applied, so the caller can restate it in the TOOL
- *  description the model actually reads (undefined when nothing was relaxed). */
+ *  relaxation note to restate in the TOOL description the model reads. Two
+ *  distinct no-note return paths: `undefined` when NOTHING was banned (the wire
+ *  projection is faithful, nothing was widened), and GENERIC_NOTE when something
+ *  WAS banned but no curated copy exists (a custom card) — that path still
+ *  restates the relaxation, because deleting a combinator without telling the
+ *  model would be a silent widening. */
+const GENERIC_RELAXATION_NOTE =
+  'The root constraint of this schema was relaxed for this provider; consult the card registry for what a valid payload is.';
+
 function relaxRootCombinators(parameters: Record<string, unknown>, cardType: string): string | undefined {
   const note = ROOT_RELAXATIONS[cardType];
   const banned = (['anyOf', 'allOf', 'oneOf', 'not', 'enum', 'const'] as const).filter(
@@ -275,7 +282,7 @@ function relaxRootCombinators(parameters: Record<string, unknown>, cardType: str
       `for this provider (it would be refused with HTTP 400); the constraint now lives in the ` +
       `description and is still enforced by card validation.`,
   );
-  return note;
+  return note ?? GENERIC_RELAXATION_NOTE;
 }
 
 /**

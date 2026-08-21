@@ -444,7 +444,7 @@ describe('cardTools: the non-strict projection survives the providers (F-20)', (
     expect(embed.description).toMatch(/url/);
   });
 
-  it('warns loudly, once per call, naming the card and the relaxed constraint', () => {
+  it('warns on a single-card call, naming the tool', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     cardTools({ artifact: cardSchemas.artifact }, { provider: 'openai' });
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('kai_artifact'));
@@ -460,6 +460,15 @@ describe('cardTools: the non-strict projection survives the providers (F-20)', (
     const before = JSON.stringify(cardSchemas.artifact);
     cardTools({ artifact: cardSchemas.artifact }, { provider: 'openai' });
     expect(JSON.stringify(cardSchemas.artifact)).toBe(before);
+  });
+
+  it('restates a generic note when a CUSTOM card carries a root combinator with no curated copy', () => {
+    const [custom] = cardTools(
+      { 'pricing-table': { type: 'object', properties: {}, anyOf: [{ required: ['a'] }, { required: ['b'] }] } },
+      { provider: 'openai' },
+    ) as OpenAIToolDef[];
+    expect(custom.function.parameters).not.toHaveProperty('anyOf');
+    expect(custom.function.description).toMatch(/relaxed/i);
   });
 
   it('guards EVERY built-in: no root combinator reaches an openai non-strict tool array', () => {
