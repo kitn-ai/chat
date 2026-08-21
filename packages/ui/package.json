@@ -144,6 +144,8 @@
     "!src/**/*.stories.tsx",
     "!src/**/*.test.ts",
     "!src/**/*.test.tsx",
+    "!src/**/*.testlib.ts",
+    "!dist/**/*.testlib.*",
     "!src/**/*.mdx",
     "!src/stories",
     "!src/wire/fixtures",

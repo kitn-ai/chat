@@ -69,6 +69,7 @@ export const inventory: TInventoryEntry[] = [
   { title: 'perplexity', sort: 'surface', note: 'Labs/App, end-to-end composition' },
   { title: 'perplexity-pro', sort: 'surface', note: 'Labs/App, end-to-end composition' },
   { title: 'v0', sort: 'surface', note: 'Labs/App, end-to-end composition' },
+  { title: 'wisp', sort: 'surface', note: 'Labs/App, end-to-end composition' },
   { title: 'lovable', sort: 'surface', note: 'Labs/App, end-to-end composition' },
   { title: 'split-workspace', sort: 'surface', note: 'Labs/App, end-to-end composition' },
   { title: 'Workspace Home', sort: 'surface', note: 'the workspace preset' },

@@ -2525,6 +2525,12 @@
           "fn": false
         },
         {
+          "name": "full",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
           "name": "open",
           "scalar": true,
           "optional": true,

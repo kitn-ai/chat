@@ -36,7 +36,7 @@ declare module 'solid-js' {
       'kai-workspace': JSX.HTMLAttributes<HTMLElement> & { 'collapse-below'?: string | number; 'drawer-below'?: string | number };
       'kai-button': JSX.HTMLAttributes<HTMLElement> & { variant?: string; size?: string; icon?: string; 'icon-trailing'?: string; label?: string; disabled?: boolean; full?: boolean; align?: 'start' | 'center' | 'end' };
       'kai-nav': JSX.HTMLAttributes<HTMLElement> & { value?: string; 'default-value'?: string; theme?: string };
-      'kai-menu': JSX.HTMLAttributes<HTMLElement> & { theme?: string; 'trigger-icon'?: string; 'trigger-label'?: string; 'trigger-icon-trailing'?: string; label?: string };
+      'kai-menu': JSX.HTMLAttributes<HTMLElement> & { theme?: string; 'trigger-icon'?: string; 'trigger-label'?: string; 'trigger-icon-trailing'?: string; label?: string; full?: boolean };
       'kai-badge': JSX.HTMLAttributes<HTMLElement> & { variant?: string };
       'kai-message': JSX.HTMLAttributes<HTMLElement>;
       'kai-prompt-input': JSX.HTMLAttributes<HTMLElement> & { theme?: string; placeholder?: string; loading?: boolean; disabled?: boolean; voice?: boolean; 'web-search'?: boolean; attach?: boolean; submit?: string; 'suggestion-mode'?: string };
@@ -247,10 +247,12 @@ export const Perplexity: Story = {
 
             {/* footer: the account menu + settings */}
             <div slot="footer" class="flex items-center px-2 py-1.5">
-              <kai-menu ref={(el) => { (el as El).items = ACCOUNT; }} label="Account menu">
+              {/* `full` + flex-1: the account row stretches across the rail (a
+                  full-width clickable row) with the settings button at its end. */}
+              <kai-menu ref={(el) => { (el as El).items = ACCOUNT; }} label="Account menu" full class="min-w-0 flex-1">
                 {/* Trigger content is NON-interactive: kai-menu supplies its own
                     <button>, so a button/kai-button here would double-nest. */}
-                <div slot="trigger" class="flex items-center gap-2 text-left">
+                <div slot="trigger" class="flex w-full items-center gap-2 text-left">
                   <kai-avatar fallback="AR" size="sm"></kai-avatar>
                   <span class="text-sm font-medium">Ada</span>
                   <span class="text-[0.8125rem] text-muted-foreground">Pro</span>
@@ -453,7 +455,7 @@ export const Perplexity: Story = {
       <!-- stand-in icons: the named-icon registry has no Compass/Layers/Image glyphs -->
     </div>
     <div slot="footer">
-      <kai-menu label="Account menu">
+      <kai-menu label="Account menu" full>
         <div slot="trigger"><kai-avatar fallback="AR"></kai-avatar> Ada · Pro</div>
       </kai-menu>
       <kai-button variant="ghost" size="icon-sm" icon="settings" label="Settings"></kai-button>

@@ -4852,6 +4852,15 @@
         "displayType": "undefined | string"
       },
       {
+        "name": "full",
+        "type": "undefined | false | true",
+        "optional": true,
+        "scalar": true,
+        "description": "Stretch the trigger to the full width of the menu's container (a block row), e.g. a sidebar-footer account row. Same affordance as `<kai-button full>`. Attribute: `full`.",
+        "default": "false",
+        "displayType": "undefined | false | true"
+      },
+      {
         "name": "open",
         "type": "undefined | false | true",
         "optional": true,

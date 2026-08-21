@@ -39,7 +39,7 @@ declare module 'solid-js' {
       'kai-workspace': JSX.HTMLAttributes<HTMLElement> & { 'collapse-below'?: string | number; 'drawer-below'?: string | number };
       'kai-button': JSX.HTMLAttributes<HTMLElement> & { variant?: string; size?: string; icon?: string; 'icon-trailing'?: string; label?: string; disabled?: boolean; full?: boolean; align?: 'start' | 'center' | 'end' };
       'kai-nav': JSX.HTMLAttributes<HTMLElement> & { value?: string; 'default-value'?: string; theme?: string };
-      'kai-menu': JSX.HTMLAttributes<HTMLElement> & { theme?: string; 'trigger-icon'?: string; 'trigger-label'?: string; 'trigger-icon-trailing'?: string; label?: string };
+      'kai-menu': JSX.HTMLAttributes<HTMLElement> & { theme?: string; 'trigger-icon'?: string; 'trigger-label'?: string; 'trigger-icon-trailing'?: string; label?: string; full?: boolean };
       'kai-badge': JSX.HTMLAttributes<HTMLElement> & { variant?: string };
       'kai-message': JSX.HTMLAttributes<HTMLElement>;
       'kai-prompt-input': JSX.HTMLAttributes<HTMLElement> & { theme?: string; placeholder?: string; loading?: boolean; disabled?: boolean; voice?: boolean; 'web-search'?: boolean; attach?: boolean; submit?: string; 'suggestion-mode'?: string };
@@ -321,7 +321,10 @@ export const PerplexityPro: Story = {
           <div class="shrink-0">
             <kai-separator></kai-separator>
             <div class="flex items-center justify-between px-2.5 py-1.5">
-              <kai-button variant="ghost" align="start" icon="settings">Settings</kai-button>
+              {/* `full` fills the HOST's box; in a flex row the host is a flex
+                  item that hugs content unless it grows, so flex-1 is what hands
+                  it the remaining width (min-w-0 keeps long labels truncatable). */}
+              <kai-button variant="ghost" align="start" icon="settings" full class="min-w-0 flex-1">Settings</kai-button>
               <kai-tooltip content="On battery - 82%">
                 <kai-button variant="ghost" size="icon-sm" label="Battery"><BatteryMedium slot="icon" class="size-4" /></kai-button>
               </kai-tooltip>
@@ -608,7 +611,7 @@ export const PerplexityPro: Story = {
     <!-- COMPUTER rail (when selected): New Task, nav, search, empty state -->
 
     <!-- pinned at the rail's bottom -->
-    <kai-button variant="ghost" icon="settings">Settings</kai-button>
+    <kai-button variant="ghost" icon="settings" full>Settings</kai-button>
     <kai-button variant="ghost" size="icon-sm" label="Battery"><svg slot="icon">…</svg></kai-button>
   </div>
 

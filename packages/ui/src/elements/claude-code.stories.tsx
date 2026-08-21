@@ -225,10 +225,12 @@ export const ClaudeCode: Story = {
                 >Design</kai-button>
               </div>
               <div class={`${footerRow} flex items-center px-2 py-1.5`}>
-                <kai-menu ref={(el) => { (el as El).items = MENU_ITEMS; }} label="Account menu">
+                {/* `full` + flex-1: the account row stretches across the rail (a
+                    full-width clickable row) with the sync button at its end. */}
+                <kai-menu ref={(el) => { (el as El).items = MENU_ITEMS; }} label="Account menu" full class="min-w-0 flex-1">
                   {/* The trigger content is NON-interactive: kai-menu wraps it in its
                       own <button>, so a button/kai-button here would double-nest. */}
-                  <div slot="trigger" class="flex items-center gap-2 text-left">
+                  <div slot="trigger" class="flex w-full items-center gap-2 text-left">
                     <kai-avatar fallback="JD" size="sm"></kai-avatar>
                     <span class="text-sm font-medium">John</span>
                     <span class="text-[0.8125rem] text-muted-foreground">Max</span>
@@ -417,7 +419,7 @@ export const ClaudeCode: Story = {
     <div slot="footer">
       <kai-tasks></kai-tasks>
       <kai-button variant="ghost" icon="workflow">Design</kai-button>
-      <kai-menu label="Account menu">
+      <kai-menu label="Account menu" full>
         <!-- Trigger content is NON-interactive: kai-menu supplies the button. -->
         <div slot="trigger" class="flex items-center gap-2">
           <kai-avatar fallback="JD"></kai-avatar> John
