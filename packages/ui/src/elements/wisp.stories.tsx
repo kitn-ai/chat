@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from 'storybook-solidjs-vite';
-import { createSignal, Show, For, type Component } from 'solid-js';
+import { createSignal, createEffect, Show, For, type Component } from 'solid-js';
 import { Code2, FileText, Globe, MessageSquare } from 'lucide-solid';
 import { expect, userEvent, waitFor } from 'storybook/test';
 import './register'; // every kai-* element used below
@@ -35,7 +35,7 @@ declare module 'solid-js' {
       'kai-workspace': JSX.HTMLAttributes<HTMLElement> & { 'collapse-below'?: string | number; 'drawer-below'?: string | number };
       'kai-button': JSX.HTMLAttributes<HTMLElement> & { variant?: string; size?: string; icon?: string; 'icon-trailing'?: string; label?: string; disabled?: boolean; full?: boolean; align?: 'start' | 'center' | 'end' };
       'kai-nav': JSX.HTMLAttributes<HTMLElement> & { value?: string; 'default-value'?: string; theme?: string };
-      'kai-menu': JSX.HTMLAttributes<HTMLElement> & { theme?: string; 'trigger-icon'?: string; 'trigger-label'?: string; 'trigger-icon-trailing'?: string; label?: string };
+      'kai-menu': JSX.HTMLAttributes<HTMLElement> & { theme?: string; 'trigger-icon'?: string; 'trigger-label'?: string; 'trigger-icon-trailing'?: string; label?: string; full?: boolean };
       'kai-badge': JSX.HTMLAttributes<HTMLElement> & { variant?: string };
       'kai-message': JSX.HTMLAttributes<HTMLElement>;
       'kai-prompt-input': JSX.HTMLAttributes<HTMLElement> & { theme?: string; placeholder?: string; loading?: boolean; disabled?: boolean; voice?: boolean; 'web-search'?: boolean; attach?: boolean; submit?: string; 'suggestion-mode'?: string };
@@ -178,9 +178,12 @@ const CANVAS_FILES = [
   },
 ];
 
-export const Wisp: Story = {
-  name: 'Wisp',
-  render: () => {
+// The whole app, shared by the display story and the interaction story below.
+// Split so the SHOWCASE story carries no play function: in Storybook dev, a
+// story's play fn runs on every canvas view, so a play that clicks the kebab
+// open would be watched executing on first paint (the init "flicker" — a focus
+// ring plus a half-open menu — was exactly that).
+function WispApp() {
     const [cmdOpen, setCmdOpen] = createSignal(false);
     const [canvasOpen, setCanvasOpen] = createSignal(false);
     const [railCollapsed, setRailCollapsed] = createSignal(false);
@@ -231,6 +234,14 @@ export const Wisp: Story = {
           <kai-conversations
             slot="start"
             ref={(el) => {
+              // In item mode the CONTAINER owns selection: its sync stamps every
+              // host's `active` from its own `activeId` prop. Feed it reactively,
+              // or the first sync (activeId undefined) CLEARS the initially
+              // active row — the init flash where row 1 highlighted and then
+              // un-highlighted was exactly that. The per-row `active` binding
+              // below covers the frames before the container's first item sync;
+              // both derive from the same signal, so they never disagree.
+              createEffect(() => { (el as El).activeId = activeId(); });
               el.addEventListener('kai-conversation-select', (e) => {
                 setActiveId((e as CustomEvent<{ id: string }>).detail.id);
               });
@@ -292,7 +303,9 @@ export const Wisp: Story = {
             </For>
 
             <div slot="footer" class="px-2 py-1.5">
-              <kai-menu ref={(el) => { (el as El).items = ACCOUNT_ITEMS; }} label="Account menu">
+              {/* `full` stretches the trigger row across the rail (a real chat
+                  app's footer is one full-width clickable row). */}
+              <kai-menu ref={(el) => { (el as El).items = ACCOUNT_ITEMS; }} label="Account menu" full>
                 <div slot="trigger" class="flex w-full items-center gap-2 text-left">
                   <kai-avatar fallback="S" size="sm"></kai-avatar>
                   <span class="text-sm font-medium">Sam</span>
@@ -466,30 +479,13 @@ export const Wisp: Story = {
         </Show>
       </div>
     );
-  },
-  // The composed rail's kebab really works: open the first row's menu, pick
-  // Rename, and the row title visibly changes in the rail's light DOM.
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const firstItem = canvasElement.querySelector('kai-conversation-item');
-    expect(firstItem).toBeTruthy();
-    const menuHost = firstItem!.querySelector('kai-menu') as HTMLElement | null;
-    expect(menuHost).toBeTruthy();
-    const shadow = menuHost!.shadowRoot!;
-    const trigger = shadow.querySelector<HTMLElement>('button');
-    expect(trigger).toBeTruthy();
+}
 
-    await userEvent.click(trigger!);
-    await waitFor(() => expect(shadow.querySelector('[role="menu"]')).toBeTruthy());
-    const rename = [...shadow.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((el) =>
-      el.textContent?.includes('Rename'),
-    );
-    expect(rename).toBeTruthy();
-    await userEvent.click(rename!);
-    await waitFor(() => {
-      expect(canvasElement.textContent).toContain('Debounce vs throttle in TS (renamed)');
-      expect(shadow.querySelector('[role="menu"]')).toBeNull();
-    });
-  },
+// The SHOWCASE: no play function, so a fresh canvas view paints and stays
+// still. The kebab interaction coverage lives in WispInteractions below.
+export const Wisp: Story = {
+  name: 'Wisp',
+  render: () => <WispApp />,
   parameters: {
     docs: {
       description: {
@@ -526,7 +522,8 @@ export const Wisp: Story = {
     <!-- ...one per record -->
 
     <div slot="footer">
-      <kai-menu label="Account menu">
+      <!-- \`full\` stretches the trigger row across the rail -->
+      <kai-menu label="Account menu" full>
         <div slot="trigger"><kai-avatar fallback="S"></kai-avatar> Sam</div>
       </kai-menu>
     </div>
@@ -548,10 +545,12 @@ export const Wisp: Story = {
 
 <script type="module">
   import '@kitn.ai/ui/elements';
-  // Selection flows container -> item: listen on the CONTAINER, drive each
-  // item's \`active\`. Array/object props are JS properties (the kai- contract).
+  // Selection flows container -> item: the CONTAINER's activeId is the source
+  // of truth (its sync stamps each item's \`active\` from it). Listen for
+  // selection on the container and write activeId back to it.
   const rail = document.querySelector('kai-conversations');
-  rail.addEventListener('kai-conversation-select', (e) => setActive(e.detail.id));
+  rail.activeId = 'c0';
+  rail.addEventListener('kai-conversation-select', (e) => { rail.activeId = e.detail.id; });
   // Each row's kebab is a real kai-menu: items as a property, actions on kai-select.
   for (const menu of document.querySelectorAll('kai-conversation-item kai-menu')) {
     menu.items = [
@@ -565,5 +564,39 @@ export const Wisp: Story = {
 </script>`,
       },
     },
+  },
+};
+
+// The interaction test for the composed rail's kebab, on its own story so the
+// showcase above never runs it on view. `!dev` keeps it out of the sidebar;
+// the vitest storybook project still executes it (addon-vitest selects on the
+// `test` tag, which every story carries — verified by the test count, not
+// assumed). Same render as the showcase.
+export const WispInteractions: Story = {
+  name: 'Wisp Interactions',
+  tags: ['!dev'],
+  render: () => <WispApp />,
+  // The composed rail's kebab really works: open the first row's menu, pick
+  // Rename, and the row title visibly changes in the rail's light DOM.
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const firstItem = canvasElement.querySelector('kai-conversation-item');
+    expect(firstItem).toBeTruthy();
+    const menuHost = firstItem!.querySelector('kai-menu') as HTMLElement | null;
+    expect(menuHost).toBeTruthy();
+    const shadow = menuHost!.shadowRoot!;
+    const trigger = shadow.querySelector<HTMLElement>('button');
+    expect(trigger).toBeTruthy();
+
+    await userEvent.click(trigger!);
+    await waitFor(() => expect(shadow.querySelector('[role="menu"]')).toBeTruthy());
+    const rename = [...shadow.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((el) =>
+      el.textContent?.includes('Rename'),
+    );
+    expect(rename).toBeTruthy();
+    await userEvent.click(rename!);
+    await waitFor(() => {
+      expect(canvasElement.textContent).toContain('Debounce vs throttle in TS (renamed)');
+      expect(shadow.querySelector('[role="menu"]')).toBeNull();
+    });
   },
 };

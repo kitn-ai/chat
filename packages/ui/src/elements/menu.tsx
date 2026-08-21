@@ -51,6 +51,10 @@ interface Props extends Record<string, unknown> {
    *  and an accessible name has to contain the visible text. Then either drop
    *  `label` or make it contain the word you slotted. */
   label?: string;
+  /** Stretch the trigger to the full width of the menu's container (a block
+   *  row), e.g. a sidebar-footer account row. Same affordance as
+   *  `<kai-button full>`. Attribute: `full`. */
+  full?: boolean;
   /** Drive/observe open state (Shoelace-style: settable + reflected to the `open`
    *  attribute, the menu still self-manages on click/keyboard). Set `el.open = true`,
    *  or `<kai-menu open>`; listen for `kai-open-change`. */
@@ -105,6 +109,7 @@ defineWebComponent<Props, Events>('kai-menu', {
   triggerLabel: undefined,
   triggerIconTrailing: undefined,
   label: undefined,
+  full: false,
   open: undefined,
   defaultOpen: undefined,
   disabled: undefined,
@@ -187,6 +192,12 @@ defineWebComponent<Props, Events>('kai-menu', {
   }
 
   return (
+    <>
+      {/* The host shrinks to the trigger by default (UA inline); `full` makes it
+          a block whose trigger button fills the width — the kai-button pattern
+          (`:host([full])`), for sidebar-footer account rows and other stretched
+          placements. */}
+      <style>{':host([full]){display:block}'}</style>
     <Dropdown
       defaultOpen={flag('defaultOpen')}
       disabled={flag('disabled')}
@@ -198,6 +209,7 @@ defineWebComponent<Props, Events>('kai-menu', {
           props.triggerLabel
             ? 'gap-1.5 px-2 py-1.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground'
             : 'justify-center p-1.5 text-foreground hover:bg-muted',
+          flag('full') && 'w-full',
         )}
         // A visible `triggerLabel` IS the name (name-from-contents reaches the
         // slotted/shadow text), so `label` must not be layered over it: aria-label
@@ -224,5 +236,6 @@ defineWebComponent<Props, Events>('kai-menu', {
         {renderItems((props.items as KaiMenuItem[] | undefined) ?? [])}
       </DropdownContent>
     </Dropdown>
+    </>
   );
 });

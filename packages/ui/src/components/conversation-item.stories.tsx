@@ -13,7 +13,7 @@ declare module 'solid-js' {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
-      'kai-menu': JSX.HTMLAttributes<HTMLElement> & { theme?: string; 'trigger-icon'?: string; 'trigger-label'?: string; 'trigger-icon-trailing'?: string; label?: string };
+      'kai-menu': JSX.HTMLAttributes<HTMLElement> & { theme?: string; 'trigger-icon'?: string; 'trigger-label'?: string; 'trigger-icon-trailing'?: string; label?: string; full?: boolean };
     }
   }
 }
@@ -185,8 +185,12 @@ const ROW_MENU_ITEMS: KaiMenuItem[] = [
  *  the `data-kai-item-menu` closest() check. This story is the axe evidence for
  *  the shape, and the kebab is a WORKING kai-menu: Rename retitles the row,
  *  Archive moves it to the end, Delete removes it. */
-export const SlottedRows: StoryObj = {
-  render: () => {
+// The rows demo, shared by the display story and the interaction story below.
+// Split so the SHOWCASE story carries no play function: in Storybook dev, a
+// story's play fn runs on every canvas view, so a play that clicks the kebab
+// open would be watched executing on first paint (an init "flicker" of focus
+// ring + half-open menu).
+function SlottedRowsDemo() {
     const [rows, setRows] = createSignal(initialSlottedRows);
     const [active, setActive] = createSignal('c2');
     const applyAction = (action: string, id: string) => {
@@ -246,7 +250,51 @@ export const SlottedRows: StoryObj = {
         </For>
       </div>
     );
-  },
+}
+
+export const SlottedRows: StoryObj = {
+  render: () => <SlottedRowsDemo />,
+  ...src(`<div role="list" aria-label="Conversations" onClick={selectUnlessInMenu}>
+  <For each={threads()}>
+    {(t) => (
+      <SlottedConversationItem
+        conversationId={t.id}
+        active={activeId() === t.id}
+        meta={<span>{t.lastReplyAgo}</span>}
+        menu={
+          <kai-menu
+            label={\`Actions for \${t.title}\`}
+            ref={(el) => {
+              el.items = [
+                { id: 'rename', label: 'Rename', icon: 'pencil' },
+                { id: 'archive', label: 'Archive', icon: 'archive' },
+                { separator: true },
+                { id: 'delete', label: 'Delete', icon: 'x' },
+              ];
+              el.addEventListener('kai-select', (e) => applyAction(e.detail.id, t.id));
+            }}
+          >
+            <span slot="trigger" aria-hidden="true">&#8942;</span>
+          </kai-menu>
+        }
+      >
+        {t.title}
+      </SlottedConversationItem>
+    )}
+  </For>
+</div>`),
+};
+
+// The interaction test for the kebab, on its own story so SlottedRows never
+// runs it on view. `!dev` keeps it out of the sidebar; the vitest storybook
+// project still executes it (addon-vitest selects on the `test` tag, which
+// every story carries — verified by the test count, not assumed).
+export const SlottedRowsInteractions: StoryObj = {
+  name: 'SlottedRows Interactions',
+  // Out of the sidebar AND off the autodocs page (it would duplicate the demo
+  // there); still `test`-tagged, so the vitest storybook project runs it.
+  tags: ['!dev', '!autodocs'],
+  render: () => <SlottedRowsDemo />,
   // The kebab really works: open the first row's menu from its trigger, close it
   // with Escape (focus returns to the trigger), then reopen and Rename — the row
   // title visibly changes. Everything lives in kai-menu's shadow root, so the
@@ -282,35 +330,6 @@ export const SlottedRows: StoryObj = {
     await userEvent.click(rename!);
     await waitFor(() => expect(canvasElement.textContent).toContain('Quarterly report (renamed)'));
   },
-  ...src(`<div role="list" aria-label="Conversations" onClick={selectUnlessInMenu}>
-  <For each={threads()}>
-    {(t) => (
-      <SlottedConversationItem
-        conversationId={t.id}
-        active={activeId() === t.id}
-        meta={<span>{t.lastReplyAgo}</span>}
-        menu={
-          <kai-menu
-            label={\`Actions for \${t.title}\`}
-            ref={(el) => {
-              el.items = [
-                { id: 'rename', label: 'Rename', icon: 'pencil' },
-                { id: 'archive', label: 'Archive', icon: 'archive' },
-                { separator: true },
-                { id: 'delete', label: 'Delete', icon: 'x' },
-              ];
-              el.addEventListener('kai-select', (e) => applyAction(e.detail.id, t.id));
-            }}
-          >
-            <span slot="trigger" aria-hidden="true">&#8942;</span>
-          </kai-menu>
-        }
-      >
-        {t.title}
-      </SlottedConversationItem>
-    )}
-  </For>
-</div>`),
 };
 
 /** Leading region plus the compact density. The `role="list"` wrapper keeps

@@ -29,7 +29,7 @@ declare module 'solid-js' {
       'kai-workspace': JSX.HTMLAttributes<HTMLElement> & { 'collapse-below'?: string | number; 'drawer-below'?: string | number };
       'kai-button': JSX.HTMLAttributes<HTMLElement> & { variant?: string; size?: string; icon?: string; 'icon-trailing'?: string; label?: string; disabled?: boolean; full?: boolean; align?: 'start' | 'center' | 'end' };
       'kai-nav': JSX.HTMLAttributes<HTMLElement> & { value?: string; 'default-value'?: string; theme?: string };
-      'kai-menu': JSX.HTMLAttributes<HTMLElement> & { theme?: string; 'trigger-icon'?: string; 'trigger-label'?: string; 'trigger-icon-trailing'?: string; label?: string };
+      'kai-menu': JSX.HTMLAttributes<HTMLElement> & { theme?: string; 'trigger-icon'?: string; 'trigger-label'?: string; 'trigger-icon-trailing'?: string; label?: string; full?: boolean };
       'kai-badge': JSX.HTMLAttributes<HTMLElement> & { variant?: string };
       'kai-message': JSX.HTMLAttributes<HTMLElement>;
       'kai-prompt-input': JSX.HTMLAttributes<HTMLElement> & { theme?: string; placeholder?: string; loading?: boolean; disabled?: boolean; voice?: boolean; 'web-search'?: boolean; attach?: boolean; submit?: string; 'suggestion-mode'?: string };
@@ -240,7 +240,9 @@ export const ChatGPT: Story = {
             </div>
 
             <div slot="footer" class="px-2 py-1.5">
-              <kai-menu ref={(el) => { (el as El).items = ACCOUNT_ITEMS; }} label="Account menu">
+              {/* `full` stretches the trigger row across the rail (the real
+                  app's footer is one full-width clickable row). */}
+              <kai-menu ref={(el) => { (el as El).items = ACCOUNT_ITEMS; }} label="Account menu" full>
                 {/* The trigger content is NON-interactive: kai-menu wraps it in its
                     own <button>, so a button/kai-button here would double-nest. */}
                 <div slot="trigger" class="flex w-full items-center gap-2 text-left">
@@ -463,7 +465,7 @@ export const ChatGPT: Story = {
       <kai-nav></kai-nav> <!-- Library, GPTs (flat rows) -->
     </div>
     <div slot="footer">
-      <kai-menu label="Account menu">
+      <kai-menu label="Account menu" full>
         <!-- Trigger content is NON-interactive: kai-menu supplies the button. -->
         <div slot="trigger"><kai-avatar fallback="S"></kai-avatar> Sam</div>
       </kai-menu>

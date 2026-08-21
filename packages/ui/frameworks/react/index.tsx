@@ -1037,6 +1037,8 @@ export interface MenuProps extends WebComponentProps {
   triggerIconTrailing?: string;
   /** Accessible name for a trigger with no visible label. Ignored when `triggerLabel` is set, which is already the visible name. It DOES name a slotted `slot="trigger"`, and that is a difference in what the two slots MEAN, not a limitation. `<kai-button>`'s slot IS the button's label, so text slotted there is the name and `label` steps aside. This slot is VISUAL content, a `+` or an `<svg>`, with the name supplied separately: decoration beside a name, never a second name competing with one. So `label` names the trigger here by design. Slotting a real WORD rather than a glyph makes that word a visible label, and an accessible name has to contain the visible text. Then either drop `label` or make it contain the word you slotted. */
   label?: string;
+  /** Stretch the trigger to the full width of the menu's container (a block row), e.g. a sidebar-footer account row. Same affordance as `<kai-button full>`. Attribute: `full`. */
+  full?: boolean;
   /** Drive/observe open state (Shoelace-style: settable + reflected to the `open` attribute, the menu still self-manages on click/keyboard). Set `el.open = true`, or `<kai-menu open>`; listen for `kai-open-change`. */
   open?: boolean;
   /** Initial open state on mount (uncontrolled seed). */
@@ -1051,7 +1053,7 @@ export interface MenuProps extends WebComponentProps {
 
 export const Menu = /*#__PURE__*/ createWebComponent<MenuProps>(
   'kai-menu',
-  ["theme","items","placement","triggerIcon","triggerLabel","triggerIconTrailing","label","open","defaultOpen","disabled"],
+  ["theme","items","placement","triggerIcon","triggerLabel","triggerIconTrailing","label","full","open","defaultOpen","disabled"],
   { onOpenChange: 'kai-open-change', onSelect: 'kai-select' },
   () => import('@kitn.ai/ui/elements/menu'),
 );
