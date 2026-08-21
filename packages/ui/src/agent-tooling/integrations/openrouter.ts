@@ -14,7 +14,13 @@ const openrouter: Integration = {
   webRoute: `async function chatHandler(request: Request): Promise<Response> {
   // tools is undefined unless the front end sent one; JSON.stringify drops it,
   // so the same handler serves a tool archetype and a plain chat.
-  const { model, messages, tools } = await readChatRequest(request);
+  let chatBody: ChatRequestBody;
+  try {
+    chatBody = await readChatRequest(request);
+  } catch (error) {
+    return toChatErrorResponse(error);
+  }
+  const { model, messages, tools } = chatBody;
 
   const upstream = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',

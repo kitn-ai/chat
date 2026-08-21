@@ -317,7 +317,13 @@ function reframeToOpenAISse(body: ReadableStream<Uint8Array>): ReadableStream<Ui
 async function chatHandler(request: Request): Promise<Response> {
   // Both model and tools come from the browser. \`tools\` arrives in OpenAI
   // function form and is converted to this API's shape below.
-  const { model, messages, tools } = await readChatRequest(request);
+  let chatBody: ChatRequestBody;
+  try {
+    chatBody = await readChatRequest(request);
+  } catch (error) {
+    return toChatErrorResponse(error);
+  }
+  const { model, messages, tools } = chatBody;
   const { system, messages: anthropicMessages } = toAnthropicBody(messages);
   const anthropicTools = toAnthropicTools(tools);
 

@@ -108,7 +108,10 @@ it('every route that proxies an upstream forwards its status', () => {
  */
 const requestFields = (code: string): Set<string> => {
   const out = new Set<string>();
-  const pattern = /const\s*\{([^}]*)\}\s*=\s*(?:await readChatRequest|\(await req(?:uest)?\.json\(\)\)|req\.body)/g;
+  // F-10: the guarded shape reads the body once into `chatBody` inside a
+  // try/catch, then destructures the fields off `chatBody` — so `= chatBody` is
+  // a read too.
+  const pattern = /const\s*\{([^}]*)\}\s*=\s*(?:await readChatRequest|\(await req(?:uest)?\.json\(\)\)|req\.body|chatBody)\b/g;
   for (const match of code.matchAll(pattern)) {
     for (const raw of match[1].split(',')) {
       const name = raw.split(':')[0].trim();

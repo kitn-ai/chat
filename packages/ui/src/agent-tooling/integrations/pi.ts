@@ -20,9 +20,64 @@ import type { OpenAIWireMessage } from '@kitn.ai/ui/wire';
 const app = express();
 app.use(express.json());
 
+class ChatRequestError extends Error {
+  constructor(readonly status: number, message: string) { super(message); }
+}
+
+/** Narrow the JSON body once, at the edge. A bare GET or a missing messages
+ *  array is a ChatRequestError with a status — NEVER an unhandled throw
+ *  (findings F-10). Malformed JSON is rejected upstream by express.json(),
+ *  which the error handler below turns into a JSON 400. */
+function readChatRequest(req: express.Request): { messages: OpenAIWireMessage[] } {
+  if (req.method !== 'POST') {
+    throw new ChatRequestError(405, \`Method \${req.method} not allowed — POST /api/chat.\`);
+  }
+  const body = (req.body ?? {}) as { messages?: OpenAIWireMessage[] };
+  if (!Array.isArray(body.messages)) {
+    throw new ChatRequestError(400, 'Request body must carry a messages array.');
+  }
+  return body as { messages: OpenAIWireMessage[] };
+}
+
+/** Map a guard rejection to the response its status demands; rethrow anything
+ *  else — an unexpected error should be loud, not laundered into a 400. */
+function toChatErrorResponse(error: unknown, res: express.Response): void {
+  if (error instanceof ChatRequestError) {
+    res.status(error.status).json({ error: { message: error.message } });
+    return;
+  }
+  throw error;
+}
+
+// express.json() rejects a malformed body at the MIDDLEWARE level, before any
+// handler runs — without this it surfaces as Express's default HTML error page.
+app.use(
+  (
+    err: { status?: number; message?: string },
+    _req: express.Request,
+    res: express.Response,
+    _next: express.NextFunction,
+  ) => {
+    res.status(err?.status ?? 500).json({ error: { message: err?.message ?? 'Request failed.' } });
+  },
+);
+
+// A bare GET is a 405 with the method named, not Express's default 404 —
+// the resource exists, the verb is wrong.
+app.get('/api/chat', (_req, res) => {
+  res.status(405).json({ error: { message: 'Method not allowed — POST /api/chat.' } });
+});
+
 // POST /api/chat: bridge a Pi RPC session to the browser as SSE.
 app.post('/api/chat', (req, res) => {
-  const { messages } = req.body as { messages: OpenAIWireMessage[] };
+  let chatBody: { messages: OpenAIWireMessage[] };
+  try {
+    chatBody = readChatRequest(req);
+  } catch (error) {
+    toChatErrorResponse(error, res);
+    return;
+  }
+  const { messages } = chatBody;
   const last = messages.at(-1)?.content;
   // \`content\` is a plain string until the turn carries an attachment, at which
   // point it is an ARRAY of content parts. Pi's RPC mode takes a TEXT prompt and
