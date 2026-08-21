@@ -466,6 +466,15 @@ Anthropic (anthropic/claude-haiku-4.5, HTTP 400, on every OpenRouter route tried
 **Positive control (insider):** `google/gemini-2.5-flash`, byte-identical tool array, HTTP 200.
 So the schema is not universally invalid — it is invalid for the two largest providers.
 
+> **Annotation, owner-validation round (2026-08-21).** F-20 **stands and now covers a third
+> provider family**: the app's `providerSafe()` workaround is load-bearing on the
+> **DeepSeek** route as well (`deepseek/deepseek-v4-flash-0731`, the app's new default —
+> task-7 fix report § KIT-OWNED 2). That round did not re-test the raw 400, because the
+> workaround was already in place and stripping it back out was not worth a paid turn — so
+> this is *"the workaround is still required"*, not a fourth captured 400. Recorded because
+> it moves the finding from "the two largest providers" to "every provider family this repo
+> has driven except Gemini", which is the scope that matters for the fix.
+
 **Re-derived here, against the shipped 0.25.2 package and the tree — three things, and two of
 them widen the finding:**
 
@@ -563,30 +572,159 @@ how F-21 presented before it was isolated.
 an explicit reader option that keeps errors flowing rather than something a host achieves by
 gutting the sink. This is the same fix surface as F-17 and the two should be designed together.
 
+---
+
+## Findings from the owner-validation round (F-23 – F-25)
+
+The owner's real-mode validation of `examples/apps/builder/` **failed**, and the five-defect fix
+wave that followed (`.superpowers/sdd/2026-08-20-rung-4-builder/task-7-fix-report.md`) root-caused
+every defect from **57 captured SSE streams** against two live models,
+`openai/gpt-4o-mini` and `deepseek/deepseek-v4-flash-0731`. The three findings below are what
+that round added to this catalog; F-20 also picked up an annotation at its own site.
+
+**Model attribution is part of the finding here and is kept at every site.** F-01 – F-19 are
+mock-only by construction, F-20 – F-22 came from a first real turn, and these came from *repeated*
+turns against *cheap* models — which is the first time this project has measured what the kit's
+card path does under the models a real consumer app will actually ship on. Rates quoted below are
+the fix report's captured counts, not estimates.
+
+### F-23 — the artifact card cannot express "this artifact IS code", and cheap models take the schema at its word · product gap · S2
+
+Verified directly against `packages/ui/src/primitives/card-schemas/artifact.schema.json`:
+
+```
+files.items.required : ["path"]          <- code is NOT required
+files.minItems       : (absent)          <- an empty files array is valid
+files.items props    : path, url, code, language, type, additions, deletions, status
+code.description     : "Source shown in the Code tab. Omit for binary files
+                        (image/pdf), which have no code view."
+```
+
+**The schema does not merely permit the useless shape — its optional-property menu invites it.**
+This is what DeepSeek returned, five times in six turns (`w7-evidence/ds-t2-{1,3,4,5,6}.sse`):
+
+```json
+{"files":[{"path":"index.html","language":"html","type":"html","additions":100,"status":"added"}]}
+```
+
+Every key there is a real property of the kit's own file object; the model filled in the
+diff-stat fields it was offered and skipped the one the app's product consists of. The call is
+**schema-valid** — `registry.validate()` passes it, the card renders, and the Code tab is empty.
+The model is not misbehaving; it is reading the schema.
+
+**The card is right and the tool is wrong, which is the whole finding.** An artifact legitimately
+may be a PDF, so `code` must stay optional *on the card*. But `cardTools` projects that same
+document into the **tool definition**, where the app's requirement ("this artifact is a code
+document") has no way to be stated. The only thing standing between a consumer and a metadata-only
+reply is prose in a system prompt — which the fix report notes a small model does not read
+(`SYSTEM_PROMPT` already asked for `files[0].code`).
+
+**Downstream, it lands as a silent nothing**, which ties it to F-22: the app's
+`takeToolCall` does `files?.find(f => typeof f.code === 'string')` and returns on a miss
+(`examples/apps/builder/src/App.tsx:125-126`), so a valid-but-codeless call produced no version,
+no error, and no explanation — five turns in six.
+
+**App's fix, for the shape a kit fix should take:** `demandFileCode()` in
+`examples/apps/builder/server/chat.ts` narrows the **derived** schema — `code` joins `path` in the
+file's `required`, `files` gets `minItems: 1` — restating nothing. It is the second such narrowing
+in one route, beside `providerSafe()` (F-20). **Two hand-written narrowings of one derived
+schema, in the first app that ever asked a real model for a card, is the signal.**
+
+**Re-cast input:** a `cardTools` option (`cardTools(reg, { provider, require: { artifact: ['code'] } })`
+or similar), or a documented narrowing recipe next to `tool-defs.ts`. Whatever the shape, the fix
+for F-20 and F-23 lands in the same place and they should be designed together.
+
+### F-24 — three things every real model does that nothing in the kit warns about · teaching gap · S2 (with a scaffolder product sub-point)
+
+Filed as **one finding with three sub-points**, per the coordinator's leave, because they share a
+single cause: *the kit's docs and MCP describe a well-behaved tool call and never describe the
+range a real cheap model produces.* All three were captured, all three had to be hardened around
+by hand, and **none of them is a defect in `readOpenAIStream`** — the reader handed over exactly
+what the provider sent, every time.
+
+**D1 — content arrives double-escaped, and nothing upstream can notice.** In `t2-14.sse` the SSE
+is valid, the JSON is valid, the arguments parse, the card validates — and the parsed
+`files[0].code` contains the two characters `\` `n` wherever a newline belongs
+(`realNewlines 0`). Rendered in an iframe those are visible text; this is what the owner's
+screenshot showed. Rate: 1 turn in 22 on gpt-4o-mini, and that turn was also a D2 turn.
+*Nothing can catch this on the wire — by construction it is well-formed at every layer the kit
+owns, so it can only be caught where the value is USED.* The app's answer is a labelled heuristic
+(`repairPageHtml`, zero real line breaks AND ≥5 escaped ones) that announces itself with a toast.
+
+**D2 — parallel duplicate tool calls.** Three of 22 turn-2 replays returned 2–3 `kai_artifact`
+calls at distinct indices with distinct ids: `t2-8` two byte-identical 725 B payloads, `t2-19`
+two byte-identical 416 B, `t2-14` three (two identical, one differing by 74 bytes). **The kit is
+explicitly cleared here** and the fix report checked rather than assumed it: `consume.ts:95`
+correlates by `index`, `settle()` runs once (line 515), `onToolCallReady` fires once per call.
+Three versions meant three genuine calls. But **nothing tells a host that `onToolCallReady` can
+fire more than once per turn**, and the naive one-version-per-call handler — which is what this
+app shipped, and what the seam inventory shows any app would write — mints three versions from one
+edit.
+
+**D4 — the model narrates the call instead of making it.** gpt-4o-mini intermittently replies
+*"…Now I will provide the complete HTML document. Calling the tool now."* with
+`finish_reason: "stop"` and zero tool calls. Before the fix the app did nothing at all: no
+version, no message, the preview silently kept showing the previous page. **A card app must
+tolerate a turn that produces no call, and say so.**
+
+**Where the kit should teach it — and the product sub-point.** Two of the three fixes are
+**request-shaping facts the emitted route could carry and cannot**:
+`parallel_tool_calls: false` (D2) and `tool_choice: 'required'` (D4). Checked across the whole
+repo: **neither string appears anywhere in `packages/ui/src/agent-tooling` or `packages/ui/src/wire`**,
+and both score **zero across all ten MCP responses and zero in the shipped `llms-full.txt`** — as
+do `double-escap`, `idempot`, `duplicate tool` and `no tool call`. So the scaffolder's card-tool
+route templates cannot ask a provider for the behaviour the card path depends on, and no document
+tells the host to be idempotent per turn or to handle the zero-call turn. **Classified teaching
+gap because the kit's parsing is correct and the missing thing is instruction — with the honest
+caveat that the two flags belong in emitted route code, which makes that half a scaffolder product
+gap.** Re-cast input: a "hardening a card-tool host" section on `kai-chat` (idempotent per turn,
+zero-call turn, use-site content validation), and the two flags in every emitted route that offers
+card tools.
+
+### F-25 — a prompt submitted while streaming vanishes with no feedback · builder error · S4 · pre-existing, flagged not fixed
+
+`examples/apps/builder/src/App.tsx:191` — `if (!value || loading) return;`. A prompt typed and
+submitted during an in-flight stream is discarded with no toast, no console line and no composer
+state change. Pre-existing in the clean-room build, untouched by the D1–D5 wave, and correctly
+flagged rather than quietly fixed.
+
+**Classified as builder error, not a kit gap** — the kit has no say here — but it is worth its own
+number because it is *the repo's own decide-loudly convention broken inside the app that exists to
+demonstrate the repo*, in the same file that now carries two model-drop toasts three lines away.
+Low severity because the composer normally guards it (the fix report reached it only by driving
+the browser deliberately). Fix is one line: keep the value and re-queue it, or toast the refusal.
+
 ## Counts by class
 
 | Class | Count | IDs |
 |---|---|---|
-| teaching gap | 3 | F-01, F-02, F-06 |
-| product gap | 11 | F-03, F-04, F-05, F-07, F-08, F-09, F-10, F-11, F-14, **F-20**, **F-22** |
+| teaching gap | 4 | F-01, F-02, F-06, **F-24** |
+| product gap | 12 | F-03, F-04, F-05, F-07, F-08, F-09, F-10, F-11, F-14, F-20, F-22, **F-23** |
 | doc gap | 3 | F-12, F-13, F-15 |
-| builder error | 1 | F-16 |
+| builder error | 2 | F-16, **F-25** |
 | acceptable variation | 2 | F-17, F-18 |
-| environmental / upstream | 1 | **F-21** |
+| environmental / upstream | 1 | F-21 |
 | strip artifact | **0** | — (all candidates checked against the real `llms-full.txt` / `README.md`) |
 | recorded non-finding | 1 | F-19 |
-| **Classified total** | **21** | F-01 – F-22 less the non-finding F-19 |
+| **Classified total** | **24** | F-01 – F-25 less the non-finding F-19 |
 
-By severity: **S1 ×4** (F-01, F-02, F-10, F-20) · **S2 ×8** (F-03, F-04, F-05, F-06, F-07, F-08,
-F-14, F-22) · **S3 ×5** (F-09, F-11, F-12, F-13, F-21) · **S4 ×2** (F-15, F-16). Nineteen
-severity-carrying findings; the two acceptable variations (F-17, F-18) carry none, and F-19 is a
-recorded non-finding.
+By severity: **S1 ×4** (F-01, F-02, F-10, F-20) · **S2 ×10** (F-03, F-04, F-05, F-06, F-07, F-08,
+F-14, F-22, **F-23**, **F-24**) · **S3 ×5** (F-09, F-11, F-12, F-13, F-21) · **S4 ×3** (F-15,
+F-16, **F-25**). Twenty-two severity-carrying findings; the two acceptable variations (F-17,
+F-18) carry none, and F-19 is a recorded non-finding.
 
-**Provenance split.** F-01 – F-19 are the clean-room run (mock-only by design). **F-20 – F-22**
-came out of the insider's real-mode smoke and are marked as such at each site: the provider HTTP
-responses are the insider's measurements, everything asserted about the kit's own code was
-re-derived by the comparer — which raised F-20 from the proposed S2 to S1 and **corrected the
-premise of F-22** (the kit is not silent; the channels it reports on are the wrong two).
+**Provenance, three rounds.** Every finding names its round at its own site.
+
+| Round | Findings | What it could and could not see |
+|---|---|---|
+| **Clean-room build** | F-01 – F-19 | Mock-only by design: the front door, the scaffolder, the kit's types, and one app built through them. No provider was ever contacted. |
+| **Insider real-mode smoke** | F-20 – F-22 | One real turn per model. Enough to find what a provider *refuses* (F-20) and what one bad stream exposes (F-21, F-22); not enough to measure rates. |
+| **Owner-validation round** | F-23 – F-25, plus the F-20 annotation | **57 captured SSE streams**, repeated turns, two *cheap* models (`openai/gpt-4o-mini`, `deepseek/deepseek-v4-flash-0731`). The first round with rates rather than anecdotes, and the first to measure the card path under the models a real app ships on. |
+
+Two comparer corrections are recorded rather than smoothed over: F-20 was raised from the
+insider's proposed S2 to S1, and **F-22's premise as it reached this catalog was wrong** (the kit
+is not silent — the two channels it reports on are the wrong two). Where a later round confirmed
+an earlier finding without re-measuring it, the annotation says so — see F-20's DeepSeek note.
 
 ## Rung-3 residuals, re-checked
 
