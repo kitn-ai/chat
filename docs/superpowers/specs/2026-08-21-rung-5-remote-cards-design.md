@@ -141,6 +141,12 @@ Ladder discipline verbatim (handoff §5, binding):
   before diagnosing; watch CI by run id for the exact head SHA; the CI `test` job is the only
   merge gate; owner live eyeball on the UI before merge.
 - README records the ENTIRE build conversation verbatim.
+- **Prompt neutrality on card integration (protects finding class 1):** the builder prompt
+  states the product requirements (approvals as interactive cards in the conversation; a
+  live board served by the app's own backend) and NEVER names either integration path —
+  not `cardTypes`, not `<kai-cards>`, not remote tags. Which path the builder finds and
+  chooses is part of the measurement; the bias statement is recorded with the prompt as in
+  rung 4.
 
 ## Expected finding classes (checked during the rung, not pre-fixed)
 
