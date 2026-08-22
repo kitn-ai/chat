@@ -1,0 +1,27 @@
+{
+  "name": "ops-console",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Internal ops console: an AI assistant proposes consequential actions as interactive cards the operator approves in the conversation.",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:console": "vite",
+    "dev:board": "vite --config vite.board.config.ts",
+    "build": "tsc --noEmit && vite build && vite build --config vite.board.config.ts",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@kitn.ai/ui": "file:../../../../../../../../../var/folders/ss/nd1qr8qj1v1dthwcsck8h5v00000gn/T/opencode/rung5-cleanroom/ops/kitn.ai-ui-0.25.2.tgz",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.8",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.1.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2"
+  }
+}
