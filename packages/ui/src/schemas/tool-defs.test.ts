@@ -544,3 +544,221 @@ describe('cardTools: the non-strict projection survives the providers (F-20)', (
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// The general case: a CUSTOM card whose ROOT is the combinator (review Critical 1)
+// ---------------------------------------------------------------------------
+//
+// Every built-in declares `type: "object"` and a root `properties` map of its own,
+// so a relaxation that only DELETES the combinator leaves them intact and the whole
+// suite stays green while a consumer-authored card projects to a schema with no
+// type and no properties at all — measured HTTP 400 from OpenAI ("schema must be a
+// JSON Schema of type \"object\""), i.e. a tool the model cannot fill. These
+// fixtures are custom on purpose: a built-in cannot exercise this path.
+
+describe('cardTools: a CUSTOM card whose ROOT is a combinator still projects a usable object', () => {
+  /** Root `anyOf` — the disjunction case. `when` is common to both branches. */
+  const BOOKING: CardSchema = {
+    title: 'Booking',
+    description: 'Book a thing.',
+    anyOf: [
+      {
+        type: 'object',
+        properties: { flightNo: { type: 'string' }, when: { type: 'string' } },
+        required: ['flightNo', 'when'],
+      },
+      {
+        type: 'object',
+        properties: { hotel: { type: 'string' }, when: { type: 'string' } },
+        required: ['hotel', 'when'],
+      },
+    ],
+  } as unknown as CardSchema;
+
+  /** Root `allOf` — the conjunction case. */
+  const AUDIT: CardSchema = {
+    title: 'Audit',
+    description: 'Record an audit entry.',
+    allOf: [
+      { type: 'object', properties: { actor: { type: 'string' } }, required: ['actor'] },
+      { type: 'object', properties: { at: { type: 'string' } }, required: ['at'] },
+    ],
+  } as unknown as CardSchema;
+
+  /** Root `oneOf` — same guarantees as `anyOf`. */
+  const PAYMENT: CardSchema = {
+    title: 'Payment',
+    description: 'Take a payment.',
+    oneOf: [
+      { type: 'object', properties: { card: { type: 'string' }, amount: { type: 'number' } }, required: ['card', 'amount'] },
+      { type: 'object', properties: { iban: { type: 'string' }, amount: { type: 'number' } }, required: ['iban', 'amount'] },
+    ],
+  } as unknown as CardSchema;
+
+  /** Root `enum` of whole objects — the review's "same class" case. */
+  const MODE: CardSchema = {
+    title: 'Mode',
+    description: 'Switch a mode.',
+    enum: [
+      { mode: 'read', scope: 'all' },
+      { mode: 'write' },
+    ],
+  } as unknown as CardSchema;
+
+  /** Root `const` — a one-value enum. */
+  const PING: CardSchema = {
+    title: 'Ping',
+    description: 'Ping.',
+    const: { op: 'ping' },
+  } as unknown as CardSchema;
+
+  const openai = (schemas: Record<string, CardSchema>) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      return cardTools(schemas, { provider: 'openai' }) as OpenAIToolDef[];
+    } finally {
+      warn.mockRestore();
+    }
+  };
+
+  it('root anyOf: the projection carries type:object and the UNION of the branch properties', () => {
+    const [def] = openai({ booking: BOOKING });
+    expect(def.function.parameters.type).toBe('object');
+    expect(def.function.parameters).not.toHaveProperty('anyOf');
+    expect(Object.keys(def.function.parameters.properties as object).sort()).toEqual(
+      ['flightNo', 'hotel', 'when'],
+    );
+  });
+
+  it('root anyOf: `required` is the INTERSECTION of the branches — only what every branch guarantees', () => {
+    const [def] = openai({ booking: BOOKING });
+    expect(def.function.parameters.required).toEqual(['when']);
+  });
+
+  it('root oneOf: same treatment as anyOf', () => {
+    const [def] = openai({ payment: PAYMENT });
+    expect(def.function.parameters.type).toBe('object');
+    expect(Object.keys(def.function.parameters.properties as object).sort()).toEqual(['amount', 'card', 'iban']);
+    expect(def.function.parameters.required).toEqual(['amount']);
+  });
+
+  it('root allOf: `required` is the UNION — a conjunction guarantees every branch', () => {
+    const [def] = openai({ audit: AUDIT });
+    expect(def.function.parameters.type).toBe('object');
+    expect(Object.keys(def.function.parameters.properties as object).sort()).toEqual(['actor', 'at']);
+    expect([...(def.function.parameters.required as string[])].sort()).toEqual(['actor', 'at']);
+  });
+
+  it('root enum of objects: keys become properties, the common keys become required', () => {
+    const [def] = openai({ mode: MODE });
+    expect(def.function.parameters.type).toBe('object');
+    expect(def.function.parameters).not.toHaveProperty('enum');
+    expect(Object.keys(def.function.parameters.properties as object).sort()).toEqual(['mode', 'scope']);
+    expect(def.function.parameters.required).toEqual(['mode']);
+  });
+
+  it('root const: the single value becomes the object shape', () => {
+    const [def] = openai({ ping: PING });
+    expect(def.function.parameters.type).toBe('object');
+    expect(def.function.parameters).not.toHaveProperty('const');
+    expect(Object.keys(def.function.parameters.properties as object)).toEqual(['op']);
+    expect(def.function.parameters.required).toEqual(['op']);
+  });
+
+  it('the INVARIANT: no provider projection ever emits a root without type:object', () => {
+    const fixtures = { booking: BOOKING, audit: AUDIT, payment: PAYMENT, mode: MODE, ping: PING };
+    for (const def of openai({ ...(cardSchemas as Record<string, CardSchema>), ...fixtures })) {
+      expect(def.function.parameters.type, `${def.function.name} root type`).toBe('object');
+    }
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    for (const def of cardTools({ ...(cardSchemas as Record<string, CardSchema>), ...fixtures }, {
+      provider: 'anthropic',
+    }) as AnthropicToolDef[]) {
+      expect(def.input_schema.type, `${def.name} root type`).toBe('object');
+    }
+    warn.mockRestore();
+  });
+
+  it('the jsonschema projection stays byte-faithful — the combinator is NOT relaxed there', () => {
+    const [def] = cardTools({ booking: BOOKING }, { provider: 'jsonschema' }) as JsonSchemaToolDef[];
+    expect(def.schema).toHaveProperty('anyOf');
+    expect(def.schema).not.toHaveProperty('properties');
+  });
+
+  it('refuses LOUDLY rather than lying when the root cannot be an object', () => {
+    expect(() => openai({ tagline: { type: 'string' } as unknown as CardSchema })).toThrow(
+      /tagline/,
+    );
+  });
+
+  it('never mutates the authored custom schema', () => {
+    const before = JSON.stringify(BOOKING);
+    openai({ booking: BOOKING });
+    expect(JSON.stringify(BOOKING)).toBe(before);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ROOT_RELAXATIONS is a hand-written restatement of a schema fact (review Important 3)
+// ---------------------------------------------------------------------------
+
+describe('the curated relaxation note is pinned to the schema it restates', () => {
+  /**
+   * Every property name the ROOT combinator branches actually mention, read out of
+   * the authored schema. Deliberately independent of the note: `required` entries
+   * and `properties` keys, recursed through the conditional/combinator keywords a
+   * branch may itself use (embed's branches are `if`/`then` pairs).
+   */
+  function namesInRootCombinator(schema: unknown): Set<string> {
+    const names = new Set<string>();
+    const walk = (node: unknown): void => {
+      if (Array.isArray(node)) {
+        for (const child of node) walk(child);
+        return;
+      }
+      if (typeof node !== 'object' || node === null) return;
+      const rec = node as Record<string, unknown>;
+      if (Array.isArray(rec.required)) for (const n of rec.required) names.add(String(n));
+      if (rec.properties && typeof rec.properties === 'object') {
+        for (const key of Object.keys(rec.properties as object)) names.add(key);
+      }
+      for (const key of ['if', 'then', 'else', 'not', 'anyOf', 'allOf', 'oneOf']) {
+        if (key in rec) walk(rec[key]);
+      }
+    };
+    const root = schema as Record<string, unknown>;
+    for (const key of ['anyOf', 'allOf', 'oneOf']) if (key in root) walk(root[key]);
+    return names;
+  }
+
+  /** The note is whatever the projection appended to the curated purpose sentence. */
+  function noteFor(cardType: 'artifact' | 'embed'): string {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const [def] = cardTools({ [cardType]: cardSchemas[cardType] }, { provider: 'openai' }) as OpenAIToolDef[];
+    warn.mockRestore();
+    return def.function.description.slice(CARD_TOOL_DESCRIPTIONS[cardType].length).trim();
+  }
+
+  for (const cardType of ['artifact', 'embed'] as const) {
+    it(`${cardType}: the note names every property its root combinator branches carry`, () => {
+      const names = namesInRootCombinator(cardSchemas[cardType]);
+      expect(names.size).toBeGreaterThan(0);
+      const note = noteFor(cardType);
+      for (const name of names) {
+        expect(note, `curated note for '${cardType}' never mentions '${name}'`).toContain(name);
+      }
+    });
+
+    it(`${cardType}: the note names NOTHING the root combinator does not carry`, () => {
+      const names = namesInRootCombinator(cardSchemas[cardType]);
+      const note = noteFor(cardType);
+      const quoted = [...note.matchAll(/`([^`]+)`/g)].map((m) => m[1]);
+      expect(quoted.length).toBeGreaterThan(0);
+      for (const token of quoted) {
+        expect(names, `curated note for '${cardType}' names '${token}', which its root combinator does not`).toContain(
+          token,
+        );
+      }
+    });
+  }
+});
