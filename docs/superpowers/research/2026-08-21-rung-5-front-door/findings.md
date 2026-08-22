@@ -8,7 +8,8 @@ the package-read audit), `NOTES.md` (the builder's questions, verbatim), `seam-i
 (the REMOTE-CARD SEAM inventory — this rung's compile-to-WC spec input), `app/` (the delivered
 source).
 
-Numbering continues rung 4, which ended at F-25. **This rung files F-26 – F-40.**
+Numbering continues rung 4, which ended at F-25. **This rung files F-26 – F-42** across two
+rounds: the clean-room build (F-26 – F-40) and the T9 insider real-mode smoke (F-41 – F-42).
 
 Classes: **teaching gap** (the front door failed to teach a fact the kit knows) · **product gap**
 (the kit lacks the thing itself) · **doc gap** (fact stated nowhere shipped — checked against the
@@ -562,29 +563,128 @@ POST /api/chat  valid             -> 200, marker-stamped SSE
 Recorded as a non-finding so the residual table has a closure with evidence, and so nobody
 re-files it.
 
+## Findings from the T9 insider real-mode round (F-41 – F-42)
+
+The clean-room build never contacted a provider (see Provenance). Task 9 landed the app at
+`examples/apps/ops-console/` and ran a real two-turn OpenRouter smoke on two models, capturing
+every stream to `.superpowers/sdd/2026-08-21-rung-5-remote-cards/t9-sse-captures/`. Six captures,
+**re-parsed here from the raw bytes rather than from T9's summary**:
+
+| Capture | prose ch | reasoning ch | reasoning tok | `finish_reason` | tool calls |
+|---|---|---|---|---|---|
+| `t1-deepseek-approval.sse` | 265 | 940 | 192 | `tool_calls` | `kai_approval` |
+| `t1-gpt4omini.sse` | 0 | 0 | 0 | `tool_calls` | `kai_parameters` |
+| **`t2-deepseek-checklist-LEAKED-INTO-REASONING.sse`** | **0** | **1,197** | **344** | **`stop`** | **none** |
+| `t2-deepseek-checklist-run2.sse` | 0 | 79 | 16 | `tool_calls` | `kai_checklist` |
+| `t2-deepseek-checklist-run3.sse` | 0 | 547 | 126 | `tool_calls` | `kai_checklist` |
+| `t2-gpt4omini-approval.sse` | 0 | 0 | 0 | `tool_calls` | `kai_approval` |
+
+Reproduce with a JSON parse over `data:` lines summing `delta.content`, `delta.reasoning`,
+`delta.tool_calls[].function.name`, `choices[0].finish_reason` and
+`usage.completion_tokens_details.reasoning_tokens`.
+
+### F-41 — a complete tool call delivered as raw markup inside `delta.reasoning`, with `finish_reason: stop` · environmental / upstream defect · S3, with a kit consequence · rung-4 F-21 class, NEW form
+
+On **1 of 3 byte-identical turn-2 requests**, OpenRouter's StreamLake/DeepSeek route emitted the
+tool call the app asked for as raw provider-internal markup inside the reasoning channel instead
+of in `tool_calls`. Verified from the capture bytes, not from the report:
+
+- `"tool_calls"` occurrences in the whole file: **0**. `finish_reason`: **`stop`** (not
+  `tool_calls`). Concatenated `delta.content`: **0 characters**.
+- `delta.reasoning`: 336 deltas, 1,197 characters, and **344 of the turn's 345 completion
+  tokens** were reasoning (`usage.completion_tokens_details.reasoning_tokens: 344`).
+- 10 `DSML` markers in the reasoning text. The reassembled tail is a **complete and
+  well-formed** call — not a truncation, not a narration:
+
+```
+<｜DSML｜tool_calls>
+<｜DSML｜invoke name="kai_checklist">
+<｜DSML｜parameter name="tasks" string="false">[{"id": "drain", "label": "Drain traffic from old fleet"}, …
+  {"id": "ticket-complete", "label": "Mark CHG-4821 complete in ticketing"}]</｜DSML｜parameter>
+<｜DSML｜parameter name="mode" string="true">progress</｜DSML｜parameter>
+<｜DSML｜parameter name="heading" string="true">Payments deploy to us-east-1 (CHG-4821)</｜DSML｜parameter>
+</｜DSML｜invoke>
+</｜DSML｜tool_calls>
+```
+
+Nine well-formed tasks, valid JSON in the `tasks` parameter, correct `mode` and `heading` — every
+byte the app needed to draw the checklist, in the one channel that cannot carry it. The two clean
+runs beside it (`run2`, `run3`) made the same call correctly with `finish_reason: tool_calls` and
+zero `DSML` markers, on the same prompt.
+
+**n = 3. That is far too small for a rate**, and it is recorded as an anecdote, exactly as F-21
+was. What it establishes is that the failure mode exists and that it is not deterministic.
+
+**The kit consequence, and it is the F-22 channel question again.** From the kit's side this turn
+is indistinguishable from a model that simply answered nothing: `readOpenAIStream` sees reasoning
+deltas and a `stop`, folds the reasoning onto a `reasoning` part, and finishes. No parse error, no
+malformed-arguments path (`wire/consume.ts:231-244` never runs, because no tool call was ever
+announced), no `onToolCallReady`, nothing for `isCardTool` to test. **Nothing anywhere on the kit
+path can surface "the model called a tool but the route buried it in the reasoning channel"** —
+and unlike F-34's two cases, there is no channel here that was closed by app choice; there is no
+signal at all. The turn simply produces an assistant message with a reasoning panel and no card.
+
+Two further notes, both consequences rather than findings:
+
+- **Invisible to every mock.** `createMockResponder()` cannot emit tool calls at all (F-35), and
+  a hand-built mock emits the frames its author intended — so no mock in this repo, present or
+  future, can produce this shape. It is reachable only from a live route. This is the strongest
+  argument yet for the real-mode round being a permanent part of the ladder rather than a
+  garnish.
+- **Not the kit's to fix, and probably not worth a heuristic.** Sniffing `delta.reasoning` for
+  provider-internal tool markup would put a per-provider parser inside the layer whose whole
+  contract is "the kit PARSES what the wire says". The defensible kit-side move is diagnostic,
+  not corrective: a turn that ends `stop` with zero content and a large reasoning share is
+  *anomalous*, and `@kitn.ai/ui/diagnostics` is where saying so would belong. Recorded as an
+  option, not a recommendation.
+
+### F-42 — the card arrives with no prose, on both models, despite the system prompt asking for a sentence first · teaching gap · S3 · rung-4 F-24 cluster
+
+`examples/apps/ops-console/server/chat.ts:134` instructs: "Say one or two sentences about what
+you are proposing, THEN make the call." Across the six captures, **five turns produced a tool
+call and four of those five emitted zero prose** — every `delta.content` string concatenates to
+the empty string in `t1-gpt4omini`, `t2-deepseek-checklist-run2`, `t2-deepseek-checklist-run3`
+and `t2-gpt4omini-approval`. Only `t1-deepseek-approval` complied, with 265 characters.
+
+The coordinator flagged this for the two clean DeepSeek turn-2 runs; the captures say it is
+broader than that — **both** models do it, and the one turn that produced prose was the only
+first-turn DeepSeek run. So this is not a DeepSeek quirk and not a turn-2 quirk.
+
+The kit consequence is a UI one, and it is the reason this is a teaching gap rather than a note:
+an app that assumes a card is preceded by an explanatory sentence will ship a thread where
+consequential actions appear with no context whatever. Rung-4's F-24 named three things every
+real model does that nothing in the kit warns about; **"a tool-calling turn frequently emits no
+text at all, however firmly you ask for some"** is a fourth, and it is one a component library
+can actually help with — the card's own `heading`/`title` is then carrying the entire burden of
+explaining the action, which is a design constraint worth stating where cards are taught.
+
+*Not filed as a product gap:* `tool_choice: 'auto'` and the prompt wording are the app's call,
+and T9's justification for `'auto'` (recorded in its report) is sound.
+
 ## Counts by class
 
 | Class | Count | IDs |
 |---|---|---|
-| teaching gap | 1 | F-27 |
+| teaching gap | 2 | F-27, **F-42** |
 | product gap | 9 | F-26, F-28, F-29, F-30, F-31, F-32, F-34, F-35, F-37 |
 | doc gap | 3 | F-33, F-38, F-39 |
 | builder error | **0** | — (all eight self-reported candidates hold against source) |
 | acceptable variation | 1 | F-36 |
-| environmental / upstream | 0 | — |
+| environmental / upstream | 1 | **F-41** |
 | strip artifact | **0** | — (all candidates checked against the real `llms-full.txt` / `README.md`) |
 | recorded non-finding | 1 | F-40 |
-| **Classified total** | **14** | F-26 – F-40 less the non-finding F-40 |
+| **Classified total** | **16** | F-26 – F-42 less the non-finding F-40 |
 
 By severity: **S1 ×3** (F-26, F-27, F-28) · **S2 ×6** (F-29, F-30, F-31, F-32, F-34, F-35) ·
-**S3 ×3** (F-33, F-37, F-38) · **S4 ×1** (F-39). Thirteen severity-carrying findings; F-36
-carries none, and F-40 is a recorded non-finding.
+**S3 ×5** (F-33, F-37, F-38, **F-41**, **F-42**) · **S4 ×1** (F-39). Fifteen severity-carrying
+findings; F-36 carries none, and F-40 is a recorded non-finding.
 
-**Catalog running total after rung 5: 38 classified findings across F-01 – F-40**
-(rung 4's 24 + this rung's 14; F-19 and F-40 are the two recorded non-findings).
+**Catalog running total after rung 5: 40 classified findings across F-01 – F-42**
+(rung 4's 24 + this rung's 16; F-19 and F-40 are the two recorded non-findings).
 
 Shape against rung 4, since the ratio is the measurement: rung 4 was 4 teaching / 12 product /
-3 doc / 2 builder-error. This rung is **1 teaching / 9 product / 3 doc / 0 builder-error**. The
+3 doc / 2 builder-error. This rung is **2 teaching / 9 product / 3 doc / 0 builder-error**, and
+one of the two teaching gaps (F-42) is only visible with a live provider. The
 front door did not get better at teaching — the two teaching gaps it would have been charged with
 (`listenForCardEvents`/`emitCardEvent`/`onToolCallReady` invisibility) are the *same* F-01/F-02
 still open, so they are not re-filed. What moved is that a more capable builder converted what
@@ -597,13 +697,13 @@ divergence sits in the kit.
 |---|---|
 | **F-10** — `GET /api/chat` kills the dev server | **FIXED.** The §0 wave landed the 405 + parse guards in the emitted route; verified live against the scaffolder and against the running keyless mirror. Filed **F-40** (non-finding). |
 | **F-03** — cards in `<kai-chat>`, `policy` on `<kai-cards>` | **NOT FIXED, and the mechanism is worse than the symptom.** No `CardHost` on the chat path at all, so events are silently discarded rather than merely unrouted. Filed **F-26** (S1, raised from F-03's S2). |
-| **F-22** — a malformed tool call reported only on the suppressed channel | **NOT FIXED, now total.** On the card path the second channel is `host?.emit`, which is `undefined` inside `<kai-chat>`. Zero channels. Filed **F-34**. |
+| **F-22** — a malformed tool call reported only on the suppressed channel | **NOT FIXED, now total.** On the card path the second channel is `host?.emit`, which is `undefined` inside `<kai-chat>`. Zero channels. Filed **F-34**. T9's real-mode round found a third shape with no channel at all — a call the route buried in `delta.reasoning`, which never reaches any reporting path (**F-41**). |
 | **F-05** — `createMockResponder()` cannot carry the payload | **NOT FIXED, verbatim.** Second rung of hand-built tool-call SSE frames. Filed **F-35**. |
 | **F-17** — the duplicate tool panel | **NOT FIXED.** Second independent builder, same hand-written sink wrapper. Filed **F-36**. |
 | **F-09** — the components axis emits bare, propless elements | **NOT FIXED, and now lands on an element where propless is fatal.** Filed **F-32**. |
 | **F-01 / F-02** — the streaming half of the bridge and the custom-card contract unnamed | **NOT FIXED.** `listenForCardEvents`, `emitCardEvent`, `onToolCallReady`, `stream.addCard`: still zero in the shipped `llms-full.txt`. Not re-filed under new numbers; F-27 is their remote-transport analogue. |
 | **F-06** — `debug` answers nothing | **REPEATED, with a new detail.** 5 calls, **3 "No known failure pattern matched"** — and the 2 that hit were about non-bubbling events and dismiss recovery, i.e. facts the pattern DB has and the shipped corpus does not. Not re-filed; the rate is recorded in `builder-run.md`. |
-| **F-24** — the cheap-model behaviour cluster | **NOT EXERCISABLE.** Mock-only run, scripted assistant, zero provider contact. Deferred to a real-mode round. |
+| **F-24** — the cheap-model behaviour cluster | **PARTIALLY RE-EXERCISED by T9.** Not in the clean-room round (mock-only, scripted assistant, zero provider contact). T9's six captures add a **fourth** cluster member — a tool-calling turn emits no prose at all, 4 of 5 turns, both models (**F-42**). Double-escaping, duplicate parallel calls and narrate-instead-of-call remain unmeasured; n is far too small for rates. |
 | **F-15** — who toggles `.dark` | Not re-exercised: this app never needed a manual toggle. Left open. |
 
 ## Independent build/run verification (keyless mirror)
@@ -629,11 +729,20 @@ the run.
 
 ## Provenance
 
-Every finding names its round at its own site. This rung has **one** round.
+Every finding names its round at its own site. This rung has **two** rounds.
 
 | Round | Findings | What it could and could not see |
 |---|---|---|
-| **Clean-room build** (2026-08-21, session `f760a7ef`, 164 turns, $22.30, 43.8 min, `claude-opus-5`) | F-26 – F-40 | **Mock-only by design.** No provider was ever contacted (`web_fetch_requests: 0`, `web_search_requests: 0`); the app's assistant is a keyword-routed script emitting hand-built OpenAI SSE frames. Enough to measure the front door, the scaffolder, the kit's types and the whole native+remote card transport under a real two-origin browser session. **Not** enough to say anything about model behaviour: F-24's cluster is untouched, and no finding here rests on what a model emits. |
+| **Clean-room build** (2026-08-21, session `f760a7ef`, 164 turns, $22.30, 43.8 min, `claude-opus-5`) | F-26 – F-40 | **Mock-only by design.** No provider was ever contacted (`web_fetch_requests: 0`, `web_search_requests: 0`); the app's assistant is a keyword-routed script emitting hand-built OpenAI SSE frames. Enough to measure the front door, the scaffolder, the kit's types and the whole native+remote card transport under a real two-origin browser session. **Not** enough to say anything about model behaviour: no finding in this round rests on what a model emits. |
+| **T9 insider real-mode smoke** (2026-08-22, the app landed at `examples/apps/ops-console/`) | F-41 – F-42 | Two models over OpenRouter — `deepseek` (the app default) and `gpt-4o-mini` — two turns each, plus two repeats of the turn-2 prompt, **six streams captured whole** to `t9-sse-captures/`. Enough to find what a route *does* to a well-formed call (F-41) and a behaviour both models share (F-42); **n = 3 on the repeated prompt, so nothing here supports a rate.** The insider's own composition choices deliberately preserved the clean-room app's F-26/F-28/F-31/F-33/F-35/F-36 workarounds, so this round tested the same seams the build round measured. |
+
+**Worth one line on model divergence**, because it shapes what a card app must handle: on the
+*same* turn-1 prompt, `gpt-4o-mini` answered with **`kai_parameters`** — a form, to gather inputs
+before proposing — while `deepseek` answered with **`kai_approval`** directly. Two defensible
+readings of one prompt, producing two different card types and two different numbers of turns to
+reach the same action. An app that hard-codes "turn 1 yields an approval" is model-specific
+without knowing it; the builder's `intent`/`params` follow-up drive happens to handle both, which
+is why the smoke passed on either model.
 
 **Comparer additions beyond the builder's own report**, so the provenance of each is clear:
 
@@ -647,6 +756,11 @@ Every finding names its round at its own site. This rung has **one** round.
 - F-39 was found while verifying other candidates and is in neither the builder's notes nor the
   handoff's candidate list.
 - F-40 (the F-10 closure) is mine; the builder had no reason to know it was a residual.
+- F-41 and F-42 come from T9's captures, but every number in them was **re-derived from the raw
+  SSE bytes** rather than taken from T9's report — including two corrections: T9 described the
+  zero-prose behaviour as the two clean DeepSeek turn-2 runs, and the captures show it in **4 of
+  5** tool-calling turns across **both** models (F-42); and the leaked call is **complete and
+  well-formed**, not partial, which is what makes F-41 a routing defect rather than a truncation.
 
 **One comparer correction is recorded rather than smoothed over:** the handoff describes
 candidate 1 as "rung-4 F-03 rediscovered independently". That undersells it. F-03 said the policy

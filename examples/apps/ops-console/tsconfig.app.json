@@ -1,0 +1,33 @@
+{
+  // INSIDER CHANGE (corpus convention, not a builder gap). The clean-room app
+  // had ONE tsconfig covering `src`, `board`, `server`, `plugins` and the vite
+  // configs together, with `types: ["node", "vite/client"]` and the DOM libs on
+  // for all of them. That compiles, and it hides the one split this repo has
+  // been bitten by: `request.json()` is `Promise<any>` under the DOM lib and
+  // `Promise<unknown>` under undici's, so a route that destructures it passes a
+  // DOM-flavoured typecheck and fails on a real Node server. The corpus splits
+  // the two, so this app does too.
+  //
+  // THE BROWSER HALF: `src/` (the console) and `board/` (the provider page).
+  // Both run in a browser, both resolve through the bundler.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo"
+  },
+  "include": ["src", "board", "shared"]
+}
