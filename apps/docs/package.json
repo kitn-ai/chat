@@ -29,7 +29,8 @@
     "sharp": "^0.34.5",
     "solid-js": "^1.9.13",
     "starlight-sidebar-topics": "^0.8.0",
-    "tailwindcss": "^4.3.1"
+    "tailwindcss": "^4.3.1",
+    "vite": "^7.3.6"
   },
   "devDependencies": {
     "@iconify-json/logos": "^1.2.11",
