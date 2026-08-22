@@ -305,12 +305,132 @@ const ROOT_RELAXATIONS: Readonly<Record<string, string>> = {
 const GENERIC_RELAXATION_NOTE =
   'The root constraint of this schema was relaxed for this provider; consult the card registry for what a valid payload is.';
 
+const BANNED_ROOT_KEYS = ['anyOf', 'allOf', 'oneOf', 'not', 'enum', 'const'] as const;
+
+/**
+ * The object shape a literal `enum` / `const` VALUE implies.
+ *
+ * `const: { op: 'ping' }` is a whole-instance constraint, which a provider refuses
+ * at the root exactly like a combinator. The instance it admits is an object, so
+ * the shape survives the relaxation as `properties: { op: { const: 'ping' } }` with
+ * `op` required — nothing widened that the branch did not already allow.
+ */
+function branchFromLiteral(value: unknown): Record<string, unknown> | null {
+  if (!isRecord(value)) return null;
+  const properties: Record<string, unknown> = {};
+  for (const [key, member] of Object.entries(value)) properties[key] = { const: member };
+  return { type: 'object', properties, required: Object.keys(value) };
+}
+
+/** The branch schemas one banned root keyword contributes, or `[]` for one that has none. */
+function branchesOfRootKeyword(keyword: string, value: unknown): Record<string, unknown>[] {
+  if (keyword === 'anyOf' || keyword === 'oneOf' || keyword === 'allOf') {
+    return Array.isArray(value) ? value.filter(isRecord) : [];
+  }
+  if (keyword === 'const') return [branchFromLiteral(value)].filter((b): b is Record<string, unknown> => b !== null);
+  if (keyword === 'enum') {
+    return Array.isArray(value)
+      ? value.map(branchFromLiteral).filter((b): b is Record<string, unknown> => b !== null)
+      : [];
+  }
+  // `not` is a NEGATIVE constraint: nothing it says is a property the instance may
+  // carry, so there is nothing sound to merge back. It is dropped and restated in
+  // the description like every other relaxation.
+  return [];
+}
+
+/**
+ * Fold a root combinator's branches back into the object root that replaces it.
+ *
+ * The two built-ins showed the shape of the rule and this generalises it rather
+ * than special-casing them. `artifact`'s root `anyOf` is `[{required:['src']},
+ * {required:['files']}]`: a DISJUNCTION guarantees only what EVERY branch
+ * guarantees, so the intersection is empty and `required` stays absent — which is
+ * exactly what the artifact projection already did. `embed`'s root `allOf` is two
+ * `if`/`then` pairs: a CONJUNCTION guarantees every branch's own top-level
+ * `required`, and an `if`/`then` branch declares none, so again nothing is added.
+ * A consumer card whose branches carry real `properties` is the case neither
+ * built-in reaches, and the one this exists for.
+ *
+ * Properties are UNIONed (each branch's shape must remain expressible — dropping
+ * one is the silent narrowing the whole F-20 fix exists to avoid); a name already
+ * on the root keeps the root's definition. `required` is the intersection for
+ * `anyOf`/`oneOf`/`enum`/`const` and the union for `allOf`, unioned in turn with
+ * whatever the root already required, and filtered to names the merged
+ * `properties` actually carries so the tool can never be unsatisfiable.
+ */
+function mergeBranchesIntoRoot(parameters: Record<string, unknown>, banned: readonly string[]): void {
+  const properties: Record<string, unknown> = isRecord(parameters.properties)
+    ? { ...parameters.properties }
+    : {};
+  const guaranteed = new Set<string>(
+    Array.isArray(parameters.required) ? parameters.required.map(String) : [],
+  );
+
+  for (const keyword of banned) {
+    const branches = branchesOfRootKeyword(keyword, parameters[keyword]);
+    if (branches.length === 0) continue;
+
+    for (const branch of branches) {
+      if (!isRecord(branch.properties)) continue;
+      for (const [name, sub] of Object.entries(branch.properties)) {
+        if (!(name in properties)) properties[name] = sub;
+      }
+    }
+
+    const perBranch = branches.map(
+      (branch) => new Set(Array.isArray(branch.required) ? branch.required.map(String) : []),
+    );
+    if (keyword === 'allOf') {
+      for (const set of perBranch) for (const name of set) guaranteed.add(name);
+    } else {
+      // Disjunction: keep only what every branch requires.
+      const [first, ...rest] = perBranch;
+      for (const name of first) {
+        if (rest.every((set) => set.has(name))) guaranteed.add(name);
+      }
+    }
+  }
+
+  if (Object.keys(properties).length > 0) parameters.properties = properties;
+  const required = [...guaranteed].filter((name) => name in properties);
+  if (required.length > 0) parameters.required = required;
+}
+
+/**
+ * Make the projected ROOT the object shape every provider demands.
+ *
+ * Deleting a root combinator is only half of F-20. A schema whose root was NOTHING
+ * BUT the combinator projects to `{"title":…,"description":…}` once it is gone —
+ * accepted by no provider (measured: OpenAI 400, "schema must be a JSON Schema of
+ * type \"object\"") and unfillable by any model. Every built-in declares
+ * `type: "object"` at its root, so nothing in the suite reached this until a
+ * consumer card did.
+ *
+ * A root that declares a NON-object type cannot be a tool schema at all, and
+ * asserting `type: "object"` over it would be a lie about the card. That refuses,
+ * naming the card.
+ */
+function ensureObjectRoot(parameters: Record<string, unknown>, cardType: string): void {
+  const declared = parameters.type;
+  if (declared !== undefined && declared !== 'object') {
+    throw new TypeError(
+      `cardTools: the '${cardType}' card schema declares root type '${String(declared)}', but a provider tool ` +
+        `schema root must be an object (OpenAI and Anthropic reject anything else with HTTP 400). ` +
+        `Wrap the payload in an object, or project this card with provider 'jsonschema'.`,
+    );
+  }
+  parameters.type = 'object';
+}
+
 function relaxRootCombinators(parameters: Record<string, unknown>, cardType: string): string | undefined {
   const note = ROOT_RELAXATIONS[cardType];
-  const banned = (['anyOf', 'allOf', 'oneOf', 'not', 'enum', 'const'] as const).filter(
-    (k) => k in parameters,
-  );
+  const banned = BANNED_ROOT_KEYS.filter((k) => k in parameters);
+  // The object-root guarantee holds for EVERY provider projection, banned keys or
+  // not: it is what the provider requires, not what the relaxation broke.
+  ensureObjectRoot(parameters, cardType);
   if (banned.length === 0) return undefined;
+  mergeBranchesIntoRoot(parameters, banned);
   for (const k of banned) delete parameters[k];
   // eslint-disable-next-line no-console
   console.warn(
