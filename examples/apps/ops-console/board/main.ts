@@ -108,7 +108,15 @@ const runBoardRenderer: RemoteCardRenderer = {
   mount(mountRoot, envelope, host) {
     const data = (envelope.data ?? {}) as BoardData;
     mountRoot.classList.add('board');
-    mountRoot.dataset.theme = host.context().theme.mode;
+    const mode = host.context().theme.mode;
+    mountRoot.dataset.theme = mode;
+    // The palette lives on `:root` (the frame inherits nothing from the host, so
+    // every value is stated there), and `html` and `body` paint from it. Stamping
+    // the mode only on the mount root left the document background — the thing
+    // the frame actually shows around the board — pinned to the dark value, so a
+    // theme change flipped an attribute and repainted nothing. See board.css.
+    document.documentElement.dataset.theme = mode;
+    document.documentElement.style.colorScheme = mode === 'light' ? 'light' : 'dark';
 
     const header = el('header', 'board__header');
     header.append(el('h2', 'board__title', data.title ?? 'Run board'));

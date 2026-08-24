@@ -29,7 +29,7 @@
  */
 import { cardTools } from '@kitn.ai/ui/schemas';
 import type { OpenAIWireMessage } from '@kitn.ai/ui/wire';
-import { CARD, cards } from '../shared/cards.js';
+import { approvalActionIdsFor, CARD, cards } from '../shared/cards.js';
 import { scriptFrames } from './script.js';
 
 /** OpenRouter normalises EVERY model onto the OpenAI chat-completions shape,
@@ -75,7 +75,7 @@ const EMPTY_ENV: ChatEnv = { key: '', model: '', maxTokens: 0 };
  * app-side patching is needed here at all — the projection ships as the kit
  * produces it, plus the `require` narrowing below.
  */
-const CARD_TOOLS = cardTools(cards, {
+export const CARD_TOOLS = cardTools(cards, {
   provider: 'openai',
   // F-23 — narrow the DERIVED tool, not the authored schema. Each of these moves
   // a failure from render time (a card the operator cannot act on) to generation
@@ -109,6 +109,68 @@ const CARD_TOOLS = cardTools(cards, {
 });
 
 /**
+ * INSIDER CHANGE (D9) — pin the approval card's action ids to the ones this
+ * console implements.
+ *
+ * Same spirit as the `require` block above (F-23: move a failure from click time
+ * to generation time), and it has to be done by hand because `CardRequireRule`
+ * narrows `required` and `minItems` only — there is no `enum` rule. It runs on
+ * the PROJECTED copy `cardTools` just built, never on the authored schema, so
+ * `registry.validate()` and every hand-built mock envelope are untouched.
+ *
+ * It throws if the path stops resolving. A pin that silently became a no-op
+ * after a schema change is worse than no pin: the model goes back to inventing
+ * ids and the only symptom is a button that does nothing, three layers away.
+ *
+ * INSIDER CHANGE (N3) — the enum is now PER INTENT and therefore per request.
+ * The flat list let a live model put `rollback` on a card proposing a deploy,
+ * under the label "Deploy, then roll back if it faults"; every id was in
+ * vocabulary, so nothing refused it, and the button rolled production back. The
+ * vocabulary is the part the app controls, so it is narrowed to what the turn is
+ * actually about — see `APPROVAL_ACTIONS_BY_INTENT`.
+ */
+function pinApprovalActionIds(tools: readonly unknown[], allowed: readonly string[]): void {
+  const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null && !Array.isArray(value);
+
+  const tool = tools.find(
+    (candidate) =>
+      isRecord(candidate) &&
+      isRecord(candidate.function) &&
+      candidate.function.name === `kai_${CARD.approval}`,
+  );
+  const fn = isRecord(tool) && isRecord(tool.function) ? tool.function : undefined;
+  let node: unknown = fn?.parameters;
+  for (const step of ['properties', 'actions', 'items', 'properties', 'id']) {
+    node = isRecord(node) ? node[step] : undefined;
+  }
+  if (!isRecord(node)) {
+    throw new TypeError(
+      `ops-console: cannot pin kai_${CARD.approval} action ids — ` +
+        'actions.items.properties.id did not resolve in the projected tool schema.',
+    );
+  }
+  node.enum = [...allowed];
+}
+
+/**
+ * The tool defs for ONE request, with the approval enum narrowed to that turn.
+ *
+ * A fresh clone per request rather than a mutated module-level object: the enum
+ * differs per turn now, so a shared object would hand whatever the last request
+ * set to the next one.
+ */
+export function cardToolsFor(intent?: string): unknown[] {
+  const tools = structuredClone(CARD_TOOLS) as unknown[];
+  pinApprovalActionIds(tools, approvalActionIdsFor(intent));
+  return tools;
+}
+
+// Run once at load so a path that stopped resolving is a boot failure, not a
+// failure on whichever request first happens to reach a provider.
+cardToolsFor();
+
+/**
  * The one instruction real mode adds. The client posts the operator's thread and
  * nothing else, so without this a model answers every question in prose and no
  * card ever appears — a tool definition is an offer, not a contract.
@@ -136,6 +198,14 @@ const SYSTEM_PROMPT = [
   '- Name the irreversible parts explicitly. Forward-only migrations are not undone by a',
   '  rollback; a revoked key fails closed for everything still holding it.',
   '- The operator is an expert. No preamble, no apologies, no safety lectures.',
+  // D9/N3: the enum on `actions[].id` is the guarantee; this is the explanation.
+  // The list is NOT restated here — it differs per turn (N3), and a second copy
+  // in prose would be the one that goes stale and contradicts the schema.
+  "- An approval card's action ids are closed: use only the values the tool schema's `enum`",
+  '  offers on THIS call. They are what the console can carry out, and they are narrowed to',
+  '  what the current turn is about. Label them however the situation reads ("Deploy now",',
+  '  "Cancel"), but every label must describe the action its own id names — a button labelled',
+  '  as one operation and identified as another is the worst thing you can put on this card.',
 ].join('\n');
 
 interface ChatRequestBody {
@@ -292,7 +362,8 @@ async function proxyOpenRouter(request: Request, env: ChatEnv, body: ChatRequest
           ...body.messages,
           ...(directive ? [directive] : []),
         ],
-        tools: CARD_TOOLS,
+        // N3: the vocabulary offered depends on what THIS turn is about.
+        tools: cardToolsFor(body.intent),
         // 'auto', NOT 'required' — and this is the one place this app deliberately
         // differs from the rung-4 builder, whose every reply IS a tool call.
         //

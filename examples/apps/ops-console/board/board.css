@@ -19,6 +19,35 @@
   --danger: #f87171;
 }
 
+/*
+ * The light palette.
+ *
+ * `<kai-remote>` sends the host's theme down the bridge and the renderer stamps
+ * the mode on `:root` and on the mount root (board/main.ts). Before this block
+ * the transport worked and NOTHING repainted: one dark palette was declared and
+ * there was no rule a theme change could select. Every colour in this file is a
+ * token, so swapping the nine values is the whole job — no per-rule overrides,
+ * and the `color-mix()` badges and the danger button follow for free.
+ *
+ * Both selectors are needed. `:root[data-theme]` repaints the document (html and
+ * body paint the frame's background, which is what the panel actually shows);
+ * `#card-root[data-theme]` keeps the board itself correct if it is ever mounted
+ * into a document whose root was not stamped.
+ */
+:root[data-theme='light'],
+#card-root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #f4f6fa;
+  --surface: #ffffff;
+  --line: #d8dee9;
+  --text: #14171c;
+  --muted: #5b6474;
+  --accent: #2563eb;
+  --ok: #15803d;
+  --warn: #a16207;
+  --danger: #b91c1c;
+}
+
 * {
   box-sizing: border-box;
 }

@@ -379,6 +379,181 @@ snapshot: the whole of `src/` (`App.tsx`, `RunBoardFrame.tsx`, `assistant.ts`,
 13. **This README.** The builder shipped `NOTES.md` (kept verbatim beside it) and
     no README.
 
+#### The hardening wave — defects D2..D7 from the task-10 IVP
+
+A hardened IVP drove this app in a real Chromium, in both modes, and found eight
+defects; the full report is
+[`.superpowers/sdd/2026-08-21-rung-5-remote-cards/task-10-report.md`](../../../.superpowers/sdd/2026-08-21-rung-5-remote-cards/task-10-report.md).
+Six of them are the app's and are fixed here. Every one of the six was a decision
+taken QUIETLY — a stop with no reason, a diagnostic with nowhere to go, a payload
+nobody named, a ticket invented, a decision never told to the model, a signal that
+landed on nothing. That is one defect class, not six, and it is the class the
+repo's decide-loudly rule exists for.
+
+14. **`src/assistant.ts` — an in-band mid-stream error reaches the thread
+    (D2).** `readOpenAIStream` reports a provider failure that arrives AFTER the
+    headers as `ModelTurn.error`, not as a throw, so the `catch` never saw it and
+    `runTurn` returned `{ error }` to a caller that dropped it: the reply stopped
+    mid-sentence with nothing on any channel — no thread text, no toast, no
+    console. `runTurn` now calls `stream.abort(reason)`, which is the SAME
+    presentation the transport-drop path already used (the reason becomes its own
+    text part; the partial reply stays where it is), plus a `console.error`. The
+    claim at `server/chat.ts:344-346` — "`src/assistant.ts` already puts that in
+    the thread" — is true as of this change and was not before.
+15. **`src/assistant.ts` — a corrupted card tool call is no longer swallowed
+    (D3, the **F-34**/**F-22** class at app scale).** When a card tool call
+    cannot be parsed, `wire/consume.ts` reports it on exactly one channel —
+    `sink.upsertTool(id, { state: 'output-error', errorText })` — and never calls
+    `onToolCallReady`. `cardAwareSink` suppressed EVERY patch for a card call id
+    (F-36, so a proposal does not render twice), which meant it suppressed that
+    one report too: a truncated `kai_approval` rendered "Working on it." and
+    stopped, with zero channels. `output-error` is now the one patch that passes
+    through — the kit's own tool-panel diagnostic draws — and the sink also calls
+    back so the console says it in words, in the thread and on `console.warn`. A
+    collapsed panel is a channel; it is not a thing an operator reads.
+16. **`src/assistant.ts` — pollution keys are rejected loudly (D4).**
+    `__proto__` / `constructor.prototype` in a card payload were inert (nothing
+    spreads them onto a prototype, and `Object.prototype` was verifiably clean)
+    but completely silent: the card rendered normally. **The kit layer cannot
+    catch this and the app was not bypassing it** — the card validator does not
+    implement `additionalProperties` at all (the exclusion is written down in
+    `packages/ui/src/primitives/card-validate-schemas.ts`), and `cardSchemas.confirm`
+    does not set it in the first place, so `cards.validate()` passes the payload
+    and is right to. So the app scans the envelope's own keys itself, refuses to
+    render the card, names the offending paths in the thread and warns on the
+    console. The paths are backticked because the notice is markdown and a bare
+    `data.__proto__` renders as emphasised "proto" — a notice naming a key that
+    is not the offending one. (Found by the repro, not by reading.)
+17. **`src/App.tsx` — an approval with no context is REFUSED, never defaulted
+    (D5).** `String(params.ticket ?? 'CHG-0000')` was invisible in mock mode,
+    because the scripted assistant attaches `{ region, ticket }` to its approve
+    action. A real model's approve action carries no payload, and the console
+    recorded a production deploy against change ticket **CHG-0000** — an audit
+    field, fabricated, on a run the operator had explicitly ticketed CHG-4821.
+    The console now takes the approve payload if it carries a whole context, else
+    the region and ticket the operator actually typed into the parameters form
+    (remembered in `deployContextRef`, written from nowhere else and cleared by
+    "Clear run"), and otherwise **stops**: nothing is deployed, the thread says
+    which fields are missing, and a toast repeats it. Refusing is the decision
+    here — a production run recorded against an invented ticket is worse than a
+    deploy that does not start, and inferring the ticket from prose would be the
+    same fabrication with more steps.
+18. **`src/assistant.ts` — card outcomes are projected into the encoded history
+    (D6).** `toOpenAIMessages` drops `card` parts by design (kit-side that is a
+    settled silent-drop waiver, and the right call: a card envelope has no
+    canonical provider representation). The consequence lands on the app — the
+    live turn-3 request contained two user lines and one prose line, no proposal
+    and no approval, and the model correctly answered *"I don't have any
+    confirmation that it was approved"*. `withCardOutcomes()` now states each
+    card and its resolution as a compact text part beside it, for the REQUEST
+    only; app state is untouched. **Open kit question for the handoff:** should
+    the kit offer a canonical projection of card parts for encoders, rather than
+    every app inventing its own wording? Not built here.
+19. **`board/board.css` + `board/main.ts` — the framed board can re-theme
+    (D7).** The transport already worked: `<kai-remote>`'s theme reaches the
+    provider and the renderer remounts. Nothing repainted, because the board
+    declared ONE dark palette and no rule a theme change could select. A light
+    palette now sits behind `[data-theme='light']`, and the mode is stamped on
+    `:root` as well as on the mount root — `html`/`body` paint the frame's
+    background, which is the surface the panel actually shows, and a mode on the
+    mount root alone left it pinned to the dark value. Every colour in that file
+    is a token, so nine values are the whole change; the `color-mix()` badges and
+    the danger button follow for free.
+
+#### The second wave — D9, D10 and N2, from the fix-wave re-review
+
+The same verifier re-drove the app after the six fixes above, live as well as
+mock, and found three more — one of them pre-existing and worse than anything in
+the first list, one caused by a fix in it.
+
+20. **`shared/cards.ts` + `server/chat.ts` + `src/App.tsx` — a model-invented
+    action id can no longer be a silent no-op (D9).** DeepSeek emitted
+    `actions: [{id:'deploy'},{id:'decline'}]` and `[{id:'deploy'},{id:'cancel'}]`.
+    `App.onCardAction` switches on `approve`/`reject`, so every live Approve fell
+    through to a default branch that raised a transient toast and returned: the
+    card stamped itself resolved ("✓ Deploy to production"), and **nothing
+    happened** — no run, no refusal, no record. It also made D5's refusal
+    unreachable live, because control never reached it. Fixed in two halves, and
+    both are needed. `APPROVAL_ACTION_IDS` in `shared/cards.ts` is the console's
+    action vocabulary, declared once; `server/chat.ts` pins it as the `enum` on
+    the derived tool's `actions[].id` so a real model **cannot** emit anything
+    else (F-23-style narrowing, on the projected copy — the authored schema and
+    every hand-built mock envelope are untouched, and the pin throws at boot if
+    its path stops resolving); and `App`'s `default` branch is now a loud
+    in-thread refusal naming the id and listing what the console does implement,
+    for the cases the enum cannot cover (a hand-built envelope, a provider that
+    drops the enum, a model that ignores it). The enum is a request; only the
+    refusal is a guarantee. `CardRequireRule` narrows `required` and `minItems`
+    only, so the enum had to be pinned by hand — **a kit gap worth a finding**.
+21. **`src/App.tsx` + `src/assistant.ts` — the projection states the console's
+    OUTCOME, not the operator's click (N2, from change 18).** The first version
+    emitted `the operator chose "deploy"` even where the console had refused to
+    act. In the live run the model was told a deploy had been chosen, the app had
+    done nothing (D9), and the next turn reported a live 1-of-5 run — and invented
+    a second ticket — while the board read `idle`. A projection that can be
+    contradicted by the board is a fiction with the app's authority behind it. The
+    outcome is now written by the code that DECIDED it (started / refused /
+    rejected / unimplemented-id), stored as a record rather than a sentence, and
+    rendered at send time against the run the BOARD is currently showing — so
+    "started" becomes "the run board no longer holds that run" once it is cleared.
+    Where no outcome was recorded the line says so, rather than implying one.
+22. **`src/assistant.ts` — an action `style` outside the schema's enum is
+    replaced, loudly (D10).** The live model sent `style: "danger"`; two warnings
+    followed and the destructive approval rendered with a **default-styled**
+    button — the loudest thing on the card was the thing that did not happen. The
+    style is now checked against the enum READ BACK from the card schema (not a
+    copy) and replaced with a named default, with a `console.warn` naming the
+    action, the value and the substitute. It is not mapped to `destructive`:
+    guessing that "danger" meant the red button would be this app inventing intent
+    for a control that fires an irreversible operation.
+23. **`src/assistant.ts` — the D3 notice no longer pastes raw model output into
+    the thread** (verifier-requested refinement of change 15). The kit's message
+    ends `… Received N chars: <the raw fragment>`. That fragment is model output,
+    and the tool panel and the console warning both still carry it in full; the
+    thread keeps the sentence only.
+
+#### The third wave — N3, from the round-2 re-review
+
+24. **`shared/cards.ts` + `server/chat.ts` + `src/assistant.ts` — the approval
+    vocabulary is PER INTENT (N3, from change 20).** The flat enum constrained
+    ids but not the labels the model writes for them, and a label is prose the
+    app does not control. Captured live, on a card proposing a **deploy**:
+
+    ```
+    'approve'  -> 'Deploy to production'
+    'reject'   -> 'Cancel'
+    'rollback' -> 'Deploy, then roll back if it faults'   <- executes rollbackRun()
+    ```
+
+    Every id was in vocabulary, so nothing refused it; the third button reads as
+    a deploy variant and rolls production back. The pin had made a
+    coherent-looking id under a contradictory label *executable*, where before it
+    at least got refused.
+
+    Reading the label to check it agrees with the id is **not** the fix — that is
+    a prose heuristic guarding an irreversible operation. The vocabulary is the
+    part the app controls, so it got smaller. `APPROVAL_ACTIONS_BY_INTENT` maps
+    each app-driven intent to what that turn may offer (`deploy-approval` →
+    approve/reject, `rollback` → rollback/reject, `strategy-confirm` →
+    apply-strategy/reject, `rotate` → rotate/stage/reject), and every other turn
+    gets `DEFAULT_APPROVAL_ACTION_IDS` — approve/reject only, which is exactly
+    the turn the captured card came from. `server/chat.ts` builds the tool defs
+    per request (a fresh clone, so one turn's enum cannot leak into the next);
+    `src/assistant.ts` removes an out-of-vocabulary button on arrival, loudly,
+    naming the id **and the label it wore**, and refuses the whole card if
+    nothing legitimate is left. `APPROVAL_ACTION_IDS` — what `App`'s total-switch
+    backstop lists — is now DERIVED from that map rather than being a second
+    list. The client-side half runs only on turns the app drove, because the mock
+    script routes a free-form prompt by keyword ("roll back the deploy" produces
+    a rollback card with no intent) and that is the app's own trusted output;
+    the scope note sits on `enforceActionVocabulary`.
+
+Not fixed here: **D1** (remote-card auto-resize under-reports, so the board is
+clipped) is kit-side, in `packages/ui/src/primitives/use-resize-observer.ts` and
+`host-embed.ts`; **N1** (its fix turned the frame into a one-way ratchet) is
+kit-side too; **D8** (two unprovoked console warnings) is kit-side noise from
+`<kai-remote>`'s own sandbox attributes and the handshake.
+
 ### Verification
 
 | Check | Result |
@@ -394,6 +569,33 @@ snapshot: the whole of `src/` (`App.tsx`, `RunBoardFrame.tsx`, `assistant.ts`,
 | `GET /` on the board origin | **200** |
 | real 2-turn smoke, `deepseek/deepseek-v4-flash-0731` (2026-08-22) | `kai_approval` then `kai_checklist`, both parsed clean, F-23 rules held — 1 of 3 follow-up runs produced nothing, see "Real mode" |
 | real 2-turn smoke, `openai/gpt-4o-mini` (2026-08-22) | `kai_parameters` then `kai_approval`, both parsed clean, every F-23 rule held — this is what backs "the alternate" above |
+| `node .superpowers/sdd/2026-08-21-rung-5-remote-cards/ivp/w11a-verify.mjs` (the D2..D7 + D9/D10/N2 repro, 2026-08-24) | all checks pass; the same script run against the pre-fix files reproduces every defect it asserts |
+| `node …/ivp/w11a-tooldefs.mjs` (the D9/N3 enum pin, on the projected tool defs themselves) | all checks pass — one cell per intent, a deploy approval cannot offer `rollback`, a rollback approval cannot offer `approve`, an unknown intent falls back to the narrow default, the ids the live model invented are absent, and the AUTHORED schema still carries no enum |
+
+The D2..D7 repro is a driven one — real Chromium, hostile and failure fixtures
+delivered as OpenAI SSE **bytes** on the app's own `/api/chat`, so each flows
+through `readOpenAIStream` → `cardAwareSink` → `cardFromToolCall` exactly as a
+model reply would. It **was watched failing first**: with the four changed files
+reverted to their pre-fix contents and nothing else touched, the run reproduces
+every defect — the in-band error invisible, the corrupted call on zero channels,
+the pollution card rendered with nothing said, `CHG-0000` on the board, a request
+body with no decision in it, and a board that flips `data-theme` while painting
+the identical `rgb(11,13,16)`. The checks that pass in BOTH runs are the ones that
+were already true (the mock approve path, `Object.prototype` staying clean, the
+theme signal arriving), which is what makes the other verdicts mean something.
+
+The second wave was watched failing the same way, against the tree as it stood
+after the first: D9's refusal absent and the board untouched by a click on
+"Deploy now", the projection reading `the operator chose "deploy"`, and the
+`danger` style producing the kit's two warnings and a default-styled destructive
+button. `w11a-tooldefs.mjs` loads `server/chat.ts` through the app's own Vite and
+inspects the projected tool defs directly, because a pinned enum only reaches a
+provider in real mode and is invisible to a keyless browser run.
+
+So was the third. Against the round-2 tree the same run renders the captured
+card with all three buttons live — `["Deploy to production", "Cancel", "Deploy,
+then roll back if it faults"]` — and says nothing on any channel; nothing else
+moved, which is what shows N3's fix did not cost any of D2..D10 or N2.
 
 Raw SSE for both models is preserved in
 [`.superpowers/sdd/2026-08-21-rung-5-remote-cards/t9-sse-captures/`](../../../.superpowers/sdd/2026-08-21-rung-5-remote-cards/t9-sse-captures/),

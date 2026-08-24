@@ -13,7 +13,9 @@ import { applyResolution, dismissRecovery, listenForCardEvents } from '@kitn.ai/
 import type { CardEnvelope, CardEvent, CardPolicy, RecoveryToast } from '@kitn.ai/ui';
 import { toast } from '@kitn.ai/ui/elements';
 import type { ChatMessage } from '@kitn.ai/ui/state';
-import { CARD, cards } from '../shared/cards';
+import { APPROVAL_ACTION_IDS, CARD, cards } from '../shared/cards';
+import type { CardOutcomes } from './assistant';
+import type { RunState } from '../shared/run';
 import type { TasksCardShape } from './run-view';
 import { checklistDataFor, runHeadline } from './run-view';
 import { cardById, cardStore, cardsOf, replaceCard, revive, withCards } from './card-store';
@@ -51,6 +53,89 @@ function newId(): string {
   return crypto.randomUUID();
 }
 
+/** What a deploy has to be authorised by. Neither field has a defensible default. */
+interface DeployContext {
+  region: string;
+  ticket: string;
+  note?: string;
+}
+
+function nonEmpty(value: unknown): string | undefined {
+  const text = typeof value === 'string' ? value.trim() : '';
+  return text.length > 0 ? text : undefined;
+}
+
+/**
+ * The deploy context carried by a payload, or nothing.
+ *
+ * Deliberately all-or-nothing: half a context is not a context, and the missing
+ * half is precisely the field a default would have invented.
+ */
+/**
+ * What the CONSOLE did about one card (N2).
+ *
+ * Stored as a RECORD, not as a finished sentence, so the wording is rendered
+ * against the run board's state at the moment the history is sent rather than at
+ * the moment the button was pressed. A run that has since been cleared must not
+ * still be described to the model as live — that is the fiction N2 filed.
+ */
+type CardOutcomeRecord =
+  | { kind: 'started'; region: string; ticket: string; runId: string }
+  | { kind: 'refused'; reason: string }
+  | { kind: 'unhandled'; action: string }
+  | { kind: 'rejected' }
+  | { kind: 'noted'; text: string };
+
+/** Render the outcomes against the run the BOARD is currently showing. */
+function describeOutcomes(
+  records: ReadonlyMap<string, CardOutcomeRecord>,
+  run: RunState | null,
+): CardOutcomes {
+  const out: Record<string, string> = {};
+  for (const [cardId, record] of records) {
+    switch (record.kind) {
+      case 'started': {
+        const live = run && run.runId === record.runId;
+        const done = live ? run.steps.filter((step) => step.state === 'done').length : 0;
+        out[cardId] =
+          `the operator approved it and the console STARTED the deploy of payments to ` +
+          `${record.region} under ${record.ticket} (run ${record.runId}). ` +
+          (live
+            ? `The run board now reads "${run.status}", ${done} of ${run.steps.length} steps done.`
+            : 'The run board no longer holds that run; it has been cleared or replaced.');
+        break;
+      }
+      case 'refused':
+        out[cardId] =
+          `the operator approved it, but the console REFUSED to act on the approval: ` +
+          `${record.reason} Nothing was deployed.`;
+        break;
+      case 'unhandled':
+        out[cardId] =
+          `the operator's click carried action id "${record.action}", which this console does ` +
+          'not implement. Nothing was done.';
+        break;
+      case 'rejected':
+        out[cardId] = 'the operator rejected it. Nothing ran.';
+        break;
+      case 'noted':
+        out[cardId] = record.text;
+        break;
+    }
+  }
+  return out;
+}
+
+function deployContext(source: unknown): DeployContext | null {
+  if (source === null || typeof source !== 'object') return null;
+  const record = source as Record<string, unknown>;
+  const region = nonEmpty(record.region);
+  const ticket = nonEmpty(record.ticket) ?? nonEmpty(record.change_ticket);
+  if (!region || !ticket) return null;
+  const note = nonEmpty(record.note);
+  return note ? { region, ticket, note } : { region, ticket };
+}
+
 function userTurn(text: string): ChatMessage {
   return { id: newId(), role: 'user', parts: [{ type: 'text', text }] };
 }
@@ -72,6 +157,27 @@ export default function App(): React.JSX.Element {
 
   /** The `tasks` card that mirrors the live run, if one has been proposed. */
   const checklistIdRef = useRef<string | null>(null);
+
+  /**
+   * The region and change ticket the OPERATOR last supplied, and nothing else.
+   *
+   * Written only from a parameters form the operator submitted, or from an
+   * approve payload that actually carried both fields (the scripted assistant
+   * attaches them to the approve action; a real model does not have to). It is
+   * never inferred from prose and never defaulted — see the refusal in
+   * `approve` for why.
+   */
+  const deployContextRef = useRef<DeployContext | null>(null);
+
+  /** What the console DID about each card, by card id (N2). */
+  const outcomesRef = useRef<Map<string, CardOutcomeRecord>>(new Map());
+  const recordOutcome = useCallback((cardId: string, record: CardOutcomeRecord) => {
+    outcomesRef.current.set(cardId, record);
+  }, []);
+
+  /** The board's own state, read at event time; the render closure is stale. */
+  const runRef = useRef<RunState | null>(run);
+  runRef.current = run;
 
   const store = useMemo(() => cardStore(() => messagesRef.current, setMessages), []);
 
@@ -125,7 +231,13 @@ export default function App(): React.JSX.Element {
       setMessages(history);
       setLoading(true);
       try {
-        return await runTurn(setMessages, history, { intent, params });
+        // The outcomes are rendered HERE, against the board's current state, so
+        // the history the model is sent cannot contradict the board (N2).
+        return await runTurn(setMessages, history, {
+          intent,
+          params,
+          outcomes: describeOutcomes(outcomesRef.current, runRef.current),
+        });
       } finally {
         setLoading(false);
       }
@@ -183,12 +295,53 @@ export default function App(): React.JSX.Element {
 
       switch (action) {
         case 'approve': {
+          /**
+           * REFUSE rather than invent.
+           *
+           * This used to read `String(params.ticket ?? 'CHG-0000')`. The scripted
+           * assistant attaches `{ region, ticket }` to its approve action, so
+           * mock mode never noticed; a real model's approve action carries no
+           * payload at all, and the console quietly recorded a production deploy
+           * against change ticket **CHG-0000** — an audit field, fabricated, on
+           * a run the operator had explicitly ticketed. A default here is not a
+           * convenience, it is a false record.
+           *
+           * So: take the payload if it carries a whole context, else the one the
+           * operator actually typed into the parameters form, else stop and say
+           * what is missing. The approval still stands; nothing is deployed.
+           */
+          const context = deployContext(params) ?? deployContextRef.current;
+          if (!context) {
+            recordOutcome(cardId, {
+              kind: 'refused',
+              reason: 'the approval carried no region and no change ticket, and none had been supplied.',
+            });
+            setMessages((prev) => [
+              ...prev,
+              systemNote(
+                'Approved, but the approval carried no region and no change ticket, and ' +
+                  'none has been supplied in this conversation. **Nothing was deployed** — ' +
+                  'a production run is not recorded against a made-up ticket. Tell me the ' +
+                  'region and the change ticket and I will put the approval back on the table.',
+              ),
+            ]);
+            toast('Approval refused: no region and no change ticket.', {
+              variant: 'error',
+              duration: 8000,
+            });
+            return;
+          }
+          deployContextRef.current = context;
           const started = await startRun({
             service: 'payments',
-            region: String(params.region ?? 'us-east-1'),
-            ticket: String(params.ticket ?? 'CHG-0000'),
+            region: context.region,
+            ticket: context.ticket,
           });
           if (!started) {
+            recordOutcome(cardId, {
+              kind: 'refused',
+              reason: `the run board on ${BOARD_ORIGIN} did not answer.`,
+            });
             setMessages((prev) => [
               ...prev,
               systemNote(
@@ -198,7 +351,16 @@ export default function App(): React.JSX.Element {
             ]);
             return;
           }
-          const result = await ask(messagesRef.current, 'deploy-running', params);
+          // `started` IS the board's own state, echoed back from the start call —
+          // the same object the board renders. Recording the run id from it is
+          // what lets the projection be checked against the board later.
+          recordOutcome(cardId, {
+            kind: 'started',
+            region: started.region,
+            ticket: started.ticket,
+            runId: started.runId,
+          });
+          const result = await ask(messagesRef.current, 'deploy-running', { ...context });
           const checklist = result.cards.find((card) => card.type === CARD.checklist);
           checklistIdRef.current = checklist?.id ?? null;
           return;
@@ -206,26 +368,41 @@ export default function App(): React.JSX.Element {
 
         case 'rollback': {
           const rolled = await rollbackRun();
+          recordOutcome(
+            cardId,
+            rolled
+              ? { kind: 'noted', text: 'the operator approved the rollback and the console started it.' }
+              : { kind: 'refused', reason: 'the run board did not answer, so nothing was rolled back.' },
+          );
           if (rolled) toast.success('Rollback started. Watch the board unwind.');
           else toast('The run board did not answer; nothing was rolled back.', { variant: 'error' });
           return;
         }
 
         case 'reject':
+          recordOutcome(cardId, { kind: 'rejected' });
           offerUndo(cardId, 'Rejected. Nothing ran.');
           return;
 
         case 'rotate':
+          recordOutcome(cardId, { kind: 'noted', text: 'the console rotated the key; the old key is revoked.' });
           toast.success('Key rotated. The old key is revoked.');
           return;
 
         case 'stage':
+          recordOutcome(cardId, {
+            kind: 'noted',
+            text: 'the console staged a new key without revoking; the current key still works.',
+          });
           toast('New key staged. The current key still works.', { variant: 'info' });
           return;
 
-        case 'apply-strategy':
-          toast.success(`Restart started (${String(params.option ?? 'rolling')}).`);
+        case 'apply-strategy': {
+          const option = String(params.option ?? 'rolling');
+          recordOutcome(cardId, { kind: 'noted', text: `the console started a ${option} restart.` });
+          toast.success(`Restart started (${option}).`);
           return;
+        }
 
         case ROLLBACK_ACTION: {
           // Came in over the iframe bridge from the board on the OTHER origin.
@@ -245,18 +422,55 @@ export default function App(): React.JSX.Element {
         }
 
         default: {
-          // Every remaining action id is a `choice` option; the choice itself is
-          // not consequential, so it is followed by an approval that is.
+          // A `choice` option's id is the model's own vocabulary and legitimately
+          // free-form: the choice itself is not consequential, so it is followed
+          // by an approval that is.
           const chosen = cardById(thread, cardId);
           if (chosen?.type === CARD.options) {
             await ask(thread, 'strategy-confirm', { option: action });
             return;
           }
-          toast(`Unhandled action “${action}”.`, { variant: 'warning' });
+
+          /**
+           * D9 — THE SWITCH IS TOTAL. An action id nobody implements is refused
+           * out loud, in the thread, naming the id.
+           *
+           * This branch used to raise a transient toast and return. A live model
+           * invented `deploy` / `decline` / `cancel` in place of
+           * `approve` / `reject`, so every live Approve landed here: the card
+           * stamped itself resolved ("✓ Deploy to production"), a toast blinked,
+           * and NOTHING happened — no run, no refusal, no record, and D5's own
+           * refusal path unreachable because control never got that far. A
+           * button on an approval card that does nothing and says nothing is the
+           * worst failure this app has.
+           *
+           * The enum pinned onto the tool schema in `server/chat.ts` is the other
+           * half, and it is the half that stops it happening. This half is what
+           * makes it VISIBLE when it happens anyway — a hand-built envelope, a
+           * provider that drops the enum, a model that ignores it.
+           */
+          const known = APPROVAL_ACTION_IDS.join(', ');
+          recordOutcome(cardId, { kind: 'unhandled', action });
+          console.warn(
+            `[card ${cardId}] unimplemented action id "${action}"` +
+              `${chosen ? ` on a ${chosen.type} card` : ''}; this console implements: ${known}.`,
+          );
+          setMessages((prev) => [
+            ...prev,
+            systemNote(
+              `That button asked for the action \`${action}\`, which this console does not ` +
+                `implement, so **nothing was done**. The actions it can carry out are ` +
+                `\`${APPROVAL_ACTION_IDS.join('`, `')}\`. The proposal has not been acted on.`,
+            ),
+          ]);
+          toast(`Nothing was done: unimplemented action “${action}”.`, {
+            variant: 'error',
+            duration: 8000,
+          });
         }
       }
     },
-    [ask, offerUndo, resolveCard],
+    [ask, offerUndo, recordOutcome, resolveCard],
   );
 
   const onCardSubmit = useCallback(
@@ -264,6 +478,11 @@ export default function App(): React.JSX.Element {
       const thread = resolveCard({ kind: 'submit', cardId, data });
       const card = cardById(thread, cardId);
       if (card?.type === CARD.parameters) {
+        // The one place a deploy context legitimately enters the console: the
+        // operator typed it. Remembered so an approval that carries no payload
+        // can still be authorised by real values instead of invented ones.
+        const supplied = deployContext(data);
+        if (supplied) deployContextRef.current = supplied;
         await ask(thread, 'deploy-approval', (data ?? {}) as Record<string, unknown>);
         return;
       }
@@ -373,7 +592,13 @@ export default function App(): React.JSX.Element {
 
   const onReset = useCallback(async () => {
     checklistIdRef.current = null;
+    // Clearing the run clears its authorisation too: the next deploy is a new
+    // decision and must carry its own ticket.
+    deployContextRef.current = null;
     const reset = await resetRun();
+    // The outcomes stay: "started, and the board no longer holds that run" is
+    // what happened, and `describeOutcomes` renders exactly that once the board
+    // is idle. Dropping them would put the history back to stating the click.
     if (reset) toast('Run board cleared.');
     else toast('The run board did not answer.', { variant: 'error' });
   }, []);
