@@ -231,8 +231,21 @@ that any spare seat can pick up without further approval, or name a different or
 ## 4. Parked and gated
 
 - **#280 `kai-devtools`.** Owner-parked. It registers no element, so it was never ladder residue: a
-  product decision (`HANDOFF-2026-08-24-post-rung-5.md` §2). **DECISION D-5: stays parked, or comes
-  back?**
+  product decision (`HANDOFF-2026-08-24-post-rung-5.md` §2). Design input arrived 2026-08-24 via dsh
+  Trajectory-panel analysis (`.superpowers/sdd/2026-08-24-form-field-formats/deepseek-harness-research.md`
+  §Addendum). Revival readiness: steal-first is the FEED, not the panel. An append-only
+  sequence-numbered log written by both `wire` and `encode.ts`, governed by one invariant: anything
+  that reaches the provider or the user is logged. This retires the encode-side blind spot
+  structurally; a silent drop becomes a missing row, testable via `lint:silent-drops`. Pure folds
+  with an `asOfSeq` watermark hand the panel whole values, not deltas. Ship a virtualized indexed
+  ledger plus a fixed timeline strip and a selection inspector (tokens, duration, Input, Output,
+  Timing, model/provider, retry attempts, TTFT, connection state). Tail-follow with auto-suspend
+  on scroll-up. One better idea to steal: context rewriting rendered in situ at its checkpoint in
+  the thread, not in a side panel. Three independent OTel plugins added model/cost/retries/TTFT to
+  their trajectory panel inside a week, validating both the field list and the plugin-harness thesis.
+  Scope the invariant honestly: the kit's boundary only (what `wire` parsed, what `encode` produced,
+  what elements rendered), not whole-app observability. Still parked; the note upgrades its
+  readiness, not its schedule. **DECISION D-5: stays parked, or comes back?**
 - **Masking tier 3 (partial and obscured display).** Gated on manual screen-reader verification, and
   the spec says so in the strongest terms it has: a bullet-filled value is not a password field, and
   "the announcement is verified in NVDA + Chrome and VoiceOver + Safari before tier 3 ships"
