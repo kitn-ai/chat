@@ -69,7 +69,21 @@ export function Input(props: InputProps): JSX.Element {
   const hasHint = () => !!local.error || !!local.hint;
   const hasAffix = () => local.leading != null || local.trailing != null;
 
-  const inputEl = (cls: string, part: string): JSX.Element => (
+  // The class arrives as an ACCESSOR, not a string, and this is load-bearing.
+  //
+  // Solid evaluates a `<Show>` `fallback` inside the Show's own memo. When the
+  // class was computed at the call site — `inputEl(cn(FIELD_BASE, …,
+  // isInvalid() && INVALID, local.class), …)` — those reads happened in that
+  // memo, so any of them changing re-ran the memo and BUILT A NEW `<input>`
+  // NODE: focus, caret and IME composition state all died with the old one. A
+  // consumer whose `invalid` is derived from the value (`kai-form` did exactly
+  // that) lost focus after every character.
+  //
+  // Passing a function moves every reactive read inside the element, where
+  // Solid compiles it into a nested effect that sets the attribute on the
+  // EXISTING node. Same reason the affix branch was always fine: it inserts the
+  // input through a function. Pinned by `tests/ui/input-node-identity.test.tsx`.
+  const inputEl = (cls: () => string, part: string): JSX.Element => (
     <input
       {...rest}
       id={id}
@@ -77,7 +91,7 @@ export function Input(props: InputProps): JSX.Element {
       disabled={local.disabled}
       aria-invalid={isInvalid() ? 'true' : undefined}
       aria-describedby={hasHint() ? hintId : undefined}
-      class={cn(SEARCH_RESET, cls)}
+      class={cn(SEARCH_RESET, cls())}
       onInput={(e) => local.onValueInput?.(e.currentTarget.value)}
       onBlur={(e) => {
         const handler = local.onBlur;
@@ -87,6 +101,17 @@ export function Input(props: InputProps): JSX.Element {
     />
   );
 
+  const fieldClass = () =>
+    cn(FIELD_BASE, local.size === 'sm' && SIZE_SM, isInvalid() && INVALID, local.class);
+
+  // Created on first use and then REUSED, so toggling an affix on or off does
+  // not discard a focused input either. The lazy cache also keeps the unused
+  // branch's node (and its effects) from being built at all.
+  let plainNode: JSX.Element;
+  const plainInput = () => (plainNode ??= inputEl(fieldClass, 'field input'));
+  let rowNode: JSX.Element;
+  const rowInput = () => (rowNode ??= inputEl(() => ROW_INPUT, 'input'));
+
   return (
     <div class="flex w-full flex-col gap-1.5">
       <Show when={local.label}>
@@ -95,13 +120,7 @@ export function Input(props: InputProps): JSX.Element {
         </label>
       </Show>
 
-      <Show
-        when={hasAffix()}
-        fallback={inputEl(
-          cn(FIELD_BASE, local.size === 'sm' && SIZE_SM, isInvalid() && INVALID, local.class),
-          'field input',
-        )}
-      >
+      <Show when={hasAffix()} fallback={plainInput()}>
         <div
           part="field"
           class={cn(
@@ -115,7 +134,7 @@ export function Input(props: InputProps): JSX.Element {
           <Show when={local.leading}>
             <span class="flex shrink-0 items-center text-muted-foreground">{local.leading}</span>
           </Show>
-          {inputEl(ROW_INPUT, 'input')}
+          {rowInput()}
           <Show when={local.trailing}>
             <span class="flex shrink-0 items-center text-muted-foreground">{local.trailing}</span>
           </Show>
