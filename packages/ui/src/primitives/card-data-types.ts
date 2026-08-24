@@ -207,6 +207,55 @@ export type FormField = {
     | 'switch';
   'x-kai-placeholder'?: string;
   'x-kai-step'?: number;
+  /**
+   * Display format for a string field (spec §7.3). `tel` / `ssn` / `credit-card`
+   * apply that type's standard mask and submit digits only; `custom` masks with
+   * `x-kai-mask` and submits the formatted value (spec §4).
+   *
+   * NOT the JSON Schema `format` keyword, and deliberately not an extension of it:
+   * `format` has a registered vocabulary with assertion semantics, `widgetFor()`
+   * already switches on it to pick a widget, and `toJsonSchema()` turns it into a
+   * validation pattern. This is a UI hint, so it lives in the `x-kai-*` namespace
+   * with the other UI hints — and it selects FORMATTING, never a widget.
+   *
+   * Typed as the semantic-type union for a consumer authoring a form definition by
+   * hand. A value arriving from a MODEL is untrusted and may be anything at all;
+   * `resolveFieldMask()` degrades an unrecognised one to an unmasked text field with
+   * a console warning rather than trusting this declaration.
+   *
+   * SPELLED OUT HERE RATHER THAN IMPORTED, and that is not laziness. `FieldSemanticType`
+   * is declared in `./field-semantics`, which carries the semantics TABLE and its
+   * `console.warn` — and this file's whole reason for existing is that a Node/no-DOM
+   * backend can name a card payload with `lib: ["ESNext"]` and `types: []`, where
+   * `console` does not exist (measured: TS2584, by
+   * `tests/schemas/card-data-types-node-safe.test.ts`, which is what caught the import).
+   * A type import still has to RESOLVE, so importing the union would drag the engine into
+   * the server-safe entry's graph.
+   *
+   * AN APP CANNOT PIN THIS ON THE MODEL TODAY (spec §7.3, open question O-1).
+   * `cardTools({ require })` narrows a projected tool schema by dot-path, but there is
+   * no path that reaches a form FIELD: a form card's payload is itself a JSON Schema, so
+   * `form.schema.json` describes `properties` as a map of field definitions rather than
+   * as a node per field, and `require: { form: [{ path: 'properties.ticketId' }] }` is a
+   * TypeError naming a path that does not resolve. "Force the model to mask the ticket
+   * field" is therefore not expressible; the enum above is what makes it LIKELY, and an
+   * app that needs a guarantee validates the arriving envelope itself.
+   *
+   * It is therefore a REGISTERED COPY of `FIELD_SEMANTIC_TYPES`: the two are pinned
+   * mutually assignable at compile time in
+   * `tests/components/form-field-formats.test.tsx`, so adding a fifth token to the enum
+   * without adding it here fails `nx typecheck ui` rather than shipping a form card that
+   * cannot name it.
+   */
+  'x-kai-format'?: 'tel' | 'ssn' | 'credit-card' | 'custom';
+  /** The mask pattern, read only when `x-kai-format` is `custom`: `#` a digit, `@` an
+   *  alphanumeric, `*` an obscurable alphanumeric, everything else a literal
+   *  (`CHG-####`). Capped at the mask engine's own limit; a longer one is refused. */
+  'x-kai-mask'?: string;
+  /** Placeholder text for the mask's unfilled positions, aligned character for
+   *  character with the pattern (`mm/dd/yyyy`). Derived from the pattern when absent;
+   *  a misaligned one is dropped, loudly, and the mask survives. */
+  'x-kai-mask-guide'?: string;
 };
 
 /** The form definition = CardEnvelope.data for type:'form'. */

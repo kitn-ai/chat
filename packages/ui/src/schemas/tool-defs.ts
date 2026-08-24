@@ -147,6 +147,16 @@ export interface CardToolOptions<P extends ToolProvider = ToolProvider> {
    * unknown path or a required name the node has no property for is a TypeError
    * naming the card, the path and the field, because a tool that can never be
    * satisfied must not ship quietly.
+   *
+   * IT CANNOT REACH A FORM CARD'S FIELDS, and that is a known limitation rather
+   * than an oversight (form-field-formats spec §7.3, open question O-1). The form
+   * card's payload IS a JSON Schema, so `form.schema.json` describes `properties`
+   * as a map of field definitions and there is no node at `properties.ticketId`
+   * for a rule to land on — `require: { form: [{ path: 'properties.ticketId' }] }`
+   * raises the TypeError above, correctly. So an app cannot pin
+   * `x-kai-format: 'custom'` onto one field of a form the model authors. The
+   * enum on that hint is what makes a small model pick a valid token; an app that
+   * needs a guarantee checks the envelope when it arrives.
    */
   readonly require?: Readonly<Record<string, readonly CardRequireRule[]>>;
 }

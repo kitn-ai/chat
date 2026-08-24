@@ -22,6 +22,8 @@ import {
 } from '../primitives/card-validate';
 import type { CardEnvelope, CardEvent, CardHost, CardResolution } from '../primitives/card-contract';
 import { emitCardEvent } from '../primitives/card-routing';
+import { compileMask, formatForDisplay, formatRaw, normalizeToRaw } from '../primitives/field-mask';
+import { FIELD_SEMANTIC_TYPES, fieldSemantics, type FieldSemanticType } from '../primitives/field-semantics';
 import { useCardHost } from '../primitives/card-host';
 import { useCardResolution } from './use-card-resolution';
 import { Check } from 'lucide-solid';
@@ -164,6 +166,233 @@ export function widgetFor(field: FormField, inlineMax: number): WidgetKind {
       return 'fieldset';
     default:
       return 'unsupported';
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Field formats (spec §7.3) — the model-facing half of masked fields.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * What one field's `x-kai-*` format hints resolve to.
+ *
+ * The three props on the left are `Input`'s masking surface verbatim (spec §7.2);
+ * `hint` is the TEXT statement of the expected format, which `FieldRow` renders and
+ * links through its EXISTING `aria-describedby` chain (spec §6 — no third channel).
+ * Every field is `undefined` when the field carries no hints, which is what "byte for
+ * byte the behavior of today" means here.
+ */
+export interface FieldMaskHint {
+  /** The compiled-clean mask pattern handed to `Input`'s `format`. */
+  format?: string;
+  /** An explicit, aligned display guide. Absent = the pattern derives its own. */
+  guide?: string;
+  /** The tier-1 semantic type: `inputmode`, `autocomplete`, and the canonical form. */
+  semantic?: FieldSemanticType;
+  /** The expected format, stated in text for the description chain. */
+  hint?: string;
+  /**
+   * Everything that was ignored and why, as DATA rather than as a side effect.
+   *
+   * Resolution runs inside a memo on a render path, so it must never throw and must
+   * not warn twice for the same reason on a re-render. Returning the messages lets
+   * `FieldRow` own the once-per-row discipline and lets the pure tests assert the
+   * wording without a console spy.
+   */
+  warnings: string[];
+}
+
+/** The resolution of a field with no format hints: shared, frozen, and the default
+ *  every non-text widget carries so the prop bag has one shape. */
+export const EMPTY_MASK_HINT: FieldMaskHint = Object.freeze({ warnings: [] as string[] });
+
+/**
+ * Messages already printed for a given field DEFINITION.
+ *
+ * Keyed on the field object, not on the row, and that is the fix rather than the
+ * convenience. A per-row `Set` looks right and does not work: `FieldRow`'s body runs
+ * TWICE for one visible row (measured — the parent rebuilds the `<For>` once at mount),
+ * so each build got its own empty Set and every bad hint printed twice. The reviewer
+ * caught that because the tests asserted `toHaveBeenCalled()` and never a count; they
+ * assert `toHaveBeenCalledTimes` now.
+ *
+ * A `WeakMap` because the key is model output: it must not pin a discarded card's field
+ * definitions in memory, and it must not dedupe across cards either. The repo's
+ * reactivity contract makes the identity exactly right — an edited field arrives as a
+ * NEW object (CLAUDE.md, the `kai-` contract), so a changed hint warns again, while the
+ * same definition rendered twice warns once.
+ */
+const WARNED_FIELDS = new WeakMap<FormField, Set<string>>();
+
+function warnOncePerField(field: FormField, message: string): void {
+  let seen = WARNED_FIELDS.get(field);
+  if (seen === undefined) {
+    seen = new Set<string>();
+    WARNED_FIELDS.set(field, seen);
+  }
+  if (seen.has(message)) return;
+  seen.add(message);
+  // eslint-disable-next-line no-console
+  console.warn(message);
+}
+
+/** Clip a model-supplied string before it reaches a console warning. Not a security
+ *  boundary — the console is not a sink — but a 500-character pattern printing itself
+ *  on every render is noise that hides the sentence that matters (M4 precedent). */
+function clipForWarning(text: string): string {
+  return text.length <= 32 ? text : `${text.slice(0, 32)}… (${text.length} chars)`;
+}
+
+const SEMANTIC_TOKENS: readonly string[] = FIELD_SEMANTIC_TYPES;
+
+/**
+ * Resolve a field's `x-kai-format` / `x-kai-mask` / `x-kai-mask-guide` into the
+ * masking props `Input` takes, or into nothing at all.
+ *
+ * EVERY INPUT HERE IS MODEL OUTPUT and therefore untrusted. The hints are
+ * display-only — they produce text and caret positions, never HTML, a URL or an
+ * attribute on a navigable element — so this is about denial of service and
+ * confusion, not injection: an unknown token, a pattern the engine refuses and a
+ * misaligned guide each degrade to the largest thing that still works, and say so.
+ * A THROW here would take out the whole card, including the fields that were fine.
+ */
+export function resolveFieldMask(field: FormField, fieldKey = ''): FieldMaskHint {
+  const declared: unknown = field['x-kai-format'];
+  const mask: unknown = field['x-kai-mask'];
+  const guideIn: unknown = field['x-kai-mask-guide'];
+  const where = fieldKey ? ` on field "${clipForWarning(fieldKey)}"` : '';
+
+  if (declared === undefined) {
+    // A pattern with nothing to attach it to. Silence here would leave a model
+    // convinced it had asked for a mask and a developer looking at a plain field.
+    if (typeof mask === 'string' || typeof guideIn === 'string') {
+      return {
+        warnings: [
+          `kai-form: x-kai-mask${where} has no x-kai-format and is ignored. ` +
+            `Set "x-kai-format": "custom" to mask with it.`,
+        ],
+      };
+    }
+    return { warnings: [] };
+  }
+
+  if (typeof declared !== 'string' || !SEMANTIC_TOKENS.includes(declared)) {
+    return {
+      warnings: [
+        `kai-form: x-kai-format "${clipForWarning(String(declared))}"${where} is not one of ` +
+          `${SEMANTIC_TOKENS.join(', ')}. Rendering an unmasked text field.`,
+      ],
+    };
+  }
+
+  const semantic = declared as FieldSemanticType;
+  const warnings: string[] = [];
+  const custom = semantic === 'custom';
+
+  if (!custom && typeof mask === 'string') {
+    warnings.push(
+      `kai-form: x-kai-mask${where} is read only with x-kai-format "custom"; ` +
+        `"${semantic}" brings its own format. The mask is ignored.`,
+    );
+  }
+
+  const pattern = custom ? mask : fieldSemantics(semantic).defaultFormat;
+  if (typeof pattern !== 'string' || pattern === '') {
+    warnings.push(
+      `kai-form: x-kai-format "custom"${where} needs an x-kai-mask pattern. ` +
+        `Rendering an unmasked text field.`,
+    );
+    return { warnings };
+  }
+
+  // Compile the PATTERN first, alone. Compiling it with a bad guide would report the
+  // guide's failure and the pattern's as one event, and the two have different
+  // fallbacks: a refused pattern means no mask at all, a refused guide means this
+  // mask with its own derived guide.
+  let compiled;
+  try {
+    compiled = compileMask(pattern);
+  } catch (err) {
+    warnings.push(
+      `kai-form: x-kai-mask "${clipForWarning(pattern)}"${where} did not compile ` +
+        `(${err instanceof Error ? err.message : String(err)}). Rendering an unmasked text field.`,
+    );
+    return { warnings };
+  }
+
+  // A pattern with no `#`/`@`/`*` COMPILES — unknown characters are literals by
+  // position, which is the rule that makes `V-***` work and is not negotiable. But it
+  // compiles to capacity 0: a field that accepts nothing, shows nothing and submits
+  // nothing. Left alone that is the quietest failure in the whole feature, and the one
+  // a model is likeliest to reach — `mm/dd/yyyy` and `CHG-1234` are the strings this
+  // schema's own descriptions put in front of it, one free-form key away from where
+  // they belong. So it is refused here, out loud, on the same path as a pattern the
+  // engine rejects outright. `compileMask` cannot make this call for both callers: a
+  // zero-capacity pattern is a legitimate compile, it is only a nonsense FIELD.
+  if (compiled.capacity === 0) {
+    warnings.push(
+      `kai-form: x-kai-mask "${clipForWarning(pattern)}"${where} has no fill positions, so nothing ` +
+        `could ever be typed into it. Use # for a digit, @ for a letter or digit, * for an ` +
+        `obscurable one (e.g. "##/##/####", with "mm/dd/yyyy" as x-kai-mask-guide). ` +
+        `Rendering an unmasked text field.`,
+    );
+    return { warnings };
+  }
+
+  let guide = typeof guideIn === 'string' ? guideIn : undefined;
+  if (guide !== undefined) {
+    try {
+      compileMask(pattern, guide);
+    } catch (err) {
+      warnings.push(
+        `kai-form: x-kai-mask-guide "${clipForWarning(guide)}"${where} does not align with the ` +
+          `pattern (${err instanceof Error ? err.message : String(err)}). Using the pattern's own guide.`,
+      );
+      guide = undefined;
+    }
+  }
+
+  return {
+    format: pattern,
+    guide,
+    semantic,
+    // The guide when there is one (`mm/dd/yyyy` reads as a format to a person); the
+    // pattern otherwise, because a DERIVED guide is spaces at every fill position and
+    // says nothing out loud. A visual guide is not a description either way (spec §6).
+    hint: `Format: ${guide ?? pattern}`,
+    warnings,
+  };
+}
+
+/**
+ * The text a masked control SHOWS for a stored (canonical) value.
+ *
+ * The store holds one value per field and it is the canonical one (spec §4): digits for
+ * `tel`/`ssn`/`credit-card`. That value is also what flows back into the control as its
+ * `value` prop — and writing `5550101234` over a field the masker just wrote
+ * `555-010-1234` into un-formats it one keystroke behind the user, with the caret
+ * jumping to the end. `<kai-input>` hit exactly this and split display from canonical;
+ * this is the same split, one layer up, for the Solid `Form`.
+ *
+ * Re-formatting through the SAME pure engine means the string handed back is the string
+ * already in the field, which the HTML value setter treats as a no-op (caret included).
+ *
+ * THE GUIDE BRANCH IS NOT A CHOICE MADE HERE — it mirrors `display()` in
+ * `primitives/input-mask.ts`: with an explicit guide the field is always the pattern's
+ * full length, without one it shows up to the last typed character. Disagreeing with the
+ * masker about that would put the fight straight back.
+ */
+function maskedDisplay(hint: FieldMaskHint, value: unknown): unknown {
+  if (hint.format === undefined || typeof value !== 'string' || value === '') return value;
+  try {
+    const pattern = compileMask(hint.format, hint.guide);
+    const raw = normalizeToRaw(pattern, value);
+    return hint.guide === undefined ? formatRaw(pattern, raw) : formatForDisplay(pattern, raw);
+  } catch {
+    // Unreachable in practice — `resolveFieldMask` only reports a `format` that already
+    // compiled — but this runs on a render path, so it degrades to the stored text
+    // rather than taking the card down if that ever stops being true.
+    return value;
   }
 }
 
@@ -740,15 +969,30 @@ function FieldRow(props: FieldRowProps): JSX.Element {
   const id = `f-${props.fieldKey}-${Math.random().toString(36).slice(2, 8)}`;
   const errorId = `${id}-err`;
   const descId = `${id}-desc`;
+  const formatId = `${id}-fmt`;
   const label = () => props.field.title ?? humanize(props.fieldKey);
   const widget = createMemo(() => widgetFor(props.field, props.inlineMax));
   const placeholder = () => props.field['x-kai-placeholder'];
+
+  // Field formats (spec §7.3). A memo, so a keystroke does not re-resolve: it reads
+  // `props.field` and nothing else, which is the subscription discipline the rest of
+  // this row is built on (K-D12b).
+  const maskHint = createMemo(() => {
+    const resolved = resolveFieldMask(props.field, props.fieldKey);
+    for (const message of resolved.warnings) warnOncePerField(props.field, message);
+    return resolved;
+  });
+
   const describedBy = () =>
-    [props.field.description ? descId : '', props.error() ? errorId : '']
+    [
+      props.field.description ? descId : '',
+      maskHint().hint ? formatId : '',
+      props.error() ? errorId : '',
+    ]
       .filter(Boolean)
       .join(' ') || undefined;
 
-  const common = fieldCommon(props, id, placeholder, label, describedBy);
+  const common = fieldCommon(props, id, placeholder, label, describedBy, maskHint);
 
   // A nested fieldset / repeater / checkbox-group provide their own grouping
   // label, so the row's <label> is only rendered for simple single controls.
@@ -769,6 +1013,15 @@ function FieldRow(props: FieldRowProps): JSX.Element {
       <Show when={props.field.description}>
         <p id={descId} class="text-xs text-muted-foreground">
           {props.field.description}
+        </p>
+      </Show>
+
+      {/* The expected format, as TEXT and in the same describedby chain as the
+          description and the error (spec §6, SC 3.3.2). The visual guide inside the
+          control is not a description and does not replace this. */}
+      <Show when={maskHint().hint}>
+        <p id={formatId} class="text-xs text-muted-foreground">
+          {maskHint().hint}
         </p>
       </Show>
 
@@ -806,10 +1059,16 @@ export function fieldCommon(
   placeholder: () => string | undefined,
   label: () => string,
   describedBy: () => string | undefined = () => undefined,
+  mask: () => FieldMaskHint = () => EMPTY_MASK_HINT,
 ): ReturnType<FieldRowCommon> {
   return {
     id,
-    get value() { return props.value(); },
+    // The DISPLAY text for a masked field, the stored value verbatim for every other
+    // one (`maskedDisplay` is the identity when nothing resolved). What the form
+    // SUBMITS is untouched by this: that comes off the store, which the control fills
+    // with the canonical value through `onInput`.
+    get value() { return maskedDisplay(mask(), props.value()); },
+    get mask() { return mask(); },
     get field() { return props.field; },
     get disabled() { return props.disabled || props.field.readOnly === true; },
     get placeholder() { return placeholder(); },
@@ -830,6 +1089,7 @@ interface WidgetSwitchProps {
 type FieldRowCommon = () => {
   id: string;
   value: unknown;
+  mask: FieldMaskHint;
   field: FormField;
   disabled: boolean;
   placeholder?: string;
