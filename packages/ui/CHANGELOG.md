@@ -1,5 +1,57 @@
 # Changelog
 
+## [0.26.0](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.25.2...@kitn.ai/ui-v0.26.0) (2026-08-24)
+
+
+### ⚠ BREAKING CHANGES
+
+* the workspace re-cast — construction over configuration, both phases ([#302](https://github.com/kitn-ai/ui/issues/302))
+* **elements:** kai-voice-error + honest speaking-change — the rung-2 findings ([#298](https://github.com/kitn-ai/ui/issues/298))
+* **elements:** the top-3 coverage backfill — and the three defects it caught ([#296](https://github.com/kitn-ai/ui/issues/296))
+* the rung-1 findings — abort surfaces its reason; reflected booleans read back ([#294](https://github.com/kitn-ai/ui/issues/294))
+* **a11y:** focus rings and shadow-* elevation that were silently inert inside every kai-* shadow root now paint. Consumers who never saw them may see a visual change: focus outlines on controls, and real depth on cards, panes and overlays. Nothing to do to adopt it, but it is not pixel-identical.
+* **attachments:** the exported `AttachmentMediaCategory` union changed. Removed: `video` and `audio` — no wire this kit ships can carry either, so they only ever made an unsendable file look sendable, and both now resolve to `unsendable`. Added: `text` (what the wire calls `text/*`, JSON, XML and YAML, which used to be lumped into `document`) and `unsendable`. A consumer switching on the union gets a compile error and must re-map: `video`/`audio` arms become `unsendable`, and a `document` arm that expected text files needs a `text` arm beside it. Callers of `getMediaCategory` that only compare against `'image'` are unaffected.
+
+### Features
+
+* **attachments:** derive preview rendering from the shared media policy ([#284](https://github.com/kitn-ai/ui/issues/284)) ([0d3e0d9](https://github.com/kitn-ai/ui/commit/0d3e0d98c4c38a0a5e8aa8f14088782876010abc))
+* **catalog:** the composition catalog — a derived layer, executed invariants, and an acceptance harness ([#288](https://github.com/kitn-ai/ui/issues/288)) ([2cf7079](https://github.com/kitn-ai/ui/commit/2cf7079573e80c2368ef4463b6e44a7af195ca6c))
+* **diagnostics:** kai devtools hook with signal-gated eager capture ([#279](https://github.com/kitn-ai/ui/issues/279)) ([64924c9](https://github.com/kitn-ai/ui/commit/64924c9b4f73f4b31a512cdd905907424dfa8116))
+* **diagnostics:** reportRequest — the app's deliberate disclosure of what it sent ([#285](https://github.com/kitn-ai/ui/issues/285)) ([4d5f1eb](https://github.com/kitn-ai/ui/commit/4d5f1eb437c223423ea6386bf38fc82e3b5d6b2e))
+* **elements:** kai-dock + the element coverage guard ([#295](https://github.com/kitn-ai/ui/issues/295)) ([dec4388](https://github.com/kitn-ai/ui/commit/dec4388e88665c3aa34ec33cc2d2ada753b92a2f))
+* **elements:** kai-dropdown — element facade + generated React wrapper for the Dropdown compound ([#309](https://github.com/kitn-ai/ui/issues/309)) ([9c2cb29](https://github.com/kitn-ai/ui/commit/9c2cb29c05b0d49b8a6d649b921cfa5868134957))
+* **elements:** kai-voice-error + honest speaking-change — the rung-2 findings ([#298](https://github.com/kitn-ai/ui/issues/298)) ([f1fcb91](https://github.com/kitn-ai/ui/commit/f1fcb915771cfbb6446e3c197f2dc153beb794a6))
+* **elements:** report contract violations and the element registry as diagnostics ([#287](https://github.com/kitn-ai/ui/issues/287)) ([1f4346a](https://github.com/kitn-ai/ui/commit/1f4346ae9e44c533e4f78fb3b480da16a8c09477))
+* **elements:** the post-rung-2 batch — dock adoption, MCP arg enforcement, coverage tranche, four defect fixes ([#299](https://github.com/kitn-ai/ui/issues/299)) ([6aa55e8](https://github.com/kitn-ai/ui/commit/6aa55e8a65bb81d605a808ec18ffa2bc54d5337e))
+* **elements:** Wisp — the composed Labs showcase, and the kebab made real ([#303](https://github.com/kitn-ai/ui/issues/303)) ([a94e003](https://github.com/kitn-ai/ui/commit/a94e003fc785812747aac366fe4412f04c58ac03))
+* **examples:** rung 1 — the support widget ([#292](https://github.com/kitn-ai/ui/issues/292)) ([188fea6](https://github.com/kitn-ai/ui/commit/188fea6093093932e7ffb0e74817c15322b865f1))
+* **examples:** rung 2 — the voice assistant, front-door-first ([#297](https://github.com/kitn-ai/ui/issues/297)) ([1cba597](https://github.com/kitn-ai/ui/commit/1cba59791b567c346565d8220fa2d2517b6e40db))
+* **examples:** rung 4 — the builder, front-door-first, artifacts + preview panel driven ([#304](https://github.com/kitn-ai/ui/issues/304)) ([34459b3](https://github.com/kitn-ai/ui/commit/34459b3d2900e78be06fb4b03664d8cd970f880b))
+* **examples:** rung 5 — ops-console, remote cards through the front door ([#308](https://github.com/kitn-ai/ui/issues/308)) ([bd74a93](https://github.com/kitn-ai/ui/commit/bd74a93bfc7775eabdde41efef9ad5d67e9d0614))
+* **mcp:** iteration 1 — the reference one-liners ([#290](https://github.com/kitn-ai/ui/issues/290)) ([4e69c82](https://github.com/kitn-ai/ui/commit/4e69c824d975f47c7c33ba9091dc0332879f8d67))
+* the workspace re-cast — construction over configuration, both phases ([#302](https://github.com/kitn-ai/ui/issues/302)) ([2d2aca0](https://github.com/kitn-ai/ui/commit/2d2aca0f166214a806b7d24a00c7951d8dd04bba))
+* **wire:** diagnostic event stream, widened empty-turn guard, model on the stream ([#278](https://github.com/kitn-ai/ui/issues/278)) ([473325a](https://github.com/kitn-ai/ui/commit/473325a746b3784f8da64ccfc0175eb88216ef3c))
+* **wire:** instrument the encode path, connection identity, trace correlation and the payload opt-in ([#283](https://github.com/kitn-ai/ui/issues/283)) ([c652f09](https://github.com/kitn-ai/ui/commit/c652f09cf686d70cfc8365d44bedbdd58eb17457))
+
+
+### Bug Fixes
+
+* **a11y:** focus indicators are invisible inside shadow roots ([#286](https://github.com/kitn-ai/ui/issues/286)) ([648e72d](https://github.com/kitn-ai/ui/commit/648e72d31287ba50485c78895fb101462022b234))
+* derive the card-type list from cardSchemas, and close the circular check over it ([#270](https://github.com/kitn-ai/ui/issues/270)) ([e325354](https://github.com/kitn-ai/ui/commit/e32535489623866be74200607669bff41c925fd0))
+* **mcp:** derive the theme tool's token names from theme.css ([#269](https://github.com/kitn-ai/ui/issues/269)) ([1921a42](https://github.com/kitn-ai/ui/commit/1921a42e107a570feb7768abff6499938451382e))
+* **mcp:** read the server's own version instead of a literal ten minors stale ([#266](https://github.com/kitn-ai/ui/issues/266)) ([6cb26c3](https://github.com/kitn-ai/ui/commit/6cb26c3fbef3147608cd348cba413a83a10a75c1))
+* **primitives:** stick-to-bottom cancels its pending frame on dispose; scrollToBottom guards scrollTo ([#310](https://github.com/kitn-ai/ui/issues/310)) ([8f7fb91](https://github.com/kitn-ai/ui/commit/8f7fb913344344601d2e399d159881b3cd987753))
+* **schemas,agent-tooling:** PR-305 follow-ups — custom-card projection contract, reachable 405, bound catch, pinned prose ([#307](https://github.com/kitn-ai/ui/issues/307)) ([d9eb2d3](https://github.com/kitn-ai/ui/commit/d9eb2d372a7c255b01c39bbc7c756b496369f0c7))
+* **scripts:** read the npm 12 pack listing in packages/ui, and guard the shape ([#271](https://github.com/kitn-ai/ui/issues/271)) ([d7a9942](https://github.com/kitn-ai/ui/commit/d7a9942a42cd35aabe61f32aeb7bc64b0758ec61))
+* **tests:** the stale-bundle guard counted build outputs as source ([#289](https://github.com/kitn-ai/ui/issues/289)) ([4bf0279](https://github.com/kitn-ai/ui/commit/4bf02795b7d3fe0916e3171d671e89c9d554911f))
+* the rung-1 findings — abort surfaces its reason; reflected booleans read back ([#294](https://github.com/kitn-ai/ui/issues/294)) ([5cae618](https://github.com/kitn-ai/ui/commit/5cae6188cb55335e0ee25bcaeac32fd1eb4ff34f))
+* **wire:** share diagnostic emitter state across module copies, and prove it against dist ([#281](https://github.com/kitn-ai/ui/issues/281)) ([1cbdf9f](https://github.com/kitn-ai/ui/commit/1cbdf9f0871ec75e27fe719395185fc2b3e41a61))
+
+
+### Tests
+
+* **elements:** the top-3 coverage backfill — and the three defects it caught ([#296](https://github.com/kitn-ai/ui/issues/296)) ([e0bb1e0](https://github.com/kitn-ai/ui/commit/e0bb1e083bb67e48b111979925f31df46e099d96))
+
 ## [0.25.2](https://github.com/kitn-ai/ui/compare/@kitn.ai/ui-v0.25.1...@kitn.ai/ui-v0.25.2) (2026-08-15)
 
 

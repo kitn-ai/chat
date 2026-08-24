@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.2.0](https://github.com/kitn-ai/ui/compare/create-kai-v0.1.4...create-kai-v0.2.0) (2026-08-24)
+
+
+### ⚠ BREAKING CHANGES
+
+* the workspace re-cast — construction over configuration, both phases ([#302](https://github.com/kitn-ai/ui/issues/302))
+
+### Features
+
+* the workspace re-cast — construction over configuration, both phases ([#302](https://github.com/kitn-ai/ui/issues/302)) ([2d2aca0](https://github.com/kitn-ai/ui/commit/2d2aca0f166214a806b7d24a00c7951d8dd04bba))
+
+
+### Bug Fixes
+
+* **create-kai:** offer only what scaffolds, and state what has one answer ([#275](https://github.com/kitn-ai/ui/issues/275)) ([dea2017](https://github.com/kitn-ai/ui/commit/dea2017011da80f86f3c96cea7f7e7b3c32ff431))
+* **scripts:** read the npm 12 pack listing in packages/ui, and guard the shape ([#271](https://github.com/kitn-ai/ui/issues/271)) ([d7a9942](https://github.com/kitn-ai/ui/commit/d7a9942a42cd35aabe61f32aeb7bc64b0758ec61))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @kitn.ai/ui bumped to 0.26.0
+
 ## [0.1.4](https://github.com/kitn-ai/ui/compare/create-kai-v0.1.3...create-kai-v0.1.4) (2026-08-15)
 
 
