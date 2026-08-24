@@ -1,0 +1,27 @@
+{
+  // THE NODE HALF: the two vite configs, the dev-server plugins and `server/`.
+  // No DOM lib on purpose — see the note in tsconfig.app.json. `shared/` is
+  // deliberately compiled by BOTH projects: it is the one declaration the
+  // client and the route share, and it has to hold under both resolvers.
+  //
+  // "module": "nodenext" is why every relative import under `plugins/` and
+  // `server/` carries a `.js` extension (TS2835 without it). Those were already
+  // written that way by the clean-room build; nothing moved.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"],
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo"
+  },
+  "include": ["vite.config.ts", "vite.board.config.ts", "plugins/**/*.ts", "server/**/*.ts", "shared/**/*.ts"]
+}

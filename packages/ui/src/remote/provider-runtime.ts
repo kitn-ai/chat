@@ -14,7 +14,7 @@ import { createPacker, isCardWireFrame, type WireMessage } from './wire';
 import { assertOrigin, redactFrame } from './origin';
 import { negotiateVersion } from './version';
 import { hasPollutionKey } from './validate';
-import { observeContentHeight } from '../primitives/use-resize-observer';
+import { observeDocumentHeight } from '../primitives/use-resize-observer';
 import { validateAgainstSchema, type JsonSchema } from '../primitives/card-validate';
 
 /** A provider-side renderer for one card `type`. Renamed (was CardRenderer) per H-K
@@ -105,10 +105,13 @@ export function createCardBridge(options: CreateCardBridgeOptions): CardBridge {
   }
 
   function startObserver(): void {
-    // Tear down any existing observer so observeContentHeight's internal `last` baseline
+    // Tear down any existing observer so observeDocumentHeight's internal `last` baseline
     // re-initializes to -1 and the newly-mounted card always emits its initial height.
+    // observeDocumentHeight (not observeContentHeight) so the reported height covers
+    // the FULL rendered document — root's own padding/border AND the provider page's
+    // body padding above it — not just root's ResizeObserver content-box (D1).
     stopObserver?.(); stopObserver = null;
-    stopObserver = observeContentHeight(root, (height) => {
+    stopObserver = observeDocumentHeight(root, (height) => {
       if (!currentId) return;
       cardHost.emit({ kind: 'resize', cardId: currentId, height });
     });

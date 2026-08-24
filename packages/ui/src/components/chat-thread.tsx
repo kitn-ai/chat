@@ -194,6 +194,30 @@ export interface ChatThreadController {
  *  Contract: `id` must be unique per message. It already had to be — the
  *  feedback/copy state above this list is keyed by it.
  */
+/** How an ASSISTANT row aligns its parts across the column (K-D11).
+ *
+ *  `stretch`, not `start`. An assistant turn is a `flex flex-col` box, so under
+ *  `items-start` every part is a flex item with a fit-content cross size —
+ *  `min(max-content, column)`. Prose is wider than the column so a text bubble
+ *  looked right, and a generative-UI card was as wide as its widest button: the
+ *  ops-console parameters form measured 285px inside a 768px column while the
+ *  approval card beside it filled all 768. A card in a chat thread filling its
+ *  column is a fact about the medium, and no consumer can reach it — the card
+ *  element is created inside `<kai-chat>`'s shadow root.
+ *
+ *  Stretch rather than `w-full` on the cards, for two reasons: it is one lever
+ *  instead of one per card surface (the Solid `Card` root AND every `kai-*`
+ *  card host, whose shadow wrapper is `display: contents`), and stretching only
+ *  applies where the cross size is `auto`, so a part that states its own width
+ *  is untouched — `Attachments variant="grid"` stays `w-fit`. `Tool` and
+ *  `Reasoning` already asked for `w-full` explicitly; this is the same
+ *  intention, applied once.
+ *
+ *  USER rows keep `items-end`: their bubble is `max-w-[85%]` and right aligned,
+ *  and stretching it would break both.
+ */
+const ASSISTANT_ALIGN = 'items-stretch';
+
 export function ChatThread(props: ChatThreadProps) {
   const outer = useChatConfig();
   const reveal = () => (props.actionsReveal === 'hover' ? 'hover' : 'always');
@@ -361,7 +385,7 @@ export function ChatThread(props: ChatThreadProps) {
                           <Show
                             when={m().avatar}
                             fallback={
-                              <Message role={m().role} class={`${rowGroup()}${m().role === 'user' ? 'flex-col items-end' : 'flex-col items-start'}`}>
+                              <Message role={m().role} class={`${rowGroup()}${m().role === 'user' ? 'flex-col items-end' : `flex-col ${ASSISTANT_ALIGN}`}`}>
                                 {body}
                               </Message>
                             }
@@ -369,7 +393,7 @@ export function ChatThread(props: ChatThreadProps) {
                             {(av) => (
                               <Message role={m().role} class={rowGroup()}>
                                 <MessageAvatar src={av().src ?? ''} alt={av().alt ?? ''} fallback={av().fallback} />
-                                <div class={`flex min-w-0 flex-1 flex-col ${m().role === 'user' ? 'items-end' : 'items-start'}`}>
+                                <div class={`flex min-w-0 flex-1 flex-col ${m().role === 'user' ? 'items-end' : ASSISTANT_ALIGN}`}>
                                   {body}
                                 </div>
                               </Message>
