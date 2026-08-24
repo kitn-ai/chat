@@ -133,6 +133,12 @@ what the builder emits.
 **Why third.** Nothing about it can be specified while the emitted artifact is undefined. Listing
 it here is the reminder the owner asked for, not a proposal to start it.
 
+**Research (2026-08-24).** Two design references sourced: `.superpowers/sdd/2026-08-24-form-field-formats/{deepseek-harness-research.md,cordis-research.md}`.
+
+DeepSeek Harness (dsh): agent runtime on Cordis, MIT, v0.1, ~19 capability seams (llm, tools, storage, sandbox, credentials, web, etc.). UI is closed to component libraries inside first-party packages, but plugins ship prebuilt browser bundles fetched at runtime; a third-party plugin's subtree is unconstrained. No sandboxed untrusted-render path exists in dsh itself; all model output is handled by the Node host. Verdict: design reference for this workstream, plus a distribution opportunity. A `dsh-plugin` npm package exporting a prebuilt `client.js` bundle can register React shim components into their slots whose subtrees render `<kai-*>` elements. Entry point: custom tool-view registration for generative-UI cards. Banked spike (one day): mount a `<kai-*>` custom element from a plugin bundle under the dsh boot graph; if it mounts cleanly, a kai-remote card-view plugin is the door into that ecosystem.
+
+Cordis: model verified firsthand (browser-viable 9.7 KB gz) but single-maintainer 4.0-rc, unstable API, no releases. DeepSeek vendored a fork rather than depend on upstream. Two doctrine collisions: silent forever-wait on unmet inject versus our decide-loudly rule; YAML-config centre of gravity versus construction-over-configuration direction. Verdict: prototype behind an owned seam when workstream 3 starts; avoid for builder runtime (Solid already owns lifecycle); adopt as design reference now (the fiber epoch rule for reactive reload; getEffects() tree as a ready-made kai-devtools feed shape).
+
 **DECISION D-3.** Confirm the harness stays parked until the builder spec exists, or name what
 about it is decidable now.
 
@@ -233,6 +239,7 @@ that any spare seat can pick up without further approval, or name a different or
   **DECISION D-9: is the parking condition met? Unpark the harness and grade against the five ladder
   apps, keep it parked until the builder ships, or retire it?**
 - **Bun 1.4 webview spike:** input-mask suite on WKWebView plus harness evaluation (no shadow piercing, type() fires no keydown/keyup, no iframe API; recorded 2026-08-24; isTrusted: true synthesized input is the one unique capability). Banked pending implementation.
+- **Forbidden-strings clean-room grep.** Current pattern file `packages/ui/src/lint/forbidden-strings.txt` is weak evidence (2 patterns). Spike: strengthen the pattern file and move it out-of-repo to avoid false-negatives from in-tree references. Recorded 2026-08-24.
 
 ## 5. Recommended sequence
 
