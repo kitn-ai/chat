@@ -26,6 +26,11 @@ import { fileURLToPath } from 'node:url';
  *   6. THE UNDO-CARET IMPRECISION recorded in `input-mask.ts`'s header and in
  *      task-3-review.md's Minor. Scenario 6 MEASURES it. It is recorded, not
  *      asserted away.
+ *   7. THE CARET WINDOW on a GUIDED field -- the owner's validation bar.
+ *      Scenarios 9 and 10 drive real mouse clicks into a rendered literal prefix
+ *      and into an unfilled guide tail, plus real Home/End/ArrowLeft, and read
+ *      the resulting offsets numerically. jsdom can dispatch `selectionchange`
+ *      but cannot decide WHERE a pixel lands, which is the whole question here.
  *
  * HOW IT BOOTS. Storybook dev (:6006) is a Vite dev server rooted at
  * `packages/ui`, so the page can `import('/src/primitives/input-mask.ts')` and
@@ -520,6 +525,124 @@ test.describe('input-mask IVP (real Chromium)', () => {
     expect(formatted).not.toBe(canonical);
     expect(canonical, 'probe-can-fail: canonical is not the formatted text').not.toBe('555-123-4567');
     await page.screenshot({ path: join(SHOT_ROOT, 's7-copy-policy.png') });
+
+    expect(errors).toEqual([]);
+  });
+
+  // ---------------------------------------------------------------------------
+  // 9. CARET FLOOR: a leading literal run is not enterable. Owner's bar, ticket
+  //    case: "I could only go back to the start of ####; the CHG- would remain."
+  // ---------------------------------------------------------------------------
+  test('9. floor: focus, Home, ArrowLeft and a real click into `CHG-` all land on the first fill', async ({ page }) => {
+    const errors = await boot(page);
+    await mk(page, 'p9', { format: 'CHG-####', guide: 'CHG-    ' });
+    const field = page.locator('#p9');
+    const box = (await field.boundingBox())!;
+    // Inside the rendered `CHG-` prefix: the probe styles the field 16px monospace
+    // with .4rem padding, so a few pixels past the left edge is character 0.
+    const inPrefix = { x: box.x + 8, y: box.y + box.height / 2 };
+
+    // FOCUS. Not covered by `selectionchange`: entering a field whose caret is
+    // already at 0 changes no selection, so nothing fires and only the `focus`
+    // clamp puts the caret on the floor.
+    await page.evaluate(() => window.__probes.p9!.el.setSelectionRange(0, 0));
+    await page.evaluate(() => window.__probes.p9!.el.focus());
+    expect((await st(page, 'p9')).start, 'focus lands at CHG-|####').toBe(4);
+
+    await field.pressSequentially('4821');
+    expect(await st(page, 'p9')).toMatchObject({ value: 'CHG-4821', start: 8 });
+
+    await page.keyboard.press('Home');
+    expect((await st(page, 'p9')).start, 'Home stops at the floor, not 0').toBe(4);
+
+    await page.keyboard.press('ArrowLeft');
+    expect((await st(page, 'p9')).start, 'ArrowLeft cannot walk out of the floor').toBe(4);
+
+    // A REAL mouse click, with the browser choosing the offset from the pixel.
+    await page.mouse.click(inPrefix.x, inPrefix.y);
+    expect((await st(page, 'p9')).start, 'a click in the prefix snaps right').toBe(4);
+
+    // A drag-selection that starts inside the prefix clamps its anchor too.
+    await page.keyboard.press('ControlOrMeta+a');
+    const all = await st(page, 'p9');
+    expect([all.start, all.end], 'select-all covers the editable window only').toEqual([4, 8]);
+    await page.screenshot({ path: join(SHOT_ROOT, 's9-caret-floor.png') });
+
+    // Backspace at the floor is a no-op even with content ahead of it -- there is nothing
+    // BEHIND the caret, and the literal run is not content. This is the owner's sentence
+    // measured directly: "I could only go back to the start of ####; the CHG- would remain."
+    await page.evaluate(() => window.__probes.p9!.el.setSelectionRange(5, 5));
+    await page.keyboard.press('Backspace');
+    expect((await st(page, 'p9')).value, 'the first fill went').toBe('CHG-821 ');
+    expect((await st(page, 'p9')).start, 'and the caret is now on the floor').toBe(4);
+    await page.keyboard.press('Backspace');
+    await page.keyboard.press('Backspace');
+    expect((await st(page, 'p9')).value, 'further backspaces at the floor do nothing').toBe('CHG-821 ');
+
+    // Emptying it from the frontier still leaves the prefix standing.
+    await page.keyboard.press('End');
+    for (let i = 0; i < 3; i += 1) await page.keyboard.press('Backspace');
+    const emptied = await st(page, 'p9');
+    expect(emptied.value, 'the prefix survives an emptied field').toBe('CHG-    ');
+    expect(emptied.start, 'and the caret rests on the floor').toBe(4);
+
+    // RED: detach the masker and repeat the two measurements. The browser alone
+    // puts the caret wherever it was asked to, inside the literal run.
+    await page.evaluate(() => window.__probes.p9!.mask.detach());
+    await page.mouse.click(inPrefix.x, inPrefix.y);
+    expect((await st(page, 'p9')).start, 'probe-can-fail: unclamped click rests in the prefix').toBe(0);
+    await page.keyboard.press('Home');
+    expect((await st(page, 'p9')).start, 'probe-can-fail: unclamped Home goes to 0').toBe(0);
+
+    expect(errors).toEqual([]);
+  });
+
+  // ---------------------------------------------------------------------------
+  // 10. FILL FRONTIER: the guide tail is a template, not a place to stand.
+  //     Owner's date case, in his own notation: `12/23/4|yyy`.
+  // ---------------------------------------------------------------------------
+  test('10. frontier: End and a real click into the `yyy` tail both snap back to one past the last filled character', async ({ page }) => {
+    const errors = await boot(page);
+    await mk(page, 'p10', { format: '##/##/####', guide: 'mm/dd/yyyy' });
+    const field = page.locator('#p10');
+    await field.click();
+
+    // The guide renders as the template it is, and typing overwrites it positionally.
+    expect((await st(page, 'p10')).value, 'the empty field shows the template').toBe('mm/dd/yyyy');
+    await field.pressSequentially('12234');
+    const typed = await st(page, 'p10');
+    expect(typed.value).toBe('12/23/4yyy');
+    expect(typed.start, 'caret sits at 12/23/4|yyy').toBe(7);
+
+    const box = (await field.boundingBox())!;
+    const inTail = { x: box.x + box.width - 10, y: box.y + box.height / 2 };
+
+    await page.keyboard.press('End');
+    expect((await st(page, 'p10')).start, 'End stops at the frontier, not the format end').toBe(7);
+
+    await page.mouse.click(inTail.x, inTail.y);
+    expect((await st(page, 'p10')).start, 'a click into the tail snaps back').toBe(7);
+    await page.screenshot({ path: join(SHOT_ROOT, 's10-fill-frontier.png') });
+
+    // A selection dragged into the tail clamps as well.
+    await page.evaluate(() => window.__probes.p10!.el.setSelectionRange(3, 10));
+    await page.evaluate(() => window.__probes.p10!.el.dispatchEvent(new Event('selectionchange', { bubbles: true })));
+    const dragged = await st(page, 'p10');
+    expect([dragged.start, dragged.end], 'selection cannot extend into the guide tail').toEqual([3, 7]);
+
+    // A caret BETWEEN filled characters is legal and is not disturbed.
+    await page.mouse.click(box.x + 8, box.y + box.height / 2);
+    const mid = await st(page, 'p10');
+    expect(mid.start, 'the floor is 0 here -- no leading literal run').toBe(0);
+
+    // RED: detach and repeat. The browser parks the caret at the end of the
+    // template, which is the behavior the owner reported as wrong.
+    await page.evaluate(() => window.__probes.p10!.mask.detach());
+    await field.click();
+    await page.keyboard.press('End');
+    expect((await st(page, 'p10')).start, 'probe-can-fail: unclamped End reaches the template end').toBe(10);
+    await page.mouse.click(inTail.x, inTail.y);
+    expect((await st(page, 'p10')).start, 'probe-can-fail: unclamped click rests in the tail').toBe(10);
 
     expect(errors).toEqual([]);
   });

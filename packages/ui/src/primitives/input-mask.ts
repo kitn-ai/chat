@@ -617,27 +617,72 @@ export function createInputMask(el: HTMLInputElement, options: InputMaskOptions)
     runOpen = false;
   }
 
-  /** One handler, idempotent, no timers (§5.9). The reference's `mousedown`+rAF /
-   *  `mouseup`+`setTimeout` pair raced itself and missed keyboard-driven selection. */
-  function onSelectionChange(): void {
+  /** The caret window: `[floor, frontier]`.
+   *
+   *  FLOOR is the first fill position, so the caret never rests inside a leading literal
+   *  run -- with `CHG-####` the field focuses at `CHG-|####` and Home, ArrowLeft and a click
+   *  into the prefix all land there. On an UNGUIDED empty field the floor collapses to 0,
+   *  because there is no rendered prefix to be trapped behind until a character exists;
+   *  `rawToFormattedIndex` clamps to the text that exists, which is what makes that fall out
+   *  rather than needing a special case.
+   *
+   *  FRONTIER is one past the last filled character (`12/23/4|yyy`), so a click into the
+   *  unfilled guide tail snaps back and End stops at the content rather than at the end of
+   *  the template. Between the two, every position is legal and is left completely alone. */
+  function caretWindow(): [floor: number, frontier: number] {
+    return [
+      rawToFormattedIndex(pattern, formatted, 0),
+      rawToFormattedIndex(pattern, formatted, raw.length),
+    ];
+  }
+
+  /** ONE clamp function, idempotent, NO TIMERS (§5.9) -- but four triggers, and the trigger
+   *  list is MEASURED, not assumed. §5.9's objection to the reference was the racing
+   *  `mousedown`+rAF / `mouseup`+`setTimeout` pair and the keyboard-driven selection it
+   *  missed; it is not an objection to listening for more than one event, and an earlier
+   *  version of this comment asserted that `selectionchange` alone covered everything. It
+   *  does not. Measured in real Chromium (tests/e2e/input-mask-ivp.spec.ts, scenarios 9-10),
+   *  logging every candidate event with the offset it saw:
+   *
+   *    Home  -> ["el:keyup@0"]
+   *    click -> ["el:selectionchange@4", "doc:selectionchange@4", "el:mouseup@0", "el:click@0"]
+   *
+   *  Two facts fall out, and both were live defects the owner hit on a guided field:
+   *    - A KEYBOARD caret move fires NO `selectionchange` whatsoever. Home, End and the
+   *      arrows reached the clamp on no engine, which is exactly "I could only go back to
+   *      the start of ####" failing to hold. `keyup` is the event that does fire.
+   *    - A CLICK fires `selectionchange` early, and then the browser applies its own
+   *      pixel-derived offset AFTER it -- note the `@4` from our clamp being replaced by the
+   *      `@0` visible at `mouseup`. Clamping only on `selectionchange` gets overwritten by
+   *      the very gesture it was reacting to. `mouseup` is where the offset is final.
+   *
+   *  So: `selectionchange` (the general case), `keyup` (keyboard), `mouseup` (pointer), and
+   *  `focus` -- the last because a selection that does not CHANGE fires nothing at all, so a
+   *  field entered while its caret is already at 0 would otherwise render with the caret
+   *  inside the literal prefix and never get a chance to be corrected. Every trigger is the
+   *  same idempotent call that early-returns when the selection is already legal, so firing
+   *  several times for one gesture costs a comparison and changes nothing. */
+  function clampSelection(): void {
     if (detached || composing || settingSelection) return;
     if (el.ownerDocument.activeElement !== el) return;
     const start = el.selectionStart;
     const end = el.selectionEnd;
     if (start === null || end === null) return;
 
-    const first = rawToFormattedIndex(pattern, formatted, 0);
-    const last = rawToFormattedIndex(pattern, formatted, raw.length);
+    const [floor, frontier] = caretWindow();
 
     let nextStart = start;
     let nextEnd = end;
     if (start === end) {
-      nextStart = nextEnd = Math.max(first, Math.min(start, last));
+      nextStart = nextEnd = Math.max(floor, Math.min(start, frontier));
     } else {
-      // A range may begin anywhere -- Ctrl-A starts at 0 and must keep meaning "all of it"
-      // -- but it may not extend past the last typed character.
-      nextEnd = Math.min(end, last);
-      nextStart = Math.min(start, nextEnd);
+      // A range obeys the SAME window at both ends. Clamping only the end was the earlier
+      // reading, and it let Ctrl-A leave the anchor at 0 -- visibly selecting a literal
+      // prefix that is not content and cannot be edited. Collapsing to the window keeps
+      // select-all meaning "all of the value": the raw range is unchanged, so a canonical
+      // copy of a fully-selected field still yields the whole value, literals included.
+      nextEnd = Math.min(end, frontier);
+      nextStart = Math.min(Math.max(start, floor), nextEnd);
     }
     if (nextStart === start && nextEnd === end) return; // already valid: do nothing at all
     setSelection(nextStart, nextEnd);
@@ -676,6 +721,11 @@ export function createInputMask(el: HTMLInputElement, options: InputMaskOptions)
     ['compositionend', onCompositionEnd],
     ['keydown', onKeyDown],
     ['mousedown', onMouseDown],
+    // The three non-`selectionchange` clamp triggers. See `clampSelection` for the measured
+    // Chromium event logs that make each of them necessary rather than defensive.
+    ['keyup', clampSelection],
+    ['mouseup', clampSelection],
+    ['focus', clampSelection],
     ['blur', onBlur],
     ['copy', onCopy],
     ['cut', onCut],
@@ -685,7 +735,7 @@ export function createInputMask(el: HTMLInputElement, options: InputMaskOptions)
   for (const [kind, handler] of elementListeners) el.addEventListener(kind, handler);
   // `selectionchange` fires on the DOCUMENT for `<input>` in every browser this kit
   // targets; the element-targeted version is newer and not yet universal.
-  doc.addEventListener('selectionchange', onSelectionChange);
+  doc.addEventListener('selectionchange', clampSelection);
 
   {
     const seed = normalizeToRaw(pattern, opts.initialValue ?? el.value, caseMode);
@@ -771,7 +821,7 @@ export function createInputMask(el: HTMLInputElement, options: InputMaskOptions)
       detached = true;
       pendingWrite = null; // a deferred write must not fire into a field we no longer own
       for (const [kind, handler] of elementListeners) el.removeEventListener(kind, handler);
-      doc.removeEventListener('selectionchange', onSelectionChange);
+      doc.removeEventListener('selectionchange', clampSelection);
     },
   };
 }

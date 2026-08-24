@@ -660,6 +660,163 @@ describe('selection clamp (§5.9) -- one handler, no timers', () => {
   });
 });
 
+describe('caret discipline: the [floor, frontier] window', () => {
+  // The owner's bar, in three sentences: with a leading literal run the caret may never
+  // rest left of the first fill position (the FLOOR); it may never rest right of one past
+  // the last filled character (the FRONTIER); and arrows, Home, End, clicks and selections
+  // all live inside that window. "I could only go back to the start of ####; the CHG- would
+  // remain."
+  const TICKET = { format: 'CHG-####', guide: 'CHG-    ' } as const;
+
+  test('focus lands on the floor, not on index 0', () => {
+    const { el } = mount({ ...TICKET });
+    caret(el, 0); // whatever the field was left holding
+    el.focus();
+    expect(el.selectionStart).toBe(4);
+    expect(el.selectionEnd).toBe(4);
+  });
+
+  test('focus on a filled field lands inside the window too', () => {
+    const { el } = mount({ ...TICKET, initialValue: '4821' });
+    caret(el, 1);
+    el.focus();
+    expect(el.selectionStart).toBe(4);
+  });
+
+  test('Home goes to the floor, not to 0', () => {
+    const { el } = mount({ ...TICKET, initialValue: '4821' });
+    el.focus();
+    caret(el, 0); // what the browser does for Home
+    selectionChange(el);
+    expect(el.selectionStart).toBe(4);
+  });
+
+  test('a click inside the leading literal run snaps right to the floor', () => {
+    const { el } = mount({ ...TICKET, initialValue: '4821' });
+    el.focus();
+    for (const clicked of [0, 1, 2, 3]) {
+      caret(el, clicked);
+      selectionChange(el);
+      expect(el.selectionStart, `click at ${clicked}`).toBe(4);
+    }
+  });
+
+  test('End goes to the frontier, not to the end of the format', () => {
+    const { el } = mount({ ...TICKET, initialValue: '48' });
+    expect(el.value).toBe('CHG-48  ');
+    el.focus();
+    caret(el, 8); // what the browser does for End
+    selectionChange(el);
+    expect(el.selectionStart).toBe(6);
+  });
+
+  test('a click into the unfilled guide tail snaps back to the frontier', () => {
+    const { el } = mount({ format: '##/##/####', guide: 'mm/dd/yyyy', initialValue: '12234' });
+    expect(el.value).toBe('12/23/4yyy');
+    el.focus();
+    for (const clicked of [8, 9, 10]) {
+      caret(el, clicked);
+      selectionChange(el);
+      expect(el.selectionStart, `click at ${clicked}`).toBe(7); // 12/23/4|yyy
+    }
+  });
+
+  test('a caret BETWEEN filled characters is legal and is left completely alone', () => {
+    const { el } = mount({ ...TICKET, initialValue: '4821' });
+    el.focus();
+    caret(el, 6);
+    const setSelection = vi.spyOn(el, 'setSelectionRange');
+    selectionChange(el);
+    expect(setSelection).not.toHaveBeenCalled();
+    expect(el.selectionStart).toBe(6);
+    setSelection.mockRestore();
+  });
+
+  test('ArrowLeft cannot walk out of the floor', () => {
+    const { el } = mount({ ...TICKET, initialValue: '4821' });
+    el.focus();
+    caret(el, 4);
+    caret(el, 3); // the browser moved it; the clamp is what puts it back
+    selectionChange(el);
+    expect(el.selectionStart).toBe(4);
+  });
+
+  test('a selection dragged into the leading literal run clamps its START to the floor', () => {
+    const { el } = mount({ ...TICKET, initialValue: '4821' });
+    el.focus();
+    caret(el, 0, 6);
+    selectionChange(el);
+    expect([el.selectionStart, el.selectionEnd]).toEqual([4, 6]);
+  });
+
+  test('select-all on a guided field selects the editable window only', () => {
+    const { el } = mount({ ...TICKET, initialValue: '48' });
+    el.focus();
+    caret(el, 0, 8); // Ctrl+A
+    selectionChange(el);
+    expect([el.selectionStart, el.selectionEnd]).toEqual([4, 6]);
+  });
+
+  test('select-all still copies the whole canonical value despite the clamp', () => {
+    const { el } = mount({ ...TICKET, initialValue: '4821', semantic: 'custom' });
+    el.focus();
+    caret(el, 0, 8);
+    selectionChange(el);
+    const { ev, read } = clipboardEvent('copy');
+    el.dispatchEvent(ev);
+    expect(read()).toBe('CHG-4821');
+  });
+
+  test('deleting back past the literal run leaves the caret on the floor', () => {
+    const { el, mask } = mount({ ...TICKET, initialValue: '4' });
+    expect(el.value).toBe('CHG-4   ');
+    caret(el, 5);
+    beforeinput(el, 'deleteContentBackward');
+    expect(mask.getRawValue()).toBe('');
+    expect(el.value).toBe('CHG-    ');
+    expect(el.selectionStart).toBe(4);
+  });
+
+  test('an unguided field is unaffected: the floor is wherever the text ends', () => {
+    // Without a guide there is no rendered prefix to be trapped behind until a character
+    // exists, so the floor collapses to 0 on an empty field. Nothing to clamp.
+    const { el } = mount({ format: 'CHG-####' });
+    expect(el.value).toBe('');
+    caret(el, 0);
+    el.focus();
+    expect(el.selectionStart).toBe(0);
+    selectionChange(el);
+    expect(el.selectionStart).toBe(0);
+  });
+
+  test("a semantic type's default format gets the same discipline", () => {
+    const { el } = mount({
+      format: '###-###-####',
+      guide: '   -   -    ',
+      semantic: 'tel',
+      initialValue: '555',
+    });
+    expect(el.value).toBe('555-   -    ');
+    el.focus();
+    caret(el, 0);
+    selectionChange(el);
+    expect(el.selectionStart, 'floor is 0 -- no leading literal run').toBe(0);
+    caret(el, 11);
+    selectionChange(el);
+    expect(el.selectionStart, 'frontier is past the literal that follows raw 3').toBe(4);
+  });
+
+  test('the clamp stands down when the field is not the focused element', () => {
+    const other = document.createElement('input');
+    document.body.append(other);
+    const { el } = mount({ ...TICKET, initialValue: '4821' });
+    other.focus();
+    caret(el, 0);
+    selectionChange(el);
+    expect(el.selectionStart).toBe(0);
+  });
+});
+
 describe('copy, cut and copyPolicy (§5.10)', () => {
   const tel = (extra: Partial<InputMaskOptions> = {}) =>
     mount({ format: '###-###-####', semantic: 'tel', initialValue: '5551234567', ...extra });
