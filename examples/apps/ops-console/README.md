@@ -149,6 +149,9 @@ which is recoverable by re-asking.
   with `use: []`, each pointing at the kit's card *element* and carrying the
   kit's authored schema. That is forced, and it is this rung's headline finding
   — see below.
+- **`src/card-frame.ts`** is the one-property frame element each of those tags
+  actually names: it exists only so a card fills the conversation column, and it
+  is a labeled workaround for a kit defect (D11), not a pattern to copy.
 - **`src/assistant.ts`** POSTs the thread and hands the response straight to
   `readOpenAIStream`. No hand-rolled SSE reader. `onToolCallReady` turns each
   card tool call into a `CardEnvelope` whose id is the `tool_call_id` unchanged,
@@ -548,11 +551,93 @@ the first list, one caused by a fix in it.
     a rollback card with no intent) and that is the app's own trusted output;
     the scope note sits on `enforceActionVocabulary`.
 
+#### The fourth wave — D11 and D12, from the owner's live validation
+
+Two defects found by driving the console by hand. Both root-caused inside the
+kit, and **both were then fixed in the kit** — so neither leaves app code behind.
+The app-side workaround D11 wore for one round is recorded here with its
+lifecycle rather than deleted: what it was, why it was allowed, and what retired
+it. There is no `ops-*-card` frame in this app any more, and `cards.tags` points
+straight at the kit elements again.
+
+25. **~~`shared/cards.ts` + `src/card-frame.ts` + `src/main.tsx`~~ — a card in
+    the thread now fills the conversation column (D11). ADDED, THEN REMOVED: the
+    kit fix landed and the app code went back to plain kit tags.** The
+    parameters form rendered ~285px wide in a 768px column: its width was its own button row.
+    `<kai-chat>` laid an assistant turn out as `flex flex-col items-start`
+    (`packages/ui/src/components/chat-thread.tsx`) and no card surface —
+    neither the Solid `Card` root nor the `kai-*` card element hosts — carried
+    `w-full` or `align-self: stretch`, so every card was a flex item sized to
+    `min(max-content, column)`. The approval card only LOOKED right: its prose is
+    wider than the column. Measured in Chromium, pre-fix: form **285**, approval
+    **768**, column **768**.
+
+    A consumer could not reach that box, and that is the part worth keeping. The
+    card element is created inside `<kai-chat>`'s shadow root, where a document
+    stylesheet does not apply, and
+    the kit's `CardTagSlot` sets only `data` / `cardId` / `heading` /
+    `resolution` / `theme` on it — no class, style or part hook. What a consumer
+    CAN do is name its own tag in `cardTypes`, so for one round `cards.tags`
+    pointed at four one-property frame elements (`ops-approval-card`, `ops-parameters-card`, …)
+    that gave themselves `display:block; width:100%` as an INLINE style and
+    rendered the kit's card as their single **light-DOM** child, forwarding those
+    same properties. Light DOM deliberately: the bubbling+composed `kai-card`
+    event still reached the host listener unchanged, and a `kai-form` probe still
+    found the element. It was labeled a workaround at its own site, with the
+    condition for deleting it written down: the day the kit gives cards a
+    full-width box.
+
+    **That day was the same day.** The kit made assistant rows `items-stretch`
+    (one lever, rather than `w-full` on the Solid `Card` root AND on every
+    `kai-*` host whose shadow wrapper is `display: contents`), pinned by
+    `packages/ui/tests/components/thread-card-width.test.tsx`, and the frame
+    elements came straight back out: `src/card-frame.ts` deleted, `cards.tags`
+    back to `kai-confirm` / `kai-form` / `kai-choice` / `kai-tasks`,
+    `main.tsx` back to its pre-D11 shape. The app now measures the same 768px it
+    measured with the frames, through the kit path and nothing else — so what
+    this corpus shows a reader is the real composition, not a masked one. The
+    one-round detour is kept in this entry because *what a consumer can reach
+    from outside a shadow root* is the finding, and it stops being visible the
+    moment the workaround is silently erased.
+26. **FIXED IN THE KIT — typing in a text field lost focus after every character
+    (D12).** Typing `CHG-4821` into "Change ticket" landed the
+    `C`, and then focus was on `<body>`; the remaining seven keys went nowhere.
+    It reproduced only with real per-key events — Playwright's `fill()` sets the
+    value in one shot and never re-enters the path, which is how the earlier IVP
+    missed it.
+
+    It was **not** the re-envelope hypothesis, and that mattered: the app never
+    writes keystrokes into card data. Nothing outside `<kai-form>` moved — a
+    MutationObserver on the card's parent in the chat's shadow root recorded
+    nothing, while one on the form's own shadow subtree recorded the `<input>`
+    being removed and re-added inside `div.flex w-full flex-col gap-1.5`, the kit
+    `Input` primitive's wrapper, three times per keystroke: 6 recreations while 8
+    characters were typed. The note field, a `<textarea>` rendered directly, kept
+    its node and its focus through the identical test, which isolated the layer.
+
+    Two kit sites, both now fixed. `packages/ui/src/ui/input.tsx` — `<Show>`'s
+    `fallback` is a getter read inside Solid's memo, and it **called**
+    `inputEl(...)` there with a class argument computed from `isInvalid()` /
+    `local.size` / `local.class`, so the node was CREATED in the memo's scope and
+    every reactive read in that argument rebuilt it. The class now arrives as an
+    accessor read inside the element, so the memo has no dependencies and the
+    node is created once. `packages/ui/src/components/form.tsx` — `common()`
+    built a fresh object reading `props.value()` alongside everything else, so
+    reading any one prop (`invalid`) subscribed to all of them; it is now one
+    stable object with a getter per prop, and reading `invalid` tracks only the
+    error. Pinned by `packages/ui/tests/ui/input-node-identity.test.tsx` and
+    `packages/ui/tests/components/form-field-subscriptions.test.tsx`.
+
+    Nothing an app could set from outside the shadow root changed any of it —
+    which is why this one had no workaround round at all, and why the honest
+    move while it was open was to leave the field broken and say so.
+
 Not fixed here: **D1** (remote-card auto-resize under-reports, so the board is
 clipped) is kit-side, in `packages/ui/src/primitives/use-resize-observer.ts` and
 `host-embed.ts`; **N1** (its fix turned the frame into a one-way ratchet) is
 kit-side too; **D8** (two unprovoked console warnings) is kit-side noise from
-`<kai-remote>`'s own sandbox attributes and the handshake.
+`<kai-remote>`'s own sandbox attributes and the handshake. **D11** and **D12**
+were kit-side too and are the two that got fixed there; see above.
 
 ### Verification
 
@@ -569,7 +654,9 @@ kit-side too; **D8** (two unprovoked console warnings) is kit-side noise from
 | `GET /` on the board origin | **200** |
 | real 2-turn smoke, `deepseek/deepseek-v4-flash-0731` (2026-08-22) | `kai_approval` then `kai_checklist`, both parsed clean, F-23 rules held — 1 of 3 follow-up runs produced nothing, see "Real mode" |
 | real 2-turn smoke, `openai/gpt-4o-mini` (2026-08-22) | `kai_parameters` then `kai_approval`, both parsed clean, every F-23 rule held — this is what backs "the alternate" above |
-| `node .superpowers/sdd/2026-08-21-rung-5-remote-cards/ivp/w11a-verify.mjs` (the D2..D7 + D9/D10/N2 repro, 2026-08-24) | all checks pass; the same script run against the pre-fix files reproduces every defect it asserts |
+| `node .superpowers/sdd/2026-08-21-rung-5-remote-cards/ivp/w11a-verify.mjs` (the D2..D7 + D9/D10/N2 repro, 2026-08-24) | all checks pass; the same script run against the pre-fix files reproduces every defect it asserts. Re-run against the kit that fixes D11/D12, with the app's frame workaround removed: **59/59** |
+| `node …/ivp/w12-verify.mjs` (the D11/D12 regression, 2026-08-24, after the kit fixes) | **13/13** — `CHG-4821` typed one key at a time keeps focus on the SAME input node for all 8 keys, the kit re-creates that node **0** times, `pressSequentially` agrees, the form still submits into the `deploy-approval` turn, and form width == approval width == column width == **768**, with no `ops-*` frame element anywhere in the ancestor chain |
+| the D11 red run, before the kit fix and without the app's (now deleted) frames | **form 285 vs approval 768** in a 768px column, which is exactly the shape the owner saw; `.../ivp/w12-red-prefix.log` |
 | `node …/ivp/w11a-tooldefs.mjs` (the D9/N3 enum pin, on the projected tool defs themselves) | all checks pass — one cell per intent, a deploy approval cannot offer `rollback`, a rollback approval cannot offer `approve`, an unknown intent falls back to the narrow default, the ids the live model invented are absent, and the AUTHORED schema still carries no enum |
 
 The D2..D7 repro is a driven one — real Chromium, hostile and failure fixtures
@@ -591,6 +678,19 @@ after the first: D9's refusal absent and the board untouched by a click on
 button. `w11a-tooldefs.mjs` loads `server/chat.ts` through the app's own Vite and
 inspects the projected tool defs directly, because a pinned enum only reaches a
 provider in real mode and is invisible to a keyless browser run.
+
+So was the fourth, and its red run is the interesting one: before the kit fix
+the parameters card measures 285 and the **approval card still measures 768**, so
+a check written only against "the card is narrow" would have passed on the card
+that looks fine and told you nothing. The check that catches it is the one
+comparing the two cards in the same thread.
+
+The D12 checks earned a second lesson, about the checks rather than the code.
+While the defect was open they were written as assertions that it was PRESENT
+("the kit re-created the input node, measured") — which went red the moment the
+fix landed, and read as a failure. A check that fails when the code gets better
+is worse than no check. They are positive now: focus retained, node identity
+held, zero re-creations, the whole ticket in the field.
 
 So was the third. Against the round-2 tree the same run renders the captured
 card with all three buttons live — `["Deploy to production", "Cancel", "Deploy,
