@@ -748,19 +748,7 @@ function FieldRow(props: FieldRowProps): JSX.Element {
       .filter(Boolean)
       .join(' ') || undefined;
 
-  const common = () => ({
-    id,
-    value: props.value(),
-    field: props.field,
-    disabled: props.disabled || props.field.readOnly === true,
-    placeholder: placeholder(),
-    required: props.required,
-    invalid: Boolean(props.error()),
-    describedBy: describedBy(),
-    label: label(),
-    onInput: props.onInput,
-    onBlur: props.onBlur,
-  });
+  const common = fieldCommon(props, id, placeholder, label, describedBy);
 
   // A nested fieldset / repeater / checkbox-group provide their own grouping
   // label, so the row's <label> is only rendered for simple single controls.
@@ -784,7 +772,7 @@ function FieldRow(props: FieldRowProps): JSX.Element {
         </p>
       </Show>
 
-      <WidgetSwitch widget={widget()} common={common()} fieldKey={props.fieldKey} />
+      <WidgetSwitch widget={widget()} common={common} fieldKey={props.fieldKey} />
 
       <Show when={props.error()}>
         <p id={errorId} role="alert" class="text-xs text-destructive dark:text-red-400">
@@ -793,6 +781,45 @@ function FieldRow(props: FieldRowProps): JSX.Element {
       </Show>
     </div>
   );
+}
+
+/**
+ * The widget prop bag for one field row. **Internal** — exported only so the
+ * subscription contract can be pinned directly
+ * (`tests/components/form-field-subscriptions.test.tsx`); it is not re-exported
+ * from the package.
+ *
+ * GETTERS, NOT AN OBJECT FACTORY, and this is the whole point (K-D12b). The
+ * factory read `props.value()` alongside everything else and rebuilt the bag on
+ * every call, so a reader of ANY prop — `invalid`, say — subscribed to `value`
+ * too and re-ran on every keystroke. Combined with the `<input>` being rebuilt
+ * when its class expression re-ran (K-D12a), that is what made typing into a
+ * `kai-form` text field lose focus after each character.
+ *
+ * One stable object with one getter per prop: each reader tracks exactly the
+ * signal behind the prop it read. The object identity is constant, so the
+ * `WidgetSwitch` prop below never changes either.
+ */
+export function fieldCommon(
+  props: FieldRowProps,
+  id: string,
+  placeholder: () => string | undefined,
+  label: () => string,
+  describedBy: () => string | undefined = () => undefined,
+): ReturnType<FieldRowCommon> {
+  return {
+    id,
+    get value() { return props.value(); },
+    get field() { return props.field; },
+    get disabled() { return props.disabled || props.field.readOnly === true; },
+    get placeholder() { return placeholder(); },
+    get required() { return props.required; },
+    get invalid() { return Boolean(props.error()); },
+    get describedBy() { return describedBy(); },
+    get label() { return label(); },
+    onInput: (v) => props.onInput(v),
+    onBlur: () => props.onBlur(),
+  };
 }
 
 interface WidgetSwitchProps {

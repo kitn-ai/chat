@@ -1,0 +1,194 @@
+/*
+ * The console chrome. The kit's own tokens (theme.tokens.css) style everything
+ * inside <kai-*>; this file is only the shell around them, and it borrows the
+ * same custom properties so the chrome and the components stay one surface.
+ */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--kai-background, #0b0d10);
+  color: var(--kai-foreground, #e6e9ef);
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* `text-align: start` undoes the centring stock starters inherit. */
+  text-align: start;
+}
+
+.console {
+  /* Full page means full page. Below the kit's toast layer (z-index 100) so a
+     toast is never buried by the shell that raised it. */
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* ------------------------------------------------------------------ bar -- */
+
+.console__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 16px;
+  height: 48px;
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--kai-border, #262b33);
+  background: var(--kai-card, #101318);
+}
+
+.console__brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.console__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #4ade80;
+  box-shadow: 0 0 0 3px rgb(74 222 128 / 0.15);
+}
+
+.console__env {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #f87171;
+  border: 1px solid rgb(248 113 113 / 0.35);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
+.console__status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.console__pill {
+  font-size: 12px;
+  border: 1px solid var(--kai-border, #262b33);
+  border-radius: 999px;
+  padding: 3px 10px;
+  color: var(--kai-muted-foreground, #99a1b0);
+  white-space: nowrap;
+}
+
+.console__pill--deploying {
+  color: #6ea8ff;
+  border-color: rgb(110 168 255 / 0.4);
+}
+.console__pill--healthy {
+  color: #4ade80;
+  border-color: rgb(74 222 128 / 0.4);
+}
+.console__pill--rolling-back {
+  color: #fbbf24;
+  border-color: rgb(251 191 36 / 0.4);
+}
+.console__pill--rolled-back {
+  color: #f87171;
+  border-color: rgb(248 113 113 / 0.4);
+}
+
+.console__reset {
+  appearance: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--kai-muted-foreground, #99a1b0);
+  background: transparent;
+  border: 1px solid var(--kai-border, #262b33);
+  border-radius: 8px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.console__reset:hover {
+  color: var(--kai-foreground, #e6e9ef);
+  border-color: var(--kai-muted-foreground, #99a1b0);
+}
+
+/* ---------------------------------------------------------------- body -- */
+
+.console__body {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+kai-resizable-item {
+  min-height: 0;
+  overflow: hidden;
+}
+
+kai-chat {
+  display: block;
+  height: 100%;
+}
+
+/* --------------------------------------------------------------- panel -- */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  border-left: 1px solid var(--kai-border, #262b33);
+  background: var(--kai-card, #101318);
+}
+
+.panel__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--kai-border, #262b33);
+}
+
+.panel__head h2 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 620;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--kai-muted-foreground, #99a1b0);
+}
+
+.panel__origin {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--kai-muted-foreground, #99a1b0);
+  opacity: 0.75;
+}
+
+.panel__frame {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.board-frame {
+  display: block;
+}
+
+/* <kai-remote> sizes its own iframe from the height the provider reports over
+   the bridge, so it needs a block box to size INTO. */
+kai-remote {
+  display: block;
+  width: 100%;
+}

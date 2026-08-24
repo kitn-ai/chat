@@ -1,0 +1,296 @@
+/*
+ * The board is drawn inside an iframe on ANOTHER origin, so it inherits nothing
+ * from the console — not the kit's CSS custom properties, not a reset, nothing.
+ * Every value here is therefore stated rather than assumed, and the palette is
+ * deliberately close to the kit's neutral/dark surfaces so the frame does not
+ * read as a foreign object in the panel.
+ */
+
+:root {
+  color-scheme: dark;
+  --bg: #0b0d10;
+  --surface: #14171c;
+  --line: #262b33;
+  --text: #e6e9ef;
+  --muted: #99a1b0;
+  --accent: #6ea8ff;
+  --ok: #4ade80;
+  --warn: #fbbf24;
+  --danger: #f87171;
+}
+
+/*
+ * The light palette.
+ *
+ * `<kai-remote>` sends the host's theme down the bridge and the renderer stamps
+ * the mode on `:root` and on the mount root (board/main.ts). Before this block
+ * the transport worked and NOTHING repainted: one dark palette was declared and
+ * there was no rule a theme change could select. Every colour in this file is a
+ * token, so swapping the nine values is the whole job — no per-rule overrides,
+ * and the `color-mix()` badges and the danger button follow for free.
+ *
+ * Both selectors are needed. `:root[data-theme]` repaints the document (html and
+ * body paint the frame's background, which is what the panel actually shows);
+ * `#card-root[data-theme]` keeps the board itself correct if it is ever mounted
+ * into a document whose root was not stamped.
+ */
+:root[data-theme='light'],
+#card-root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #f4f6fa;
+  --surface: #ffffff;
+  --line: #d8dee9;
+  --text: #14171c;
+  --muted: #5b6474;
+  --accent: #2563eb;
+  --ok: #15803d;
+  --warn: #a16207;
+  --danger: #b91c1c;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+body {
+  /* The bridge measures this element with a ResizeObserver and reports the
+     height up as a `resize` event, so padding here becomes real frame height. */
+  padding: 12px;
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.92em;
+}
+
+#standalone {
+  color: var(--muted);
+  max-width: 46ch;
+}
+
+.board {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.board__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.board__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 620;
+  letter-spacing: -0.01em;
+}
+
+.badge {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.badge--deploying {
+  color: var(--accent);
+  border-color: color-mix(in oklab, var(--accent) 45%, var(--line));
+}
+.badge--healthy {
+  color: var(--ok);
+  border-color: color-mix(in oklab, var(--ok) 45%, var(--line));
+}
+.badge--rolling-back {
+  color: var(--warn);
+  border-color: color-mix(in oklab, var(--warn) 45%, var(--line));
+}
+.badge--rolled-back {
+  color: var(--danger);
+  border-color: color-mix(in oklab, var(--danger) 45%, var(--line));
+}
+
+.meta {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 12px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.meta dt {
+  color: var(--muted);
+}
+
+.meta dd {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.section__title {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+}
+
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.step {
+  display: grid;
+  grid-template-columns: 18px 1fr max-content;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--bg) 55%, transparent);
+}
+
+.step.empty {
+  display: block;
+  color: var(--muted);
+}
+
+.step__glyph {
+  color: var(--muted);
+}
+
+.step--running .step__glyph {
+  color: var(--accent);
+}
+.step--done .step__glyph {
+  color: var(--ok);
+}
+.step--reverted .step__glyph {
+  color: var(--danger);
+}
+
+.step__body {
+  display: flex;
+  flex-direction: column;
+}
+
+.step__label {
+  font-weight: 560;
+}
+
+.step--pending .step__label {
+  color: var(--muted);
+}
+
+.step__desc {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.step__state {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.pings__empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.pings__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.ping {
+  display: grid;
+  grid-template-columns: 12px 1fr max-content max-content;
+  gap: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--muted);
+  padding: 2px 8px;
+}
+
+.ping--ok .ping__dot {
+  color: var(--ok);
+}
+.ping--bad .ping__dot {
+  color: var(--danger);
+}
+
+.ping__status,
+.ping__latency {
+  color: var(--text);
+}
+
+.board__footer {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+button.danger {
+  appearance: none;
+  border: 1px solid color-mix(in oklab, var(--danger) 55%, var(--line));
+  background: color-mix(in oklab, var(--danger) 14%, transparent);
+  color: var(--danger);
+  font: inherit;
+  font-weight: 600;
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+button.danger:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--danger) 24%, transparent);
+}
+
+button.danger:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  color: var(--muted);
+  border-color: var(--line);
+  background: transparent;
+}
+
+.board__note {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+[role='alert'] {
+  color: var(--danger);
+}
