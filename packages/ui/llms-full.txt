@@ -3,7 +3,7 @@
 
 # @kitn.ai/ui
 
-> Framework-agnostic, Shadow-DOM web components for building AI chat interfaces — works in React, Vue, Angular, Svelte, or plain HTML. 82 custom elements, every one prefixed `kai-` (e.g. `<kai-chat>`, `<kai-artifact>`): streaming responses, markdown + code rendering, reasoning/tool panels, attachments, conversation sidebar, voice input. Zero framework dependency for consumers; the SolidJS runtime it is authored in is bundled in, so the host needs nothing.
+> Framework-agnostic, Shadow-DOM web components for building AI chat interfaces — works in React, Vue, Angular, Svelte, or plain HTML. 83 custom elements, every one prefixed `kai-` (e.g. `<kai-chat>`, `<kai-artifact>`): streaming responses, markdown + code rendering, reasoning/tool panels, attachments, conversation sidebar, voice input. Zero framework dependency for consumers; the SolidJS runtime it is authored in is bundled in, so the host needs nothing.
 
 ## Install
 
@@ -37,7 +37,7 @@ Drop an element into any framework (React, Vue, plain HTML). Data in via JS prop
 - `<kai-prompt-input>` — standalone composer with send button.
 
 **Layer 2 — composable primitives** (`import { … } from '@kitn.ai/ui'`):
-All 82 elements are also exported individually. Use them for custom layouts or features `<kai-chat>` does not expose (ChainOfThought, FeedbackBar, ThinkingBar, VoiceInput, …). Your bundler tree-shakes the rest.
+All 83 elements are also exported individually. Use them for custom layouts or features `<kai-chat>` does not expose (ChainOfThought, FeedbackBar, ThinkingBar, VoiceInput, …). Your bundler tree-shakes the rest.
 
 ## Key rules for the web components
 
@@ -151,7 +151,7 @@ For Tailwind builds: `@import "@kitn.ai/ui/theme.css"` in your CSS.
 
 ## Docs
 
-- Full element reference (all 82 elements, every prop/event): ./llms-full.txt — https://kitn.dev/llms-full.txt
+- Full element reference (all 83 elements, every prop/event): ./llms-full.txt — https://kitn.dev/llms-full.txt
 - Machine-readable Custom Elements Manifest: https://unpkg.com/@kitn.ai/ui/dist/custom-elements.json
 - Working examples: https://github.com/kitn-ai/ui/tree/main/examples
 - Storybook: https://storybook.kitn.dev
@@ -248,7 +248,7 @@ The same reassign rule applies to every array/object property (`models`, `contex
 
 ---
 
-## Element reference (82 elements, generated from custom-elements.json)
+## Element reference (83 elements, generated from custom-elements.json)
 
 Every element also accepts the `theme` attribute. Array/object properties are marked with a `—` attribute: they must be set as JS properties.
 
@@ -1160,6 +1160,45 @@ _No events._
 | `::part(launcher)` | The launcher button pinned to the corner: a disc by default, a pill once you slot a text label. Restyle its surface or shadow; --kai-dock-launcher-size sets its height and its minimum width. — `kai-dock::part(launcher) { background: var(--color-info) }` |
 | `::part(badge)` | The unread dot on the launcher, rendered only while closed and only when `unread` is set. Restyle its color or size. — `kai-dock::part(badge) { background: var(--color-success) }` |
 | `::part(panel)` | The panel body. ANY element: a `<kai-chat>`, a form, your own component. The dock never reads or types it, and the default slot is the same region. |
+
+---
+
+### `kai-dropdown` / `Dropdown`
+
+**Properties** (every element also accepts `theme="light|dark|auto"`; only scalar props work as HTML attributes):
+
+| Property | Attribute | Type | Description |
+|---|---|---|---|
+| `theme` | `theme` | `"light" \| "dark" \| "auto"` | Color mode (`auto` follows prefers-color-scheme). |
+| `triggerIcon` | `trigger-icon` | `undefined \| string` | Built-in trigger: leading icon (a named icon like `"plus"`, an image URL/data-URI, or text). A slotted `slot="trigger"` overrides it. |
+| `triggerLabel` | `trigger-label` | `undefined \| string` | Built-in trigger: a text label. This is the trigger's VISIBLE text, so it is also its accessible name, and `label` does not override it: an accessible name that does not contain the visible text is unreachable by speech input (WCAG 2.5.3, Label in Name). Same rule `kai-menu` follows. |
+| `triggerIconTrailing` | `trigger-icon-trailing` | `undefined \| string` | Built-in trigger: a trailing icon (e.g. `"chevron-down"` for a select look). |
+| `label` | `label` | `undefined \| string` | Accessible name for a trigger with no visible label. Ignored when `triggerLabel` is set, which is already the visible name. It DOES name a slotted `slot="trigger"`, which is VISUAL content with the name supplied separately: the same two-slot distinction `kai-menu` documents. |
+| `full` | `full` | `undefined \| false \| true` | Stretch the trigger to the full width of its container (a block row). Attribute: `full`. |
+| `open` | `open` | `undefined \| false \| true` | Drive/observe open state (Shoelace-style: settable + reflected to the `open` attribute, the menu still self-manages on click/keyboard). Set `el.open = true`, or `<kai-dropdown open>`; listen for `kai-open-change`. |
+| `defaultOpen` | `default-open` | `undefined \| false \| true` | Initial open state on mount (uncontrolled seed). |
+| `disabled` | `disabled` | `undefined \| false \| true` | Disable the trigger: click/keyboard and `show()` no longer open the menu. |
+
+**Events** (non-bubbling `CustomEvent`s — listen directly on the element):
+
+| Event | `detail` type | Description |
+|---|---|---|
+| `kai-open-change` | `CustomEvent<{ open: false \| true }>` | The menu opened or closed (click, keyboard, Escape, outside-click, or a method). |
+
+**Methods** (call on the element instance: `document.querySelector('kai-dropdown').show()`):
+
+| Method | Signature | Description |
+|---|---|---|
+| `show` | `(): void` | Open it programmatically (no-op while disabled). |
+| `hide` | `(): void` | Close it programmatically. |
+| `toggle` | `(): void` | Flip the open state (closes while disabled). |
+
+**Slots** (project your own markup via `slot="name"` on a light-DOM child):
+
+| Slot | Mode | Description |
+|---|---|---|
+| _(default)_ | inject | The menu body: your own rows. Give each `role="menuitem"`. The control that opens it is the `trigger` slot. |
+| `trigger` | replace | Visual content of the trigger button (an icon, text, an `<svg>`). Replaces the built-in trigger* content; name it with `label`. |
 
 ---
 

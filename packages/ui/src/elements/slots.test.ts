@@ -806,6 +806,7 @@ describe('ELEMENT_COMPOSITION registry (single source of truth the build extract
       'kai-conversations',
       'kai-dialog',
       'kai-dock',
+      'kai-dropdown',
       'kai-editable-label',
       'kai-empty',
       'kai-file-tree',

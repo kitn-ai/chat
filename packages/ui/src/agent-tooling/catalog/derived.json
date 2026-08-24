@@ -1741,6 +1741,80 @@
       "tokens": []
     },
     {
+      "tag": "kai-dropdown",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "triggerIcon",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "triggerLabel",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "triggerIconTrailing",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "label",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "full",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "open",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "defaultOpen",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "disabled",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [
+        "kai-open-change"
+      ],
+      "methods": [
+        "show",
+        "hide",
+        "toggle"
+      ],
+      "parts": [],
+      "composedFrom": [
+        "Dropdown",
+        "DropdownTrigger",
+        "DropdownContent"
+      ],
+      "tokens": []
+    },
+    {
       "tag": "kai-editable-label",
       "props": [
         {

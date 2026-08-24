@@ -67,6 +67,7 @@
     "kai-compare": "compare",
     "kai-composer": "composer",
     "kai-menu": "menu",
+    "kai-dropdown": "dropdown",
     "kai-command": "command",
     "kai-prompt-dock": "prompt-dock",
     "kai-segmented": "segmented",
@@ -279,6 +280,9 @@
     ],
     "menu": [
       "kai-menu"
+    ],
+    "dropdown": [
+      "kai-dropdown"
     ],
     "command": [
       "kai-command"
