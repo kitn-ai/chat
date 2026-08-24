@@ -1,0 +1,27 @@
+[
+  {
+    "name": "the required ticket still submits canonical",
+    "pass": true,
+    "detail": {
+      "region": "us-east-1",
+      "ticket": "CHG-4821"
+    }
+  },
+  {
+    "name": "an UNTOUCHED masked date does NOT submit its guide as a value",
+    "pass": true,
+    "detail": {}
+  },
+  {
+    "name": "an UNTOUCHED tel field does not submit anything either",
+    "pass": true,
+    "detail": {}
+  },
+  {
+    "name": "and no invented window reaches the next turn",
+    "pass": true,
+    "detail": {
+      "hasGuideInThread": false
+    }
+  }
+]

@@ -1,0 +1,5 @@
+{
+  "approved": "Approve deploy",
+  "boardText": "<kai-remote></kai-remote>",
+  "boardApi": "{\"runId\":\"run-mt7t8kzf\",\"service\":\"payments\",\"region\":\"us-east-1\",\"ticket\":\"CHG-4821\",\"status\":\"deploying\",\"steps\":[{\"id\":\"build\",\"label\":\"Build image\",\"description\":\"payments:18c2afa — multi-stage build\",\"state\":\"running\"},{\"id\":\"migrate\",\"label\":\"Run migrations\",\"description\":\"3 pending migrations, forward-only\",\"state\":\"pending\"},{\"id\":\"canary\",\"label\":\"Shift 5% canary\",\"description\":\"Weighted routing in us-east-1\",\"state\":\"pending\"},{\"id\":\"soak\",\"label\":\"Soak canary\",\"description\":\"Watch error rate for 90s\",\"state\":\"pending\"},{\"id\":\"promote\",\"label\":\"Promote to 100%\",\"description\":\"Drain the old revision\",\"state\":\"pending\"}],\"pings\":[],\"updatedAt\":\"2026-08-24T22:31:12.597Z\"}"
+}

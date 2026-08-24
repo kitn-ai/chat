@@ -74,12 +74,59 @@ function deployParamsTurn(): ScriptedTurn {
               default: 'us-east-1',
               'x-kai-widget': 'select',
             },
+            /**
+             * INSIDER CHANGE (M1) — the field the masking feature was built for.
+             *
+             * `x-kai-mask` shapes what the operator sees as they type: the literals
+             * `CHG-` are the pattern's, so `chg4821` typed one key at a time reads
+             * `CHG-4821` and that formatted string is what submits (`custom` is the
+             * one semantic whose canonical value keeps its literals). The `pattern`
+             * below is unchanged and is still the only CHECK — a mask shapes, it
+             * does not validate, and the two are declared separately on purpose.
+             */
             ticket: {
               type: 'string',
               title: 'Change ticket',
-              description: 'CHG-#### from the change calendar.',
+              description: 'CHG-#### from the change calendar. Shaped as you type.',
               pattern: '^CHG-[0-9]{4}$',
               'x-kai-placeholder': 'CHG-4821',
+              'x-kai-format': 'custom',
+              'x-kai-mask': 'CHG-####',
+              'x-kai-mask-guide': 'CHG-####',
+            },
+            /**
+             * INSIDER CHANGE (M1) — a DATE, and it is a mask and nothing else.
+             *
+             * `##/##/####` accepts four digits where the year goes and two where the
+             * month goes; it does not know that there is no 13th month, that
+             * February is short, or that a window in the past is useless. Saying so
+             * in the description is the point — a field that looks validated and is
+             * not is worse than a plain one. Optional: the console defaults to the
+             * next window when it is blank.
+             */
+            window: {
+              type: 'string',
+              title: 'Maintenance window (start)',
+              description:
+                'mm/dd/yyyy. Shaped as you type — this is a MASK, not a date check: ' +
+                'it enforces the shape, never that the date exists or is in the future. ' +
+                'Blank means the next open window.',
+              'x-kai-format': 'custom',
+              'x-kai-mask': '##/##/####',
+              'x-kai-mask-guide': 'mm/dd/yyyy',
+            },
+            /**
+             * INSIDER CHANGE (M1) — the one TIER-1 SEMANTIC on this form. `tel`
+             * brings its own format (`###-###-####`) and its own canonical form:
+             * what submits is DIGITS, separators stripped, which is why the paging
+             * system downstream never has to re-parse a human-typed number.
+             */
+            oncall: {
+              type: 'string',
+              title: 'On-call contact',
+              description:
+                'Paged if the canary faults. Shown as ###-###-####; submitted as digits. Optional.',
+              'x-kai-format': 'tel',
             },
             note: {
               type: 'string',
@@ -89,7 +136,7 @@ function deployParamsTurn(): ScriptedTurn {
               'x-kai-placeholder': 'Anything the on-call should know.',
             },
           },
-          'x-kai-order': ['region', 'ticket', 'note'],
+          'x-kai-order': ['region', 'ticket', 'window', 'oncall', 'note'],
           'x-kai-submitLabel': 'Draft the approval',
           'x-kai-dismissible': true,
         },
@@ -102,6 +149,10 @@ function deployApprovalTurn(params: Record<string, unknown> | undefined): Script
   const region = str(params?.region, 'us-east-1');
   const ticket = str(params?.ticket, 'CHG-0000');
   const note = str(params?.note, '');
+  // M1: restated so the value the mask CANONICALISED is visible on the next turn —
+  // the window as the operator saw it, the contact as digits.
+  const windowStart = str(params?.window, '');
+  const oncall = str(params?.oncall, '');
   return {
     text: `Ready. This ships **payments** to production in **${region}** under **${ticket}**.`,
     cards: [
@@ -111,6 +162,8 @@ function deployApprovalTurn(params: Record<string, unknown> | undefined): Script
           heading: 'Deploy payments to production',
           body:
             `Region ${region} · ticket ${ticket}.\n` +
+            (windowStart ? `Window opens ${windowStart}.\n` : '') +
+            (oncall ? `On-call ${oncall}.\n` : '') +
             'Five steps, canary first, migrations are forward-only and cannot be undone by the ' +
             'rollback button.' +
             (note ? `\n\nOperator note: ${note}` : ''),

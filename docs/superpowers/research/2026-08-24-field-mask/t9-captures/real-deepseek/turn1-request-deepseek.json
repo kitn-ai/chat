@@ -1,0 +1,16 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "Deploy the payments service to production."
+    },
+    {
+      "role": "assistant",
+      "content": "The operator asks to deploy the payments service to production. This is a consequential, irreversible operation. I should propose it via kai_approval. But I might need to collect parameters, or offer options. Let me consider: deploying is consequential/irreversible — approval card.\n\nHowever, there may be multiple strategies differing in blast radius. But the simplest is an approval. Actually let me offer approval. One card per reply.\n\nLet me propose the deploymentI'll propose deploying the payments service to production. This is a live change: the new version goes fully live and a rollback is a separate forward action, not an automatic undo.\n\n[card approval \"Deploy payments service to production\" id=call_eba69c25d3e549489e8f2968] proposed to the operator; still unanswered."
+    },
+    {
+      "role": "user",
+      "content": "Ask me for the deployment parameters as a form: region, change ticket, maintenance window start date, on-call contact number."
+    }
+  ]
+}

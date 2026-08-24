@@ -1,0 +1,49 @@
+[
+  {
+    "type": "object",
+    "title": "Deployment Parameters for Payments Service",
+    "description": "Please provide the parameters for deploying the payments service to production.",
+    "required": [
+      "region",
+      "change_ticket",
+      "maintenance_window_start_date",
+      "on_call_contact_number"
+    ],
+    "properties": {
+      "region": {
+        "type": "string",
+        "title": "Region",
+        "description": "Specify the deployment region."
+      },
+      "change_ticket": {
+        "type": "string",
+        "title": "Change Ticket",
+        "description": "Enter the change ticket in the format CHG-####.",
+        "pattern": "^CHG-\\d{4}$"
+      },
+      "maintenance_window_start_date": {
+        "type": "string",
+        "title": "Maintenance Window Start Date",
+        "description": "Enter the start date of the maintenance window in the format mm/dd/yyyy.",
+        "pattern": "^(0[1-9]|1[0-2])/(?:(0[1-9]|[12][0-9]|3[01])|([1-9]))/\\d{4}$",
+        "x-kai-format": "custom",
+        "x-kai-mask": "##/##/####",
+        "x-kai-mask-guide": "mm/dd/yyyy"
+      },
+      "on_call_contact_number": {
+        "type": "string",
+        "title": "On-Call Contact Number",
+        "description": "Enter the on-call contact number in the format (XXX) XXX-XXXX.",
+        "pattern": "^\\(\\d{3}\\) \\d{3}-\\d{4}$",
+        "x-kai-format": "tel"
+      }
+    },
+    "x-kai-submitLabel": "Submit",
+    "x-kai-order": [
+      "region",
+      "change_ticket",
+      "maintenance_window_start_date",
+      "on_call_contact_number"
+    ]
+  }
+]

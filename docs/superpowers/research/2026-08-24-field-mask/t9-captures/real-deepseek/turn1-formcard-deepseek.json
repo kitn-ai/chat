@@ -1,0 +1,49 @@
+[
+  {
+    "title": "Payments deployment parameters",
+    "description": "Provide the parameters for the payments service production deployment.",
+    "type": "object",
+    "properties": {
+      "region": {
+        "type": "string",
+        "title": "Region",
+        "description": "Deployment region, e.g. us-east-1, eu-west-1."
+      },
+      "change_ticket": {
+        "type": "string",
+        "title": "Change ticket",
+        "description": "The change ticket number authorizing this deployment. Format is shaped, not validated.",
+        "x-kai-format": "custom",
+        "x-kai-mask": "CHG-####",
+        "x-kai-mask-guide": "CHG-####"
+      },
+      "maintenance_start": {
+        "type": "string",
+        "title": "Maintenance window start",
+        "description": "Start of the maintenance window during which the deployment is permitted. Must be a real calendar date; the mask shapes only (mm/dd/yyyy).",
+        "x-kai-format": "custom",
+        "x-kai-mask": "##/##/####",
+        "x-kai-mask-guide": "mm/dd/yyyy"
+      },
+      "on_call_contact": {
+        "type": "string",
+        "title": "On-call contact",
+        "description": "Phone number of the on-call engineer for this deployment.",
+        "x-kai-format": "tel"
+      }
+    },
+    "required": [
+      "region",
+      "change_ticket",
+      "maintenance_start",
+      "on_call_contact"
+    ],
+    "x-kai-order": [
+      "region",
+      "change_ticket",
+      "maintenance_start",
+      "on_call_contact"
+    ],
+    "x-kai-submitLabel": "Submit parameters"
+  }
+]

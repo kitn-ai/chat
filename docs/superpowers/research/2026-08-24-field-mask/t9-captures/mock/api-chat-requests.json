@@ -1,0 +1,17 @@
+[
+  {
+    "method": "POST",
+    "url": "http://localhost:5182/api/chat",
+    "body": "{\"messages\":[{\"role\":\"user\",\"content\":\"Deploy the payments service to production\"}]}"
+  },
+  {
+    "method": "POST",
+    "url": "http://localhost:5182/api/chat",
+    "body": "{\"messages\":[{\"role\":\"user\",\"content\":\"Deploy the payments service to production\"},{\"role\":\"assistant\",\"content\":\"Deploying **payments** to production needs two things I will not guess: the target region and the change ticket it is authorised under. Fill these in and I will draft the approval.[card parameters id=call_mt7t8hl5_0] the operator submitted {\\\"region\\\":\\\"us-east-1\\\",\\\"ticket\\\":\\\"CHG-4821\\\",\\\"window\\\":\\\"09/15/2026\\\",\\\"oncall\\\":\\\"4155550142\\\"}.\"}],\"intent\":\"deploy-approval\",\"params\":{\"region\":\"us-east-1\",\"ticket\":\"CHG-4821\",\"window\":\"09/15/2026\",\"oncall\":\"4155550142\"}}"
+  },
+  {
+    "method": "POST",
+    "url": "http://localhost:5182/api/chat",
+    "body": "{\"messages\":[{\"role\":\"user\",\"content\":\"Deploy the payments service to production\"},{\"role\":\"assistant\",\"content\":\"Deploying **payments** to production needs two things I will not guess: the target region and the change ticket it is authorised under. Fill these in and I will draft the approval.[card parameters id=call_mt7t8hl5_0] the operator submitted {\\\"region\\\":\\\"us-east-1\\\",\\\"ticket\\\":\\\"CHG-4821\\\",\\\"window\\\":\\\"09/15/2026\\\",\\\"oncall\\\":\\\"4155550142\\\"}.\"},{\"role\":\"assistant\",\"content\":\"Ready. This ships **payments** to production in **us-east-1** under **CHG-4821**.[card approval \\\"Deploy payments to production\\\" id=call_mt7t8k0b_0] the operator approved it and the console STARTED the deploy of payments to us-east-1 under CHG-4821 (run run-mt7t8kzf). The run board now reads \\\"deploying\\\", 0 of 5 steps done.\"}],\"intent\":\"deploy-running\",\"params\":{\"region\":\"us-east-1\",\"ticket\":\"CHG-4821\"}}"
+  }
+]

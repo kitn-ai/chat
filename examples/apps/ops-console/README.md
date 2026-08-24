@@ -127,6 +127,26 @@ Measured 2026-08-22. Raw SSE for every row below is preserved in
 | the same deploy prompt | `kai_parameters`, 448 bytes, parsed clean — it asks for the values rather than proposing straight away, which is the app's own scripted flow and a defensible read of the prompt. F-23 held: `title` "Deploy Payments Service", `required: ["region","change_ticket"]` |
 | follow-up, `intent: deploy-approval` | `kai_approval`, 445 bytes, parsed clean. **Every F-23 rule held**: `heading` "Deploy Payments Service to Production", a non-empty `body` naming the operation as irreversible and echoing the ticket and the operator note, and 2 actions (`approve` / `deny`) |
 
+**Masked fields, measured 2026-08-24** (the form-field-formats round; captures in
+[`docs/superpowers/research/2026-08-24-field-mask/t9-captures/`](../../../docs/superpowers/research/2026-08-24-field-mask/t9-captures/)).
+The hints reach the provider as BYTES — the outgoing OpenRouter body, recorded in
+the dev-server process rather than in the browser, carries `x-kai-format` (enum
+`tel · ssn · credit-card · custom`), `x-kai-mask` and `x-kai-mask-guide` on the
+`kai_parameters` field schema. What each model then does with them differs, and
+the difference is the finding:
+
+| Model | What it declared, unprompted by anything but the schema |
+|---|---|
+| `deepseek/deepseek-v4-flash-0731` | **all three**: `change_ticket` → `custom` + `CHG-####`, `maintenance_start` → `custom` + `##/##/####` + guide `mm/dd/yyyy`, `on_call_contact` → `tel`. Typing `chg4821` per key showed `CHG-4821`, the submit posted `"CHG-4821"` and `"4155550142"` (tel canonicalises to digits), and the model's next turn read both back in the approval body |
+| `openai/gpt-4o-mini` | the date and the phone, **but not the ticket**: it masked `maintenance_window_start_date` (`custom` + `##/##/####` + guide) and typed `on_call_contact_number` as `tel`, and gave the change ticket a `pattern` regex (`^CHG-\d{4}$`) with no format at all — validation where the other model reached for shaping. The field renders as plain text and rejects the value after the fact |
+
+An app that needs the mask cannot pin it: `CardRequireRule` narrows `required`
+and `minItems` and **cannot reach inside a form's `properties` map**, so there is
+no way to require a format on a field the model invents. The system prompt asks
+for it (change 27) and the schema's enum makes the token easy to pick; neither is
+a guarantee, and gpt-4o-mini is what "not a guarantee" looks like. **A kit gap
+worth a finding**, and the same shape as the one D9 hit with action ids.
+
 Both models emit the call with no prose on the `intent`-driven follow-up turns —
 the directive apparently outweighs the system prompt's "say a sentence first", so
 the assistant bubble is a bare card. Not wrong; recorded because it is visible.
@@ -632,6 +652,31 @@ straight at the kit elements again.
     which is why this one had no workaround round at all, and why the honest
     move while it was open was to leave the field broken and say so.
 
+27. **`server/script.ts` + `server/chat.ts` — the parameters form declares its
+    field FORMATS (M1, form-field-formats).** The change-ticket field is where
+    this feature started, and it now carries `"x-kai-format": "custom"` with
+    `"x-kai-mask": "CHG-####"` and a guide, so `chg4821` typed one key at a time
+    reads `CHG-4821` in the field and submits as `"CHG-4821"` — the `custom`
+    semantic is the one whose canonical value keeps its literals. Its `pattern`
+    is untouched and is still the only CHECK: **a mask shapes, it does not
+    validate**, and the two are declared side by side on purpose. Two more
+    fields exercise the rest of the surface: a `maintenance window (start)` with
+    `##/##/####` and the guide `mm/dd/yyyy` — labelled a mask in its own
+    description, because `##/##/####` does not know there is no 13th month — and
+    an `on-call contact` typed `tel`, which brings its own format and submits
+    DIGITS with the separators stripped. Both are optional, and an untouched one
+    submits **nothing**: the guide an empty masked input shows is display text,
+    never a value (probed, because a fabricated maintenance window is the same
+    class of defect as the `CHG-0000` this app already refuses).
+
+    `server/chat.ts`'s `SYSTEM_PROMPT` gains the matching request in real mode —
+    a field with a fixed shape declares it — with the CHG and date patterns named
+    as examples and the shapes-vs-validates line restated. It is a request and
+    not a constraint, for the reason in "What a real model did to this loop":
+    nothing can pin a format onto a field the model authors, and one of the two
+    models tested reached for a `pattern` on the ticket instead. **The kit gap is
+    the same one D9 named** — `CardRequireRule` cannot reach a form card's fields.
+
 Not fixed here: **D1** (remote-card auto-resize under-reports, so the board is
 clipped) is kit-side, in `packages/ui/src/primitives/use-resize-observer.ts` and
 `host-embed.ts`; **N1** (its fix turned the frame into a one-way ratchet) is
@@ -654,6 +699,10 @@ were kit-side too and are the two that got fixed there; see above.
 | `GET /` on the board origin | **200** |
 | real 2-turn smoke, `deepseek/deepseek-v4-flash-0731` (2026-08-22) | `kai_approval` then `kai_checklist`, both parsed clean, F-23 rules held — 1 of 3 follow-up runs produced nothing, see "Real mode" |
 | real 2-turn smoke, `openai/gpt-4o-mini` (2026-08-22) | `kai_parameters` then `kai_approval`, both parsed clean, every F-23 rule held — this is what backs "the alternate" above |
+| `node …/2026-08-24-form-field-formats/t9-captures/t9-mock-mask.mjs` (keyless, 2026-08-24) | **15/15** — `chg4821` typed one key at a time shows `CHG-4821` on the same focused node throughout, `09152026` becomes `09/15/2026` via `pressSequentially`, `4155550142` shows `415-555-0142` with `inputmode="tel"`/`autocomplete="tel"`, the submit posts `CHG-4821` · `09/15/2026` · `4155550142` (digits), the next turn reads them back and the run board records the TYPED ticket |
+| `node …/t9-captures/t9-mock-blank.mjs` (the field nobody touched) | **4/4** — an untouched masked date submits nothing at all; the `mm/dd/yyyy` an empty masked input renders as its `.value` is a guide, and the required-field validator agrees it is empty |
+| `node …/t9-captures/t9-real.mjs deepseek` (REAL, 2026-08-24) | **9/9** — the hints are in the outgoing OpenRouter bytes, the model declared all three kinds itself, `chg4821` typed per key into the model-authored field gave `CHG-4821`, turn 2's request carried the canonical values and the reply read them back |
+| `node …/t9-captures/t9-real.mjs gpt-4o-mini --capture-only` (REAL, 2026-08-24) | **5/5** — same bytes, a form card arrives; it masked the date and typed the phone `tel` but gave the ticket a `pattern` instead of a format (see the table above) |
 | `node .superpowers/sdd/2026-08-21-rung-5-remote-cards/ivp/w11a-verify.mjs` (the D2..D7 + D9/D10/N2 repro, 2026-08-24) | all checks pass; the same script run against the pre-fix files reproduces every defect it asserts. Re-run against the kit that fixes D11/D12, with the app's frame workaround removed: **59/59** |
 | `node …/ivp/w12-verify.mjs` (the D11/D12 regression, 2026-08-24, after the kit fixes) | **13/13** — `CHG-4821` typed one key at a time keeps focus on the SAME input node for all 8 keys, the kit re-creates that node **0** times, `pressSequentially` agrees, the form still submits into the `deploy-approval` turn, and form width == approval width == column width == **768**, with no `ops-*` frame element anywhere in the ancestor chain |
 | the D11 red run, before the kit fix and without the app's (now deleted) frames | **form 285 vs approval 768** in a 768px column, which is exactly the shape the owner saw; `.../ivp/w12-red-prefix.log` |

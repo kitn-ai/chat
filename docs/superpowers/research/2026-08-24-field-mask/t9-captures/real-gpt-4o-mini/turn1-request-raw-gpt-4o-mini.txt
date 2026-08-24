@@ -1,0 +1,7 @@
+POST http://localhost:5182/api/chat
+{"messages":[{"role":"user","content":"Deploy the payments service to production."}]}
+
+---
+
+POST http://localhost:5182/api/chat
+{"messages":[{"role":"user","content":"Deploy the payments service to production."},{"role":"assistant","content":"We need to confirm a few parameters for the deployment of the payments service to production. Please provide the following details:\n\n- Region\n- Change ticket (format: CHG-####)\n- Operator note (if any)\n\nShall I proceed to collect this information?"},{"role":"user","content":"Ask me for the deployment parameters as a form: region, change ticket, maintenance window start date, on-call contact number."}]}

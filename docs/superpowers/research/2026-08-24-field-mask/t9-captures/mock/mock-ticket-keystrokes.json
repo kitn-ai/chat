@@ -1,0 +1,65 @@
+[
+  {
+    "key": "c",
+    "active": {
+      "tag": "input",
+      "id": "f-ticket-3doz57",
+      "value": "CHG-####",
+      "sameNode": true
+    }
+  },
+  {
+    "key": "h",
+    "active": {
+      "tag": "input",
+      "id": "f-ticket-3doz57",
+      "value": "CHG-####",
+      "sameNode": true
+    }
+  },
+  {
+    "key": "g",
+    "active": {
+      "tag": "input",
+      "id": "f-ticket-3doz57",
+      "value": "CHG-####",
+      "sameNode": true
+    }
+  },
+  {
+    "key": "4",
+    "active": {
+      "tag": "input",
+      "id": "f-ticket-3doz57",
+      "value": "CHG-4###",
+      "sameNode": true
+    }
+  },
+  {
+    "key": "8",
+    "active": {
+      "tag": "input",
+      "id": "f-ticket-3doz57",
+      "value": "CHG-48##",
+      "sameNode": true
+    }
+  },
+  {
+    "key": "2",
+    "active": {
+      "tag": "input",
+      "id": "f-ticket-3doz57",
+      "value": "CHG-482#",
+      "sameNode": true
+    }
+  },
+  {
+    "key": "1",
+    "active": {
+      "tag": "input",
+      "id": "f-ticket-3doz57",
+      "value": "CHG-4821",
+      "sameNode": true
+    }
+  }
+]

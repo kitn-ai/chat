@@ -1,0 +1,155 @@
+[
+  {
+    "name": "the request the app SENT UPSTREAM carries the kai_parameters tool",
+    "pass": true,
+    "detail": {
+      "tools": [
+        "kai_approval",
+        "kai_parameters",
+        "kai_options",
+        "kai_checklist"
+      ],
+      "model": "deepseek/deepseek-v4-flash-0731",
+      "upstreamCalls": 4
+    }
+  },
+  {
+    "name": "x-kai-format / x-kai-mask / x-kai-mask-guide are present in the REQUEST BYTES",
+    "pass": true,
+    "detail": {
+      "format": true,
+      "mask": true,
+      "guide": true,
+      "bytes": 12720
+    }
+  },
+  {
+    "name": "and they sit on the FIELD schema of the form tool, with x-kai-format enum-constrained",
+    "pass": true,
+    "detail": {
+      "fieldKeys": [
+        "x-kai-format",
+        "x-kai-mask",
+        "x-kai-mask-guide"
+      ],
+      "enum": [
+        "tel",
+        "ssn",
+        "credit-card",
+        "custom"
+      ]
+    }
+  },
+  {
+    "name": "the model answered with a form card",
+    "pass": true,
+    "detail": {
+      "title": "Payments deployment parameters",
+      "fields": [
+        "region",
+        "change_ticket",
+        "maintenance_start",
+        "on_call_contact"
+      ],
+      "attempts": 2
+    }
+  },
+  {
+    "name": "what the model did with the hints",
+    "observation": {
+      "fieldsDeclaringAMask": [
+        {
+          "field": "change_ticket",
+          "format": "custom",
+          "mask": "CHG-####",
+          "guide": "CHG-####"
+        },
+        {
+          "field": "maintenance_start",
+          "format": "custom",
+          "mask": "##/##/####",
+          "guide": "mm/dd/yyyy"
+        },
+        {
+          "field": "on_call_contact",
+          "format": "tel"
+        }
+      ],
+      "allFields": [
+        {
+          "field": "region",
+          "title": "Region",
+          "format": null,
+          "mask": null,
+          "pattern": null
+        },
+        {
+          "field": "change_ticket",
+          "title": "Change ticket",
+          "format": "custom",
+          "mask": "CHG-####",
+          "pattern": null
+        },
+        {
+          "field": "maintenance_start",
+          "title": "Maintenance window start",
+          "format": "custom",
+          "mask": "##/##/####",
+          "pattern": null
+        },
+        {
+          "field": "on_call_contact",
+          "title": "On-call contact",
+          "format": "tel",
+          "mask": null,
+          "pattern": null
+        }
+      ]
+    }
+  },
+  {
+    "name": "a change-ticket field exists on the card the model authored",
+    "pass": true,
+    "detail": {
+      "ticketKey": "change_ticket",
+      "ids": [
+        "f-region-iarg1z",
+        "f-change_ticket-vs6gf3",
+        "f-maintenance_start-wdn0lg",
+        "f-on_call_contact-lbi773"
+      ]
+    }
+  },
+  {
+    "name": "typing `chg4821` per key into the model-authored ticket field yields CHG-4821",
+    "pass": true,
+    "detail": {
+      "value": "CHG-4821",
+      "focused": {
+        "tag": "input",
+        "id": "f-change_ticket-vs6gf3",
+        "value": "CHG-4821"
+      }
+    }
+  },
+  {
+    "name": "turn 2's request carries the CANONICAL masked value",
+    "pass": true,
+    "detail": {
+      "params": {
+        "region": "us-east-1",
+        "change_ticket": "CHG-4821",
+        "maintenance_start": "09/15/2026",
+        "on_call_contact": "4155550142"
+      },
+      "intent": "deploy-approval"
+    }
+  },
+  {
+    "name": "the model's reply reads CHG-4821 back",
+    "pass": true,
+    "detail": {
+      "tail": " service to production Roll out the payments service to production with the supplied parameters: region us-east-1, change ticket CHG-4821, maintenance window 09/15/2026, on-call 4155550142. Irreversible: this takes the new version live. Rolling back is a separate forward deploy, not an automatic undo. Runbook escalation to on-call during the window. Deploy now Cancel Deploy the payments service to production Restart the queue workers Rotate the payments provider API key What is on the run board?"
+    }
+  }
+]

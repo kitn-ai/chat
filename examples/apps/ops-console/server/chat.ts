@@ -201,6 +201,18 @@ const SYSTEM_PROMPT = [
   // D9/N3: the enum on `actions[].id` is the guarantee; this is the explanation.
   // The list is NOT restated here — it differs per turn (N3), and a second copy
   // in prose would be the one that goes stale and contradicts the schema.
+  // M1 (form-field-formats): the hints are on the projected `kai_parameters` schema
+  // already — `x-kai-format` carries an enum, `x-kai-mask` the token string — but a
+  // tool definition is an offer. `CardRequireRule` narrows `required`/`minItems` only
+  // and cannot reach INSIDE a form's `properties` map, so there is no way to pin a
+  // format onto a field the model authors; this is the request, and the app checking
+  // the envelope when it arrives is the only guarantee.
+  '- A `kai_parameters` field whose value has a FIXED SHAPE declares it, so the operator is',
+  '  shaped as they type instead of corrected afterwards: `"x-kai-format": "custom"` with an',
+  '  `"x-kai-mask"` (`#` a digit, `@` a letter or digit, anything else a literal) — a change',
+  '  ticket is `CHG-####`, a date is `##/##/####` with `"x-kai-mask-guide": "mm/dd/yyyy"` — or',
+  '  `"x-kai-format": "tel"` for a phone number, which brings its own. A mask SHAPES and does',
+  '  not validate: if the value must also be checked, say so in the field description.',
   "- An approval card's action ids are closed: use only the values the tool schema's `enum`",
   '  offers on THIS call. They are what the console can carry out, and they are narrowed to',
   '  what the current turn is about. Label them however the situation reads ("Deploy now",',

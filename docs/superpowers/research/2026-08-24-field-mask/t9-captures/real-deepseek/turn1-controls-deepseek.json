@@ -1,0 +1,30 @@
+[
+  {
+    "id": "f-region-iarg1z",
+    "tag": "input",
+    "value": "",
+    "inputmode": null,
+    "autocomplete": null
+  },
+  {
+    "id": "f-change_ticket-vs6gf3",
+    "tag": "input",
+    "value": "CHG-####",
+    "inputmode": null,
+    "autocomplete": null
+  },
+  {
+    "id": "f-maintenance_start-wdn0lg",
+    "tag": "input",
+    "value": "mm/dd/yyyy",
+    "inputmode": null,
+    "autocomplete": null
+  },
+  {
+    "id": "f-on_call_contact-lbi773",
+    "tag": "input",
+    "value": "",
+    "inputmode": "tel",
+    "autocomplete": "tel"
+  }
+]
