@@ -1,0 +1,13 @@
+
+Running 8 tests using 1 worker
+
+  ✓  1 [chromium] › packages/ui/tests/e2e/input-mask-ivp.spec.ts:167:3 › input-mask IVP (real Chromium) › 1. pressSequentially: chg4821 -> CHG-4821, per key, focus + node identity held (1.3s)
+  ✓  2 [chromium] › packages/ui/tests/e2e/input-mask-ivp.spec.ts:216:3 › input-mask IVP (real Chromium) › 2. typing at capacity is refused and the value is unchanged (real cancelation) (1.2s)
+  ✓  3 [chromium] › packages/ui/tests/e2e/input-mask-ivp.spec.ts:247:3 › input-mask IVP (real Chromium) › 3. paste V-123 into V-*** keeps every character (§5.7) -- naive normalizer reddens it (1.2s)
+  ✓  4 [chromium] › packages/ui/tests/e2e/input-mask-ivp.spec.ts:303:3 › input-mask IVP (real Chromium) › 4. caret: literal boundary, mid-value insert, selection replace, backspace across a separator (1.2s)
+  ✓  5 [chromium] › packages/ui/tests/e2e/input-mask-ivp.spec.ts:351:3 › input-mask IVP (real Chromium) › 5. IME: a real composition survives intact; a mid-composition write lands on compositionend (1.2s)
+  ✓  6 [chromium] › packages/ui/tests/e2e/input-mask-ivp.spec.ts:398:3 › input-mask IVP (real Chromium) › 6. undo restores the prior text and caret; the diff-fallback caret is measured, not asserted away (1.2s)
+  ✓  7 [chromium] › packages/ui/tests/e2e/input-mask-ivp.spec.ts:491:3 › input-mask IVP (real Chromium) › 7. copy policy: formatted vs canonical on a real select-all + copy (1.2s)
+  ✓  8 [chromium] › packages/ui/tests/e2e/input-mask-ivp.spec.ts:530:3 › input-mask IVP (real Chromium) › 8. MaskedFormats story: the date field masks in the real app composition (1.2s)
+
+  8 passed (10.2s)

@@ -1,0 +1,10 @@
+{
+  "what": "The diff-fallback undo caret, measured in real Chromium (task-3 deferred this here).",
+  "setup": "format '###-###-####', typed 5551234567 (caret 12). The PAGE then wrote el.value='555-123-45' and dispatched `input` — a browser-driven edit the masker never intercepted, so it went through the §5.1 diff/reconcile fallback. Then Ctrl+Z.",
+  "preEditCaret": 12,
+  "caretUserHadWhenTheBrowserEdited": 12,
+  "textAfterUndo": "555-123-4567",
+  "caretAfterUndo": 10,
+  "verdict": "REPRODUCES. The documented imprecision is real: the undo entry stored the POST-edit caret (10) against the PRE-edit text. Text is exact; the caret is merely plausible and is in range.",
+  "recorded_not_failed": "Per task-3-report.md's deferral and task-3-review.md's MINOR (undo caret fidelity on the diff-fallback path). The spec asserts the text exactly and asserts only in-range for the caret."
+}
