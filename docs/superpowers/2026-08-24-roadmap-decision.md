@@ -91,7 +91,8 @@ compiled web component. The interior stays pure Solid so there are no registry c
 emit source AND binary. That architecture is owner-ratified from 2026-08-20 and recorded in the
 `builder-compile-to-wc` memory, which is why "raw Solid then compile" is not a separate decision on
 this list: it is this workstream's settled internals, and the only thing outstanding about it is
-the spec that writes it down.
+the spec that writes it down. Plugins extend the builder's palette (a bundle registering elements
+plus an element-meta-shaped manifest) so the catalog grows without rebuilding the builder.
 
 **What this is NOT (owner clarification, binding).** The compile-to-WC output is **additive**: an
 output format for the builder's finished compositions, aimed at no-bundler consumers, free of
@@ -124,6 +125,24 @@ or hold it until workstream 1 lands. Second half of the same decision: scope. Do
 target the whole app surface, or only the card/artifact seam the two inventories measured?
 
 ### Workstream 3 (downstream): the harness layer around the builder
+
+**Thesis: the open, safe, framework-neutral plugin harness.** A runtime where providers, tools,
+and UI panels are plugins around the kit's components, differentiated from deepseek-harness on
+three structural axes: (1) OPEN where theirs is closed: the plugin-UI contract is web components,
+so plugins are framework-free by construction (no shared React runtime, no version coupling; their
+contract accepts React components specifically); (2) SAFE where theirs is not: a two-tier trust
+contract falls out of what we already ship: trusted plugin = in-page custom element, untrusted =
+kai-remote iframe with the card contract (dsh runs third-party plugin UI with full DOM access in
+a shell-privileged app); (3) LOUD where theirs is silent: cordis-style dependency-aware lifecycle
+with decide-loudly semantics (an unmet dependency reports, never waits forever). Already
+half-built: element-meta.json is the plugin-manifest shape; the ops-console app-declared card
+types were a working miniature (registry + schema + renderer). Scope honesty (owner clarification):
+"not better" applies to the agent EXECUTION machinery, not models: the loop, sandboxed code
+execution, tool execution, session persistence, permissioning, which is most of dsh's ~48 packages
+and host-side. Models are already a plugin in dsh and we stay model-agnostic regardless. Strategy:
+their MIT seams are a syllabus, not a wall; study the loop/sandbox/session designs as references,
+lead with the UI contract, keep the harness v1 loop thin (or interop) rather than claiming to
+out-build four years of runtime machinery.
 
 **What it is.** The harness discussion the owner parked with an explicit request to be reminded
 (memory `harness-layer-discussion`, starting point `integrations/harnesses.mdx`). It is explicitly
