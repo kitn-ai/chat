@@ -136,6 +136,10 @@ it here is the reminder the owner asked for, not a proposal to start it.
 **DECISION D-3.** Confirm the harness stays parked until the builder spec exists, or name what
 about it is decidable now.
 
+### Solid v2 migration
+
+**Solid v2 migration (owner-ratified 2026-08-24, decided).** Solid 2.0 is RC with a frozen API (research memo: `.superpowers/sdd/2026-08-24-form-field-formats/solid-v2-research.md`; posture memory: `solid-v2-posture`). Staged: (1) immediately after the form-field-formats feature lands, run the spike. One element ported to `@solidjs/element@2.0.0-rc.1` plus the input-node-identity test, answering the undocumented Show-node-preservation question that the K-D12a focus fix and the masker attachment depend on; (2) spike-green, open a PURELY MECHANICAL v2 migration branch (merge/omit/onSettled renames, two-phase createEffect, flush strategy for declarative tests, no feature work on the branch); main stays 1.x-shippable; merge at v2 stable or sustained full-gate green; (3) the compile-to-WC builder spec targets v2 unconditionally (render-root event delegation with per-shadow-root listeners removes the composed:true boundary pain). Rationale: frozen RC API removes the sweep-twice cost; v2 eliminates trap classes this repo keeps paying for.
+
 ## 3. The kit-debt lane (parallel to the spine)
 
 Findings-driven fixes. None is scheduled; none blocks the spine; each can be threaded in by a
@@ -228,6 +232,7 @@ that any spare seat can pick up without further approval, or name a different or
   findings (F-01 to F-42, two recorded non-findings) is arguably that corpus.
   **DECISION D-9: is the parking condition met? Unpark the harness and grade against the five ladder
   apps, keep it parked until the builder ships, or retire it?**
+- **Bun 1.4 webview spike:** input-mask suite on WKWebView plus harness evaluation (no shadow piercing, type() fires no keydown/keyup, no iframe API; recorded 2026-08-24; isTrusted: true synthesized input is the one unique capability). Banked pending implementation.
 
 ## 5. Recommended sequence
 
@@ -267,6 +272,9 @@ Answer in order. Each is one line.
 - [ ] **D-8. Builder session directory.** Standalone, or folded into the builder spec?
 - [ ] **D-9. Acceptance harness.** Parking condition met? Unpark and grade the five ladder apps,
       keep parked until the builder ships, or retire?
+- ~~**D-10. Solid v2 migration.** Owner-ratified 2026-08-24. Staged: spike after form-field-formats,
+      mechanical branch on spike-green, merge at v2 stable or sustained full-gate green (§2.5).
+      Builder spec targets v2 unconditionally.~~ Decided.
 
 ## Sources
 
