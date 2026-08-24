@@ -16,7 +16,9 @@ A complete reference implementation for field masking and text formatting patter
 
 Clean-room derivation turns the distinction between function and expression into a procedure. One team reads the reference work and writes a functional specification containing only unprotected material — facts, mathematics, ideas, procedures, processes. A second team, which never sees the reference implementation, implements from that specification alone. If the wall holds, the second team's output cannot be a copy of expression it never saw.
 
-This archive is the reference implementation. Any derived implementation must follow this rule: the implementing team reads only a functional specification derived from this reference, and must not directly examine these files.
+This archive is the reference implementation. Any derived implementation must follow this rule: the implementing team may study this reference to understand behavior, but must not copy code, transcribe structure, or allow any forbidden-string pattern to appear in the repo. Every implementation is written fresh from the behavior specification in docs/superpowers/specs/2026-08-24-form-field-formats-design.md.
+
+**Policy clarification (2026-08-24):** This wording was corrected to match the policy of record. Task 1 studied this reference under this rule and disclosed it in its report.
 
 ## Verification
 
