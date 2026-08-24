@@ -949,7 +949,7 @@ export const Image = /*#__PURE__*/ createWebComponent<ImageProps>(
 export interface InputProps extends WebComponentProps {
   /** Native input type: `text` (default) · `email` · `url` · `search` · `tel` · `password` · `number`. Single-line only. */
   type?: string;
-  /** Controlled value. Settable and reflected to the `value` attribute. `el.value = 'hi'` drives it (no event); typing updates it and fires `kai-input`. Read `el.value` for live state. */
+  /** Controlled value, and always the CANONICAL one when a mask is active: digits for `tel` / `ssn` / `credit-card`, the formatted text for `custom` (spec §4). Settable and reflected to the `value` attribute. `el.value = '5551234567'` drives it (no event) and is re-fitted to the mask on the way in, so the field shows `555-123-4567`. Read `el.value` for live state; the formatted text rides along on every `kai-input` / `kai-change` detail as `formattedValue`. */
   value?: string;
   /** Placeholder shown when empty. */
   placeholder?: string;
@@ -975,16 +975,28 @@ export interface InputProps extends WebComponentProps {
   autocomplete?: string;
   /** Virtual-keyboard hint forwarded to the inner input (e.g. `numeric`, `email`). */
   inputmode?: string;
-  /** The value was committed (blur). */
-  onChange?: (event: CustomEvent<{ value: string }>) => void;
-  /** The value changed per keystroke. */
-  onInput?: (event: CustomEvent<{ value: string }>) => void;
+  /** Mask pattern: `#` a digit, `@` a letter or digit, `*` an obscurable letter or digit, and every other character a positional literal (`@@@-####` → `CHG-4821`). The literal `default` is the opt-in sentinel: it resolves to the default format of `semantic` (`tel` → `###-###-####`). A bare `semantic` never starts masking on its own, so an opt-in token is what turns tier 2 on. */
+  format?: string;
+  /** Placeholder guide shown at unfilled positions, aligned position for position with `format`: `mm/dd/yyyy` against `##/##/####`. Spaces are a valid guide character, so a guide of blanks and separators is how a phone field shows its shape without showing letters. Without a guide the field shows only up to the last typed character. A guide is a visual aid, never an accessible name: keep the `hint` text as well. */
+  guide?: string;
+  /** Semantic field type: `tel` · `ssn` · `credit-card` · `custom`. On its own it sets `inputmode` / `autocomplete` / `spellcheck` / `autocorrect` / `autocapitalize` and decides the canonical value; it never starts masking by itself. */
+  semantic?: "credit-card" | "custom" | "ssn" | "tel";
+  /** Case folding applied to typed and pasted text: `preserve` (default) · `upper` · `lower`. Attribute: `case-mode`. */
+  caseMode?: "preserve" | "upper" | "lower";
+  /** What a copy or cut of a masked field puts on the clipboard: `canonical` (default) · `formatted` · `obscured` · `blocked`. Attribute: `copy-policy`. */
+  copyPolicy?: "formatted" | "canonical" | "obscured" | "blocked";
+  /** The value was committed (blur). Same detail shape as `kai-input`. */
+  onChange?: (event: CustomEvent<{ value: string; formattedValue: string }>) => void;
+  /** The value changed per keystroke. `value` is the canonical value (what a backend wants); `formattedValue` is the text on screen. With no mask the two are equal. */
+  onInput?: (event: CustomEvent<{ value: string; formattedValue: string }>) => void;
+  /** A mask refused, or partly refused, some content. The reasons are `full` (no free position left), `wrong-class` (a letter into a digit position), `over-capacity` (a paste longer than the mask holds; what fits was kept), and `format-change-clipped` (the `format` changed under a value that no longer fits). `data` is the content that was refused. The first three are USER-INPUT errors, and are the ones worth announcing in a polite live region. `format-change-clipped` is not one: it follows the app changing its own configuration, so it reports and nothing more. None of the four touches validity, so `invalid` and `error` stay the consumer decision. */
+  onInputRejected?: (event: CustomEvent<{ reason: "full" | "wrong-class" | "over-capacity" | "format-change-clipped"; data: string }>) => void;
 }
 
 export const Input = /*#__PURE__*/ createWebComponent<InputProps>(
   'kai-input',
-  ["theme","type","value","placeholder","label","hint","error","size","disabled","readonly","required","invalid","name","autocomplete","inputmode"],
-  { onChange: 'kai-change', onInput: 'kai-input' },
+  ["theme","type","value","placeholder","label","hint","error","size","disabled","readonly","required","invalid","name","autocomplete","inputmode","format","guide","semantic","caseMode","copyPolicy"],
+  { onChange: 'kai-change', onInput: 'kai-input', onInputRejected: 'kai-input-rejected' },
   () => import('@kitn.ai/ui/elements/input'),
 );
 

@@ -2384,15 +2384,48 @@
           "scalar": true,
           "optional": true,
           "fn": false
+        },
+        {
+          "name": "format",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "guide",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "semantic",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "caseMode",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "copyPolicy",
+          "scalar": true,
+          "optional": true,
+          "fn": false
         }
       ],
       "events": [
         "kai-change",
-        "kai-input"
+        "kai-input",
+        "kai-input-rejected"
       ],
       "methods": [
         "focus",
         "select",
+        "getRawValue",
+        "getFormattedValue",
         "clear"
       ],
       "parts": [

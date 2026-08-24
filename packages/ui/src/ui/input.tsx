@@ -67,8 +67,14 @@ export interface InputProps extends Omit<JSX.InputHTMLAttributes<HTMLInputElemen
   onMaskReject?: (detail: { reason: InputMaskRejectReason; data: string }) => void;
 }
 
-/** The `format` value that means: resolve the default format of the semantic type. */
-const DEFAULT_FORMAT = 'default';
+/** The `format` value that means: resolve the default format of the semantic type.
+ *
+ *  EXPORTED because `src/elements/input.tsx` has to recognise the same sentinel when it
+ *  resolves a seeded value ahead of the masker, and a restated literal there would fail
+ *  SILENTLY if this string ever changed: `format === 'default'` would simply go false and
+ *  `compileMask('default')` would compile seven literals, garbling the seed with no error
+ *  anywhere. One exported constant instead of two copies of a magic string. */
+export const DEFAULT_FORMAT = 'default';
 
 // The single source of the field shell styling — lifted verbatim from the
 // `inputBase` constant that used to live in `src/components/form-widgets.tsx`.
