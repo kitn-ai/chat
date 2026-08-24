@@ -1343,10 +1343,16 @@ async function routeCheck(scaffold) {
     // (`toChatErrorResponse`) without the 405 guard means a bare GET still
     // reaches `request.json()`. Zero matches is a hard failure below, never a
     // skip.
-    if (!code.includes('toChatErrorResponse') || !code.includes('405')) {
+    // The METHOD guard, not the literal `405`. Grepping for the number passed on a
+    // branch that could never execute: every route emitted it, and on the 27 Vite
+    // cells the middleware hard-coded `method: 'POST'` when it built the Request, so
+    // a bare GET arrived as an empty POST and came back 400. Assert the guard's
+    // CONDITION, and assert per host below that the real method reaches it.
+    if (!code.includes('toChatErrorResponse') || !/\.method\s*!==\s*'POST'/.test(code)) {
       guardFailures.push(
         `${c.label}: the emitted route lacks the F-10 body guards ` +
-          `(toChatErrorResponse / 405) — a bare GET or malformed body reaches request.json() unguarded`,
+          `(toChatErrorResponse / a request.method !== 'POST' refusal) — a bare GET or malformed ` +
+          `body reaches request.json() unguarded`,
       );
     } else {
       guardedRoutes++;
@@ -1354,14 +1360,34 @@ async function routeCheck(scaffold) {
 
     // The Vite dev-server bridge is where F-10 actually killed a server: an
     // unhandled rejection in an async connect middleware EXITS Node 22. Its
-    // `chatHandler` call must sit inside a try/catch.
+    // `chatHandler` call must sit inside a try/catch — and, because it builds the
+    // `Request` itself, it is also the one host that can make the 405 guard above
+    // unreachable. Three structural facts, none of which tsc can see.
     if (runtime === 'Vite dev-server middleware (Node)') {
       viteMiddlewareCells++;
-      const wrapped = /try\s*\{[\s\S]*?await chatHandler\([\s\S]*?\}\s*catch\s*\{/.test(code);
+      const wrapped = /try\s*\{[\s\S]*?await chatHandler\([\s\S]*?\}\s*catch\s*\(/.test(code);
       if (!wrapped) {
         guardFailures.push(
-          `${c.label}: the Vite middleware does not wrap chatHandler in try/catch — ` +
-            'a handler rejection is an unhandled rejection and can EXIT the dev server',
+          `${c.label}: the Vite middleware does not wrap chatHandler in a try/catch with a BOUND ` +
+            'error — a handler rejection is an unhandled rejection and can EXIT the dev server, ' +
+            'and an unbound catch throws the diagnosis away',
+        );
+      }
+      if (!/console\.error\(/.test(code)) {
+        guardFailures.push(
+          `${c.label}: the Vite middleware returns a generic 500 without logging the error — ` +
+            'decide loudly: the browser gets eight words, the terminal must get the stack',
+        );
+      }
+      // Does the request's own method reach `readChatRequest`? A literal in the
+      // Request init means it never can.
+      const init = /new Request\(([\s\S]*?)\n\s*\);/.exec(code)?.[1] ?? '';
+      const forwards =
+        /req\.method/.test(code) && /\bmethod\s*(?:,|:\s*(?!['"`])[^,\n]*\bmethod\b)/.test(init);
+      if (!forwards) {
+        guardFailures.push(
+          `${c.label}: the Vite middleware does not forward req.method into the Request it builds — ` +
+            "the emitted 405 guard is dead code on this host (a bare GET arrives as an empty POST and 400s)",
         );
       }
     }
@@ -1395,8 +1421,9 @@ async function routeCheck(scaffold) {
     fail(`${guardFailures.length} emitted route(s) lost the F-10 guards (bare GET / malformed body).`);
   }
   console.log(
-    `  ✓ ${guardedRoutes} emitted routes carry the F-10 body guards (toChatErrorResponse + 405); ` +
-      `${viteMiddlewareCells} Vite middleware cell(s) wrap chatHandler in try/catch`,
+    `  ✓ ${guardedRoutes} emitted routes carry the F-10 body guards (toChatErrorResponse + a non-POST refusal); ` +
+      `${viteMiddlewareCells} Vite middleware cell(s) wrap chatHandler in a bound try/catch, log the error, ` +
+      `and forward req.method so the 405 guard is reachable`,
   );
 
   await assertRoutesAreSurfaceIndependent(scaffold, reference);
