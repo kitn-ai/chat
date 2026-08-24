@@ -806,6 +806,49 @@ describe('caret discipline: the [floor, frontier] window', () => {
     expect(el.selectionStart, 'frontier is past the literal that follows raw 3').toBe(4);
   });
 
+  // Every test above mounts into the flat document, where `document.activeElement` IS the
+  // input -- and so did the browser IVP, which drives a Storybook story. That is the one
+  // arrangement no `kai-*` element ships in: a real consumer's input sits inside at least
+  // one shadow root, `document.activeElement` retargets to the outermost HOST, and the
+  // whole clamp early-returned on a guard that asked the document instead of the field's
+  // own root. It was dead in the ops-console app (two shadow roots deep) while green here
+  // and green in Chromium. These two mount the same field through a shadow root so the
+  // guard is exercised where it actually failed.
+  function mountInShadow(options: InputMaskOptions): { el: HTMLInputElement; host: HTMLElement } {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const root = host.attachShadow({ mode: 'open' });
+    const el = document.createElement('input');
+    root.append(el);
+    attached.push(createInputMask(el, options));
+    return { el, host };
+  }
+
+  test('the clamp holds for a field inside a shadow root (document.activeElement retargets)', () => {
+    const { el } = mountInShadow({ ...TICKET, initialValue: '4821' });
+    el.focus();
+    expect(el.getRootNode(), 'precondition: the field really is in a shadow root').not.toBe(document);
+    expect(
+      document.activeElement,
+      'precondition: the document reports the HOST, which is why the old guard failed',
+    ).not.toBe(el);
+
+    caret(el, 0); // Home, or a click into `CHG-`
+    selectionChange(el);
+    expect(el.selectionStart).toBe(4);
+    expect(el.selectionEnd).toBe(4);
+  });
+
+  test('a shadow-hosted field still stands down when something else holds focus', () => {
+    const other = document.createElement('input');
+    document.body.append(other);
+    const { el } = mountInShadow({ ...TICKET, initialValue: '4821' });
+    other.focus();
+    caret(el, 0);
+    selectionChange(el);
+    expect(el.selectionStart, 'not focused: nothing to clamp').toBe(0);
+  });
+
   test('the clamp stands down when the field is not the focused element', () => {
     const other = document.createElement('input');
     document.body.append(other);

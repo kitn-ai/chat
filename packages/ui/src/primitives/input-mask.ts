@@ -662,9 +662,35 @@ export function createInputMask(el: HTMLInputElement, options: InputMaskOptions)
    *  inside the literal prefix and never get a chance to be corrected. Every trigger is the
    *  same idempotent call that early-returns when the selection is already legal, so firing
    *  several times for one gesture costs a comparison and changes nothing. */
+  /** "Is the caret in THIS field?" -- asked of the element's own root, never of the
+   *  document.
+   *
+   *  `document.activeElement` RETARGETS: for a focused node inside a shadow tree it reports
+   *  the OUTERMOST host, so on any element this kit actually ships the answer is `<kai-chat>`
+   *  and never the input. `el.ownerDocument.activeElement !== el` was therefore true on every
+   *  trigger, and the whole clamp early-returned -- the caret discipline was dead in the
+   *  ops-console app (input at `kai-chat` shadow -> card -> `kai-form` shadow) while passing
+   *  in Storybook, whose story mounts the input into a FLAT document where the two agree.
+   *  Measured in that app on the dist build (m11-diagnose.mjs), focusing the `CHG-####`
+   *  field:
+   *
+   *    el:focus            docActiveIsEl=false  docActive=kai-chat  rootActiveIsEl=true
+   *    el:mouseup          docActiveIsEl=false  docActive=kai-chat  rootActiveIsEl=true
+   *    doc:selectionchange docActiveIsEl=false  docActive=kai-chat  rootActiveIsEl=true
+   *
+   *  All four triggers FIRE at the right offsets through two shadow roots -- the trigger
+   *  table above holds unchanged; it was only this guard that was wrong. `getRootNode()` is
+   *  read per call rather than captured, because the element can be moved between roots, and
+   *  it degrades correctly: in a flat document the root IS the document, and while detached
+   *  the root is a fragment with no `activeElement`, which reads as not focused. */
+  function isFocused(): boolean {
+    const root = el.getRootNode() as Document | ShadowRoot;
+    return root.activeElement === el;
+  }
+
   function clampSelection(): void {
     if (detached || composing || settingSelection) return;
-    if (el.ownerDocument.activeElement !== el) return;
+    if (!isFocused()) return;
     const start = el.selectionStart;
     const end = el.selectionEnd;
     if (start === null || end === null) return;
