@@ -76,6 +76,10 @@ Legend: ✅ shipped · 🔬 spike (this branch) · 📋 proposed · 🧩 primiti
 🧩 **Hooks / config:** `useAutoResize`, `useStickToBottom`, `useTextStream`, `useVoiceRecorder`, `ChatConfig`/`useChatConfig`, `configureCodeHighlighting`, `proseClass`/`textClass`, `cn`.
 🧩 **Generic UI primitives:** `Button`, `Avatar`, `Tooltip`, `HoverCard`, `Collapsible`, `ScrollArea`, `Dropdown`, `Textarea`, `Badge`, `Separator`, `Resizable*`, `Skeleton`, `Dialog`. (A host framework already has these; wrapping them is surface area for no value.)
 
+> **2026-08-24 — `Dropdown` is now element-ized as `<kai-dropdown>`, against the ruling above.** A React build test hit the gap: with no facade there is no generated wrapper, so the app imported the SolidJS component under an alias cast and mount-gated it against `getNextContextId` to keep it off the server. That is the cost the ruling did not price in: "the host framework already has these" holds for the WIDGET, not for the kit's own composition surface, which a consumer can only reach through an element. The rest of the list stands; this is one overturned entry, not a new policy.
+>
+> Honest open question, not resolved here: `<kai-popover>` already gives you a trigger plus arbitrary slotted content, so the real gap may have been menu SEMANTICS (`role="menu"`, roving focus, typeahead) rather than a missing element. If that is right, the two should probably converge rather than both grow.
+
 ### Folded / context-bound
 
 ⤵️ `MessageContent`/`MessageAvatar`/`MessageActions`/`MessageCopyButton` → inside `<kai-message>`. `CodeBlockCode`/`Group` → inside `<kai-markdown>`/`<kai-code-block>`. `ConversationItem` → inside `<kai-conversations>`. `ScrollButton`, `ChatContainerContent`/`ScrollAnchor` → context-bound, live inside `<kai-chat>`/`<kai-container>` (a standalone `<kai-scroll-button>` can't see another element's scroll context).

@@ -37,6 +37,63 @@ const useDropdown = () => {
 // a parent's querySelectorAll scoped to its own menu never reaches sub items.
 const ITEM_SELECTOR = '[role="menuitem"]:not([aria-disabled="true"]), [role="menuitemcheckbox"]:not([aria-disabled="true"]), [role="menuitemradio"]:not([aria-disabled="true"])';
 
+/**
+ * The roving-focus set, in FLAT-TREE order.
+ *
+ * ★ NOT `querySelectorAll`, and the difference is the whole point: a `<slot>` in the
+ * shadow tree contains NONE of the light-DOM nodes it projects, so a plain query
+ * returns zero items for any facade whose rows are SLOTTED (`<kai-dropdown>`) and
+ * ArrowUp/Down, Home/End and typeahead all reach nothing. The items-tree facades
+ * (`kai-menu`, `kai-model-switcher`, `kai-scope-picker`) render their rows INTO the
+ * shadow tree, so both spellings agree for them — which is exactly why this went
+ * unnoticed until a slotted menu body existed.
+ *
+ * Same class as `hasFocusableChild` in ./hover-card.tsx, which asks the boolean
+ * version of this question. This one needs the ORDER as well, so it walks the tree
+ * and splices each slot's assigned elements in AT THE SLOT'S POSITION rather than
+ * appending them; a menu may mix rendered and slotted rows. `flatten: true` follows
+ * a slot assigned to another slot.
+ *
+ * Scope is unchanged: submenu content is portaled to a SIBLING node, so a parent's
+ * walk still never reaches sub items.
+ */
+function menuItems(root: HTMLElement | undefined): HTMLElement[] {
+  if (!root) return [];
+  const out: HTMLElement[] = [];
+  const collect = (el: Element): void => {
+    if (el.matches(ITEM_SELECTOR)) out.push(el as HTMLElement);
+    for (const child of Array.from(el.children)) visit(child);
+  };
+  const visit = (el: Element): void => {
+    if (el.localName === 'slot') {
+      for (const assigned of (el as HTMLSlotElement).assignedElements({ flatten: true })) collect(assigned);
+      return;
+    }
+    collect(el);
+  };
+  for (const child of Array.from(root.children)) visit(child);
+  return out;
+}
+
+/** The first roving-focus item, in flat-tree order. Replaces
+ *  `querySelector(ITEM_SELECTOR)` for the reason `menuItems` replaces the `All`. */
+const firstMenuItem = (root: HTMLElement | undefined): HTMLElement | undefined => menuItems(root)[0];
+
+/**
+ * The focused item, resolved across BOTH trees.
+ *
+ * Inside a Shadow DOM `document.activeElement` returns the HOST rather than the
+ * focused menu item, so the menu's own root node is asked first. But a SLOTTED row
+ * lives in the LIGHT DOM: focus is then outside the shadow tree, that root reports
+ * null, and the document's answer is the real one. Asking only the shadow root would
+ * leave `currentIndex()` at -1 for every slotted row, so ArrowDown would restart at
+ * the top instead of advancing.
+ */
+function activeMenuItem(root: HTMLElement | undefined): Element | null {
+  const tree = root?.getRootNode() as Document | ShadowRoot | undefined;
+  return (tree?.activeElement ?? document.activeElement) as Element | null;
+}
+
 /** Imperative open controller, handed to a parent (e.g. the kai-menu facade) via
  *  `controllerRef` so it can drive/observe the Dropdown's open state. */
 export interface DropdownController { open: Accessor<boolean>; setOpen: (v: boolean) => void; }
@@ -103,8 +160,8 @@ export function Dropdown(props: DropdownProps) {
       // attempt focus now and re-assert in the menu ref's microtask so it lands
       // once the node exists. Skip disabled items (roving-focus contract).
       if (opts?.viaKeyboard) {
-        queueMicrotask(() => menu()?.querySelector<HTMLElement>(ITEM_SELECTOR)?.focus());
-        menu()?.querySelector<HTMLElement>(ITEM_SELECTOR)?.focus();
+        queueMicrotask(() => firstMenuItem(menu())?.focus());
+        firstMenuItem(menu())?.focus();
       }
     } else if (opts?.returnFocus !== false) {
       // Closing via keyboard/select: return focus to the trigger. The menu
@@ -179,23 +236,14 @@ export function DropdownContent(props: DropdownContentProps) {
     refs: () => [ctx.trigger(), ctx.menu(), ...ctx.subMenus()],
   });
 
-  const items = () => Array.from(ctx.menu()?.querySelectorAll<HTMLElement>(ITEM_SELECTOR) ?? []);
+  const items = () => menuItems(ctx.menu());
   const focusIndex = (i: number) => {
     const list = items();
     if (!list.length) return;
     const idx = ((i % list.length) + list.length) % list.length;
     list[idx].focus();
   };
-  // Resolve the focused item via the menu's own root node. Inside a Shadow DOM
-  // (every kitn-* element), `document.activeElement` returns the host element,
-  // not the focused menu item, which would break ArrowUp/Down roving focus.
-  // `getRootNode().activeElement` correctly returns the active node within the
-  // same tree (ShadowRoot or Document).
-  const activeItem = () => {
-    const root = ctx.menu()?.getRootNode() as Document | ShadowRoot | undefined;
-    return (root?.activeElement ?? document.activeElement) as Element | null;
-  };
-  const currentIndex = () => items().findIndex((el) => el === activeItem());
+  const currentIndex = () => items().findIndex((el) => el === activeMenuItem(ctx.menu()));
 
   const onKeyDown = (e: KeyboardEvent) => {
     const list = items();
@@ -226,7 +274,7 @@ export function DropdownContent(props: DropdownContentProps) {
             // synchronously; this ref-time microtask re-asserts focus once the
             // menu node exists. Skip disabled items.
             if (ctx.openedViaKeyboard()) {
-              queueMicrotask(() => el.querySelector<HTMLElement>(ITEM_SELECTOR)?.focus());
+              queueMicrotask(() => firstMenuItem(el)?.focus());
             }
           }}
           id={ctx.menuId}
@@ -424,8 +472,8 @@ export function DropdownSub(props: DropdownSubProps) {
     setOpenSig(v);
     if (v) {
       if (opts?.viaKeyboard) {
-        queueMicrotask(() => menu()?.querySelector<HTMLElement>(ITEM_SELECTOR)?.focus());
-        menu()?.querySelector<HTMLElement>(ITEM_SELECTOR)?.focus();
+        queueMicrotask(() => firstMenuItem(menu())?.focus());
+        firstMenuItem(menu())?.focus();
       }
     } else if (opts?.returnFocus !== false) {
       const el = trigger();
@@ -516,18 +564,14 @@ export function DropdownSubContent(props: DropdownSubContentProps) {
   // useDismiss here would double-fire Escape because document listeners run
   // after stopPropagation on the element, not on the document.
 
-  const items = () => Array.from(sub.menu()?.querySelectorAll<HTMLElement>(ITEM_SELECTOR) ?? []);
+  const items = () => menuItems(sub.menu());
   const focusIndex = (i: number) => {
     const list = items();
     if (!list.length) return;
     const idx = ((i % list.length) + list.length) % list.length;
     list[idx].focus();
   };
-  const activeItem = () => {
-    const root = sub.menu()?.getRootNode() as Document | ShadowRoot | undefined;
-    return (root?.activeElement ?? document.activeElement) as Element | null;
-  };
-  const currentIndex = () => items().findIndex((el) => el === activeItem());
+  const currentIndex = () => items().findIndex((el) => el === activeMenuItem(sub.menu()));
 
   const onKeyDown = (e: KeyboardEvent) => {
     const list = items();
@@ -559,7 +603,7 @@ export function DropdownSubContent(props: DropdownSubContentProps) {
             const unregister = parent.registerSubMenu(el);
             onCleanup(unregister);
             if (sub.openedViaKeyboard()) {
-              queueMicrotask(() => el.querySelector<HTMLElement>(ITEM_SELECTOR)?.focus());
+              queueMicrotask(() => firstMenuItem(el)?.focus());
             }
           }}
           id={sub.menuId}

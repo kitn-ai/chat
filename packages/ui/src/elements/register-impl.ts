@@ -80,6 +80,10 @@ import './compare';
 import './composer';
 // W3 phase 2: cascading action menu from a JSON items-tree
 import './menu';
+// The same Dropdown surface with a consumer-owned body: you slot the rows
+// instead of handing over an items tree (the shape a framework consumer needs
+// when the rows are their own components).
+import './dropdown';
 // W4 phase 1: grouped filterable command/mention palette
 import './command';
 // Prompt dock + settings building blocks (graduated from SolidJS prototypes)

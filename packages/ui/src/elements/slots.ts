@@ -678,6 +678,13 @@ export const POPOVER_SLOTS: SlotDef[] = [
   { name: 'trigger', mode: 'replace', doc: 'The control that opens the popover (a button, an avatar, …). The panel anchors to it.' },
 ];
 
+/** Slots of `<kai-dropdown>`. The menu body is the default slot; `trigger` is the
+ *  VISUAL content of the built-in trigger button (never your own `<button>`/`<a>`,
+ *  which would nest interactive elements — the `kai-menu` rule). */
+export const DROPDOWN_SLOTS: SlotDef[] = [
+  { name: 'trigger', mode: 'replace', doc: 'Visual content of the trigger button (an icon, text, an `<svg>`). Replaces the built-in trigger* content; name it with `label`.' },
+];
+
 /** Styleable `::part`s of `<kai-audio-visualizer>`. Every DOM variant (`bar`,
  *  `grid`, `radial`) shares the `bar`/`cell` markup pattern; the shader variants
  *  (`wave`, `aurora`) share the `canvas` part. Lit items ALSO carry the
@@ -757,6 +764,7 @@ export const ELEMENT_COMPOSITION: Record<string, ElementComposition> = {
   'kai-empty': { slots: EMPTY_SLOTS, children: 'The empty-state body below the title/description, usually the call to action.' },
   'kai-file-upload': { children: 'Custom dropzone content, replacing the default label (the `label` prop is the fallback).' },
   'kai-popover': { slots: POPOVER_SLOTS, children: 'The popover panel body. The control that opens it is the `trigger` slot.' },
+  'kai-dropdown': { slots: DROPDOWN_SLOTS, children: 'The menu body: your own rows. Give each `role="menuitem"`. The control that opens it is the `trigger` slot.' },
   'kai-resizable': { children: 'The `<kai-resizable-item>` panels, in order. Dividers are inserted between them.' },
   'kai-resizable-item': { children: 'This panel\'s content.' },
   'kai-tooltip': { children: 'The TRIGGER the tooltip describes. The tip text is the `text` prop.' },

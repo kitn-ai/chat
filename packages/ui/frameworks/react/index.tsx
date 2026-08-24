@@ -716,6 +716,34 @@ export const Dock = /*#__PURE__*/ createWebComponent<DockProps>(
   () => import('@kitn.ai/ui/elements/dock'),
 );
 
+export interface DropdownProps extends WebComponentProps {
+  /** Built-in trigger: leading icon (a named icon like `"plus"`, an image URL/data-URI, or text). A slotted `slot="trigger"` overrides it. */
+  triggerIcon?: string;
+  /** Built-in trigger: a text label. This is the trigger's VISIBLE text, so it is also its accessible name, and `label` does not override it: an accessible name that does not contain the visible text is unreachable by speech input (WCAG 2.5.3, Label in Name). Same rule `kai-menu` follows. */
+  triggerLabel?: string;
+  /** Built-in trigger: a trailing icon (e.g. `"chevron-down"` for a select look). */
+  triggerIconTrailing?: string;
+  /** Accessible name for a trigger with no visible label. Ignored when `triggerLabel` is set, which is already the visible name. It DOES name a slotted `slot="trigger"`, which is VISUAL content with the name supplied separately: the same two-slot distinction `kai-menu` documents. */
+  label?: string;
+  /** Stretch the trigger to the full width of its container (a block row). Attribute: `full`. */
+  full?: boolean;
+  /** Drive/observe open state (Shoelace-style: settable + reflected to the `open` attribute, the menu still self-manages on click/keyboard). Set `el.open = true`, or `<kai-dropdown open>`; listen for `kai-open-change`. */
+  open?: boolean;
+  /** Initial open state on mount (uncontrolled seed). */
+  defaultOpen?: boolean;
+  /** Disable the trigger: click/keyboard and `show()` no longer open the menu. */
+  disabled?: boolean;
+  /** The menu opened or closed (click, keyboard, Escape, outside-click, or a method). */
+  onOpenChange?: (event: CustomEvent<{ open: boolean }>) => void;
+}
+
+export const Dropdown = /*#__PURE__*/ createWebComponent<DropdownProps>(
+  'kai-dropdown',
+  ["theme","triggerIcon","triggerLabel","triggerIconTrailing","label","full","open","defaultOpen","disabled"],
+  { onOpenChange: 'kai-open-change' },
+  () => import('@kitn.ai/ui/elements/dropdown'),
+);
+
 export interface EditableLabelProps extends WebComponentProps {
   /** The label text. Settable and reflected to the `value` attribute. Read `el.value` for live state. */
   value?: string;
