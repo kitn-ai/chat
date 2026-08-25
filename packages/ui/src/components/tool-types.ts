@@ -25,6 +25,15 @@ export interface ToolPart {
   type: string;
   /** Semantic classification for rendering. Derive with classifyTool(type). */
   kind?: ToolKind;
+  /** The call's lifecycle. A provider stream (real or `createMockResponder`)
+   *  only ever ANNOUNCES a call: arguments stream in (`input-streaming`), then
+   *  the part parks at `input-available` — and stays there. The kit parses and
+   *  renders the call; EXECUTING it and answering is the host's side of the
+   *  seam: after the read settles, run the tool and patch the part forward with
+   *  `stream.upsertTool(id, { state: 'output-available', output })` (or
+   *  `upsertToolPart`), or `output-error` + `errorText` on failure. The one
+   *  exception is a call the provider ran itself (`raw` carries the result and
+   *  the wire sets `output` directly) — never re-execute those. */
   state: 'input-streaming' | 'input-available' | 'output-available' | 'output-error';
   /** Last VALID parsed snapshot, fingerprint-deduped. The primary channel: this is
    *  what the kit renders. */

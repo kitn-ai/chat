@@ -19,7 +19,9 @@ import {
 interface Props extends Record<string, unknown> {
   /** The attachments to render. Omit (or pass an empty array) for the empty
    *  state, which shows `emptyText` if set and nothing otherwise. Set as a JS
-   *  property (array). */
+   *  property (array). Each item's `url` must be a `data:` URI or an https
+   *  URL, never `URL.createObjectURL`: a `blob:` URL previews here but the
+   *  wire encoders (`toOpenAIMessages`/`toAnthropicMessages`) refuse it. */
   items?: AttachmentData[];
   /** Layout: `grid` = visual tiles, `inline` = icon + label chips, `list` = rows. */
   variant?: AttachmentVariant;

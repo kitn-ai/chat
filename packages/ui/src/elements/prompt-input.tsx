@@ -49,7 +49,11 @@ interface Props extends Record<string, unknown> {
   attach?: boolean;
   /** Attachments to seed the input with (so a consumer can pre-populate staged
    *  files without an upload). Set as a JS property; the element then manages its
-   *  own attachment state from there (add via the paperclip, remove per chip). */
+   *  own attachment state from there (add via the paperclip, remove per chip).
+   *  Each item's `url` must be a `data:` URI or an https URL, never
+   *  `URL.createObjectURL`: a `blob:` URL previews perfectly and is meaningless
+   *  outside this tab, so `toOpenAIMessages`/`toAnthropicMessages` refuse it.
+   *  (The built-in paperclip already stages files as `data:` URIs.) */
   attachments?: AttachmentData[];
   /** Rich entity triggers. Each `{ char, kind, items }` opens a caret-anchored menu
    *  that inserts an atomic pill. Convention: `/` → skills, `@` → agents (plugins
@@ -64,7 +68,9 @@ interface Props extends Record<string, unknown> {
 interface Events {
   /** The user submitted the prompt (Enter or send button). `value` is the
    *  flattened text (back-compat); `doc` is the structured document and
-   *  `entities` the inserted pills (skills/agents) for downstream expansion. */
+   *  `entities` the inserted pills (skills/agents) for downstream expansion.
+   *  `<kai-prompt-input>` is the batteries-included composer row (send button,
+   *  toolbar, attachment staging) built on `<kai-composer>`, the bare editor. */
   'kai-submit': { value: string; doc: ComposerDoc; entities: EntityRef[]; attachments: AttachmentData[] };
   /** The input changed (fires on every edit). Carries the flattened `value`
    *  plus the structured `doc` + `entities`. */

@@ -99,7 +99,7 @@ export const Artifact = /*#__PURE__*/ createWebComponent<ArtifactProps>(
 );
 
 export interface AttachmentsProps extends WebComponentProps {
-  /** The attachments to render. Omit (or pass an empty array) for the empty state, which shows `emptyText` if set and nothing otherwise. Set as a JS property (array). */
+  /** The attachments to render. Omit (or pass an empty array) for the empty state, which shows `emptyText` if set and nothing otherwise. Set as a JS property (array). Each item's `url` must be a `data:` URI or an https URL, never `URL.createObjectURL`: a `blob:` URL previews here but the wire encoders (`toOpenAIMessages`/`toAnthropicMessages`) refuse it. */
   items?: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }[];
   /** Layout: `grid` = visual tiles, `inline` = icon + label chips, `list` = rows. */
   variant?: "grid" | "inline" | "list";
@@ -565,7 +565,7 @@ export interface ComposerProps extends WebComponentProps {
   onEntityRemove?: (event: CustomEvent<{ entity: { kind: string; id: string; label: string; icon?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> } }>) => void;
   /** The composer gained focus. `focus`/`blur` are NOT composed natively, so they don't escape the shadow root; these re-expose them on the host. (For `keydown`/`paste`/`focusin`/`focusout`, listen NATIVELY on `<kai-composer>`: they're composed and already cross the shadow boundary.) */
   onFocus?: (event: CustomEvent<{ originalEvent: FocusEvent }>) => void;
-  /** The user submitted the composer (Enter or programmatic submit). */
+  /** The user submitted the composer (Enter or programmatic submit). Note the detail carries no `attachments`; `<kai-composer>` is the bare editing surface: no send button, toolbar, or attachments. For a drop-in composer row with all three, reach for `<kai-prompt-input>`, which is built on this. */
   onSubmit?: (event: CustomEvent<{ doc: ({ type: "text"; text: string } | { type: "entity"; entity: { kind: string; id: string; label: string; icon?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> } })[]; text: string; entities: { kind: string; id: string; label: string; icon?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[] }>) => void;
   /** A trigger character was detected at the caret (e.g. `/` or `@`). */
   onTrigger?: (event: CustomEvent<{ char: string; query: string; rect: DOMRect }>) => void;
@@ -621,7 +621,7 @@ export const Context = /*#__PURE__*/ createWebComponent<ContextProps>(
 );
 
 export interface ConversationItemProps extends WebComponentProps {
-  /** The row's identity, handed to the container's selection contract. In the element this is the `conversation-id` attribute (host `id` is the fallback). */
+  /** The row's identity, handed to the container's selection contract. In the element this is the `conversation-id` attribute (host `id` is the fallback). Standalone caveat: outside `<kai-conversations>` the row is inert. It emits no event of its own (activation surfaces as `kai-conversation-select` on the container), and Enter/Space + roving tabindex are the container's, so a hand-composed rail must add its own click and key handling. */
   conversationId?: string;
   /** Selected state. Reflected as `aria-current` on the row body and a `data-active` styling hook on the row; the container drives it from its `activeId`. */
   active?: boolean;
@@ -1351,7 +1351,7 @@ export interface PromptInputProps extends WebComponentProps {
   submit?: "always" | "auto";
   /** When `false`, hides the built-in paperclip attach button even though the element otherwise supports attachments. Use this when a `+` menu in `toolbar-start` already exposes "Add files", to avoid a duplicate control. Defaults to `true`. */
   attach?: boolean;
-  /** Attachments to seed the input with (so a consumer can pre-populate staged files without an upload). Set as a JS property; the element then manages its own attachment state from there (add via the paperclip, remove per chip). */
+  /** Attachments to seed the input with (so a consumer can pre-populate staged files without an upload). Set as a JS property; the element then manages its own attachment state from there (add via the paperclip, remove per chip). Each item's `url` must be a `data:` URI or an https URL, never `URL.createObjectURL`: a `blob:` URL previews perfectly and is meaningless outside this tab, so `toOpenAIMessages`/`toAnthropicMessages` refuse it. (The built-in paperclip already stages files as `data:` URIs.) */
   attachments?: { id: string; type: "file" | "source-document"; filename?: string; mediaType?: string; url?: string; title?: string }[];
   /** Rich entity triggers. Each `{ char, kind, items }` opens a caret-anchored menu that inserts an atomic pill. Convention: `/` → skills, `@` → agents (plugins are the grouping/provenance of those items). Set as a JS property. */
   triggers?: { char: string; kind: string; items?: { id: string; label: string; icon?: string; description?: string; group?: string; kind?: string; promptText?: string; data?: Record<string, unknown> }[] }[];
@@ -1361,7 +1361,7 @@ export interface PromptInputProps extends WebComponentProps {
   onAttachmentsChange?: (event: CustomEvent<{ attachments: { id: string; type: "file" | "source-document"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[] }>) => void;
   /** The Stop button was clicked while `stoppable` and `loading` are both true. */
   onStop?: (event: CustomEvent<Record<string, never>>) => void;
-  /** The user submitted the prompt (Enter or send button). `value` is the flattened text (back-compat); `doc` is the structured document and `entities` the inserted pills (skills/agents) for downstream expansion. */
+  /** The user submitted the prompt (Enter or send button). `value` is the flattened text (back-compat); `doc` is the structured document and `entities` the inserted pills (skills/agents) for downstream expansion. `<kai-prompt-input>` is the batteries-included composer row (send button, toolbar, attachment staging) built on `<kai-composer>`, the bare editor. */
   onSubmit?: (event: CustomEvent<{ value: string; doc: ({ type: "text"; text: string } | { type: "entity"; entity: { kind: string; id: string; label: string; icon?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> } })[]; entities: { kind: string; id: string; label: string; icon?: undefined | string; promptText?: undefined | string; data?: undefined | Record<string, unknown> }[]; attachments: { id: string; type: "file" | "source-document"; filename?: undefined | string; mediaType?: undefined | string; url?: undefined | string; title?: undefined | string }[] }>) => void;
   /** A suggestion was clicked while `suggestion-mode="fill"`. */
   onSuggestionClick?: (event: CustomEvent<{ value: string }>) => void;
@@ -1912,7 +1912,7 @@ export const Thread = /*#__PURE__*/ createWebComponent<ThreadProps>(
 );
 
 export interface ToastRegionProps extends WebComponentProps {
-  /** The toasts to render. Newest is shown on top. Set as a JS property (array); pass a new array reference to update. Omit for an empty region, which is the normal resting state and how the imperative `toast()` API starts. */
+  /** The toasts to render. Newest is shown on top. Set as a JS property (array); pass a new array reference to update. Omit for an empty region, which is the normal resting state and how the imperative `toast()` API starts. Data-driven and imperative are EITHER/OR per app: `toast()` mounts its own region on `document.body` and never adopts one you placed in markup, so mixing the two gives you two overlapping regions. */
   toasts?: { id: string; message: string; variant?: "neutral" | "success" | "warning" | "error" | "info"; appearance?: "pill" | "card"; inverse?: boolean; description?: string; action?: { label: string; onAction: () => void | false }; duration?: number; dismissible?: boolean; target?: HTMLElement }[];
   /** Stack anchor: `'top-center'` (default), `'top-right'`, `'bottom-center'`, … */
   position?: "top-center" | "top-right" | "top-left" | "bottom-center" | "bottom-right" | "bottom-left";
