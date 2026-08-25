@@ -36,6 +36,11 @@ interface Events {
  * vote (`collect-detail`), then confirms with a thank-you — all in place. Emits
  * `kai-feedback` (`{ value }`), `kai-feedback-detail` (`{ value, category?, comment? }`),
  * and `kai-close`.
+ *
+ * Placement and lifecycle are the app's call: the component is designed as a
+ * THREAD-level bar (its events carry no message id), and when to show it —
+ * e.g. revealed after a settled turn, hidden again on submit — is product
+ * behavior the host decides.
  */
 defineWebComponent<Props, Events>('kai-feedback-bar', {
   barTitle: 'Was this helpful?',

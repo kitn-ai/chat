@@ -5,7 +5,11 @@ import { SlottedConversationItem } from '../components/conversation-item';
 
 interface Props extends Record<string, unknown> {
   /** The row's identity, handed to the container's selection contract. In the
-   *  element this is the `conversation-id` attribute (host `id` is the fallback). */
+   *  element this is the `conversation-id` attribute (host `id` is the fallback).
+   *  Standalone caveat: outside `<kai-conversations>` the row is inert. It
+   *  emits no event of its own (activation surfaces as `kai-conversation-select`
+   *  on the container), and Enter/Space + roving tabindex are the container's,
+   *  so a hand-composed rail must add its own click and key handling. */
   conversationId?: string;
   /** Selected state. Reflected as `aria-current` on the row body and a
    *  `data-active` styling hook on the row; the container drives it from its
@@ -35,6 +39,13 @@ interface Props extends Record<string, unknown> {
  * The item is presentational on its own: activation (click, Enter, Space)
  * surfaces as `kai-conversation-select` on the surrounding `<kai-conversations>`,
  * never as an event of this element.
+ *
+ * OUTSIDE `<kai-conversations>` the row is therefore INERT — no event fires
+ * when it is clicked, and the keyboard story (Enter/Space activation, roving
+ * tabindex, arrow-key traversal) lives in the container's controller, so a
+ * standalone row has none of it. A hand-composed rail must bring its own click
+ * handler AND its own keyboard handling, or slot the rows into
+ * `<kai-conversations>` and get both for free.
  */
 defineWebComponent<Props>('kai-conversation-item', {
   conversationId: undefined,

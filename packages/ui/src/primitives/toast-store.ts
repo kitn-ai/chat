@@ -9,6 +9,11 @@
 // element, so it carries its own shadow root + the shared kit stylesheet — it's
 // viewport-positioned AND fully kit-styled, never a raw div.
 //
+// CREATES, never adopts: `ensureMounted` does not look for a
+// `<kai-toast-region>` already in the markup, so an app that places and drives
+// its own region (the declarative mode) must not also call `toast()` — the
+// first call mounts a second, overlapping region. Pick one mode per app.
+//
 // SSR-safe: every DOM touch is guarded by `typeof document`. On the server,
 // raising a toast is an inert no-op (the store updates, nothing mounts).
 
@@ -161,6 +166,11 @@ function resolveDuration(item: Pick<ToastItem, 'duration' | 'action'>): number {
  * upgrade (its `defineWebComponent` registration) happens when the elements
  * bundle loads; setting the property before/after upgrade both work because
  * `customElement` reflects late-set properties.
+ *
+ * It CREATES a region — it never queries the document for, or adopts, a
+ * `<kai-toast-region>` the app placed in markup. Imperative `toast()` and a
+ * hand-placed data-driven region are therefore either/or: an app that owns its
+ * own region must not also call `toast()`, or two overlapping regions render.
  */
 // One region per distinct target (the `null` key = the global / viewport region).
 // Every region binds the SAME store proxy and filters to its own target, so a

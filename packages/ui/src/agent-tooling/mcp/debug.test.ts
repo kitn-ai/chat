@@ -299,4 +299,83 @@ describe('debug', () => {
     const text = (out.content as { type: string; text: string }[])[0].text;
     expect(text).not.toMatch(/kai-compare|kai-compare-select/i);
   });
+
+  // ── Rule 13: kai-composer is bare — attachments/send live on kai-prompt-input ──
+  it('"attach a file in kai-composer" → composer-attachments fix (reach for kai-prompt-input)', async () => {
+    const out = await debug.handler({
+      symptom: 'How does a user attach a file in kai-composer? I cannot find an attachment prop or a paperclip.',
+    });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+    expect(text).toMatch(/kai-prompt-input/);
+    expect(text).toMatch(/bare editing surface|no attachment/i);
+  });
+
+  it('"kai-composer has no send button" → composer-attachments fix', async () => {
+    const out = await debug.handler({
+      symptom: 'kai-composer has no send button — where is it?',
+    });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+    expect(text).toMatch(/kai-prompt-input/);
+  });
+
+  it('generic "attach a file" without composer/kai context does NOT fire composer-attachments', async () => {
+    const out = await debug.handler({
+      symptom: 'How do I attach a file to an email in JavaScript?',
+    });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+    expect(text).not.toMatch(/kai-prompt-input/);
+  });
+
+  // ── Rule 14: blob: attachment URLs — the wire refuses them; use a data: URI ──
+  it('URL.createObjectURL in an attachment snippet → attachment-blob-url fix (data: URI)', async () => {
+    const out = await debug.handler({
+      snippet: "return { id, type: 'file', filename: file.name, url: URL.createObjectURL(file) };",
+    });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+    expect(text).toMatch(/data:/);
+    expect(text).toMatch(/readAsDataURL|FileReader/i);
+  });
+
+  it('"wire refuses my blob: attachment url" → attachment-blob-url fix', async () => {
+    const out = await debug.handler({
+      symptom: 'toOpenAIMessages throws on my attachment — it refuses a blob: URL',
+    });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+    expect(text).toMatch(/data: URI|data URI/i);
+  });
+
+  it('generic blob question without attachment/kai context does NOT fire attachment-blob-url', async () => {
+    const out = await debug.handler({
+      symptom: 'How do I download a blob from S3 in Node?',
+    });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+    expect(text).not.toMatch(/readAsDataURL|data: URI/i);
+  });
+
+  // ── Rule 15: mock tool calls — MockTurn.toolCalls, and the HOST resolves them ──
+  it('"make createMockResponder emit a tool call" → mock-tool-calls fix (MockTurn.toolCalls)', async () => {
+    const out = await debug.handler({
+      symptom: 'How do I make createMockResponder emit a tool call?',
+    });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+    expect(text).toMatch(/toolCalls/);
+    expect(text).toMatch(/upsertTool/);
+  });
+
+  it('"mock tool call stuck in input-available" → mock-tool-calls fix (host resolves it)', async () => {
+    const out = await debug.handler({
+      symptom: 'my mock tool call is stuck in input-available and never shows output in kai-chat',
+    });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+    expect(text).toMatch(/output-available/);
+    expect(text).toMatch(/upsertTool/);
+  });
+
+  it('generic "mock a function in tests" does NOT fire mock-tool-calls', async () => {
+    const out = await debug.handler({
+      symptom: 'How do I mock a function with vitest?',
+    });
+    const text = (out.content as { type: string; text: string }[])[0].text;
+    expect(text).not.toMatch(/createMockResponder|MockTurn/);
+  });
 });
