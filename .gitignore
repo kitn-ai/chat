@@ -38,3 +38,7 @@ packages/ui/.tmp-emitted-scaffold/
 
 # kai dev workdirs
 .kai/
+
+# `kai compile` integration test's packed-tarball cache (derived from the
+# checkout's own dist/ build; see packedUiTarball() in construct/cli.test.ts)
+packages/ui/.kai-test-cache/

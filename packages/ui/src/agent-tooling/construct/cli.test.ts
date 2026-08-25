@@ -1,17 +1,49 @@
 import { describe, expect, it } from 'vitest';
-import { mkdtempSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, existsSync, readFileSync, mkdirSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { runCli } from './cli';
 
 const good = { name: 'acme-support', layout: 'widget', provider: { mode: 'mock' } };
 
-// npm's currently-published @kitn.ai/ui lacks ./define (that export lands
-// with this branch); the local tarball is the one build with it available.
-const UI_TARBALL = resolve(
-  import.meta.dirname,
-  '../../../../../.superpowers/sdd/2026-08-25-construct-engine/t5-evidence/kitn.ai-ui-0.26.0.tgz',
-);
+// packages/ui, three levels up from this file.
+const PKG_ROOT = resolve(import.meta.dirname, '../../..');
+// Gitignored (`.kai-test-cache/` — see .gitignore), derived, never committed.
+const PACK_CACHE_DIR = join(PKG_ROOT, '.kai-test-cache');
+
+/**
+ * The tarball `compile`'s integration test installs against, packed from
+ * THIS checkout's own built dist/ — never a hand-placed evidence file (that
+ * would be gitignored and red on any fresh clone/CI, the repo's most
+ * expensive repeat trap). npm's currently-published @kitn.ai/ui doesn't ship
+ * ./define yet, so a bare `npm install` would resolve a version this
+ * branch's own codegen can't build against; packing the local build is the
+ * honest way to get a spec that has it.
+ *
+ * Cached by version under a gitignored dir inside packages/ui so repeat runs
+ * (and both `compile` tests, if a second one lands) don't re-pack. When
+ * dist/ is missing, fails loudly with the exact fix — same convention as
+ * the MCP manifest tests' "Missing build artifact" — never a silent skip.
+ */
+function packedUiTarball(): string {
+  const distDir = join(PKG_ROOT, 'dist');
+  if (!existsSync(distDir)) {
+    throw new Error(
+      `Missing build artifact: ${distDir}\n` +
+        `The 'kai compile' integration test packs @kitn.ai/ui from this checkout's ` +
+        `own dist/ (npm's published version doesn't ship ./define yet). Run ` +
+        `\`nx build ui\` (or \`npm run build:api\` in packages/ui) and try again.`,
+    );
+  }
+  const pkg = JSON.parse(readFileSync(join(PKG_ROOT, 'package.json'), 'utf8')) as { version: string };
+  const tarballPath = join(PACK_CACHE_DIR, `kitn.ai-ui-${pkg.version}.tgz`);
+  if (!existsSync(tarballPath)) {
+    mkdirSync(PACK_CACHE_DIR, { recursive: true });
+    execFileSync('npm', ['pack', '--silent', '--pack-destination', PACK_CACHE_DIR], { cwd: PKG_ROOT });
+  }
+  return tarballPath;
+}
 
 function tmpConstruct(body: unknown): string {
   const dir = mkdtempSync(join(tmpdir(), 'kai-cli-'));
@@ -109,11 +141,12 @@ describe('kai CLI', () => {
     async () => {
       const out = mkdtempSync(join(tmpdir(), 'kai-compile-'));
       const { io } = collect();
-      // Pin --ui to the local tarball: npm's currently-published @kitn.ai/ui
-      // doesn't ship ./define yet, so a bare `npm install` in the generated
-      // workdir would resolve a version this repo's own codegen can't build
-      // against. Task 15's fixture-compiling gate exercises the real default.
-      const code = await runCli(['compile', tmpConstruct(good), out, '--ui', `file:${UI_TARBALL}`], io);
+      // Pin --ui to a tarball packed from this checkout's own build: npm's
+      // currently-published @kitn.ai/ui doesn't ship ./define yet, so a bare
+      // `npm install` in the generated workdir would resolve a version this
+      // repo's own codegen can't build against. Task 15's fixture-compiling
+      // gate exercises the real default.
+      const code = await runCli(['compile', tmpConstruct(good), out, '--ui', `file:${packedUiTarball()}`], io);
       expect(code).toBe(0);
       const js = readFileSync(join(out, 'acme-support.js'), 'utf8');
       expect(js).toContain('acme-support'); // the tag registered by the inlined defineWebComponent
