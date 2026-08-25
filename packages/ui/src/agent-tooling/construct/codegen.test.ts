@@ -135,6 +135,38 @@ describe('generateProject (widget + mock core)', () => {
     expect(app).not.toContain('<Button');
   });
 
+  it('gates undeclared-capability affordances OFF: no-attachments/no-capability-vocabulary construct explicitly disables webSearch and voice', () => {
+    // Format rule: an undeclared capability's affordance must be OFF. The v1
+    // construct schema carries no capability vocabulary at all yet (lands
+    // Task 9), so every construct today is "no capabilities declared" — these
+    // must be explicitly false, not just omitted, so the gating decision is
+    // visible in the emitted source.
+    const app = file(generateProject(construct()), 'src/App.tsx');
+    expect(app).toContain('webSearch={false}');
+    expect(app).toContain('voice={false}');
+    // No starter prompts, no model switcher: omitted entirely (undefined has
+    // the same off-by-default effect as explicit false for these two).
+    expect(app).not.toMatch(/\bsuggestions=\{/);
+    expect(app).not.toMatch(/\bmodels=\{/);
+  });
+
+  it('documents the attachments (paperclip) kit gap rather than silently leaving it on or hand-composing around it', () => {
+    // ChatThread has NO `attach` passthrough (verified by reading
+    // chat-thread.tsx's full prop list) — unlike webSearch/voice, its
+    // internal composer always wires a live onAttachmentsChange handler to
+    // DefaultPromptInput, so the paperclip cannot be gated off from outside
+    // ChatThread today. The disabling prop is real one layer down
+    // (DefaultPromptInputProps.attach / kai-prompt-input's `attach`
+    // attribute) but ChatThread never forwards it. Codegen does not
+    // hand-compose a replacement composer to route around this (the exact
+    // pattern the previous round stopped) — it says so in the emitted
+    // source instead, so the gap is visible rather than silently shipped.
+    const app = file(generateProject(construct()), 'src/App.tsx');
+    expect(app).toMatch(/attach.*kit gap|kit gap.*attach/is);
+    expect(app).not.toContain('attach={false}');
+    expect(app).not.toContain('attach={');
+  });
+
   it('ratchet: App.tsx carries (near) zero hand-authored inline styles now that ChatThread owns layout', () => {
     // Every prior round's fix for a layout defect (composer padding,
     // send-button alignment, the accent CSS var) was ANOTHER inline style —
