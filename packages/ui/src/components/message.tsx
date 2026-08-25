@@ -619,7 +619,17 @@ function MessageBody(props: MessageBodyProps) {
                           part="bubble content"
                           markdown={props.markdown}
                           class={props.isUser
-                            ? 'bg-muted text-primary max-w-[85%] rounded-2xl px-4 py-2'
+                            // Content token, not the brand token: `--color-primary`
+                            // is the documented consumer brand override
+                            // (theme.css `--kai-color-primary`), so toking message
+                            // TEXT to it means every consumer that brands primary
+                            // gets brand-colored message text. `text-foreground` is
+                            // already `MessageContent`'s base color (matches the
+                            // assistant path's `bg-transparent p-0`, which carries
+                            // no color override and falls through to the same
+                            // base) — dropping `text-primary` here just lets that
+                            // base apply on the user bubble too.
+                            ? 'bg-muted max-w-[85%] rounded-2xl px-4 py-2'
                             : 'bg-transparent p-0'}
                         >
                           {p().text}

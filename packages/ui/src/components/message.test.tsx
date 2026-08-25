@@ -118,6 +118,38 @@ describe('groupMessageParts', () => {
   });
 });
 
+// ─── User bubble text token ──────────────────────────────────────────────────
+//
+// Content token, not the brand token: `text-primary` on the user-message
+// bubble toked the message's own words to `--color-primary`, the documented
+// consumer BRAND override (`theme.css` `--kai-color-primary`). Any consumer
+// that brands primary got brand-colored message text. This is a CHEAP jsdom
+// pin on the class list only — jsdom cannot compute the real Tailwind cascade
+// (see the "compiled.css trap" notes in `vitest.config.ts` and
+// `focus-ring-paints.spec.ts`'s header), so it cannot prove the class doesn't
+// resolve to the branded color. That proof lives in
+// `tests/e2e/message-text-token.spec.ts`, a real-Chromium guard against the
+// built bundle. This test exists only so a `text-primary` regression on this
+// specific line is caught by the fast unit suite, not just the slower e2e one.
+describe('MessageBody user bubble text token', () => {
+  it('never emits text-primary on the user message bubble content', () => {
+    const { container } = render(() => (
+      <MessageBody
+        parts={[{ type: 'text', text: 'hello' }]}
+        isUser={true}
+        markdown={false}
+      />
+    ));
+    const bubble = container.querySelector('[part="bubble content"]');
+    expect(bubble).toBeTruthy();
+    const classes = (bubble!.getAttribute('class') ?? '').split(/\s+/);
+    expect(classes).not.toContain('text-primary');
+    // And it's not simply missing a color entirely — the base class still
+    // carries the correct neutral content token.
+    expect(classes).toContain('text-foreground');
+  });
+});
+
 // ─── Streaming identity ──────────────────────────────────────────────────────
 //
 // A live message is re-rendered once per stream delta with a BRAND-NEW `parts`

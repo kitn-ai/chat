@@ -808,6 +808,18 @@ jobs:
       - name: Focus-indicator paint guard (shadow-root rings, built bundle)
         run: pnpm --filter @kitn.ai/ui run test:focus-ring
 
+      # A branded --kai-color-primary must color CONTROLS, never message
+      # CONTENT ("accent brands controls, never content" — owner-ruled). The
+      # user-message bubble used to set text-primary on the text part, so any
+      # consumer that branded primary got brand-colored message text on every
+      # thread surface. Same shape as the two guards above: bare harness, no
+      # document Tailwind, drives the BUILT bundle, because only the real
+      # cascade proves what a branded custom property resolves to inside a
+      # shadow root. Carries a positive control (a default kai-button DOES take
+      # the brand) so the negative assertion can't pass by nothing being wired.
+      - name: Message text-token guard (brand must not color content, built bundle)
+        run: pnpm --filter @kitn.ai/ui run test:message-text-token
+
       # Keyboard tab-stop behaviour for the hover-card, same shape as above:
       # Storybook-free, own port, drives the BUILT bundle. Added by PR #284;
       # this step is wired here deliberately BEFORE that branch merged, because
