@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { mkdtempSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { runCli } from './cli';
 
 const good = { name: 'acme-support', layout: 'widget', provider: { mode: 'mock' } };
+
+// npm's currently-published @kitn.ai/ui lacks ./define (that export lands
+// with this branch); the local tarball is the one build with it available.
+const UI_TARBALL = resolve(
+  import.meta.dirname,
+  '../../../../../.superpowers/sdd/2026-08-25-construct-engine/t5-evidence/kitn.ai-ui-0.26.0.tgz',
+);
 
 function tmpConstruct(body: unknown): string {
   const dir = mkdtempSync(join(tmpdir(), 'kai-cli-'));
@@ -86,4 +93,33 @@ describe('kai CLI', () => {
     expect(await runCli(['frobnicate'], io)).toBe(2);
     expect(lines.join('\n')).toMatch(/usage/i);
   });
+
+  it('compile: missing path prints usage and exits 2', async () => {
+    const { io, lines } = collect();
+    const code = await runCli(['compile'], io);
+    expect(code).toBe(2);
+    expect(lines.join('\n')).toMatch(/usage/i);
+  });
+
+  // Real `npm install` + `vite build` — kept in the unit suite (not
+  // it.skipIf(CI)) since it's the only place this path is exercised short of
+  // Task 15's fixture-compiling gate; if CI time proves painful, revisit.
+  it(
+    'compile: produces one self-registering js + d.ts + the source beside it',
+    async () => {
+      const out = mkdtempSync(join(tmpdir(), 'kai-compile-'));
+      const { io } = collect();
+      // Pin --ui to the local tarball: npm's currently-published @kitn.ai/ui
+      // doesn't ship ./define yet, so a bare `npm install` in the generated
+      // workdir would resolve a version this repo's own codegen can't build
+      // against. Task 15's fixture-compiling gate exercises the real default.
+      const code = await runCli(['compile', tmpConstruct(good), out, '--ui', `file:${UI_TARBALL}`], io);
+      expect(code).toBe(0);
+      const js = readFileSync(join(out, 'acme-support.js'), 'utf8');
+      expect(js).toContain('acme-support'); // the tag registered by the inlined defineWebComponent
+      expect(existsSync(join(out, 'acme-support.d.ts'))).toBe(true);
+      expect(existsSync(join(out, 'source', 'src', 'App.tsx'))).toBe(true);
+    },
+    240_000,
+  );
 });

@@ -4,10 +4,11 @@
  * Every subcommand goes through validateConstruct first — a validation failure
  * never reaches codegen; the problems print with paths and the exit code says so.
  */
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readFileSync, mkdirSync, copyFileSync, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { join, resolve } from 'node:path';
 import { validateConstruct, type Construct } from './schema';
-import { accentContrastNotice, generateProject, writeProject } from './codegen';
+import { accentContrastNotice, emitTypes, generateProject, writeProject } from './codegen';
 
 export interface CliIo {
   log: (s: string) => void;
@@ -49,6 +50,15 @@ export function loadConstruct(path: string, io: CliIo): Construct | null {
   return out.construct;
 }
 
+/** `--ui <spec>` extraction shared by `dev` and `compile`. NB: guard the -1
+ *  case — `i !== uiFlag + 1` with uiFlag === -1 would drop index 0. */
+function parseUiFlag(rest: string[]): { uiSpec: string | undefined; positional: string[] } {
+  const uiFlag = rest.indexOf('--ui');
+  const uiSpec = uiFlag >= 0 ? rest[uiFlag + 1] : undefined;
+  const positional = uiFlag >= 0 ? rest.filter((_, i) => i !== uiFlag && i !== uiFlag + 1) : rest;
+  return { uiSpec, positional };
+}
+
 export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<number> {
   const [command, ...rest] = argv;
   switch (command) {
@@ -76,10 +86,7 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       return 0;
     }
     case 'dev': {
-      // NB: guard the -1 case — `i !== uiFlag + 1` with uiFlag === -1 would drop index 0.
-      const uiFlag = rest.indexOf('--ui');
-      const uiSpec = uiFlag >= 0 ? rest[uiFlag + 1] : undefined;
-      const positional = uiFlag >= 0 ? rest.filter((_, i) => i !== uiFlag && i !== uiFlag + 1) : rest;
+      const { uiSpec, positional } = parseUiFlag(rest);
       const path = positional[0];
       if (!path) {
         io.error(USAGE);
@@ -88,6 +95,33 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       const { dev } = await import('./dev');
       await dev(path, { io, uiSpec });
       return 0; // unreachable; dev() never resolves
+    }
+    case 'compile': {
+      const { uiSpec, positional } = parseUiFlag(rest);
+      const [path, outArg] = positional;
+      if (!path) {
+        io.error(USAGE);
+        return 2;
+      }
+      const construct = loadConstruct(path, io);
+      if (!construct) return 1;
+      const outDir = resolve(outArg ?? 'dist-construct');
+      const { workDirFor, ensureInstalled } = await import('./dev');
+      const dir = workDirFor(construct.name, process.cwd());
+      const files = generateProject(construct, { uiSpec });
+      writeProject(files, dir);
+      await ensureInstalled(dir, files, io);
+      await new Promise<void>((done, fail) => {
+        const child = spawn('npm', ['run', 'build'], { cwd: dir, stdio: 'inherit' });
+        child.on('exit', (code) => (code === 0 ? done() : fail(new Error(`vite build exited ${code}`))));
+      });
+      mkdirSync(outDir, { recursive: true });
+      copyFileSync(join(dir, 'dist', `${construct.name}.js`), join(outDir, `${construct.name}.js`));
+      writeFileSync(join(outDir, `${construct.name}.d.ts`), emitTypes(construct));
+      writeProject(files, join(outDir, 'source'));
+      io.log(`compiled <${construct.name}> → ${outDir}/${construct.name}.js (source beside it in source/).`);
+      io.log(`endpoint backends: the kai MCP scaffold tool emits a matching route — see its output for your framework.`);
+      return 0;
     }
     default:
       io.error(USAGE);

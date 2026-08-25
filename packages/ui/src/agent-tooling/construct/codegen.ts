@@ -422,6 +422,20 @@ function emitLayoutClose(c: Construct): string {
   return `    </Dock>\n`;
 }
 
+// ── kai compile: the d.ts alongside the single .js ─────────────────────────
+
+/** The declaration file `kai compile` writes beside the emitted .js — just
+ *  enough for a consumer's TS to know the tag and its one settable prop. */
+export function emitTypes(c: Construct): string {
+  return `declare global {
+  interface HTMLElementTagNameMap {
+    '${c.name}': HTMLElement & { theme: 'light' | 'dark' | 'auto' };
+  }
+}
+export {};
+`;
+}
+
 // ── writing ──────────────────────────────────────────────────────────────────
 
 const MANIFEST = '.kai-manifest.json';

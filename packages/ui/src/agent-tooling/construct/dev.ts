@@ -78,6 +78,25 @@ export function regenTurn(
 
 const KEY_FILE = '.kai-install-key';
 
+/**
+ * `npm install` in the generated workdir, but only when the emitted
+ * package.json actually changed since the last install (tracked via a hash
+ * written to KEY_FILE) — shared by `kai dev` (on first run and per regen) and
+ * `kai compile`, so there's one install path, not two.
+ */
+export async function ensureInstalled(dir: string, files: GeneratedFile[], io: CliIo): Promise<void> {
+  const key = installKey(files);
+  const keyPath = join(dir, KEY_FILE);
+  const installed = existsSync(keyPath) && readFileSync(keyPath, 'utf8') === key;
+  if (installed) return;
+  io.log(`installing dependencies in ${dir} (first run or deps changed)…`);
+  await new Promise<void>((done, fail) => {
+    const child = spawn('npm', ['install'], { cwd: dir, stdio: 'inherit' });
+    child.on('exit', (code) => (code === 0 ? done() : fail(new Error(`npm install exited ${code}`))));
+  });
+  writeFileSync(keyPath, key);
+}
+
 export async function dev(
   constructPath: string,
   opts: { io?: CliIo; uiSpec?: string } = {},
@@ -97,17 +116,7 @@ export async function dev(
   const firstNotice = accentContrastNotice(first.construct);
   if (firstNotice) io.log(firstNotice);
 
-  const key = installKey(files);
-  const keyPath = join(dir, KEY_FILE);
-  const installed = existsSync(keyPath) && readFileSync(keyPath, 'utf8') === key;
-  if (!installed) {
-    io.log(`installing dependencies in ${dir} (first run or deps changed)…`);
-    await new Promise<void>((done, fail) => {
-      const child = spawn('npm', ['install'], { cwd: dir, stdio: 'inherit' });
-      child.on('exit', (code) => (code === 0 ? done() : fail(new Error(`npm install exited ${code}`))));
-    });
-    writeFileSync(keyPath, key);
-  }
+  await ensureInstalled(dir, files, io);
 
   // Watch the PARENT DIRECTORY, not the file itself: most editors save by
   // writing a temp file and renaming it over the original, which replaces the
