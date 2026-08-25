@@ -70,6 +70,17 @@ describe('kai CLI', () => {
     expect(ejectedIdx).toBeGreaterThan(overwriteIdx);
   });
 
+  it('eject: an unparseable accent prints the contrast NOTICE before the success line', async () => {
+    const out = mkdtempSync(join(tmpdir(), 'kai-eject-'));
+    const { io, lines } = collect();
+    const construct = { ...good, theme: { accent: 'var(--brand)', mode: 'system' } };
+    expect(await runCli(['eject', tmpConstruct(construct), out], io)).toBe(0);
+    const noticeIdx = lines.findIndex((l) => /not parseable for contrast/.test(l));
+    const ejectedIdx = lines.findIndex((l) => /^ejected/.test(l));
+    expect(noticeIdx).toBeGreaterThanOrEqual(0);
+    expect(ejectedIdx).toBeGreaterThan(noticeIdx);
+  });
+
   it('unknown subcommand: exit 2 with usage', async () => {
     const { io, lines } = collect();
     expect(await runCli(['frobnicate'], io)).toBe(2);

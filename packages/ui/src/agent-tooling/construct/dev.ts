@@ -12,8 +12,8 @@ import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, watch, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
-import { generateProject, writeProject, type GeneratedFile, type GenerateOptions } from './codegen';
-import { validateConstruct, type ConstructProblem } from './schema';
+import { accentContrastNotice, generateProject, writeProject, type GeneratedFile, type GenerateOptions } from './codegen';
+import { validateConstruct, type Construct, type ConstructProblem } from './schema';
 import type { CliIo } from './cli';
 
 export function workDirFor(name: string, root: string): string {
@@ -25,7 +25,9 @@ export function installKey(files: GeneratedFile[]): string {
   return createHash('sha256').update(pkg?.code ?? '').digest('hex');
 }
 
-export type RegenOutcome = { ok: true; files: GeneratedFile[] } | { ok: false; problems: ConstructProblem[] };
+export type RegenOutcome =
+  | { ok: true; files: GeneratedFile[]; construct: Construct }
+  | { ok: false; problems: ConstructProblem[] };
 
 /** One regen turn, injectable writer so the watch loop is testable. */
 export function regenerate(
@@ -38,7 +40,7 @@ export function regenerate(
   if (!validated.ok) return validated;
   const files = generateProject(validated.construct, opts);
   sink.write(files, dir);
-  return { ok: true, files };
+  return { ok: true, files, construct: validated.construct };
 }
 
 /**
@@ -67,6 +69,8 @@ export function regenTurn(
       return;
     }
     io.log('construct changed — regenerated; Vite will hot-update the tab.');
+    const notice = accentContrastNotice(out.construct);
+    if (notice) io.log(notice);
   } catch (err) {
     io.error(`regen failed (${err instanceof Error ? err.message : String(err)}) — last good preview stays up`);
   }
@@ -90,6 +94,8 @@ export async function dev(
   const dir = workDirFor(first.construct.name, process.cwd());
   const files = generateProject(first.construct, { uiSpec: opts.uiSpec });
   writeProject(files, dir);
+  const firstNotice = accentContrastNotice(first.construct);
+  if (firstNotice) io.log(firstNotice);
 
   const key = installKey(files);
   const keyPath = join(dir, KEY_FILE);

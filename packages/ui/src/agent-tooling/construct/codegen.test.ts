@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { generateProject, writeProject } from './codegen';
+import { accentContrastNotice, generateProject, resolveContrastForeground, writeProject } from './codegen';
 import { validateConstruct, type Construct } from './schema';
 
 function construct(overrides: Partial<Construct> = {}): Construct {
@@ -111,6 +111,23 @@ describe('generateProject (widget + mock core)', () => {
     }
   });
 
+  it('insets the composer to match the kit\'s own chat-surface padding', () => {
+    // T5 demo defect: PromptInput sat flush against the Dock panel's own
+    // frame — dock.tsx's [part="panel"] is deliberately unpadded (it hands
+    // all interior spacing to its content), and PromptInput's own `p-2` is
+    // internal chrome (box border -> textarea), not an outer inset. The
+    // kit's own chat surface (ChatThread, chat-thread.tsx) wraps its built-in
+    // composer in a `px-4 pb-4` (1rem horizontal, 1rem below) div — mirror
+    // that with inline styles, since the interior must stay Tailwind-free.
+    const app = file(generateProject(construct()), 'src/App.tsx');
+    expect(app).toMatch(/<div style=\{\{ padding: '0 1rem 1rem' \}\}>\s*<PromptInput/);
+  });
+
+  it('right-aligns the send button by default (no idiom exists on PromptInputActions, so inline style is the kit-level default)', () => {
+    const app = file(generateProject(construct()), 'src/App.tsx');
+    expect(app).toContain("<PromptInputActions style={{ 'justify-content': 'flex-end' }}>");
+  });
+
   it('composes the kit\'s own Thread — not a hand-rolled message list', () => {
     // T5 demo defect: a hand-rolled <For>/<Message>/<MessageContent> list had
     // no padding, no gap between messages, and both roles left-aligned. The
@@ -141,31 +158,96 @@ describe('generateProject (widget + mock core)', () => {
     expect(hintIndex).toBeLessThan(elementIndex);
   });
 
-  it('routes the theme accent onto the launcher, the user bubble, and the send button via kit tokens', () => {
-    // Owner feedback: theming is a headline format feature, but the accent
-    // (#e91e63 in the demo fixture) appeared nowhere visible. Fix: consume it
-    // through the kit's OWN --color-primary token routing (dock.tsx's
-    // launcher CSS and Button's `variant="default"` both already read
-    // var(--color-primary)/-foreground) — never hardcode the hex anywhere.
+  it('routes the theme accent onto the launcher and the send button — never onto message bubbles', () => {
+    // Owner ruling: "accent brands CONTROLS, never content." The launcher
+    // (dock.tsx's own CSS) and the send button (Button's `variant="default"`,
+    // bg-primary / text-primary-foreground under the hood) both already read
+    // var(--color-primary)/-foreground with no work needed here — never
+    // hardcode the hex anywhere. Message bubbles get NONE of it: an earlier
+    // round routed the accent onto the user bubble via a
+    // `[data-role="user"] [part="bubble content"]` override; the owner
+    // reversed that, so bubbles stay on the kit's neutral theme surfaces.
     const files = generateProject(construct({ theme: { accent: '#e91e63', mode: 'system' } }));
     const element = file(files, 'src/element.tsx');
     const app = file(files, 'src/App.tsx');
-    // Exactly one hardcoded hex in the whole project: the JSON.stringify'd
-    // custom-property value in element.tsx. Everything downstream of it
-    // (the launcher, the bubble, the send button) reads var(--color-primary)
+    // Exactly one hardcoded accent hex in the whole project: the
+    // JSON.stringify'd custom-property value in element.tsx. Everything
+    // downstream (the launcher, the send button) reads var(--color-primary)
     // — never the literal color.
     const hexOccurrences = (element + app).match(/#e91e63/g) ?? [];
     expect(hexOccurrences).toHaveLength(1);
     expect(element).toContain("ctx.element.style.setProperty('--kai-color-primary', \"#e91e63\")");
-    // The send button uses the kit's own primary Button variant (bg-primary /
-    // text-primary-foreground under the hood) rather than a hand-styled one.
     expect(app).toContain('<Button variant="default"');
-    // The user bubble has no primary-color prop on Thread, so it's routed via
-    // the documented `part="bubble content"` styling hook, scoped to the user
-    // role only via Message's own `data-role` attribute.
-    expect(app).toContain('[data-role="user"] [part="bubble content"]');
-    expect(app).toContain('var(--color-primary)');
-    expect(app).toContain('var(--color-primary-foreground)');
+    // The bubble-accent hook from the earlier round must be gone, not just
+    // unused: App.tsx (the shadow-tree content, where message bubbles
+    // render) never mentions var(--color-primary) at all. (A doc comment
+    // may still name the old hook historically — checking the actual
+    // selector/property text, not the bare word "bubble", keeps this
+    // assertion honest about that.)
+    expect(app).not.toContain('[data-role="user"]');
+    expect(app).not.toContain('[part="bubble content"]');
+    expect(app).not.toContain('var(--color-primary)');
+  });
+});
+
+describe('accent contrast (paired --kai-color-primary-foreground)', () => {
+  it('resolveContrastForeground: a light accent (yellow) picks black; #e91e63 picks white', () => {
+    // Worked numbers (see the doc comment on resolveContrastForeground for
+    // why this is a luminance-distance comparison, not the WCAG contrast-
+    // RATIO formula): yellow #ffff00 has relative luminance ≈0.928 (>0.5 —
+    // closer to white, so black text sits on it); #e91e63 has relative
+    // luminance ≈0.192 (<=0.5 — closer to black, so white text sits on it).
+    expect(resolveContrastForeground('#ffff00')).toBe('#000000');
+    expect(resolveContrastForeground('#e91e63')).toBe('#ffffff');
+  });
+
+  it('resolveContrastForeground: parses rgb()/hsl() numeric forms the same way as hex', () => {
+    expect(resolveContrastForeground('rgb(255, 255, 0)')).toBe('#000000');
+    expect(resolveContrastForeground('hsl(0, 76%, 52%)')).toEqual(expect.stringMatching(/^#(000000|ffffff)$/));
+  });
+
+  it('resolveContrastForeground: does not guess at named colors, var(), or other exotic syntax', () => {
+    expect(resolveContrastForeground('var(--brand)')).toBeNull();
+    expect(resolveContrastForeground('yellow')).toBeNull();
+    expect(resolveContrastForeground('color-mix(in oklab, red, blue)')).toBeNull();
+  });
+
+  it('a parseable accent emits the base --kai-color-primary-foreground declaration before the @supports override, both at :host', () => {
+    const element = file(generateProject(construct({ theme: { accent: '#e91e63', mode: 'system' } })), 'src/element.tsx');
+    expect(element).toContain(':host { --kai-color-primary-foreground: #ffffff; }');
+    expect(element).toContain('@supports (color: contrast-color(red))');
+    expect(element).toContain('contrast-color(var(--kai-color-primary))');
+    // Ordering: the base declaration comes BEFORE (outside) the @supports
+    // block, so ordinary cascade order lets the native answer win where the
+    // browser supports it, and lets the codegen-computed floor stand where it
+    // doesn't — no !important needed either way.
+    const baseIdx = element.indexOf('--kai-color-primary-foreground: #ffffff');
+    const supportsIdx = element.indexOf('@supports');
+    expect(baseIdx).toBeGreaterThan(-1);
+    expect(supportsIdx).toBeGreaterThan(baseIdx);
+  });
+
+  it('an unparseable accent skips the base foreground declaration, still emits @supports, and leaves a softened NOTICE', () => {
+    const files = generateProject(construct({ theme: { accent: 'var(--brand)', mode: 'system' } }));
+    const element = file(files, 'src/element.tsx');
+    expect(element).not.toContain('--kai-color-primary-foreground: #ffffff');
+    expect(element).not.toContain('--kai-color-primary-foreground: #000000');
+    // @supports still covers it natively where the browser can resolve
+    // contrast-color() itself, accent included.
+    expect(element).toContain('@supports (color: contrast-color(red))');
+    expect(element).toContain('contrast-color(var(--kai-color-primary))');
+    // NOTICE, softened: the theme default stands only in browsers that can't
+    // do contrast-color() — not an unconditional claim.
+    expect(element).toMatch(/NOTICE:.*not parseable for contrast/);
+    expect(element).toMatch(/without CSS contrast-color\(\) support/);
+  });
+
+  it('accentContrastNotice: null when there is no accent or the accent parses; one line when it does not', () => {
+    expect(accentContrastNotice(construct())).toBeNull();
+    expect(accentContrastNotice(construct({ theme: { accent: '#e91e63', mode: 'system' } }))).toBeNull();
+    const notice = accentContrastNotice(construct({ theme: { accent: 'var(--brand)', mode: 'system' } }));
+    expect(notice).toMatch(/^accent 'var\(--brand\)' not parseable for contrast/);
+    expect(notice).toMatch(/without CSS contrast-color\(\) support/);
   });
 });
 

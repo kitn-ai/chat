@@ -7,7 +7,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { validateConstruct, type Construct } from './schema';
-import { generateProject, writeProject } from './codegen';
+import { accentContrastNotice, generateProject, writeProject } from './codegen';
 
 export interface CliIo {
   log: (s: string) => void;
@@ -70,6 +70,8 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       if (overwritten.length > 0) {
         io.log(`overwriting ${overwritten.length} existing file(s)`);
       }
+      const notice = accentContrastNotice(construct);
+      if (notice) io.log(notice);
       io.log(`ejected <${construct.name}> to ${resolve(outDir)} — npm install && npm run dev. The source is yours.`);
       return 0;
     }

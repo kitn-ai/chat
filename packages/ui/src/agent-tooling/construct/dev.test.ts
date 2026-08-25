@@ -46,6 +46,18 @@ describe('kai dev internals', () => {
     );
     expect(out.ok).toBe(true);
     expect(written).toEqual(['/tmp/somewhere']);
+    if (out.ok) expect(out.construct.name).toBe('demo-widget');
+  });
+
+  it('regenTurn logs the accent-contrast notice on a regen whose accent is unparseable', () => {
+    const logs: string[] = [];
+    const io = { log: (s: string) => logs.push(s), error: () => {} };
+    const raw = {
+      name: 'demo-widget', layout: 'widget', provider: { mode: 'mock' },
+      theme: { accent: 'var(--brand)', mode: 'system' },
+    };
+    regenTurn(() => raw, { write: () => {} }, '/tmp/somewhere', {}, io);
+    expect(logs.some((l) => l.includes('not parseable for contrast'))).toBe(true);
   });
 
   it('regenTurn survives a throw from the writer, reports it, and the loop stays alive for the next edit', () => {
