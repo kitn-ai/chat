@@ -1,0 +1,29 @@
+{
+  "compiles": {
+    "passed": true,
+    "detail": "tsc --strict clean over 9 unit(s) under the default consumer project (framework react), resolving @kitn.ai/ui through the shipped exports map.",
+    "framework": "react",
+    "project": "default",
+    "filesSeen": 10,
+    "filesScanned": 9,
+    "unitsCompiled": [
+      "index.html",
+      "src/App.tsx",
+      "src/cards.ts",
+      "src/components/PreviewPanel.tsx",
+      "src/components/TopBar.tsx",
+      "src/main.tsx",
+      "src/page-html.ts",
+      "src/page-version-card.ts",
+      "src/versions.ts"
+    ],
+    "skipped": [],
+    "unread": [
+      "src/app.css"
+    ]
+  },
+  "registers": {
+    "passed": true,
+    "detail": "Live browser probe 2026-08-25 (Chrome, vite dev :5181): kai-chat 650x1068, kai-resizable 1712x1068, 2x kai-resizable-item, kai-button, kai-segmented all defined and non-empty; kai-artifact is registered (customElements.get truthy) and mounts in the preview panel only once a version exists — zero instances at idle is the app design, not a failed upgrade."
+  }
+}

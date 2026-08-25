@@ -1,0 +1,21 @@
+{
+  "runId": "20260825-180554-S4-claude-opus",
+  "date": "2026-08-25T18:05:54.855Z",
+  "scenarioId": "S4",
+  "model": "claude-opus",
+  "modelCanonical": "claude-opus",
+  "tier": "frontier",
+  "effort": null,
+  "executionPath": "claude-code",
+  "pathSource": "inferred",
+  "routingRule": "anthropic-via-subscription",
+  "kitVersion": "0.26.0",
+  "packDir": "/private/tmp/claude-501/-Users-home-Projects-kitn-ai-kitn-chat/3a29a2b2-3185-4996-bd49-032020989aff/scratchpad/d9-runs/20260825-180554-S4-claude-opus/pack",
+  "handoverDir": "/var/folders/ss/nd1qr8qj1v1dthwcsck8h5v00000gn/T/kai-handover-20260825-180554-S4-claude-opus-foLULH",
+  "handoverFiles": 97,
+  "handoverDigest": "sha256:bf46542e09cec070e3c01a3c34f4cf67959ce5b13d74151c40f3222f4b3b8979",
+  "outputDir": "/private/tmp/claude-501/-Users-home-Projects-kitn-ai-kitn-chat/3a29a2b2-3185-4996-bd49-032020989aff/scratchpad/d9-runs/20260825-180554-S4-claude-opus/output",
+  "note": "D-9 grading 2026-08-25: output = shipped ladder app examples/apps/builder (client src), graded post-hoc under nearest deck scenario; not a fresh handover run. Builder model per app README: Claude Opus (version unrecorded).",
+  "status": "prepared",
+  "transport": null
+}

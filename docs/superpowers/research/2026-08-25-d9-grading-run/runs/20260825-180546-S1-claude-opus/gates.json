@@ -1,0 +1,25 @@
+{
+  "compiles": {
+    "passed": true,
+    "detail": "tsc --strict clean over 5 unit(s) under the default consumer project (framework react), resolving @kitn.ai/ui through the shipped exports map.",
+    "framework": "react",
+    "project": "default",
+    "filesSeen": 6,
+    "filesScanned": 5,
+    "unitsCompiled": [
+      "index.html",
+      "src/App.tsx",
+      "src/conversations.ts",
+      "src/main.tsx",
+      "src/storage.ts"
+    ],
+    "skipped": [],
+    "unread": [
+      "src/styles.css"
+    ]
+  },
+  "registers": {
+    "passed": true,
+    "detail": "Live browser probe 2026-08-25 (Chrome, vite dev :5180, keyless mock mode): kai-chat 1424x1074, kai-workspace 1712x1116, kai-conversations 280x1074 — every element the output uses is defined in customElements and renders non-empty (populated shadow roots)."
+  }
+}

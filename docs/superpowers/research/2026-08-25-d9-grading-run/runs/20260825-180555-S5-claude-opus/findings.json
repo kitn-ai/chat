@@ -1,0 +1,22 @@
+{
+  "_note": "D-9 grading run: subject is the SHIPPED ladder app examples/apps/support-widget (rung 1). Judged against the app's own recorded brief (docked support widget, vanilla TS + Vite — the framework the ladder spec fixed for rungs 1-2). S5 is the nearest deck scenario (support chat widget, upgrade race, consumer-owned endpoint) but its delivery target is script-tag/no-bundler, which the corpus app deliberately is not; the script-tag cell of the deck therefore still has no corpus subject. Recorded as a deck coverage gap in the run report, not as an app defect.",
+  "judgedScores": {
+    "contract-correctness": 10,
+    "invariant-compliance": 10,
+    "honesty-bound": 10,
+    "completeness": 10
+  },
+  "findings": [
+    {
+      "id": "SW1",
+      "dimension": "invariant-compliance",
+      "severity": "cosmetic-or-practice",
+      "summary": "The shipped code carries a defensive comment for an ordering rule no invariant states: encode the thread BEFORE createAssistantStream appends its empty assistant placeholder. The rung-1 clean-room rebuild hit this as a real builder error (findings D-9/G-15: encoded after, sending a thread ending in an empty assistant turn), and only the reference's hand-written comment prevents it here.",
+      "attribution": {
+        "kind": "missing-invariant",
+        "proposedId": "encode-before-stream",
+        "statement": "Encode the outgoing thread with toOpenAIMessages/toAnthropicMessages BEFORE creating the assistant stream: createAssistantStream appends an empty assistant message immediately, so encoding afterwards sends a thread that ends in an empty assistant turn."
+      }
+    }
+  ]
+}

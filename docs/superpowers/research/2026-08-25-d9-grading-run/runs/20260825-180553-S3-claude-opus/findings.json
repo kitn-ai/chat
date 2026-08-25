@@ -1,0 +1,23 @@
+{
+  "_note": "D-9 grading run: subject is the SHIPPED ladder app examples/apps/voice-assistant (rung 2). Judged against the app's own recorded brief. S3 is the nearest deck scenario (voice capability) but its two scoring lines name the OTHER voice surface — kai-prompt-input's function-valued `transcribe` and slash-command triggers — which this app deliberately does not use (it is a hands-free kai-voice-input -> kai-thread -> kai-voice-output loop). No deck scenario covers the hands-free voice family; recorded as a deck coverage gap in the run report.",
+  "judgedScores": {
+    "contract-correctness": 10,
+    "invariant-compliance": 10,
+    "wiring-topology": 10,
+    "honesty-bound": 10,
+    "completeness": 10
+  },
+  "findings": [
+    {
+      "id": "V1",
+      "dimension": "wiring-topology",
+      "severity": "cosmetic-or-practice",
+      "summary": "kai-voice-input opens its own microphone stream for recognition and hands it to nobody, and speechSynthesis exposes no audio node, so driving kai-audio-visualizer honestly requires a SECOND getUserMedia capture (with its own latch/timeout plumbing, ~60 lines) and synthetic bands for the speaking phase. The shipped code does both loudly, but the extra capture is wiring the kit forces on every voice+visualizer composition.",
+      "attribution": {
+        "kind": "underived-contract",
+        "tag": "kai-voice-input",
+        "fact": "the element does not expose the MediaStream it captures, and nothing in the derived layer says so; a consumer wiring a visualizer must discover by experiment that a second capture is the only path"
+      }
+    }
+  ]
+}
