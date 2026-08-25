@@ -1517,7 +1517,9 @@
           "fn": false
         }
       ],
-      "events": [],
+      "events": [
+        "kai-select"
+      ],
       "methods": [],
       "parts": [
         "body",

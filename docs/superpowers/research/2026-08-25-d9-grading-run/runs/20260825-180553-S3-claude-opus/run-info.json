@@ -1,0 +1,21 @@
+{
+  "runId": "20260825-180553-S3-claude-opus",
+  "date": "2026-08-25T18:05:53.756Z",
+  "scenarioId": "S3",
+  "model": "claude-opus",
+  "modelCanonical": "claude-opus",
+  "tier": "frontier",
+  "effort": null,
+  "executionPath": "claude-code",
+  "pathSource": "inferred",
+  "routingRule": "anthropic-via-subscription",
+  "kitVersion": "0.26.0",
+  "packDir": "/private/tmp/claude-501/-Users-home-Projects-kitn-ai-kitn-chat/3a29a2b2-3185-4996-bd49-032020989aff/scratchpad/d9-runs/20260825-180553-S3-claude-opus/pack",
+  "handoverDir": "/var/folders/ss/nd1qr8qj1v1dthwcsck8h5v00000gn/T/kai-handover-20260825-180553-S3-claude-opus-nxjRi5",
+  "handoverFiles": 97,
+  "handoverDigest": "sha256:f2d6ddf904db3a1ab3154ca46a62a43239917451ca226f60ac6c40badd8d1bce",
+  "outputDir": "/private/tmp/claude-501/-Users-home-Projects-kitn-ai-kitn-chat/3a29a2b2-3185-4996-bd49-032020989aff/scratchpad/d9-runs/20260825-180553-S3-claude-opus/output",
+  "note": "D-9 grading 2026-08-25: output = shipped ladder app examples/apps/voice-assistant (client src), graded post-hoc under nearest deck scenario; not a fresh handover run. Builder model per app README: Claude Opus (version unrecorded).",
+  "status": "prepared",
+  "transport": null
+}

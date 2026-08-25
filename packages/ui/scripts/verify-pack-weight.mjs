@@ -102,8 +102,18 @@ const ALLOWED_LARGE_FILES = new Map([
  * blocks (AssistantStream, the encoder docs, MockTurn) are exactly the
  * measured hard core rung 6 filed as its one S1, and the whole section gone
  * would still not have fit under 13.0.
+ *
+ * 13.5 → 13.15 MiB, LOWERED (2026-08-25, the llms-full dedupe): the tarball
+ * shipped llms-full.txt twice — the package root and dist/llms/ — at ~293 KB
+ * each, and the copies were caught drifting (a stale dist copy without the
+ * programmatic markers beside a current root). Owner ruled the root copy
+ * canonical: gen-llms.mjs no longer writes dist/llms/ (and removes a stale
+ * one), and the MCP slicer reads the root copy. Measured 12.91 MiB after the
+ * dedupe; the ceiling reclaims the saving with ~0.24 MiB headroom, chosen so
+ * the dist copy quietly coming back (~0.29 MiB with its llms.txt sibling)
+ * trips this rule rather than hiding in slack.
  */
-const MAX_UNPACKED_BYTES = 13.5 * 1024 * 1024;
+const MAX_UNPACKED_BYTES = 13.15 * 1024 * 1024;
 
 const kib = (n) => `${(n / 1024).toFixed(1)} KiB`;
 const mib = (n) => `${(n / 1024 / 1024).toFixed(2)} MiB`;

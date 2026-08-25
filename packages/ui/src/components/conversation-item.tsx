@@ -41,11 +41,14 @@ export function relativeTimeShort(iso?: string, now: number = Date.now()): strin
  * title), plus `leading`, `meta`, and `menu`. The `menu` region takes the
  * consumer's OWN popover (rename / fork / archive live there); the component
  * provides only the region plus focus and ARIA plumbing, never a declarative
- * actions prop. Activation semantics live in the CONTAINER
- * (`createConversationItemsController` in conversation-list.tsx): this row is
- * presentational, and the `data-kai-item-menu` marker on the menu region is what
- * the container's activation guard keys off so a click in the consumer's menu
- * never also selects the row.
+ * actions prop. Activation has two modes: inside `<kai-conversations>` it
+ * lives in the CONTAINER (`createConversationItemsController` in
+ * conversation-list.tsx — this row renders no handler and the
+ * `data-kai-item-menu` marker on the menu region is what the container's
+ * activation guard keys off so a click in the consumer's menu never also
+ * selects the row); STANDALONE (F-45 tier 2), `onActivate` makes the row body
+ * its own tabbable button-role control — click / Enter / Space — with the menu
+ * still outside the control as the body's sibling.
  *
  * ARIA contract for direct Solid use: the row renders `role="listitem"` holding
  * a `role="button"` body (`aria-current` marks the active row, the same dialect
@@ -80,11 +83,20 @@ export interface SlottedConversationItemProps {
    *  Solid consumers rendering the component directly leave it off and the row
    *  itself is the group. */
   hostSemantics?: boolean;
+  /** STANDALONE activation (F-45 tier 2): when set, the row body is itself the
+   *  activation control — `tabindex="0"` on the `role="button"` body, and
+   *  click / Enter / Space call this. The menu region never triggers it (it is
+   *  the body's sibling, outside the control). Inside `<kai-conversations>`
+   *  leave it UNSET: the container's controller owns activation (its delegated
+   *  click/keydown → `kai-conversation-select`) plus roving tabindex, and a
+   *  handler here would double-fire. The `kai-conversation-item` facade passes
+   *  it only when the item is standalone. */
+  onActivate?: () => void;
   class?: string;
 }
 
 export function SlottedConversationItem(props: SlottedConversationItemProps) {
-  const [local] = splitProps(props, ['conversationId', 'active', 'compact', 'leading', 'meta', 'menu', 'children', 'hostSemantics', 'class']);
+  const [local] = splitProps(props, ['conversationId', 'active', 'compact', 'leading', 'meta', 'menu', 'children', 'hostSemantics', 'onActivate', 'class']);
   return (
     // The sibling restructure (ratified 2026-08-20): axe nested-interactive
     // bans focusable descendants of an activation control, so the control role
@@ -112,6 +124,18 @@ export function SlottedConversationItem(props: SlottedConversationItemProps) {
         role="button"
         data-kai-item-body
         aria-current={local.active ? 'true' : 'false'}
+        // Standalone activation only (F-45 tier 2): with `onActivate` unset —
+        // the inside-a-container case — no tabindex and no handlers render, so
+        // the container's delegated activation stays the single path.
+        tabindex={local.onActivate ? 0 : undefined}
+        onClick={() => local.onActivate?.()}
+        onKeyDown={(e: KeyboardEvent) => {
+          if (!local.onActivate) return;
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault(); // Space must not scroll the page
+            local.onActivate();
+          }
+        }}
         class="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <Show when={local.leading}>

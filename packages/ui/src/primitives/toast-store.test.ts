@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createRoot, onCleanup } from 'solid-js';
 import {
   toast, getToasts, ensureMounted, isToastRegionMounted,
@@ -160,6 +160,69 @@ describe('ensureMounted', () => {
     expect(document.querySelector('kai-toast-region')).toBeNull();
     toast('First');
     expect(document.querySelector('kai-toast-region')).not.toBeNull();
+  });
+});
+
+describe('ensureMounted — adopt-if-present (F-48, owner-ruled 2026-08-25)', () => {
+  it('adopts a connected hand-placed <kai-toast-region> instead of creating a second one', () => {
+    const placed = document.createElement('kai-toast-region');
+    document.body.appendChild(placed);
+    const h = toast('Adopted');
+    // No second region: the hand-placed one is the imperative singleton now.
+    expect(document.querySelectorAll('kai-toast-region')).toHaveLength(1);
+    const bound = (placed as HTMLElement & { toasts?: ToastItem[] }).toasts;
+    expect(bound?.some((t) => t.id === h.id)).toBe(true);
+  });
+
+  it('does not clobber the adopted region\'s authored attributes with config defaults', () => {
+    const placed = document.createElement('kai-toast-region');
+    placed.setAttribute('position', 'bottom-left');
+    document.body.appendChild(placed);
+    toast('hi');
+    expect(placed.getAttribute('position')).toBe('bottom-left');
+  });
+
+  it('creates its own region only when none exists (existing behavior)', () => {
+    expect(document.querySelector('kai-toast-region')).toBeNull();
+    toast('Fresh');
+    expect(document.querySelectorAll('kai-toast-region')).toHaveLength(1);
+  });
+
+  it('falls back gracefully when the adopted region leaves the DOM — no dead cache entry', () => {
+    const placed = document.createElement('kai-toast-region');
+    document.body.appendChild(placed);
+    toast('One');
+    expect(document.querySelectorAll('kai-toast-region')).toHaveLength(1);
+    placed.remove();
+    // Next toast must not route into the disconnected element: a fresh region
+    // mounts (nothing left to adopt) and carries the store.
+    const h = toast('Two');
+    const regionsNow = document.querySelectorAll('kai-toast-region');
+    expect(regionsNow).toHaveLength(1);
+    expect(regionsNow[0]).not.toBe(placed);
+    const bound = (regionsNow[0] as HTMLElement & { toasts?: ToastItem[] }).toasts;
+    expect(bound?.some((t) => t.id === h.id)).toBe(true);
+  });
+
+  it('warns once — and only once — on genuine ambiguity (2+ candidate regions), adopting the first', () => {
+    const first = document.createElement('kai-toast-region');
+    const second = document.createElement('kai-toast-region');
+    document.body.appendChild(first);
+    document.body.appendChild(second);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      toast('A');
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0][0])).toContain('kai-toast-region');
+      // Document order wins: the FIRST region is the one adopted.
+      expect((first as HTMLElement & { toasts?: ToastItem[] }).toasts?.length).toBeGreaterThan(0);
+      expect((second as HTMLElement & { toasts?: ToastItem[] }).toasts).toBeUndefined();
+      // Decide loudly, once — not on every subsequent toast.
+      toast('B');
+      expect(warn).toHaveBeenCalledTimes(1);
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 

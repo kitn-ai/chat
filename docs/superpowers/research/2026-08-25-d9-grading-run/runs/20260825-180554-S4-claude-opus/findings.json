@@ -1,0 +1,22 @@
+{
+  "_note": "D-9 grading run: subject is the SHIPPED ladder app examples/apps/builder (rung 4, Pagesmith). Judged against the app's own recorded brief (Lovable-style page builder: artifacts, preview panel, versions). S4 is the nearest deck scenario only by depth class ('whole surface'); its prompt names a Perplexity-style research UI, which no corpus app answers. Recorded as a deck coverage gap in the run report.",
+  "judgedScores": {
+    "contract-correctness": 10,
+    "invariant-compliance": 10,
+    "honesty-bound": 10,
+    "completeness": 10
+  },
+  "findings": [
+    {
+      "id": "B1",
+      "dimension": "contract-correctness",
+      "severity": "cosmetic-or-practice",
+      "summary": "CardSchema's type describes only the subset the kit's validator implements, so the nested `description` properties every authored schema carries — the kit's own seven included — are an excess property against it, and the app's page-version schema needs an `as CardSchema` assertion to compile (recorded in the app's NOTES.md). The type the consumer is handed rejects the shape the kit itself authors.",
+      "attribution": {
+        "kind": "underived-contract",
+        "tag": "kai-chat",
+        "fact": "cardSchemas accepts schemas whose nested property `description` fields the CardSchema type rejects; the accepted-vs-validated schema shape is stated in a source comment but not derivable by a consumer"
+      }
+    }
+  ]
+}

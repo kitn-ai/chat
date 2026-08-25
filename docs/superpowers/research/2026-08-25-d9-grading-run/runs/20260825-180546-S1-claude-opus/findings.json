@@ -1,0 +1,23 @@
+{
+  "_note": "D-9 grading run (owner ruling 2026-08-24): the subject is the SHIPPED ladder app examples/apps/workspace (rung 3), not a fresh catalog-only agent run. Judged dimensions are scored against the app's own recorded build brief (README provenance); S1 is the nearest deck scenario (conversations sidebar + thread switching, React). Deck-fit delta recorded in the run report, not as a score: S1 additionally asks for an artifact side panel, which was rung 4's family, so the corpus app for S1's exact prompt does not exist.",
+  "judgedScores": {
+    "contract-correctness": 10,
+    "invariant-compliance": 10,
+    "wiring-topology": 10,
+    "honesty-bound": 10,
+    "completeness": 10
+  },
+  "findings": [
+    {
+      "id": "W1",
+      "dimension": "contract-correctness",
+      "severity": "cosmetic-or-practice",
+      "summary": "kai-toast-region's stacking contract (z-index 100 in the host page) is documented nowhere a consumer can derive. The app's first cut buried the delete-Undo toast under its own fixed-position layout (rung-3 IVP point 4); the shipped CSS carries the fix plus a comment naming the contract by hand, which is the tell that the contract is underived.",
+      "attribution": {
+        "kind": "underived-contract",
+        "tag": "kai-toast-region",
+        "fact": "the element renders at z-index 100 and is trivially buried by consumer fixed-position stacking contexts; nothing in the derived layer or element page states the stacking contract or what the host must not do"
+      }
+    }
+  ]
+}

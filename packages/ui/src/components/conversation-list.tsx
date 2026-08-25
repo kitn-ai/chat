@@ -41,6 +41,21 @@ export function readConversationItemId(el: Element): string {
   return el.getAttribute('conversation-id') ?? el.id;
 }
 
+/** Whether a `<kai-conversation-item>` is STANDALONE — outside the management
+ *  of a `<kai-conversations>` container — and therefore activates ITSELF
+ *  (F-45 tier 2, owner-ruled 2026-08-25): the facade makes its row body a
+ *  tabbable button and fires `kai-select` on click / Enter / Space. Derived
+ *  from the container's own membership rule, not from mere ancestry: item mode
+ *  queries `:scope > kai-conversation-item` (direct children only), so an item
+ *  wrapped in another element inside a container is standalone too — the
+ *  container's controller never stamps or activates it. Inside a container
+ *  (a direct child), the ratified parent-item contract is the ONLY activation
+ *  path: the container dispatches `kai-conversation-select` and owns roving
+ *  tabindex, and the item fires nothing of its own. */
+export function isStandaloneConversationItem(el: Element): boolean {
+  return el.parentElement?.localName !== 'kai-conversations';
+}
+
 export interface ConversationItemsControllerOptions {
   /** The current slotted item hosts, in DOM order. */
   getItems: () => HTMLElement[];

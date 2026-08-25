@@ -6,9 +6,10 @@ interface Props extends Record<string, unknown> {
   /** The toasts to render. Newest is shown on top. Set as a JS property (array);
    *  pass a new array reference to update. Omit for an empty region, which is
    *  the normal resting state and how the imperative `toast()` API starts.
-   *  Data-driven and imperative are EITHER/OR per app: `toast()` mounts its own
-   *  region on `document.body` and never adopts one you placed in markup, so
-   *  mixing the two gives you two overlapping regions. */
+   *  Note the handover: the first `toast()` call ADOPTS a region you placed in
+   *  markup (no second region mounts) and binds the imperative store to this
+   *  property, replacing any array you set. Drive a region as data OR via
+   *  `toast()`, not both at once. */
   toasts?: ToastItem[];
   /** Stack anchor: `'top-center'` (default), `'top-right'`, `'bottom-center'`, … */
   position?: ToastPosition;
@@ -44,11 +45,14 @@ interface Events {
  * also usable declaratively — set `el.toasts = [...]` (a JS property, never an
  * attribute) and listen for `kai-dismiss` / `kai-action`.
  *
- * Pick ONE of those modes per app. `toast()` always mounts its own region and
- * never adopts a `<kai-toast-region>` you placed in markup, so a hand-placed
- * region plus a `toast()` call anywhere in the app yields two overlapping
- * regions. Driving your own region as data means owning the whole array —
- * don't also call `toast()`.
+ * The two modes meet gracefully: `toast()` ADOPTS the first connected
+ * `<kai-toast-region>` already in the document instead of mounting a second
+ * one, and creates its own on `document.body` only when none exists. Adoption
+ * keeps your authored attributes (position/stack/appearance) but binds the
+ * imperative store to `toasts`, replacing an array you were driving as data —
+ * so within one app, either own the array or call `toast()`, not both. With
+ * two or more regions placed, the first in document order is adopted and a
+ * one-time console.warn flags the ambiguity.
  *
  * Because it is a real `kai-*` element it carries its own shadow root + the
  * shared kit stylesheet, so it is viewport-positioned AND kit-styled.

@@ -1,0 +1,22 @@
+{
+  "_note": "D-9 grading run: subject is the SHIPPED ladder app examples/apps/ops-console (rung 5, remote cards). Judged against the app's own recorded brief. S6 is the nearest deck scenario because ops-console is the composing shape S6's honesty-bound 10-anchor names at scale: message types the kit does not ship (approval, parameters, run-board) are composed as custom card types through createCardRegistry + cardTypes/cardSchemas — including a cross-origin kai-remote board card — with no kai-* tag fabricated anywhere. Verified live 2026-08-25 (vite dev :5182/:5183, keyless mock): one submitted turn produced an assistant message with text + card parts and a mounted kai-remote (557x150).",
+  "judgedScores": {
+    "contract-correctness": 10,
+    "invariant-compliance": 10,
+    "honesty-bound": 10,
+    "completeness": 10
+  },
+  "findings": [
+    {
+      "id": "O1",
+      "dimension": "contract-correctness",
+      "severity": "cosmetic-or-practice",
+      "summary": "The kit's card validator implements no `additionalProperties`, so undeclared keys — including __proto__/constructor/prototype — pass validation against every schema, and the app polices prototype-pollution keys itself before rendering a card. The exclusion is written down only in a kit source comment (primitives/card-validate-schemas.ts); a consumer cannot derive that cards.validate() leaves undeclared keys unexamined.",
+      "attribution": {
+        "kind": "underived-contract",
+        "tag": "kai-chat",
+        "fact": "cardSchemas validation does not implement additionalProperties, so undeclared keys in model-produced card data are never a validation failure; the consumer must reject pollution keys themselves and nothing derivable says so"
+      }
+    }
+  ]
+}

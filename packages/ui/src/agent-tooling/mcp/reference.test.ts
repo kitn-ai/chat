@@ -949,6 +949,10 @@ describe('component_reference — programmatic layer + code recipes (rung-6 F-46
     expect(text).not.toContain('URL.createObjectURL');
     // The host resolves the announced tool call (F-47), in code.
     expect(text).toContain("state: 'output-available'");
+    // F-45 tier 2: the standalone rail rows activate THEMSELVES — the recipe
+    // wires the item's own kai-select event, not a raw host click listener
+    // (which would miss the keyboard story the element now provides).
+    expect(text).toContain("addEventListener('kai-select'");
   });
 
   it('the composed-thread markup places no <kai-chat> — that is the premise', () => {

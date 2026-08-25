@@ -1,0 +1,6 @@
+{
+  "registers": {
+    "passed": true,
+    "detail": "Live browser probe 2026-08-25 (Chrome, vite dev :5178, keyless mock mode): kai-dock defined (host box 0x0 by design — fixed-position launcher/panel render from its shadow root), kai-chat 378x598 non-empty; setting dock.open=true opens the panel. Props are set only after customElements.whenDefined per the upgrade-race handling in src/main.ts."
+  }
+}
