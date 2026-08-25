@@ -20,8 +20,9 @@ Plan follows via writing-plans after owner review of this file.
   Consumers install nothing but the output; Solid appears only if they eject.
 - **Codegen-only, one path** (owner-picked option B): `kai dev` and `kai compile` share
   every line of generation, so the preview IS the artifact. No interpreter to drift.
-- **Success**: ops-console re-expressed as a construct with ≥50% less hand-written code ·
-  construct → live preview < 1 min, keyless · emitted element passes the same consumer
+- **Success**: ops-console re-expressed as a construct with ≥50% less hand-written code (lint-thresholds: waive -- target set from the measured seam inventories, 48% and 63.6% glue; the achieved ratio is measured and reported at plan completion, not asserted) ·
+  construct → live preview < 1 min, keyless (lint-thresholds: waive -- UX target the owner set in
+  the sitting; Task 5 demonstrates it live rather than asserting it) · emitted element passes the same consumer
   gates as the kit's own elements · a coding agent authors a valid construct first-try
   from one sentence.
 
