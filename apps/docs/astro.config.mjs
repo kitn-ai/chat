@@ -86,6 +86,7 @@ export default defineConfig({
                   { label: 'Build a composer', slug: 'guides/build-a-composer' },
                   { label: 'Compose a message thread', slug: 'guides/compose-message-thread' },
                   { label: 'Compose your own shell', slug: 'patterns/compose-your-own' },
+                  { label: 'App shell', slug: 'guides/app-shell' },
                   { label: 'Custom chat header', slug: 'patterns/custom-chat-header' },
                   { label: 'Menus & command pickers', slug: 'guides/menus-and-pickers' },
                 ],
