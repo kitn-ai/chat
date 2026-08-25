@@ -75,6 +75,7 @@
     "kai-setting-item": "setting-item",
     "kai-pane": "pane",
     "kai-pane-group": "pane-group",
+    "kai-pane-grid": "pane-grid",
     "kai-agent-card": "agent-card",
     "kai-dialog": "dialog",
     "kai-dock": "dock",
@@ -304,6 +305,9 @@
     ],
     "pane-group": [
       "kai-pane-group"
+    ],
+    "pane-grid": [
+      "kai-pane-grid"
     ],
     "agent-card": [
       "kai-agent-card"

@@ -3009,6 +3009,54 @@
       "tokens": []
     },
     {
+      "tag": "kai-pane-grid",
+      "props": [
+        {
+          "name": "theme",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "minPaneWidth",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "minPaneHeight",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "maxColumns",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "gap",
+          "scalar": true,
+          "optional": true,
+          "fn": false
+        },
+        {
+          "name": "maximizedIndex",
+          "scalar": false,
+          "optional": true,
+          "fn": false
+        }
+      ],
+      "events": [],
+      "methods": [],
+      "parts": [],
+      "composedFrom": [
+        "PaneGrid"
+      ],
+      "tokens": []
+    },
+    {
       "tag": "kai-pane-group",
       "props": [
         {

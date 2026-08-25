@@ -5901,6 +5901,73 @@
     ]
   },
   {
+    "tag": "kai-pane-grid",
+    "className": "KaiPaneGridElement",
+    "displayName": "PaneGrid",
+    "props": [
+      {
+        "name": "theme",
+        "type": "\"light\" | \"dark\" | \"auto\"",
+        "optional": true,
+        "scalar": true,
+        "description": "Color mode (`auto` follows prefers-color-scheme).",
+        "default": "'auto'",
+        "universal": true,
+        "displayType": "\"light\" | \"dark\" | \"auto\""
+      },
+      {
+        "name": "minPaneWidth",
+        "type": "undefined | number",
+        "optional": true,
+        "scalar": true,
+        "description": "Minimum width of every pane, in px, before columns drop / the grid scrolls. Defaults to `280`. Attribute: `min-pane-width`.",
+        "displayType": "undefined | number"
+      },
+      {
+        "name": "minPaneHeight",
+        "type": "undefined | number",
+        "optional": true,
+        "scalar": true,
+        "description": "Minimum height of every pane, in px, before the grid scrolls vertically. Defaults to `200`. Attribute: `min-pane-height`.",
+        "displayType": "undefined | number"
+      },
+      {
+        "name": "maxColumns",
+        "type": "undefined | number",
+        "optional": true,
+        "scalar": true,
+        "description": "Column cap when the container is wide (default `3`). Attribute: `max-columns`.",
+        "displayType": "undefined | number"
+      },
+      {
+        "name": "gap",
+        "type": "undefined | string",
+        "optional": true,
+        "scalar": true,
+        "description": "Gap between panes, any CSS length. Defaults to the kit gap (`var(--kai-pane-grid-gap, 0.5rem)`). Attribute: `gap`.",
+        "displayType": "undefined | string"
+      },
+      {
+        "name": "maximizedIndex",
+        "type": "undefined | number | null",
+        "optional": true,
+        "scalar": false,
+        "description": "When set to a valid child index, render ONLY that pane full-bleed: a simple maximize hook the consumer drives (pair it with `<kai-pane>`'s `kai-maximize` event). Clear it (or point out of range) for the full tiled grid. Attribute: `maximized-index`.",
+        "displayType": "undefined | number | null"
+      }
+    ],
+    "events": [],
+    "methods": [],
+    "composedFrom": [
+      {
+        "name": "PaneGrid",
+        "group": "UI",
+        "storyId": "solid-advanced-primitives-panegrid--docs"
+      }
+    ],
+    "tokens": []
+  },
+  {
     "tag": "kai-pane-group",
     "className": "KaiPaneGroupElement",
     "displayName": "PaneGroup",
