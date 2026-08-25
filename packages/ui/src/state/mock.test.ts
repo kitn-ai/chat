@@ -195,3 +195,101 @@ describe('createMockResponder — you can tell it is a mock', () => {
     expect(info).not.toHaveBeenCalled();
   });
 });
+
+describe('createMockResponder — scripted tool calls (F-35)', () => {
+  // The acceptance that matters: the SAME fold path real wire output takes —
+  // frames -> readOpenAIStream -> createAssistantStream -> parts. No hand-rolled
+  // tool-call SSE framing in the app, which is what every ladder rung paid for.
+
+  it('a scripted tool call becomes a tool part with parsed input, via the real parser', async () => {
+    const respond = createMockResponder({
+      ...quiet,
+      delayMs: 0,
+      replies: [{ toolCalls: [{ name: 'get_weather', arguments: { city: 'Oslo', units: 'metric' } }] }],
+    });
+    const { messages, turn } = await runTurn(respond);
+
+    const toolParts = messages[0].parts.filter((p) => p.type === 'tool');
+    expect(toolParts).toHaveLength(1);
+    const tool = (toolParts[0] as { tool: { type: string; state: string; input?: unknown } }).tool;
+    expect(tool.type).toBe('get_weather');
+    expect(tool.state).toBe('input-available');
+    expect(tool.input).toEqual({ city: 'Oslo', units: 'metric' });
+
+    // The turn settles the way a real tool-calling turn does.
+    expect(turn.finishReason).toBe('tool_calls');
+    expect(turn.toolCalls).toHaveLength(1);
+    expect(turn.toolCalls[0].name).toBe('get_weather');
+    expect(turn.toolCalls[0].input).toEqual({ city: 'Oslo', units: 'metric' });
+  });
+
+  it('text + tool call in one turn arrive as ordered text-then-tool parts', async () => {
+    const respond = createMockResponder({
+      ...quiet,
+      delayMs: 0,
+      replies: [{
+        text: 'Let me check that for you.',
+        toolCalls: [{ id: 'call_mock_1', name: 'kai_confirm', arguments: { title: 'Proceed?', actions: [{ id: 'ok', label: 'OK' }] } }],
+      }],
+    });
+    const { messages, turn } = await runTurn(respond);
+
+    expect(messages[0].parts.map((p) => p.type)).toEqual(['text', 'tool']);
+    expect(turn.text).toBe('Let me check that for you.');
+    expect(turn.toolCalls[0].id).toBe('call_mock_1');
+  });
+
+  it('argument JSON is streamed in fragments, not delivered in one frame', async () => {
+    const respond = createMockResponder({
+      ...quiet,
+      delayMs: 0,
+      replies: [{ toolCalls: [{ name: 'kai_form', arguments: { fields: ['a', 'b', 'c', 'd'], reason: 'exercise the fragment reassembly path the real wire hits' } }] }],
+    });
+    const raw = await collect(respond('hi'));
+    const toolFrames = raw
+      .split('\n\n')
+      .filter((f) => f.startsWith('data: ') && !f.includes('[DONE]'))
+      .map((f) => JSON.parse(f.slice(6)) as { choices?: { delta?: { tool_calls?: unknown[] } }[] })
+      .filter((f) => Array.isArray(f.choices?.[0]?.delta?.tool_calls));
+    expect(toolFrames.length).toBeGreaterThan(1);
+    // And the reassembled result still parses to the exact object.
+    const { turn } = await runTurn(respond);
+    expect(turn.toolCalls[0].input).toEqual({
+      fields: ['a', 'b', 'c', 'd'],
+      reason: 'exercise the fragment reassembly path the real wire hits',
+    });
+  });
+
+  it('every tool-call frame still carries the mock marker and model id', async () => {
+    const respond = createMockResponder({
+      ...quiet,
+      delayMs: 0,
+      replies: [{ toolCalls: [{ name: 'get_weather', arguments: { city: 'Oslo' } }] }],
+    });
+    const frames = (await collect(respond('hi')))
+      .split('\n\n')
+      .filter((f) => f.startsWith('data: ') && !f.includes('[DONE]'))
+      .map((f) => JSON.parse(f.slice(6)) as Record<string, unknown>);
+    expect(frames.length).toBeGreaterThan(0);
+    for (const f of frames) {
+      expect(f[MOCK_MARKER_KEY]).toBe(MOCK_MARKER);
+      expect(f.model).toBe(MOCK_MODEL_ID);
+    }
+  });
+
+  it('plain-string replies and MockTurn replies mix and cycle together', async () => {
+    const respond = createMockResponder({
+      ...quiet,
+      delayMs: 0,
+      replies: ['just text', { text: 'then a tool', toolCalls: [{ name: 't', arguments: {} }] }],
+    });
+    const first = await runTurn(respond);
+    expect(first.turn.text).toBe('just text');
+    expect(first.turn.toolCalls).toHaveLength(0);
+    expect(first.turn.finishReason).toBe('stop');
+    const second = await runTurn(respond);
+    expect(second.turn.text).toBe('then a tool');
+    expect(second.turn.toolCalls).toHaveLength(1);
+    expect(second.turn.finishReason).toBe('tool_calls');
+  });
+});

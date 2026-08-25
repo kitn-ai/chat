@@ -128,6 +128,8 @@ defineWebComponent<Props, Events>('kai-thread', {
         scrollButton={props.scrollButton !== false}
         cardTypes={cardComponentsFromTags(props.cardTypes as Record<string, string> | undefined, (props as { theme?: string }).theme)}
         cardSchemas={props.cardSchemas as Record<string, object> | undefined}
+        /* F-26: card parts emit off THIS element as the bubbling `kai-card` event. */
+        cardHostElement={element}
         empty={slots()['empty'] ? <slot name="empty" /> : undefined}
         onMessageAction={(detail) => dispatch('kai-message-action', detail)}
         controllerRef={(c) => (controller = c)}

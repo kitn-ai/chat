@@ -96,9 +96,42 @@ export const DEFAULT_MOCK_REPLIES: readonly string[] = [
   'Mock again. Every frame I send is tagged `_kai_mock` and my usage reports zero tokens, so nothing here can be mistaken for a real turn.',
 ];
 
+/** One scripted tool call for a mock turn. Framed exactly the way the OpenAI
+ *  chat-completions wire frames a real one — an announce fragment carrying
+ *  `id`/`function.name`, then the argument JSON streamed in fragments — so the
+ *  kit's own reader (`readOpenAIStream`) reassembles it through the same path a
+ *  real provider's call takes. */
+export interface MockToolCall {
+  /** The tool name, e.g. `'get_weather'` or a card tool like `'kai_confirm'`. */
+  name: string;
+  /** The call's arguments. Serialized with `JSON.stringify` and streamed as
+   *  fragments, like a real provider. Defaults to `{}`. */
+  arguments?: unknown;
+  /** Explicit tool-call id. Defaults to `call_kai-mock-<turn>-<n>`, which keeps
+   *  the mock's naming tell (see tell 3): no provider issues ids in that shape. */
+  id?: string;
+}
+
+/** A scripted mock turn: optional text, then optional tool calls. A turn with
+ *  tool calls finishes `finish_reason: 'tool_calls'`, exactly as a real
+ *  tool-calling turn does; a turn without them finishes `'stop'`. */
+export interface MockTurn {
+  /** Text streamed (token by token) before the tool calls. */
+  text?: string;
+  /** Tool calls announced this turn, in order. */
+  toolCalls?: readonly MockToolCall[];
+}
+
+/** A canned reply: plain text, or a scripted turn. A string is exactly
+ *  `{ text }` — the pre-tool-call API unchanged. */
+export type MockReply = string | MockTurn;
+
 export interface MockResponderOptions {
-  /** Canned replies, cycled one per turn. Defaults to `DEFAULT_MOCK_REPLIES`. */
-  replies?: readonly string[];
+  /** Canned replies, cycled one per turn. Plain strings stream as text; a
+   *  `MockTurn` can also script tool calls (`{ text, toolCalls }`), which is
+   *  what lets the zero-config mock exercise the kit's tool/card path without
+   *  hand-rolled SSE framing. Defaults to `DEFAULT_MOCK_REPLIES`. */
+  replies?: readonly MockReply[];
   /** Delay between chunks, in ms. Defaults to 24 — fast enough to feel alive,
    *  slow enough that the streaming is visible. `0` streams as fast as the
    *  event loop allows, which is what tests want. */
@@ -144,6 +177,27 @@ function frame(id: string, body: Record<string, unknown>): string {
 const delay = (ms: number): Promise<void> =>
   ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve();
 
+/** Normalize a canned reply: a plain string is exactly `{ text }`. */
+const asTurn = (reply: MockReply): MockTurn => (typeof reply === 'string' ? { text: reply } : reply);
+
+/** How many characters of argument JSON ride in each tool-call fragment. Small
+ *  enough that any realistic argument object spans several frames, so the
+ *  reader's fragment-reassembly path — the one a real provider exercises — is
+ *  exercised here too, rather than a single-frame shortcut it would never see
+ *  in production. */
+const TOOL_ARG_FRAGMENT_CHARS = 16;
+
+/** Split argument JSON into the fragments a provider streams. Never empty: an
+ *  empty-object call still sends its `'{}'` so the reader has arguments to
+ *  parse. */
+function argumentFragments(json: string): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < json.length; i += TOOL_ARG_FRAGMENT_CHARS) {
+    out.push(json.slice(i, i + TOOL_ARG_FRAGMENT_CHARS));
+  }
+  return out.length > 0 ? out : [''];
+}
+
 /**
  * Build a mock responder.
  *
@@ -170,8 +224,9 @@ export function createMockResponder(options: MockResponderOptions = {}): MockRes
   let announced = false;
 
   return function respond(_prompt?: string): AsyncIterable<string> {
-    const reply = pool[turn % pool.length];
+    const scripted = asTurn(pool[turn % pool.length]);
     const id = `kai-mock-${turn + 1}`;
+    const turnNumber = turn + 1;
     turn += 1;
 
     return {
@@ -193,15 +248,46 @@ export function createMockResponder(options: MockResponderOptions = {}): MockRes
         // exercises the reader's empty-delta path.
         yield frame(id, { choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] });
 
-        for (const token of tokenize(reply, chunkSize)) {
+        for (const token of tokenize(scripted.text ?? '', chunkSize)) {
           await delay(delayMs);
           yield frame(id, { choices: [{ index: 0, delta: { content: token }, finish_reason: null }] });
         }
 
+        // Scripted tool calls, framed the way the OpenAI wire frames real ones:
+        // one announce fragment per call (`index`/`id`/`function.name` + empty
+        // arguments), then the argument JSON in fragments. The kit's reader
+        // reassembles them through the exact path a real provider's call takes.
+        const toolCalls = scripted.toolCalls ?? [];
+        for (let index = 0; index < toolCalls.length; index += 1) {
+          const call = toolCalls[index];
+          // Tell 3's shape, extended to call ids: no provider issues these.
+          const callId = call.id ?? `call_${MOCK_MODEL_ID}-${turnNumber}-${index + 1}`;
+          await delay(delayMs);
+          yield frame(id, {
+            choices: [{
+              index: 0,
+              delta: { tool_calls: [{ index, id: callId, function: { name: call.name, arguments: '' } }] },
+              finish_reason: null,
+            }],
+          });
+          for (const fragment of argumentFragments(JSON.stringify(call.arguments ?? {}))) {
+            await delay(delayMs);
+            yield frame(id, {
+              choices: [{
+                index: 0,
+                delta: { tool_calls: [{ index, function: { arguments: fragment } }] },
+                finish_reason: null,
+              }],
+            });
+          }
+        }
+
         // Tell 4: zero usage. A real turn that produced this much text cannot
-        // report zero completion tokens.
+        // report zero completion tokens. A turn that announced tool calls ends
+        // `tool_calls`, exactly as a real one does, so the consumer's tool loop
+        // branches the same way it would against a provider.
         yield frame(id, {
-          choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+          choices: [{ index: 0, delta: {}, finish_reason: toolCalls.length > 0 ? 'tool_calls' : 'stop' }],
           usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
         });
         yield 'data: [DONE]\n\n';
