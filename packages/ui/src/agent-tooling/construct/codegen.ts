@@ -408,35 +408,50 @@ async function submit(detail: { value: string; attachments: AttachmentData[] }) 
   if (!detail.value.trim() || chat.loading()) return;
   chat.append({ id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: detail.value }] });
   const stream = chat.streamAssistant();
-  await readOpenAIStream(respond(detail.value), stream);
-  stream.done();
+  try {
+    await readOpenAIStream(respond(detail.value), stream);
+    stream.done();
+  } catch (err) {
+    stream.abort(err instanceof Error ? err.message : String(err));
+  }
 }`;
   }
 
   const { url, wire } = c.provider;
   const read = wire === 'openai' ? 'readOpenAIStream' : 'readAnthropicStream';
   const encode = wire === 'openai' ? 'toOpenAIMessages' : 'toAnthropicMessages';
-  // provider.url is an UNCONSTRAINED z.string() (schema.ts) — JSON.stringify
-  // it at the interpolation site exactly like the accent in emitElement, so a
-  // hostile url (a quote, a template literal, a `);`) can't break out of the
-  // fetch() call into new JS.
-  return `// Provider seam: YOUR endpoint at ${commentSafe(url)} (${wire} wire). The kit
-// PARSES, this component FETCHES — no key, no provider SDK, no client in
-// here. Your route holds the key and re-frames to the provider; the kai MCP
-// scaffold tool emits one for your framework.
+  // provider.url is an UNCONSTRAINED z.string() (schema.ts). It is NEVER
+  // embedded in this comment — a `//` line comment is ended by a raw
+  // U+2028/U+2029 line separator (a valid JS line terminator that
+  // commentSafe's \r\n strip does not catch), so a url containing one of
+  // those code points could close the comment early and let the rest of the
+  // url execute as JS. commentSafe is a comment-escaping tool and this is a
+  // hand-rolled-escaping trap for untrusted input by construction, so the
+  // fix is to never hand-roll it here: the url appears ONLY on the fetch()
+  // line below, via JSON.stringify, which is a real JS string literal (not a
+  // comment) and immune to this class of bug.
+  return `// Provider seam: YOUR endpoint (${wire} wire, see the fetch call below
+// for the URL). The kit PARSES, this component FETCHES — no key, no
+// provider SDK, no client in here. Your route holds the key and re-frames to
+// the provider; the kai MCP scaffold tool emits one for your framework.
 const chat = createKaiChat();
 
 async function submit(detail: { value: string; attachments: AttachmentData[] }) {
   if (!detail.value.trim() || chat.loading()) return;
   chat.append({ id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text: detail.value }] });
   const stream = chat.streamAssistant();
-  const response = await fetch(${JSON.stringify(url)}, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ messages: ${encode}(chat.messages()) }),
-  });
-  await ${read}(response, stream);
-  stream.done();
+  try {
+    const response = await fetch(${JSON.stringify(url)}, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ messages: ${encode}(chat.messages()) }),
+    });
+    if (!response.ok) throw new Error(\`endpoint responded \${response.status}\`);
+    await ${read}(response, stream);
+    stream.done();
+  } catch (err) {
+    stream.abort(err instanceof Error ? err.message : String(err));
+  }
 }`;
 }
 

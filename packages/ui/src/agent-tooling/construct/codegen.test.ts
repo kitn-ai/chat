@@ -318,6 +318,42 @@ describe('endpoint provider', () => {
     // The raw payload must never appear un-escaped as its own token boundary.
     expect(app).not.toContain(`fetch('${hostile}'`);
   });
+
+  it('url is never embedded in a // comment — a U+2028/U+2029 line-separator payload cannot end the comment and expose executable text', () => {
+    // U+2028 (LINE SEPARATOR) and U+2029 (PARAGRAPH SEPARATOR) are valid JS
+    // line terminators that end a `//` comment, but are NOT touched by
+    // commentSafe's \r\n strip — so hand-rolling comment-escaping for
+    // untrusted text is a trap. The real fix is structural: the url is never
+    // interpolated into a comment at all, only into the fetch() call via
+    // JSON.stringify (a real string literal, immune to this class of bug).
+    const hostile = `http://x console.log("INJECTED");//`;
+    const app = file(generateProject(endpoint('openai', hostile)), 'src/App.tsx');
+    const jsonLiteral = JSON.stringify(hostile);
+    expect(app).toContain(`fetch(${jsonLiteral}`);
+    // Strip the one legitimate occurrence (the JSON string literal on the
+    // fetch() line) and confirm the payload appears nowhere else — in
+    // particular not bare in a `//` comment where it could break out.
+    const withoutTheOneLiteral = app.split(jsonLiteral).join('');
+    expect(withoutTheOneLiteral).not.toContain('INJECTED');
+    expect(withoutTheOneLiteral).not.toContain(' ');
+  });
+
+  it('endpoint branch: a throwing fetch/reader surfaces via stream.abort — no unhandled rejection, no stuck loading', () => {
+    const app = file(generateProject(endpoint('openai')), 'src/App.tsx');
+    expect(app).toMatch(/try\s*\{[\s\S]*fetch\(/);
+    expect(app).toMatch(/catch \(err\) \{\s*stream\.abort\(/);
+  });
+
+  it('endpoint branch: a non-2xx response is thrown before parsing, not silently rendered as an empty reply', () => {
+    const app = file(generateProject(endpoint('openai')), 'src/App.tsx');
+    expect(app).toMatch(/if \(!response\.ok\) throw new Error/);
+  });
+
+  it('mock branch: the same throw -> stream.abort discipline applies (a malformed scripted turn must not hang loading forever either)', () => {
+    const app = file(generateProject(construct()), 'src/App.tsx');
+    expect(app).toMatch(/try\s*\{[\s\S]*readOpenAIStream\(/);
+    expect(app).toMatch(/catch \(err\) \{\s*stream\.abort\(/);
+  });
 });
 
 describe('writeProject', () => {
