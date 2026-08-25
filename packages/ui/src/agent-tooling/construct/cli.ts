@@ -60,13 +60,16 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
     }
     case 'eject': {
       const [path, outDir] = rest;
-      const construct = path && outDir ? loadConstruct(path, io) : null;
-      if (!construct || !outDir) {
-        if (construct === null && path) return 1;
+      if (!path || !outDir) {
         io.error(USAGE);
         return 2;
       }
-      writeProject(generateProject(construct), resolve(outDir));
+      const construct = loadConstruct(path, io);
+      if (!construct) return 1;
+      const overwritten = writeProject(generateProject(construct), resolve(outDir));
+      if (overwritten.length > 0) {
+        io.log(`overwriting ${overwritten.length} existing file(s)`);
+      }
       io.log(`ejected <${construct.name}> to ${resolve(outDir)} — npm install && npm run dev. The source is yours.`);
       return 0;
     }

@@ -49,6 +49,27 @@ describe('kai CLI', () => {
     expect(readFileSync(join(out, 'package.json'), 'utf8')).toContain('"acme-support"');
   });
 
+  it('eject: missing outDir prints usage and exits 2 — not a silent 1', async () => {
+    const { io, lines } = collect();
+    const code = await runCli(['eject', tmpConstruct(good)], io);
+    expect(code).toBe(2);
+    expect(lines.join('\n')).toMatch(/usage/i);
+  });
+
+  it('eject: re-ejecting over existing files says so before the success line', async () => {
+    const out = mkdtempSync(join(tmpdir(), 'kai-eject-'));
+    const path = tmpConstruct(good);
+    const first = collect();
+    expect(await runCli(['eject', path, out], first.io)).toBe(0);
+
+    const second = collect();
+    expect(await runCli(['eject', path, out], second.io)).toBe(0);
+    const overwriteIdx = second.lines.findIndex((l) => /overwriting \d+ existing file/i.test(l));
+    const ejectedIdx = second.lines.findIndex((l) => /^ejected/.test(l));
+    expect(overwriteIdx).toBeGreaterThanOrEqual(0);
+    expect(ejectedIdx).toBeGreaterThan(overwriteIdx);
+  });
+
   it('unknown subcommand: exit 2 with usage', async () => {
     const { io, lines } = collect();
     expect(await runCli(['frobnicate'], io)).toBe(2);

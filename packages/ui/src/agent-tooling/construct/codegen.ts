@@ -265,8 +265,14 @@ function emitLayoutClose(c: Construct): string {
 
 const MANIFEST = '.kai-manifest.json';
 
-/** Write files; prune anything the PREVIOUS generation wrote that this one didn't. */
-export function writeProject(files: GeneratedFile[], dir: string): void {
+/**
+ * Write files; prune anything the PREVIOUS generation wrote that this one
+ * didn't. Returns the paths that already existed on disk before this write
+ * (i.e. were overwritten) — callers that decide loudly (the CLI's `eject`)
+ * use it to say so instead of silently clobbering a file the caller may have
+ * hand-edited.
+ */
+export function writeProject(files: GeneratedFile[], dir: string): string[] {
   const manifestPath = join(dir, MANIFEST);
   const previous: string[] = existsSync(manifestPath)
     ? (JSON.parse(readFileSync(manifestPath, 'utf8')) as string[])
@@ -275,10 +281,13 @@ export function writeProject(files: GeneratedFile[], dir: string): void {
   for (const stale of previous) {
     if (!current.has(stale)) rmSync(join(dir, stale), { force: true });
   }
+  const overwritten: string[] = [];
   for (const f of files) {
     const abs = join(dir, f.path);
+    if (existsSync(abs)) overwritten.push(f.path);
     mkdirSync(dirname(abs), { recursive: true });
     writeFileSync(abs, f.code);
   }
   writeFileSync(manifestPath, `${JSON.stringify([...current].sort(), null, 2)}\n`);
+  return overwritten;
 }
