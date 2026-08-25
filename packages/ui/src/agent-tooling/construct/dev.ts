@@ -11,7 +11,7 @@
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, watch, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { generateProject, writeProject, type GeneratedFile, type GenerateOptions } from './codegen';
 import { validateConstruct, type ConstructProblem } from './schema';
 import type { CliIo } from './cli';
@@ -72,7 +72,15 @@ export async function dev(
     writeFileSync(keyPath, key);
   }
 
-  watch(abs, () => {
+  // Watch the PARENT DIRECTORY, not the file itself: most editors save by
+  // writing a temp file and renaming it over the original, which replaces the
+  // inode. fs.watch(path) on macOS/FSEvents stays bound to the old inode and
+  // goes permanently silent after that first rename — one edit works, every
+  // edit after it is dropped with no error. Watching the directory and
+  // filtering for the construct's basename survives rename-based saves.
+  const base = basename(abs);
+  watch(dirname(abs), (_event, filename) => {
+    if (filename !== base) return;
     let raw: unknown;
     try {
       raw = readRaw();
