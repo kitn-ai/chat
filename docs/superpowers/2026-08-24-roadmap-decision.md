@@ -292,28 +292,54 @@ any of it.
 
 ## 6. Decision checklist
 
-Answer in order. Each is one line.
+Answer in order. Each is one line. **Ruled 2026-08-24, this sitting: all nine answered, each
+adopting the doc's recommendation. The ruling stands beside each item.**
 
 - ~~**D-0. Release.**~~ Resolved by shipping: 0.26.0 and create-kai 0.2.0 published 2026-08-24
       (§1). No decision needed. Numbering below is unchanged so earlier references still resolve.
-- [ ] **D-1. Workstream 1.** Approve standalone elements and the composition surface as the next
+- [x] **D-1. Workstream 1.** Approve standalone elements and the composition surface as the next
       spine item? First step: rung-6 "compose your own thread" app, surface audit, or both?
-- [ ] **D-1b. Ladder exit.** Formally declare the ladder done (the handoff §2 recommendation), or
+      **Ruled 2026-08-24: APPROVED — workstream 1 is the next spine item. First step: BOTH, surface
+      audit first, then the rung-6 app.**
+- [x] **D-1b. Ladder exit.** Formally declare the ladder done (the handoff §2 recommendation), or
       require the residual rung before anything else starts?
-- [ ] **D-2. Builder.** Green-light a compile-to-WC spec now in parallel, or hold until workstream 1
+      **Ruled 2026-08-24: ladder formally DECLARED DONE; the rung-6 app is the residue, absorbed
+      into workstream 1.**
+- [x] **D-2. Builder.** Green-light a compile-to-WC spec now in parallel, or hold until workstream 1
       lands? And scope: whole app surface, or the card/artifact seam only?
-- [ ] **D-3. Harness.** Confirm parked until the builder spec exists?
-- [ ] **D-4. Kit-debt lane.** Approve F-26, then F-35, then the teaching round as pick-up-able work,
+      **Ruled 2026-08-24: GREEN-LIT in parallel once workstream 1 is moving; v1 scope = the
+      card/artifact seam only, not the whole app surface. Targets Solid v2 per D-10.**
+- [x] **D-3. Harness.** Confirm parked until the builder spec exists?
+      **Ruled 2026-08-24: stays PARKED until the builder spec exists; EXCEPTION — the banked 1-day
+      dsh spike (mount a kai-* element from a plugin bundle under the dsh boot graph) is authorized
+      as a spare-seat item.**
+- [x] **D-4. Kit-debt lane.** Approve F-26, then F-35, then the teaching round as pick-up-able work,
       or reorder?
-- [ ] **D-5. `kai-devtools` (#280).** Stays parked, or comes back?
-- [ ] **D-6. Masking tier 3.** Proceed after tiers 1 and 2? Who runs the NVDA and VoiceOver passes?
-- [ ] **D-7. Theme editor.** Revive or retire?
-- [ ] **D-8. Builder session directory.** Standalone, or folded into the builder spec?
-- [ ] **D-9. Acceptance harness.** Parking condition met? Unpark and grade the five ladder apps,
+      **Ruled 2026-08-24: APPROVED as ordered (F-26, then F-35, then the teaching round) —
+      pick-up-able by any spare seat without further approval.**
+- [x] **D-5. `kai-devtools` (#280).** Stays parked, or comes back?
+      **Ruled 2026-08-24: comes back FEED-ONLY — the append-only wire+encode ledger (invariant:
+      anything reaching provider or user is logged). The panel stays parked until the feed exists.**
+- [x] **D-6. Masking tier 3.** Proceed after tiers 1 and 2? Who runs the NVDA and VoiceOver passes?
+      **Ruled 2026-08-24: PROCEEDS after tiers 1+2 merge. Owner runs the VoiceOver+Safari pass;
+      NVDA+Chrome gates on lining up a Windows box.**
+- [x] **D-7. Theme editor.** Revive or retire?
+      **Ruled 2026-08-24: RETIRED into the builder — the standalone spec is retired, its ideas fold
+      into the workstream-2 spec; the docs site keeps the static theming page.**
+- [x] **D-8. Builder session directory.** Standalone, or folded into the builder spec?
+      **Ruled 2026-08-24: FOLDED into the builder spec (a session-directory section there); not
+      built standalone.**
+- [x] **D-9. Acceptance harness.** Parking condition met? Unpark and grade the five ladder apps,
       keep parked until the builder ships, or retire?
+      **Ruled 2026-08-24: UNPARKED for ONE grading run over the five ladder apps; its future
+      (standing role vs retire) is decided from that run's result.**
 - ~~**D-10. Solid v2 migration.** Owner-ratified 2026-08-24. Staged: spike after form-field-formats,
       mechanical branch on spike-green, merge at v2 stable or sustained full-gate green (§2.5).
       Builder spec targets v2 unconditionally.~~ Decided.
+      **Spike ran 2026-08-24: GREEN WITH CONDITIONS (Show preserves node identity; two sweep rules
+      for the mechanical branch — user-effect node reads move to the apply phase, onSettled
+      callbacks must not return non-function values). Report:
+      docs/superpowers/research/2026-08-24-solid-v2-spike.md**
 
 ## Sources
 
